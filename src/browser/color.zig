@@ -213,13 +213,17 @@ pub const RGBA = packed struct(u32) {
         };
     }
 
-    /// Parses the given color.
-    /// Currently we only parse hex colors and named colors; other variants
-    /// require CSS evaluation.
+    /// Parses a hex color or a named color. The color *functions* live in
+    /// `parseStyle`, which is the entry point for the whole grammar.
     pub fn parse(input: []const u8) !RGBA {
         if (!isHexColor(input)) {
-            // Try named colors.
-            return find(input) orelse return error.Invalid;
+            // Try named colors, which are ASCII case insensitive. The longest
+            // one is `lightgoldenrodyellow`, so the buffer cannot be the thing
+            // that rejects a real name.
+            var lower: [32]u8 = undefined;
+            if (input.len > lower.len) return error.Invalid;
+            return find(std.ascii.lowerString(lower[0..input.len], input)) orelse
+                return error.Invalid;
         }
 
         const slice = input[1..];
@@ -257,11 +261,12 @@ pub const RGBA = packed struct(u32) {
         }
     }
 
-    /// Parses a CSS color *function*: `rgb()`, `rgba()`, `hsl()` and `hsla()`,
-    /// in both the legacy comma syntax and the modern space-separated one.
-    /// Returns null for anything else — notably the color-space functions
-    /// (`lab()`, `oklch()`, `hwb()`, `color()`), which need a conversion matrix,
-    /// and `calc()` channels, which need an expression evaluator.
+    /// Parses the CSS colour functions that answer back as a hex string or an
+    /// `rgba()`: `rgb()`, `rgba()`, `hsl()`, `hsla()` and `hwb()`. The first
+    /// four take both the legacy comma syntax and the modern space-separated
+    /// one; `hwb()` is modern-only. The functions that answer back as
+    /// *themselves* are `Wide`'s, and `calc()` channels, which need an
+    /// expression evaluator, are nobody's.
     ///
     /// Out-of-range channels clamp rather than reject, and halves round away
     /// from zero, both of which match what Chrome reads back.
@@ -273,10 +278,12 @@ pub const RGBA = packed struct(u32) {
         const raw_name = input[0..open];
         if (raw_name.len > name_buf.len) return null;
         const name = std.ascii.lowerString(name_buf[0..raw_name.len], raw_name);
-        const kind: enum { rgb, hsl } = if (std.mem.eql(u8, name, "rgb") or std.mem.eql(u8, name, "rgba"))
+        const kind: enum { rgb, hsl, hwb } = if (std.mem.eql(u8, name, "rgb") or std.mem.eql(u8, name, "rgba"))
             .rgb
         else if (std.mem.eql(u8, name, "hsl") or std.mem.eql(u8, name, "hsla"))
             .hsl
+        else if (std.mem.eql(u8, name, "hwb"))
+            .hwb
         else
             return null;
 
@@ -290,6 +297,8 @@ pub const RGBA = packed struct(u32) {
         var parts: [4][]const u8 = undefined;
         var count: usize = 0;
         if (std.mem.indexOfScalar(u8, args, ',') != null) {
+            // `hwb()` postdates the comma form and never took it.
+            if (kind == .hwb) return null;
             if (std.mem.indexOfScalar(u8, args, '/') != null) return null;
             var it = std.mem.splitScalar(u8, args, ',');
             while (it.next()) |part| {
@@ -313,14 +322,18 @@ pub const RGBA = packed struct(u32) {
         }
         if (count != 3 and count != 4) return null;
 
-        // The alpha is parsed for validity and then dropped: the callers that
-        // want a hex string cannot express it anyway.
-        if (count == 4) _ = parseAlpha(parts[3]) orelse return null;
+        const alpha: u8 = if (count == 4)
+            round255((parseAlpha(parts[3]) orelse return null) * 255)
+        else
+            255;
 
-        return switch (kind) {
+        var rgba = switch (kind) {
             .rgb => parseRgbChannels(parts[0..3]),
             .hsl => parseHslChannels(parts[0..3]),
-        };
+            .hwb => parseHwbChannels(parts[0..3]),
+        } orelse return null;
+        rgba.a = alpha;
+        return rgba;
     }
 
     fn parseRgbChannels(parts: []const []const u8) ?RGBA {
@@ -352,25 +365,22 @@ pub const RGBA = packed struct(u32) {
         const hue = parseHue(parts[0]) orelse return null;
         const s = parsePercent(parts[1]) orelse return null;
         const l = parsePercent(parts[2]) orelse return null;
+        return fromUnit(hslToRgb(hue, s, l));
+    }
 
-        // HSL -> RGB, with the hue wrapped into [0, 360) first.
-        const h = @mod(hue, 360);
-        const c = (1 - @abs(2 * l - 1)) * s;
-        const h6 = h / 60;
-        const x = c * (1 - @abs(@mod(h6, 2) - 1));
-        const m = l - c / 2;
-        const rgb: [3]f64 = switch (@as(u8, @intFromFloat(@floor(h6)))) {
-            0 => .{ c, x, 0 },
-            1 => .{ x, c, 0 },
-            2 => .{ 0, c, x },
-            3 => .{ 0, x, c },
-            4 => .{ x, 0, c },
-            else => .{ c, 0, x },
-        };
+    fn parseHwbChannels(parts: []const []const u8) ?RGBA {
+        const hue = parseHue(parts[0]) orelse return null;
+        const w = parsePercent(parts[1]) orelse return null;
+        const b = parsePercent(parts[2]) orelse return null;
+        return fromUnit(hwbToRgb(hue, w, b));
+    }
+
+    /// Three channels on the 0..1 scale as an opaque colour.
+    fn fromUnit(rgb: [3]f64) RGBA {
         return .{
-            .r = round255((rgb[0] + m) * 255),
-            .g = round255((rgb[1] + m) * 255),
-            .b = round255((rgb[2] + m) * 255),
+            .r = round255(rgb[0] * 255),
+            .g = round255(rgb[1] * 255),
+            .b = round255(rgb[2] * 255),
             .a = 255,
         };
     }
@@ -417,7 +427,10 @@ pub const RGBA = packed struct(u32) {
         return n;
     }
 
-    fn round255(value: f64) u8 {
+    /// A channel already on the 0..255 scale as the byte a browser answers:
+    /// rounded half away from zero, which is what makes `rgb(2.5)` a 3 and
+    /// `50%` a 128.
+    pub fn round255(value: f64) u8 {
         return @intFromFloat(std.math.clamp(@round(value), 0, 255));
     }
 
@@ -463,7 +476,9 @@ pub const RGBA = packed struct(u32) {
         }
 
         // Prefer RGBA format for everything else.
-        return writer.print("rgba({d}, {d}, {d}, {d:.2})", .{ self.r, self.g, self.b, self.normalizedAlpha() });
+        try writer.print("rgba({d}, {d}, {d}, ", .{ self.r, self.g, self.b });
+        try writeAlpha(writer, self.a);
+        return writer.writeByte(')');
     }
 
     /// Returns true if `Color` is opaque.
@@ -476,3 +491,514 @@ pub const RGBA = packed struct(u32) {
         return @as(f32, @floatFromInt(self.a)) / 255;
     }
 };
+
+/// A parsed color: the bytes to paint with, plus — when the notation is one of
+/// the five functions a browser answers back as *itself* — enough of the source
+/// to write it back. See `Wide`.
+pub const Style = struct {
+    rgba: RGBA,
+    wide: ?Wide = null,
+};
+
+/// The whole grammar this engine reads: a hex form, a named color, or any of
+/// the color functions. Surrounding whitespace is trimmed and a name matched
+/// case insensitively, both measured on a canvas `fillStyle` where ` red `,
+/// `RED` and ` rgb(1,2,3) ` all read. `currentColor` is *not* here: what it
+/// resolves to depends on the caller, so the caller resolves it.
+pub fn parseStyle(input: []const u8) ?Style {
+    const trimmed = std.mem.trim(u8, input, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    if (std.mem.indexOfScalar(u8, trimmed, '(') != null) {
+        if (RGBA.parseFunction(trimmed)) |rgba| return .{ .rgba = rgba };
+        const wide = Wide.parse(trimmed) orelse return null;
+        return .{ .rgba = wide.toRGBA(), .wide = wide };
+    }
+    return .{ .rgba = RGBA.parse(trimmed) catch return null };
+}
+
+/// The alpha a browser writes back is the shortest one, two or three decimal
+/// number that rounds to the same alpha byte — measured over fifty alphas,
+/// which is what makes 221/255 `0.867`, 158/255 `0.62`, 128/255 `0.5` and
+/// anything under half a byte a plain `0`. Three decimals always round-trip
+/// (their spacing is finer than a byte), so the loop always answers.
+pub fn writeAlpha(writer: *Io.Writer, alpha: u8) Io.Writer.Error!void {
+    if (alpha == 0) {
+        return writer.writeByte('0');
+    }
+    const exact = @as(f64, @floatFromInt(alpha)) / 255.0;
+    for ([_]f64{ 10, 100, 1000 }, 1..) |scale, places| {
+        const rounded = @round(exact * scale);
+        if (rounded >= scale) {
+            // Would answer `1`, which no alpha under 255 can round back to.
+            continue;
+        }
+        if (RGBA.round255(rounded / scale * 255.0) != alpha) {
+            continue;
+        }
+        const digits: u32 = @intFromFloat(rounded);
+        switch (places) {
+            1 => try writer.print("0.{d}", .{digits}),
+            2 => try writer.print("0.{d:0>2}", .{digits}),
+            else => try writer.print("0.{d:0>3}", .{digits}),
+        }
+        return;
+    }
+    unreachable;
+}
+
+/// HSL to RGB, each channel on the 0..1 scale, with the hue wrapped into
+/// [0, 360) first.
+///
+/// The chroma/match formulation, not CSS Color 4's `f(n)` one: the two agree to
+/// within a ULP, and switching to the spec's does not buy a reading — measured,
+/// it moves `hwb(200 10% 20%)`'s green from 144.49999999999997 to
+/// 144.4999999999999, which rounds the same way and still is not Chrome's 145.
+pub fn hslToRgb(hue: f64, saturation: f64, lightness: f64) [3]f64 {
+    const h = @mod(hue, 360.0);
+    const c = (1 - @abs(2 * lightness - 1)) * saturation;
+    const segment = h / 60.0;
+    const x = c * (1 - @abs(@mod(segment, 2.0) - 1));
+    const m = lightness - c / 2;
+    const triple: [3]f64 = switch (@as(u8, @intFromFloat(@min(5, @floor(segment))))) {
+        0 => .{ c, x, 0 },
+        1 => .{ x, c, 0 },
+        2 => .{ 0, c, x },
+        3 => .{ 0, x, c },
+        4 => .{ x, 0, c },
+        else => .{ c, 0, x },
+    };
+    return .{ triple[0] + m, triple[1] + m, triple[2] + m };
+}
+
+/// HWB to RGB. Measured: a whiteness and blackness summing past 100% is the
+/// grey between them — `hwb(120 50% 60%)` answers `rgb(116, 116, 116)`.
+pub fn hwbToRgb(hue: f64, whiteness: f64, blackness: f64) [3]f64 {
+    if (whiteness + blackness >= 1) {
+        const grey = whiteness / (whiteness + blackness);
+        return .{ grey, grey, grey };
+    }
+    const base = hslToRgb(hue, 1, 0.5);
+    var out: [3]f64 = undefined;
+    for (base, 0..) |channel, at| {
+        out[at] = channel * (1 - whiteness - blackness) + whiteness;
+    }
+    return out;
+}
+
+/// A colour written in one of the five functions a browser answers back as
+/// *itself* rather than as a hex string or an `rgba()`: `lab()`, `lch()`,
+/// `oklab()`, `oklch()` and `color()`. Measured on headed Chrome by
+/// tools/fingerprint/probes/canvas-color-notation.js — every other notation
+/// collapses, these five do not, so a caller that has to answer the style back
+/// (a canvas `fillStyle`) keeps one of these next to the RGBA it paints with.
+///
+/// The struct is deliberately plain data with no slices in it: a canvas can
+/// hold it by value and its save/restore stack can copy it, with no arena and
+/// no lifetime to get wrong.
+pub const Wide = struct {
+    function: Function,
+    /// Read only when `function` is `.color`.
+    space: Space,
+    channels: [3]Channel,
+    /// Null when the notation carried no alpha at all, which is the form Chrome
+    /// writes without the `/ a` part — as it also does for an alpha of one.
+    alpha: ?Channel,
+
+    pub const Function = enum { lab, lch, oklab, oklch, color };
+
+    /// The colour spaces `color()` takes. `xyz` is a shorthand Chrome answers
+    /// as `xyz-d65`, so it is not a member.
+    pub const Space = enum {
+        srgb,
+        @"srgb-linear",
+        @"display-p3",
+        @"a98-rgb",
+        @"prophoto-rgb",
+        rec2020,
+        @"xyz-d65",
+        @"xyz-d50",
+    };
+
+    /// A channel as written. `none` is kept rather than folded to zero because
+    /// Chrome writes it back as `none`.
+    pub const Channel = union(enum) {
+        none,
+        number: f64,
+
+        fn value(self: Channel) f64 {
+            return switch (self) {
+                .none => 0,
+                .number => |n| n,
+            };
+        }
+    };
+
+    /// What a channel means, which is all that separates the five functions
+    /// from each other at parse time.
+    const Shape = struct {
+        /// What a hundred percent is worth on this channel.
+        percent: f64,
+        /// Inclusive bounds, or null for a channel that is left as written —
+        /// measured: `lab(150 40 30)` answers `lab(100 40 30)` while
+        /// `color(srgb 1.5 -0.5 0.5)` is answered whole.
+        min: ?f64 = null,
+        max: ?f64 = null,
+        /// A hue: takes an angle unit and wraps into [0, 360).
+        hue: bool = false,
+    };
+
+    fn shapes(function: Function) [3]Shape {
+        return switch (function) {
+            .lab => .{
+                .{ .percent = 100, .min = 0, .max = 100 },
+                .{ .percent = 125 },
+                .{ .percent = 125 },
+            },
+            .lch => .{
+                .{ .percent = 100, .min = 0, .max = 100 },
+                .{ .percent = 150, .min = 0 },
+                .{ .percent = 100, .hue = true },
+            },
+            .oklab => .{
+                .{ .percent = 1, .min = 0, .max = 1 },
+                .{ .percent = 0.4 },
+                .{ .percent = 0.4 },
+            },
+            .oklch => .{
+                .{ .percent = 1, .min = 0, .max = 1 },
+                .{ .percent = 0.4, .min = 0 },
+                .{ .percent = 100, .hue = true },
+            },
+            .color => .{
+                .{ .percent = 1 },
+                .{ .percent = 1 },
+                .{ .percent = 1 },
+            },
+        };
+    }
+
+    /// Parses one of the five. All of them take the space-separated grammar
+    /// only: measured, `lab(50, 40, 30)` and `color(display-p3, 1, 0, 0)` are
+    /// both rejected, and the alpha is always introduced by a slash.
+    pub fn parse(input: []const u8) ?Wide {
+        const open = std.mem.indexOfScalar(u8, input, '(') orelse return null;
+        if (input[input.len - 1] != ')') return null;
+
+        var name_buf: [8]u8 = undefined;
+        if (open == 0 or open > name_buf.len) return null;
+        const name = std.ascii.lowerString(name_buf[0..open], input[0..open]);
+        const function = std.meta.stringToEnum(Function, name) orelse return null;
+
+        const args = input[open + 1 .. input.len - 1];
+        // A comma is the legacy grammar and a nested call needs its own parser.
+        if (std.mem.indexOfAny(u8, args, ",(") != null) return null;
+
+        // The alpha, if any, is everything past the one slash.
+        const slash = std.mem.indexOfScalar(u8, args, '/');
+        const head = if (slash) |at| args[0..at] else args;
+        const tail = if (slash) |at| args[at + 1 ..] else null;
+        if (tail) |t| if (std.mem.indexOfScalar(u8, t, '/') != null) return null;
+
+        var parts: [4][]const u8 = undefined;
+        var count: usize = 0;
+        var it = std.mem.tokenizeAny(u8, head, &std.ascii.whitespace);
+        while (it.next()) |part| {
+            if (count == parts.len) return null;
+            parts[count] = part;
+            count += 1;
+        }
+
+        var space: Space = .srgb;
+        var first: usize = 0;
+        if (function == .color) {
+            if (count == 0) return null;
+            var ident_buf: [16]u8 = undefined;
+            const ident = parts[0];
+            if (ident.len > ident_buf.len) return null;
+            const lower = std.ascii.lowerString(ident_buf[0..ident.len], ident);
+            space = if (std.mem.eql(u8, lower, "xyz"))
+                .@"xyz-d65"
+            else
+                std.meta.stringToEnum(Space, lower) orelse return null;
+            first = 1;
+        }
+        if (count != first + 3) return null;
+
+        var wide: Wide = .{
+            .function = function,
+            .space = space,
+            .channels = undefined,
+            .alpha = null,
+        };
+        for (shapes(function), 0..) |shape, at| {
+            wide.channels[at] = parseChannel(parts[first + at], shape) orelse return null;
+        }
+        if (tail) |t| {
+            const trimmed = std.mem.trim(u8, t, &std.ascii.whitespace);
+            if (std.ascii.eqlIgnoreCase(trimmed, "none")) {
+                wide.alpha = .none;
+            } else {
+                const a = RGBA.parseAlpha(trimmed) orelse return null;
+                // An alpha of one is the same string as no alpha at all.
+                wide.alpha = if (a == 1) null else .{ .number = a };
+            }
+        }
+        return wide;
+    }
+
+    fn parseChannel(part: []const u8, shape: Shape) ?Channel {
+        if (std.ascii.eqlIgnoreCase(part, "none")) return .none;
+        var n = if (shape.hue)
+            RGBA.parseHue(part) orelse return null
+        else if (std.mem.endsWith(u8, part, "%"))
+            (RGBA.parseNumber(part[0 .. part.len - 1]) orelse return null) * shape.percent / 100
+        else
+            RGBA.parseNumber(part) orelse return null;
+        if (shape.hue) n = @mod(n, 360);
+        if (shape.min) |min| n = @max(min, n);
+        if (shape.max) |max| n = @min(max, n);
+        return .{ .number = n };
+    }
+
+    /// The colour as sRGB bytes: through CIE XYZ for every family, gamma
+    /// encoded, then clipped into gamut. Three of the results are measured
+    /// against Chrome — `color(display-p3 1 0.25 0.5)` is `ff1b7f`,
+    /// `lab(50% 40 30)` is `bb5846`, `oklch(0.7 0.1 20)` is `d68585`.
+    pub fn toRGBA(self: Wide) RGBA {
+        const c: [3]f64 = .{
+            self.channels[0].value(),
+            self.channels[1].value(),
+            self.channels[2].value(),
+        };
+        const alpha: u8 = switch (self.alpha orelse Channel{ .number = 1 }) {
+            .none => 0,
+            .number => |a| RGBA.round255(a * 255),
+        };
+
+        // `color(srgb ...)` is already the encoded form, so it skips the round
+        // trip through linear light that would only add rounding error.
+        if (self.function == .color and self.space == .srgb) {
+            return .{
+                .r = RGBA.round255(c[0] * 255),
+                .g = RGBA.round255(c[1] * 255),
+                .b = RGBA.round255(c[2] * 255),
+                .a = alpha,
+            };
+        }
+
+        const linear: [3]f64 = switch (self.function) {
+            .lab => labToSrgbLinear(c[0], c[1], c[2]),
+            .lch => polar(labToSrgbLinear, c),
+            .oklab => oklabToSrgbLinear(c[0], c[1], c[2]),
+            .oklch => polar(oklabToSrgbLinear, c),
+            .color => switch (self.space) {
+                .srgb => unreachable, // handled above
+                .@"srgb-linear" => c,
+                .@"display-p3" => rgbSpaceToSrgbLinear(display_p3_to_xyz, srgbToLinear, c),
+                .@"a98-rgb" => rgbSpaceToSrgbLinear(a98_rgb_to_xyz, a98ToLinear, c),
+                .@"prophoto-rgb" => xyzD50ToSrgbLinear(matrixApply(prophoto_rgb_to_xyz_d50, .{
+                    prophotoToLinear(c[0]),
+                    prophotoToLinear(c[1]),
+                    prophotoToLinear(c[2]),
+                })),
+                .rec2020 => rgbSpaceToSrgbLinear(rec2020_to_xyz, rec2020ToLinear, c),
+                .@"xyz-d65" => matrixApply(xyz_to_srgb, c),
+                .@"xyz-d50" => xyzD50ToSrgbLinear(c),
+            },
+        };
+        return .{
+            .r = RGBA.round255(srgbFromLinear(linear[0]) * 255),
+            .g = RGBA.round255(srgbFromLinear(linear[1]) * 255),
+            .b = RGBA.round255(srgbFromLinear(linear[2]) * 255),
+            .a = alpha,
+        };
+    }
+
+    /// Formats the colour the way Chrome answers it: the function lowercased,
+    /// the channels re-serialised shortest, `none` kept, and the alpha written
+    /// only when it is neither absent nor one.
+    pub fn format(self: *const Wide, writer: *Io.Writer) Io.Writer.Error!void {
+        try writer.writeAll(@tagName(self.function));
+        try writer.writeByte('(');
+        if (self.function == .color) {
+            try writer.writeAll(@tagName(self.space));
+            try writer.writeByte(' ');
+        }
+        for (self.channels, 0..) |channel, at| {
+            if (at != 0) try writer.writeByte(' ');
+            try writeChannel(writer, channel);
+        }
+        if (self.alpha) |alpha| {
+            try writer.writeAll(" / ");
+            try writeChannel(writer, alpha);
+        }
+        return writer.writeByte(')');
+    }
+
+    fn writeChannel(writer: *Io.Writer, channel: Channel) Io.Writer.Error!void {
+        return switch (channel) {
+            .none => writer.writeAll("none"),
+            .number => |n| writer.print("{d}", .{n}),
+        };
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Colour space conversion
+//
+// Every wide-gamut notation CSS Color 4 defines is a path through CIE XYZ, so
+// one matrix each way plus a transfer function covers the whole family. The
+// numbers are that spec's; what makes them trustworthy here is that the
+// readings they produce are measured against Chrome, one per colour space, in
+// src/browser/tests/canvas/canvas_rendering_context_2d.html.
+// ---------------------------------------------------------------------------
+
+/// A 3x3 matrix, row major.
+const Matrix = [9]f64;
+
+fn matrixApply(m: Matrix, v: [3]f64) [3]f64 {
+    return .{
+        m[0] * v[0] + m[1] * v[1] + m[2] * v[2],
+        m[3] * v[0] + m[4] * v[1] + m[5] * v[2],
+        m[6] * v[0] + m[7] * v[1] + m[8] * v[2],
+    };
+}
+
+const xyz_to_srgb: Matrix = .{
+    3.2409699419045226,  -1.537383177570094,   -0.4986107602930034,
+    -0.9692436362808796, 1.8759675015077202,   0.04155505740717559,
+    0.05563007969699366, -0.20397695888897652, 1.0569715142428786,
+};
+
+const display_p3_to_xyz: Matrix = .{
+    0.4865709486482162, 0.26566769316909306, 0.1982172852343625,
+    0.2289745640697488, 0.6917385218365064,  0.079286914093745,
+    0.0,                0.04511338185890264, 1.043944368900976,
+};
+
+const a98_rgb_to_xyz: Matrix = .{
+    0.5766690429101305,  0.1855582379065463,  0.1882286462349947,
+    0.29734497525053605, 0.6273635662554661,  0.07529145849399788,
+    0.02703136138641234, 0.07068885253582723, 0.9913375368376388,
+};
+
+/// ProPhoto RGB is the one of the family defined against D50.
+const prophoto_rgb_to_xyz_d50: Matrix = .{
+    0.7977604896723027, 0.13518583717574031, 0.0313493495815248,
+    0.2880711282292934, 0.7118432178101014,  0.00008565396060525902,
+    0.0,                0.0,                 0.8251046025104601,
+};
+
+const rec2020_to_xyz: Matrix = .{
+    0.6369580483012914, 0.14461690358620832,  0.16888097516417208,
+    0.2627002120112671, 0.6779980715188708,   0.05930171646986196,
+    0.0,                0.028072693049087428, 1.060985057710791,
+};
+
+/// Bradford adapted, which is the adaptation CSS Color 4 specifies.
+const xyz_d50_to_d65: Matrix = .{
+    0.9554734527042182,    -0.023098536874261423, 0.0632593086610217,
+    -0.028369706963208136, 1.0099954580058226,    0.021041398966943008,
+    0.012314001688319899,  -0.020507696433477912, 1.3303659366080753,
+};
+
+const oklab_to_lms: Matrix = .{
+    1.0, 0.3963377773761749,  0.2158037573099136,
+    1.0, -0.1055613458156586, -0.0638541728258133,
+    1.0, -0.0894841775298119, -1.2914855480194092,
+};
+
+const lms_to_srgb_linear: Matrix = .{
+    4.0767416360759583,  -3.3077115392580616, 0.2309699031821043,
+    -1.2684380040921763, 2.6097574006633715,  -0.3413193963102197,
+    -0.0041960761386756, -0.7034186179359362, 1.7076146940746117,
+};
+
+/// The D50 white point Lab and ProPhoto RGB are relative to.
+const d50_white: [3]f64 = .{ 0.9642956764295677, 1.0, 0.8251046025104602 };
+
+/// Every transfer function here is sign preserving, so a channel outside the
+/// gamut keeps its side of zero right up to the clip in `round255`.
+fn signOf(v: f64) f64 {
+    return if (v < 0) -1 else 1;
+}
+
+fn srgbToLinear(v: f64) f64 {
+    const a = @abs(v);
+    if (a <= 0.04045) return v / 12.92;
+    return signOf(v) * std.math.pow(f64, (a + 0.055) / 1.055, 2.4);
+}
+
+fn srgbFromLinear(v: f64) f64 {
+    const a = @abs(v);
+    if (a <= 0.0031308) return v * 12.92;
+    return signOf(v) * (1.055 * std.math.pow(f64, a, 1.0 / 2.4) - 0.055);
+}
+
+/// A plain 2.2, *not* CSS Color 4's 563/256. Of the five a98 readings measured
+/// for this, four cannot tell the two exponents apart; the one that can —
+/// `color(a98-rgb 1 0.25 0.5)`, which Chrome answers `ff3d82` — puts the green
+/// channel at 61.5017 under 563/256, a thousandth of a byte over the rounding
+/// boundary, and at 61.4676 under 2.2. So 2.2 is the measured fit.
+fn a98ToLinear(v: f64) f64 {
+    return signOf(v) * std.math.pow(f64, @abs(v), 2.2);
+}
+
+fn prophotoToLinear(v: f64) f64 {
+    const a = @abs(v);
+    if (a <= 16.0 / 512.0) return v / 16.0;
+    return signOf(v) * std.math.pow(f64, a, 1.8);
+}
+
+fn rec2020ToLinear(v: f64) f64 {
+    const alpha = 1.09929682680944;
+    const beta = 0.018053968510807;
+    const a = @abs(v);
+    if (a < beta * 4.5) return v / 4.5;
+    return signOf(v) * std.math.pow(f64, (a + alpha - 1) / alpha, 1.0 / 0.45);
+}
+
+/// One of the gamma-encoded RGB spaces into linear sRGB, via its own primaries.
+fn rgbSpaceToSrgbLinear(
+    to_xyz: Matrix,
+    comptime toLinear: fn (f64) f64,
+    encoded: [3]f64,
+) [3]f64 {
+    return matrixApply(xyz_to_srgb, matrixApply(to_xyz, .{
+        toLinear(encoded[0]),
+        toLinear(encoded[1]),
+        toLinear(encoded[2]),
+    }));
+}
+
+fn xyzD50ToSrgbLinear(xyz_d50: [3]f64) [3]f64 {
+    return matrixApply(xyz_to_srgb, matrixApply(xyz_d50_to_d65, xyz_d50));
+}
+
+fn labToSrgbLinear(l: f64, a: f64, b: f64) [3]f64 {
+    const kappa = 24389.0 / 27.0;
+    const epsilon = 216.0 / 24389.0;
+    const fy = (l + 16) / 116;
+    const fx = fy + a / 500;
+    const fz = fy - b / 200;
+    const fx3 = fx * fx * fx;
+    const fz3 = fz * fz * fz;
+    const xyz_d50: [3]f64 = .{
+        (if (fx3 > epsilon) fx3 else (116 * fx - 16) / kappa) * d50_white[0],
+        (if (l > 8) fy * fy * fy else l / kappa) * d50_white[1],
+        (if (fz3 > epsilon) fz3 else (116 * fz - 16) / kappa) * d50_white[2],
+    };
+    return xyzD50ToSrgbLinear(xyz_d50);
+}
+
+fn oklabToSrgbLinear(l: f64, a: f64, b: f64) [3]f64 {
+    var lms = matrixApply(oklab_to_lms, .{ l, a, b });
+    for (&lms) |*channel| channel.* = channel.* * channel.* * channel.*;
+    return matrixApply(lms_to_srgb_linear, lms);
+}
+
+/// The polar spelling of a Lab-shaped space: lightness, chroma, hue.
+fn polar(comptime rectangular: fn (f64, f64, f64) [3]f64, lch: [3]f64) [3]f64 {
+    const hue = std.math.degreesToRadians(lch[2]);
+    return rectangular(lch[0], lch[1] * @cos(hue), lch[1] * @sin(hue));
+}

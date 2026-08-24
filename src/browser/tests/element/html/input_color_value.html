@@ -178,6 +178,36 @@
   }
 </script>
 
+<script id="color_wide_gamut_functions">
+  // Chrome runs the whole CSS colour parser here, so `hwb()` and the
+  // wide-gamut families come through too, converted into sRGB and with their
+  // alpha dropped like `rgb()`'s. Measured on headed Chrome; the same readings
+  // drive the canvas `fillStyle` tests, which is where the conversion lives.
+  {
+    const read = (v) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'color');
+      i.value = v;
+      return i.value;
+    };
+
+    testing.expectEqual('#ff0000', read('hwb(0 0% 0%)'));
+    testing.expectEqual('#33b333', read('hwb(120 20% 30%)'));
+    testing.expectEqual('#bb5846', read('lab(50% 40 30)'));
+    testing.expectEqual('#b25d57', read('lch(50 40 30)'));
+    testing.expectEqual('#db8279', read('oklab(0.7 0.1 0.05)'));
+    testing.expectEqual('#d68585', read('oklch(0.7 0.1 20)'));
+    testing.expectEqual('#ff0000', read('color(display-p3 1 0 0)'));
+    testing.expectEqual('#ff4080', read('color(srgb 1 0.25 0.5)'));
+    // An unknown colour space is not a colour, so the value resets.
+    testing.expectEqual('#000000', read('color(nonesuch 1 0 0)'));
+    // `currentColor` has no element to resolve against here.
+    testing.expectEqual('#000000', read('currentColor'));
+    // A fully transparent colour keeps its channels, alpha being dropped.
+    testing.expectEqual('#010203', read('rgba(1,2,3,0)'));
+  }
+</script>
+
 <script id="color_via_attribute">
   // The same parser on the attribute path, where defaultValue keeps the raw
   // text it was given.

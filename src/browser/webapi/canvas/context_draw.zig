@@ -51,12 +51,39 @@ pub fn Saved(comptime Font: type) type {
     return struct {
         transform: Transform,
         fill_style: color.RGBA,
+        /// The source notation, when the style was written in one of the five
+        /// functions a browser answers back as itself. See `color.Wide`.
+        fill_style_wide: ?color.Wide,
         stroke_style: color.RGBA,
+        stroke_style_wide: ?color.Wide,
         line_width: f64,
         global_alpha: f64,
         font: Font,
         attrs: state.State,
     };
+}
+
+/// What `fillStyle` and `strokeStyle` accept. `currentColor` is the element's
+/// `color`, and neither context tracks one of its own, so it resolves to that
+/// property's initial value -- measured on Chrome as `#000000`.
+pub fn parseStyle(value: []const u8) ?color.Style {
+    if (std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, &std.ascii.whitespace), "currentcolor")) {
+        return .{ .rgba = color.RGBA.Named.black };
+    }
+    return color.parseStyle(value);
+}
+
+/// The string a style answers back with: the source notation when the colour
+/// was written in one of the five functions that keep it, and the hex or
+/// `rgba()` form otherwise.
+pub fn styleString(arena: std.mem.Allocator, rgba: color.RGBA, wide: ?color.Wide) ![]const u8 {
+    var w = std.Io.Writer.Allocating.init(arena);
+    if (wide) |source| {
+        try source.format(&w.writer);
+    } else {
+        try rgba.format(&w.writer);
+    }
+    return w.written();
 }
 
 pub fn Mixin(comptime T: type) type {
@@ -87,7 +114,9 @@ pub fn Mixin(comptime T: type) type {
             self._saved.append(arena(self), .{
                 .transform = self._transform,
                 .fill_style = self._fill_style,
+                .fill_style_wide = self._fill_style_wide,
                 .stroke_style = self._stroke_style,
+                .stroke_style_wide = self._stroke_style_wide,
                 .line_width = self._line_width,
                 .global_alpha = self._global_alpha,
                 .font = self._font,
@@ -99,7 +128,9 @@ pub fn Mixin(comptime T: type) type {
             const top = self._saved.pop() orelse return;
             self._transform = top.transform;
             self._fill_style = top.fill_style;
+            self._fill_style_wide = top.fill_style_wide;
             self._stroke_style = top.stroke_style;
+            self._stroke_style_wide = top.stroke_style_wide;
             self._line_width = top.line_width;
             self._global_alpha = top.global_alpha;
             self._font = top.font;
