@@ -465,12 +465,12 @@ pub fn structuredClone(_: *const WorkerGlobalScope, value: JS.Value) !JS.Value {
     return value.structuredClone("Failed to execute 'structuredClone' on 'WorkerGlobalScope': ");
 }
 
-pub fn unhandledPromiseRejection(self: *WorkerGlobalScope, no_handler: bool, rejection: JS.PromiseRejection) !void {
+pub fn unhandledPromiseRejection(self: *WorkerGlobalScope, no_handler: bool, promise: JS.Promise, reason: ?JS.Value) !void {
     if (comptime lp.IS_DEBUG) {
         log.debug(.js, "unhandled rejection", .{
             .target = "worker",
-            .value = rejection.reason(),
-            .stack = rejection.local.stackTrace() catch |err| @errorName(err) orelse "???",
+            .value = reason,
+            .stack = promise.local.stackTrace() catch |err| @errorName(err) orelse "???",
         });
     }
 
@@ -488,8 +488,8 @@ pub fn unhandledPromiseRejection(self: *WorkerGlobalScope, no_handler: bool, rej
     const target = self.asEventTarget();
     if (self._event_manager.hasDirectListeners(target, event_name, attribute_callback)) {
         const event = (try @import("event/PromiseRejectionEvent.zig").init(event_name, .{
-            .reason = if (rejection.reason()) |r| try r.persist() else null,
-            .promise = try rejection.promise().persist(),
+            .reason = if (reason) |r| try r.persist() else null,
+            .promise = try promise.persist(),
         }, self._page)).asEvent();
         try self.dispatch(target, event, attribute_callback, .{});
     }
