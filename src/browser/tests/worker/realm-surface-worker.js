@@ -78,8 +78,28 @@ self.onmessage = () => {
     // Chrome's worker has all of these, so this is a measured shortfall rather
     // than a match: closing it needs worker-owned state, not another name in a
     // list.
-    frame_bound: ['GPU', 'StorageBucket', 'TrustedTypePolicyFactory', 'FontFace',
+    frame_bound: ['GPU', 'StorageBucket', 'FontFace',
       'MediaSource', 'CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
+
+    // Trusted Types, which is the one the station reads: its trampoline
+    // worker's first statement is `if (self.trustedTypes)`. The whole round
+    // trip, not just the name -- createPolicy in a worker used to be the
+    // engine's ceiling, because every member of the factory wanted the owner's
+    // Frame.
+    tt_holder: holderOf('trustedTypes'),
+    tt_brand: ask(() => Object.prototype.toString.call(self.trustedTypes)),
+    tt_interfaces: ['TrustedHTML', 'TrustedScript', 'TrustedScriptURL',
+      'TrustedTypePolicy', 'TrustedTypePolicyFactory']
+      .filter((n) => typeof self[n] !== 'function').join(','),
+    tt_policy_name: ask(() => self.trustedTypes
+      .createPolicy('Kssz2', { createScript: (s) => s + '/ok' }).name),
+    tt_created: ask(() => String(self.trustedTypes
+      .createPolicy('Kssz3', { createScript: (s) => s + '/ok' }).createScript('x'))),
+    tt_created_brand: ask(() => Object.prototype.toString.call(self.trustedTypes
+      .createPolicy('Kssz4', { createScript: (s) => s }).createScript('x'))),
+    tt_empty_identity: ask(() =>
+      self.trustedTypes.emptyScript === self.trustedTypes.emptyScript),
+    tt_default_policy: ask(() => self.trustedTypes.defaultPolicy),
 
     // console is own on self and nowhere else.
     holder_console: holderOf('console'),

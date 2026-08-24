@@ -11832,3 +11832,62 @@ reading, unchanged, no abort. `make test` 1433/1433 for both. The challenge
 still refuses, so the 57 names were not the deciding property either; the realm
 it is asked in is now 264 names wide against Chrome's 336, with nothing in it
 that Chrome does not have.
+
+### The Frame was never the requirement — Trusted Types in a worker (worker-trusted-types-state, 2026-08-23)
+
+The section above closed with Trusted Types in the "needs worker-owned state
+before it can be named" row, and that row was wrong about what the obstacle was.
+It is now live in the worker realm, `createPolicy` and all, and the fix touched
+no state at all.
+
+`trusted_types.zig` took a `*Frame` in seven places and wanted exactly four
+things from it: a factory to create branded objects in, an arena to dupe a
+policy name into, the isolate to throw on, and the local handle to call the
+page's callback through. **All four are on `*Execution`, and `Env.zig` builds one
+per context out of that context's own global** — `._factory = global._factory`,
+`.arena = global.arena`. So a worker's Execution already *is* worker-owned
+state; the file was reaching past it to the frame that happened to be more
+familiar. One of the file's own members, `getTypeMapping`, already took an
+`*Execution`.
+
+Seven signatures changed from `frame: *Frame` to `exec: *Execution`, the file's
+`Frame` import came out, `WorkerGlobalScope` got a `_trusted_types` factory of
+its own next to its scheduler and crypto, and the module went on
+`worker_common_apis`.
+
+**The A/B, which is the whole point.** The previous attempt at this — handing the
+worker realm `worker._frame` out of `getGlobalArg` — turned `cf-scrapingcourse`
+into `CRASHED SIGABRT`, twice. Through an Execution instead: `cf-challenge`,
+`doc=403->200`, 47 nodes, `"Just a moment..."`, **three consecutive runs**, which
+is the control reading exactly. `make test` 1435/1435. So the abort was never
+"Trusted Types in a worker" — it was the borrowed Frame, and nothing else.
+
+| | before | after | Chrome 151 |
+|---|---|---|---|
+| `self` own names | 264 | **269** | 336 |
+| `WorkerGlobalScope.prototype` | 25 | **26** | 30 |
+| names Chrome's worker has and ours does not | 72 | **67** | — |
+| `self.trustedTypes` | `undefined` | `[object TrustedTypePolicyFactory]` | same |
+| `createPolicy('Kssz2', {createScript}).createScript('x')` | — | `[object TrustedScript]`, `"x/ok"` | same |
+
+The station's trampoline worker opens with
+`var _p=null;if(self.trustedTypes)try{_p=self.trustedTypes.createPolicy('Kssz2',…)}`,
+and that branch is now the one it takes. The verdict is still `cf-challenge`, so
+the feature detect was not the deciding property either — but it was the one
+place in the whole worker realm where the station's own code was demonstrably
+reading us and getting `undefined`.
+
+**The rule this replaces.** "A member that takes a `*Frame` stays out of the
+worker realm" still holds as written — you may not hand a worker its owner's
+Frame. What does not follow, and what the section above assumed, is that such a
+member is therefore *stuck*. Check what it actually wants from the Frame first:
+if it is a factory, an arena, a scheduler, the isolate or the local handle, an
+`*Execution` has all of them per-realm and the conversion is mechanical. Only a
+member that wants something genuinely page-scoped — the DOM, the frame's URL, the
+navigation state — is really blocked.
+
+By that test the remaining 67 divide differently than the table above suggests,
+and the next pass should re-audit rather than trust it: WebGPU wants one Frame
+for one accessor, `StorageBucket.indexedDB` reaches `global.frame.window`, and
+the MediaSource and font families want a Page. Those are three different
+distances from possible.

@@ -961,9 +961,18 @@ fn getGlobalArg(comptime T: type, ctx: *Context) T {
             // from `cf-challenge` to `CRASHED SIGABRT` inside the trampoline
             // worker's onmessage, twice; reverting the line restored it.
             //
-            // So a member that takes a Frame stays out of the worker realm. That
-            // is what keeps Trusted Types out of it, and it is the ceiling on how
-            // much of the 122-name shortfall can be closed by naming modules.
+            // So a member that takes a Frame stays out of the worker realm.
+            //
+            // What does *not* follow is that such a member is stuck there. Ask
+            // what it wanted the Frame for first: a factory, an arena, the
+            // scheduler, the isolate or the local handle are all on *Execution,
+            // and Env.zig builds one per context out of that context's own
+            // global -- so converting the signature is mechanical and the state
+            // it reaches is the worker's. That is how Trusted Types got in
+            // (trusted_types.zig, seven signatures, no new state, and the same
+            // cf-scrapingcourse reading over three runs). Only a member that
+            // wants something genuinely page-scoped -- the DOM, the frame's URL,
+            // the navigation state -- is really blocked.
             .worker => unreachable,
         };
     }

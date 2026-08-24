@@ -74,6 +74,21 @@ in results/probes/expr-worker-surface.chrome.json).
       // getGlobalArg in js/Caller.zig.
       testing.expectEqual('', data.frame_bound);
 
+      // Trusted Types. Chrome holds `trustedTypes` on WorkerGlobalScope
+      // .prototype, and everything the factory does in a worker it also does on
+      // a page: createPolicy answers a named policy, createScript runs the
+      // page's own callback and boxes the result, and emptyScript keeps its
+      // identity across reads.
+      testing.expectEqual('WorkerGlobalScope.prototype', data.tt_holder);
+      testing.expectEqual('[object TrustedTypePolicyFactory]', data.tt_brand);
+      testing.expectEqual('', data.tt_interfaces);
+      testing.expectEqual('Kssz2', data.tt_policy_name);
+      testing.expectEqual('x/ok', data.tt_created);
+      testing.expectEqual('[object TrustedScript]', data.tt_created_brand);
+      testing.expectEqual(true, data.tt_empty_identity);
+      // Nothing here enforces a CSP, so no policy ever becomes the default one.
+      testing.expectEqual(null, data.tt_default_policy);
+
       // console is an own data property of the global and is not on the
       // interface prototype behind it.
       testing.expectEqual('self', data.holder_console);

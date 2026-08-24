@@ -183,6 +183,11 @@
      "TextMetrics",
      "TransformStream",
      "TransformStreamDefaultController",
+     "TrustedHTML",
+     "TrustedScript",
+     "TrustedScriptURL",
+     "TrustedTypePolicy",
+     "TrustedTypePolicyFactory",
      "TypeError",
      "URIError",
      "URL",
@@ -305,7 +310,8 @@
      "self",
      "setInterval",
      "setTimeout",
-     "structuredClone"
+     "structuredClone",
+     "trustedTypes"
     ]
    },
    {
@@ -515,6 +521,11 @@
    "TextMetrics": "function/0 c w",
    "TransformStream": "function/0 c w",
    "TransformStreamDefaultController": "function/0 c w",
+   "TrustedHTML": "function/0 c w",
+   "TrustedScript": "function/0 c w",
+   "TrustedScriptURL": "function/0 c w",
+   "TrustedTypePolicy": "function/0 c w",
+   "TrustedTypePolicyFactory": "function/0 c w",
    "TypeError": "function/1 c w",
    "URIError": "function/1 c w",
    "URL": "function/1 c w",
@@ -1462,6 +1473,31 @@
     "length": 0,
     "proto_own": 4
    },
+   "TrustedHTML": {
+    "name": "TrustedHTML",
+    "length": 0,
+    "proto_own": 3
+   },
+   "TrustedScript": {
+    "name": "TrustedScript",
+    "length": 0,
+    "proto_own": 3
+   },
+   "TrustedScriptURL": {
+    "name": "TrustedScriptURL",
+    "length": 0,
+    "proto_own": 3
+   },
+   "TrustedTypePolicy": {
+    "name": "TrustedTypePolicy",
+    "length": 0,
+    "proto_own": 5
+   },
+   "TrustedTypePolicyFactory": {
+    "name": "TrustedTypePolicyFactory",
+    "length": 0,
+    "proto_own": 11
+   },
    "TypeError": {
     "name": "TypeError",
     "length": 1,
@@ -1735,7 +1771,7 @@
    "WorkerGlobalScope": {
     "name": "WorkerGlobalScope",
     "length": 0,
-    "proto_own": 25
+    "proto_own": 26
    },
    "WorkerLocation": {
     "name": "WorkerLocation",
@@ -1855,18 +1891,18 @@
   },
   "values": {
    "location": {
-    "href": "blob:http://127.0.0.1:54619/c233ddd1-98a6-4e5d-80a5-3163aeab6353",
-    "origin": "http://127.0.0.1:54619",
+    "href": "blob:http://127.0.0.1:60826/8b10461c-62a3-4473-b99c-447954f4fb82",
+    "origin": "http://127.0.0.1:60826",
     "protocol": "blob:",
     "host": "",
     "hostname": "",
     "port": "",
-    "pathname": "http://127.0.0.1:54619/c233ddd1-98a6-4e5d-80a5-3163aeab6353",
+    "pathname": "http://127.0.0.1:60826/8b10461c-62a3-4473-b99c-447954f4fb82",
     "search": "",
     "hash": ""
    },
-   "location_string": "blob:http://127.0.0.1:54619/c233ddd1-98a6-4e5d-80a5-3163aeab6353",
-   "origin": "http://127.0.0.1:54619",
+   "location_string": "blob:http://127.0.0.1:60826/8b10461c-62a3-4473-b99c-447954f4fb82",
+   "origin": "http://127.0.0.1:60826",
    "isSecureContext": true,
    "crossOriginIsolated": false,
    "self_name": "",
@@ -9411,18 +9447,18 @@
   },
   "values": {
    "location": {
-    "href": "http://127.0.0.1:54619/",
-    "origin": "http://127.0.0.1:54619",
+    "href": "http://127.0.0.1:60826/",
+    "origin": "http://127.0.0.1:60826",
     "protocol": "http:",
-    "host": "127.0.0.1:54619",
+    "host": "127.0.0.1:60826",
     "hostname": "127.0.0.1",
-    "port": "54619",
+    "port": "60826",
     "pathname": "/",
     "search": "",
     "hash": ""
    },
-   "location_string": "http://127.0.0.1:54619/",
-   "origin": "http://127.0.0.1:54619",
+   "location_string": "http://127.0.0.1:60826/",
+   "origin": "http://127.0.0.1:60826",
    "isSecureContext": true,
    "crossOriginIsolated": false,
    "self_name": "",
@@ -9466,7 +9502,7 @@
     "mobile": false,
     "platform": "macOS"
    },
-   "clock_clamp": 0.09999999999999432,
+   "clock_clamp": 0.09999999999999787,
    "performance_now_typeof": "number",
    "timeOrigin_typeof": "number",
    "toString_self": "[object Window]",

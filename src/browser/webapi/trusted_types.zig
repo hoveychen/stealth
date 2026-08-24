@@ -25,11 +25,19 @@
 //! sink ever checks it. What matters for parity is the surface -- five globals,
 //! their prototypes, the factory's answers, and the type mapping -- all measured
 //! on a headed Chrome 150 over http://localhost.
+//!
+//! Every member here takes an `*Execution` rather than the `*Frame` it used to,
+//! and that is what lets a worker have Trusted Types at all. A worker realm
+//! cannot be handed its owner's Frame -- see the comment on `getGlobalArg` in
+//! js/Caller.zig, which is a live SIGABRT and not a style preference -- but its
+//! Execution is its own: Env.zig builds one per context, taking `_factory` and
+//! `arena` from that context's global. The three things this file wanted a Frame
+//! for (a factory to create in, an arena to dupe into, the isolate and local
+//! handle) are all on Execution and all per-realm.
 
 const std = @import("std");
 
 const js = @import("../js/js.zig");
-const Frame = @import("../Frame.zig");
 const Execution = js.Execution;
 const v8 = js.v8;
 
@@ -280,15 +288,15 @@ pub const TrustedTypePolicy = struct {
     fn missingMember(
         self: *const TrustedTypePolicy,
         comptime member: []const u8,
-        frame: *Frame,
+        exec: *Execution,
     ) anyerror {
         const message = std.fmt.allocPrint(
-            frame.call_arena,
+            exec.call_arena,
             "Failed to execute '" ++ member ++ "' on 'TrustedTypePolicy': Policy {s}'s " ++
                 "TrustedTypePolicyOptions did not specify a '" ++ member ++ "' member.",
             .{self._name},
         ) catch return error.TypeError;
-        const isolate = frame.js.isolate;
+        const isolate = exec.js.isolate;
         _ = isolate.throwException(isolate.createTypeError(message));
         return error.JsException;
     }
@@ -296,38 +304,38 @@ pub const TrustedTypePolicy = struct {
     fn apply(
         callback: ?js.Function.Global,
         input: ?[]const u8,
-        frame: *Frame,
+        exec: *Execution,
     ) ![]const u8 {
-        const local = frame.js.local.?;
+        const local = exec.js.local.?;
         const result = try callback.?.local(local).call([]const u8, .{input orelse ""});
-        return frame.dupeString(result);
+        return exec.dupeString(result);
     }
 
     pub fn createHTML(
         self: *TrustedTypePolicy,
         input: ?[]const u8,
-        frame: *Frame,
+        exec: *Execution,
     ) !*TrustedHTML {
-        if (self._create_html == null) return self.missingMember("createHTML", frame);
-        return frame._factory.create(TrustedHTML{ ._value = try apply(self._create_html, input, frame) });
+        if (self._create_html == null) return self.missingMember("createHTML", exec);
+        return exec._factory.create(TrustedHTML{ ._value = try apply(self._create_html, input, exec) });
     }
 
     pub fn createScript(
         self: *TrustedTypePolicy,
         input: ?[]const u8,
-        frame: *Frame,
+        exec: *Execution,
     ) !*TrustedScript {
-        if (self._create_script == null) return self.missingMember("createScript", frame);
-        return frame._factory.create(TrustedScript{ ._value = try apply(self._create_script, input, frame) });
+        if (self._create_script == null) return self.missingMember("createScript", exec);
+        return exec._factory.create(TrustedScript{ ._value = try apply(self._create_script, input, exec) });
     }
 
     pub fn createScriptURL(
         self: *TrustedTypePolicy,
         input: ?[]const u8,
-        frame: *Frame,
+        exec: *Execution,
     ) !*TrustedScriptURL {
-        if (self._create_script_url == null) return self.missingMember("createScriptURL", frame);
-        return frame._factory.create(TrustedScriptURL{ ._value = try apply(self._create_script_url, input, frame) });
+        if (self._create_script_url == null) return self.missingMember("createScriptURL", exec);
+        return exec._factory.create(TrustedScriptURL{ ._value = try apply(self._create_script_url, input, exec) });
     }
 
     pub const JsApi = struct {
@@ -355,16 +363,16 @@ pub const TrustedTypePolicyFactory = struct {
 
     pub const init: TrustedTypePolicyFactory = .{};
 
-    pub fn getEmptyHTML(self: *TrustedTypePolicyFactory, frame: *Frame) !*TrustedHTML {
+    pub fn getEmptyHTML(self: *TrustedTypePolicyFactory, exec: *Execution) !*TrustedHTML {
         if (self._empty_html) |empty| return empty;
-        const created = try frame._factory.create(TrustedHTML{ ._value = "" });
+        const created = try exec._factory.create(TrustedHTML{ ._value = "" });
         self._empty_html = created;
         return created;
     }
 
-    pub fn getEmptyScript(self: *TrustedTypePolicyFactory, frame: *Frame) !*TrustedScript {
+    pub fn getEmptyScript(self: *TrustedTypePolicyFactory, exec: *Execution) !*TrustedScript {
         if (self._empty_script) |empty| return empty;
-        const created = try frame._factory.create(TrustedScript{ ._value = "" });
+        const created = try exec._factory.create(TrustedScript{ ._value = "" });
         self._empty_script = created;
         return created;
     }
@@ -383,11 +391,11 @@ pub const TrustedTypePolicyFactory = struct {
         _: *TrustedTypePolicyFactory,
         policy_name: []const u8,
         options: ?TrustedTypePolicy.Options,
-        frame: *Frame,
+        exec: *Execution,
     ) !*TrustedTypePolicy {
         const opts = options orelse TrustedTypePolicy.Options{};
-        return frame._factory.create(TrustedTypePolicy{
-            ._name = try frame.dupeString(policy_name),
+        return exec._factory.create(TrustedTypePolicy{
+            ._name = try exec.dupeString(policy_name),
             ._create_html = if (opts.createHTML) |cb| try cb.persist() else null,
             ._create_script = if (opts.createScript) |cb| try cb.persist() else null,
             ._create_script_url = if (opts.createScriptURL) |cb| try cb.persist() else null,
