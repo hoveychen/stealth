@@ -331,7 +331,10 @@ pub const RGBA = packed struct(u32) {
     ///
     /// Out-of-range channels clamp rather than reject, and halves round away
     /// from zero, both of which match what Chrome reads back.
-    pub fn parseFunction(input: []const u8) ?RGBA {
+    ///
+    /// The answer is a `Style` rather than an `RGBA` because two of the five
+    /// carry a colour the byte form cannot hold — see `Style.float`.
+    pub fn parseFunction(input: []const u8) ?Style {
         const open = std.mem.indexOfScalar(u8, input, '(') orelse return null;
         if (input.len == 0 or input[input.len - 1] != ')') return null;
 
@@ -388,13 +391,17 @@ pub const RGBA = packed struct(u32) {
         else
             255;
 
-        var rgba = switch (kind) {
-            .rgb => parseRgbChannels(parts[0..3]),
-            .hsl => parseHslChannels(parts[0..3]),
-            .hwb => parseHwbChannels(parts[0..3]),
-        } orelse return null;
-        rgba.a = alpha;
-        return rgba;
+        var style: Style = switch (kind) {
+            // Legacy `rgb()` quantises in the parser, so its channels *are*
+            // bytes and no float survives it -- measured, and it is what bounds
+            // the two families below: on a display-p3 canvas Chrome converts
+            // `rgb(50% 0% 0%)` as 128 rather than as 127.5.
+            .rgb => .{ .rgba = parseRgbChannels(parts[0..3]) orelse return null },
+            .hsl => .fromUnit(parseHslChannels(parts[0..3]) orelse return null),
+            .hwb => .fromUnit(parseHwbChannels(parts[0..3]) orelse return null),
+        };
+        style.rgba.a = alpha;
+        return style;
     }
 
     fn parseRgbChannels(parts: []const []const u8) ?RGBA {
@@ -422,18 +429,21 @@ pub const RGBA = packed struct(u32) {
         return .{ .r = channels[0], .g = channels[1], .b = channels[2], .a = 255 };
     }
 
-    fn parseHslChannels(parts: []const []const u8) ?RGBA {
+    /// The two families answer the 0..1 triple rather than the byte one, because
+    /// their channels are not byte-valued and a caller that converts them into
+    /// another colour space needs the unrounded form. See `Style.float`.
+    fn parseHslChannels(parts: []const []const u8) ?[3]f64 {
         const hue = parseHue(parts[0]) orelse return null;
         const s = parsePercent(parts[1]) orelse return null;
         const l = parsePercent(parts[2]) orelse return null;
-        return fromUnit(hslToRgb(hue, s, l));
+        return hslToRgb(hue, s, l);
     }
 
-    fn parseHwbChannels(parts: []const []const u8) ?RGBA {
+    fn parseHwbChannels(parts: []const []const u8) ?[3]f64 {
         const hue = parseHue(parts[0]) orelse return null;
         const w = parsePercent(parts[1]) orelse return null;
         const b = parsePercent(parts[2]) orelse return null;
-        return fromUnit(hwbToRgb(hue, w, b));
+        return hwbToRgb(hue, w, b);
     }
 
     /// Three channels on the 0..1 scale as an opaque colour.
@@ -559,6 +569,60 @@ pub const RGBA = packed struct(u32) {
 pub const Style = struct {
     rgba: RGBA,
     wide: ?Wide = null,
+    /// The sRGB channels on the 0..1 scale, unrounded, for the notations whose
+    /// channels are not byte-valued: `hsl()`, `hsla()` and `hwb()`. Null
+    /// everywhere else, where `rgba` already *is* the colour.
+    ///
+    /// It exists because a display-p3 canvas converts the colour before it
+    /// quantises it, and the two orders do not agree: `hsl(30 60% 40%)` is
+    /// (0.64, 0.4, 0.16), and converting that stores `9b6935` where converting
+    /// the bytes it answers back -- (163, 102, 41) -- stores `9a6935`. Chrome
+    /// stores the first (results/canvas-color-notation.chrome.json). Legacy
+    /// `rgb()` is not in this set: its parser rounds first, so the byte is the
+    /// source there and `rgb(50% 0% 0%)` converts 128 rather than 127.5.
+    float: ?[3]f64 = null,
+
+    /// Three sRGB channels on the 0..1 scale, kept in both forms: the byte one
+    /// for everything that reads a colour back, and the float one for the
+    /// canvas that converts it first.
+    fn fromUnit(rgb: [3]f64) Style {
+        return .{ .rgba = .fromUnit(rgb), .float = rgb };
+    }
+
+    /// The colour a canvas bitmap in `space` paints with, still unquantised —
+    /// see `Paint`.
+    ///
+    /// A wide notation resolves from `wide` rather than from `rgba`, because
+    /// `rgba` has already been clipped into sRGB's gamut and the clip does not
+    /// come back out: on a display-p3 canvas Chrome stores `ff228d` for
+    /// `color(rec2020 1 0.25 0.5)`, where converting the sRGB bytes it also
+    /// reports would give `ea338b` (probes/canvas-own-color-space.js).
+    pub fn paint(self: Style, space: CanvasSpace) Paint {
+        if (self.wide) |source| {
+            return source.toPaint(space);
+        }
+        const unit = self.float orelse {
+            if (space == .srgb) {
+                return .fromRGBA(self.rgba);
+            }
+            return convertCanvasPaint(.srgb, space, .fromRGBA(self.rgba));
+        };
+        // A legacy alpha is a byte by the time it is parsed, whichever notation
+        // carried it — only `Wide`'s is a float. See `Paint`.
+        const alpha = self.rgba.normalizedAlpha();
+        const rgb: [3]f32 = .{
+            @floatCast(unit[0]),
+            @floatCast(unit[1]),
+            @floatCast(unit[2]),
+        };
+        const converted = convertCanvasUnit(.srgb, space, rgb);
+        return .clip(
+            converted[0] * 255,
+            converted[1] * 255,
+            converted[2] * 255,
+            alpha,
+        );
+    }
 };
 
 /// The whole grammar this engine reads: a hex form, a named color, or any of
@@ -570,7 +634,7 @@ pub fn parseStyle(input: []const u8) ?Style {
     const trimmed = std.mem.trim(u8, input, &std.ascii.whitespace);
     if (trimmed.len == 0) return null;
     if (std.mem.indexOfScalar(u8, trimmed, '(') != null) {
-        if (RGBA.parseFunction(trimmed)) |rgba| return .{ .rgba = rgba };
+        if (RGBA.parseFunction(trimmed)) |style| return style;
         const wide = Wide.parse(trimmed) orelse return null;
         return .{ .rgba = wide.toRGBA(.srgb), .wide = wide };
     }
@@ -613,7 +677,12 @@ pub fn writeAlpha(writer: *Io.Writer, alpha: u8) Io.Writer.Error!void {
 /// The chroma/match formulation, not CSS Color 4's `f(n)` one: the two agree to
 /// within a ULP, and switching to the spec's does not buy a reading — measured,
 /// it moves `hwb(200 10% 20%)`'s green from 144.49999999999997 to
-/// 144.4999999999999, which rounds the same way and still is not Chrome's 145.
+/// 144.4999999999999, and both round the same way.
+///
+/// What *did* buy that reading is the width the channel is carried at rather
+/// than the formulation: 17/30 is a whisker under 144.5 in double and exactly
+/// 144.5 in float, and Chrome's 145 is the float. So the caller narrows to f32
+/// before it quantises — see `Style.float`.
 pub fn hslToRgb(hue: f64, saturation: f64, lightness: f64) [3]f64 {
     const h = @mod(hue, 360.0);
     const c = (1 - @abs(2 * lightness - 1)) * saturation;
@@ -1548,6 +1617,149 @@ test "color: canvas space conversion matches Chrome's own readbacks" {
         &.{ 0xea, 0x33, 0x23, 0xff, 0x00, 0x00, 0xf5, 0xff },
         &pair,
     );
+}
+
+test "color: hsl and hwb reach a canvas as floats, legacy rgb as bytes" {
+    // Readings from results/canvas-color-notation.chrome.json: the notation
+    // painted on a display-p3 canvas (`display-p3->display-p3`), and the same
+    // bitmap read back as srgb (`display-p3->srgb`). The srgb column is the
+    // control — an srgb canvas quantises on the way in either way, so the float
+    // source must not move it.
+    const cases = [_]struct {
+        notation: []const u8,
+        srgb: [3]u8,
+        p3: [3]u8,
+        back: [3]u8,
+    }{
+        // (163.2, 102, 40.8): converting the float stores 9b, converting the
+        // byte stores 9a, and the round trip back to srgb doubles the gap.
+        .{
+            .notation = "hsl(30 60% 40%)",
+            .srgb = .{ 0xa3, 0x66, 0x29 },
+            .p3 = .{ 0x9b, 0x69, 0x35 },
+            .back = .{ 0xa4, 0x66, 0x28 },
+        },
+        // (51, 178.5, 51), and the same story with the opposite sign.
+        .{
+            .notation = "hwb(120 20% 30%)",
+            .srgb = .{ 0x33, 0xb3, 0x33 },
+            .p3 = .{ 0x5c, 0xb0, 0x47 },
+            .back = .{ 0x33, 0xb3, 0x33 },
+        },
+        // The bound: legacy `rgb()` rounds in the parser, so 127.5 is a 128 by
+        // the time the conversion sees it and Chrome sides with the byte arm.
+        .{
+            .notation = "rgb(50% 0% 0%)",
+            .srgb = .{ 0x80, 0x00, 0x00 },
+            .p3 = .{ 0x75, 0x14, 0x0c },
+            .back = .{ 0x80, 0x00, 0x00 },
+        },
+        // Byte-valued channels, so both arms agree and nothing should move.
+        .{
+            .notation = "hsl(0 100% 50%)",
+            .srgb = .{ 0xff, 0x00, 0x00 },
+            .p3 = .{ 0xea, 0x33, 0x23 },
+            .back = .{ 0xff, 0x00, 0x00 },
+        },
+        // A whiteness and blackness past 100%, which is the grey between them:
+        // 5/11 of a byte is 115.909, so the float rounds up to the same 116 the
+        // byte arm already had.
+        .{
+            .notation = "hwb(120 50% 60%)",
+            .srgb = .{ 0x74, 0x74, 0x74 },
+            .p3 = .{ 0x74, 0x74, 0x74 },
+            .back = .{ 0x74, 0x74, 0x74 },
+        },
+        // 17/30 of a byte: 144.49999999999997 in double, exactly 144.5 in
+        // float. This row is the one that says the channel is narrowed to f32
+        // before it is quantised, and the srgb column says it without any
+        // colour space conversion being involved at all.
+        .{
+            .notation = "hwb(200 10% 20%)",
+            .srgb = .{ 0x1a, 0x91, 0xcc },
+            .p3 = .{ 0x44, 0x8e, 0xc7 },
+            .back = .{ 0x19, 0x90, 0xcc },
+        },
+        // Nine more of the same shape, so no single knife edge is carrying the
+        // claim on its own. Every channel here is a repeating fraction of a
+        // byte (measured -- probes/canvas-float-source-channels.js).
+        .{
+            .notation = "hwb(200 10% 21%)",
+            .srgb = .{ 0x1a, 0x8f, 0xc9 },
+            .p3 = .{ 0x43, 0x8d, 0xc4 },
+            .back = .{ 0x17, 0x8f, 0xc9 },
+        },
+        .{
+            .notation = "hsl(280 70% 30%)",
+            .srgb = .{ 0x5e, 0x17, 0x82 },
+            .p3 = .{ 0x57, 0x1d, 0x7d },
+            .back = .{ 0x5f, 0x17, 0x82 },
+        },
+        .{
+            .notation = "hsl(90 33% 57%)",
+            .srgb = .{ 0x91, 0xb6, 0x6d },
+            .p3 = .{ 0x99, 0xb4, 0x75 },
+            .back = .{ 0x92, 0xb5, 0x6d },
+        },
+        .{
+            .notation = "hsl(210 25% 61%)",
+            .srgb = .{ 0x83, 0x9c, 0xb4 },
+            .p3 = .{ 0x88, 0x9b, 0xb2 },
+            .back = .{ 0x83, 0x9c, 0xb4 },
+        },
+        .{
+            .notation = "hwb(45 15% 35%)",
+            .srgb = .{ 0xa6, 0x86, 0x26 },
+            .p3 = .{ 0xa1, 0x87, 0x39 },
+            .back = .{ 0xa6, 0x86, 0x25 },
+        },
+        .{
+            .notation = "hsl(150 40% 45%)",
+            .srgb = .{ 0x45, 0xa1, 0x73 },
+            .p3 = .{ 0x5e, 0x9f, 0x76 },
+            .back = .{ 0x45, 0xa1, 0x72 },
+        },
+        .{
+            .notation = "hwb(300 5% 5%)",
+            .srgb = .{ 0xf2, 0x0d, 0xf2 },
+            .p3 = .{ 0xde, 0x33, 0xea },
+            .back = .{ 0xf2, 0x0c, 0xf2 },
+        },
+        // Exactly half a byte, which rounds away from zero to 128 -- and grey
+        // does not stay grey across the D50 round trip, so the p3 column is not
+        // three equal channels.
+        .{
+            .notation = "hsl(0 0% 50%)",
+            .srgb = .{ 0x80, 0x80, 0x80 },
+            .p3 = .{ 0x80, 0x7f, 0x7f },
+            .back = .{ 0x80, 0x7f, 0x7f },
+        },
+        // Two more `rgb()` bounds: a percentage that is not byte-valued, and
+        // fractional numbers. Both are rounded by the parser, so the float
+        // never reaches the conversion.
+        .{
+            .notation = "rgb(10% 20% 30%)",
+            .srgb = .{ 0x1a, 0x33, 0x4d },
+            .p3 = .{ 0x20, 0x32, 0x4b },
+            .back = .{ 0x1a, 0x33, 0x4d },
+        },
+        .{
+            .notation = "rgb(2.5 3.5 4.5)",
+            .srgb = .{ 0x03, 0x04, 0x05 },
+            .p3 = .{ 0x03, 0x04, 0x05 },
+            .back = .{ 0x03, 0x04, 0x05 },
+        },
+    };
+    for (cases) |case| {
+        const style = parseStyle(case.notation) orelse return error.Unparseable;
+        const srgb = style.paint(.srgb).toRGBA();
+        try std.testing.expectEqualSlices(u8, &case.srgb, &.{ srgb.r, srgb.g, srgb.b });
+        const p3 = style.paint(.@"display-p3").toRGBA();
+        try std.testing.expectEqualSlices(u8, &case.p3, &.{ p3.r, p3.g, p3.b });
+        var read: [4]u8 = .{ p3.r, p3.g, p3.b, p3.a };
+        convertCanvasPixels(.@"display-p3", .srgb, &read);
+        try std.testing.expectEqualSlices(u8, &case.back, read[0..3]);
+    }
 }
 
 test "color: canvas space matrix matches Chrome cell for cell" {
