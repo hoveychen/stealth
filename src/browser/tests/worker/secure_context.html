@@ -54,9 +54,16 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // Then five more, once the File System Access handles went on: OPFS is
       // only usable from a worker, so Chrome's worker carries all five and this
       // one now does too (worker/opfs.html).
+      //
+      // 211 since the realm stopped borrowing the window's surface
+      // (worker/realm_surface.html): out went Navigator, CookieStore,
+      // CookieChangeEvent and the own copy of cookieStore -- none of which a
+      // Chrome worker has -- and in came WorkerNavigator plus the three members
+      // of the global that were missing, `name`, `origin` and
+      // `crossOriginIsolated`.
       testing.expectEqual(13, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(212, data.count);
+      testing.expectEqual(211, data.count);
     });
   }
 </script>

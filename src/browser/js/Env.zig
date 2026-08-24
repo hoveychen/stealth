@@ -401,16 +401,17 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
         // and Object.getOwnPropertyNames(window) is a surface fingerprinters
         // read directly -- so the property is put back here, per context.
         //
-        // The window realm's Console comes from the Window itself: [Global]
-        // leaves nothing on Window.prototype to resolve through. A worker's
-        // `console` belongs to WorkerGlobalScope, which is an *inherited*
-        // interface there rather than the [Global] one, so its accessor is
-        // still on WorkerGlobalScope.prototype and a plain get finds it.
+        // Both realms resolve it from the scope object itself. A worker used to
+        // read it back off the global, which worked only because
+        // WorkerGlobalScope.prototype carried a `console` accessor -- and Chrome
+        // has nothing named console on that prototype (measured,
+        // probes/expr-worker-surface.js), so the accessor is gone and the value
+        // has to come from the same place the window realm's does.
         const global_object = context.globalObject(&ls.local);
         const console_value = if (comptime is_frame)
             ls.local.zigValueToJs(global.window.getConsole(), .{})
         else
-            global_object.get("console");
+            ls.local.zigValueToJs(global.getConsole(), .{});
         if (console_value) |value| {
             _ = global_object.defineOwnProperty("console", value, v8.DontEnum);
         } else |err| {

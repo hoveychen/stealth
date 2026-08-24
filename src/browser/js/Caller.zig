@@ -952,6 +952,18 @@ fn getGlobalArg(comptime T: type, ctx: *Context) T {
     if (comptime isFrame(T)) {
         return switch (ctx.global) {
             .frame => |frame| frame,
+            // A worker realm cannot be handed its owner's Frame, even though it
+            // holds a pointer to one. Answering `worker._frame` here compiles and
+            // passes every local test, and then aborts the engine on the live
+            // Cloudflare station: the frame's factory and arenas belong to the
+            // page thread. Measured -- with that one line changed and
+            // `trustedTypes`/`caches` exposed on top of it, cf-scrapingcourse went
+            // from `cf-challenge` to `CRASHED SIGABRT` inside the trampoline
+            // worker's onmessage, twice; reverting the line restored it.
+            //
+            // So a member that takes a Frame stays out of the worker realm. That
+            // is what keeps Trusted Types out of it, and it is the ceiling on how
+            // much of the 122-name shortfall can be closed by naming modules.
             .worker => unreachable,
         };
     }

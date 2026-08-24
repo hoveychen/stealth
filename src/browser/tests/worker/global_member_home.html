@@ -7,7 +7,7 @@ that carries it moves its members onto the global object. Measured on headless
 Chrome 151 with a blob worker (expr-worker-global-shape):
 
   Object.getPrototypeOf(self) === DedicatedWorkerGlobalScope.prototype -> true
-  Object.getOwnPropertyNames(DedicatedWorkerGlobalScope.prototype)     -> PERSISTENT, TEMPORARY, constructor
+  Object.getOwnPropertyNames(DedicatedWorkerGlobalScope.prototype)     -> TEMPORARY, PERSISTENT, constructor
   onmessage / postMessage      -> own on self          (DedicatedWorkerGlobalScope is [Global])
   fetch / isSecureContext      -> WorkerGlobalScope.prototype  (inherited, so it stays put)
   addEventListener             -> EventTarget.prototype
@@ -44,10 +44,11 @@ from over-reaching one level up.
       // an own data property -- which is the shape Chrome reports for it.
       testing.expectEqual('self', data.holder_console);
 
-      // Chrome also carries the two deprecated quota constants here; this
-      // engine does not declare them on a worker global, so `constructor` is
-      // all that is left once the members move off.
-      testing.expectEqual('constructor', data.dwgs_prototype_own.join(','));
+      // Chrome carries the two deprecated quota constants here, and so does
+      // this engine now (worker/realm_surface.html asserts Chrome's own,
+      // unsorted order: TEMPORARY, PERSISTENT, constructor). Constants are what
+      // [Global] leaves behind when the operations and attributes move off.
+      testing.expectEqual('PERSISTENT,TEMPORARY,constructor', data.dwgs_prototype_own.join(','));
     });
   }
 </script>

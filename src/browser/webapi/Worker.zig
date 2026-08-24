@@ -53,6 +53,10 @@ _arena: *lp.Arena,
 _worker_scope: *DedicatedWorkerGlobalScope,
 
 _url: [:0]const u8,
+// The `name` option, which the worker's own global reports as `self.name`. An
+// omitted option is the empty string, not undefined (measured on a Chrome 151
+// blob worker, probes/expr-worker-surface.js).
+_name: []const u8 = "",
 _type: WorkerType = .classic,
 _script_loaded: bool = false,
 _script_arena: ?*lp.Arena = null,
@@ -61,6 +65,7 @@ _http_transfer: ?*Transfer = null,
 
 const WorkerOptions = struct {
     type: WorkerType = .classic,
+    name: []const u8 = "",
 };
 
 pub fn init(url: []const u8, options: ?WorkerOptions, frame: *Frame) !*Worker {
@@ -76,6 +81,7 @@ pub fn init(url: []const u8, options: ?WorkerOptions, frame: *Frame) !*Worker {
         ._frame = frame,
         ._url = resolved_url,
         ._type = if (options) |o| o.type else .classic,
+        ._name = if (options) |o| try arena.allocator().dupe(u8, o.name) else "",
         ._worker_scope = undefined,
         ._frame_id = session.nextFrameId(),
         ._loader_id = session.nextLoaderId(),

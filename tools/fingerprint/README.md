@@ -11550,3 +11550,196 @@ sweep, which had been at 27/28 with `structuredClone` the last one out, is now
   where Chrome says `Only one element on document allowed.`; the check exists
   and fires on a `createDocument` tree, so what differs is whether the blank
   document has an element child at all. Separate from the wording.
+
+## The worker realm is a hand-picked subset, and it is 124 names short (P1–P2, 2026-08-23)
+
+Every surface reading above this line was taken in a Window realm. The station
+this fork is measured against does not ask its questions there: it builds a
+blob worker whose entire program is an `eval` trampoline, posts source text in,
+and reads the answer back out. Whatever it asks is answered by a
+`DedicatedWorkerGlobalScope`, and nobody had ever read one.
+
+`probes/expr-worker-surface.js` reads the same reader twice in one page — once
+inside the worker, once in the page that built it — so a worker-only difference
+can be told from a difference this engine has in both realms. Readings:
+`results/probes/expr-worker-surface.{chrome,lightpanda}.json`, headless Chrome
+151 against the engine built from `efcc66db3`, both arms on a loopback http
+origin.
+
+**The two arms need different drivers, and that is not a detail.** This engine
+does not run scheduled tasks while an `awaitPromise` evaluate is outstanding —
+already recorded at the top of `run-page-probe.mjs` — so a probe that awaits a
+worker's message never returns under `run-expr.mjs` or `run-probe.mjs`; it hangs
+until the CDP client's own 30 s timeout. The lightpanda arm goes through
+`run-page-probe.mjs` (page load), the Chrome arm through
+`run-probe.mjs chrome <probe> http://127.0.0.1:<port>/`. `about:blank` is the
+one URL not to compare across engines, because the secure-context gate reads it
+differently on the two.
+
+### The size of it
+
+| level | Chrome 151 | here |
+|---|---|---|
+| `self` | 336 | **212** |
+| `DedicatedWorkerGlobalScope.prototype` | 3 | 1 |
+| `WorkerGlobalScope.prototype` | 30 | 25 |
+| `EventTarget.prototype` | 5 | 4 |
+| `Object.prototype` | 12 | 12 |
+
+The chain has the same shape and the same length. What differs is what is on
+it. For scale, the **window** realm of the same sitting is 1237 against 1203 —
+34 names apart, and every one of those 34 is a feature this engine does not
+implement. The worker realm is 124 apart **in names this engine already has**.
+
+`bridge.zig`'s `worker_common_apis` is a hand-written list of about ninety
+modules with a `TODO: Expand this list to include all worker-appropriate APIs.`
+above it. That TODO is the whole finding.
+
+### (A) 124 names we implement, in a realm we did not name them in
+
+Chrome's worker carries them and so does *our own window realm*; only our
+worker does not. In rough families: the whole WebGPU surface (45), WebUSB (13),
+WebHID (4), WebCodecs (11), Background Fetch (3), Push (3), Media Source (4),
+`Cache`/`CacheStorage`, `FontFace`/`FontFaceSet`, `ImageBitmap` +
+`ImageBitmapRenderingContext` + `createImageBitmap`, `ImageDecoder`/`ImageTrack`/
+`ImageTrackList`, `Lock`/`LockManager`, `Scheduler`/`TaskController`/`TaskSignal`/
+`TaskPriorityChangeEvent`, `TrustedHTML`/`TrustedScript`/`TrustedScriptURL`/
+`TrustedTypePolicy`/`TrustedTypePolicyFactory` + `trustedTypes`,
+`PerformanceResourceTiming`/`PerformanceServerTiming`, `Serial`/`SerialPort`,
+`ServiceWorkerRegistration`, `StorageBucket`/`StorageBucketManager`,
+`SyncManager`/`PeriodicSyncManager`, `NavigationPreloadManager`,
+`NetworkInformation`, `MediaCapabilities`, `UserActivation`, `CSSSkewX`/
+`CSSSkewY`, `Worker` itself, and the members `caches`, `crossOriginIsolated`,
+`name`, `onlanguagechange`, `origin`, plus `PERSISTENT`/`TEMPORARY`.
+
+`trustedTypes` is worth naming on its own, because the station reads it
+directly. Its trampoline worker's entire preamble is
+`var _p=null;if(self.trustedTypes)try{_p=self.trustedTypes.createPolicy('Kssz2',…)}`
+— a feature detect that takes the other branch here, every time.
+
+### (B) 17 names Chrome's worker has that we have in neither realm
+
+`BarcodeDetector`, `CreateMonitor`, `FileSystemObserver`, `Observable`,
+`PressureObserver`, `PressureRecord`, `RestrictionTarget`, `Subscriber`,
+`Temporal`, `WebSocketError`, `WebSocketStream`, `WorkerNavigator`, `fonts`,
+`onrtctransform`, `webkitRequestFileSystemSync`,
+`webkitResolveLocalFileSystemSyncURL`, and `EventTarget.prototype.when`. All but
+`WorkerNavigator` are also missing from our window realm, so they are not
+worker-realm findings; they belong to whatever plan closes the window shortfall.
+
+### (C) 8 names our worker carries that a Chrome worker does not
+
+Window-only in Chrome, and every one of them a leak:
+
+| name | how it got in |
+|---|---|
+| `Navigator` | `worker_common_apis` names `Navigator.zig` — see below |
+| `CookieStore`, `CookieChangeEvent`, `cookieStore` | named outright; `cookieStore` is Window and ServiceWorker, not DedicatedWorker |
+| `PerformanceNavigation`, `PerformanceTiming` | flattened in with `Performance.zig`'s type list |
+| `WebKitCSSMatrix`, `webkitURL` | `constructor_aliases` of `DOMMatrix` and `URL`, which are worker-exposed while the aliases are not |
+
+### The worker-only readings, which is what this plan is actually for
+
+Sorted by how loudly each answers a fingerprinter:
+
+1. **`navigator` here is a `Navigator`, and in a worker it is a
+   `WorkerNavigator`.** `Object.prototype.toString.call(navigator)` answers
+   `[object Navigator]` against Chrome's `[object WorkerNavigator]`, and
+   `navigator.constructor.name` says the same. The brand is the small half. The
+   large half is that nine window-only members come with it: `webdriver`,
+   `vendor`, `vendorSub`, `productSub`, `doNotTrack`, `cookieEnabled`,
+   `pdfViewerEnabled`, `javaEnabled`, `maxTouchPoints`. **`navigator.webdriver`
+   does not exist at all in a Chrome worker** — not `false`, absent — and a
+   worker that answers `false` has answered a question no browser was asked.
+2. **`self.origin` is `undefined`** where Chrome answers the owner's origin
+   (`http://127.0.0.1:9701`). Ours is not a wrong string; the property is not
+   there.
+3. **`self.crossOriginIsolated` is `undefined`.** It was fixed in the window
+   realm and the worker never got it, so a challenge that is cross-origin
+   isolated reads `true` in the page and `undefined` one thread over.
+4. **`self.name` is `undefined`** where Chrome answers `""` for an unnamed
+   worker.
+5. **A blob URL is parsed as though the scheme were not there.**
+
+   | | Chrome 151 | here |
+   |---|---|---|
+   | `location.origin` | `http://127.0.0.1:9701` | `"null"` |
+   | `location.host` | `""` | `127.0.0.1:58749` |
+   | `location.hostname` | `""` | `127.0.0.1` |
+   | `location.port` | `""` | `58749` |
+   | `location.pathname` | `http://127.0.0.1:9701/<uuid>` | `/<uuid>` |
+
+   `blob:http://host/uuid` has one opaque path — the whole `http://host/uuid` —
+   and no host of its own; the origin comes from the inner URL. We parse the
+   inner URL as if it were the outer one and then hand back `"null"` for the
+   origin we did have.
+6. **`console` sits on `WorkerGlobalScope.prototype` as well as on `self`.**
+   Chrome has it own on `self` and nowhere else. `cookieStore` is on that
+   prototype too and should not exist at all (C above).
+7. **`DedicatedWorkerGlobalScope.prototype` is missing `PERSISTENT` and
+   `TEMPORARY`** — the same two deprecated quota constants already recorded as
+   missing from `Window.prototype`.
+
+Two rows in that list are *not* worker findings and are recorded so nobody
+chases them here: `performance` lacks the three `EventTarget` methods in both
+realms (this engine's `Performance` does not inherit `EventTarget`), and the
+`HeadlessChrome`/`Chrome` split in the user agent is this fork's deliberate
+disguise, not a gap.
+
+### What the seven cost, and the one that could not be paid (P3, 2026-08-23)
+
+All seven are closed. Rerun of the same probe against the engine built from this
+branch, worker realm, both arms in one sitting:
+
+| | before | after | Chrome 151 |
+|---|---|---|---|
+| `self` own names | 212 | 211 | 336 |
+| `DedicatedWorkerGlobalScope.prototype` | 1 | **3** | 3 |
+| names our worker has and Chrome's does not | 8 | **4** | — |
+| `navigator` brand | `[object Navigator]` | `[object WorkerNavigator]` | `[object WorkerNavigator]` |
+| window-only members on `navigator` | 9 | **0** | 0 |
+| `self.origin` / `self.name` / `self.crossOriginIsolated` | all `undefined` | the owner's origin / `""` / `false` | same |
+| `location.origin` in a blob worker | `"null"` | the inner origin | the inner origin |
+| `location.host` / `port` / `pathname` | inner URL's | `""` / `""` / whole inner URL | same |
+
+`self` going *down* by one while all of that was added is the leak count paying
+for it: `Navigator`, `CookieStore` and `CookieChangeEvent` left, `WorkerNavigator`
+arrived, `cookieStore` came off the global, and `name` went on.
+
+The four names still ours alone are the two that ride in on a flattened type
+list (`PerformanceNavigation`, `PerformanceTiming`, behind `Performance.zig`) and
+the two `constructor_aliases` (`WebKitCSSMatrix`, `webkitURL`). Neither
+mechanism has a realm gate, which is a bridge change rather than a list edit.
+
+#### A worker realm cannot borrow its owner's Frame
+
+Trusted Types was going to come with this pass, because the station's own
+trampoline worker feature-detects `self.trustedTypes` in its first statement.
+It cannot, and the reason is worth recording as a rule rather than a note.
+
+`Caller.getGlobalArg` answers `unreachable` when a bound member wants a `*Frame`
+and the realm is a worker. A worker *has* a frame — the one that created it, the
+same one its origin, secure-context bit and cross-origin isolation already come
+from — so returning it looks like the obvious repair, and it behaves: the engine
+builds, all 1433 tests pass, and a local page whose blob worker calls
+`trustedTypes.createPolicy('Kssz2', {createScript: …})` gets a policy back.
+
+Against the live station it aborts. With that one line changed and
+`trustedTypes`/`caches` exposed on top of it, `antibot-sweep --only
+cf-scrapingcourse` went from `cf-challenge / 47 nodes / "Just a moment…"` to
+**`CRASHED SIGABRT`**, twice, with the stack ending in the trampoline worker's
+own `onmessage` dispatch. Reverting the line — and only that line, plus the two
+accessors that needed it — restored the control reading exactly: `cf-challenge`,
+`doc=403->200`, 47 nodes. The frame's factory and arenas belong to the page
+thread, and a worker running on its own thread reaching through them is a race
+that a local single-page probe does not provoke.
+
+So: **a member that takes a `*Frame` stays out of the worker realm.** That is
+also the ceiling on the 122-name shortfall — the families in it that resolve
+through a Frame (`gpu`, `usb`, `hid`, `serial`, `locks`, `connection`,
+`mediaCapabilities`, `storageBuckets`, and Trusted Types) need worker-owned state
+before they can be named, not a line in a list.
+
+The challenge still refuses (`cf-challenge`, same verdict as the control), so
+none of this was the deciding property. The realm it asks its questions in now
+answers as a worker rather than as a borrowed window.
