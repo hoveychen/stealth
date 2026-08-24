@@ -175,6 +175,25 @@ pub const Path = struct {
         return true;
     }
 
+    /// The same device-space geometry moved by (`dx`, `dy`), for the caller
+    /// that rasterises into a buffer whose origin is not the canvas's: a
+    /// shadow's mask, which needs room for the blur to reach past the edge.
+    /// The current point is untouched — it is in user space and this is not a
+    /// transform, only a destination.
+    pub fn translated(self: *const Path, arena: Allocator, dx: f64, dy: f64) !Path {
+        var out: Path = .{};
+        try out.subpaths.ensureTotalCapacity(arena, self.subpaths.items.len);
+        for (self.subpaths.items) |sub| {
+            var moved: Subpath = .{ .closed = sub.closed };
+            try moved.points.ensureTotalCapacity(arena, sub.points.items.len);
+            for (sub.points.items) |at| {
+                moved.points.appendAssumeCapacity(.{ .x = at.x + dx, .y = at.y + dy });
+            }
+            out.subpaths.appendAssumeCapacity(moved);
+        }
+        return out;
+    }
+
     fn open(self: *Path, arena: Allocator, at: Point, ctm: Transform) !void {
         try self.subpaths.append(arena, .{});
         const sub = &self.subpaths.items[self.subpaths.items.len - 1];
