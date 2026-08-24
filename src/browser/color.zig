@@ -386,10 +386,10 @@ pub const RGBA = packed struct(u32) {
         }
         if (count != 3 and count != 4) return null;
 
-        const alpha: u8 = if (count == 4)
-            round255((parseAlpha(parts[3]) orelse return null) * 255)
+        const alpha: f64 = if (count == 4)
+            parseAlpha(parts[3]) orelse return null
         else
-            255;
+            1;
 
         var style: Style = switch (kind) {
             // Legacy `rgb()` quantises in the parser, so its channels *are*
@@ -400,7 +400,12 @@ pub const RGBA = packed struct(u32) {
             .hsl => .fromUnit(parseHslChannels(parts[0..3]) orelse return null),
             .hwb => .fromUnit(parseHwbChannels(parts[0..3]) orelse return null),
         };
-        style.rgba.a = alpha;
+        style.rgba.a = round255(alpha * 255);
+        // `hwb()` is the one function here CSS Color 4 does not call legacy, so
+        // its alpha is not quantised with the rest of it. See `Style.alpha`.
+        if (kind == .hwb) {
+            style.alpha = alpha;
+        }
         return style;
     }
 
@@ -582,6 +587,21 @@ pub const Style = struct {
     /// source there and `rgb(50% 0% 0%)` converts 128 rather than 127.5.
     float: ?[3]f64 = null,
 
+    /// The source alpha, unrounded, for the notations CSS Color 4 does *not*
+    /// call legacy. Null for the ones it does, whose alpha is a byte by the
+    /// time it is parsed and so already lives in `rgba`.
+    ///
+    /// Only `hwb()` is here: the other modern functions carry their own alpha
+    /// in `wide`, and `rgb()`, `rgba()`, `hsl()`, `hsla()`, a hex and a name
+    /// are the legacy set. A float16 bitmap keeps whatever alpha it is handed
+    /// and says so on sight -- Chrome answers 0.501953125 for
+    /// `rgba(255, 0, 0, 0.5)` and 0.5 for `hwb(200 10% 20% / 0.5)`
+    /// (results/canvas-nonlegacy-alpha.chrome.json). It is observable on an
+    /// eight-bit display-p3 bitmap too, where the colour is not quantised and
+    /// the alpha is the only thing left to round: `hwb(45 15% 35% / 0.5)`
+    /// stores a red of 80 against the byte alpha's 81.
+    alpha: ?f64 = null,
+
     /// Three sRGB channels on the 0..1 scale, kept in both forms: the byte one
     /// for everything that reads a colour back, and the float one for the
     /// canvas that converts it first.
@@ -611,9 +631,9 @@ pub const Style = struct {
         if (self.wide) |source| {
             return source.toPaint(space);
         }
-        // A legacy alpha is a byte by the time it is parsed, whichever notation
-        // carried it — only `Wide`'s is a float. See `Paint`.
-        const alpha = self.rgba.normalizedAlpha();
+        // A legacy alpha is a byte by the time it is parsed; a modern
+        // notation's stays the float it was written as. See `Style.alpha`.
+        const alpha = self.alpha orelse self.rgba.normalizedAlpha();
         const unit = self.float orelse {
             const bytes: Paint = .{
                 .r = @floatFromInt(self.rgba.r),
@@ -1285,12 +1305,13 @@ pub const CanvasChannels = enum {
 /// reads it back as `0x7e`, where quantising first would have premultiplied 127
 /// into 64 and read back `0x80`.
 ///
-/// Alpha is *not* the same story. A legacy colour's alpha is already a byte by
-/// the time it is parsed — `rgba(255, 0, 0, 0.5)` is 128/255, not 0.5, and two
-/// of those stacked read `ff0000c0` rather than the `ff0000bf` that an exact
-/// half would give — and `globalAlpha` is rounded to one as well (see
-/// `raster.opacity`). Only the wide notations keep a float alpha, which is why
-/// this field is one.
+/// Alpha is *not* the same story. A *legacy* colour's alpha is already a byte
+/// by the time it is parsed — `rgba(255, 0, 0, 0.5)` is 128/255, not 0.5, and
+/// two of those stacked read `ff0000c0` rather than the `ff0000bf` that an
+/// exact half would give — and `globalAlpha` is rounded to one as well (see
+/// `raster.opacity`). The notations CSS Color 4 does not call legacy keep a
+/// float alpha, `hwb()` among them, which is why this field is one. See
+/// `Style.alpha`.
 pub const Paint = struct {
     r: f64,
     g: f64,
