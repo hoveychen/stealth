@@ -30,6 +30,7 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+const color = @import("../../color.zig");
 
 const path = @import("path.zig");
 const Surface = @import("raster.zig");
@@ -85,6 +86,27 @@ pub fn Mixin(comptime T: type) type {
         /// axis-aligned rectangles, which is every `scale` and `translate`.
         fn upright(ctm: Transform) bool {
             return ctm.b == 0 and ctm.c == 0;
+        }
+
+        /// `globalCompositeOperation` as the rasteriser reads it. The keyword
+        /// itself is already validated by the setter, so anything the
+        /// rasteriser does not implement simply falls back to source-over.
+        fn composite(self: *const T) Surface.Composite {
+            return .fromKeyword(self._state.global_composite_operation);
+        }
+
+        /// `ctx.filter` as the rasteriser reads it.
+        fn filter(self: *const T) Surface.Filter {
+            return .parse(self._state.filter);
+        }
+
+        /// A flat paint after `ctx.filter`. The filter applies to the source
+        /// graphic, and a fill's source graphic is one colour all over — so for
+        /// everything but `drawImage` the whole of it lands here rather than in
+        /// the rasteriser. Chrome runs the filter on fills too, not only on
+        /// images (measured, probes/expr-canvas-filter-grayscale.js).
+        fn paint(self: *const T, style: canvas_objects.PaintStyle) color.RGBA {
+            return filter(self).applyTo(style.colour);
         }
 
         // --- state stack ---------------------------------------------------
@@ -244,8 +266,9 @@ pub fn Mixin(comptime T: type) type {
                 height(self),
                 &self._path,
                 rule,
-                self._fill_style.colour,
+                paint(self, self._fill_style),
                 self._global_alpha,
+                composite(self),
             );
         }
 
@@ -256,8 +279,9 @@ pub fn Mixin(comptime T: type) type {
                 height(self),
                 &self._path,
                 self._line_width * self._transform.meanScale(),
-                self._stroke_style.colour,
+                paint(self, self._stroke_style),
                 self._global_alpha,
+                composite(self),
             );
         }
 
@@ -385,12 +409,12 @@ pub fn Mixin(comptime T: type) type {
             const ctm = self._transform;
             if (upright(ctm)) {
                 const at = ctm.apply(x, y);
-                self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, self._fill_style.colour, self._global_alpha);
+                self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, paint(self, self._fill_style), self._global_alpha, composite(self));
                 return;
             }
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
-            self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, self._fill_style.colour, self._global_alpha);
+            self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, paint(self, self._fill_style), self._global_alpha, composite(self));
         }
 
         pub fn strokeRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {
@@ -398,12 +422,12 @@ pub fn Mixin(comptime T: type) type {
             const line_width = self._line_width * ctm.meanScale();
             if (upright(ctm)) {
                 const at = ctm.apply(x, y);
-                self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, self._stroke_style.colour, self._global_alpha);
+                self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, paint(self, self._stroke_style), self._global_alpha, composite(self));
                 return;
             }
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
-            self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, self._stroke_style.colour, self._global_alpha);
+            self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, paint(self, self._stroke_style), self._global_alpha, composite(self));
         }
 
         pub fn clearRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {
@@ -472,6 +496,8 @@ pub fn Mixin(comptime T: type) type {
                 blit,
                 self._transform,
                 self._global_alpha,
+                composite(self),
+                filter(self),
             );
         }
 
