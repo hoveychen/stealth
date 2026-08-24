@@ -372,7 +372,12 @@ pub fn getTaggedOpaque(value: *const v8.Value) ?*TaggedOpaque {
         return null;
     }
 
-    const tao_ptr = v8.v8__Object__GetAlignedPointerFromInternalField(value, 0).?;
+    // Having internal fields is not the same as being one of ours. V8 reports a
+    // non-zero count for objects it lays out that way itself -- a promise is
+    // one -- and reads back a null pointer from the slot, so the count cannot
+    // stand in for the check. The two other readers of this slot (Value.zig,
+    // TaggedOpaque.zig) already treat null as "not a host object".
+    const tao_ptr = v8.v8__Object__GetAlignedPointerFromInternalField(value, 0) orelse return null;
     return @ptrCast(@alignCast(tao_ptr));
 }
 
