@@ -877,7 +877,16 @@ fn returnsPromise(comptime F: type) bool {
 fn domExceptionToJs(local: *const Local, err: anyerror, message: []const u8) ?*const v8.Value {
     const DOMException = @import("../webapi/DOMException.zig");
     var ex = DOMException.fromError(err) orelse return null;
-    if (message.len != 0) ex._custom_message = message;
+    // Copied onto the context arena, not kept as-is. Every caller builds this
+    // message on call_arena -- it has to, since local_arena is reset before
+    // handleError gets here -- and call_arena is itself reset the moment this
+    // top-level call returns, which is before the script that caught the
+    // exception can read `.message`. The next call's allocations then land on
+    // the same bytes, so the message read back was whatever had since been
+    // written there: a run of NULs on the first throw, and the head of some
+    // later string argument after that. `DOMException.constructor` already
+    // copies for exactly this reason; this path is its missing counterpart.
+    if (message.len != 0) ex._custom_message = local.ctx.arena.dupe(u8, message) catch message;
     const value = local.zigValueToJs(ex, .{}) catch return local.isolate.createError("internal error");
     return value.handle;
 }
