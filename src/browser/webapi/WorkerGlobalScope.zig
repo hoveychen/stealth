@@ -46,6 +46,7 @@ const Timers = @import("Timers.zig");
 const scheduler = @import("scheduler.zig");
 const EventTarget = @import("EventTarget.zig");
 const Performance = @import("Performance.zig");
+const trusted_types = @import("trusted_types.zig");
 const WorkerLocation = @import("WorkerLocation.zig");
 const ErrorEvent = @import("event/ErrorEvent.zig");
 const Fetch = @import("net/Fetch.zig");
@@ -122,6 +123,10 @@ _location: WorkerLocation,
 
 _timers: Timers = .{},
 _scheduler: scheduler.Scheduler = .init,
+// The factory is per-realm state: it caches emptyHTML/emptyScript, which keep
+// their identity across reads. A worker gets its own rather than reaching for
+// the owning frame's -- see the module comment in trusted_types.zig.
+_trusted_types: trusted_types.TrustedTypePolicyFactory = .init,
 
 pub const Type = union(enum) {
     shared: *SharedWorkerGlobalScope,
@@ -370,6 +375,10 @@ pub fn getCrossOriginIsolated(self: *const WorkerGlobalScope) bool {
 
 pub fn getScheduler(self: *WorkerGlobalScope) *scheduler.Scheduler {
     return &self._scheduler;
+}
+
+pub fn getTrustedTypes(self: *WorkerGlobalScope) *trusted_types.TrustedTypePolicyFactory {
+    return &self._trusted_types;
 }
 
 pub fn performance(self: *WorkerGlobalScope) *Performance {
@@ -672,6 +681,7 @@ pub const JsApi = struct {
     pub const crypto = bridge.accessor(WorkerGlobalScope.getCrypto, null, .{});
     pub const navigator = bridge.accessor(WorkerGlobalScope.getNavigator, null, .{});
     pub const scheduler = bridge.accessor(WorkerGlobalScope.getScheduler, null, .{});
+    pub const trustedTypes = bridge.accessor(WorkerGlobalScope.getTrustedTypes, null, .{});
     pub const performance = bridge.accessor(struct {
         // Unnecessary, But, our WebAPI getters are ALWAYS `fn getPerformance()...`.
         // But for performance, we _need_ to have fn performance() *Performance to

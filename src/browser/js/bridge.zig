@@ -1578,8 +1578,10 @@ const worker_common_apis = [_]type{
     // handed its owner's Frame -- see the comment on getGlobalArg in Caller.zig,
     // which is a live SIGABRT on the Cloudflare station and not a style
     // preference -- so the Frame-taking families stay out even though Chrome's
-    // worker has them: WebGPU (GPU.wgslLanguageFeatures), Trusted Types, the
-    // font families, MediaSource, and the typed-OM transform components.
+    // worker has them: WebGPU (GPU.wgslLanguageFeatures), the font families,
+    // MediaSource, and the typed-OM transform components. Trusted Types was in
+    // that list until its members were converted to take an `*Execution`, which
+    // is the escape hatch every one of the rest should be re-audited against.
     //
     // WebCodecs: the encode/decode pipeline is the reason a page moves media
     // work into a worker at all, so all four codecs and every chunk and frame
@@ -1642,6 +1644,12 @@ const worker_common_apis = [_]type{
     @import("../webapi/navigator/services.zig").WGSLLanguageFeatures.KeyIterator,
     @import("../webapi/navigator/services.zig").WGSLLanguageFeatures.ValueIterator,
     @import("../webapi/navigator/services.zig").WGSLLanguageFeatures.EntryIterator,
+    // Trusted Types, which used to be the ceiling: every member of the factory
+    // took a `*Frame`, and a worker cannot be handed one. They take an
+    // `*Execution` now, which Env.zig builds per context out of that context's
+    // own global -- so the factory a worker creates in is the worker's. The
+    // station's trampoline worker opens with `if (self.trustedTypes)`.
+    @import("../webapi/trusted_types.zig"),
 };
 
 pub const DedicatedWorkerJsApis = flattenTypes(&([_]type{
