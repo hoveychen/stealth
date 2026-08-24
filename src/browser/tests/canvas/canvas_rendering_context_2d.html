@@ -689,6 +689,20 @@
   ctx.putImageData(imageData, 10, 20);
   // With dirty rect parameters.
   ctx.putImageData(imageData, 0, 0, 0, 0, 5, 5);
+
+  // And the pixels are really in the bitmap: the same paint the offscreen
+  // context's `putImageData` block covers, on an element-backed canvas. The
+  // element defaults to 300x150, so (10, 20) is on it too.
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  testing.expectEqual('ff0000ff', hex(ctx.getImageData(0, 0, 1, 1).data));
+  testing.expectEqual('ff0000ff', hex(ctx.getImageData(10, 20, 1, 1).data));
+  // Outside every window written above.
+  testing.expectEqual('00000000', hex(ctx.getImageData(50, 50, 1, 1).data));
+  // The dirty rectangle is a whole overload, not four optional arguments.
+  testing.expectError(
+    "TypeError: Failed to execute 'putImageData' on " +
+      "'CanvasRenderingContext2D': Overload resolution failed.",
+    () => ctx.putImageData(imageData, 0, 0, 0));
 }
 </script>
 

@@ -795,6 +795,49 @@ pub fn premultiply(pixel: *const [4]u8) [4]u8 {
     };
 }
 
+/// The other direction: overwrites a `sw` x `sh` window at (`dx`, `dy`) with
+/// `bytes`, which are the straight-alpha RGBA8 an ImageData carries and must be
+/// `sw * sh * 4` long. Nothing is composited — the destination pixels are
+/// replaced, alpha and all — and the window may hang off any edge, those pixels
+/// simply being dropped.
+///
+/// On a transparent canvas the bytes are premultiplied on the way in, which is
+/// the whole of why `putImageData` does not round-trip: `{200, 100, 50, 77}`
+/// stores `{60, 30, 15, 77}` and reads back `c763324d`.
+///
+/// An opaque canvas does *not* premultiply them, and since the read divides by
+/// the alpha either way, a translucent pixel comes back brighter than it went
+/// in. Measured (probes/canvas-put-image-data.js): the same bytes on an
+/// `{alpha: false}` canvas read `ffffa64d`, and `{100, 50, 25, 128}` reads
+/// `c7643280` where premultiplying would have read `64321a80`.
+pub fn writePixels(self: *Surface, canvas_width: u32, canvas_height: u32, dx: i64, dy: i64, sw: u32, sh: u32, bytes: []const u8) void {
+    const pixels = self.ensure(canvas_width, canvas_height) orelse return;
+
+    var row: u32 = 0;
+    while (row < sh) : (row += 1) {
+        const dst_y = dy + @as(i64, row);
+        if (dst_y < 0 or dst_y >= canvas_height) {
+            continue;
+        }
+
+        var col: u32 = 0;
+        while (col < sw) : (col += 1) {
+            const dst_x = dx + @as(i64, col);
+            if (dst_x < 0 or dst_x >= canvas_width) {
+                continue;
+            }
+            const from: usize = (@as(usize, row) * sw + col) * 4;
+            const to: usize = (@as(usize, @intCast(dst_y)) * canvas_width +
+                @as(usize, @intCast(dst_x))) * 4;
+            const pixel = bytes[from..][0..4];
+            pixels[to..][0..4].* = switch (self.background) {
+                .transparent => premultiply(pixel),
+                .black => pixel.*,
+            };
+        }
+    }
+}
+
 /// The whole bitmap as the straight-alpha bytes a page reads, allocated on
 /// `arena`. The store is premultiplied, so the two consumers that hand the
 /// pixels straight out — a PNG and a VideoFrame — cannot borrow it the way

@@ -993,3 +993,194 @@
     filled({ alpha: false, colorSpace: 'display-p3' }, 'rgba(255, 0, 0, 0.5)'));
 }
 </script>
+
+<script id="OffscreenCanvasRenderingContext2D#putImageData">
+{
+  // The one way pixels go back *into* a canvas, and the only paint that skips
+  // the whole drawing state. Readings from probes/canvas-put-image-data.js.
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const ctx = (w, h, settings) => new OffscreenCanvas(w, h)
+    .getContext('2d', { willReadFrequently: true, ...settings });
+  const read = (c, w, h, space) => hex(c.getImageData(0, 0, w, h,
+    space ? { colorSpace: space } : undefined).data);
+  // A `w` x `h` ImageData whose pixels are all distinguishable.
+  const ramp = (w, h) => {
+    const d = new ImageData(w, h);
+    for (let i = 0; i < w * h; i++) {
+      d.data.set([255, i * 16, 0, 255], i * 4);
+    }
+    return d;
+  };
+  const one = (channels, settings) => {
+    const d = new ImageData(1, 1, settings);
+    d.data.set(channels);
+    return d;
+  };
+
+  // The store is premultiplied, so a translucent pixel does not come back as
+  // the bytes that went in — the divergence a translucent fill has.
+  {
+    const c = ctx(1, 1);
+    c.putImageData(one([200, 100, 50, 77]), 0, 0);
+    testing.expectEqual('c763324d', read(c, 1, 1));
+  }
+  // An opaque canvas does not premultiply on the way in — and still divides on
+  // the way out, so the colour comes back *brighter* than it went in. Two
+  // alphas pin it: premultiplying would read 64321a80 for the second.
+  {
+    const c = ctx(1, 1, { alpha: false });
+    c.putImageData(one([200, 100, 50, 77]), 0, 0);
+    testing.expectEqual('ffffa64d', read(c, 1, 1));
+  }
+  {
+    const c = ctx(1, 1, { alpha: false });
+    c.putImageData(one([100, 50, 25, 128]), 0, 0);
+    testing.expectEqual('c7643280', read(c, 1, 1));
+  }
+  {
+    const c = ctx(1, 1, { alpha: false });
+    c.putImageData(one([200, 100, 50, 255]), 0, 0);
+    testing.expectEqual('c86432ff', read(c, 1, 1));
+  }
+  // Transparent black over a painted pixel erases it: a replace, not a
+  // composite.
+  {
+    const c = ctx(1, 1);
+    c.fillStyle = '#00ff00';
+    c.fillRect(0, 0, 1, 1);
+    c.putImageData(new ImageData(1, 1), 0, 0);
+    testing.expectEqual('00000000', read(c, 1, 1));
+  }
+  // globalAlpha, the composite operator and the transform are all ignored.
+  {
+    const c = ctx(1, 1);
+    c.globalAlpha = 0.5;
+    c.globalCompositeOperation = 'destination-atop';
+    c.translate(5, 5);
+    c.scale(2, 2);
+    c.putImageData(one([255, 0, 0, 255]), 0, 0);
+    testing.expectEqual('ff0000ff', read(c, 1, 1));
+  }
+
+  // Where the pixels land. A fractional destination truncates toward zero.
+  {
+    const c = ctx(2, 1);
+    c.putImageData(ramp(2, 1), 0, 0);
+    testing.expectEqual('ff0000ffff1000ff', read(c, 2, 1));
+  }
+  {
+    const c = ctx(2, 1);
+    c.putImageData(ramp(1, 1), 0.9, 0);
+    testing.expectEqual('ff0000ff00000000', read(c, 2, 1));
+  }
+  {
+    const c = ctx(2, 1);
+    c.putImageData(ramp(1, 1), -0.9, 0);
+    testing.expectEqual('ff0000ff00000000', read(c, 2, 1));
+  }
+  // Partly off an edge: the part that overlaps lands, the rest is dropped.
+  {
+    const c = ctx(2, 1);
+    c.putImageData(ramp(2, 1), -1, 0);
+    testing.expectEqual('ff1000ff00000000', read(c, 2, 1));
+  }
+  {
+    const c = ctx(2, 1);
+    c.putImageData(ramp(2, 1), 1, 0);
+    testing.expectEqual('00000000ff0000ff', read(c, 2, 1));
+  }
+
+  // The dirty rectangle, in the ImageData's own coordinates.
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 0, 0, 0, 0, 1, 1);
+    testing.expectEqual('ff0000ff000000000000000000000000', read(c, 2, 2));
+  }
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 0, 0, 1, 1, 1, 1);
+    testing.expectEqual('000000000000000000000000ff3000ff', read(c, 2, 2));
+  }
+  // A negative extent flips the rectangle rather than being refused, the way
+  // getImageData's window does.
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 0, 0, 1, 1, -1, -1);
+    testing.expectEqual('ff0000ff000000000000000000000000', read(c, 2, 2));
+  }
+  // Oversized clips to the source.
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 0, 0, -5, -5, 20, 20);
+    testing.expectEqual('ff0000ffff1000ffff2000ffff3000ff', read(c, 2, 2));
+  }
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 0, 0, 0, 0, 0, 2);
+    testing.expectEqual('00000000000000000000000000000000', read(c, 2, 2));
+  }
+  // The destination offset moves where that piece of the source lands.
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 1, 1, 0, 0, 1, 1);
+    testing.expectEqual('000000000000000000000000ff0000ff', read(c, 2, 2));
+  }
+
+  // The ImageData carries its own colour space, so crossing into the canvas's
+  // one converts the bytes.
+  {
+    const c = ctx(1, 1, { colorSpace: 'display-p3' });
+    c.putImageData(one([255, 0, 0, 255], { colorSpace: 'srgb' }), 0, 0);
+    testing.expectEqual('ea3323ff', read(c, 1, 1, 'display-p3'));
+    testing.expectEqual('ff0000ff', read(c, 1, 1, 'srgb'));
+  }
+  // The other way the conversion leaves the srgb gamut and clamps.
+  {
+    const c = ctx(1, 1);
+    c.putImageData(one([255, 0, 0, 255], { colorSpace: 'display-p3' }), 0, 0);
+    testing.expectEqual('ff0000ff', read(c, 1, 1, 'srgb'));
+    testing.expectEqual('ea3323ff', read(c, 1, 1, 'display-p3'));
+  }
+  {
+    const c = ctx(1, 1, { colorSpace: 'display-p3' });
+    c.putImageData(one([255, 0, 0, 255], { colorSpace: 'display-p3' }), 0, 0);
+    testing.expectEqual('ff0000ff', read(c, 1, 1, 'display-p3'));
+  }
+
+  // A float16 ImageData's channels are 0..1 floats over a bitmap that is still
+  // eight bits, so they quantise on the way in and clamp outside 0..1.
+  {
+    const c = ctx(1, 1);
+    c.putImageData(one([1, 0.5, 0.2, 1], { pixelFormat: 'rgba-float16' }), 0, 0);
+    testing.expectEqual('ff8033ff', read(c, 1, 1));
+  }
+  {
+    const c = ctx(1, 1);
+    c.putImageData(one([2, -1, 0.5, 1], { pixelFormat: 'rgba-float16' }), 0, 0);
+    testing.expectEqual('ff0080ff', read(c, 1, 1));
+  }
+  {
+    const c = ctx(1, 1);
+    c.putImageData(one([200 / 255, 100 / 255, 50 / 255, 77 / 255],
+      { pixelFormat: 'rgba-float16' }), 0, 0);
+    testing.expectEqual('c763324d', read(c, 1, 1));
+  }
+
+  // The call itself: three required arguments, and the dirty rectangle is a
+  // whole overload rather than four optional arguments.
+  testing.expectEqual(3, OffscreenCanvasRenderingContext2D.prototype.putImageData.length);
+  testing.expectEqual(undefined, ctx(1, 1).putImageData(new ImageData(1, 1), 0, 0));
+  testing.expectError(
+    "TypeError: Failed to execute 'putImageData' on " +
+      "'OffscreenCanvasRenderingContext2D': Overload resolution failed.",
+    () => ctx(1, 1).putImageData(new ImageData(1, 1), 0, 0, 0));
+  testing.expectError(
+    "TypeError: Failed to execute 'putImageData' on " +
+      "'OffscreenCanvasRenderingContext2D': parameter 1 is not of type 'ImageData'.",
+    () => ctx(1, 1).putImageData({ width: 1, height: 1, data: new Uint8ClampedArray(4) }, 0, 0));
+  testing.expectError(
+    "TypeError: Failed to execute 'putImageData' on " +
+      "'OffscreenCanvasRenderingContext2D': 3 arguments required, but only 0 present.",
+    () => ctx(1, 1).putImageData());
+}
+</script>

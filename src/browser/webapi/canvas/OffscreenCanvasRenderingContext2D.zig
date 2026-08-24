@@ -124,12 +124,11 @@ pub fn setGlobalAlpha(self: *OffscreenCanvasRenderingContext2D, value: f64) void
     }
 }
 
-pub fn putImageData(_: *const OffscreenCanvasRenderingContext2D, _: *ImageData, _: f64, _: f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64) void {}
-
-/// Both of these are the same code on either context but for the interface name
-/// their refusals carry, so they live in the mixin.
+/// All three of these are the same code on either context but for the interface
+/// name their refusals carry, so they live in the mixin.
 pub const createImageData = draw.createImageData;
 pub const getImageData = draw.getImageData;
+pub const putImageData = draw.putImageData;
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/getContextAttributes
 pub fn getContextAttributes(self: *const OffscreenCanvasRenderingContext2D) attributes.TwoD {
@@ -277,7 +276,7 @@ pub const JsApi = struct {
     pub const createConicGradient = bridge.function(OffscreenCanvasRenderingContext2D.createConicGradient, .{});
     pub const createPattern = bridge.function(OffscreenCanvasRenderingContext2D.createPattern, .{});
 
-    pub const putImageData = bridge.function(OffscreenCanvasRenderingContext2D.putImageData, .{ .noop = true });
+    pub const putImageData = bridge.function(OffscreenCanvasRenderingContext2D.putImageData, .{});
     pub const drawImage = bridge.function(OffscreenCanvasRenderingContext2D.drawImage, .{ .arity = 3 });
     pub const getImageData = bridge.function(OffscreenCanvasRenderingContext2D.getImageData, .{});
     pub const save = bridge.function(OffscreenCanvasRenderingContext2D.save, .{ .arity = 0 });

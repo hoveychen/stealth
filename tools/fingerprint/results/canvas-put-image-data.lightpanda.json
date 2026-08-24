@@ -1,0 +1,42 @@
+{
+ "stored": {
+  "translucent": "c763324d",
+  "translucent onto opaque canvas": "ffffa64d",
+  "half-alpha onto opaque canvas": "c7643280",
+  "opaque onto opaque canvas": "c86432ff",
+  "transparent over painted": "00000000",
+  "ignores drawing state": "ff0000ff"
+ },
+ "placed": {
+  "whole 2x1": "ff0000ffff1000ff",
+  "dx 0.9": "ff0000ff00000000",
+  "dx -0.9": "ff0000ff00000000",
+  "dx NaN": "ff0000ff00000000",
+  "dx 1e10": "0000000000000000",
+  "dx -1": "ff1000ff00000000",
+  "dx 1": "00000000ff0000ff"
+ },
+ "dirty": {
+  "top-left pixel only": "ff0000ff000000000000000000000000",
+  "bottom-right pixel only": "000000000000000000000000ff3000ff",
+  "negative extents": "ff0000ff000000000000000000000000",
+  "oversized": "ff0000ffff1000ffff2000ffff3000ff",
+  "zero width": "00000000000000000000000000000000",
+  "offset destination": "000000000000000000000000ff0000ff"
+ },
+ "formats": {
+  "srgb data onto display-p3 canvas": "ea3323ff / ff0000ff",
+  "display-p3 data onto srgb canvas": "ff0000ff / ea3323ff",
+  "display-p3 data onto display-p3 canvas": "ff0000ff",
+  "float16 data": "ff8033ff",
+  "float16 data out of range": "ff0080ff",
+  "float16 translucent": "c763324d"
+ },
+ "call": {
+  "length": 3,
+  "returns": "undefined",
+  "four arguments": "throw:TypeError: Failed to execute 'putImageData' on 'OffscreenCanvasRenderingContext2D': Overload resolution failed.",
+  "non-ImageData": "throw:TypeError: Failed to execute 'putImageData' on 'OffscreenCanvasRenderingContext2D': parameter 1 is not of type 'ImageData'.",
+  "no arguments": "throw:TypeError: Failed to execute 'putImageData' on 'OffscreenCanvasRenderingContext2D': 3 arguments required, but only 0 present."
+ }
+}
