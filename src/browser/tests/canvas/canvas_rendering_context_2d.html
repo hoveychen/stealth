@@ -858,6 +858,138 @@
 }
 </script>
 
+<script id="CanvasRenderingContext2D#globalCompositeOperation pixels">
+{
+  // Every expectation is a Chrome 151 readback (scratch/expr-composite-blend.js).
+  const cell = (op, backdrop, source) => {
+    const element = document.createElement('canvas');
+    element.width = 1;
+    element.height = 1;
+    const ctx = element.getContext('2d');
+    if (backdrop) {
+      ctx.fillStyle = backdrop;
+      ctx.fillRect(0, 0, 1, 1);
+    }
+    ctx.globalCompositeOperation = op;
+    ctx.fillStyle = source;
+    ctx.fillRect(0, 0, 1, 1);
+    return Array.from(ctx.getImageData(0, 0, 1, 1).data);
+  };
+
+  // Opaque over opaque is the blend function alone: Cb*Cs and |Cb-Cs|.
+  testing.expectEqual([64, 64, 0, 255], cell('multiply', '#ff8000', '#4080c0'));
+  testing.expectEqual([191, 0, 192, 255], cell('difference', '#ff8000', '#4080c0'));
+  // Multiplying by white, or differencing with black, changes nothing.
+  testing.expectEqual([51, 102, 204, 255], cell('multiply', '#3366cc', '#ffffff'));
+  testing.expectEqual([51, 102, 204, 255], cell('difference', '#3366cc', '#000000'));
+  // Differencing a colour with itself is black, which is the whole point of
+  // the pass the fingerprinting widget runs.
+  testing.expectEqual([0, 0, 0, 255], cell('difference', '#3366cc', '#3366cc'));
+  // With no backdrop there is nothing to blend with, so the source lands as-is.
+  testing.expectEqual([51, 102, 204, 255], cell('multiply', null, '#3366cc'));
+  testing.expectEqual([51, 102, 204, 255], cell('difference', null, '#3366cc'));
+  // A half-opaque source only blends over the half of the pixel it covers.
+  testing.expectEqual([159, 96, 0, 255], cell('multiply', '#ff8000', 'rgba(64,128,192,0.5)'));
+  testing.expectEqual([223, 64, 96, 255], cell('difference', '#ff8000', 'rgba(64,128,192,0.5)'));
+  // A half-opaque backdrop: the part of the source it does not cover stays
+  // itself, so the result is a mix of the blend and the raw source.
+  testing.expectEqual([64, 96, 96, 255], cell('multiply', 'rgba(255,128,0,0.5)', '#4080c0'));
+  testing.expectEqual([128, 64, 192, 255], cell('difference', 'rgba(255,128,0,0.5)', '#4080c0'));
+
+  // The twenty-four Porter-Duff keywords are stored and reported but not
+  // applied — they still paint source-over, which is what they did before.
+  testing.expectEqual([64, 128, 192, 255], cell('destination-in', '#ff8000', '#4080c0'));
+  testing.expectEqual([64, 128, 192, 255], cell('xor', '#ff8000', '#4080c0'));
+
+  // A blend mode is part of the saved drawing state.
+  {
+    const element = document.createElement('canvas');
+    element.width = 1;
+    element.height = 1;
+    const ctx = element.getContext('2d');
+    ctx.fillStyle = '#ff8000';
+    ctx.fillRect(0, 0, 1, 1);
+    ctx.globalCompositeOperation = 'difference';
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+    testing.expectEqual('difference', ctx.globalCompositeOperation);
+    ctx.fillStyle = '#4080c0';
+    ctx.fillRect(0, 0, 1, 1);
+    testing.expectEqual([191, 0, 192, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+  }
+}
+</script>
+
+<script id="CanvasRenderingContext2D#globalCompositeOperation on paths and images">
+{
+  const at = (ctx, x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+
+  // A path's partly covered edge pixel: coverage is the source's alpha, so the
+  // half-covered column reads exactly what a half-opaque fill would.
+  {
+    const element = document.createElement('canvas');
+    element.width = 8;
+    element.height = 1;
+    const ctx = element.getContext('2d');
+    ctx.fillStyle = '#ff8000';
+    ctx.fillRect(0, 0, 8, 1);
+    ctx.globalCompositeOperation = 'difference';
+    ctx.fillStyle = '#4080c0';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(4.5, 0);
+    ctx.lineTo(4.5, 1);
+    ctx.lineTo(0, 1);
+    ctx.fill();
+    testing.expectEqual([191, 0, 192, 255], at(ctx, 0, 0));
+    testing.expectEqual([191, 0, 192, 255], at(ctx, 3, 0));
+    testing.expectEqual([223, 64, 96, 255], at(ctx, 4, 0));
+    testing.expectEqual([255, 128, 0, 255], at(ctx, 5, 0));
+  }
+
+  // drawImage under a blend mode. Taking the same surface twice, the second
+  // time differenced, has to flatten every pixel to opaque black whatever the
+  // source held — this is verbatim the pass the widget runs before it reads a
+  // 1x1 downscale, and until the mode was read the second draw simply
+  // overwrote the first.
+  {
+    const a = document.createElement('canvas');
+    a.width = 4;
+    a.height = 4;
+    const ca = a.getContext('2d');
+    ca.fillStyle = '#ffffff';
+    ca.fillRect(0, 0, 4, 4);
+    ca.fillStyle = '#123456';
+    ca.fillRect(1, 1, 2, 2);
+
+    const b = document.createElement('canvas');
+    b.width = 4;
+    b.height = 4;
+    const cb = b.getContext('2d');
+    cb.drawImage(a, 0, 0);
+    cb.globalCompositeOperation = 'difference';
+    cb.drawImage(a, 0, 0);
+    cb.globalCompositeOperation = 'source-over';
+
+    const flat = Array.from(cb.getImageData(0, 0, 4, 4).data);
+    let black = 0;
+    for (let i = 0; i < flat.length; i += 4) {
+      if (flat[i] === 0 && flat[i + 1] === 0 && flat[i + 2] === 0 && flat[i + 3] === 255) black++;
+    }
+    testing.expectEqual(16, black);
+
+    // And the downscale of it, which is the readback the widget actually takes.
+    const c = document.createElement('canvas');
+    c.width = 1;
+    c.height = 1;
+    const cc = c.getContext('2d');
+    cc.drawImage(b, 0, 0, 4, 4, 0, 0, 1, 1);
+    testing.expectEqual([0, 0, 0, 255], at(cc, 0, 0));
+  }
+}
+</script>
+
 <script id="CanvasRenderingContext2D#strokeRect">
 {
   const element = document.createElement('canvas');
