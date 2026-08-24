@@ -574,6 +574,13 @@
   // Every colour space `color()` takes, one reading each.
   testing.expectEqual("ff0000ff", paint("color(display-p3 1 0 0)"));
   testing.expectEqual("ff1b7fff", paint("color(display-p3 1 0.25 0.5)"));
+  // ⚠️ Our value, not Chrome's: re-measured on Chrome 151 this answers
+  // `ff1c7e80`. A translucent pixel goes into the bitmap premultiplied and is
+  // unpremultiplied again on the way out, and the encode happens on the *float*
+  // colour — the blue here is about 0.4976, so 0.4976 * 0.5 stores 63 and 63 of
+  // 128 reads back as 126. Fixing that is a separate axis (the
+  // `cfsc-canvas-color-space` plan's P6) and this line moves with it. The
+  // opaque row above was re-measured at the same time and is right.
   testing.expectEqual("ff1b7f80", paint("color(display-p3 1 0.25 0.5 / 0.5)"));
   testing.expectEqual("00000000", paint("color(display-p3 1 0.25 0.5 / none)"));
   testing.expectEqual("004184ff", paint("color(display-p3 none 0.25 0.5)"));
