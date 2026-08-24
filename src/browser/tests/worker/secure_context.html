@@ -61,9 +61,22 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // Chrome worker has -- and in came WorkerNavigator plus the three members
       // of the global that were missing, `name`, `origin` and
       // `crossOriginIsolated`.
+      //
+      // 207 once the last four window-only interface objects stopped riding in
+      // on a type list: PerformanceTiming, PerformanceNavigation,
+      // WebKitCSSMatrix and webkitURL (worker/realm_surface.html).
+      //
+      // 264 with the 57 interface objects this engine already had for the page
+      // realm and a Chrome worker carries too: WebCodecs, ImageBitmap, the
+      // scheduler, the cache storage, NetworkInformation, resource and server
+      // timing, the USB/HID/Serial families, the service-worker client surface,
+      // and the locks, media capabilities and user activation
+      // (worker/realm_surface.html). 46 of the 57 are [SecureContext], which is
+      // why the insecure-owner count in frames/secure_context_gate.html falls
+      // further behind this one than it used to.
       testing.expectEqual(13, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(211, data.count);
+      testing.expectEqual(264, data.count);
     });
   }
 </script>

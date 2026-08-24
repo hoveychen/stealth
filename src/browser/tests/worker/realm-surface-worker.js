@@ -56,6 +56,30 @@ self.onmessage = () => {
     typeof_CookieStore: typeof CookieStore,
     typeof_CookieChangeEvent: typeof CookieChangeEvent,
     has_cookieStore: 'cookieStore' in self,
+    // Window-only interface objects that reached this realm by riding along
+    // with a type list rather than through an [Exposed] decision of their own:
+    // the two legacy navigation-timing interfaces travel with Performance, and
+    // the two legacy vendor-prefixed constructor names travel with DOMMatrix
+    // and URL.
+    window_only_interfaces: ['PerformanceNavigation', 'PerformanceTiming',
+      'WebKitCSSMatrix', 'webkitURL'].filter((n) => n in self).join(','),
+    // One name out of each family this realm was missing entirely.
+    missing_families: ['VideoDecoder', 'AudioData', 'EncodedVideoChunk',
+      'ImageDecoder', 'ImageBitmap', 'ImageBitmapRenderingContext', 'Scheduler',
+      'TaskController', 'CacheStorage', 'NetworkInformation',
+      'PerformanceResourceTiming', 'PerformanceServerTiming', 'USB', 'USBDevice',
+      'HID', 'HIDDevice', 'Serial', 'SerialPort', 'ServiceWorkerRegistration',
+      'PushManager', 'Lock', 'LockManager', 'MediaCapabilities',
+      'UserActivation', 'WGSLLanguageFeatures',
+    ].filter((n) => typeof self[n] !== 'function').join(','),
+    // The families that have to stay out: a member of each wants the owner's
+    // Frame -- most of them take one outright, StorageBucket.indexedDB reaches
+    // for it through the Execution -- and a worker realm cannot be handed one.
+    // Chrome's worker has all of these, so this is a measured shortfall rather
+    // than a match: closing it needs worker-owned state, not another name in a
+    // list.
+    frame_bound: ['GPU', 'StorageBucket', 'TrustedTypePolicyFactory', 'FontFace',
+      'MediaSource', 'CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
 
     // console is own on self and nowhere else.
     holder_console: holderOf('console'),
