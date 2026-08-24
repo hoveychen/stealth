@@ -129,7 +129,7 @@ const Source = union(enum) {
     not_in_union,
 };
 
-fn classify(value: js.Value) Source {
+fn classify(value: js.Value, arena: Allocator) !Source {
     if (value.toZig(*Canvas)) |canvas| {
         return .{ .usable = .{
             .width = canvas.getWidth(),
@@ -147,11 +147,12 @@ fn classify(value: js.Value) Source {
     if (value.toZig(*ImageData)) |data| {
         // Straight RGBA8, row-major -- the rasteriser's layout but not its
         // alpha, so these are the one source that has to be premultiplied on
-        // the way in.
+        // the way in. A float16 object is quantised to that same RGBA8 first;
+        // `straightBytes` is where that happens.
         return .{ .usable = .{
             .width = data.getWidth(),
             .height = data.getHeight(),
-            .pixels = data.getData().local(value.local).slice(),
+            .pixels = try data.straightBytes(value.local, arena),
             .premultiplied = false,
         } };
     } else |_| {}
@@ -231,7 +232,7 @@ pub fn create(
         .type_error = PREFIX ++ "1 argument required, but only 0 present.",
     });
 
-    const size = switch (classify(source)) {
+    const size = switch (try classify(source, exec.arena)) {
         .usable => |s| s,
         .not_usable => return rejectDom(PREFIX ++ "The image source is not usable.", "InvalidStateError", exec),
         // Note the missing prefix -- Chrome's decode failure is worded on its

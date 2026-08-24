@@ -87,6 +87,61 @@
   testing.expectError("IndexSizeError", () => new ImageData(2_147_483_648, 2_147_483_648));
 </script>
 
+<script id=float16-is-a-float16-array>
+  {
+    // `pixelFormat` picks the typed array, not merely the string answered back.
+    // The two formats carry the same four *elements* per pixel -- so `length`
+    // tells them apart not at all and `constructor.name` tells them apart on
+    // its own -- and differ in what one element is: a 0..255 byte against a
+    // 0..1 float (measured -- results/canvas-image-data-settings.chrome.json,
+    // where a red pixel read as float16 is `01000001` under a hex formatter
+    // that stringifies each entry).
+    const unorm8 = new ImageData(1, 1);
+    testing.expectEqual("Uint8ClampedArray", unorm8.data.constructor.name);
+    testing.expectEqual(4, unorm8.data.length);
+    testing.expectEqual(4, unorm8.data.byteLength);
+
+    const float16 = new ImageData(1, 1, { pixelFormat: "rgba-float16" });
+    testing.expectEqual("Float16Array", float16.data.constructor.name);
+    testing.expectEqual(4, float16.data.length);
+    // Four elements of two bytes each: the element count is what the page sees
+    // and the byte count is where the format shows.
+    testing.expectEqual(8, float16.data.byteLength);
+    // Freshly built, so transparent black -- as 0.0, not as a zero byte.
+    testing.expectEqual("0,0,0,0", [...float16.data].join(","));
+
+    const bigger = new ImageData(2, 3, { pixelFormat: "rgba-float16" });
+    testing.expectEqual(24, bigger.data.length);
+    testing.expectEqual(48, bigger.data.byteLength);
+
+    // The array is the object's own storage in both formats: a write through
+    // one read of `data` is there through the next.
+    float16.data[1] = 0.5;
+    testing.expectEqual(0.5, float16.data[1]);
+    // Half precision, so a value it cannot hold is rounded to one it can.
+    float16.data[2] = 0.1;
+    testing.expectEqual(true, Math.abs(float16.data[2] - 0.1) < 0.001);
+    testing.expectEqual(false, float16.data[2] === 0.1);
+  }
+</script>
+
+<script id=float16-survives-a-structured-clone>
+  {
+    // A clone keeps the format as much as the space: the bytes alone would not
+    // say which typed array to rebuild.
+    const img = new ImageData(1, 1, { pixelFormat: "rgba-float16", colorSpace: "display-p3" });
+    img.data[0] = 0.5;
+    const clone = structuredClone(img);
+    testing.expectEqual("rgba-float16", clone.pixelFormat);
+    testing.expectEqual("display-p3", clone.colorSpace);
+    testing.expectEqual("Float16Array", clone.data.constructor.name);
+    testing.expectEqual(4, clone.data.length);
+    testing.expectEqual(0.5, clone.data[0]);
+    clone.data[0] = 0.25;
+    testing.expectEqual(0.5, img.data[0]);
+  }
+</script>
+
 <script id=settings-dictionary>
   {
     // `ImageDataSettings`, the dictionary this constructor shares with

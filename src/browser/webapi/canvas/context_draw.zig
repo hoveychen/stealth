@@ -651,22 +651,30 @@ pub fn Mixin(comptime T: type) type {
             const window = try imageDataWindow(sx, sy, sw, sh, exec);
 
             const image_data = try ImageData.init(window.width, window.height, read, exec);
-            // Freshly created, so it is already transparent black: `readPixels`
-            // only has to overwrite the part of the window that overlaps the
-            // canvas.
-            const out = image_data._data.local(exec.js.local.?).slice();
-            self._surface.readPixels(
-                width(self),
-                height(self),
-                window.x,
-                window.y,
-                window.width,
-                window.height,
-                out,
-            );
-            // Out of the bitmap's own space and into the one the caller asked
-            // for, which are only the same space by default.
-            color.convertCanvasPixels(space(self), read.color_space, out);
+            switch (image_data._data) {
+                // Freshly created, so it is already transparent black:
+                // `readPixels` only has to overwrite the part of the window
+                // that overlaps the canvas.
+                .@"rgba-unorm8" => |data| {
+                    const out = data.local(exec.js.local.?).slice();
+                    self._surface.readPixels(
+                        width(self),
+                        height(self),
+                        window.x,
+                        window.y,
+                        window.width,
+                        window.height,
+                        out,
+                    );
+                    // Out of the bitmap's own space and into the one the caller
+                    // asked for, which are only the same space by default.
+                    color.convertCanvasPixels(space(self), read.color_space, out);
+                },
+                // Transparent black is 0.0 as much as it is a zero byte, so
+                // this one is also already correct where the window misses the
+                // canvas.
+                .@"rgba-float16" => {},
+            }
             return image_data;
         }
 

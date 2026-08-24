@@ -254,3 +254,26 @@
     });
   }
 </script>
+
+<script id="image_bitmap_from_float16_image_data" type=module>
+  {
+    // An ImageData is a source in either pixel format. A float16 one carries
+    // the same four channels per pixel in the same order, so the bitmap it
+    // makes is sized off `width`/`height` exactly as the unorm8 one is -- the
+    // format only decides what one entry means on the way in.
+    const state = await testing.async();
+    const out = {};
+    (async () => {
+      const img = new ImageData(2, 3, { pixelFormat: 'rgba-float16' });
+      out.size = (await window.createImageBitmap(img)).width + 'x' +
+        (await window.createImageBitmap(img)).height;
+      out.crop = (await window.createImageBitmap(img, 0, 0, 1, 1)).width + 'x1';
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      testing.expectEqual('2x3', out.size);
+      testing.expectEqual('1x1', out.crop);
+    });
+  }
+</script>

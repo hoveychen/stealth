@@ -689,6 +689,32 @@
     const inherited = ctx.createImageData(source);
     testing.expectEqual('display-p3', inherited.colorSpace);
     testing.expectEqual('2x3', `${inherited.width}x${inherited.height}`);
+
+    // The format decides the typed array here too, and it is inherited from a
+    // source ImageData along with the space: `createImageData from float16`
+    // answers `display-p3 rgba-float16 Float16Array` (measured --
+    // results/canvas-image-data-settings-2.chrome.json).
+    testing.expectEqual(
+      'Float16Array',
+      ctx.createImageData(1, 1, { pixelFormat: 'rgba-float16' }).data.constructor.name);
+    testing.expectEqual(
+      'Uint8ClampedArray', ctx.createImageData(1, 1).data.constructor.name);
+    const float16Source = new ImageData(2, 3, {
+      colorSpace: 'display-p3',
+      pixelFormat: 'rgba-float16',
+    });
+    const fromFloat16 = ctx.createImageData(float16Source);
+    testing.expectEqual('display-p3', fromFloat16.colorSpace);
+    testing.expectEqual('rgba-float16', fromFloat16.pixelFormat);
+    testing.expectEqual('Float16Array', fromFloat16.data.constructor.name);
+    testing.expectEqual(24, fromFloat16.data.length);
+
+    // And getImageData reads back through the same dictionary.
+    testing.expectEqual(
+      'Float16Array',
+      ctx.getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float16' }).data.constructor.name);
+    testing.expectEqual(
+      'Uint8ClampedArray', ctx.getImageData(0, 0, 1, 1).data.constructor.name);
     testing.expectEqual(
       "TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': " +
         "The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
