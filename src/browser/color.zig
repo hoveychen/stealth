@@ -589,34 +589,61 @@ pub const Style = struct {
         return .{ .rgba = .fromUnit(rgb), .float = rgb };
     }
 
-    /// The colour a canvas bitmap in `space` paints with, still unquantised —
-    /// see `Paint`.
+    /// The colour a canvas bitmap of `space` and `channels` paints with, still
+    /// unquantised — see `Paint`.
     ///
     /// A wide notation resolves from `wide` rather than from `rgba`, because
     /// `rgba` has already been clipped into sRGB's gamut and the clip does not
     /// come back out: on a display-p3 canvas Chrome stores `ff228d` for
     /// `color(rec2020 1 0.25 0.5)`, where converting the sRGB bytes it also
     /// reports would give `ea338b` (probes/canvas-own-color-space.js).
-    pub fn paint(self: Style, space: CanvasSpace) Paint {
+    ///
+    /// `channels` is here for one combination: an eight-bit *sRGB* bitmap is
+    /// the only one Blink can hand Skia as a plain eight-bit colour, and there
+    /// the colour is quantised before the premultiply rather than after, so
+    /// `float` never reaches it. Everywhere else — a display-p3 bitmap, a
+    /// float16 one — the float goes through. Measured, fourteen pairs on each
+    /// of the two spaces (results/canvas-legacy-premultiply.chrome.json):
+    /// `hsl(30 60% 40%)`'s blue is 40.8, which premultiplies to 20 and reads
+    /// back 40, where the 41 it rounds to premultiplies to 21 and reads back
+    /// the 42 Chrome answers.
+    pub fn paint(self: Style, space: CanvasSpace, channels: CanvasChannels) Paint {
         if (self.wide) |source| {
             return source.toPaint(space);
         }
-        const unit = self.float orelse {
-            if (space == .srgb) {
-                // Byte-valued and already in the bitmap's space, so there is
-                // nothing to convert.
-                return .fromRGBA(self.rgba);
-            }
-            return convertCanvasPaint(.srgb, space, .fromRGBA(self.rgba));
-        };
         // A legacy alpha is a byte by the time it is parsed, whichever notation
         // carried it — only `Wide`'s is a float. See `Paint`.
         const alpha = self.rgba.normalizedAlpha();
+        const unit = self.float orelse {
+            const bytes: Paint = .{
+                .r = @floatFromInt(self.rgba.r),
+                .g = @floatFromInt(self.rgba.g),
+                .b = @floatFromInt(self.rgba.b),
+                .a = alpha,
+            };
+            if (space == .srgb) {
+                // Byte-valued and already in the bitmap's space, so there is
+                // nothing to convert.
+                return bytes;
+            }
+            return convertCanvasPaint(.srgb, space, bytes);
+        };
         const rgb: [3]f32 = .{
             @floatCast(unit[0]),
             @floatCast(unit[1]),
             @floatCast(unit[2]),
         };
+        if (space == .srgb and channels == .unorm8) {
+            // The one bitmap that quantises first. Rounded at the width the
+            // channel is carried at, which is the same f32 the conversion
+            // below narrows to — see `Style.float`.
+            return .{
+                .r = @floatFromInt(RGBA.round255(rgb[0] * 255)),
+                .g = @floatFromInt(RGBA.round255(rgb[1] * 255)),
+                .b = @floatFromInt(RGBA.round255(rgb[2] * 255)),
+                .a = alpha,
+            };
+        }
         const converted = convertCanvasUnit(.srgb, space, rgb);
         return .unclipped(
             converted[0] * 255,
@@ -1798,9 +1825,9 @@ test "color: hsl and hwb reach a canvas as floats, legacy rgb as bytes" {
     };
     for (cases) |case| {
         const style = parseStyle(case.notation) orelse return error.Unparseable;
-        const srgb = style.paint(.srgb).toRGBA();
+        const srgb = style.paint(.srgb, .unorm8).toRGBA();
         try std.testing.expectEqualSlices(u8, &case.srgb, &.{ srgb.r, srgb.g, srgb.b });
-        const p3 = style.paint(.@"display-p3").toRGBA();
+        const p3 = style.paint(.@"display-p3", .unorm8).toRGBA();
         try std.testing.expectEqualSlices(u8, &case.p3, &.{ p3.r, p3.g, p3.b });
         var read: [4]u8 = .{ p3.r, p3.g, p3.b, p3.a };
         convertCanvasPixels(.@"display-p3", .srgb, &read);
