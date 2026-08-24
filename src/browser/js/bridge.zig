@@ -1601,6 +1601,13 @@ const worker_common_apis = [_]type{
     // back branded in the owner's realm. Through the Execution it is this
     // realm's.
     @import("../webapi/media/MediaSource.zig"),
+    // The font families. `FontFaceSet.load` dispatches two events, and the
+    // listener list it dispatched into was the frame's -- through
+    // `GlobalScope.eventManagerBase()` it is this realm's, which is what an
+    // EventTarget exposed in two realms needs. FontFaceSetLoadEvent is
+    // Window-only and lives in event/css_events.zig, so it does not travel.
+    @import("../webapi/css/FontFace.zig"),
+    @import("../webapi/css/FontFaceSet.zig"),
     // An ImageBitmap is the transferable image handle a worker decodes into,
     // and its canvas context comes along with it.
     @import("../webapi/canvas/ImageBitmap.zig"),

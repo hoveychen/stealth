@@ -106,6 +106,19 @@ in results/probes/expr-worker-surface.chrome.json).
       testing.expectEqual('[object IDBFactory]', data.bucket_idb_brand);
       testing.expectEqual(true, data.bucket_idb_is_realms);
 
+      // The font families, and `self.fonts` dispatching its `loading` event
+      // into this realm's own listener list.
+      testing.expectEqual('', data.font_family);
+      testing.expectEqual('undefined', data.typeof_FontFaceSetLoadEvent);
+      testing.expectEqual('WorkerGlobalScope.prototype', data.fonts_holder);
+      testing.expectEqual('[object FontFaceSet]', data.fonts_brand);
+      testing.expectEqual(true, data.fonts_identity);
+      testing.expectEqual('loaded', data.fonts_status);
+      testing.expectEqual(0, data.fonts_size);
+      testing.expectEqual('ok:loading', data.fonts_loaded);
+      testing.expectEqual('Kssz', data.font_face_family);
+      testing.expectEqual('normal', data.font_face_style);
+
       // Trusted Types. Chrome holds `trustedTypes` on WorkerGlobalScope
       // .prototype, and everything the factory does in a worker it also does on
       // a page: createPolicy answers a named policy, createScript runs the

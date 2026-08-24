@@ -18,6 +18,16 @@ self.onmessage = async () => {
     bucket = await navigator.storageBuckets.open('kssz-bucket');
   } catch { /* left null, and reported as such */ }
 
+  // Same, for the two font promises. `fonts.load` is the member that dispatches
+  // into this realm's listener list rather than the owner's.
+  let fonts_loaded = 'threw';
+  try {
+    self.fonts.addEventListener('loading', () => { fonts_loaded += ':loading'; });
+    await self.fonts.load('12px Kssz');
+    await self.fonts.ready;
+    fonts_loaded = 'ok' + fonts_loaded.slice('threw'.length);
+  } catch (e) { fonts_loaded = 'threw: ' + e.name; }
+
   const holderOf = (name) => {
     if (Object.prototype.hasOwnProperty.call(self, name)) return 'self';
     for (let o = Object.getPrototypeOf(self); o; o = Object.getPrototypeOf(o)) {
@@ -86,7 +96,26 @@ self.onmessage = async () => {
     // Chrome's worker has all of these, so this is a measured shortfall rather
     // than a match: closing it needs worker-owned state, not another name in a
     // list.
-    frame_bound: ['FontFace', 'CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
+    frame_bound: ['CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
+
+    // The font families. What they wanted the Frame for was an arena, the
+    // factory and -- in `FontFaceSet.load` -- somewhere to dispatch two events;
+    // an Execution has the first two and `GlobalScope.eventManagerBase()` is
+    // the listener list of whichever realm is asking. `self.fonts` is a
+    // WorkerGlobalScope.prototype member on Chrome.
+    font_family: ['FontFace', 'FontFaceSet']
+      .filter((n) => typeof self[n] !== 'function').join(','),
+    // FontFaceSetLoadEvent is Window-only: it must not travel with them.
+    typeof_FontFaceSetLoadEvent: typeof FontFaceSetLoadEvent,
+    fonts_holder: holderOf('fonts'),
+    fonts_brand: ask(() => Object.prototype.toString.call(self.fonts)),
+    fonts_identity: ask(() => self.fonts === self.fonts),
+    fonts_status: ask(() => self.fonts.status),
+    fonts_size: ask(() => self.fonts.size),
+    // The load path, which is the one that reaches for a listener list.
+    fonts_loaded: fonts_loaded,
+    font_face_family: ask(() => new FontFace('Kssz', 'local(Arial)').family),
+    font_face_style: ask(() => new FontFace('Kssz', 'local(Arial)').style),
 
     // Storage buckets. Only one member of the family reached for the owner --
     // `StorageBucket.indexedDB`, through `exec.js.global.frame.window` on the

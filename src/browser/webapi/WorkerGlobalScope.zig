@@ -51,6 +51,7 @@ const WorkerLocation = @import("WorkerLocation.zig");
 const ErrorEvent = @import("event/ErrorEvent.zig");
 const Fetch = @import("net/Fetch.zig");
 const idb = @import("storage/idb/idb.zig");
+const FontFaceSet = @import("css/FontFaceSet.zig");
 const CookieStore = @import("storage/CookieStore.zig");
 const MessagePort = @import("MessagePort.zig");
 const SharedWorkerGlobalScope = @import("SharedWorkerGlobalScope.zig");
@@ -114,6 +115,10 @@ _crypto: Crypto = .init,
 _navigator: WorkerNavigator = .{},
 _performance: Performance,
 _idb_factory: ?*idb.IDBFactory = null,
+// `self.fonts`, the worker realm's counterpart to `document.fonts`. Its own,
+// for the same reason the trusted-types factory below is: the set is an
+// EventTarget, and its listener list has to be this realm's.
+_fonts: ?*FontFaceSet = null,
 _on_error: ?JS.Function.Global = null,
 _on_rejection_handled: ?JS.Function.Global = null,
 _on_unhandled_rejection: ?JS.Function.Global = null,
@@ -235,6 +240,12 @@ pub fn deinit(self: *WorkerGlobalScope) void {
     while (self._message_ports.first) |node| {
         const port: *MessagePort = @alignCast(@fieldParentPtr("_node", node));
         port.close(); // removes from self._message_ports
+    }
+
+    // The reference `getFonts` took, released the way Frame.deinit releases the
+    // document's: the set holds a pooled arena, and nothing else drops it.
+    if (self._fonts) |fonts| {
+        fonts.releaseRef(page);
     }
 
     self._identity.deinit();
@@ -639,6 +650,16 @@ pub fn clearInterval(self: *WorkerGlobalScope, id: u32) void {
     self._timers.clear(id);
 }
 
+pub fn getFonts(self: *WorkerGlobalScope, exec: *const JS.Execution) !*FontFaceSet {
+    if (self._fonts) |fonts| {
+        return fonts;
+    }
+    const fonts = try FontFaceSet.init(exec);
+    fonts.acquireRef();
+    self._fonts = fonts;
+    return fonts;
+}
+
 pub fn getIndexedDB(self: *WorkerGlobalScope, exec: *JS.Execution) !*idb.IDBFactory {
     if (self._idb_factory) |f| {
         return f;
@@ -694,6 +715,7 @@ pub const JsApi = struct {
     pub const self = bridge.accessor(WorkerGlobalScope.getSelf, WorkerGlobalScope.setSelf, .{});
     pub const location = bridge.accessor(WorkerGlobalScope.getLocation, null, .{});
     pub const indexedDB = bridge.accessor(WorkerGlobalScope.getIndexedDB, null, .{});
+    pub const fonts = bridge.accessor(WorkerGlobalScope.getFonts, null, .{});
 
     pub const onerror = bridge.accessor(WorkerGlobalScope.getOnError, WorkerGlobalScope.setOnError, .{});
     pub const onrejectionhandled = bridge.accessor(WorkerGlobalScope.getOnRejectionHandled, WorkerGlobalScope.setOnRejectionHandled, .{});

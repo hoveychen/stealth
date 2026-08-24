@@ -20,9 +20,11 @@ const lp = @import("lightpanda");
 
 const js = @import("../../js/js.zig");
 const Page = @import("../../Page.zig");
-const Frame = @import("../../Frame.zig");
+
+const Execution = js.Execution;
 
 const Event = @import("../Event.zig");
+const EventManagerBase = @import("../../EventManagerBase.zig");
 const EventTarget = @import("../EventTarget.zig");
 
 const FontFace = @import("FontFace.zig");
@@ -35,11 +37,11 @@ _rc: lp.RC = .{},
 _proto: *EventTarget,
 _arena: *lp.Arena,
 
-pub fn init(frame: *Frame) !*FontFaceSet {
-    const arena = try frame.getArena(.tiny, "FontFaceSet");
+pub fn init(exec: *const Execution) !*FontFaceSet {
+    const arena = try exec.getArena(.tiny, "FontFaceSet");
     errdefer arena.release();
 
-    return frame._factory.eventTargetWithAllocator(arena.allocator(), FontFaceSet{
+    return exec._factory.eventTargetWithAllocator(arena.allocator(), FontFaceSet{
         ._proto = undefined,
         ._arena = arena,
     });
@@ -75,8 +77,8 @@ pub fn getStatus(_: *const FontFaceSet) []const u8 {
 
 // FontFaceSet.ready - returns an already-resolved Promise.
 // In a headless browser there is no font loading, so fonts are always ready.
-pub fn getReady(_: *FontFaceSet, frame: *Frame) !js.Promise {
-    return frame.js.local.?.resolvePromise({});
+pub fn getReady(_: *FontFaceSet, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
 }
 
 // check(font, text?) - always true; headless has no real fonts to check.
@@ -86,25 +88,40 @@ pub fn check(_: *const FontFaceSet, font: []const u8) bool {
 }
 
 // load(font, text?) - resolves immediately with an empty array.
-pub fn load(self: *FontFaceSet, font: []const u8, frame: *Frame) !js.Promise {
+pub fn load(self: *FontFaceSet, font: []const u8, exec: *const Execution) !js.Promise {
     // TODO parse font to check if the font has been added before dispatching
     // events.
     _ = font;
 
-    // Dispatch loading event
     const target = self.asEventTarget();
-    if (frame._event_manager.hasDirectListeners(target, "loading", null)) {
-        const event = try Event.initTrusted(comptime .wrap("loading"), .{}, frame._page);
-        try frame._event_manager.dispatchDirect(target, event, null, .{ .context = "load font face set" });
-    }
+    try dispatch(exec, target, "loading");
+    try dispatch(exec, target, "loadingdone");
 
-    // Dispatch loadingdone event
-    if (frame._event_manager.hasDirectListeners(target, "loadingdone", null)) {
-        const event = try Event.initTrusted(comptime .wrap("loadingdone"), .{}, frame._page);
-        try frame._event_manager.dispatchDirect(target, event, null, .{ .context = "load font face set" });
-    }
+    return exec.js.local.?.resolvePromise({});
+}
 
-    return frame.js.local.?.resolvePromise({});
+// Into the asking realm's own listener list. Both globals carry the same two
+// members -- a frame through the DOM-aware EventManager, which also keeps
+// `window.event` pointed at the event being dispatched, and a worker directly --
+// so the split is over which one to ask, not over what to do.
+fn dispatch(exec: *const Execution, target: *EventTarget, comptime typ: []const u8) !void {
+    const opts: EventManagerBase.DispatchDirectOptions = .{ .context = "load font face set" };
+    switch (exec.js.global) {
+        .frame => |frame| {
+            if (frame._event_manager.hasDirectListeners(target, typ, null) == false) {
+                return;
+            }
+            const event = try Event.initTrusted(comptime .wrap(typ), .{}, frame._page);
+            try frame._event_manager.dispatchDirect(target, event, null, opts);
+        },
+        .worker => |worker| {
+            if (worker.hasDirectListeners(target, typ, null) == false) {
+                return;
+            }
+            const event = try Event.initTrusted(comptime .wrap(typ), .{}, worker._page);
+            try worker.dispatch(target, event, null, opts);
+        },
+    }
 }
 
 // add(fontFace) - no-op; headless browser does not track loaded fonts.
