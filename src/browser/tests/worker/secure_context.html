@@ -85,9 +85,17 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // object factory alone, and an Execution has one (worker/realm_surface
       // .html). All 40 are [SecureContext], so an insecure owner sees none of
       // them and frames/secure_context_gate.html holds at its old count.
+      //
+      // 313 with the four MSE interface objects, which travelled the same way
+      // again. None of the four is [SecureContext], so the insecure count moves
+      // with this one for these.
       testing.expectEqual(13, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(309, data.count);
+      //
+      // 315 with StorageBucket and StorageBucketManager, whose one Frame reach
+      // was `StorageBucket.indexedDB` looking past the global union. Both are
+      // [SecureContext].
+      testing.expectEqual(315, data.count);
     });
   }
 </script>

@@ -816,9 +816,14 @@ pub const StorageBucket = struct {
     // The bucket shares the page's IDB factory rather than getting one of its
     // own — a separate database namespace would be a difference a page could
     // observe, and we have none to give it.
+    // The realm's own factory, whichever realm that is: both globals answer
+    // `getIndexedDB`, and reaching past the union to `.frame` was the only
+    // thing keeping the bucket family out of a worker.
     pub fn getIndexedDB(_: *const StorageBucket, exec: *Execution) !*idb.IDBFactory {
-        // Window-only, so the global is always a Frame.
-        return exec.js.global.frame.window.getIndexedDB(exec);
+        return switch (exec.js.global) {
+            .frame => |frame| frame.window.getIndexedDB(exec),
+            .worker => |worker| worker.getIndexedDB(exec),
+        };
     }
 
     pub fn getCaches(self: *StorageBucket) *cache_storage.CacheStorage {

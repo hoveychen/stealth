@@ -7,8 +7,16 @@
 // under test: an unguarded `WorkerNavigator.prototype` would throw before the
 // message is posted and the failure would arrive as a timeout instead of as an
 // assertion.
-self.onmessage = () => {
+self.onmessage = async () => {
   const ask = (fn) => { try { return fn(); } catch (e) { return 'threw: ' + e.name; } };
+
+  // The one reading here that needs a turn of the microtask queue: a bucket
+  // arrives through a promise, and `bucket.indexedDB` is the member that used
+  // to assume the global was a Frame.
+  let bucket = null;
+  try {
+    bucket = await navigator.storageBuckets.open('kssz-bucket');
+  } catch { /* left null, and reported as such */ }
 
   const holderOf = (name) => {
     if (Object.prototype.hasOwnProperty.call(self, name)) return 'self';
@@ -78,8 +86,39 @@ self.onmessage = () => {
     // Chrome's worker has all of these, so this is a measured shortfall rather
     // than a match: closing it needs worker-owned state, not another name in a
     // list.
-    frame_bound: ['StorageBucket', 'FontFace',
-      'MediaSource', 'CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
+    frame_bound: ['FontFace', 'CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
+
+    // Storage buckets. Only one member of the family reached for the owner --
+    // `StorageBucket.indexedDB`, through `exec.js.global.frame.window` on the
+    // stated assumption that the global is always a Frame. Both globals answer
+    // `getIndexedDB`, so the assumption was the bug: a bucket in a worker
+    // shares the worker's factory, which is what `self.indexedDB` is.
+    bucket_family: ['StorageBucket', 'StorageBucketManager']
+      .filter((n) => typeof self[n] !== 'function').join(','),
+    bucket_manager_brand: ask(() =>
+      Object.prototype.toString.call(navigator.storageBuckets)),
+    bucket_brand: bucket === null ? 'null' : Object.prototype.toString.call(bucket),
+    bucket_name: ask(() => bucket.name),
+    bucket_idb_brand: ask(() => Object.prototype.toString.call(bucket.indexedDB)),
+    bucket_idb_is_realms: ask(() => bucket.indexedDB === self.indexedDB),
+
+    // Media Source Extensions. Its accessors wanted a `*Page` rather than a
+    // `*Frame`, which a worker realm can be handed -- but the page's factory is
+    // the page's, and an object branded there and handed back here would be the
+    // cross-realm bug the Frame rule exists to prevent. Through the Execution
+    // the source buffer list is this realm's own. `MediaSource
+    // .canConstructInDedicatedWorker` is the static that says so.
+    mse_family: ['MediaSource', 'MediaSourceHandle', 'SourceBuffer',
+      'SourceBufferList'].filter((n) => typeof self[n] !== 'function').join(','),
+    mse_can_construct: ask(() => MediaSource.canConstructInDedicatedWorker),
+    mse_buffers_brand: ask(() =>
+      Object.prototype.toString.call(new MediaSource().sourceBuffers)),
+    mse_buffers_identity: ask(() => {
+      const ms = new MediaSource();
+      return ms.sourceBuffers === ms.sourceBuffers
+        && ms.sourceBuffers !== ms.activeSourceBuffers;
+    }),
+    mse_buffers_length: ask(() => new MediaSource().sourceBuffers.length),
 
     // WebGPU, all 40 interface objects Chrome's worker carries. The family used
     // to be Frame-bound off a single member -- GPU.wgslLanguageFeatures created

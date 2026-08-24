@@ -111,6 +111,10 @@ pub fn getGpu(self: *WorkerNavigator, exec: *Execution) !*services.GPU {
     return self._navigator.getGpu(exec);
 }
 
+pub fn getStorageBuckets(self: *WorkerNavigator, exec: *Execution) !*services.StorageBucketManager {
+    return self._navigator.getStorageBuckets(exec);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(WorkerNavigator);
 
@@ -122,12 +126,12 @@ pub const JsApi = struct {
 
     // Declaration order is Chrome 151's own
     // `Object.getOwnPropertyNames(WorkerNavigator.prototype)` order, measured in
-    // a blob worker. The seven it carries that are still missing here --
-    // connection, hid, mediaCapabilities, serial, usb, locks, storageBuckets --
-    // resolve through a Frame, and `Caller.getGlobalArg` has no Frame to hand a
-    // worker realm. `gpu` used to be an eighth: the only thing it wanted the
-    // Frame for was `_factory`, which is on the Execution, so asking for the
-    // right argument was the whole of it.
+    // a blob worker. The six it carries that are still missing here --
+    // connection, hid, mediaCapabilities, serial, usb, locks -- resolve through
+    // a Frame, and `Caller.getGlobalArg` has no Frame to hand a worker realm.
+    // `gpu` and `storageBuckets` used to be among them: the only thing either
+    // wanted the Frame for was `_factory`, which is on the Execution, so asking
+    // for the right argument was the whole of it.
     pub const hardwareConcurrency = bridge.accessor(WorkerNavigator.getHardwareConcurrency, null, .{});
     pub const appCodeName = bridge.accessor(WorkerNavigator.getAppCodeName, null, .{});
     pub const appName = bridge.accessor(WorkerNavigator.getAppName, null, .{});
@@ -143,4 +147,5 @@ pub const JsApi = struct {
     pub const userAgentData = bridge.accessor(WorkerNavigator.getUserAgentData, null, .{});
     pub const storage = bridge.accessor(WorkerNavigator.getStorage, null, .{});
     pub const gpu = bridge.accessor(WorkerNavigator.getGpu, null, .{});
+    pub const storageBuckets = bridge.accessor(WorkerNavigator.getStorageBuckets, null, .{});
 };

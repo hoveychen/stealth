@@ -1578,8 +1578,8 @@ const worker_common_apis = [_]type{
     // handed its owner's Frame -- see the comment on getGlobalArg in Caller.zig,
     // which is a live SIGABRT on the Cloudflare station and not a style
     // preference -- so the Frame-taking families stay out even though Chrome's
-    // worker has them: the font families, MediaSource, and the typed-OM
-    // transform components. Trusted Types and WebGPU were both on that list
+    // worker has them: the font families and the typed-OM transform
+    // components. Trusted Types, WebGPU and MSE were all on that list
     // until their members were converted to take an `*Execution`, which is the
     // escape hatch every one of the rest should be re-audited against. The
     // question to ask of a `*Frame` is never "can a worker have one" -- it
@@ -1592,6 +1592,15 @@ const worker_common_apis = [_]type{
     @import("../webapi/webcodecs/codecs.zig"),
     @import("../webapi/webcodecs/frames.zig"),
     @import("../webapi/webcodecs/image_decoder.zig"),
+    // MSE-in-Worker. A dedicated worker is the only realm Chrome lets a
+    // MediaSource be constructed in at all -- `canConstructInDedicatedWorker`
+    // is a static that exists to say so -- so this family being absent here was
+    // the surface contradicting its own static. Its two list accessors took a
+    // `*Page`, which a worker realm *can* be handed, and that was the trap: the
+    // page's factory is the page's, so the SourceBufferList would have come
+    // back branded in the owner's realm. Through the Execution it is this
+    // realm's.
+    @import("../webapi/media/MediaSource.zig"),
     // An ImageBitmap is the transferable image handle a worker decodes into,
     // and its canvas context comes along with it.
     @import("../webapi/canvas/ImageBitmap.zig"),
@@ -1631,16 +1640,20 @@ const worker_common_apis = [_]type{
     @import("../webapi/service_worker.zig").SyncManager,
     @import("../webapi/service_worker.zig").PeriodicSyncManager,
     @import("../webapi/service_worker.zig").NavigationPreloadManager,
-    // Six of navigator/services.zig's seventeen. The file is still not
-    // importable whole, and the reason is the Frame rule: `StorageBucket` has
-    // `indexedDB`, which reaches `global.frame` through the Execution on the
-    // stated assumption that the global is a Frame -- so its bucket manager
-    // stays out with it. The other eleven types the file registers are
-    // window-only anyway.
+    // Eight of navigator/services.zig's seventeen. The other nine the file
+    // registers are window-only, which is the only reason it is still named
+    // type by type rather than imported whole.
     @import("../webapi/navigator/services.zig").Lock,
     @import("../webapi/navigator/services.zig").LockManager,
     @import("../webapi/navigator/services.zig").MediaCapabilities,
     @import("../webapi/navigator/services.zig").UserActivation,
+    // The bucket family. `StorageBucket.indexedDB` used to reach
+    // `exec.js.global.frame.window` -- past the union, on the stated assumption
+    // that the global is always a Frame. Both arms of that union answer
+    // `getIndexedDB`, so switching on it is the whole fix, and a bucket in a
+    // worker now shares the worker's factory rather than the owner window's.
+    @import("../webapi/navigator/services.zig").StorageBucket,
+    @import("../webapi/navigator/services.zig").StorageBucketManager,
     // `GPU` was the seventh reason this file could not travel whole: its
     // `wgslLanguageFeatures` took a `*Frame`. It wanted the Frame's `_factory`
     // and nothing else, and every Execution carries one, so the accessor takes
