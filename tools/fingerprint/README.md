@@ -11988,3 +11988,79 @@ MSE+buckets+fonts, and after the filesystem: `cf-challenge`, `doc=403->200`,
 47 nodes, `"Just a moment..."` — **two consecutive runs at each of the three
 checkpoints, six in total**, which is the control reading exactly. `make test`
 1435/1435 at each. The verdict has not moved; the surface it is reading has.
+
+## Twelve of nineteen colour notations painted the previous colour (2026-08-23)
+
+`ctx.fillStyle = 'rgb(255, 0, 0)'; ctx.fillRect(...)` filled **blue**, because
+the fill before it was blue. So did `hsl()`, `hwb()`, `lab()`, `lch()`,
+`oklab()`, `oklch()`, `color()` and `currentColor`: `RGBA.parse` read a hex form
+and a name and nothing else, and the setter's `catch self._fill_style` turned
+every other notation into silence. Only hex, the named colours and
+`transparent` worked. A page that fills red and reads back blue is a tell one
+line of JS finds, and it does not need a canvas hash to find it.
+
+**The measurement had to come first, because the notations do not all behave the
+same way.** `probes/canvas-color-notation.js` puts 86 notations through a 2D
+context on headed Chrome and records three things for each: the string
+`fillStyle` answers, the bytes `fillRect` leaves in each of four
+canvas-space × readback-space combinations, and what the context says about
+itself. Readings in `results/canvas-color-notation.chrome.json`, this engine's
+arm in `results/canvas-color-notation.lightpanda.json`.
+
+What that turned up, none of it derivable from the spec text:
+
+- **The notations split in two, by what comes back rather than by how they are
+  computed.** Hex, a name, `rgb()`, `hsl()` and `hwb()` all collapse to a hex
+  string, or to `rgba()` when translucent. `lab()`, `lch()`, `oklab()`,
+  `oklch()` and `color()` are answered back as *themselves*, canonicalised:
+  `lab(50% 40 30)` → `lab(50 40 30)`, `color(xyz 0.5 0.25 0.1)` →
+  `color(xyz-d65 0.5 0.25 0.1)`, `color(display-p3 50% 25% 50%)` →
+  `color(display-p3 0.5 0.25 0.5)`. So a context cannot keep only the bytes it
+  paints with. `color.Wide` is the source of those five — plain data, no slices,
+  so the save/restore stack copies it and no arena is involved.
+- **The canonicalisation has its own rules, all measured.** `none` is kept as
+  `none`; an alpha of exactly one, or one that clamps to it, is dropped from the
+  string entirely; a lightness clamps ([0,100] for lab/lch, [0,1] for
+  oklab/oklch) and the clamped value is what is written back; a chroma clamps at
+  zero; a hue wraps ( `lch(50 40 400)` → `lch(50 40 40)`, `-30` → `330`) and
+  loses its unit; a percentage is worth 125 on lab's a and b, 150 on lch's
+  chroma, 0.4 on the oklab family's, and 1 everywhere in `color()`; and
+  `color()`'s channels are *not* clamped, so `color(srgb 1.5 -0.5 0.5)` comes
+  back whole. The comma grammar is rejected for all five.
+- **a98-rgb uses a plain 2.2, not CSS Color 4's 563/256.** Four of the five a98
+  readings cannot tell the two exponents apart. The one that can —
+  `color(a98-rgb 1 0.25 0.5)`, which Chrome answers `ff3d82` — puts the green
+  channel at 61.5017 under the spec exponent, a thousandth of a byte over the
+  rounding boundary, and at 61.4676 under 2.2.
+- **The alpha a canvas writes back was two decimals and should be shortest.**
+  `#ff000080` read `rgba(255, 0, 0, 0.50)` where Chrome says `0.5`, and
+  `transparent` read `0.00` where Chrome says `0`. The correct serialiser
+  already existed in `CSSStyleDeclaration.zig` and nowhere else; it, `hslToRgb`
+  and `hwbToRgb` moved down into `color.zig`, which is where the canvas could
+  reach them.
+
+**Result: the `fillStyle` strings are 86/86 identical to Chrome, and the srgb /
+rgba-unorm8 pixels 85/86.** The one miss is `color(display-p3 1 0.25 0.5 / 0.5)`
+— with an alpha, Chrome's *colour* channels shift too (`ff1c7e` against the
+opaque `ff1b7f`), which is its premultiplied 8-bit storage round trip, not its
+parser. Two readings elsewhere in the set land within a twentieth of a rounding
+boundary and answer one LSB away: Skia carries its gamut matrices as D50 fixed
+point, so a knife-edge channel can fall either side of the boundary, and a
+one-LSB channel is a reading a real browser produces too. Those are recorded
+next to their assertions rather than chased.
+
+### What the same probe found next door, and why it is a different axis
+
+The Turnstile widget's four canvases (`results/ibt2-oracle.json`) are not one
+canvas read four ways — they are `{srgb, display-p3}` × `{unorm8, float16}`,
+each built with `willReadFrequently: true` and read back with the *matching*
+settings. An earlier note read the display-p3 row as a conversion applied at
+readback time; it is not, it is a display-p3 **canvas**. That distinction
+matters because it puts the row in a different place: `getContext('2d', …)`
+discards its options here, `getContextAttributes()` answers a fixed struct
+(so `willReadFrequently` reads `false` on a context created with `true`), and
+`getImageData` has no fifth parameter at all. Three of the probe's four pixel
+columns diverge for that one reason, and the fix is a different shape — a canvas
+that has a colour space has to keep the source colour for `fillStyle` to answer
+with *and* the converted bytes to paint with. It is `cfsc-canvas-color-space`,
+with the measured targets already in it.
