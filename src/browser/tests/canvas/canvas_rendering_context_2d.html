@@ -574,14 +574,18 @@
   // Every colour space `color()` takes, one reading each.
   testing.expectEqual("ff0000ff", paint("color(display-p3 1 0 0)"));
   testing.expectEqual("ff1b7fff", paint("color(display-p3 1 0.25 0.5)"));
-  // ⚠️ Our value, not Chrome's: re-measured on Chrome 151 this answers
-  // `ff1c7e80`. A translucent pixel goes into the bitmap premultiplied and is
-  // unpremultiplied again on the way out, and the encode happens on the *float*
-  // colour — the blue here is about 0.4976, so 0.4976 * 0.5 stores 63 and 63 of
-  // 128 reads back as 126. Fixing that is a separate axis (the
-  // `cfsc-canvas-color-space` plan's P6) and this line moves with it. The
-  // opaque row above was re-measured at the same time and is right.
-  testing.expectEqual("ff1b7f80", paint("color(display-p3 1 0.25 0.5 / 0.5)"));
+  // ⚠️ Blue is Chrome's; green is one byte short of it. Chrome answers
+  // `ff1c7e80` (results/canvas-premultiplied-encode.chrome.json). The bitmap
+  // premultiplies the *float* colour and divides it back out on the way to a
+  // page, which is why the blue moved: 126.78 * 0.5 stores 63, and 63 of 128
+  // reads back as 126 rather than the 127 the opaque row stores. The green is
+  // the one channel that lands on the wrong side of a rounding boundary — ours
+  // is 26.998, Chrome's is just over 27, so half of each stores 13 against 14.
+  // The gap is 1e-5 in the colour-space transform, and it is *not* a choice
+  // between the two published matrix sets: measured over 24 colours the two
+  // disagree about, Chrome sides with neither (probes/canvas-space-matrix.js).
+  // The un-premultiplication doubles that 1e-5 into the two bytes seen here.
+  testing.expectEqual("ff1a7e80", paint("color(display-p3 1 0.25 0.5 / 0.5)"));
   testing.expectEqual("00000000", paint("color(display-p3 1 0.25 0.5 / none)"));
   testing.expectEqual("004184ff", paint("color(display-p3 none 0.25 0.5)"));
   testing.expectEqual("893b83ff", paint("color(display-p3 50% 25% 50%)"));
@@ -1035,10 +1039,13 @@
   testing.expectEqual([119, 119, 119, 255], fill(' grayscale( 1 ) ', '#4080c0'));
   testing.expectEqual([119, 119, 119, 255], fill('grayscale(1', '#4080c0'));
 
-  // Two divergences, both deliberate. A translucent paint: Chrome greys the
-  // premultiplied bytes and reads 120, we grey the straight ones and read 119.
-  testing.expectEqual([119, 119, 119, 128], fill('grayscale(1)', 'rgba(64,128,192,0.5)'));
-  // And a chain whose other half we do not implement paints unfiltered, since
+  // A translucent paint, which used to be a divergence: Chrome greys the
+  // premultiplied bytes and reads 120, and greying the straight colour without
+  // rounding it first reaches the same 120 once the bitmap premultiplies it
+  // (measured -- results/canvas-premultiplied-encode.chrome.json).
+  testing.expectEqual([120, 120, 120, 128], fill('grayscale(1)', 'rgba(64,128,192,0.5)'));
+  // One divergence, deliberate: a chain whose other half we do not implement
+  // paints unfiltered, since
   // honouring only the grey would land further from Chrome's {128,128,128,8}
   // than honouring none of it — the blur is most of what happened there.
   testing.expectEqual([64, 128, 192, 255], fill('grayscale(1) blur(2px)', '#4080c0'));

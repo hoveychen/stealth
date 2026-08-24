@@ -113,7 +113,7 @@ pub fn Mixin(comptime T: type) type {
         /// everything but `drawImage` the whole of it lands here rather than in
         /// the rasteriser. Chrome runs the filter on fills too, not only on
         /// images (measured, probes/expr-canvas-filter-grayscale.js).
-        fn paint(self: *const T, style: canvas_objects.PaintStyle) color.RGBA {
+        fn paint(self: *const T, style: canvas_objects.PaintStyle) color.Paint {
             // Resolved into the bitmap's colour space first, then filtered. The
             // order is a guess where the space is not: nothing measured says
             // whether Chrome filters before or after the conversion, and on an

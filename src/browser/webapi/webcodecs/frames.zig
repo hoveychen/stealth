@@ -324,7 +324,7 @@ pub const VideoFrame = struct {
                 .width = width,
                 .height = height,
                 .format = "BGRA",
-                .pixels = try swapRedBlue(canvas.pixels(), width, height, exec),
+                .pixels = try swapRedBlue(try canvas.straightPixels(exec.call_arena), width, height, exec),
             };
         } else |_| {}
 
@@ -336,7 +336,7 @@ pub const VideoFrame = struct {
             }
             // Software-backed, and therefore RGBA: the rasteriser's own order,
             // so nothing is swapped.
-            return .{ .width = width, .height = height, .format = "RGBA", .pixels = canvas.pixels() };
+            return .{ .width = width, .height = height, .format = "RGBA", .pixels = try canvas.straightPixels(exec.call_arena) };
         } else |_| {}
 
         if (source.toZig(*ImageBitmap)) |bitmap| {

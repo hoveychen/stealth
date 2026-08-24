@@ -110,6 +110,10 @@ const Usable = struct {
     width: u32,
     height: u32,
     pixels: ?[]const u8,
+    /// Whether `pixels` is already in the premultiplied form a `Surface`
+    /// stores. Another bitmap's are; an ImageData's are not — that object is
+    /// the straight-alpha view a page gets handed.
+    premultiplied: bool = true,
 };
 
 const Source = union(enum) {
@@ -141,12 +145,14 @@ fn classify(value: js.Value) Source {
         } };
     } else |_| {}
     if (value.toZig(*ImageData)) |data| {
-        // Straight RGBA8, row-major -- the same layout the rasteriser keeps,
-        // so the bytes go across unchanged.
+        // Straight RGBA8, row-major -- the rasteriser's layout but not its
+        // alpha, so these are the one source that has to be premultiplied on
+        // the way in.
         return .{ .usable = .{
             .width = data.getWidth(),
             .height = data.getHeight(),
             .pixels = data.getData().local(value.local).slice(),
+            .premultiplied = false,
         } };
     } else |_| {}
     if (value.toZig(*ImageBitmap)) |bitmap| {
@@ -192,7 +198,11 @@ fn snapshot(arena: Allocator, source: Usable, left: i64, top: i64, width: u32, h
             if (sx < 0 or sx >= @as(i64, source.width)) continue;
             const at = (@as(usize, @intCast(sy)) * source.width + @as(usize, @intCast(sx))) * 4;
             const to = (@as(usize, row) * width + col) * 4;
-            @memcpy(into[to..][0..4], from[at..][0..4]);
+            if (source.premultiplied) {
+                @memcpy(into[to..][0..4], from[at..][0..4]);
+            } else {
+                into[to..][0..4].* = Surface.premultiply(from[at..][0..4]);
+            }
         }
     }
     return copy;
