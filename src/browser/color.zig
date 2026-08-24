@@ -1279,15 +1279,15 @@ pub fn convertCanvasUnit(from: CanvasSpace, to: CanvasSpace, rgb: [3]f32) [3]f32
         .srgb => srgb_linear_to_p3_linear,
         .@"display-p3" => p3_linear_to_srgb_linear,
     };
-    const linear = matrixApply(matrix, .{
-        srgbToLinear(rgb[0]),
-        srgbToLinear(rgb[1]),
-        srgbToLinear(rgb[2]),
+    const linear = matrixApplyFused(matrix, .{
+        canvasToLinear(rgb[0]),
+        canvasToLinear(rgb[1]),
+        canvasToLinear(rgb[2]),
     });
     return .{
-        srgbFromLinear(linear[0]),
-        srgbFromLinear(linear[1]),
-        srgbFromLinear(linear[2]),
+        canvasFromLinear(linear[0]),
+        canvasFromLinear(linear[1]),
+        canvasFromLinear(linear[2]),
     };
 }
 
@@ -1301,15 +1301,182 @@ fn narrow(m: Matrix) CanvasMatrix {
     return out;
 }
 
-/// Both canvas spaces share sRGB's transfer function, so the conversion is one
-/// matrix: `display_p3_to_xyz` into XYZ and `xyz_to_srgb` back out, composed.
-const p3_linear_to_srgb_linear: CanvasMatrix =
-    matrixMultiply(narrow(xyz_to_srgb), narrow(display_p3_to_xyz));
+fn widen(m: CanvasMatrix) Matrix {
+    var out: Matrix = undefined;
+    for (&out, m) |*cell, value| cell.* = value;
+    return out;
+}
 
-/// The other direction, which no matrix above spells: sRGB's own to-XYZ matrix
-/// is not one of them, so this is the inverse of the composition rather than a
-/// second composition.
-const srgb_linear_to_p3_linear: CanvasMatrix = matrixInvert(p3_linear_to_srgb_linear);
+// ---------------------------------------------------------------------------
+// The canvas leg does not go through the matrices above. Both canvas spaces
+// share sRGB's transfer function, so the conversion is one matrix -- but *which*
+// matrix is a measurement, not a derivation from CSS Color 4, because Chrome
+// composes it out of Skia's own two gamuts and rounds twice on the way.
+//
+// `SkColorSpace::gamutTransformTo` is
+// `skcms_Matrix3x3_concat(&invert(dst->toXYZD50), &src->toXYZD50)`, where the
+// two `toXYZD50` matrices are `SkNamedGamut::kSRGB` and
+// `SkNamedGamut::kDisplayP3` (include/core/SkColorSpace.h),
+// `skcms_Matrix3x3_invert` does its arithmetic in double and *stores f32*, and
+// the concat is f32 throughout (modules/skcms/skcms.cc). Those two roundings are
+// the whole of why the answer is neither of the two published sRGB<->P3
+// products: both of those were measured and ruled out through whole bytes
+// (probes/canvas-space-matrix.js), and the composition below was then recovered
+// cell by cell at float precision (probes/canvas-space-float-matrix.js). See
+// `color: canvas space matrix matches Chrome cell for cell`.
+//
+// Two things follow from the D50 round trip that no exact D65 matrix has: the
+// rows do not sum to one, so grey does not come back as grey, and the blue
+// column's top two cells are not structural zeros, so an sRGB blue reads with a
+// faint negative red.
+// ---------------------------------------------------------------------------
+
+/// `SkNamedGamut::kSRGB`, which is the ICC fixed-point (16.16) spelling and not
+/// the exact primaries -- every cell is a whole multiple of 2^-16 and so exact
+/// at f32.
+const skcms_srgb_to_xyz_d50: CanvasMatrix = .{
+    0x6FA2p-16, 0x6299p-16, 0x24A0p-16,
+    0x38F5p-16, 0xB785p-16, 0x0F84p-16,
+    0x0390p-16, 0x18DAp-16, 0xB6CFp-16,
+};
+
+/// `SkNamedGamut::kDisplayP3`, which is six significant digits of f32 literal
+/// rather than a fixed-point grid.
+const skcms_p3_to_xyz_d50: CanvasMatrix = .{
+    0.515102,    0.291965,  0.157153,
+    0.241182,    0.692236,  0.0665819,
+    -0.00104941, 0.0418818, 0.784378,
+};
+
+/// `0.822547197 0.177678615 -0.000004828 / 0.033179868 0.966723800 -0.000010076
+/// / 0.017070306 0.072381869 0.910398364`, measured to at most one ULP.
+const srgb_linear_to_p3_linear: CanvasMatrix =
+    matrixMultiply(narrow(matrixInvert(widen(skcms_p3_to_xyz_d50))), skcms_srgb_to_xyz_d50);
+
+/// `1.224816442 -0.225114793 0.000004023 / -0.042038292 1.042147279 0.000011312
+/// / -0.019623475 -0.078635663 1.098419309`. Not the inverse of the row above:
+/// Chrome composes each direction from the two gamuts, and inverting the f32
+/// product instead would round a third time.
+const p3_linear_to_srgb_linear: CanvasMatrix =
+    matrixMultiply(narrow(matrixInvert(widen(skcms_srgb_to_xyz_d50))), skcms_p3_to_xyz_d50);
+
+/// The matrix leg spelled the way Skia's raster pipeline spells it: one chain of
+/// fused multiply-adds per output channel, innermost first (`matrix_3x3` in
+/// src/opts/SkRasterPipeline_opts.h, where `mad` is `vmlaq_f32` and so a single
+/// rounding). At f32 the order is visible -- a plain left-to-right sum lands one
+/// ULP off on one channel of every grey reading measured for this.
+fn matrixApplyFused(m: CanvasMatrix, v: [3]f32) [3]f32 {
+    var out: [3]f32 = undefined;
+    for (&out, 0..) |*channel, row| {
+        channel.* = @mulAdd(f32, v[0], m[row * 3], @mulAdd(
+            f32,
+            v[1],
+            m[row * 3 + 1],
+            v[2] * m[row * 3 + 2],
+        ));
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// Nor is the canvas leg's transfer function `srgbToLinear`'s. Chrome runs this
+// conversion through Skia's raster pipeline, whose `parametric` stage evaluates
+// an `skcms_TransferFunction` as
+//
+//   v <= d  ?  mad(c, v, f)  :  approx_powf(mad(a, v, b), g) + e
+//
+// and whose `approx_powf` is a polynomial over the float's own exponent and
+// mantissa bits, not a libm `powf` (src/opts/SkRasterPipeline_opts.h). At the
+// f32 width a float read answers in, the difference is not academic: it is
+// worth about 1.6e-4 of the result, a hundred times the last bit.
+//
+// Measured (probes/canvas-space-float-decode.js): all 256 byte values, both
+// channels, both directions -- 512 readings -- land on `approx_powf` to the bit.
+// skcms's *own* `powf_` (modules/skcms/skcms.cc) is close but not it, and 26 of
+// those 512 say so: its `exp2f_` truncates the bit pattern where the pipeline's
+// `approx_pow2` rounds it. So the arithmetic under measurement is the raster
+// pipeline's, and this is the spelling that reproduces it.
+// ---------------------------------------------------------------------------
+
+/// `approx_log2`, whose whole trick is that a float's exponent field already
+/// *is* a rough log2 and its mantissa refines the error.
+fn approxLog2(x: f32) f32 {
+    const raw: u32 = @bitCast(x);
+    const e = @as(f32, @floatFromInt(raw)) * 0x1p-23;
+    const m: f32 = @bitCast((raw & 0x007fffff) | 0x3f000000);
+    // `nmad(m, k, a)` is `a - m * k` with one rounding, which is what a fused
+    // multiply-add of the negated multiplicand is.
+    return @mulAdd(f32, -m, 1.498030302, e - 124.225514990) -
+        1.725879990 / (0.3520887068 + m);
+}
+
+/// `approx_pow2`, the same trick run backwards: build the exponent and mantissa
+/// fields as one integer and reinterpret them.
+fn approxPow2(x: f32) f32 {
+    const fract = x - @floor(x);
+    var approx = @mulAdd(f32, -fract, 1.490129070, x + 121.274057500);
+    approx += 27.728023300 / (4.84252568 - fract);
+    approx *= 0x1p23;
+    // Guards against underflow and overflow, exactly as the stage does.
+    approx = @min(@max(approx, 0), @as(f32, @bitCast(@as(u32, 0x7f800000))));
+    // `round` is round-to-nearest here, but at this magnitude an f32 is already
+    // a whole number -- the last representable step past 2^23 is at least one --
+    // so nothing is being rounded and the tie rule cannot show.
+    return @bitCast(@as(u32, @intFromFloat(@round(approx))));
+}
+
+fn approxPowf(x: f32, y: f32) f32 {
+    if (x == 0 or x == 1) {
+        return x;
+    }
+    return approxPow2(approxLog2(x) * y);
+}
+
+/// `SkNamedTransferFn::kSRGB`, which is kept "bitwise exactly the same as
+/// skcms" and so holds the f32 *quotients* rather than the exact rationals.
+const srgb_tf_g: f32 = 2.4;
+const srgb_tf_a: f32 = 1.0 / 1.055;
+const srgb_tf_b: f32 = 0.055 / 1.055;
+const srgb_tf_c: f32 = 1.0 / 12.92;
+const srgb_tf_d: f32 = 0.04045;
+
+/// `skcms_TransferFunction_invert` of the row above. `d` is the curve's join
+/// carried through the linear segment, `c` its reciprocal, and `b` is zero
+/// because sRGB's `e` is.
+const srgb_inv_g: f32 = 1.0 / srgb_tf_g;
+const srgb_inv_c: f32 = 1.0 / srgb_tf_c;
+const srgb_inv_d: f32 = srgb_tf_c * srgb_tf_d;
+
+/// `powf_(a, -g)`, which is `1.055^2.4` -- but through skcms's *own* approximate
+/// pow, so 1.1372833251953125 where the exact value is 1.1371191. Transcribed
+/// rather than derived: that pow truncates where `approxPow2` rounds, and this
+/// is the only place the difference would matter.
+const srgb_inv_a: f32 = 1.1372833251953125;
+
+/// Not `-0.055`. `skcms_TransferFunction_invert` ends by tweaking `e` so that
+/// "the valuable invariant `inv(src(1.0f)) == 1.0f`" holds -- `inv.e = 1.0f -
+/// powf_(inv.a * s + inv.b, inv.g)` where `s` is `src(1.0f)`, which sRGB
+/// evaluates exactly. So the encode is *not* the decode's inverse: it is the
+/// decode's inverse bent by 3.02e-5 to keep white white, and every reading in
+/// the nonlinear segment is off by exactly that much without it. Measured
+/// (probes/canvas-space-float-sweep.js): 1536 of 1536 channels.
+const srgb_inv_e: f32 = 1.0 - approxPowf(srgb_inv_a, srgb_inv_g);
+
+fn canvasToLinear(v: f32) f32 {
+    const a = @abs(v);
+    if (a <= srgb_tf_d) {
+        return signOf(v) * (srgb_tf_c * a);
+    }
+    return signOf(v) * approxPowf(@mulAdd(f32, srgb_tf_a, a, srgb_tf_b), srgb_tf_g);
+}
+
+fn canvasFromLinear(v: f32) f32 {
+    const a = @abs(v);
+    if (a <= srgb_inv_d) {
+        return signOf(v) * (srgb_inv_c * a);
+    }
+    return signOf(v) * (approxPowf(srgb_inv_a * a, srgb_inv_g) + srgb_inv_e);
+}
 
 fn matrixMultiply(a: anytype, b: @TypeOf(a)) @TypeOf(a) {
     var out: @TypeOf(a) = undefined;
@@ -1380,6 +1547,71 @@ test "color: canvas space conversion matches Chrome's own readbacks" {
         u8,
         &.{ 0xea, 0x33, 0x23, 0xff, 0x00, 0x00, 0xf5, 0xff },
         &pair,
+    );
+}
+
+test "color: canvas space matrix matches Chrome cell for cell" {
+    // A byte read can only pin a channel to 1/255, which is why the test above
+    // cannot say *which* matrix Chrome composes. A `rgba-float32` read hands
+    // back the encoded float itself, and the readings below
+    // (probes/canvas-space-float-matrix.js, results/canvas-space-float-matrix
+    // .chrome.json) were chosen so that no powf is under measurement:
+    //
+    //   gray n=1  the source byte decodes into the transfer function's *linear*
+    //             segment and the result encodes back out of it, so the whole
+    //             round trip is `v / 12.92`, a matrix row, and `* 12.92`. What
+    //             it measures is each row's sum -- and Chrome's rows do not sum
+    //             to one, because the composition goes through D50.
+    //   blue      `decode(1.0)` is exactly 1.0 under any spelling of the curve,
+    //             and the other two channels are zero, so the reading is the
+    //             blue column scaled by 12.92. Its top two cells are not the
+    //             structural zeros an exact D65 matrix gives.
+    //
+    // The blue column's third cell is left out: that one *does* leave the
+    // linear segment, so it measures the encode as much as the matrix. It
+    // belongs to `canvas-space-encode-approx`, not here.
+    const u: f32 = 1.0 / 255.0;
+    const grey_to_p3 = convertCanvasUnit(.srgb, .@"display-p3", .{ u, u, u });
+    try testing.expectEqual(
+        [3]f32{ 0.003922435455024242, 0.003921151161193848, 0.003920982591807842 },
+        grey_to_p3,
+    );
+    const grey_to_srgb = convertCanvasUnit(.@"display-p3", .srgb, .{ u, u, u });
+    try testing.expectEqual(
+        [3]f32{ 0.003920414485037327, 0.003922040108591318, 0.003922197036445141 },
+        grey_to_srgb,
+    );
+
+    const blue_to_p3 = convertCanvasUnit(.srgb, .@"display-p3", .{ 0, 0, 1 });
+    try testing.expectEqual(-0.00006237745401449502, blue_to_p3[0]);
+    try testing.expectEqual(-0.00013018165191169828, blue_to_p3[1]);
+    const blue_to_srgb = convertCanvasUnit(.@"display-p3", .srgb, .{ 0, 0, 1 });
+    try testing.expectEqual(0.00005198120925342664, blue_to_srgb[0]);
+    try testing.expectEqual(0.00014614903193432838, blue_to_srgb[1]);
+
+    // And the readings that *do* go through the curve, which pin the other two
+    // layers: `approxPowf` on the way in and the normalised inverse on the way
+    // out. An exact `powf` puts every one of these 1.6e-4 low, and the exact
+    // inverse -- `-0.055` rather than `srgb_inv_e` -- another 3.02e-5 on top.
+    try testing.expectEqual(
+        [3]f32{ 0.9175682067871094, 0.2002735137939453, 0.13854026794433594 },
+        convertCanvasUnit(.srgb, .@"display-p3", .{ 1, 0, 0 }),
+    );
+    try testing.expectEqual(
+        [3]f32{ 1.0930633544921875, -0.22672080993652344, -0.15011119842529297 },
+        convertCanvasUnit(.@"display-p3", .srgb, .{ 1, 0, 0 }),
+    );
+    // White does not come back white, which is the D50 round trip showing.
+    try testing.expectEqual(
+        [3]f32{ 1.0000991821289062, 0.9999618530273438, 0.9999465942382812 },
+        convertCanvasUnit(.srgb, .@"display-p3", .{ 1, 1, 1 }),
+    );
+    // The mid grey a byte of 128 normalises to, which `straightUnit` reaches by
+    // multiplying by 1/255 rather than dividing -- for this byte the two agree.
+    const half: f32 = 128.0 / 255.0;
+    try testing.expectEqual(
+        [3]f32{ 0.5019874572753906, 0.5019111633300781, 0.5018959045410156 },
+        convertCanvasUnit(.srgb, .@"display-p3", .{ half, half, half }),
     );
 }
 

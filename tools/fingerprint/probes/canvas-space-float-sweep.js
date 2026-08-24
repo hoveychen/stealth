@@ -20,13 +20,26 @@
 //   Skia       approx_powf(1.1371191*y, 0.41666666) - 0.055   sits lower still
 //   power law  best A*y^G + E fit over the 1470 samples: rms 1.4e-5, so no
 //
-// It is an approximation — dividing the readings by Skia's `approx_powf` leaves
-// a residual five times smoother than dividing by an exact powf, which is that
-// polynomial's own oscillation cancelling — but not one of the shapes above.
-// Whatever it is, the error it costs is about 3.5e-5 in the encoded float,
-// which is 0.009 of a byte, so it only ever moves a reading that already sits
-// within a hundredth of a rounding boundary. 1470 samples are archived in
-// results/ for whoever names it.
+// ANSWER: it is Skia's `approx_powf` after all — with `a` = 1.1372833, which is
+// what skcms's *own* approximate pow answers for `1.055^2.4` rather than the
+// exact 1.1371191 — and a constant term that is not -0.055.
+//
+// What names it is the shape of the residual, not its size. Subtract the
+// textbook curve and the miss is 3.022e-5 at *every* sample in the nonlinear
+// segment, from a reading of 0.043 to one of 1.0, and exactly zero in the
+// linear one. A pow that is off is off proportionally; only a constant term is
+// off by a constant. So the whole discrepancy is the `+ e` of the parametric
+// stage, and solving for it gives a single f32: -0.05496978759765625, which is
+// `1 - approx_powf(1.1372833, 1/2.4)`.
+//
+// That is `skcms_TransferFunction_invert`'s last paragraph, in
+// modules/skcms/skcms.cc — after inverting each coefficient it bends `e` (or
+// `f`, whichever segment holds it) so that "the valuable invariant
+// `inv(src(1.0f)) == 1.0f`" survives the approximation. Chrome's encode is
+// therefore *not* its decode inverted: it is the inverse tilted by 3.02e-5 to
+// keep white exactly white. Under it every one of these 1536 channels is exact,
+// both directions, where the textbook curve missed all 1470 in the nonlinear
+// segment by the same amount.
 (() => {
     const out = { toP3: {}, toSrgb: {} };
 

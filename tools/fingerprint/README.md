@@ -12045,9 +12045,9 @@ rgba-unorm8 pixels 85/86.** The one miss is `color(display-p3 1 0.25 0.5 / 0.5)`
 opaque `ff1b7f`), which is its premultiplied 8-bit storage round trip, not its
 parser. Two readings elsewhere in the set land within a twentieth of a rounding
 boundary and answer one LSB away: Skia carries its gamut matrices as D50 fixed
-point, so a knife-edge channel can fall either side of the boundary, and a
-one-LSB channel is a reading a real browser produces too. Those are recorded
-next to their assertions rather than chased.
+point, so a knife-edge channel can fall either side of the boundary. Those two
+were not knife-edge luck and they have since been chased — see "The srgb ↔
+display-p3 transform is three layers of Skia" below, which closes them.
 
 ### What the same probe found next door, and why it is a different axis
 
@@ -12186,3 +12186,85 @@ Unchanged, as expected: this closed the largest all-wrong block in one branch's
 canvas readings, and the branch is still separated from Chrome's by the 48×48
 render — radial gradients and glyph outlines, which are `cfsc-gradient-paint-source`,
 `cfsc-shadow-blur` and `cfsc-glyph-outline-raster`.
+
+## The srgb ↔ display-p3 transform is three layers of Skia (2026-08-24)
+
+The canvas leg converted between the two colour spaces with CSS Color 4's exact
+D65 product and a libm `powf`. `canvas-space-matrix.js` had already ruled that
+out at byte precision — across 24 colours picked so that the two published
+matrices disagree, Chrome sided with the D65 fractions 11 times, with Skia's D50
+matrices 12 times, and with neither once. A third thing, unnamed.
+
+What named it was widening the read. A `rgba-float32` `getImageData` hands back
+the *encoded float* the transform produced, seven significant digits of it,
+where a byte read can only pin a channel to 1/255. At that width the transform
+comes apart into three layers, and each has a stimulus that isolates it.
+
+**The matrix, from readings that never touch a powf.** The composed matrix's
+blue column has two cells of order 5e-6 and 1e-5, so a blue-only fill lands the
+red and green outputs inside the encode's *linear* segment, where the encode is
+one multiply by 12.92 and exactly invertible. A grey fill does the same for the
+row sums. Nine cells, read directly:
+
+    srgb -> display-p3                    display-p3 -> srgb
+     0.822547197  0.177678615 -0.000004828   1.224816442 -0.225114793 0.000004023
+     0.033179868  0.966723800 -0.000010076  -0.042038292  1.042147279 0.000011312
+     0.017070306  0.072381869  0.910398364  -0.019623475 -0.078635663 1.098419309
+
+That is `skcms_Matrix3x3_concat(invert(dst->toXYZD50), src->toXYZD50)` over
+`SkNamedGamut::kSRGB` and `kDisplayP3` — where `skcms_Matrix3x3_invert` works in
+double and *stores f32*, and the concat is f32 throughout. Rounding the
+composition twice is the whole of why it is neither published product; nothing
+about the published D50 cells is wrong. Two structural marks fall out that no
+exact D65 matrix has: the rows do not sum to one, so `#ffffff` reads
+`1.0000992 0.9999619 0.9999466` rather than white, and the blue column's top
+cells are not structural zeros, so an srgb blue reads with a faint negative red.
+
+**The order it is applied in, from the greys alone.** Skia's `matrix_3x3` is a
+chain of fused multiply-adds, innermost term first. A plain left-to-right f32
+sum of the same nine cells is one ULP off on one channel of every grey reading —
+and only a row whose three inputs are equal can see that, which is why the greys
+carry this and the basis columns cannot.
+
+**The curve, both halves.** `canvas-space-float-decode.js` inverts the linear
+segment for all 256 bytes and finds the decode is the raster pipeline's
+`approx_powf` — a polynomial over the float's own exponent and mantissa bits,
+worth 1.6e-4 of the result, a hundred times the last bit. It is not skcms's own
+`powf_` either: skcms truncates the cast where the pipeline rounds, and 26 of
+those 512 readings say so. So this work is `SkRasterPipeline`'s, not
+`skcms_Transform`'s — worth knowing on its own.
+
+The encode was the layer that stayed open longest, and the answer was in the
+*shape* of the residual rather than its size. Against the textbook
+`1.055*y^(1/2.4) - 0.055` the miss is 3.022e-5 at every one of the 1470 samples
+in the nonlinear segment — a reading of 0.043 and a reading of 1.0 are off by
+the same amount — and exactly zero in the linear one. A pow that is wrong is
+wrong proportionally; only a constant term is wrong by a constant. Solving for
+that term gives one f32, `-0.05496978759765625`, which is
+`1 - approx_powf(1.1372833, 1/2.4)`.
+
+That is the last paragraph of `skcms_TransferFunction_invert`: after inverting
+each coefficient it bends `e` so that "the valuable invariant
+`inv(src(1.0f)) == 1.0f`" survives the approximation. **Chrome's encode is not
+its decode inverted** — it is the inverse tilted by 3.02e-5 so that white stays
+exactly white. Miss that and every reading in the nonlinear segment is short by
+the same 0.009 of a byte, which is invisible until a channel sits near a
+rounding boundary, and then it is a whole byte.
+
+### What it moved
+
+| probe | before | after |
+|---|---|---|
+| `canvas-space-matrix` (24 colours chosen to discriminate) | 11/24 | **24/24** |
+| `canvas-space-float-matrix` (46 float readings) | — | **46/46** |
+| `canvas-space-float-sweep` (256-value grey sweep, both ways) | nonlinear segment all short | **512/512** |
+| `canvas-space-float-decode` (512 byte readings) | — | **512/512** |
+| `canvas-color-notation` | 411 same / 21 diff | 415 same / **17** diff |
+
+The 17 that remain are a different axis and are not this transform: they are the
+premultiplied 8-bit round trip an alpha forces (`color(display-p3 1 0.25 0.5 /
+0.5)` shifts its colour channels too) and the wide-notation source channels
+(`hsl(30 60% 40%)`, `lab(50 40 30)`), which is `canvas-float-source-channels`.
+The earlier note here that two knife-edge readings "answer one LSB away …
+recorded next to their assertions rather than chased" is no longer true of the
+matrix — those were this residual, and they are exact now.
