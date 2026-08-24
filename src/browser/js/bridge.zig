@@ -1627,6 +1627,21 @@ const worker_common_apis = [_]type{
     @import("../webapi/service_worker.zig").SyncManager,
     @import("../webapi/service_worker.zig").PeriodicSyncManager,
     @import("../webapi/service_worker.zig").NavigationPreloadManager,
+    // Five of navigator/services.zig's seventeen. The file is not importable
+    // whole for two separate reasons, and both are the Frame rule: `GPU` has
+    // `wgslLanguageFeatures`, which takes one outright, and `StorageBucket` has
+    // `indexedDB`, which reaches `global.frame` through the Execution on the
+    // stated assumption that the global is a Frame -- so its bucket manager
+    // stays out with it. The other twelve types the file registers are
+    // window-only anyway.
+    @import("../webapi/navigator/services.zig").Lock,
+    @import("../webapi/navigator/services.zig").LockManager,
+    @import("../webapi/navigator/services.zig").MediaCapabilities,
+    @import("../webapi/navigator/services.zig").UserActivation,
+    @import("../webapi/navigator/services.zig").WGSLLanguageFeatures,
+    @import("../webapi/navigator/services.zig").WGSLLanguageFeatures.KeyIterator,
+    @import("../webapi/navigator/services.zig").WGSLLanguageFeatures.ValueIterator,
+    @import("../webapi/navigator/services.zig").WGSLLanguageFeatures.EntryIterator,
 };
 
 pub const DedicatedWorkerJsApis = flattenTypes(&([_]type{

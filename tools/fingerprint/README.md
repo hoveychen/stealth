@@ -11743,3 +11743,92 @@ before they can be named, not a line in a list.
 The challenge still refuses (`cf-challenge`, same verdict as the control), so
 none of this was the deciding property. The realm it asks its questions in now
 answers as a worker rather than as a borrowed window.
+
+### The last four leaks, and 57 of the names (cfsc-worker-surface-rest, 2026-08-23)
+
+The worker realm's own-name diff against Chrome is now **0 extra, 72 short**,
+against 4 extra and 129 short at the end of the pass above. Same probe, same two
+drivers, engine built from this branch; reading refreshed in place at
+`results/probes/expr-worker-surface.lightpanda.json`.
+
+| | before | after | Chrome 151 |
+|---|---|---|---|
+| `self` own names | 211 | **264** | 336 |
+| names our worker has and Chrome's does not | 4 | **0** | — |
+| names Chrome's worker has and ours does not | 129 | **72** | — |
+
+The window realm is untouched at 1203 against 1237 — the same two deliberate
+extras (`ModelContext`, `ModelContextClient`) and the same 36 short.
+
+#### An interface object needed its own `[Exposed]`
+
+All four leaks got in by riding along with something else, and neither carrier
+had a realm gate:
+
+- `PerformanceTiming` and `PerformanceNavigation` are in `Performance.zig`'s
+  `registerTypes()`, and `worker_common_apis` names the file. Their only
+  reference is `performance.timing` / `.navigation`, both already
+  `.exposed = .window`, so the interface object was the whole of their presence
+  in a worker.
+- `WebKitCSSMatrix` and `webkitURL` are `constructor_aliases` on `DOMMatrix` and
+  `URL`, and a worker has both of those interfaces.
+
+`[Exposed]` was a member-level annotation only; it now has an interface-level
+half. `Meta.exposed` gates the one place in `Snapshot.zig` where a name reaches
+a global — the type still goes in both realms' lists, because they share one
+`JsApiLookup` and the template and class id are not optional.
+
+The aliases needed no annotation at all, because there is nothing to decide per
+interface. Chrome's Window carries 14 webkit-prefixed names and its dedicated
+worker carries four, and the four are `WorkerGlobalScope` *operations*
+(`webkitRequestFileSystem` and friends) rather than interface objects. Not one
+legacy alias crosses, so the whole block is window-only.
+
+#### 57 of the 129 were already built, just never named here
+
+Of the 129 missing names, 115 are interfaces this engine already implements for
+the page realm. What decides which of those can be named is not judgement, it is
+the Frame rule from the section above: **57 have no member that wants the owner's
+Frame, and they all go on.** WebCodecs whole (the reason media work moves off the
+page in the first place), `ImageBitmap` and its canvas context, the prioritised
+scheduler behind the `self.scheduler` that was already exposed, cache storage,
+`NetworkInformation`, resource and server timing, the USB/HID/Serial families
+whole, ten of `service_worker.zig`'s twelve, and five of
+`navigator/services.zig`'s seventeen.
+
+Two exclusions inside otherwise-eligible files are worth naming, since the audit
+that finds them is per *type*, not per file:
+
+- `service_worker.zig` also registers `ServiceWorker` itself and
+  `CookieStoreManager`, neither of which a dedicated worker carries — the cookie
+  store is Window and ServiceWorker only, which is the same reason `CookieStore`
+  came out in the pass above.
+- `navigator/services.zig` fails the Frame rule twice, differently. `GPU` has
+  `wgslLanguageFeatures`, which takes a `*Frame` outright. `StorageBucket` has
+  `indexedDB`, which reaches `global.frame` *through the Execution* — the member
+  signature is clean and the hazard is inside the body, on a stated assumption
+  ("Window-only, so the global is always a Frame") that naming the type in a
+  worker list would quietly falsify. So its bucket manager stays out with it.
+
+#### What the remaining 72 are
+
+| | count | why |
+|---|---|---|
+| Frame-bound families we implement | 58 | WebGPU (40 incl. `WGSLLanguageFeatures`' owner), Trusted Types (5), MediaSource (4), Trusted-Types-adjacent `FontFace`/`FontFaceSet` (2), `CSSSkewX`/`CSSSkewY` (2, through `CSSStyleValue.toString`), `StorageBucket`/`StorageBucketManager` (2), nested `Worker` (1), the two `webkit*FileSystem*` operations (2) |
+| not implemented in either realm | 14 | `BarcodeDetector`, `CreateMonitor`, `FileSystemObserver`, `Observable`, `PressureObserver`, `PressureRecord`, `RestrictionTarget`, `Subscriber`, `Temporal`, `WebSocketError`, `WebSocketStream`, `onrtctransform`, `webkitRequestFileSystemSync`, `webkitResolveLocalFileSystemSyncURL` |
+
+So the shortfall is no longer a list to expand. Every remaining name needs either
+worker-owned state to replace the borrowed Frame, or the feature itself.
+
+`trustedTypes` is still the one that stings, because the station's trampoline
+worker feature-detects it in its first statement — and it is squarely in the
+first row.
+
+#### The A/B
+
+`antibot-sweep --only cf-scrapingcourse` after each of the two batches:
+`cf-challenge`, `doc=403->200`, 47 nodes, `"Just a moment..."` — the control
+reading, unchanged, no abort. `make test` 1433/1433 for both. The challenge
+still refuses, so the 57 names were not the deciding property either; the realm
+it is asked in is now 264 names wide against Chrome's 336, with nothing in it
+that Chrome does not have.
