@@ -337,7 +337,12 @@ pub const DateTime = struct {
             return error.InvalidTime;
         }
 
-        _ = std.meta.stringToEnum(enum { UT, GMT, Z }, parser.rest()) orelse return error.UnsupportedTimeZone;
+        // UTC is not one of RFC 822's zone names, but it is the spelling a
+        // page reaches for when it writes a date itself, and it names the same
+        // zone as UT. Refusing it costs the whole date: a cookie deletion
+        // written as `expires=Thu, 01 Jan 1970 00:00:00 UTC` loses its expiry
+        // and is stored as a live session cookie instead.
+        _ = std.meta.stringToEnum(enum { UT, UTC, GMT, Z }, parser.rest()) orelse return error.UnsupportedTimeZone;
 
         return initUTC(year, @intFromEnum(month) + 1, day, tm.hour, tm.min, tm.sec, tm.micros);
     }
@@ -1537,6 +1542,15 @@ test "DateTime: parse RFC822" {
         try testing.expectEqual(22, dt.time().min);
         try testing.expectEqual(3, dt.time().sec);
         try testing.expectEqual(0, dt.time().micros);
+    }
+
+    // "UTC" names the same zone as "UT" and "GMT" and is what a page writes
+    // when it stringifies `new Date(0)` through a toUTCString-alike of its own.
+    // Akamai's interstitial clears a stale cookie with exactly this spelling,
+    // and rejecting it turned the deletion into a session cookie.
+    {
+        const dt = try DateTime.parse("Thu, 01 Jan 1970 00:00:00 UTC", .rfc822);
+        try testing.expectEqual(0, dt.micros);
     }
 }
 
