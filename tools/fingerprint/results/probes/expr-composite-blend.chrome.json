@@ -1,0 +1,371 @@
+{
+  "cases": [
+    {
+      "tag": "mul.opaque",
+      "op": "multiply",
+      "back": "#ff8000",
+      "src": "#4080c0",
+      "backdrop": [
+        255,
+        128,
+        0,
+        255
+      ],
+      "opRead": "multiply",
+      "got": [
+        64,
+        64,
+        0,
+        255
+      ]
+    },
+    {
+      "tag": "mul.white-src",
+      "op": "multiply",
+      "back": "#3366cc",
+      "src": "#ffffff",
+      "backdrop": [
+        51,
+        102,
+        204,
+        255
+      ],
+      "opRead": "multiply",
+      "got": [
+        51,
+        102,
+        204,
+        255
+      ]
+    },
+    {
+      "tag": "mul.black-src",
+      "op": "multiply",
+      "back": "#3366cc",
+      "src": "#000000",
+      "backdrop": [
+        51,
+        102,
+        204,
+        255
+      ],
+      "opRead": "multiply",
+      "got": [
+        0,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "tag": "mul.no-backdrop",
+      "op": "multiply",
+      "back": null,
+      "src": "#3366cc",
+      "backdrop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opRead": "multiply",
+      "got": [
+        51,
+        102,
+        204,
+        255
+      ]
+    },
+    {
+      "tag": "mul.src-half",
+      "op": "multiply",
+      "back": "#ff8000",
+      "src": "rgba(64,128,192,0.5)",
+      "backdrop": [
+        255,
+        128,
+        0,
+        255
+      ],
+      "opRead": "multiply",
+      "got": [
+        159,
+        96,
+        0,
+        255
+      ]
+    },
+    {
+      "tag": "mul.back-half",
+      "op": "multiply",
+      "back": "rgba(255,128,0,0.5)",
+      "src": "#4080c0",
+      "backdrop": [
+        255,
+        128,
+        0,
+        128
+      ],
+      "opRead": "multiply",
+      "got": [
+        64,
+        96,
+        96,
+        255
+      ]
+    },
+    {
+      "tag": "mul.both-half",
+      "op": "multiply",
+      "back": "rgba(255,128,0,0.5)",
+      "src": "rgba(64,128,192,0.5)",
+      "backdrop": [
+        255,
+        128,
+        0,
+        128
+      ],
+      "opRead": "multiply",
+      "got": [
+        128,
+        106,
+        64,
+        192
+      ]
+    },
+    {
+      "tag": "mul.galpha-half",
+      "op": "multiply",
+      "back": "#ff8000",
+      "src": "#4080c0",
+      "ga": 0.5,
+      "backdrop": [
+        255,
+        128,
+        0,
+        255
+      ],
+      "opRead": "multiply",
+      "got": [
+        159,
+        96,
+        0,
+        255
+      ]
+    },
+    {
+      "tag": "dif.opaque",
+      "op": "difference",
+      "back": "#ff8000",
+      "src": "#4080c0",
+      "backdrop": [
+        255,
+        128,
+        0,
+        255
+      ],
+      "opRead": "difference",
+      "got": [
+        191,
+        0,
+        192,
+        255
+      ]
+    },
+    {
+      "tag": "dif.same",
+      "op": "difference",
+      "back": "#3366cc",
+      "src": "#3366cc",
+      "backdrop": [
+        51,
+        102,
+        204,
+        255
+      ],
+      "opRead": "difference",
+      "got": [
+        0,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "tag": "dif.white-src",
+      "op": "difference",
+      "back": "#3366cc",
+      "src": "#ffffff",
+      "backdrop": [
+        51,
+        102,
+        204,
+        255
+      ],
+      "opRead": "difference",
+      "got": [
+        204,
+        153,
+        51,
+        255
+      ]
+    },
+    {
+      "tag": "dif.black-src",
+      "op": "difference",
+      "back": "#3366cc",
+      "src": "#000000",
+      "backdrop": [
+        51,
+        102,
+        204,
+        255
+      ],
+      "opRead": "difference",
+      "got": [
+        51,
+        102,
+        204,
+        255
+      ]
+    },
+    {
+      "tag": "dif.no-backdrop",
+      "op": "difference",
+      "back": null,
+      "src": "#3366cc",
+      "backdrop": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opRead": "difference",
+      "got": [
+        51,
+        102,
+        204,
+        255
+      ]
+    },
+    {
+      "tag": "dif.src-half",
+      "op": "difference",
+      "back": "#ff8000",
+      "src": "rgba(64,128,192,0.5)",
+      "backdrop": [
+        255,
+        128,
+        0,
+        255
+      ],
+      "opRead": "difference",
+      "got": [
+        223,
+        64,
+        96,
+        255
+      ]
+    },
+    {
+      "tag": "dif.back-half",
+      "op": "difference",
+      "back": "rgba(255,128,0,0.5)",
+      "src": "#4080c0",
+      "backdrop": [
+        255,
+        128,
+        0,
+        128
+      ],
+      "opRead": "difference",
+      "got": [
+        128,
+        64,
+        192,
+        255
+      ]
+    },
+    {
+      "tag": "dif.both-half",
+      "op": "difference",
+      "back": "rgba(255,128,0,0.5)",
+      "src": "rgba(64,128,192,0.5)",
+      "backdrop": [
+        255,
+        128,
+        0,
+        128
+      ],
+      "opRead": "difference",
+      "got": [
+        170,
+        85,
+        128,
+        192
+      ]
+    },
+    {
+      "tag": "dif.galpha-half",
+      "op": "difference",
+      "back": "#ff8000",
+      "src": "#4080c0",
+      "ga": 0.5,
+      "backdrop": [
+        255,
+        128,
+        0,
+        255
+      ],
+      "opRead": "difference",
+      "got": [
+        223,
+        64,
+        96,
+        255
+      ]
+    }
+  ],
+  "notes": [],
+  "selfDifference": "000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff000000ff",
+  "downscale": [
+    0,
+    0,
+    0,
+    255
+  ],
+  "pathEdge": [
+    191,
+    0,
+    192,
+    255,
+    191,
+    0,
+    192,
+    255,
+    191,
+    0,
+    192,
+    255,
+    191,
+    0,
+    192,
+    255,
+    223,
+    64,
+    96,
+    255,
+    255,
+    128,
+    0,
+    255,
+    255,
+    128,
+    0,
+    255,
+    255,
+    128,
+    0,
+    255
+  ]
+}

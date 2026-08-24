@@ -1,0 +1,116 @@
+{
+  "cases": [
+    {
+      "tag": "ga.half.black-on-white",
+      "back": "#ffffff",
+      "src": "#000000",
+      "ga": 0.5,
+      "op": "source-over",
+      "gaRead": 0.5,
+      "got": [
+        127,
+        127,
+        127,
+        255
+      ]
+    },
+    {
+      "tag": "rgba.half.black-on-white",
+      "back": "#ffffff",
+      "src": "rgba(0,0,0,0.5)",
+      "ga": 1,
+      "op": "source-over",
+      "gaRead": 1,
+      "got": [
+        127,
+        127,
+        127,
+        255
+      ]
+    },
+    {
+      "tag": "ga.third.black-on-white",
+      "back": "#ffffff",
+      "src": "#000000",
+      "ga": 0.3333333333333333,
+      "op": "source-over",
+      "gaRead": 0.3333333333333333,
+      "got": [
+        170,
+        170,
+        170,
+        255
+      ]
+    },
+    {
+      "tag": "rgba.third.black-on-white",
+      "back": "#ffffff",
+      "src": "rgba(0,0,0,0.3333333333333333)",
+      "ga": 1,
+      "op": "source-over",
+      "gaRead": 1,
+      "got": [
+        170,
+        170,
+        170,
+        255
+      ]
+    },
+    {
+      "tag": "ga.0p502.black-on-white",
+      "back": "#ffffff",
+      "src": "#000000",
+      "ga": 0.502,
+      "op": "source-over",
+      "gaRead": 0.502,
+      "got": [
+        127,
+        127,
+        127,
+        255
+      ]
+    },
+    {
+      "tag": "ga.0p498.black-on-white",
+      "back": "#ffffff",
+      "src": "#000000",
+      "ga": 0.498,
+      "op": "source-over",
+      "gaRead": 0.498,
+      "got": [
+        128,
+        128,
+        128,
+        255
+      ]
+    },
+    {
+      "tag": "ga.one",
+      "back": "#ffffff",
+      "src": "#000000",
+      "ga": 1,
+      "op": "source-over",
+      "gaRead": 1,
+      "got": [
+        0,
+        0,
+        0,
+        255
+      ]
+    },
+    {
+      "tag": "ga.zero",
+      "back": "#ffffff",
+      "src": "#000000",
+      "ga": 0,
+      "op": "source-over",
+      "gaRead": 0,
+      "got": [
+        255,
+        255,
+        255,
+        255
+      ]
+    }
+  ]
+}

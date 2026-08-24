@@ -1,0 +1,415 @@
+{
+  "fills": [
+    {
+      "filter": "none",
+      "colour": "#4080c0",
+      "read": "none",
+      "got": [
+        64,
+        128,
+        192,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(1)",
+      "colour": "#4080c0",
+      "read": "grayscale(1)",
+      "got": [
+        119,
+        119,
+        119,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(0)",
+      "colour": "#4080c0",
+      "read": "grayscale(0)",
+      "got": [
+        64,
+        128,
+        192,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(0.5)",
+      "colour": "#4080c0",
+      "read": "grayscale(0.5)",
+      "got": [
+        92,
+        124,
+        156,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(50%)",
+      "colour": "#4080c0",
+      "read": "grayscale(50%)",
+      "got": [
+        92,
+        124,
+        156,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(2)",
+      "colour": "#4080c0",
+      "read": "grayscale(2)",
+      "got": [
+        119,
+        119,
+        119,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(-1)",
+      "colour": "#4080c0",
+      "read": "none",
+      "got": [
+        64,
+        128,
+        192,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale()",
+      "colour": "#4080c0",
+      "read": "grayscale()",
+      "got": [
+        119,
+        119,
+        119,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(1)",
+      "colour": "#ff0000",
+      "read": "grayscale(1)",
+      "got": [
+        54,
+        54,
+        54,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(1)",
+      "colour": "#00ff00",
+      "read": "grayscale(1)",
+      "got": [
+        182,
+        182,
+        182,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(1)",
+      "colour": "#0000ff",
+      "read": "grayscale(1)",
+      "got": [
+        18,
+        18,
+        18,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(1)",
+      "colour": "#ffffff",
+      "read": "grayscale(1)",
+      "got": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "filter": "grayscale(1)",
+      "colour": "rgba(64,128,192,0.5)",
+      "read": "grayscale(1)",
+      "got": [
+        120,
+        120,
+        120,
+        128
+      ]
+    }
+  ],
+  "images": [
+    {
+      "filter": "none",
+      "row": [
+        [
+          255,
+          0,
+          0,
+          255
+        ],
+        [
+          0,
+          255,
+          0,
+          255
+        ],
+        [
+          0,
+          0,
+          255,
+          255
+        ],
+        [
+          64,
+          128,
+          192,
+          255
+        ]
+      ]
+    },
+    {
+      "filter": "grayscale(1)",
+      "row": [
+        [
+          54,
+          54,
+          54,
+          255
+        ],
+        [
+          182,
+          182,
+          182,
+          255
+        ],
+        [
+          18,
+          18,
+          18,
+          255
+        ],
+        [
+          119,
+          119,
+          119,
+          255
+        ]
+      ]
+    },
+    {
+      "filter": "grayscale(0.5)",
+      "row": [
+        [
+          155,
+          27,
+          27,
+          255
+        ],
+        [
+          91,
+          219,
+          91,
+          255
+        ],
+        [
+          9,
+          9,
+          137,
+          255
+        ],
+        [
+          92,
+          124,
+          156,
+          255
+        ]
+      ]
+    },
+    {
+      "filter": "grayscale(25%)",
+      "row": [
+        [
+          205,
+          14,
+          14,
+          255
+        ],
+        [
+          46,
+          237,
+          46,
+          255
+        ],
+        [
+          5,
+          5,
+          196,
+          255
+        ],
+        [
+          78,
+          126,
+          174,
+          255
+        ]
+      ]
+    }
+  ],
+  "setter": [
+    {
+      "set": "none",
+      "read": "none",
+      "got": [
+        64,
+        128,
+        192,
+        255
+      ]
+    },
+    {
+      "set": "NONE",
+      "read": "NONE",
+      "got": [
+        64,
+        128,
+        192,
+        255
+      ]
+    },
+    {
+      "set": "grayscale(1)",
+      "read": "grayscale(1)",
+      "got": [
+        119,
+        119,
+        119,
+        255
+      ]
+    },
+    {
+      "set": "grayscale(100%)",
+      "read": "grayscale(100%)",
+      "got": [
+        119,
+        119,
+        119,
+        255
+      ]
+    },
+    {
+      "set": "GRAYSCALE(1)",
+      "read": "GRAYSCALE(1)",
+      "got": [
+        119,
+        119,
+        119,
+        255
+      ]
+    },
+    {
+      "set": " grayscale( 1 ) ",
+      "read": " grayscale( 1 ) ",
+      "got": [
+        119,
+        119,
+        119,
+        255
+      ]
+    },
+    {
+      "set": "grayscale(1) blur(2px)",
+      "read": "grayscale(1) blur(2px)",
+      "got": [
+        128,
+        128,
+        128,
+        8
+      ]
+    },
+    {
+      "set": "grayscale",
+      "read": "grayscale(0.25)",
+      "got": [
+        78,
+        126,
+        174,
+        255
+      ]
+    },
+    {
+      "set": "notafilter(1)",
+      "read": "grayscale(0.25)",
+      "got": [
+        78,
+        126,
+        174,
+        255
+      ]
+    },
+    {
+      "set": "grayscale(1",
+      "read": "grayscale(1",
+      "got": [
+        119,
+        119,
+        119,
+        255
+      ]
+    },
+    {
+      "set": "",
+      "read": "grayscale(0.25)",
+      "got": [
+        78,
+        126,
+        174,
+        255
+      ]
+    },
+    {
+      "set": "grayscale(1e0)",
+      "read": "grayscale(1e0)",
+      "got": [
+        119,
+        119,
+        119,
+        255
+      ]
+    },
+    {
+      "set": "grayscale(+1)",
+      "read": "grayscale(+1)",
+      "got": [
+        119,
+        119,
+        119,
+        255
+      ]
+    },
+    {
+      "set": "grayscale(.5)",
+      "read": "grayscale(.5)",
+      "got": [
+        92,
+        124,
+        156,
+        255
+      ]
+    }
+  ],
+  "notes": [],
+  "savedFilter": "grayscale(1)",
+  "withDifference": [
+    136,
+    9,
+    119,
+    255
+  ]
+}
