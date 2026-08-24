@@ -24,7 +24,9 @@
 //! default states, every message and the odd bits below were measured on a
 //! headed Chrome 150 over http://localhost
 //! (tools/fingerprint/probes/probe-perm1.js and probe-perm2.js,
-//! with perm1-chrome.json).
+//! with perm1-chrome.json). The four entries marked below were added against
+//! Chrome 151.0.7922.172 -- the enum grows between releases, and a name the
+//! reference answers that we call invalid is a reading a guard gets for free.
 //!
 //! Two things worth knowing before reading the table:
 //!
@@ -126,12 +128,19 @@ const TABLE = std.StaticStringMap(Answer).initComptime(.{
     .{ "pointer-lock", Answer{ .plain = .{ .status_name = "pointer-lock", .state = .granted } } },
     .{ "keyboard-lock", Answer{ .plain = .{ .status_name = "keyboard-lock", .state = .granted } } },
 
+    // Chrome 151 additions, measured on 151.0.7922.172. All three echo the
+    // queried name back rather than a Blink spelling of it.
+    .{ "local-network", Answer{ .plain = .{ .status_name = "local-network", .state = .prompt } } },
+    .{ "local-network-access", Answer{ .plain = .{ .status_name = "local-network-access", .state = .prompt } } },
+    .{ "loopback-network", Answer{ .plain = .{ .status_name = "loopback-network", .state = .prompt } } },
+
     // Known to the enum, feature off. Each has its own wording.
     .{ "ambient-light-sensor", Answer{ .disabled = "GenericSensorExtraClasses flag is not enabled." } },
     .{ "nfc", Answer{ .disabled = "Web NFC is not enabled." } },
     .{ "system-wake-lock", Answer{ .disabled = "System Wake Lock is not enabled." } },
     .{ "speaker-selection", Answer{ .disabled = "The Speaker Selection API is not enabled." } },
     .{ "web-app-installation", Answer{ .disabled = "The Web App Install API is not enabled." } },
+    .{ "geolocation-approximate", Answer{ .disabled = "Permission API support for approximate geolocation is not enabled." } },
 
     // Need a member before they answer.
     .{
