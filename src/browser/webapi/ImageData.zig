@@ -498,6 +498,27 @@ pub fn straightBytes(
     };
 }
 
+/// `data` is `[Cached]` in Blink, so it is an own value property on the instance
+/// as well as the prototype getter — and it is there before anything reads it.
+/// That makes an ImageData the one object on this interface with an own key, and
+/// `Object.keys`, `Object.hasOwn` and `JSON.stringify` all see it: measured
+/// (probes/canvas-image-data-settings-2.js) as
+/// `{writable: false, enumerable: true, configurable: true}` against `absent`
+/// for the other four attributes.
+///
+/// Only the unorm8 arm has one. The cached attribute in Blink's IDL is the
+/// `Uint8ClampedArray` one, so a float ImageData answers `absent` here and
+/// reaches `data` through the getter alone (measured).
+pub fn cacheOwnProperties(self: *const ImageData, object: js.Object) !void {
+    const array = switch (self._data) {
+        .@"rgba-unorm8" => |data| data,
+        else => return,
+    };
+    const local = object.local;
+    const value: js.Value = .{ .local = local, .handle = array.local(local).handle };
+    _ = object.defineOwnProperty("data", value, js.v8.ReadOnly);
+}
+
 pub fn getColorSpace(self: *const ImageData) []const u8 {
     return @tagName(self._settings.color_space);
 }
@@ -517,15 +538,21 @@ pub const JsApi = struct {
 
     pub const constructor = bridge.constructor(ImageData.constructor, .{});
 
-    // Prototype getters, not own values: `Object.getOwnPropertyDescriptor` on
-    // an instance answers undefined for both, and on the prototype answers a
-    // getter (measured -- probes/canvas-image-data-settings-2.js).
-    pub const colorSpace = bridge.accessor(ImageData.getColorSpace, null, .{});
-    pub const pixelFormat = bridge.accessor(ImageData.getPixelFormat, null, .{});
-
-    pub const data = bridge.accessor(ImageData.getData, null, .{});
+    // Declaration order is the prototype's own-key order, and Blink's is
+    // `width, height, colorSpace, data, pixelFormat, constructor` (measured --
+    // probes/canvas-image-data-settings-2.js), which is neither alphabetical nor
+    // the order the spec lists them in.
+    //
+    // All five are prototype getters and nothing more:
+    // `Object.getOwnPropertyDescriptor` on an *instance* answers undefined for
+    // four of them. `data` is the exception, and it is not one of these — it is
+    // an own value the instance carries as well, defined in
+    // `cacheOwnProperties`.
     pub const width = bridge.accessor(ImageData.getWidth, null, .{});
     pub const height = bridge.accessor(ImageData.getHeight, null, .{});
+    pub const colorSpace = bridge.accessor(ImageData.getColorSpace, null, .{});
+    pub const data = bridge.accessor(ImageData.getData, null, .{});
+    pub const pixelFormat = bridge.accessor(ImageData.getPixelFormat, null, .{});
 };
 
 const testing = @import("../../testing.zig");

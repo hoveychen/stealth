@@ -1442,3 +1442,80 @@
   // not this constructor.
 }
 </script>
+
+<script id="OffscreenCanvasRenderingContext2D#ImageData data is cached">
+{
+  // `data` is `[Cached]` in Blink, which makes it an own value property on the
+  // instance *as well as* the prototype getter — and it is there before
+  // anything reads it. So an ImageData is the one object on this interface with
+  // an own key, which `Object.keys`, `JSON.stringify` and `Object.hasOwn` all
+  // see. Readings from probes/canvas-image-data-settings-2.js.
+  const desc = (o, k) => {
+    const d = Object.getOwnPropertyDescriptor(o, k);
+    if (!d) return 'absent';
+    if ('value' in d) return `value writable=${d.writable} enumerable=${d.enumerable} configurable=${d.configurable}`;
+    return `get enumerable=${d.enumerable} configurable=${d.configurable}`;
+  };
+  const ctx = () => new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+
+  const d0 = new ImageData(1, 1);
+  testing.expectEqual('value writable=false enumerable=true configurable=true', desc(d0, 'data'));
+  testing.expectEqual('get enumerable=true configurable=true', desc(ImageData.prototype, 'data'));
+  // The other three attributes are prototype getters and nothing more.
+  testing.expectEqual('absent', desc(d0, 'colorSpace'));
+  testing.expectEqual('absent', desc(d0, 'pixelFormat'));
+  testing.expectEqual('absent', desc(d0, 'width'));
+  testing.expectEqual('absent', desc(d0, 'height'));
+
+  testing.expectEqual('data', Object.keys(d0).join(','));
+  testing.expectEqual('data', Object.getOwnPropertyNames(d0).join(','));
+  testing.expectEqual(true, Object.hasOwn(d0, 'data'));
+  testing.expectEqual('{"data":{"0":0,"1":0,"2":0,"3":0}}', JSON.stringify(d0));
+  // The own value is the array the getter answers, not a second copy of it.
+  testing.expectEqual(true, Object.getOwnPropertyDescriptor(d0, 'data').value === d0.data);
+
+  // Present on a fresh object, before `data` has been read through anything.
+  testing.expectEqual('value writable=false enumerable=true configurable=true',
+    desc(new ImageData(1, 1), 'data'));
+  // And on one from every entry point that hands an ImageData out.
+  testing.expectEqual('value writable=false enumerable=true configurable=true',
+    desc(ctx().getImageData(0, 0, 1, 1), 'data'));
+  testing.expectEqual('value writable=false enumerable=true configurable=true',
+    desc(ctx().createImageData(1, 1), 'data'));
+  testing.expectEqual('value writable=false enumerable=true configurable=true',
+    desc(structuredClone(new ImageData(1, 1)), 'data'));
+
+  // Only the unorm8 arm has one. The cached attribute in Blink's IDL is the
+  // Uint8ClampedArray one, so a float ImageData reaches `data` through the
+  // prototype getter alone (measured).
+  testing.expectEqual('absent', desc(new ImageData(1, 1, { pixelFormat: 'rgba-float16' }), 'data'));
+  testing.expectEqual('absent', desc(new ImageData(1, 1, { pixelFormat: 'rgba-float32' }), 'data'));
+  testing.expectEqual('absent',
+    desc(ctx().getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float16' }), 'data'));
+
+  // writable=false, so an assignment is dropped; configurable=true, so a
+  // delete and a redefinition are not.
+  {
+    const d = new ImageData(1, 1);
+    const before = d.data;
+    d.data = 5;
+    testing.expectEqual(true, d.data === before);
+  }
+  {
+    const d = new ImageData(1, 1);
+    testing.expectEqual(true, delete d.data);
+    testing.expectEqual('absent', desc(d, 'data'));
+    // The prototype getter is still there underneath.
+    testing.expectEqual(4, d.data.length);
+  }
+  {
+    const d = new ImageData(1, 1);
+    Object.defineProperty(d, 'data', { value: 7 });
+    testing.expectEqual(7, d.data);
+  }
+
+  // The prototype's own keys, in Blink's order.
+  testing.expectEqual('width,height,colorSpace,data,pixelFormat,constructor',
+    Object.getOwnPropertyNames(ImageData.prototype).join(','));
+}
+</script>
