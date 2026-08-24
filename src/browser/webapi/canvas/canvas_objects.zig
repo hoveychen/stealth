@@ -102,6 +102,27 @@ pub const PaintStyle = struct {
         return color.parseStyle(value);
     }
 
+    /// The bytes the rasteriser writes, in the bitmap's own colour space. This
+    /// is where the two halves of a paint style come apart: what a script reads
+    /// back is the notation (see `read`), and what goes into the bitmap is that
+    /// notation resolved into `space`.
+    ///
+    /// A wide notation is resolved from `wide` rather than from `colour`,
+    /// because `colour` has already been clipped into sRGB's gamut and the clip
+    /// does not come back out. On a display-p3 canvas Chrome stores `ff228d`
+    /// for `color(rec2020 1 0.25 0.5)`; converting the sRGB bytes it also
+    /// reports for that notation would give `ea338b` (measured --
+    /// probes/canvas-own-color-space.js).
+    pub fn paint(self: *const PaintStyle, space: color.CanvasSpace) color.RGBA {
+        if (space == .srgb) {
+            return self.colour;
+        }
+        if (self.wide) |source| {
+            return source.toRGBA(space);
+        }
+        return color.convertCanvasRGBA(.srgb, space, self.colour);
+    }
+
     /// The colour arm answers with the source notation when the colour was
     /// written in one of the five functions that keep it, and with the hex or
     /// `rgba()` form otherwise.

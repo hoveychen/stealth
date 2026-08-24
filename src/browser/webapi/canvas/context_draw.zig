@@ -84,6 +84,20 @@ pub fn Mixin(comptime T: type) type {
             return self._canvas.getHeight();
         }
 
+        /// The bitmap's own colour space, which every colour is resolved into
+        /// on the way in and converted out of on the way back.
+        fn space(self: *const T) color.CanvasSpace {
+            return self._attributes.space();
+        }
+
+        fn fillPaint(self: *const T) color.RGBA {
+            return self._fill_style.paint(space(self));
+        }
+
+        fn strokePaint(self: *const T) color.RGBA {
+            return self._stroke_style.paint(space(self));
+        }
+
         /// True when the transform maps axis-aligned rectangles to
         /// axis-aligned rectangles, which is every `scale` and `translate`.
         fn upright(ctm: Transform) bool {
@@ -247,7 +261,7 @@ pub fn Mixin(comptime T: type) type {
                 height(self),
                 &self._path,
                 rule,
-                self._fill_style.colour,
+                fillPaint(self),
                 self._global_alpha,
             );
         }
@@ -259,7 +273,7 @@ pub fn Mixin(comptime T: type) type {
                 height(self),
                 &self._path,
                 self._line_width * self._transform.meanScale(),
-                self._stroke_style.colour,
+                strokePaint(self),
                 self._global_alpha,
             );
         }
@@ -388,12 +402,12 @@ pub fn Mixin(comptime T: type) type {
             const ctm = self._transform;
             if (upright(ctm)) {
                 const at = ctm.apply(x, y);
-                self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, self._fill_style.colour, self._global_alpha);
+                self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, fillPaint(self), self._global_alpha);
                 return;
             }
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
-            self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, self._fill_style.colour, self._global_alpha);
+            self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, fillPaint(self), self._global_alpha);
         }
 
         pub fn strokeRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {
@@ -401,12 +415,12 @@ pub fn Mixin(comptime T: type) type {
             const line_width = self._line_width * ctm.meanScale();
             if (upright(ctm)) {
                 const at = ctm.apply(x, y);
-                self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, self._stroke_style.colour, self._global_alpha);
+                self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, strokePaint(self), self._global_alpha);
                 return;
             }
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
-            self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, self._stroke_style.colour, self._global_alpha);
+            self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, strokePaint(self), self._global_alpha);
         }
 
         pub fn clearRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {
@@ -472,6 +486,11 @@ pub fn Mixin(comptime T: type) type {
                 src.surface,
                 src.width,
                 src.height,
+                // Chrome converts rather than copies when the two bitmaps are
+                // in different spaces: a display-p3 `ff407f` drawn onto an srgb
+                // canvas lands as `ff1c7e` (measured --
+                // probes/canvas-own-color-space.js).
+                .{ .from = src.space, .to = space(self) },
                 blit,
                 self._transform,
                 self._global_alpha,
@@ -482,6 +501,10 @@ pub fn Mixin(comptime T: type) type {
             surface: *const Surface,
             width: u32,
             height: u32,
+            /// The space the source's own bytes are in, which decides whether
+            /// they are copied or converted. An ImageBitmap is srgb because
+            /// nothing here builds one from a display-p3 canvas yet.
+            space: color.CanvasSpace = .srgb,
         };
 
         /// The pixels behind a `CanvasImageSource`, when there are any. Both
@@ -492,14 +515,24 @@ pub fn Mixin(comptime T: type) type {
             if (value.toZig(*CanvasElement)) |canvas| {
                 const cached = canvas._cached orelse return null;
                 return switch (cached) {
-                    .@"2d" => |ctx| .{ .surface = &ctx._surface, .width = canvas.getWidth(), .height = canvas.getHeight() },
+                    .@"2d" => |ctx| .{
+                        .surface = &ctx._surface,
+                        .width = canvas.getWidth(),
+                        .height = canvas.getHeight(),
+                        .space = ctx._attributes.space(),
+                    },
                     else => null,
                 };
             } else |_| {}
             if (value.toZig(*OffscreenCanvas)) |canvas| {
                 const cached = canvas._cached orelse return null;
                 return switch (cached) {
-                    .@"2d" => |ctx| .{ .surface = &ctx._surface, .width = canvas.getWidth(), .height = canvas.getHeight() },
+                    .@"2d" => |ctx| .{
+                        .surface = &ctx._surface,
+                        .width = canvas.getWidth(),
+                        .height = canvas.getHeight(),
+                        .space = ctx._attributes.space(),
+                    },
                     else => null,
                 };
             } else |_| {}
@@ -550,7 +583,7 @@ pub fn Mixin(comptime T: type) type {
         };
 
         pub fn createImageData(
-            _: *const T,
+            self: *const T,
             width_or_image_data: WidthOrImageData,
             /// If `ImageData` variant preferred, this is null.
             maybe_height: ?u32,
@@ -560,7 +593,8 @@ pub fn Mixin(comptime T: type) type {
         ) !*ImageData {
             switch (width_or_image_data) {
                 .width => |w| {
-                    const read = try ImageDataSettings("createImageData").read(settings, exec);
+                    const read = try ImageDataSettings("createImageData")
+                        .read(settings, space(self), exec);
                     const h = maybe_height orelse return error.TypeError;
                     return ImageData.init(w, h, read, exec);
                 },
@@ -591,7 +625,7 @@ pub fn Mixin(comptime T: type) type {
             // Read before the rect is looked at, which is the order a page can
             // see: a zero-sized window and a bad member together report the
             // member (measured).
-            const read = try ImageDataSettings("getImageData").read(settings, exec);
+            const read = try ImageDataSettings("getImageData").read(settings, space(self), exec);
             const window = try imageDataWindow(sx, sy, sw, sh, exec);
 
             const image_data = try ImageData.init(window.width, window.height, read, exec);
@@ -608,13 +642,9 @@ pub fn Mixin(comptime T: type) type {
                 window.height,
                 out,
             );
-            // The bitmap is srgb whatever the context was created with — a
-            // canvas carrying its own colour space is still to come — so this
-            // converts *from* srgb rather than from
-            // `_attributes.colorSpace`. Passing the attribute here instead
-            // would convert an srgb byte as though it were already display-p3,
-            // which is further from Chrome than not converting at all.
-            color.convertCanvasPixels(.srgb, read.color_space, out);
+            // Out of the bitmap's own space and into the one the caller asked
+            // for, which are only the same space by default.
+            color.convertCanvasPixels(space(self), read.color_space, out);
             return image_data;
         }
 

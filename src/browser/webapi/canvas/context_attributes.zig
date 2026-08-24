@@ -58,6 +58,7 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+const color = @import("../../color.zig");
 const dictionary = @import("../dictionary.zig");
 const color_space_gate = @import("color_space.zig");
 
@@ -78,6 +79,16 @@ pub const TwoD = struct {
     pub const ToneMapping = struct {
         mode: []const u8 = "standard",
     };
+
+    /// `colorSpace` as the bitmap's own space. It is kept as the string the
+    /// getter answers rather than as the enum, because every field of this
+    /// struct is a field a script reads back — including the key order, which a
+    /// test pins.
+    pub fn space(self: TwoD) color.CanvasSpace {
+        // Both gates have run by the time one of these exists, so the name is
+        // one of the two.
+        return std.meta.stringToEnum(color.CanvasSpace, self.colorSpace) orelse .srgb;
+    }
 };
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/getContextAttributes

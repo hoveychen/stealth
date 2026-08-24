@@ -75,11 +75,28 @@ pub const Settings = struct {
     /// is the only thing the three differ in.
     pub fn Reading(comptime Reader: type) type {
         return struct {
-            pub fn read(settings: ?js.Value, exec: *const Execution) !Settings {
+            /// `default_space` is what an *absent* `colorSpace` member means,
+            /// which is not always srgb: both canvas entry points default to
+            /// the canvas's own space and only an explicit value overrides it,
+            /// while `new ImageData` — which has no canvas — does default to
+            /// srgb. Measured in probes/canvas-own-color-space.js: on a
+            /// display-p3 canvas `getImageData(0, 0, 1, 1)` and
+            /// `createImageData(1, 1)` both answer display-p3, and so do `{}`,
+            /// `[]`, `null` and `{colorSpace: undefined}`.
+            pub fn read(
+                settings: ?js.Value,
+                default_space: color.CanvasSpace,
+                exec: *const Execution,
+            ) !Settings {
                 const reader = try Reader.read(settings, exec);
                 // Alphabetical, which is the order Blink reads them in: a
                 // throwing `colorSpace` getter pre-empts `pixelFormat`'s.
-                const space = try color_space_gate.read(reader, "colorSpace", "srgb", exec);
+                const space = try color_space_gate.read(
+                    reader,
+                    "colorSpace",
+                    @tagName(default_space),
+                    exec,
+                );
                 const format = (try reader.enumMember(
                     "pixelFormat",
                     "ImageDataPixelFormat",
@@ -116,7 +133,7 @@ pub const Settings = struct {
 /// We currently support only the first 2.
 pub fn constructor(width: u32, height: u32, settings: ?js.Value, exec: *Execution) !*ImageData {
     const Reading = Settings.Reading(dictionary.Reader("ImageData", "ImageDataSettings"));
-    return init(width, height, try Reading.read(settings, exec), exec);
+    return init(width, height, try Reading.read(settings, .srgb, exec), exec);
 }
 
 /// The creator the three entry points share, past the point where the settings

@@ -700,3 +700,131 @@
   }
 }
 </script>
+
+<script id="OffscreenCanvasRenderingContext2D#canvas colour space">
+{
+  // A display-p3 canvas stores its bitmap in *its own* space, so the notation
+  // is converted on the way in rather than on the way out. The two halves pull
+  // apart: `fillStyle` still answers the notation it was given, which is why a
+  // context cannot keep one RGBA and serve both. Readings from
+  // probes/canvas-own-color-space.js.
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const painted = (space, notation) => {
+    const c = new OffscreenCanvas(1, 1).getContext('2d', {
+      colorSpace: space,
+      willReadFrequently: true,
+    });
+    c.fillStyle = notation;
+    c.fillRect(0, 0, 1, 1);
+    return c;
+  };
+  const stored = (notation) => hex(painted('display-p3', notation).getImageData(0, 0, 1, 1).data);
+  const asSrgb = (notation) =>
+    hex(painted('display-p3', notation).getImageData(0, 0, 1, 1, { colorSpace: 'srgb' }).data);
+
+  // An srgb notation is converted into the canvas's space.
+  testing.expectEqual('ea3323ff', stored('#ff0000'));
+  testing.expectEqual('ea3b7fff', stored('rgb(255, 27, 127)'));
+  testing.expectEqual('ffffffff', stored('white'));
+  // A display-p3 notation goes in as itself — no round trip through srgb, which
+  // is what makes this different from converting the stored bytes afterwards.
+  testing.expectEqual('ff407fff', stored('color(display-p3 1 0.25 0.5)'));
+  // The other wide notations convert straight into p3 as well, and the proof is
+  // rec2020: via srgb it would be ea338b, because srgb clips the red channel
+  // before the second conversion sees it.
+  testing.expectEqual('ff228dff', stored('color(rec2020 1 0.25 0.5)'));
+  testing.expectEqual('eb5180ff', stored('color(srgb 1 0.25 0.5)'));
+  testing.expectEqual('b25d22ff', stored('lab(50% 40 59.5)'));
+  testing.expectEqual('61afb5ff', stored('oklch(0.7 0.1 200)'));
+
+  // Read back as srgb, the round trip is visible: three of these are a bit off
+  // what the same notation paints on an srgb canvas (bf5700, 40b1b7, ff008d).
+  testing.expectEqual('ff0000ff', asSrgb('#ff0000'));
+  testing.expectEqual('ff1c7eff', asSrgb('color(display-p3 1 0.25 0.5)'));
+  testing.expectEqual('bf5701ff', asSrgb('lab(50% 40 59.5)'));
+  testing.expectEqual('3fb1b7ff', asSrgb('oklch(0.7 0.1 200)'));
+  testing.expectEqual('ff008eff', asSrgb('color(rec2020 1 0.25 0.5)'));
+
+  // An srgb canvas is unchanged by any of this.
+  testing.expectEqual('ff0000ff',
+    hex(painted('srgb', '#ff0000').getImageData(0, 0, 1, 1).data));
+  testing.expectEqual('ff1b7fff',
+    hex(painted('srgb', 'color(display-p3 1 0.25 0.5)').getImageData(0, 0, 1, 1).data));
+
+  // The paint state answers the notation, not the bytes.
+  testing.expectEqual('#ff0000', painted('display-p3', '#ff0000').fillStyle);
+  testing.expectEqual('color(display-p3 1 0.25 0.5)',
+    painted('display-p3', 'color(display-p3 1 0.25 0.5)').fillStyle);
+  testing.expectEqual('#ff1b7f', painted('display-p3', 'rgb(255, 27, 127)').fillStyle);
+
+  // The rest of the paint state on a display-p3 canvas.
+  {
+    const c = new OffscreenCanvas(1, 1).getContext('2d', {
+      colorSpace: 'display-p3',
+      willReadFrequently: true,
+    });
+    c.strokeStyle = '#ff0000';
+    c.lineWidth = 2;
+    c.strokeRect(0, 0, 1, 1);
+    testing.expectEqual('ea3323ff', hex(c.getImageData(0, 0, 1, 1).data));
+    testing.expectEqual('#ff0000', c.strokeStyle);
+  }
+  // Transparent black is the same in both spaces, so neither an untouched
+  // bitmap nor a cleared one moves.
+  testing.expectEqual('00000000', hex(new OffscreenCanvas(1, 1)
+    .getContext('2d', { colorSpace: 'display-p3' }).getImageData(0, 0, 1, 1).data));
+  {
+    const c = painted('display-p3', '#ff0000');
+    c.clearRect(0, 0, 1, 1);
+    testing.expectEqual('00000000', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+  // save/restore carries the notation across, so the restored style paints the
+  // p3 bytes rather than the ones the discarded style would have.
+  {
+    const c = new OffscreenCanvas(1, 1).getContext('2d', {
+      colorSpace: 'display-p3',
+      willReadFrequently: true,
+    });
+    c.fillStyle = 'color(display-p3 1 0.25 0.5)';
+    c.save();
+    c.fillStyle = '#00ff00';
+    c.restore();
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('ff407fff', hex(c.getImageData(0, 0, 1, 1).data));
+    testing.expectEqual('color(display-p3 1 0.25 0.5)', c.fillStyle);
+  }
+  // Resizing drops the bitmap and keeps the space.
+  {
+    const canvas = new OffscreenCanvas(1, 1);
+    const c = canvas.getContext('2d', { colorSpace: 'display-p3', willReadFrequently: true });
+    canvas.width = 2;
+    c.fillStyle = '#ff0000';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('ea3323ff', hex(c.getImageData(0, 0, 1, 1).data));
+    testing.expectEqual('display-p3', c.getContextAttributes().colorSpace);
+  }
+
+  // drawImage crosses spaces, so the pixels are converted rather than copied.
+  {
+    const source = new OffscreenCanvas(1, 1);
+    const sg = source.getContext('2d', { colorSpace: 'display-p3' });
+    sg.fillStyle = 'color(display-p3 1 0.25 0.5)';
+    sg.fillRect(0, 0, 1, 1);
+    const dest = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+    dest.drawImage(source, 0, 0);
+    testing.expectEqual('ff1c7eff', hex(dest.getImageData(0, 0, 1, 1).data));
+  }
+  {
+    const source = new OffscreenCanvas(1, 1);
+    const sg = source.getContext('2d');
+    sg.fillStyle = '#ff0000';
+    sg.fillRect(0, 0, 1, 1);
+    const dest = new OffscreenCanvas(1, 1).getContext('2d', {
+      colorSpace: 'display-p3',
+      willReadFrequently: true,
+    });
+    dest.drawImage(source, 0, 0);
+    testing.expectEqual('ea3323ff', hex(dest.getImageData(0, 0, 1, 1).data));
+  }
+}
+</script>

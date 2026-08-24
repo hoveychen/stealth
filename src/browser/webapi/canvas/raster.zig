@@ -421,6 +421,9 @@ pub fn drawSurface(
     src: *const Surface,
     src_width: u32,
     src_height: u32,
+    /// The two bitmaps' colour spaces. Equal for every canvas pair until one of
+    /// them is created display-p3, and then every texel is converted.
+    spaces: color.SpaceChange,
     blit: Blit,
     ctm: path_mod.Transform,
     global_alpha: f64,
@@ -462,7 +465,12 @@ pub fn drawSurface(
             const from = (@as(usize, src_y) * src_width + src_x) * 4;
             const texel = source[from..][0..4];
             if (texel[3] == 0) continue;
-            const paint = RGBA{ .r = texel[0], .g = texel[1], .b = texel[2], .a = 255 };
+            const paint = color.convertCanvasRGBA(spaces.from, spaces.to, .{
+                .r = texel[0],
+                .g = texel[1],
+                .b = texel[2],
+                .a = 255,
+            });
             const at = (row * canvas_width + col) * 4;
             blend(pixels[at..][0..4], paint, alpha * (@as(f64, @floatFromInt(texel[3])) / 255));
         }
