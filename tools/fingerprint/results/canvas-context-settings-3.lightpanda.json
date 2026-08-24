@@ -1,0 +1,44 @@
+{
+ "messages": {
+  "canvas colorSpace rec2020": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
+  "canvas colorSpace nonesuch": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+  "canvas colorType float32": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorType' property from 'CanvasContextCreationAttributesModule': The provided value 'float32' is not a valid enum value of type CanvasPixelFormat.",
+  "imagedata rec2020": "TypeError: ",
+  "imagedata nonesuch": "TypeError: ",
+  "imagedata srgb-linear": "TypeError: ",
+  "getImageData rec2020": "srgb",
+  "getImageData nonesuch": "srgb"
+ },
+ "willReadFrequently": {
+  "\"undefined\"": "{\"alpha\":true,\"colorSpace\":\"srgb\",\"colorType\":\"unorm8\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":false}",
+  "\"auto\"": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided value 'auto' is not a valid enum value of type CanvasWillReadFrequently.",
+  "object": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided value '[object Object]' is not a valid enum value of type CanvasWillReadFrequently."
+ },
+ "webgl": {
+  "omitted": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "alpha:false": "{\"alpha\":false,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "depth:false": "{\"alpha\":true,\"antialias\":true,\"depth\":false,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "stencil:true": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":true,\"xrCompatible\":false}",
+  "antialias:false": "{\"alpha\":true,\"antialias\":false,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "premultipliedAlpha:false": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":false,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "preserveDrawingBuffer:true": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":true,\"stencil\":false,\"xrCompatible\":false}",
+  "failIfMajorPerformanceCaveat:true": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":true,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "desynchronized:true": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "xrCompatible:true": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "powerPreference:high-performance": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"high-performance\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "powerPreference:low-power": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"low-power\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "powerPreference:nonesuch": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'powerPreference' property from 'CanvasContextCreationAttributesModule': The provided value 'nonesuch' is not a valid enum value of type CanvasPowerPreference.",
+  "alpha:0": "{\"alpha\":false,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "non-object": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "null": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "unknown key": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "colorSpace:display-p3": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "willReadFrequently:true": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}"
+ },
+ "webgl2": {
+  "omitted": "{\"alpha\":true,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "alpha:false,xrCompatible:true": "{\"alpha\":false,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "offscreen alpha:false": "{\"alpha\":false,\"antialias\":true,\"depth\":true,\"desynchronized\":false,\"failIfMajorPerformanceCaveat\":false,\"powerPreference\":\"default\",\"premultipliedAlpha\":true,\"preserveDrawingBuffer\":false,\"stencil\":false,\"xrCompatible\":false}",
+  "key order": "alpha,antialias,depth,desynchronized,failIfMajorPerformanceCaveat,powerPreference,premultipliedAlpha,preserveDrawingBuffer,stencil,xrCompatible"
+ }
+}

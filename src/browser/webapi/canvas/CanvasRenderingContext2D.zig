@@ -25,6 +25,7 @@ const color = @import("../../color.zig");
 const Canvas = @import("../element/html/Canvas.zig");
 const Font = @import("font.zig");
 const state = @import("context_state.zig");
+const attributes = @import("context_attributes.zig");
 const path = @import("path.zig");
 const context_draw = @import("context_draw.zig");
 const canvas_objects = @import("canvas_objects.zig");
@@ -65,6 +66,10 @@ _font: Font = Font.default,
 /// Drawing state the rasteriser does not read. See context_state.zig for
 /// why it is here at all.
 _state: state.State = .{},
+/// The dictionary this context was created from. Fixed for its whole life:
+/// a later `getContext` call's settings are dropped, and so is a `width`
+/// assignment's reset. See context_attributes.zig.
+_attributes: attributes.TwoD = .{},
 /// The current transformation matrix, and the path being built under it.
 /// Both live in context_draw.zig, which is shared with the other 2D context.
 _transform: path.Transform = .{},
@@ -195,8 +200,8 @@ pub fn getImageData(
 }
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/getContextAttributes
-pub fn getContextAttributes(_: *const CanvasRenderingContext2D) state.ContextAttributes {
-    return .{};
+pub fn getContextAttributes(self: *const CanvasRenderingContext2D) attributes.TwoD {
+    return self._attributes;
 }
 
 /// We never lose the context: there is no GPU behind it to lose.

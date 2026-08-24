@@ -26,6 +26,7 @@ const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
 
 const Blob = @import("../../Blob.zig");
+const attributes = @import("../../canvas/context_attributes.zig");
 const png = @import("../../canvas/png.zig");
 const CanvasRenderingContext2D = @import("../../canvas/CanvasRenderingContext2D.zig");
 const WebGLRenderingContext = @import("../../canvas/WebGLRenderingContext.zig");
@@ -99,7 +100,18 @@ const DrawingContext = union(enum) {
     bitmaprenderer: *ImageBitmapRenderingContext,
 };
 
-pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?DrawingContext {
+pub fn getContext(
+    self: *Canvas,
+    context_type: []const u8,
+    settings: ?js.Value,
+    frame: *Frame,
+) !?DrawingContext {
+    // Before the cache and before the context type is looked at, because that
+    // is the order a page can see: a bad member throws even when the canvas
+    // already has a context, and even when the type is one we answer null for.
+    // See canvas/context_attributes.zig.
+    const created = try attributes.Creation("HTMLCanvasElement").read(settings, &frame.js.execution);
+
     if (self._cached) |cached| {
         const matches = switch (cached) {
             .@"2d" => std.mem.eql(u8, context_type, "2d"),
@@ -116,6 +128,7 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
             const ctx = try frame._factory.create(CanvasRenderingContext2D{
                 ._canvas = self,
                 ._surface = .{ .arena = frame.arena },
+                ._attributes = created.two_d,
             });
             break :blk .{ .@"2d" = ctx };
         }
@@ -134,7 +147,7 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
         // a loud signal — `getContext('webgl') === null` happens on no real
         // browser on this hardware.
         if (std.mem.eql(u8, context_type, "webgl") or std.mem.eql(u8, context_type, "experimental-webgl")) {
-            const ctx = try frame._factory.create(WebGLRenderingContext{ ._canvas = .{ .html = self }, ._gl = .init(frame.arena) });
+            const ctx = try frame._factory.create(WebGLRenderingContext{ ._canvas = .{ .html = self }, ._gl = .init(frame.arena), ._attributes = created.gl });
             break :blk .{ .webgl = ctx };
         }
 
@@ -147,7 +160,7 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
         }
 
         if (std.mem.eql(u8, context_type, "webgl2")) {
-            const ctx = try frame._factory.create(WebGL2RenderingContext{ ._canvas = .{ .html = self }, ._gl = .init(frame.arena) });
+            const ctx = try frame._factory.create(WebGL2RenderingContext{ ._canvas = .{ .html = self }, ._gl = .init(frame.arena), ._attributes = created.gl });
             break :blk .{ .webgl2 = ctx };
         }
 

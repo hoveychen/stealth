@@ -641,3 +641,64 @@ void main() {
   }
 }
 </script>
+
+<script id="WebGLRenderingContext#creation_attributes">
+{
+  // WebGL takes the same creation dictionary as the 2D context -- one
+  // `CanvasContextCreationAttributesModule`, whichever type is asked for -- and
+  // honours a different subset of it. Readings from
+  // probes/canvas-context-settings-3.js.
+  const attrs = (settings) => {
+    const c = document.createElement('canvas');
+    return (settings === undefined ? c.getContext('webgl') : c.getContext('webgl', settings))
+      .getContextAttributes();
+  };
+
+  testing.expectEqual(false, attrs({ alpha: false }).alpha);
+  testing.expectEqual(false, attrs({ depth: false }).depth);
+  testing.expectEqual(true, attrs({ stencil: true }).stencil);
+  testing.expectEqual(false, attrs({ antialias: false }).antialias);
+  testing.expectEqual(false, attrs({ premultipliedAlpha: false }).premultipliedAlpha);
+  testing.expectEqual(true, attrs({ preserveDrawingBuffer: true }).preserveDrawingBuffer);
+  testing.expectEqual(true, attrs({ failIfMajorPerformanceCaveat: true }).failIfMajorPerformanceCaveat);
+  testing.expectEqual('high-performance', attrs({ powerPreference: 'high-performance' }).powerPreference);
+  testing.expectEqual('low-power', attrs({ powerPreference: 'low-power' }).powerPreference);
+  // A plain WebIDL boolean, so ToBoolean.
+  testing.expectEqual(false, attrs({ alpha: 0 }).alpha);
+
+  // Two members are accepted and never granted. `desynchronized` is honoured on
+  // a 2D context and dropped here; `xrCompatible` is dropped for the same
+  // reason makeXRCompatible rejects -- there is no XR device.
+  testing.expectEqual(false, attrs({ desynchronized: true }).desynchronized);
+  testing.expectEqual(false, attrs({ xrCompatible: true }).xrCompatible);
+
+  // The 2D-only members are simply absent from the answer, not rejected.
+  testing.expectEqual(undefined, attrs({ colorSpace: 'display-p3' }).colorSpace);
+  testing.expectEqual(undefined, attrs({ willReadFrequently: true }).willReadFrequently);
+
+  // Non-objects and unknown keys take the defaults, and a bad enum still throws
+  // even though it is a 2D member reaching a WebGL context.
+  for (const bad of ['nope', null, undefined, { nonesuch: 1 }]) {
+    testing.expectEqual(true, attrs(bad).alpha);
+    testing.expectEqual('default', attrs(bad).powerPreference);
+  }
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the " +
+      "'powerPreference' property from 'CanvasContextCreationAttributesModule': The provided " +
+      "value 'nonesuch' is not a valid enum value of type CanvasPowerPreference.",
+    (() => { try { attrs({ powerPreference: 'nonesuch' }); } catch (e) { return `${e.name}: ${e.message}`; } })());
+
+  testing.expectEqual(
+    'alpha,antialias,depth,desynchronized,failIfMajorPerformanceCaveat,powerPreference,' +
+      'premultipliedAlpha,preserveDrawingBuffer,stencil,xrCompatible',
+    Object.keys(attrs(undefined)).join(','));
+
+  // WebGL2 reads the same dictionary, on both canvas types.
+  testing.expectEqual(false, document.createElement('canvas')
+    .getContext('webgl2', { alpha: false }).getContextAttributes().alpha);
+  testing.expectEqual(false, new OffscreenCanvas(2, 2)
+    .getContext('webgl2', { alpha: false }).getContextAttributes().alpha);
+  testing.expectEqual(true, new OffscreenCanvas(2, 2)
+    .getContext('webgl', { stencil: true }).getContextAttributes().stencil);
+}
+</script>

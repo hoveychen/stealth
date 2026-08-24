@@ -31,6 +31,7 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 const objects = @import("webgl_objects.zig");
 const gl_state = @import("webgl_state.zig");
+const attributes = @import("context_attributes.zig");
 const gpu_table = @import("gpu.zig");
 const gpu = gpu_table.gpu;
 const DOMException = @import("../DOMException.zig");
@@ -55,6 +56,9 @@ _gl: gl_state,
 /// WebGLRenderingContext.
 _drawing_buffer_color_space: ColorSpace = .srgb,
 _unpack_color_space: ColorSpace = .srgb,
+/// The dictionary this context was created from. See context_attributes.zig
+/// for the two members WebGL is asked for and never grants.
+_attributes: attributes.Gl = .{},
 
 pub const Surface = WebGL1.Surface;
 pub const ColorSpace = WebGL1.ColorSpace;
@@ -1246,19 +1250,6 @@ pub fn getInternalformatParameter(_: *const WebGL2RenderingContext, _: u32, _: u
     return intArray(exec, gpu.internalformat_samples);
 }
 
-const ContextAttributes = struct {
-    alpha: bool = true,
-    antialias: bool = true,
-    depth: bool = true,
-    desynchronized: bool = false,
-    failIfMajorPerformanceCaveat: bool = false,
-    powerPreference: []const u8 = "default",
-    premultipliedAlpha: bool = true,
-    preserveDrawingBuffer: bool = false,
-    stencil: bool = false,
-    xrCompatible: bool = false,
-};
-
 /// WebXR's hook into a WebGL context. Chrome rejects with a bare
 /// InvalidStateError -- "An attempt was made to use an object that is not, or
 /// is no longer, usable." -- when there is no XR device to make the context
@@ -1273,8 +1264,8 @@ pub fn makeXRCompatible(_: *const WebGL2RenderingContext, exec: *const js.Execut
     return resolver.promise();
 }
 
-pub fn getContextAttributes(_: *const WebGL2RenderingContext) ContextAttributes {
-    return .{};
+pub fn getContextAttributes(self: *const WebGL2RenderingContext) attributes.Gl {
+    return self._attributes;
 }
 
 // The state setters. The ones with something to remember delegate to

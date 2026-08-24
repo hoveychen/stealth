@@ -28,6 +28,8 @@ const OffscreenCanvasRenderingContext2D = @import("OffscreenCanvasRenderingConte
 const WebGLRenderingContext = @import("WebGLRenderingContext.zig");
 const WebGL2RenderingContext = @import("WebGL2RenderingContext.zig");
 const GPUCanvasContext = @import("../webgpu/pipeline.zig").GPUCanvasContext;
+const attributes = @import("context_attributes.zig");
+const dictionary = @import("../dictionary.zig");
 
 const Execution = js.Execution;
 
@@ -101,8 +103,27 @@ const ContextType = enum {
     webgpu,
 };
 
-pub fn getContext(self: *OffscreenCanvas, context_type: []const u8, exec: *Execution) !?DrawingContext {
-    const requested = std.meta.stringToEnum(ContextType, context_type) orelse return error.TypeError;
+pub fn getContext(
+    self: *OffscreenCanvas,
+    context_type: []const u8,
+    settings: ?js.Value,
+    exec: *Execution,
+) !?DrawingContext {
+    // The type enum first here, unlike on an HTMLCanvasElement: a bad name and
+    // a bad dictionary member together report the name (measured, so this order
+    // is not incidental). "of type" and not "of the type", unlike the colour
+    // space's second gate in context_attributes.zig.
+    const requested = std.meta.stringToEnum(ContextType, context_type) orelse {
+        return dictionary.throwTypeError(try std.fmt.allocPrint(
+            exec.call_arena,
+            "Failed to execute 'getContext' on 'OffscreenCanvas': The provided value '{s}' " ++
+                "is not a valid enum value of type OffscreenRenderingContextType.",
+            .{context_type},
+        ), exec);
+    };
+
+    // Then the dictionary, ahead of the cache -- see canvas/context_attributes.zig.
+    const created = try attributes.Creation("OffscreenCanvas").read(settings, exec);
 
     // A canvas hands back the same context object every time, so the pixels a
     // caller drew are still there on the next `getContext`. Asking for a
@@ -121,9 +142,10 @@ pub fn getContext(self: *OffscreenCanvas, context_type: []const u8, exec: *Execu
         .@"2d" => .{ .@"2d" = try exec._factory.create(OffscreenCanvasRenderingContext2D{
             ._canvas = self,
             ._surface = .{ .arena = exec.arena },
+            ._attributes = created.two_d,
         }) },
-        .webgl => .{ .webgl = try exec._factory.create(WebGLRenderingContext{ ._canvas = .{ .offscreen = self }, ._gl = .init(exec.arena) }) },
-        .webgl2 => .{ .webgl2 = try exec._factory.create(WebGL2RenderingContext{ ._canvas = .{ .offscreen = self }, ._gl = .init(exec.arena) }) },
+        .webgl => .{ .webgl = try exec._factory.create(WebGLRenderingContext{ ._canvas = .{ .offscreen = self }, ._gl = .init(exec.arena), ._attributes = created.gl }) },
+        .webgl2 => .{ .webgl2 = try exec._factory.create(WebGL2RenderingContext{ ._canvas = .{ .offscreen = self }, ._gl = .init(exec.arena), ._attributes = created.gl }) },
         // An OffscreenCanvas gets a WebGPU context too, and `ctx.canvas` is
         // then the offscreen canvas itself (measured).
         .webgpu => .{ .webgpu = try exec._factory.create(GPUCanvasContext{ ._canvas = .{ .offscreen = self } }) },
