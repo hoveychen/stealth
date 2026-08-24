@@ -25,6 +25,7 @@
 const std = @import("std");
 const lp = @import("lightpanda");
 
+const URL = @import("../URL.zig");
 const Frame = @import("../Frame.zig");
 const js = @import("../js/js.zig");
 
@@ -282,7 +283,7 @@ pub fn findClickActivationTarget(target: *Node, bubbles: bool) ?*Node {
     return null;
 }
 
-fn runJavascriptUrl(frame: *Frame, source: []const u8) !void {
+pub fn runJavascriptUrl(frame: *Frame, source: []const u8) !void {
     const arena = try frame.getArena(.tiny, "javascript-url");
     errdefer arena.release();
 
@@ -290,9 +291,13 @@ fn runJavascriptUrl(frame: *Frame, source: []const u8) !void {
     task.* = .{
         .frame = frame,
         .arena = arena,
-        // TODO: the URL body should be percent-decoded; hrefs written in
-        // markup rarely are.
-        .source = try arena.dupe(u8, source),
+        // The body is a URL, so it is script only once it has been
+        // percent-decoded. An href written in markup rarely carries an escape
+        // and comes back unchanged, but a `javascript:` URL that went through
+        // an `iframe.src` did get resolved on the way here -- its spaces are
+        // `%20` by the time this sees them, and evaluating that raw is a
+        // SyntaxError on the first one.
+        .source = try URL.unescape(arena.allocator(), source),
     };
     try frame.js.scheduler.add(task, JavascriptUrlTask.run, 0, .{
         .name = "javascript-url",

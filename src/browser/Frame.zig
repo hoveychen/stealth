@@ -922,8 +922,28 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
 
     const http_client = &session.browser.http_client;
 
+    // A `javascript:` URL is not a place to go. The URL is a script, it is
+    // evaluated in this frame, and only a *string* completion value would
+    // become the frame's document -- so every other completion, `javascript:;`
+    // above all, leaves the frame on the about:blank it already has, origin
+    // inherited from its parent and all. Which is to say it is an about:blank
+    // navigation plus a queued script, and it gets to reuse that whole path.
+    //
+    // Sending it down the network path instead is what it used to do, and the
+    // failure was not the request: libcurl rejects `http://javascript:;` as
+    // malformed, the frame keeps the garbage origin, and `contentWindow` then
+    // answers a CrossOriginWindow that throws SecurityError on the first read.
+    // `<iframe src="javascript:;">` is how an anti-bot script asks for a second
+    // copy of the intrinsics, so that throw landed in the middle of Kasada's
+    // bootstrap on canadagoose.com and hyatt.com and left both stuck on their
+    // 429 interstitial -- a fingerprint gap that reads as a network error.
+    const javascript_url: ?[]const u8 = if (std.mem.startsWith(u8, request_url, "javascript:"))
+        request_url["javascript:".len..]
+    else
+        null;
+
     // Handle synthetic navigations: about:blank, about:srcdoc and blob: URLs
-    const is_about_blank = std.mem.eql(u8, "about:blank", request_url);
+    const is_about_blank = javascript_url != null or std.mem.eql(u8, "about:blank", request_url);
     const is_srcdoc = !is_about_blank and std.mem.eql(u8, "about:srcdoc", request_url);
     const is_blob = !is_about_blank and !is_srcdoc and std.mem.startsWith(u8, request_url, "blob:");
 
@@ -1030,12 +1050,17 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
         // events by request id, so consume one.
         const req_id = http_client.incrReqId();
 
+        // What the frame committed to, which for a `javascript:` URL is the
+        // about:blank it stayed on rather than the script it ran. The other
+        // three arms commit the URL they were handed.
+        const committed_url: [:0]const u8 = if (javascript_url != null) "about:blank" else request_url;
+
         session.notification.dispatch(.frame_navigate, &.{
             .opts = opts,
             .req_id = req_id,
             .frame_id = self._frame_id,
             .loader_id = self._loader_id,
-            .url = request_url,
+            .url = committed_url,
             .timestamp = lp.datetime.timestamp(.boot),
         });
 
@@ -1050,7 +1075,7 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
                 .reason = opts.reason,
                 .method = opts.method,
             },
-            .url = request_url,
+            .url = committed_url,
             .timestamp = lp.datetime.timestamp(.boot),
         });
 
@@ -1060,6 +1085,13 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
         }
 
         self.documentIsComplete();
+
+        // Queued, not called: the script runs as a task, after the frame this
+        // navigation just committed is readable. Same helper an
+        // `<a href="javascript:...">` activation goes through.
+        if (javascript_url) |source| {
+            try user_input.runJavascriptUrl(self, source);
+        }
         return;
     }
 
