@@ -22,6 +22,9 @@
     // Legacy rgb(), whose channels are bytes by the time anything sees them.
     'rgb(50% 0% 0%)', 'rgb(10% 20% 30%)', 'rgb(2.5 3.5 4.5)',
     'rgb(255 0 0)', 'rgba(255, 0, 0, 0.5)',
+    // The widget's own fill, and the one notation that needs no conversion at
+    // all on a display-p3 bitmap.
+    'color(display-p3 1 0.25 0.5)', 'color(display-p3 1 0.25 0.5 / 0.5)',
   ];
 
   const hex = (data) =>

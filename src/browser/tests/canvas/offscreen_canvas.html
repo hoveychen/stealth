@@ -1239,6 +1239,75 @@
 }
 </script>
 
+<script id="OffscreenCanvasRenderingContext2D#float16 colorType bitmap">
+{
+  // `colorType: 'float16'` is not the same axis as `pixelFormat:
+  // 'rgba-float16'`. The pixel format is a finer *read* of an eight-bit bitmap,
+  // so every channel it answers is the half-precision neighbour of some `n /
+  // 255`. The colour type is a finer *bitmap*: the paint goes in unquantised
+  // and comes back out that way, so a channel that is not byte-valued stays
+  // that way. Measured on headed Chrome by
+  // probes/canvas-float-source-channels.js, readings in
+  // results/canvas-float-source-channels.chrome.json.
+  //
+  // Two of the four contexts the Turnstile widget builds are float16
+  // (results/ibt2-oracle.json), so both of its float16 rows read this.
+  const read = (colorSpace, notation) => {
+    const ctx = new OffscreenCanvas(1, 1).getContext('2d', {
+      colorSpace,
+      colorType: 'float16',
+      willReadFrequently: true,
+    });
+    ctx.fillStyle = notation;
+    ctx.fillRect(0, 0, 1, 1);
+    return [...ctx.getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float16' }).data].join(' ');
+  };
+
+  // `hsl(30 60% 40%)` is (0.64, 0.4, 0.16). Half precision's neighbour of 0.64
+  // is 0.64013671875; of the 163/255 an eight-bit bitmap would hold it is
+  // 0.63916015625. The first is what a float16 bitmap answers.
+  testing.expectEqual('0.64013671875 0.39990234375 0.1600341796875 1',
+    read('srgb', 'hsl(30 60% 40%)'));
+  // 17/30 of a byte, the row that pinned the f32 width for the unorm8 bitmap.
+  testing.expectEqual('0.0999755859375 0.56689453125 0.7998046875 1',
+    read('srgb', 'hwb(200 10% 20%)'));
+  // Exactly half, which an eight-bit bitmap cannot hold: it stores 128 and
+  // reads back 0.501953125.
+  testing.expectEqual('0.5 0.5 0.5 1', read('srgb', 'hsl(0 0% 50%)'));
+  // Legacy `rgb()` is quantised by its own parser, so 128/255 is the colour
+  // here and both bitmaps agree.
+  testing.expectEqual('0.501953125 0 0 1', read('srgb', 'rgb(50% 0% 0%)'));
+
+  // On a display-p3 float16 bitmap the *conversion* is what stays unquantised,
+  // so even pure red parts from the eight-bit answer: 0.2003173828125 is the
+  // converted green itself, where 0.199951171875 is the 51/255 a byte bitmap
+  // rounds it to.
+  testing.expectEqual('0.91748046875 0.2003173828125 0.1385498046875 1',
+    read('display-p3', '#ff0000'));
+  testing.expectEqual('0.91748046875 0.2003173828125 0.1385498046875 1',
+    read('display-p3', 'hsl(0 100% 50%)'));
+  testing.expectEqual('0.60595703125 0.410888671875 0.208740234375 1',
+    read('display-p3', 'hsl(30 60% 40%)'));
+  // A translucent fill premultiplies into the float bitmap and divides back
+  // out of it, so the colour channels come back further from the byte arm than
+  // the opaque row above.
+  testing.expectEqual('0.91796875 0.2003173828125 0.1385498046875 0.501953125',
+    read('display-p3', 'rgba(255, 0, 0, 0.5)'));
+  // The widget's own fill. On a display-p3 float16 bitmap it needs no
+  // conversion at all, so the channels come back as themselves — where the
+  // eight-bit bitmap answers 0.2509765625 and 0.498046875 for the same paint.
+  testing.expectEqual('1 0.25 0.5 1', read('display-p3', 'color(display-p3 1 0.25 0.5)'));
+  // And at half alpha the premultiply round trip is lossless here, where on an
+  // eight-bit bitmap it moves two channels.
+  testing.expectEqual('1 0.25 0.5 0.5', read('display-p3', 'color(display-p3 1 0.25 0.5 / 0.5)'));
+  // The same fill on an *srgb* float16 bitmap keeps a channel outside the
+  // gamut: a float bitmap has room for one, so the conversion is not clipped.
+  // The eight-bit bitmap clamps the same red to 255.
+  testing.expectEqual('1.0888671875 0.10601806640625 0.497314453125 1',
+    read('srgb', 'color(display-p3 1 0.25 0.5)'));
+}
+</script>
+
 <script id="OffscreenCanvasRenderingContext2D#float32 pixel format">
 {
   // `ImageDataPixelFormat` has a third member. Chrome's own refusal for a
