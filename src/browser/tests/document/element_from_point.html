@@ -191,6 +191,46 @@
 }
 </script>
 
+<script id="hit_test_does_not_measure_every_paragraph">
+{
+  // The box the hit test asks each element for is mostly free -- except that an
+  // element with no declared size gets one from its text, and getting a width
+  // out of text means walking every character of it. The vertical half of the
+  // test does not need that width: the height text contributes is the font's
+  // own box, which is the same whatever the text says. So the walk has to stay
+  // off the path that rejects an element on its y alone, which is all but a
+  // handful of them.
+  //
+  // kohls.com is the page that made this the whole cost: ~1600 bytes of text
+  // per element, ~1900 elements walked per call, a few hundred calls a load --
+  // 76MB of text measured, 24s of a 25s run. Measured here (debug build,
+  // Apple silicon): 6.6s for the loop below when the width is measured for
+  // every element, 0.04s when it is measured only for the survivors.
+  const host = document.createElement('div');
+  const filler = 'Free shipping on orders over 49 dollars, no code needed. '.repeat(30);
+  for (let i = 0; i < 400; i++) {
+    const row = document.createElement('p');
+    row.textContent = i + ': ' + filler;
+    host.appendChild(row);
+  }
+  document.body.appendChild(host);
+
+  const started = Date.now();
+  for (let i = 0; i < 40; i++) {
+    document.elementFromPoint(4000 + i, 4000);
+  }
+  const elapsed = Date.now() - started;
+
+  host.remove();
+
+  if (elapsed >= 1500) {
+    testing.fail('40 elementFromPoint calls over 400 paragraphs took ' + elapsed + 'ms');
+  }
+  // Reached the end of the block, and the tree it built is gone again.
+  testing.expectEqual(0, document.getElementsByTagName('p').length);
+}
+</script>
+
 <script id="elementsFromPoint_basic">
 {
   // Test that elementsFromPoint returns array of element and its ancestors
