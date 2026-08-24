@@ -833,6 +833,20 @@
   testing.expectEqual('ea3323ff', stored('#ff0000'));
   testing.expectEqual('ea3b7fff', stored('rgb(255, 27, 127)'));
   testing.expectEqual('ffffffff', stored('white'));
+  // `hsl()` and `hwb()` reach the conversion as *floats*, not as the bytes they
+  // answer back: `hsl(30 60% 40%)` is (163.2, 102, 40.8), and converting that
+  // rather than (163, 102, 41) is the difference between `9b` and `9a` in the
+  // red channel. Legacy `rgb()` is the other way round — its percentages are
+  // quantised before the conversion sees them, which is why `rgb(50% 0% 0%)`
+  // converts 128 and not 127.5 (measured, all four axes --
+  // results/canvas-color-notation.chrome.json).
+  testing.expectEqual('9b6935ff', stored('hsl(30 60% 40%)'));
+  testing.expectEqual('5cb047ff', stored('hwb(120 20% 30%)'));
+  testing.expectEqual('75140cff', stored('rgb(50% 0% 0%)'));
+  // A byte-valued `hsl()` and an out-of-gamut `hwb()` are the same either way,
+  // so they pin that the float source did not move what already agreed.
+  testing.expectEqual('ea3323ff', stored('hsl(0 100% 50%)'));
+  testing.expectEqual('747474ff', stored('hwb(120 50% 60%)'));
   // A display-p3 notation goes in as itself — no round trip through srgb, which
   // is what makes this different from converting the stored bytes afterwards.
   testing.expectEqual('ff407fff', stored('color(display-p3 1 0.25 0.5)'));
@@ -851,6 +865,12 @@
   testing.expectEqual('bf5701ff', asSrgb('lab(50% 40 59.5)'));
   testing.expectEqual('3fb1b7ff', asSrgb('oklch(0.7 0.1 200)'));
   testing.expectEqual('ff008eff', asSrgb('color(rec2020 1 0.25 0.5)'));
+  // The float source shows on this axis too, and its sign is the giveaway that
+  // it is a source and not a readback: converting the *byte* triple in and back
+  // out lands on a36628/32b433, one step away from Chrome on both.
+  testing.expectEqual('a46628ff', asSrgb('hsl(30 60% 40%)'));
+  testing.expectEqual('33b333ff', asSrgb('hwb(120 20% 30%)'));
+  testing.expectEqual('800000ff', asSrgb('rgb(50% 0% 0%)'));
 
   // An srgb canvas is unchanged by any of this.
   testing.expectEqual('ff0000ff',
