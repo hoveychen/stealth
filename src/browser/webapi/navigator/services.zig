@@ -37,7 +37,6 @@ const js = @import("../../js/js.zig");
 const mime = @import("../media/mime.zig");
 const MediaMetadata = @import("../media/MediaMetadata.zig").MediaMetadata;
 const chrome_sdp = @import("../webrtc/chrome_sdp.zig");
-const Frame = @import("../../Frame.zig");
 const StorageManager = @import("../StorageManager.zig");
 const idb = @import("../storage/idb/idb.zig");
 const webgpu_adapter = @import("../webgpu/adapter.zig");
@@ -407,11 +406,11 @@ pub const GPU = struct {
     // owner.
     _features: ?*WGSLLanguageFeatures = null,
 
-    pub fn getWgslLanguageFeatures(self: *GPU, frame: *Frame) !*WGSLLanguageFeatures {
+    pub fn getWgslLanguageFeatures(self: *GPU, exec: *Execution) !*WGSLLanguageFeatures {
         if (self._features) |features| {
             return features;
         }
-        const created = try frame._factory.create(WGSLLanguageFeatures{});
+        const created = try exec._factory.create(WGSLLanguageFeatures{});
         self._features = created;
         return created;
     }

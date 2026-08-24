@@ -40,6 +40,7 @@ const Navigator = @import("Navigator.zig");
 const Permissions = @import("Permissions.zig");
 const StorageManager = @import("StorageManager.zig");
 const NavigatorUAData = @import("NavigatorUAData.zig");
+const services = @import("navigator/services.zig");
 
 const Execution = js.Execution;
 
@@ -103,6 +104,13 @@ pub fn getStorage(self: *WorkerNavigator) *StorageManager {
     return self._navigator.getStorage();
 }
 
+// The Navigator this wraps is a field of it, not the page's -- so the service
+// object cached in its slot is this realm's, created through this realm's
+// Execution.
+pub fn getGpu(self: *WorkerNavigator, exec: *Execution) !*services.GPU {
+    return self._navigator.getGpu(exec);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(WorkerNavigator);
 
@@ -114,10 +122,12 @@ pub const JsApi = struct {
 
     // Declaration order is Chrome 151's own
     // `Object.getOwnPropertyNames(WorkerNavigator.prototype)` order, measured in
-    // a blob worker. The eight it carries that are missing here -- connection,
-    // hid, mediaCapabilities, serial, usb, locks, gpu, storageBuckets -- all
+    // a blob worker. The seven it carries that are still missing here --
+    // connection, hid, mediaCapabilities, serial, usb, locks, storageBuckets --
     // resolve through a Frame, and `Caller.getGlobalArg` has no Frame to hand a
-    // worker realm. They are a separate piece of work, not an oversight.
+    // worker realm. `gpu` used to be an eighth: the only thing it wanted the
+    // Frame for was `_factory`, which is on the Execution, so asking for the
+    // right argument was the whole of it.
     pub const hardwareConcurrency = bridge.accessor(WorkerNavigator.getHardwareConcurrency, null, .{});
     pub const appCodeName = bridge.accessor(WorkerNavigator.getAppCodeName, null, .{});
     pub const appName = bridge.accessor(WorkerNavigator.getAppName, null, .{});
@@ -132,4 +142,5 @@ pub const JsApi = struct {
     pub const deviceMemory = bridge.accessor(WorkerNavigator.getDeviceMemory, null, .{});
     pub const userAgentData = bridge.accessor(WorkerNavigator.getUserAgentData, null, .{});
     pub const storage = bridge.accessor(WorkerNavigator.getStorage, null, .{});
+    pub const gpu = bridge.accessor(WorkerNavigator.getGpu, null, .{});
 };

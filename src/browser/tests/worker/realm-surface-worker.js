@@ -78,8 +78,44 @@ self.onmessage = () => {
     // Chrome's worker has all of these, so this is a measured shortfall rather
     // than a match: closing it needs worker-owned state, not another name in a
     // list.
-    frame_bound: ['GPU', 'StorageBucket', 'FontFace',
+    frame_bound: ['StorageBucket', 'FontFace',
       'MediaSource', 'CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
+
+    // WebGPU, all 40 interface objects Chrome's worker carries. The family used
+    // to be Frame-bound off a single member -- GPU.wgslLanguageFeatures created
+    // through `frame._factory` -- and a worker realm cannot be handed a Frame.
+    // The factory it wanted is on the Execution, which Env builds per context,
+    // so the whole family travels once that one signature changes.
+    gpu_family: ['GPU', 'GPUAdapter', 'GPUAdapterInfo', 'GPUBindGroup',
+      'GPUBindGroupLayout', 'GPUBuffer', 'GPUBufferUsage', 'GPUCanvasContext',
+      'GPUColorWrite', 'GPUCommandBuffer', 'GPUCommandEncoder',
+      'GPUCompilationInfo', 'GPUCompilationMessage', 'GPUComputePassEncoder',
+      'GPUComputePipeline', 'GPUDevice', 'GPUDeviceLostInfo', 'GPUError',
+      'GPUExternalTexture', 'GPUInternalError', 'GPUMapMode',
+      'GPUOutOfMemoryError', 'GPUPipelineError', 'GPUPipelineLayout',
+      'GPUQuerySet', 'GPUQueue', 'GPURenderBundle', 'GPURenderBundleEncoder',
+      'GPURenderPassEncoder', 'GPURenderPipeline', 'GPUSampler',
+      'GPUShaderModule', 'GPUShaderStage', 'GPUSupportedFeatures',
+      'GPUSupportedLimits', 'GPUTexture', 'GPUTextureUsage', 'GPUTextureView',
+      'GPUUncapturedErrorEvent', 'GPUValidationError',
+    ].filter((n) => !(n in self)).join(','),
+    // Five of the 40 are namespace objects holding the bitflag constants rather
+    // than interface objects, on Chrome as much as here.
+    gpu_namespaces: ['GPUBufferUsage', 'GPUColorWrite', 'GPUMapMode',
+      'GPUShaderStage', 'GPUTextureUsage'].map((n) => typeof self[n]).join(','),
+    gpu_interfaces: ['GPU', 'GPUAdapter', 'GPUDevice', 'GPUQueue', 'GPUBuffer',
+      'GPUTexture', 'GPUCommandEncoder', 'GPUShaderModule', 'GPUValidationError',
+    ].filter((n) => typeof self[n] !== 'function').join(','),
+    // And the round trip that proves the factory is the worker's own: reading
+    // `navigator.gpu` creates a GPU here, and reading its wgslLanguageFeatures
+    // creates a branded set that keeps its identity across reads.
+    nav_gpu_brand: ask(() => Object.prototype.toString.call(navigator.gpu)),
+    gpu_canvas_format: ask(() => navigator.gpu.getPreferredCanvasFormat()),
+    wgsl_brand: ask(() =>
+      Object.prototype.toString.call(navigator.gpu.wgslLanguageFeatures)),
+    wgsl_identity: ask(() =>
+      navigator.gpu.wgslLanguageFeatures === navigator.gpu.wgslLanguageFeatures),
+    wgsl_has_f16: ask(() => navigator.gpu.wgslLanguageFeatures.has('readonly_and_readwrite_storage_textures')),
 
     // Trusted Types, which is the one the station reads: its trampoline
     // worker's first statement is `if (self.trustedTypes)`. The whole round

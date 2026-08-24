@@ -131,12 +131,12 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(false, w.secure);
       testing.expectEqual('', w.gated.join(' '));
       testing.expectEqual(6, w.ungated.length);
-      // 269 own names on a secure owner (worker/secure_context.html), less the
-      // 46 gated ones this engine has in the worker realm. The gap used to be
-      // 13; the 62 interface objects the realm gained are 46 [SecureContext]
+      // 309 own names on a secure owner (worker/secure_context.html), less the
+      // 86 gated ones this engine has in the worker realm. The gap used to be
+      // 13; the 102 interface objects the realm gained are 86 [SecureContext]
       // ones -- USB, HID, Serial, the caches, the locks, the service-worker
-      // client surface -- and 16 unconditional ones, the last five of which are
-      // Trusted Types.
+      // client surface and all 40 of WebGPU -- and 16 unconditional ones, the
+      // last five of which are Trusted Types.
       testing.expectEqual(223, w.count);
     });
   }

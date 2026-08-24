@@ -79,9 +79,15 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // owner's Frame once the factory started taking an Execution
       // (worker/realm_surface.html). `trustedTypes` itself is a
       // WorkerGlobalScope.prototype member, so it is not one of these five.
+      //
+      // 309 with the 40 WebGPU interface objects, which travelled the same way
+      // Trusted Types did: `GPU.wgslLanguageFeatures` wanted a Frame for its
+      // object factory alone, and an Execution has one (worker/realm_surface
+      // .html). All 40 are [SecureContext], so an insecure owner sees none of
+      // them and frames/secure_context_gate.html holds at its old count.
       testing.expectEqual(13, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(269, data.count);
+      testing.expectEqual(309, data.count);
     });
   }
 </script>

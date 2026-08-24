@@ -33,9 +33,11 @@ in results/probes/expr-worker-surface.chrome.json).
 
       // Chrome's WorkerNavigator.prototype, minus the ones this engine cannot
       // serve without a Frame (connection, hid, mediaCapabilities, serial, usb,
-      // locks, gpu, storageBuckets).
+      // locks, storageBuckets). `gpu` is here because the only thing the GPU
+      // service wanted a Frame for was the object factory, which every
+      // Execution carries.
       testing.expectEqual(
-        'appCodeName,appName,appVersion,constructor,deviceMemory,hardwareConcurrency,' +
+        'appCodeName,appName,appVersion,constructor,deviceMemory,gpu,hardwareConcurrency,' +
         'language,languages,onLine,permissions,platform,product,storage,userAgent,userAgentData',
         data.wn_proto_own);
 
@@ -73,6 +75,18 @@ in results/probes/expr-worker-surface.chrome.json).
       // Still missing, and not by an oversight in a list: see the comment on
       // getGlobalArg in js/Caller.zig.
       testing.expectEqual('', data.frame_bound);
+
+      // WebGPU. All 40 interface objects, and a live round trip through the
+      // realm's own factory: `navigator.gpu` and the set behind
+      // wgslLanguageFeatures are created here, by this context's Execution.
+      testing.expectEqual('', data.gpu_family);
+      testing.expectEqual('object,object,object,object,object', data.gpu_namespaces);
+      testing.expectEqual('', data.gpu_interfaces);
+      testing.expectEqual('[object GPU]', data.nav_gpu_brand);
+      testing.expectEqual('bgra8unorm', data.gpu_canvas_format);
+      testing.expectEqual('[object WGSLLanguageFeatures]', data.wgsl_brand);
+      testing.expectEqual(true, data.wgsl_identity);
+      testing.expectEqual(true, data.wgsl_has_f16);
 
       // Trusted Types. Chrome holds `trustedTypes` on WorkerGlobalScope
       // .prototype, and everything the factory does in a worker it also does on
