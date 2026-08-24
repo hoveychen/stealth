@@ -1,0 +1,33 @@
+{
+ "srgb": {
+  "color(display-p3 1 0.25 0.5)": "ff1b7fff fillStyle=color(display-p3 1 0.25 0.5)",
+  "color(display-p3 1 0.25 0.5 / 0.5)": "ff1a7e80 fillStyle=color(display-p3 1 0.25 0.5 / 0.5)",
+  "color(display-p3 1 0.25 0.5 / 0.25)": "ff1c8040 fillStyle=color(display-p3 1 0.25 0.5 / 0.25)",
+  "color(rec2020 1 0.25 0.5 / 0.5)": "ff008b80 fillStyle=color(rec2020 1 0.25 0.5 / 0.5)",
+  "lab(50% 40 30)": "bb5846ff fillStyle=lab(50 40 30)",
+  "lab(50 40 30 / 0.5)": "bb584680 fillStyle=lab(50 40 30 / 0.5)",
+  "oklch(0.7 0.1 20)": "d68585ff fillStyle=oklch(0.7 0.1 20)",
+  "oklch(0.7 0.1 20 / 0.5)": "d5838380 fillStyle=oklch(0.7 0.1 20 / 0.5)",
+  "rgba(255, 27, 127, 0.5)": "ff1c8080 fillStyle=rgba(255, 27, 127, 0.5)",
+  "#a36629": "a36629ff fillStyle=#a36629",
+  "hsl(30 60% 40%)": "a36629ff fillStyle=#a36629",
+  "hsl(30 60% 40% / 0.5)": "a3662a80 fillStyle=rgba(163, 102, 41, 0.5)"
+ },
+ "p3": {
+  "#ff0000": "ea3323ff fillStyle=#ff0000",
+  "rgba(255, 0, 0, 0.5)": "e9342480 fillStyle=rgba(255, 0, 0, 0.5)",
+  "hsl(30 60% 40%)": "9a6935ff fillStyle=#a36629",
+  "hsl(30 60% 40% / 0.5)": "996a3680 fillStyle=rgba(163, 102, 41, 0.5)",
+  "color(display-p3 1 0.25 0.5)": "ff407fff fillStyle=color(display-p3 1 0.25 0.5)",
+  "color(display-p3 1 0.25 0.5 / 0.5)": "fd408080 fillStyle=color(display-p3 1 0.25 0.5 / 0.5)",
+  "#ff0000 globalAlpha 0.5": "e9342480 fillStyle=#ff0000",
+  "color(display-p3 1 0.25 0.5) globalAlpha 0.5": "ff408080 fillStyle=color(display-p3 1 0.25 0.5)"
+ },
+ "filter": {
+  "opaque": "777777ff",
+  "half": "78787880",
+  "half, quarter grey": "4e7ead80",
+  "tenth": "7676761a",
+  "half p3": "52525280"
+ }
+}

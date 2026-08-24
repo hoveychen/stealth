@@ -12,7 +12,7 @@
   "display-p3 | #ff0000": "default=ea3323ff srgb=ff0000ff p3=ea3323ff fillStyle=#ff0000",
   "display-p3 | color(display-p3 1 0.25 0.5)": "default=ff407fff srgb=ff1c7eff p3=ff407fff fillStyle=color(display-p3 1 0.25 0.5)",
   "display-p3 | rgb(255, 27, 127)": "default=ea3b7fff srgb=ff1b7fff p3=ea3b7fff fillStyle=#ff1b7f",
-  "display-p3 | rgba(255, 0, 0, 0.5)": "default=ea332380 srgb=ff000080 p3=ea332380 fillStyle=rgba(255, 0, 0, 0.5)",
+  "display-p3 | rgba(255, 0, 0, 0.5)": "default=e9342480 srgb=fe050280 p3=e9342480 fillStyle=rgba(255, 0, 0, 0.5)",
   "display-p3 | lab(50% 40 59.5)": "default=b25d22ff srgb=bf5701ff p3=b25d22ff fillStyle=lab(50 40 59.5)",
   "display-p3 | oklch(0.7 0.1 200)": "default=61afb5ff srgb=3fb1b7ff p3=61afb5ff fillStyle=oklch(0.7 0.1 200)",
   "display-p3 | color(srgb 1 0.25 0.5)": "default=eb5180ff srgb=ff4080ff p3=eb5180ff fillStyle=color(srgb 1 0.25 0.5)",
@@ -23,7 +23,7 @@
   "strokeStyle": "ea3323ff strokeStyle=#ff0000",
   "clearRect": "00000000",
   "untouched": "00000000",
-  "globalAlpha": "ea332380",
+  "globalAlpha": "e9342480",
   "save/restore": "ff407fff fillStyle=color(display-p3 1 0.25 0.5)",
   "resize keeps the space": "ea3323ff display-p3"
  },
