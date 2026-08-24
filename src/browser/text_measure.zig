@@ -17,6 +17,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
+const lp = @import("lightpanda");
 
 const font_metrics = @import("font_metrics.zig");
 const emoji_metrics = @import("emoji_metrics.zig");
@@ -363,6 +364,56 @@ fn meanAdvance(family: font_metrics.Family) f64 {
     var total: f64 = 0;
     for (ascii) |glyph| total += glyph.advance;
     return total / @as(f64, @floatFromInt(ascii.len));
+}
+
+// `measure` runs per text-only element that `document.elementFromPoint` walks
+// past, and pages call that in scroll and IntersectionObserver handlers. On
+// kohls.com 375 such calls spent 18.5s of a 19s run inside text measurement,
+// which is what turned a page load into a wedged `Runtime.evaluate`. Almost
+// all of it was `emoji_metrics.match` walking its whole 91-cluster table at
+// every character position of every string, so a run of plain text paid 91
+// prefix comparisons per character to be told what its lead byte already says.
+//
+// The bound is wall clock, which is the only thing this defect shows up in, so
+// it is set well clear of both sides rather than tight against one. Measured
+// here (debug build, Apple silicon): 3.9s with the whole-table walk, 0.48s
+// without it.
+test "text_measure: plain text is not charged for the emoji table" {
+    const iterations = 60_000;
+    const line = "Free shipping on orders over 49";
+
+    const started = lp.datetime.microTimestamp(.boot);
+    var total: f64 = 0;
+    for (0..iterations) |_| {
+        total += measure(font_metrics.sans_serif, line, 16).width;
+    }
+    const elapsed_ms = (lp.datetime.microTimestamp(.boot) - started) / 1000;
+
+    // Read back so the loop cannot be optimised away.
+    try std.testing.expectEqual(@as(f64, 226.796875 * iterations), total);
+    try std.testing.expect(elapsed_ms < 1200);
+}
+
+// The lead-byte gate in front of that table walk is only sound while every
+// cluster in the table really does start with a byte the gate admits. The
+// table is generated, so this asks the table itself rather than restating it.
+test "text_measure: every emoji cluster is still reachable" {
+    for (emoji_metrics.clusters) |cluster| {
+        const found = emoji_metrics.match(cluster.text) orelse {
+            std.debug.print("\nunreachable cluster: {s}\n", .{cluster.text});
+            return error.ClusterNotFound;
+        };
+        // Longest-first ordering means the answer for a cluster's own text is
+        // either itself or a longer cluster that starts with it.
+        try std.testing.expect(std.mem.startsWith(u8, found.text, cluster.text) or
+            std.mem.startsWith(u8, cluster.text, found.text));
+        try std.testing.expect(measure(font_metrics.sans_serif, cluster.text, 100).width > 0);
+    }
+
+    // A lead byte no cluster uses, and the empty string, are both misses.
+    try std.testing.expectEqual(@as(?emoji_metrics.Cluster, null), emoji_metrics.match(""));
+    try std.testing.expectEqual(@as(?emoji_metrics.Cluster, null), emoji_metrics.match("a"));
+    try std.testing.expectEqual(@as(?emoji_metrics.Cluster, null), emoji_metrics.match("\u{00e9}"));
 }
 
 test "text_measure: reproduces Chrome's measureText" {

@@ -146,7 +146,18 @@ pub const clusters = [_]Cluster{
 
 /// The measured cluster `text` starts with, or null when we have no
 /// measurement for it.
+///
+/// Callers ask this at every character position of every string they measure,
+/// so the answer for the overwhelming majority of them -- runs of ordinary
+/// text, which no cluster above begins with -- has to cost one array read
+/// rather than a walk of the whole table. Charging plain text 91 prefix
+/// comparisons per character is what made `document.elementFromPoint` take
+/// 50ms a call on a retail page, and a page that calls it in an
+/// IntersectionObserver handler never came back.
 pub fn match(text: []const u8) ?Cluster {
+    if (text.len == 0 or !starts_a_cluster[text[0]]) {
+        return null;
+    }
     for (clusters) |cluster| {
         if (std.mem.startsWith(u8, text, cluster.text)) {
             return cluster;
@@ -154,5 +165,15 @@ pub fn match(text: []const u8) ?Cluster {
     }
     return null;
 }
+
+/// Which lead bytes any cluster above starts with. Derived from the table so
+/// it cannot drift out of step with it.
+const starts_a_cluster = blk: {
+    var table = [_]bool{false} ** 256;
+    for (clusters) |cluster| {
+        table[cluster.text[0]] = true;
+    }
+    break :blk table;
+};
 
 const std = @import("std");

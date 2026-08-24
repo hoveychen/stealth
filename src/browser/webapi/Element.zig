@@ -1745,7 +1745,12 @@ fn resolveFont(self: *Element, frame: *Frame) struct { family: font_metrics.Fami
 /// carry (the reference reports 83 for 72px serif where ascent and descent sum
 /// to 80). Close and derived from a measurement, rather than exact; still the
 /// difference between a line that scales with its font and one that does not.
-fn textLayout(self: *Element, frame: *Frame) ?struct { width: f64, height: f64 } {
+///
+/// Because the height is the font's box and nothing else, a caller that wants
+/// only the height can pass `measure_width = false` and skip the walk over the
+/// text — which is the whole cost here on any element holding a sentence. The
+/// returned `width` is then 0 and must not be read.
+fn textLayout(self: *Element, frame: *Frame, measure_width: bool) ?struct { width: f64, height: f64 } {
     var total_text: usize = 0;
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
@@ -1762,10 +1767,12 @@ fn textLayout(self: *Element, frame: *Frame) ?struct { width: f64, height: f64 }
 
     const font = self.resolveFont(frame);
     var width: f64 = 0;
-    child = self.asNode().firstChild();
-    while (child) |node| : (child = node.nextSibling()) {
-        if (node.is(CData.Text)) |text| {
-            width += text_measure.measure(font.family, Factory.protoOf(text)._data.str(), font.size).width;
+    if (measure_width) {
+        child = self.asNode().firstChild();
+        while (child) |node| : (child = node.nextSibling()) {
+            if (node.is(CData.Text)) |text| {
+                width += text_measure.measure(font.family, Factory.protoOf(text)._data.str(), font.size).width;
+            }
         }
     }
 
@@ -1821,6 +1828,21 @@ pub const Dimensions = struct {
 };
 
 pub fn getElementDimensions(self: *Element, frame: *Frame) Dimensions {
+    return self.dimensions(frame, true);
+}
+
+/// Just the height of the box, for the callers that have no use for its width.
+/// Worth its own entry point because a width can cost a walk over every
+/// character of the element's text while the height never does: an element
+/// holding a sentence is two orders of magnitude cheaper to measure vertically.
+/// `document.elementFromPoint` rejects all but a handful of elements on their
+/// y alone, and it is the difference between reading a document and measuring
+/// one.
+pub fn getElementHeight(self: *Element, frame: *Frame) f64 {
+    return self.dimensions(frame, false).height;
+}
+
+fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) Dimensions {
     var dims: Dimensions = .{ .width = 5.0, .height = 5.0 };
 
     if (self.getStyle(frame)) |style| {
@@ -1862,7 +1884,7 @@ pub fn getElementDimensions(self: *Element, frame: *Frame) Dimensions {
         if (tag == .html or tag == .body) {
             const owner = self.ownerFrame(frame);
             const box: Dimensions = if (owner.iframe) |iframe|
-                iframe.asElement().getElementDimensions(frame)
+                iframe.asElement().dimensions(frame, measure_text_width)
             else blk: {
                 const viewport = owner._page.getViewport();
                 break :blk .{
@@ -1915,9 +1937,13 @@ pub fn getElementDimensions(self: *Element, frame: *Frame) Dimensions {
     // does. The text-derived size is not `explicit`: it is a measurement, not
     // a declared value, and clientWidth/clientHeight still take the max with
     // the (zero, for a text-only element) content extent.
-    if (dims.width == 5.0 or dims.height == 5.0) {
-        if (self.textLayout(frame)) |text| {
-            if (dims.width == 5.0) dims.width = text.width;
+    // A declared width already answers the only question the measurement is
+    // for, so it also gates the walk over the text -- not just the caller's
+    // opt-out above.
+    const wants_text_width = measure_text_width and dims.width == 5.0;
+    if (wants_text_width or dims.height == 5.0) {
+        if (self.textLayout(frame, wants_text_width)) |text| {
+            if (wants_text_width) dims.width = text.width;
             if (dims.height == 5.0) dims.height = text.height;
         }
     }

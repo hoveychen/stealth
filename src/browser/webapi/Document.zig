@@ -937,8 +937,9 @@ fn elementFromPointImpl(self: *Document, x: f64, y: f64, ignore_x: bool, frame: 
     // (which itself is O(N)). Once the counter's y passes the query y, no
     // later element can contain the point, and we can return.
     //
-    // We also share a single VisibilityCache across all elements so the
-    // ancestor-walk inside isHidden gets amortized.
+    // The elements whose box contains the point share one VisibilityCache, so
+    // the ancestor walk inside isHidden is paid once per ancestor rather than
+    // once per candidate.
     var topmost: ?*Element = null;
 
     const root = self.asNode();
@@ -959,15 +960,27 @@ fn elementFromPointImpl(self: *Document, x: f64, y: f64, ignore_x: bool, frame: 
 
         preorder_index += 1;
         if (node.is(Element)) |element| {
-            if (element.checkVisibilityCached(&visibility_cache, frame)) {
-                const dims = element.getElementDimensions(frame);
-                // x and y both come from preorder position in our faux layout.
-                const left = pos;
-                const top = pos;
-                const right = pos + dims.width;
-                const bottom = pos + dims.height;
-                const x_contained = ignore_x or (x >= left and x <= right);
-                if (x_contained and y >= top and y <= bottom) {
+            // x and y both come from preorder position in our faux layout, so
+            // `pos` is the box's left and its top both.
+            //
+            // Three tests, cheapest first, because all three have to hold and
+            // every one of them rejects nearly everything: a height, then a
+            // width, then a computed visibility. The order is what keeps this
+            // walk affordable -- a height is a couple of table reads, a width
+            // can be a walk over every character of the element's text, and a
+            // visibility is a CSS cascade. Of the thousands of elements a call
+            // passes, single digits get as far as the last one.
+            hit: {
+                if (y < pos or y > pos + element.getElementHeight(frame)) {
+                    break :hit;
+                }
+                if (!ignore_x) {
+                    const dims = element.getElementDimensions(frame);
+                    if (x < pos or x > pos + dims.width) {
+                        break :hit;
+                    }
+                }
+                if (element.checkVisibilityCached(&visibility_cache, frame)) {
                     topmost = element;
                 }
             }
