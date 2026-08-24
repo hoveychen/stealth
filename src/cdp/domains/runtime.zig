@@ -122,7 +122,7 @@ const RemoteObject = struct {
     className: ?[]const u8,
     description: ?[]const u8,
     objectId: ?[]const u8,
-    value: js.Value,
+    value: ?js.Value,
 };
 
 const ConsoleMessage = struct {
@@ -153,13 +153,31 @@ pub fn consoleMessage(arena: Allocator, bc: *CDP.BrowserContext, event: *const N
         );
         defer remote_object.deinit();
 
+        const @"type" = try remote_object.getType(arena);
+        const subtype = try remote_object.getSubtype(arena);
+
+        // Chrome hands the client an objectId and lets it ask for the
+        // properties; it never serialises the argument into the event, and its
+        // preview reports an accessor as `{"name":"g","type":"accessor"}`
+        // without calling it (tools/fingerprint/console-args.mjs). Serialising
+        // here means running V8's JSON::Stringify over the page's own value,
+        // which invokes getters, toJSON and the Proxy traps -- so a page can
+        // hand console.log an object that reports on itself and learn a
+        // debugger is attached, noiselessly (tools/fingerprint/rt-tell.mjs).
+        // Primitives have no user code behind them and are sent by value, which
+        // is also what Chrome does.
+        const by_value = std.mem.eql(u8, @"type", "string") or
+            std.mem.eql(u8, @"type", "number") or
+            std.mem.eql(u8, @"type", "boolean") or
+            (subtype != null and std.mem.eql(u8, subtype.?, "null"));
+
         try args.append(arena, .{
-            .type = try remote_object.getType(arena),
-            .subtype = try remote_object.getSubtype(arena),
+            .type = @"type",
+            .subtype = subtype,
             .className = try remote_object.getClassName(arena),
             .description = try remote_object.getDescription(arena),
             .objectId = try remote_object.getObjectId(arena),
-            .value = value,
+            .value = if (by_value) value else null,
         });
     }
 
@@ -245,4 +263,65 @@ test "cdp.runtime: consoleAPICalled names the realm that logged" {
         );
         return error.RealmsShareOneContextId;
     }
+}
+
+// Describing a console argument must never run the page's own code. Chrome
+// answers an accessor with `{"name":"g","type":"accessor"}` and never calls it
+// (tools/fingerprint/console-args.mjs), so a page cannot tell a debugger is
+// attached by handing console.log an object that reports on itself. Serialising
+// the argument instead -- JSON.stringify does invoke getters, toJSON and the
+// Proxy traps -- turns every console.log into a noiseless attach oracle, which
+// is exactly what Kasada reads: with Runtime enabled the guard refuses the
+// telemetry POST for Chrome too.
+test "cdp.runtime: consoleAPICalled describes an argument without running page code" {
+    testing.silenceLog(&.{.js});
+
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const bc = try ctx.loadBrowserContext(.{ .id = "BID-CONSP", .url = "hi.html", .target_id = "FID-000000CONP".* });
+    try ctx.processMessage(.{ .id = 60, .method = "Runtime.enable" });
+
+    const frame = bc.mainFrame() orelse unreachable;
+    var ls: js.Local.Scope = undefined;
+    frame.js.localScope(&ls);
+    defer ls.deinit();
+
+    _ = try ls.local.exec(
+        \\globalThis.hits = 0;
+        \\const getter = {};
+        \\Object.defineProperty(getter, 'g', { get() { globalThis.hits++; return 1; }, enumerable: true });
+        \\console.log(getter);
+        \\console.log({ toJSON() { globalThis.hits++; return 'J'; } });
+        \\console.log(new Proxy({ a: 1 }, {
+        \\    get(t, k) { globalThis.hits++; return Reflect.get(t, k); },
+        \\    ownKeys(t) { globalThis.hits++; return Reflect.ownKeys(t); },
+        \\}));
+    , null);
+
+    const hits = try (try ls.local.exec("globalThis.hits", null)).toU32();
+    if (hits != 0) {
+        std.debug.print("describing the arguments ran page code {d} time(s)\n", .{hits});
+        return error.ConsoleArgumentRanPageCode;
+    }
+
+    // The shape that lets a client see the object without the engine touching
+    // it: an objectId to expand on demand, and no serialised `value`.
+    var seen: usize = 0;
+    var i: usize = 0;
+    while (try ctx.getSentMessage(i)) |msg| : (i += 1) {
+        const method = msg.object.get("method") orelse continue;
+        if (std.mem.eql(u8, method.string, "Runtime.consoleAPICalled") == false) continue;
+        const args = msg.object.get("params").?.object.get("args").?.array;
+        for (args.items) |a| {
+            seen += 1;
+            try testing.expectEqual("object", a.object.get("type").?.string);
+            try testing.expectEqual(true, a.object.get("objectId") != null);
+            if (a.object.get("value")) |v| {
+                std.debug.print("argument carried a serialised value: {f}\n", .{std.json.fmt(v, .{})});
+                return error.ConsoleArgumentSerialised;
+            }
+        }
+    }
+    try testing.expectEqual(@as(usize, 3), seen);
 }
