@@ -11,7 +11,7 @@
   "rgba(255, 27, 127, 0.5)": "ff1c8080 fillStyle=rgba(255, 27, 127, 0.5)",
   "#a36629": "a36629ff fillStyle=#a36629",
   "hsl(30 60% 40%)": "a36629ff fillStyle=#a36629",
-  "hsl(30 60% 40% / 0.5)": "a3662880 fillStyle=rgba(163, 102, 41, 0.5)"
+  "hsl(30 60% 40% / 0.5)": "a3662a80 fillStyle=rgba(163, 102, 41, 0.5)"
  },
  "p3": {
   "#ff0000": "ea3323ff fillStyle=#ff0000",

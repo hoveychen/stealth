@@ -105,9 +105,15 @@ pub const PaintStyle = struct {
     ///
     /// It stays a float because the bitmap premultiplies before it rounds, and
     /// the two orders do not agree to the byte — see `color.Paint`. On a
-    /// float16 bitmap it is never rounded at all.
-    pub fn paint(self: *const PaintStyle, space: color.CanvasSpace) color.Paint {
-        return self.style.paint(space);
+    /// float16 bitmap it is never rounded at all. `channels` is what decides
+    /// whether the bitmap sees the notation's float at all: an eight-bit sRGB
+    /// one does not — see `color.Style.paint`.
+    pub fn paint(
+        self: *const PaintStyle,
+        space: color.CanvasSpace,
+        channels: color.CanvasChannels,
+    ) color.Paint {
+        return self.style.paint(space, channels);
     }
 
     /// The colour arm answers with the source notation when the colour was

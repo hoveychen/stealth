@@ -386,10 +386,10 @@ pub const RGBA = packed struct(u32) {
         }
         if (count != 3 and count != 4) return null;
 
-        const alpha: u8 = if (count == 4)
-            round255((parseAlpha(parts[3]) orelse return null) * 255)
+        const alpha: f64 = if (count == 4)
+            parseAlpha(parts[3]) orelse return null
         else
-            255;
+            1;
 
         var style: Style = switch (kind) {
             // Legacy `rgb()` quantises in the parser, so its channels *are*
@@ -400,7 +400,12 @@ pub const RGBA = packed struct(u32) {
             .hsl => .fromUnit(parseHslChannels(parts[0..3]) orelse return null),
             .hwb => .fromUnit(parseHwbChannels(parts[0..3]) orelse return null),
         };
-        style.rgba.a = alpha;
+        style.rgba.a = round255(alpha * 255);
+        // `hwb()` is the one function here CSS Color 4 does not call legacy, so
+        // its alpha is not quantised with the rest of it. See `Style.alpha`.
+        if (kind == .hwb) {
+            style.alpha = alpha;
+        }
         return style;
     }
 
@@ -582,6 +587,21 @@ pub const Style = struct {
     /// source there and `rgb(50% 0% 0%)` converts 128 rather than 127.5.
     float: ?[3]f64 = null,
 
+    /// The source alpha, unrounded, for the notations CSS Color 4 does *not*
+    /// call legacy. Null for the ones it does, whose alpha is a byte by the
+    /// time it is parsed and so already lives in `rgba`.
+    ///
+    /// Only `hwb()` is here: the other modern functions carry their own alpha
+    /// in `wide`, and `rgb()`, `rgba()`, `hsl()`, `hsla()`, a hex and a name
+    /// are the legacy set. A float16 bitmap keeps whatever alpha it is handed
+    /// and says so on sight -- Chrome answers 0.501953125 for
+    /// `rgba(255, 0, 0, 0.5)` and 0.5 for `hwb(200 10% 20% / 0.5)`
+    /// (results/canvas-nonlegacy-alpha.chrome.json). It is observable on an
+    /// eight-bit display-p3 bitmap too, where the colour is not quantised and
+    /// the alpha is the only thing left to round: `hwb(45 15% 35% / 0.5)`
+    /// stores a red of 80 against the byte alpha's 81.
+    alpha: ?f64 = null,
+
     /// Three sRGB channels on the 0..1 scale, kept in both forms: the byte one
     /// for everything that reads a colour back, and the float one for the
     /// canvas that converts it first.
@@ -589,34 +609,61 @@ pub const Style = struct {
         return .{ .rgba = .fromUnit(rgb), .float = rgb };
     }
 
-    /// The colour a canvas bitmap in `space` paints with, still unquantised —
-    /// see `Paint`.
+    /// The colour a canvas bitmap of `space` and `channels` paints with, still
+    /// unquantised — see `Paint`.
     ///
     /// A wide notation resolves from `wide` rather than from `rgba`, because
     /// `rgba` has already been clipped into sRGB's gamut and the clip does not
     /// come back out: on a display-p3 canvas Chrome stores `ff228d` for
     /// `color(rec2020 1 0.25 0.5)`, where converting the sRGB bytes it also
     /// reports would give `ea338b` (probes/canvas-own-color-space.js).
-    pub fn paint(self: Style, space: CanvasSpace) Paint {
+    ///
+    /// `channels` is here for one combination: an eight-bit *sRGB* bitmap is
+    /// the only one Blink can hand Skia as a plain eight-bit colour, and there
+    /// the colour is quantised before the premultiply rather than after, so
+    /// `float` never reaches it. Everywhere else — a display-p3 bitmap, a
+    /// float16 one — the float goes through. Measured, fourteen pairs on each
+    /// of the two spaces (results/canvas-legacy-premultiply.chrome.json):
+    /// `hsl(30 60% 40%)`'s blue is 40.8, which premultiplies to 20 and reads
+    /// back 40, where the 41 it rounds to premultiplies to 21 and reads back
+    /// the 42 Chrome answers.
+    pub fn paint(self: Style, space: CanvasSpace, channels: CanvasChannels) Paint {
         if (self.wide) |source| {
             return source.toPaint(space);
         }
+        // A legacy alpha is a byte by the time it is parsed; a modern
+        // notation's stays the float it was written as. See `Style.alpha`.
+        const alpha = self.alpha orelse self.rgba.normalizedAlpha();
         const unit = self.float orelse {
+            const bytes: Paint = .{
+                .r = @floatFromInt(self.rgba.r),
+                .g = @floatFromInt(self.rgba.g),
+                .b = @floatFromInt(self.rgba.b),
+                .a = alpha,
+            };
             if (space == .srgb) {
                 // Byte-valued and already in the bitmap's space, so there is
                 // nothing to convert.
-                return .fromRGBA(self.rgba);
+                return bytes;
             }
-            return convertCanvasPaint(.srgb, space, .fromRGBA(self.rgba));
+            return convertCanvasPaint(.srgb, space, bytes);
         };
-        // A legacy alpha is a byte by the time it is parsed, whichever notation
-        // carried it — only `Wide`'s is a float. See `Paint`.
-        const alpha = self.rgba.normalizedAlpha();
         const rgb: [3]f32 = .{
             @floatCast(unit[0]),
             @floatCast(unit[1]),
             @floatCast(unit[2]),
         };
+        if (space == .srgb and channels == .unorm8) {
+            // The one bitmap that quantises first. Rounded at the width the
+            // channel is carried at, which is the same f32 the conversion
+            // below narrows to — see `Style.float`.
+            return .{
+                .r = @floatFromInt(RGBA.round255(rgb[0] * 255)),
+                .g = @floatFromInt(RGBA.round255(rgb[1] * 255)),
+                .b = @floatFromInt(RGBA.round255(rgb[2] * 255)),
+                .a = alpha,
+            };
+        }
         const converted = convertCanvasUnit(.srgb, space, rgb);
         return .unclipped(
             converted[0] * 255,
@@ -1258,12 +1305,13 @@ pub const CanvasChannels = enum {
 /// reads it back as `0x7e`, where quantising first would have premultiplied 127
 /// into 64 and read back `0x80`.
 ///
-/// Alpha is *not* the same story. A legacy colour's alpha is already a byte by
-/// the time it is parsed — `rgba(255, 0, 0, 0.5)` is 128/255, not 0.5, and two
-/// of those stacked read `ff0000c0` rather than the `ff0000bf` that an exact
-/// half would give — and `globalAlpha` is rounded to one as well (see
-/// `raster.opacity`). Only the wide notations keep a float alpha, which is why
-/// this field is one.
+/// Alpha is *not* the same story. A *legacy* colour's alpha is already a byte
+/// by the time it is parsed — `rgba(255, 0, 0, 0.5)` is 128/255, not 0.5, and
+/// two of those stacked read `ff0000c0` rather than the `ff0000bf` that an
+/// exact half would give — and `globalAlpha` is rounded to one as well (see
+/// `raster.opacity`). The notations CSS Color 4 does not call legacy keep a
+/// float alpha, `hwb()` among them, which is why this field is one. See
+/// `Style.alpha`.
 pub const Paint = struct {
     r: f64,
     g: f64,
@@ -1798,9 +1846,9 @@ test "color: hsl and hwb reach a canvas as floats, legacy rgb as bytes" {
     };
     for (cases) |case| {
         const style = parseStyle(case.notation) orelse return error.Unparseable;
-        const srgb = style.paint(.srgb).toRGBA();
+        const srgb = style.paint(.srgb, .unorm8).toRGBA();
         try std.testing.expectEqualSlices(u8, &case.srgb, &.{ srgb.r, srgb.g, srgb.b });
-        const p3 = style.paint(.@"display-p3").toRGBA();
+        const p3 = style.paint(.@"display-p3", .unorm8).toRGBA();
         try std.testing.expectEqualSlices(u8, &case.p3, &.{ p3.r, p3.g, p3.b });
         var read: [4]u8 = .{ p3.r, p3.g, p3.b, p3.a };
         convertCanvasPixels(.@"display-p3", .srgb, &read);

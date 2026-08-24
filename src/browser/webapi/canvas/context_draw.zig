@@ -90,6 +90,12 @@ pub fn Mixin(comptime T: type) type {
             return self._attributes.space();
         }
 
+        /// What one channel of the bitmap is, which decides whether a colour
+        /// is quantised on the way in — see `color.Style.paint`.
+        fn channels(self: *const T) color.CanvasChannels {
+            return self._attributes.channels();
+        }
+
         /// True when the transform maps axis-aligned rectangles to
         /// axis-aligned rectangles, which is every `scale` and `translate`.
         fn upright(ctm: Transform) bool {
@@ -119,7 +125,7 @@ pub fn Mixin(comptime T: type) type {
             // whether Chrome filters before or after the conversion, and on an
             // srgb canvas — every canvas until one asks for display-p3 — the
             // conversion is the identity and the question does not arise.
-            return filter(self).applyTo(style.paint(space(self)));
+            return filter(self).applyTo(style.paint(space(self), channels(self)));
         }
 
         // --- state stack ---------------------------------------------------
