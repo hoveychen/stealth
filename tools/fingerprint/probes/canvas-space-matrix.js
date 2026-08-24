@@ -14,13 +14,17 @@
 // colours Chrome sides with the D65 fractions 11 times, with the D50 matrices
 // 12 times, and with neither once (`#997f5c` reads `4598e4`, where the two
 // predict `4498e5` and `4598e5`). So Chrome's transform is a third thing, and
-// swapping our matrices for either published set is not the fix. This matters
-// because the residual is about 1e-5 in the encoded float, which is invisible
-// while a canvas stores whole bytes and doubles once the bitmap premultiplies:
-// `color(display-p3 1 0.25 0.5 / 0.5)` on an srgb canvas has a green of 26.998
-// here against Chrome's 27.0-something, and half of each rounds to a different
-// byte. Closing it means finding what skcms actually computes, not picking
-// between these two.
+// swapping our matrices for either published set is not the fix.
+//
+// The third thing is now named, by `canvas-space-float-matrix.js`: the D50
+// matrices are right, but *composed the way skcms composes them* — invert the
+// destination's `toXYZD50` in double and store the result as f32, then
+// concatenate with the source's in f32. Rounding the composition to f32 twice
+// is what moves it off both published products; nothing about the published
+// D50 cells themselves is wrong. Under that matrix these 24 read 17/24 rather
+// than 11/24, and every miss left is a channel off by one, which belongs to the
+// encode transfer function rather than to the matrix — see
+// `canvas-space-float-sweep.js`.
 (() => {
     const out = { toP3: {}, toSrgb: {} };
 
