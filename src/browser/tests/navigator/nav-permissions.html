@@ -83,6 +83,13 @@
       'idle-detection': ['prompt', 'idle_detection'],
       'pointer-lock': ['granted', 'pointer-lock'],
       'keyboard-lock': ['granted', 'keyboard-lock'],
+      // Three names Chrome 151 answers that Chrome 150 did not know. Measured
+      // on Chrome 151.0.7922.172; a Kasada interstitial walks the whole enum,
+      // so a name that rejects here where the reference resolves is a reading
+      // the guard gets for free.
+      'local-network': ['prompt', 'local-network'],
+      'local-network-access': ['prompt', 'local-network-access'],
+      'loopback-network': ['prompt', 'loopback-network'],
     };
     const got = {};
     for (const name of Object.keys(TABLE)) {
@@ -165,6 +172,7 @@
     await probe('systemWakeLock', true, { name: 'system-wake-lock' });
     await probe('speakerSelection', true, { name: 'speaker-selection' });
     await probe('webAppInstall', true, { name: 'web-app-installation' });
+    await probe('geoApprox', true, { name: 'geolocation-approximate' });
 
     // Three names that need a specific dictionary member before they answer.
     await probe('push', true, { name: 'push' });
@@ -203,6 +211,9 @@
       testing.expectEqual('TypeError: ' + PREFIX + 'System Wake Lock is not enabled.', out.systemWakeLock);
       testing.expectEqual('TypeError: ' + PREFIX + 'The Speaker Selection API is not enabled.', out.speakerSelection);
       testing.expectEqual('TypeError: ' + PREFIX + 'The Web App Install API is not enabled.', out.webAppInstall);
+      // A name Chrome knows and refuses by name, not one it has never heard of.
+      testing.expectEqual('TypeError: ' + PREFIX +
+        'Permission API support for approximate geolocation is not enabled.', out.geoApprox);
 
       // push is the one that is not a TypeError.
       const PUSH = 'NotSupportedError: ' + PREFIX +
