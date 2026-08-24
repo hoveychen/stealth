@@ -627,11 +627,15 @@
   testing.expectEqual("00e2ebff", paint("lch(80 60 200)"));
   testing.expectEqual("115705ff", paint("oklab(0.4 -0.1 0.08)"));
   testing.expectEqual("773ac1ff", paint("oklch(0.5 0.2 300)"));
-  // The second of the two non-Chrome readings, and the same shape as the
-  // display-p3 one above: green lands on 144.49999999999997 where Chrome
-  // answers 145, so the byte falls the other side of a boundary the two arms
-  // approach from opposite directions. Both hsl formulations land under it.
-  testing.expectEqual("1a90ccff", paint("hwb(200 10% 20%)"));
+  // Green is 17/30 of a byte, which is 144.49999999999997 in double and
+  // exactly 144.5 in float — so the byte it stores says which width the
+  // channel is carried at, and Chrome's 145 says float. Measured directly:
+  // a float16 read of this paint answers 0.56689453125, the half-precision
+  // neighbour of 17/30, and not the 0.568359375 that 145/255 would give
+  // (probes/canvas-float-source-channels.js). Under a double the same channel
+  // lands a whisker below the boundary and stores 144, which is the byte this
+  // line carried before.
+  testing.expectEqual("1a91ccff", paint("hwb(200 10% 20%)"));
   testing.expectEqual("5e1782ff", paint("hsl(280 70% 30%)"));
   testing.expectEqual("1a334dff", paint("rgb(10% 20% 30%)"));
 }

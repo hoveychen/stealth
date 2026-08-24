@@ -40,17 +40,15 @@ pub fn registerTypes() []const type {
 /// to parse as a colour, and read back as the *previous* colour: `typeof
 /// ctx.fillStyle` answered `string` where Chrome answers `object`.
 pub const PaintStyle = struct {
-    /// The colour the rasteriser paints with. A gradient or a pattern leaves
-    /// it alone, since neither carries paint yet — whatever colour they
-    /// replaced keeps getting painted, which is what happened before this
-    /// too. Giving them real paint is the `cfsc-gradient-paint-source` plan.
-    colour: color.RGBA = color.RGBA.Named.black,
-    /// The source notation, when the colour was written in one of the five
-    /// functions a browser answers back as *itself* rather than as hex. See
-    /// `color.Wide`.
-    wide: ?color.Wide = null,
+    /// The colour the rasteriser paints with, in the form the notation was
+    /// written: the bytes, plus whatever of the source the notation needs kept
+    /// (see `color.Style`). A gradient or a pattern leaves it alone, since
+    /// neither carries paint yet — whatever colour they replaced keeps getting
+    /// painted, which is what happened before this too. Giving them real paint
+    /// is the `cfsc-gradient-paint-source` plan.
+    style: color.Style = .{ .rgba = color.RGBA.Named.black },
     /// Set when the last assignment was a gradient or a pattern, in which case
-    /// that object — not `colour` — is what a script reads back.
+    /// that object — not `style` — is what a script reads back.
     object: ?Object = null,
 
     pub const Object = union(enum) {
@@ -83,9 +81,7 @@ pub const PaintStyle = struct {
             .gradient => |gradient| self.object = .{ .gradient = gradient },
             .pattern => |pattern| self.object = .{ .pattern = pattern },
             .text => |text| {
-                const style = parseColour(text) orelse return;
-                self.colour = style.rgba;
-                self.wide = style.wide;
+                self.style = parseColour(text) orelse return;
                 self.object = null;
             },
         }
@@ -109,21 +105,8 @@ pub const PaintStyle = struct {
     ///
     /// It stays a float because the bitmap premultiplies before it rounds, and
     /// the two orders do not agree to the byte — see `color.Paint`.
-    ///
-    /// A wide notation is resolved from `wide` rather than from `colour`,
-    /// because `colour` has already been clipped into sRGB's gamut and the clip
-    /// does not come back out. On a display-p3 canvas Chrome stores `ff228d`
-    /// for `color(rec2020 1 0.25 0.5)`; converting the sRGB bytes it also
-    /// reports for that notation would give `ea338b` (measured --
-    /// probes/canvas-own-color-space.js).
     pub fn paint(self: *const PaintStyle, space: color.CanvasSpace) color.Paint {
-        if (self.wide) |source| {
-            return source.toPaint(space);
-        }
-        if (space == .srgb) {
-            return .fromRGBA(self.colour);
-        }
-        return color.convertCanvasPaint(.srgb, space, .fromRGBA(self.colour));
+        return self.style.paint(space);
     }
 
     /// The colour arm answers with the source notation when the colour was
@@ -132,10 +115,10 @@ pub const PaintStyle = struct {
     pub fn read(self: *const PaintStyle, arena: Allocator) !Read {
         const object = self.object orelse {
             var w = std.Io.Writer.Allocating.init(arena);
-            if (self.wide) |source| {
+            if (self.style.wide) |source| {
                 try source.format(&w.writer);
             } else {
-                try self.colour.format(&w.writer);
+                try self.style.rgba.format(&w.writer);
             }
             return .{ .text = w.written() };
         };

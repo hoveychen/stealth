@@ -12268,3 +12268,89 @@ premultiplied 8-bit round trip an alpha forces (`color(display-p3 1 0.25 0.5 /
 The earlier note here that two knife-edge readings "answer one LSB away …
 recorded next to their assertions rather than chased" is no longer true of the
 matrix — those were this residual, and they are exact now.
+
+## `hsl()` and `hwb()` are floats; legacy `rgb()` is bytes (2026-08-24)
+
+`canvas-color-notation` had 17 readings left after the transform above was
+pinned. Four of them were one notation family, and the tell was that they only
+appear on a display-p3 canvas: `hsl(30 60% 40%)` stored `9a6935` where Chrome
+stores `9b6935`, and read back as srgb it was `a36628` against `a46628`. On an
+srgb canvas the same notation agreed exactly. A conversion that is wrong is
+wrong on both canvases; a *source* that is wrong only shows where the
+conversion runs before the quantisation does.
+
+So the source. `hsl(30 60% 40%)` answers `#a36629`, but its sRGB channels are
+(0.64, 0.4, 0.16) — (163.2, 102, 40.8) — and a display-p3 canvas converts before
+it rounds. Converting the float stores `9b`; converting the 163 the notation
+answers back stores `9a`.
+
+### The float16 read says it directly
+
+Inferring the source from a converted byte is one inference too many, so the new
+probe (`canvas-float-source-channels.js`) reads the paint back through a
+`float16` context, which hands back the channel rather than a byte:
+
+| notation | Chrome's stored red | half-precision neighbour of |
+|---|---|---|
+| `hsl(30 60% 40%)` | `0.64013671875` | **0.64**, not 163/255 (`0.6396484375`) |
+| `hwb(200 10% 20%)` green | `0.56689453125` | **17/30**, not 145/255 (`0.568359375`) |
+| `rgb(50% 0% 0%)` | `0.501953125` | **128/255**, not 0.5 |
+| `rgb(10% 20% 30%)` | `0.10198974609375` | **26/255**, not 0.1 |
+
+Two families, opposite answers. `hsl()`, `hsla()` and `hwb()` reach the canvas
+unrounded. Legacy `rgb()` — number *and* percentage forms — is quantised by its
+own parser, so 127.5 is a 128 before any conversion sees it. That is the bound
+that keeps the fix from spreading: `rgb(50% 0% 0%)` on a p3 canvas is `75140c`
+in both engines, and converting 127.5 would have made it `74140c`.
+
+### The width, for free
+
+`hwb(200 10% 20%)`'s green is 17/30 of a byte. In double that is
+144.49999999999997 and rounds to 144; in float it is exactly 144.5 and rounds
+to 145. Chrome stores 145, and the float16 read above says why. This row needs
+no colour space conversion at all — it is an srgb canvas — so it isolates the
+width from everything else, and it is one of the two readings a previous round
+recorded as "one LSB away from Chrome, recorded rather than chased". It is exact
+now. The other one, `color(display-p3 0.2 0.4 0.6)`, is a `color()` notation and
+still ours.
+
+Eleven more knife-edge notations were measured on headed Chrome for this, four
+canvas-space × readback-space axes each, and all forty-four readings agree.
+
+### What it moved
+
+| probe | before | after |
+|---|---|---|
+| `canvas-color-notation` (430 readings: 86 notations × 1 string + 4 pixel axes) | 413 same / 17 diff | 417 same / **13** diff |
+| `canvas-float-source-channels` bytes (76 readings) | — | **75/76** |
+
+The 13 that remain are two other axes, neither of them this one:
+
+- **six** are the premultiplied 8-bit round trip an alpha forces — every
+  `alpha=0x80` row read across spaces (`#ff000080`, `rgba(255,0,0,0.5)`,
+  `lab(50 40 30 / 0.5)`), where Chrome premultiplies the float and we
+  premultiply the byte;
+- **four** are `color()` and `lab()` on the p3 leg, which still goes through CSS
+  Color 4's naive f32 sum and an exact `srgbFromLinear` rather than the Skia
+  spelling the canvas leg now uses — `color(display-p3 50% 25% 50%)` stores
+  `80407f` against Chrome's `7f407f`;
+- **three** are `color(display-p3 1 0.25 0.5 / 0.5)`, which is worse than one
+  LSB (`ea3b7e80` against `fe407e80` on `srgb->display-p3`) and looks like a
+  colour already in p3 being converted a second time.
+
+### The float16 *canvas* is still byte-backed, and the widget builds four
+
+The probe's float16 half was measured on both engines and only 6 of its 38
+readings agree. That is not the source channels — it is that a
+`colorType: 'float16'` context stores a byte bitmap here and expands it on read,
+so every channel comes back as the half-precision neighbour of `n/255`. Chrome's
+comes back as the neighbour of the colour itself. The readings above are exactly
+that gap, and it is not a rounding argument: `hsl(30 60% 40%)` is
+`0.64013671875` there and `0.63916015625` here.
+
+This matters more than a byte. The Turnstile widget (`results/ibt2-oracle.json`)
+builds four offscreen canvases — {srgb, display-p3} × {unorm8, float16} — fills
+each with `color(display-p3 1 0.25 0.5)` and reads 1×1 back from each. Two of
+its four rows are float16, and both of them read a quantised channel from this
+engine. Readings in `results/canvas-float-source-channels.{chrome,lightpanda}
+.json`.
