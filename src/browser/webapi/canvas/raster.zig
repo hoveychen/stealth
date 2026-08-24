@@ -814,7 +814,7 @@ test "raster: the blend modes land on Chrome's bytes" {
     const half_backdrop = RGBA{ .r = 255, .g = 128, .b = 0, .a = 128 };
 
     // Every expectation below is a Chrome 151 readback
-    // (scratch/expr-composite-blend.js), not a hand-derived value — bar the one
+    // (probes/expr-composite-blend.js), not a hand-derived value — bar the one
     // cell called out in place, where the comment says what Chrome reads.
     const cases = [_]struct {
         back: ?RGBA,
@@ -838,7 +838,7 @@ test "raster: the blend modes land on Chrome's bytes" {
         // we read 160. That is a divergence in the alpha, not in the blending —
         // it is there under plain source-over too — so it belongs to whatever
         // fixes the alpha rather than being smuggled in here. Measured in
-        // scratch/expr-globalalpha-quant.js.
+        // probes/expr-globalalpha-quant.js.
         // A half-opaque backdrop: the uncovered half of the source stays itself.
         .{ .back = half_backdrop, .src = source, .op = .multiply, .want = .{ 64, 96, 96, 255 } },
         .{ .back = half_backdrop, .src = source, .op = .difference, .want = .{ 128, 64, 192, 255 } },
@@ -869,7 +869,7 @@ test "raster: the blend modes land on Chrome's bytes" {
 
 test "context filter: what a grayscale() string parses to" {
     // Chrome 151 keeps or rejects each of these at the setter, and paints the
-    // amount below (scratch/expr-canvas-filter-grayscale.js).
+    // amount below (probes/expr-canvas-filter-grayscale.js).
     for ([_]struct { text: []const u8, want: f64 }{
         .{ .text = "grayscale(1)", .want = 1 },
         .{ .text = "grayscale(0)", .want = 0 },
@@ -967,7 +967,7 @@ test "raster: a blend mode reaches a path's partly covered edge" {
     try p.rect(alloc, 0, 0, 4.5, 1, ctm);
     surface.fillPath(alloc, 8, 1, &p, .nonzero, .{ .r = 64, .g = 128, .b = 192, .a = 255 }, 1, .difference);
 
-    // Chrome 151 (scratch/expr-composite-blend.js `pathEdge`): four whole
+    // Chrome 151 (probes/expr-composite-blend.js `pathEdge`): four whole
     // pixels of the difference, one at half coverage, three untouched.
     try testing.expectEqualSlices(u8, &.{ 191, 0, 192, 255 }, surface.pixels[0..4]);
     try testing.expectEqualSlices(u8, &.{ 191, 0, 192, 255 }, surface.pixels[3 * 4 ..][0..4]);

@@ -104,7 +104,7 @@ pub fn Mixin(comptime T: type) type {
         /// graphic, and a fill's source graphic is one colour all over — so for
         /// everything but `drawImage` the whole of it lands here rather than in
         /// the rasteriser. Chrome runs the filter on fills too, not only on
-        /// images (measured, scratch/expr-canvas-filter-grayscale.js).
+        /// images (measured, probes/expr-canvas-filter-grayscale.js).
         fn paint(self: *const T, style: canvas_objects.PaintStyle) color.RGBA {
             return filter(self).applyTo(style.colour);
         }

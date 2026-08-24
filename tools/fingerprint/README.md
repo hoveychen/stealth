@@ -12064,3 +12064,125 @@ columns diverge for that one reason, and the fix is a different shape — a canv
 that has a colour space has to keep the source colour for `fillStyle` to answer
 with *and* the converted bytes to paint with. It is `cfsc-canvas-color-space`,
 with the measured targets already in it.
+
+## globalCompositeOperation and filter were stored, echoed and never read (2026-08-24)
+
+Both attributes existed as fingerprint surface only: the setters validated and
+kept them, the getters answered, and the rasteriser painted source-over with an
+unfiltered paint whatever they said. That made the widget's
+grayscale-then-difference pass a no-op — the second `drawImage` overwrote the
+first instead of differencing against it — so the 80×24 readback came back as
+the text panel where Chrome hands over 1920 pixels of opaque black, and the 1×1
+downscale taken from it reported white.
+
+**1920 of 1920 pixels wrong: the largest single all-wrong block measured on
+that program.**
+
+### What Chrome actually does, measured before anything was written
+
+`probes/expr-composite-blend.js` sweeps (backdrop alpha × source alpha ×
+globalAlpha) for the two blend modes, because the informative cells are the
+ones where either side is partly transparent — opaque-over-opaque is just the
+blend function, and a naive "apply the blend function to the two colours" gets
+it right by accident there and wrong everywhere else.
+
+| case | Chrome 151 | what it pins down |
+|---|---|---|
+| `difference` opaque `#ff8000` ← `#4080c0` | `191,0,192,255` | `B(Cb,Cs) = \|Cb−Cs\|` |
+| `multiply` same | `64,64,0,255` | `B(Cb,Cs) = Cb·Cs` |
+| either, no backdrop | the source, opaque | nothing to blend with |
+| `difference`, source α=0.5 | `223,64,96,255` | the blend governs only the overlap |
+| `difference`, backdrop α=0.5 | `128,64,192,255` | the uncovered source stays itself |
+| `difference`, both α=0.5 | `170,85,128,192` | all three terms of the spec formula |
+| a path's half-covered edge pixel | `223,64,96,255` | coverage *is* the source alpha |
+
+The last row is the one that decides where the arithmetic goes: a half-covered
+path pixel reads exactly what a half-opaque fill reads, so coverage multiplies
+into the source alpha and the blend needs no separate handling for edges.
+
+`probes/expr-canvas-filter-grayscale.js` does the same for `filter`, and three
+of its answers contradict what the plan assumed:
+
+- **It reaches a plain fill, not only `drawImage`.** A `fillRect` of `#4080c0`
+  under `grayscale(1)` reads `119,119,119`. So the filter belongs on the paint
+  going into the rasteriser, where every entry point gets it at once, rather
+  than inside `drawSurface`.
+- **The coefficients are the sRGB luminance ones applied to the bytes.** A CSS
+  filter does not linearise: 255 red reads 54, green 182, blue 18. And
+  `grayscale(a)` is exactly an interpolation towards that luminance — all
+  thirteen sampled amount/colour pairs land on Chrome's byte, percentages and
+  the empty argument included.
+- **It applies to the source and never to the backdrop.** `grayscale(1)` under
+  `difference` reads `136,9,119,255`, which is `|backdrop − luminance(source)|`
+  to the byte. Filtering the destination would have given something else
+  entirely.
+
+### Result: 46 of 53 sampled cells identical to Chrome
+
+The seven that are not are each recorded next to their assertion rather than
+chased, because five of them are not about blending at all:
+
+| cell | Chrome | here | why |
+|---|---|---|---|
+| `multiply`, both sides α=0.5 | `128,106,64,192` | `127,107,64,192` | both channels sit within half a unit of the rounding boundary; Chrome is the other side of it because its backdrop is premultiplied 8-bit, so what it un-premultiplies out of a half-alpha 128 is 127 |
+| `grayscale(1)` on a translucent paint | `120,120,120,128` | `119,119,119,128` | same root: Chrome greys premultiplied bytes |
+| `multiply` with `globalAlpha = 0.5` | `159,96,0,255` | `160,96,0,255` | see below — the alpha, not the blend |
+| `grayscale(1) blur(2px)` | `128,128,128,8` | the colour unfiltered | deliberate: honouring only the half we implement lands *further* away than honouring none of it, since the blur is most of what happened |
+| `filter = 'grayscale'` / `'notafilter(1)'` / `''` | keeps the previous filter | stores the string | the setter is `freeform`; refusing these needs the whole `<filter-value-list>` grammar, and a partial one would reject `blur(2px)` — which Chrome echoes back |
+
+### A separate finding: globalAlpha is a byte in Chrome, and a double here
+
+The `multiply`/`globalAlpha` row above is not about compositing, so
+`probes/expr-globalalpha-quant.js` isolated it. Source-over of black over white
+separates the two hypotheses, because `255·(1 − 0.5) = 127.5` rounds up and
+`255·(1 − 128/255) = 127.0` does not:
+
+| `globalAlpha` | Chrome | implies |
+|---|---|---|
+| `0.5` | `127` | the paint alpha is `round(a·255)`, i.e. 128 |
+| `rgba(0,0,0,0.5)` at α=1 | `127` | identical — both are bytes |
+| `0.502` | `127` | rounds to the same 128 |
+| `0.498` | `128` | rounds to 127, a different byte |
+| `1/3` | `170` | 85/255, not a third |
+
+So Chrome quantises `globalAlpha` to eight bits before it reaches the
+compositor and we carry a double all the way through. Only one of the probe's
+eight cells actually diverges today, and the widget's program never touches
+`globalAlpha` — so this cannot move any of its readbacks. **Left unfixed and
+uncoupled from this work on purpose:** it is one line in the rasteriser, but it
+shifts every antialiased pixel drawn under a fractional alpha, and it wants its
+own before/after against the whole probe corpus rather than a ride along a
+compositing change.
+
+### On the widget's own program, per pixel against headed Chrome
+
+`scratch/expr-widget-canvas-program.js`, every phase diffed pixel by pixel:
+
+| phase | pixels | before | after |
+|---|---|---|---|
+| `p6.diff` 80×24 | 1920 | **1920 wrong** | **0** — and the hash is Chrome's exactly |
+| `p7.1x1` (read twice) | 1 | 1 wrong | **0**, matching the live oracle |
+| `p4.49x44` three multiplied discs | 2156 | 657 wrong | **362** |
+| the other seven phases | — | — | untouched to the pixel |
+
+Whole program: 5217 wrong pixels → 3000. Phases whose hash now equals Chrome's:
+two → four of nine.
+
+`p4` improving without being the target is the `multiply` in its own program —
+three discs composited that way, which had been painting source-over. Its
+remaining 362 are the arc antialiasing gap noted elsewhere, not the blend.
+
+Reading `filter` moved no widget pixel, which is expected and worth stating:
+the panel it greys is white, black and neutral grey text, and grayscale is the
+identity on a neutral colour. The pass matters for what a page reads back from
+a *coloured* fill, not for this program.
+
+### The station still does not clear
+
+    headed chrome  pass         doc=403->200 nodes=34  "Cloudflare Challenge - ScrapingCourse.co"
+    lightpanda     cf-challenge doc=403->200 nodes=47  "Just a moment..."
+
+Unchanged, as expected: this closed the largest all-wrong block in one branch's
+canvas readings, and the branch is still separated from Chrome's by the 48×48
+render — radial gradients and glyph outlines, which are `cfsc-gradient-paint-source`,
+`cfsc-shadow-blur` and `cfsc-glyph-outline-raster`.
