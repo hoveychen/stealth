@@ -226,6 +226,106 @@
 }
 </script>
 
+<script id="OffscreenCanvas#fillStyle(gradient)">
+{
+  // Same union as the element context: a gradient reads back as itself. Chrome
+  // 151 readings.
+  const canvas = new OffscreenCanvas(20, 20);
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#123456';
+  const gradient = ctx.createLinearGradient(0, 0, 5, 5);
+  ctx.fillStyle = gradient;
+  testing.expectEqual('object', typeof ctx.fillStyle);
+  testing.expectEqual(true, ctx.fillStyle === gradient);
+  testing.expectEqual('[object CanvasGradient]', String(ctx.fillStyle));
+
+  ctx.strokeStyle = gradient;
+  testing.expectEqual(true, ctx.strokeStyle === gradient);
+
+  ctx.fillStyle = '#ff0000';
+  testing.expectEqual('#ff0000', ctx.fillStyle);
+
+  // The resize reset drops the gradient along with everything else.
+  ctx.fillStyle = gradient;
+  canvas.width = 20;
+  testing.expectEqual('#000000', ctx.fillStyle);
+
+  // addColorStop refuses the same three ways here as on the element context.
+  const P = "Failed to execute 'addColorStop' on 'CanvasGradient': ";
+  testing.expectError('TypeError: ' + P + 'The provided double value is non-finite.',
+    () => ctx.createLinearGradient(0, 0, 5, 5).addColorStop(NaN, '#fff'));
+  testing.expectError(
+    'IndexSizeError: ' + P + 'The provided value (2) is outside the range (0.0, 1.0).',
+    () => ctx.createLinearGradient(0, 0, 5, 5).addColorStop(2, '#fff'));
+  testing.expectError(
+    "SyntaxError: " + P + "The value provided ('notacolour') could not be parsed as a color.",
+    () => ctx.createLinearGradient(0, 0, 5, 5).addColorStop(0, 'notacolour'));
+  ctx.createLinearGradient(0, 0, 5, 5).addColorStop(0, 'rgba(1,2,3,0.5)');
+
+  // The factories refuse the same way, and the sentence names *this* interface
+  // rather than the element context's (measured on Chrome 151).
+  const on = (op) => "Failed to execute '" + op +
+    "' on 'OffscreenCanvasRenderingContext2D': ";
+  testing.expectError(
+    'TypeError: ' + on('createLinearGradient') + 'The provided double value is non-finite.',
+    () => ctx.createLinearGradient(NaN, 0, 1, 1));
+  testing.expectError(
+    'IndexSizeError: ' + on('createRadialGradient') + 'The r0 provided is less than 0.',
+    () => ctx.createRadialGradient(0, 0, -1, 0, 0, 1));
+  testing.expectError(
+    'TypeError: ' + on('createConicGradient') + 'The provided double value is non-finite.',
+    () => ctx.createConicGradient(NaN, 0, 0));
+  testing.expectError(
+    "SyntaxError: " + on('createPattern') +
+    "The provided type ('bogus') is not one of 'repeat', 'no-repeat', " +
+    "'repeat-x', or 'repeat-y'.",
+    () => ctx.createPattern(new OffscreenCanvas(2, 2), 'bogus'));
+  testing.expectError(
+    'TypeError: ' + on('createPattern') +
+    "The provided value is not of type '(CSSImageValue or HTMLCanvasElement " +
+    "or HTMLImageElement or HTMLVideoElement or ImageBitmap or OffscreenCanvas " +
+    "or SVGImageElement or VideoFrame)'.",
+    () => ctx.createPattern(null, 'repeat'));
+}
+</script>
+
+<script id="OffscreenCanvas#getContextAttributes">
+{
+  // Same echo as the element context, and the refusals name *this* interface.
+  const attrs = (settings) => new OffscreenCanvas(10, 10).getContext('2d', settings)
+    .getContextAttributes();
+
+  testing.expectEqual(false, attrs(undefined).willReadFrequently);
+  testing.expectEqual(true, attrs({ willReadFrequently: true }).willReadFrequently);
+  const all = attrs({
+    alpha: false,
+    colorSpace: 'display-p3',
+    colorType: 'float16',
+    desynchronized: true,
+    willReadFrequently: true,
+  });
+  testing.expectEqual('false,display-p3,float16,true,true',
+    [all.alpha, all.colorSpace, all.colorType, all.desynchronized, all.willReadFrequently].join(','));
+  testing.expectEqual(false, attrs('nonsense').willReadFrequently);
+
+  const P = "Failed to execute 'getContext' on 'OffscreenCanvas': " +
+    "Failed to read the '";
+  const M = "' property from 'CanvasContextCreationAttributesModule': " +
+    "The provided value 'bogus' is not a valid enum value of type ";
+  testing.expectError('TypeError: ' + P + 'colorSpace' + M + 'PredefinedColorSpace.',
+    () => attrs({ colorSpace: 'bogus' }));
+  testing.expectError('TypeError: ' + P + 'colorType' + M + 'CanvasPixelFormat.',
+    () => attrs({ colorType: 'bogus' }));
+  testing.expectError(
+    "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': " +
+    "Failed to read the 'willReadFrequently' property from " +
+    "'CanvasContextCreationAttributesModule': The provided value '1' is not " +
+    'a valid enum value of type CanvasWillReadFrequently.',
+    () => attrs({ willReadFrequently: 1 }));
+}
+</script>
+
 <script id="OffscreenCanvas#drawImage">
 {
   // This member did not exist on the offscreen context at all -- the element

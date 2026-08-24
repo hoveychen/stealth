@@ -35,6 +35,7 @@ const color = @import("../../color.zig");
 const path = @import("path.zig");
 const Surface = @import("raster.zig");
 const state = @import("context_state.zig");
+const canvas_objects = @import("canvas_objects.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
 const ImageData = @import("../ImageData.zig");
 const ImageBitmap = @import("ImageBitmap.zig");
@@ -42,6 +43,13 @@ const dictionary = @import("../dictionary.zig");
 const DOMException = @import("../DOMException.zig");
 const CanvasElement = @import("../element/html/Canvas.zig");
 const OffscreenCanvas = @import("OffscreenCanvas.zig");
+// The rest of the CanvasImageSource union. Named after the interface rather
+// than the file, since two of the files are both called Image.zig.
+const ImageElement = @import("../element/html/Image.zig");
+const VideoElement = @import("../element/html/Video.zig");
+const SvgImageElement = @import("../element/svg/Image.zig");
+const VideoFrame = @import("../webcodecs/frames.zig").VideoFrame;
+const CSSImageValue = @import("../css/typed_om.zig").CSSImageValue;
 
 const Execution = js.Execution;
 const Transform = path.Transform;
@@ -52,40 +60,13 @@ const FillRule = path.FillRule;
 pub fn Saved(comptime Font: type) type {
     return struct {
         transform: Transform,
-        fill_style: color.RGBA,
-        /// The source notation, when the style was written in one of the five
-        /// functions a browser answers back as itself. See `color.Wide`.
-        fill_style_wide: ?color.Wide,
-        stroke_style: color.RGBA,
-        stroke_style_wide: ?color.Wide,
+        fill_style: canvas_objects.PaintStyle,
+        stroke_style: canvas_objects.PaintStyle,
         line_width: f64,
         global_alpha: f64,
         font: Font,
         attrs: state.State,
     };
-}
-
-/// What `fillStyle` and `strokeStyle` accept. `currentColor` is the element's
-/// `color`, and neither context tracks one of its own, so it resolves to that
-/// property's initial value -- measured on Chrome as `#000000`.
-pub fn parseStyle(value: []const u8) ?color.Style {
-    if (std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, &std.ascii.whitespace), "currentcolor")) {
-        return .{ .rgba = color.RGBA.Named.black };
-    }
-    return color.parseStyle(value);
-}
-
-/// The string a style answers back with: the source notation when the colour
-/// was written in one of the five functions that keep it, and the hex or
-/// `rgba()` form otherwise.
-pub fn styleString(arena: std.mem.Allocator, rgba: color.RGBA, wide: ?color.Wide) ![]const u8 {
-    var w = std.Io.Writer.Allocating.init(arena);
-    if (wide) |source| {
-        try source.format(&w.writer);
-    } else {
-        try rgba.format(&w.writer);
-    }
-    return w.written();
 }
 
 pub fn Mixin(comptime T: type) type {
@@ -116,9 +97,7 @@ pub fn Mixin(comptime T: type) type {
             self._saved.append(arena(self), .{
                 .transform = self._transform,
                 .fill_style = self._fill_style,
-                .fill_style_wide = self._fill_style_wide,
                 .stroke_style = self._stroke_style,
-                .stroke_style_wide = self._stroke_style_wide,
                 .line_width = self._line_width,
                 .global_alpha = self._global_alpha,
                 .font = self._font,
@@ -130,9 +109,7 @@ pub fn Mixin(comptime T: type) type {
             const top = self._saved.pop() orelse return;
             self._transform = top.transform;
             self._fill_style = top.fill_style;
-            self._fill_style_wide = top.fill_style_wide;
             self._stroke_style = top.stroke_style;
-            self._stroke_style_wide = top.stroke_style_wide;
             self._line_width = top.line_width;
             self._global_alpha = top.global_alpha;
             self._font = top.font;
@@ -270,7 +247,7 @@ pub fn Mixin(comptime T: type) type {
                 height(self),
                 &self._path,
                 rule,
-                self._fill_style,
+                self._fill_style.colour,
                 self._global_alpha,
             );
         }
@@ -282,9 +259,120 @@ pub fn Mixin(comptime T: type) type {
                 height(self),
                 &self._path,
                 self._line_width * self._transform.meanScale(),
-                self._stroke_style,
+                self._stroke_style.colour,
                 self._global_alpha,
             );
+        }
+
+        // --- gradient and pattern factories -----------------------------------
+
+        // These carry no paint — see canvas_objects.zig — but they do refuse
+        // the way Chrome refuses, and the sentence names the interface, which
+        // is the reason they live here rather than twice over in the two
+        // context files: `OffscreenCanvasRenderingContext2D` has to say its own
+        // name (measured on Chrome 151, both contexts).
+        const said = "Failed to execute '{s}' on '" ++ T.JsApi.Meta.name ++ "': ";
+
+        /// WebIDL `double` is restricted, so a non-finite coordinate is refused
+        /// before the operation's own steps run — which is why this beats the
+        /// radius check below even when both are wrong.
+        fn nonFinite(comptime operation: []const u8, exec: *Execution) anyerror {
+            return exec.js.fail(error.TypeError, comptime std.fmt.comptimePrint(
+                said ++ "The provided double value is non-finite.",
+                .{operation},
+            ));
+        }
+
+        fn finite(comptime operation: []const u8, values: []const f64, exec: *Execution) !void {
+            for (values) |value| {
+                if (!std.math.isFinite(value)) return nonFinite(operation, exec);
+            }
+        }
+
+        pub fn createLinearGradient(_: *T, x0: f64, y0: f64, x1: f64, y1: f64, exec: *Execution) !*canvas_objects.CanvasGradient {
+            try finite("createLinearGradient", &.{ x0, y0, x1, y1 }, exec);
+            return exec._factory.create(canvas_objects.CanvasGradient{});
+        }
+
+        /// Both radii have to be non-negative, and `r0` is checked first — so
+        /// two negative radii name `r0` (measured). `-0` is not negative.
+        pub fn createRadialGradient(_: *T, x0: f64, y0: f64, r0: f64, x1: f64, y1: f64, r1: f64, exec: *Execution) !*canvas_objects.CanvasGradient {
+            try finite("createRadialGradient", &.{ x0, y0, r0, x1, y1, r1 }, exec);
+            if (r0 < 0) {
+                return exec.js.fail(error.IndexSizeError, comptime std.fmt.comptimePrint(
+                    said ++ "The r0 provided is less than 0.",
+                    .{"createRadialGradient"},
+                ));
+            }
+            if (r1 < 0) {
+                return exec.js.fail(error.IndexSizeError, comptime std.fmt.comptimePrint(
+                    said ++ "The r1 provided is less than 0.",
+                    .{"createRadialGradient"},
+                ));
+            }
+            return exec._factory.create(canvas_objects.CanvasGradient{});
+        }
+
+        /// The angle is not wrapped or bounded: Chrome takes 1e6 turns.
+        pub fn createConicGradient(_: *T, angle: f64, x: f64, y: f64, exec: *Execution) !*canvas_objects.CanvasGradient {
+            try finite("createConicGradient", &.{ angle, x, y }, exec);
+            return exec._factory.create(canvas_objects.CanvasGradient{});
+        }
+
+        /// The repetition is one of four keywords, and `null`/`undefined`/`''`
+        /// all mean `repeat` (measured).
+        ///
+        /// The image is an eight-member IDL union, converted before the
+        /// operation's steps run, so anything that is none of the eight — a
+        /// primitive or a plain object alike — is refused with the union's whole
+        /// spelling. This is a wider test than `sourceOf` above, which only
+        /// answers the three we can actually read pixels out of: an `<img>` is a
+        /// valid argument here even though drawing it paints nothing yet.
+        pub fn createPattern(_: *T, image: js.Value, repetition: js.Value, exec: *Execution) !*canvas_objects.CanvasPattern {
+            if (!isImageSource(image)) {
+                return exec.js.fail(error.TypeError, comptime std.fmt.comptimePrint(said, .{"createPattern"}) ++
+                    "The provided value is not of type '(CSSImageValue or " ++
+                    "HTMLCanvasElement or HTMLImageElement or HTMLVideoElement or " ++
+                    "ImageBitmap or OffscreenCanvas or SVGImageElement or VideoFrame)'.");
+            }
+            if (!repetition.isNullOrUndefined()) {
+                const text = try repetition.toStringSliceWithAlloc(exec.call_arena);
+                if (text.len != 0 and !isRepetition(text)) {
+                    return exec.js.fail(error.SyntaxError, try std.fmt.allocPrint(
+                        exec.call_arena,
+                        comptime std.fmt.comptimePrint(said, .{"createPattern"}) ++
+                            "The provided type ('{s}') is not one of 'repeat', " ++
+                            "'no-repeat', 'repeat-x', or 'repeat-y'.",
+                        .{text},
+                    ));
+                }
+            }
+            return exec._factory.create(canvas_objects.CanvasPattern{});
+        }
+
+        /// The `CanvasImageSource` union, member for member.
+        fn isImageSource(value: js.Value) bool {
+            if (!value.isObject()) return false;
+            inline for (.{
+                *CanvasElement,
+                *OffscreenCanvas,
+                *ImageBitmap,
+                *ImageElement,
+                *VideoElement,
+                *SvgImageElement,
+                *VideoFrame,
+                *CSSImageValue,
+            }) |Member| {
+                if (value.toZig(Member)) |_| return true else |_| {}
+            }
+            return false;
+        }
+
+        fn isRepetition(text: []const u8) bool {
+            for ([_][]const u8{ "repeat", "no-repeat", "repeat-x", "repeat-y" }) |allowed| {
+                if (std.mem.eql(u8, allowed, text)) return true;
+            }
+            return false;
         }
 
         fn ruleOf(value: ?js.Value, exec: *Execution) ?FillRule {
@@ -300,12 +388,12 @@ pub fn Mixin(comptime T: type) type {
             const ctm = self._transform;
             if (upright(ctm)) {
                 const at = ctm.apply(x, y);
-                self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, self._fill_style, self._global_alpha);
+                self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, self._fill_style.colour, self._global_alpha);
                 return;
             }
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
-            self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, self._fill_style, self._global_alpha);
+            self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, self._fill_style.colour, self._global_alpha);
         }
 
         pub fn strokeRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {
@@ -313,12 +401,12 @@ pub fn Mixin(comptime T: type) type {
             const line_width = self._line_width * ctm.meanScale();
             if (upright(ctm)) {
                 const at = ctm.apply(x, y);
-                self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, self._stroke_style, self._global_alpha);
+                self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, self._stroke_style.colour, self._global_alpha);
                 return;
             }
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
-            self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, self._stroke_style, self._global_alpha);
+            self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, self._stroke_style.colour, self._global_alpha);
         }
 
         pub fn clearRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {

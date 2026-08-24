@@ -156,3 +156,52 @@
     testing.expectEqual(11, named.code);
   }
 </script>
+
+<script id=thrown_message_outlives_later_calls>
+  {
+    // The other half of the same hazard. A DOMException the engine throws
+    // carries a message built on the per-call arena, and the exception object
+    // kept the slice rather than a copy -- so a script that caught one and read
+    // `.message` after any further call read whatever had since been written
+    // there. The constructor above copies; this path did not.
+    const messages = [];
+    const collect = (fn) => {
+      try {
+        fn();
+        testing.expectEqual('should have thrown', 'did not throw');
+      } catch (e) {
+        // Deliberately not read yet: the whole point is that it survives.
+        messages.push(e);
+      }
+    };
+
+    collect(() => document.querySelector('###'));
+    collect(() => document.createElement('canvas').getContext('2d')
+      .createLinearGradient(0, 0, 1, 1).addColorStop(0, 'notacolour'));
+    collect(() => document.createElement('canvas').getContext('2d')
+      .createLinearGradient(0, 0, 1, 1).addColorStop(2, '#fff'));
+
+    // Churn the arena the messages were built on. Without the copy the first
+    // of these three reads back as "#fffFailed to execute 'addColorStop' on
+    // 'CanvasGradient': The provided value (2" -- the head of its own message
+    // overwritten by the two that were thrown after it, and by their arguments.
+    const churn = 'y'.repeat(400);
+    for (let i = 0; i < 8; i++) {
+      new CustomEvent(churn);
+      document.createElement('canvas').getContext('2d').measureText(churn);
+      new URL('http://example.com/' + churn);
+    }
+
+    testing.expectEqual(
+      "Failed to execute 'querySelector' on 'Document': '###' is not a valid selector.",
+      messages[0].message);
+    testing.expectEqual(
+      "Failed to execute 'addColorStop' on 'CanvasGradient': " +
+      "The value provided ('notacolour') could not be parsed as a color.",
+      messages[1].message);
+    testing.expectEqual(
+      "Failed to execute 'addColorStop' on 'CanvasGradient': " +
+      'The provided value (2) is outside the range (0.0, 1.0).',
+      messages[2].message);
+  }
+</script>

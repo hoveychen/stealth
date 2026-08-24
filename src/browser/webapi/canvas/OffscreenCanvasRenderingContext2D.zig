@@ -19,7 +19,6 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
-const color = @import("../../color.zig");
 
 const ImageData = @import("../ImageData.zig");
 const OffscreenCanvas = @import("OffscreenCanvas.zig");
@@ -31,8 +30,7 @@ const context_draw = @import("context_draw.zig");
 const canvas_objects = @import("canvas_objects.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
 
-const CanvasGradient = canvas_objects.CanvasGradient;
-const CanvasPattern = canvas_objects.CanvasPattern;
+const PaintStyle = canvas_objects.PaintStyle;
 const TextMetrics = @import("TextMetrics.zig");
 const text_measure = @import("../../text_measure.zig");
 const Surface = @import("raster.zig");
@@ -47,15 +45,10 @@ const OffscreenCanvasRenderingContext2D = @This();
 _canvas: *OffscreenCanvas,
 /// The pixels this context has actually painted. See `raster.zig`.
 _surface: Surface,
-/// Fill color.
-/// TODO: Add support for `CanvasGradient` and `CanvasPattern`.
-_fill_style: color.RGBA = color.RGBA.Named.black,
-/// Set when the fill was written in one of the five colour functions a browser
-/// answers back as itself, which is the only thing the getter needs it for.
-_fill_style_wide: ?color.Wide = null,
-/// Stroke color, same caveat.
-_stroke_style: color.RGBA = color.RGBA.Named.black,
-_stroke_style_wide: ?color.Wide = null,
+/// Fill style: a colour, or the gradient/pattern object assigned to it.
+_fill_style: PaintStyle = .{},
+/// Stroke style, same three arms.
+_stroke_style: PaintStyle = .{},
 _line_width: f64 = 1,
 _global_alpha: f64 = 1,
 /// The parsed `font` attribute. Drives measureText; see font.zig.
@@ -76,28 +69,20 @@ pub fn getCanvas(self: *const OffscreenCanvasRenderingContext2D) *OffscreenCanva
     return self._canvas;
 }
 
-pub fn getFillStyle(self: *const OffscreenCanvasRenderingContext2D, exec: *Execution) ![]const u8 {
-    return context_draw.styleString(exec.local_arena, self._fill_style, self._fill_style_wide);
+pub fn getFillStyle(self: *const OffscreenCanvasRenderingContext2D, exec: *Execution) !PaintStyle.Read {
+    return self._fill_style.read(exec.local_arena);
 }
 
-pub fn setFillStyle(
-    self: *OffscreenCanvasRenderingContext2D,
-    value: []const u8,
-) !void {
-    // Prefer the same fill_style if fails.
-    const style = context_draw.parseStyle(value) orelse return;
-    self._fill_style = style.rgba;
-    self._fill_style_wide = style.wide;
+pub fn setFillStyle(self: *OffscreenCanvasRenderingContext2D, value: PaintStyle.Assigned) void {
+    self._fill_style.assign(value);
 }
 
-pub fn getStrokeStyle(self: *const OffscreenCanvasRenderingContext2D, exec: *Execution) ![]const u8 {
-    return context_draw.styleString(exec.local_arena, self._stroke_style, self._stroke_style_wide);
+pub fn getStrokeStyle(self: *const OffscreenCanvasRenderingContext2D, exec: *Execution) !PaintStyle.Read {
+    return self._stroke_style.read(exec.local_arena);
 }
 
-pub fn setStrokeStyle(self: *OffscreenCanvasRenderingContext2D, value: []const u8) void {
-    const style = context_draw.parseStyle(value) orelse return;
-    self._stroke_style = style.rgba;
-    self._stroke_style_wide = style.wide;
+pub fn setStrokeStyle(self: *OffscreenCanvasRenderingContext2D, value: PaintStyle.Assigned) void {
+    self._stroke_style.assign(value);
 }
 
 pub fn getLineWidth(self: *const OffscreenCanvasRenderingContext2D) f64 {
@@ -169,10 +154,8 @@ pub const getTransform = draw.getTransform;
 /// Drops the bitmap and every piece of drawing state, as `reset()` does.
 pub fn reset(self: *OffscreenCanvasRenderingContext2D) void {
     self._surface.reset();
-    self._fill_style = color.RGBA.Named.black;
-    self._fill_style_wide = null;
-    self._stroke_style = color.RGBA.Named.black;
-    self._stroke_style_wide = null;
+    self._fill_style = .{};
+    self._stroke_style = .{};
     self._line_width = 1;
     self._global_alpha = 1;
     self._font = Font.default;
@@ -191,24 +174,13 @@ pub fn isPointInStroke(_: *const OffscreenCanvasRenderingContext2D, _: js.Value,
     return false;
 }
 
-// The gradient and pattern handles. They carry no paint — see
-// canvas_objects.zig — but a script that builds one gets an object back
-// rather than a TypeError.
-pub fn createLinearGradient(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, exec: *Execution) !*CanvasGradient {
-    return exec._factory.create(CanvasGradient{});
-}
-
-pub fn createRadialGradient(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64, exec: *Execution) !*CanvasGradient {
-    return exec._factory.create(CanvasGradient{});
-}
-
-pub fn createConicGradient(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, exec: *Execution) !*CanvasGradient {
-    return exec._factory.create(CanvasGradient{});
-}
-
-pub fn createPattern(_: *OffscreenCanvasRenderingContext2D, _: js.Value, _: js.Value, exec: *Execution) !*CanvasPattern {
-    return exec._factory.create(CanvasPattern{});
-}
+// The gradient and pattern handles, shared with the other 2D context: the
+// sentences they refuse with name the interface, so they are written once and
+// take the name from `T`.
+pub const createLinearGradient = draw.createLinearGradient;
+pub const createRadialGradient = draw.createRadialGradient;
+pub const createConicGradient = draw.createConicGradient;
+pub const createPattern = draw.createPattern;
 
 pub const save = draw.save;
 pub const restore = draw.restore;
