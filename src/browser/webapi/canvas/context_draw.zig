@@ -660,25 +660,61 @@ pub fn Mixin(comptime T: type) type {
                     const out = data.local(exec.js.local.?).slice();
                     readInto(self, window, read.color_space, out);
                 },
-                // The bitmap is eight bits a channel in Chrome too, so float16
-                // is not a finer read but the same one scaled: every entry is
-                // the unorm8 byte over 255, rounded to half precision. All four
-                // float16 rows of probes/canvas-image-data-settings.js come out
-                // of the bytes of their unorm8 rows that way, to the digit --
-                // a display-p3 red reads 0.eae/0.333/0.232 against ea/33/23.
+                // The bitmap is eight bits a channel in Chrome too, so a float
+                // format is not a finer *bitmap* — but it is a finer read of
+                // one: the un-premultiplication and the colour conversion both
+                // happen in floating point, and neither is rounded into a byte
+                // on the way. See `readFloatInto`.
                 .@"rgba-float16" => |data| {
-                    const out = data.local(exec.js.local.?).slice();
-                    const bytes = try exec.arena.alloc(u8, out.len);
-                    // The read leaves whatever it did not overlap alone, and
-                    // this buffer is not the fresh array the other arm has.
-                    @memset(bytes, 0);
-                    readInto(self, window, read.color_space, bytes);
-                    for (out, bytes) |*channel, byte| {
-                        channel.* = @floatCast(@as(f64, @floatFromInt(byte)) / 255);
-                    }
+                    try readFloatInto(self, window, read.color_space, data.local(exec.js.local.?).slice(), exec);
                 },
             }
             return image_data;
+        }
+
+        /// The float formats' read: one `Paint` a pixel out of the bitmap,
+        /// converted unclipped, and only then narrowed to the format's element.
+        ///
+        /// Two bytes the byte path would have gone through are missing here, and
+        /// both are observable (measured --
+        /// probes/canvas-image-data-construct.js):
+        ///
+        ///   - The un-premultiplication. A premultiplied `{60, 30, 15, 77}`
+        ///     pixel is `0.7792208194732666` = `60 / 77` as float32, not the
+        ///     `199 / 255` its unorm8 byte would give. Every opaque pixel hides
+        ///     this, since dividing by an alpha of 255 is not dividing at all —
+        ///     which is why the float16 rows measured before this all agreed
+        ///     with the byte path.
+        ///   - The gamut clip. A display-p3 red read back as srgb answers
+        ///     `1.0930633544921875 -0.22672080993652344`, where the unorm8 read
+        ///     of the same pixel clamps to `255 0 0`.
+        fn readFloatInto(
+            self: *const T,
+            window: Window,
+            to: color.CanvasSpace,
+            out: anytype,
+            exec: *Execution,
+        ) !void {
+            const paints = try exec.arena.alloc(color.Paint, out.len / 4);
+            // The read overwrites only the part of the window that overlaps the
+            // canvas, and this buffer is not the fresh array the byte arm has.
+            @memset(paints, .{ .r = 0, .g = 0, .b = 0, .a = 0 });
+            self._surface.readPaints(
+                width(self),
+                height(self),
+                window.x,
+                window.y,
+                window.width,
+                window.height,
+                paints,
+            );
+            for (paints, 0..) |pixel, i| {
+                const converted = color.convertCanvasPaintUnclipped(space(self), to, pixel);
+                out[i * 4 + 0] = @floatCast(converted.r / 255);
+                out[i * 4 + 1] = @floatCast(converted.g / 255);
+                out[i * 4 + 2] = @floatCast(converted.b / 255);
+                out[i * 4 + 3] = @floatCast(converted.a);
+            }
         }
 
         /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/putImageData

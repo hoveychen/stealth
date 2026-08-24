@@ -718,11 +718,39 @@
   }
 
   // What a float16 read *holds*. The bitmap behind a canvas is eight bits a
-  // channel in Chrome too, so this format is not a finer read but the same one
-  // scaled: every entry is the unorm8 byte over 255, rounded to half
-  // precision. Every number below is that of the byte on the line above it,
-  // and both columns are measured
-  // (results/canvas-image-data-settings.chrome.json).
+  // channel in Chrome too, so this is not a finer *bitmap* — but it is a finer
+  // read of it: the un-premultiplication happens in floating point and is not
+  // rounded into a byte on the way. Measured
+  // (probes/canvas-image-data-construct.js): a `rgba(200, 100, 50, 0.3)` pixel
+  // stores the premultiplied {60, 30, 15, 77} and reads
+  //
+  //   unorm8   199              = round(60 * 255 / 77)
+  //   float16  0.779296875      = round_f16(60 / 77)
+  //   float32  0.7792208194732666 = 60 / 77
+  //
+  // and not round_f16(199 / 255), which is a different half-precision value
+  // (0.78027). Every opaque row below cannot tell the two apart, because
+  // dividing by an alpha of 255 is the same as not dividing at all — which is
+  // why they read as if the byte were the source.
+  {
+    const f16 = { pixelFormat: 'rgba-float16' };
+    const c = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+    c.fillStyle = 'rgba(200, 100, 50, 0.3)';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('199,99,50,77',
+      [...c.getImageData(0, 0, 1, 1).data].join(','));
+    testing.expectEqual('0.779296875,0.3896484375,0.19482421875,0.302001953125',
+      [...c.getImageData(0, 0, 1, 1, f16).data].join(','));
+  }
+  {
+    const f16 = { pixelFormat: 'rgba-float16' };
+    const c = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+    c.fillStyle = 'rgba(1, 2, 3, 0.01)';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('0,0,0,3', [...c.getImageData(0, 0, 1, 1).data].join(','));
+    testing.expectEqual('0,0,0,0.0117645263671875',
+      [...c.getImageData(0, 0, 1, 1, f16).data].join(','));
+  }
   {
     const f16 = { pixelFormat: 'rgba-float16' };
     const read = (canvasSpace, notation, settings) => {
@@ -748,9 +776,15 @@
     testing.expectEqual('1,0.2509765625,0.498046875,1', read('display-p3', p3, f16));
 
     // An explicit space still converts under this format: the two axes of the
-    // dictionary do not interfere.
+    // dictionary do not interfere. This is *not* the reading two lines above,
+    // even though both end up in display-p3: there the p3 bytes were already in
+    // the bitmap and the read only divided them by 255, here the conversion
+    // runs unquantised and only the result is narrowed to half precision.
+    // Chrome 151 reads 0.2003173828125 against that one's 0.199951171875
+    // (measured; the reading this line carried before was the other row's,
+    // copied across).
     testing.expectEqual(
-      '0.91748046875,0.199951171875,0.13720703125,1',
+      '0.91748046875,0.2003173828125,0.1385498046875,1',
       read('srgb', '#ff0000', { colorSpace: 'display-p3', pixelFormat: 'rgba-float16' }));
 
     // A window that runs off the canvas is transparent black where it missed,

@@ -1,0 +1,48 @@
+{
+ "forms": {
+  "length": 2,
+  "(data, w)": "throw:IndexSizeError: Index or size is negative or greater than the allowed amount",
+  "(data, w, h)": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "(data, w, h, settings)": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "(data, w, h, undefined)": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "(data, w, undefined)": "throw:IndexSizeError: Index or size is negative or greater than the allowed amount",
+  "(data, w, undefined, settings)": "throw:IndexSizeError: Index or size is negative or greater than the allowed amount",
+  "(w, h, settings)": "display-p3 rgba-unorm8 1x1 Uint8ClampedArray len=4"
+ },
+ "aliasing": {
+  "same object": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "writes through": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "subarray": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'."
+ },
+ "formats": {
+  "Float16Array, no settings": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "Float16Array, float16": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "Float16Array, unorm8": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "Uint8ClampedArray, float16": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "Uint8ClampedArray, unorm8": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "Uint8Array": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "Float32Array": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "Array": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "ArrayBuffer": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "null": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'."
+ },
+ "refusals": {
+  "length not a multiple of 4": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "length does not divide by width": "throw:IndexSizeError: Index or size is negative or greater than the allowed amount",
+  "height disagrees": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "width 0": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "height 0": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "empty array": "throw:IndexSizeError: Index or size is negative or greater than the allowed amount",
+  "width negative": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "bad colorSpace": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "bad pixelFormat": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "non-object settings": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "detached buffer": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "no arguments": "throw:TypeError: Failed to construct 'ImageData': 2 arguments required, but only 0 present.",
+  "one argument": "throw:TypeError: Failed to construct 'ImageData': 2 arguments required, but only 1 present.",
+  "width alone": "throw:TypeError: Failed to construct 'ImageData': 2 arguments required, but only 1 present."
+ },
+ "created": {
+  "createImageData(data, w, h)": "throw:TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': The provided value is not of type 'ImageDataSettings'."
+ }
+}

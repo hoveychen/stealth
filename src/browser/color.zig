@@ -1234,6 +1234,20 @@ pub fn convertCanvasRGBA(from: CanvasSpace, to: CanvasSpace, rgba: RGBA) RGBA {
 /// The same conversion left unquantised, for the callers that go on to
 /// premultiply it into a bitmap rather than answer it as bytes. See `Paint`.
 pub fn convertCanvasPaint(from: CanvasSpace, to: CanvasSpace, paint: Paint) Paint {
+    const out = convertCanvasPaintUnclipped(from, to, paint);
+    if (from == to) {
+        return out;
+    }
+    return .clip(out.r, out.g, out.b, out.a);
+}
+
+/// The same conversion with the gamut clip left off, for the one caller that
+/// has room for a channel outside the destination gamut: a float pixel format.
+/// Measured (results/canvas-image-data-construct.chrome.json): a display-p3 red
+/// read back as srgb answers `1.0930633544921875 -0.22672080993652344` through
+/// `rgba-float32`, where the same read through `rgba-unorm8` clamps to
+/// `255 0 0`.
+pub fn convertCanvasPaintUnclipped(from: CanvasSpace, to: CanvasSpace, paint: Paint) Paint {
     if (from == to) {
         return paint;
     }
@@ -1249,12 +1263,12 @@ pub fn convertCanvasPaint(from: CanvasSpace, to: CanvasSpace, paint: Paint) Pain
         srgbToLinear(@as(f32, @floatCast(paint.g)) / 255),
         srgbToLinear(@as(f32, @floatCast(paint.b)) / 255),
     });
-    return .clip(
-        srgbFromLinear(linear[0]) * 255,
-        srgbFromLinear(linear[1]) * 255,
-        srgbFromLinear(linear[2]) * 255,
-        paint.a,
-    );
+    return .{
+        .r = srgbFromLinear(linear[0]) * 255,
+        .g = srgbFromLinear(linear[1]) * 255,
+        .b = srgbFromLinear(linear[2]) * 255,
+        .a = paint.a,
+    };
 }
 
 /// A canvas matrix is f32, where every other matrix here is f64 — see

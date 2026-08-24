@@ -795,6 +795,49 @@ pub fn premultiply(pixel: *const [4]u8) [4]u8 {
     };
 }
 
+/// The same window `readPixels` copies, left unquantised: one `Paint` a pixel
+/// rather than four bytes, so the un-premultiplication is not rounded into a
+/// byte on the way out. `out` must be `sw * sh` long and already transparent
+/// black; the window may hang off any edge, and those pixels stay as they came.
+///
+/// This is what the float pixel formats read through, and the byte in between
+/// is observable. Measured (probes/canvas-image-data-construct.js): a
+/// premultiplied `{60, 30, 15, 77}` pixel is `199` through `rgba-unorm8` —
+/// `round(60 * 255 / 77)` — but `0.7792208194732666` through `rgba-float32`,
+/// which is `60 / 77`, and `0.779296875` through `rgba-float16`, which is that
+/// same quotient at half precision rather than `199 / 255`.
+pub fn readPaints(self: *const Surface, canvas_width: u32, canvas_height: u32, sx: i64, sy: i64, sw: u32, sh: u32, out: []Paint) void {
+    const pixels: ?[]const u8 = self.peek(canvas_width, canvas_height);
+    if (pixels == null and self.background == .transparent) {
+        return;
+    }
+    const background = straight(&self.background.pixel());
+
+    var row: u32 = 0;
+    while (row < sh) : (row += 1) {
+        const src_y = sy + @as(i64, row);
+        if (src_y < 0 or src_y >= canvas_height) {
+            continue;
+        }
+
+        var col: u32 = 0;
+        while (col < sw) : (col += 1) {
+            const src_x = sx + @as(i64, col);
+            if (src_x < 0 or src_x >= canvas_width) {
+                continue;
+            }
+            const to: usize = @as(usize, row) * sw + col;
+            if (pixels) |have| {
+                const from: usize = (@as(usize, @intCast(src_y)) * canvas_width +
+                    @as(usize, @intCast(src_x))) * 4;
+                out[to] = straight(have[from..][0..4]);
+            } else {
+                out[to] = background;
+            }
+        }
+    }
+}
+
 /// The other direction: overwrites a `sw` x `sh` window at (`dx`, `dy`) with
 /// `bytes`, which are the straight-alpha RGBA8 an ImageData carries and must be
 /// `sw * sh * 4` long. Nothing is composited — the destination pixels are
