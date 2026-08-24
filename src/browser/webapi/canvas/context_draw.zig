@@ -651,10 +651,45 @@ pub fn Mixin(comptime T: type) type {
             const window = try imageDataWindow(sx, sy, sw, sh, exec);
 
             const image_data = try ImageData.init(window.width, window.height, read, exec);
-            // Freshly created, so it is already transparent black: `readPixels`
-            // only has to overwrite the part of the window that overlaps the
-            // canvas.
-            const out = image_data._data.local(exec.js.local.?).slice();
+            switch (image_data._data) {
+                // Freshly created, so it is already transparent black:
+                // `readPixels` only has to overwrite the part of the window
+                // that overlaps the canvas. In this format the array the page
+                // will be handed *is* the read's destination.
+                .@"rgba-unorm8" => |data| {
+                    const out = data.local(exec.js.local.?).slice();
+                    readInto(self, window, read.color_space, out);
+                },
+                // The bitmap is eight bits a channel in Chrome too, so float16
+                // is not a finer read but the same one scaled: every entry is
+                // the unorm8 byte over 255, rounded to half precision. All four
+                // float16 rows of probes/canvas-image-data-settings.js come out
+                // of the bytes of their unorm8 rows that way, to the digit --
+                // a display-p3 red reads 0.eae/0.333/0.232 against ea/33/23.
+                .@"rgba-float16" => |data| {
+                    const out = data.local(exec.js.local.?).slice();
+                    const bytes = try exec.arena.alloc(u8, out.len);
+                    // The read leaves whatever it did not overlap alone, and
+                    // this buffer is not the fresh array the other arm has.
+                    @memset(bytes, 0);
+                    readInto(self, window, read.color_space, bytes);
+                    for (out, bytes) |*channel, byte| {
+                        channel.* = @floatCast(@as(f64, @floatFromInt(byte)) / 255);
+                    }
+                },
+            }
+            return image_data;
+        }
+
+        /// The read both pixel formats share: the window's overlap with the
+        /// bitmap, converted out of the bitmap's own space and into the one the
+        /// caller asked for — which are only the same space by default.
+        fn readInto(
+            self: *const T,
+            window: Window,
+            to: color.CanvasSpace,
+            out: []u8,
+        ) void {
             self._surface.readPixels(
                 width(self),
                 height(self),
@@ -664,10 +699,7 @@ pub fn Mixin(comptime T: type) type {
                 window.height,
                 out,
             );
-            // Out of the bitmap's own space and into the one the caller asked
-            // for, which are only the same space by default.
-            color.convertCanvasPixels(space(self), read.color_space, out);
-            return image_data;
+            color.convertCanvasPixels(space(self), to, out);
         }
 
         const Window = struct { x: i32, y: i32, width: u32, height: u32 };
