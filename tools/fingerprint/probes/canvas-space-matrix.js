@@ -21,10 +21,13 @@
 // destination's `toXYZD50` in double and store the result as f32, then
 // concatenate with the source's in f32. Rounding the composition to f32 twice
 // is what moves it off both published products; nothing about the published
-// D50 cells themselves is wrong. Under that matrix these 24 read 17/24 rather
-// than 11/24, and every miss left is a channel off by one, which belongs to the
-// encode transfer function rather than to the matrix — see
-// `canvas-space-float-sweep.js`.
+// D50 cells themselves is wrong.
+//
+// The matrix alone gets 17 of these 24; the last seven are the transfer
+// function, and `canvas-space-float-decode.js` and `canvas-space-float-sweep.js`
+// name both halves of it — Skia's `approx_powf` in, and an inverse whose
+// constant term is bent to keep white white out. With all three layers this
+// probe is **24/24**, against 11/24 before any of them.
 (() => {
     const out = { toP3: {}, toSrgb: {} };
 

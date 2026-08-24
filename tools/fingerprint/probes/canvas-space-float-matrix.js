@@ -38,6 +38,17 @@
 // primaries give, which is why an srgb blue reads with a faint negative red.
 // Both are the D50 round trip, and both are measurable in the encode's linear
 // segment, which is what pins the cells exactly.
+//
+// One more thing the grey rows pin, which the columns cannot: the *order* the
+// matrix is applied in. Skia's `matrix_3x3` is a chain of fused multiply-adds,
+// innermost term first; a plain left-to-right f32 sum of the same nine cells
+// lands one ULP off on one channel of every grey reading here. Only a row whose
+// three inputs are equal can see that, which is why the greys are in this probe
+// and not only in the sweep.
+//
+// With the matrix, that order, and the two transfer functions
+// (`canvas-space-float-decode.js`, `canvas-space-float-sweep.js`), all 46
+// readings here reproduce exactly.
 (() => {
     const out = { basisToP3: {}, basisToSrgb: {}, grayToP3: {}, grayToSrgb: {}, mixedToP3: {}, mixedToSrgb: {}, control: {} };
 
