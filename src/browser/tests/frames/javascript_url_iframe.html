@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  `<iframe src="javascript:...">` does not navigate anywhere. The URL is a
+  script, it is evaluated in the frame, and only a *string* completion value
+  would become the frame's document. `javascript:;` completes with undefined,
+  so the frame stays on the about:blank it was created with -- which means it
+  keeps the origin it inherited from its parent, and the parent can still read
+  into it.
+
+  Anti-bot scripts lean on exactly this: an `<iframe src="javascript:;">` is
+  how they get a second, untouched copy of the intrinsics to compare against
+  the page's. Kasada's `ips.js` does it on canadagoose.com and hyatt.com, and
+  reads the frame's window straight afterwards -- so a frame that comes back
+  cross-origin does not merely read wrong, it throws SecurityError into the
+  middle of their bootstrap and the 429 interstitial is never solved.
+-->
+
+<script id=stays_on_about_blank type=module>
+  {
+    const f = document.createElement('iframe');
+    f.src = 'javascript:;';
+    document.body.appendChild(f);
+
+    // Nothing was fetched, so this is readable synchronously -- there is no
+    // load to wait for.
+    testing.expectEqual('about:blank', f.contentWindow.location.href);
+    testing.expectEqual('about:blank', f.contentDocument.URL);
+
+    f.remove();
+  }
+</script>
+
+<script id=inherits_parent_origin type=module>
+  {
+    const f = document.createElement('iframe');
+    f.src = 'javascript:;';
+    document.body.appendChild(f);
+
+    // Same origin as the parent, so every one of these is a plain read rather
+    // than a SecurityError. Reading a name off the cross-origin safelist is
+    // not enough of a check -- those are readable across origins too -- so
+    // this asks for intrinsics, which is also what the anti-bot scripts want.
+    const w = f.contentWindow;
+    testing.expectEqual(true, w.document === f.contentDocument);
+    testing.expectEqual('function', typeof w.Function);
+    testing.expectEqual(true, w.Array !== window.Array);
+    testing.expectEqual(document.origin, w.document.origin);
+
+    f.remove();
+  }
+</script>
+
+<script id=body_runs_in_the_frame type=module>
+  {
+    const state = await testing.async();
+
+    const f = document.createElement('iframe');
+    // Whichever realm this lands in is the one that gets the property, so
+    // reading it back off the frame's own window is the whole assertion.
+    f.src = "javascript:window.__ran = (self === parent ? 'parent' : 'frame')";
+    document.body.appendChild(f);
+
+    // Queued as a task, so it has not run by the time appendChild returns.
+    testing.expectEqual(undefined, f.contentWindow.__ran);
+
+    setTimeout(() => state.resolve(f.contentWindow.__ran), 10);
+
+    await state.done((ran) => {
+      testing.expectEqual('frame', ran);
+      f.remove();
+    });
+  }
+</script>
+
+<script id=undefined_leaves_the_document_alone type=module>
+  {
+    const f = document.createElement('iframe');
+    f.src = 'javascript:void 0';
+    document.body.appendChild(f);
+
+    // A non-string completion replaces nothing.
+    testing.expectEqual('about:blank', f.contentWindow.location.href);
+    testing.expectEqual(0, f.contentDocument.body.childNodes.length);
+
+    f.remove();
+  }
+</script>
