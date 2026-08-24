@@ -59,6 +59,7 @@ const std = @import("std");
 
 const js = @import("../../js/js.zig");
 const dictionary = @import("../dictionary.zig");
+const color_space_gate = @import("color_space.zig");
 
 const Execution = js.Execution;
 
@@ -107,19 +108,6 @@ pub const Created = struct {
     gl: Gl = .{},
 };
 
-/// The IDL enum's own members. Five of them clear the dictionary conversion and
-/// are then refused by the canvas itself, with a different message — see `read`.
-/// `display-p3-linear` is one of those five and is easy to miss: it is not a
-/// name any other colour API here takes, and leaving it out would have given it
-/// the wrong one of the two refusals.
-const predefined_color_spaces = [_][]const u8{
-    "srgb",              "display-p3",  "rec2020",    "srgb-linear",
-    "display-p3-linear", "rec2100-hlg", "rec2100-pq",
-};
-
-/// The two a canvas can actually be.
-const canvas_color_spaces = [_][]const u8{ "srgb", "display-p3" };
-
 const color_types = [_][]const u8{ "unorm8", "float16" };
 const power_preferences = [_][]const u8{ "default", "low-power", "high-performance" };
 
@@ -152,13 +140,7 @@ pub fn Creation(comptime interface: []const u8) type {
             // refusal that would have come from a later one.
             const alpha = try reader.boolean("alpha", true);
             const antialias = try reader.boolean("antialias", true);
-            const color_space = (try reader.enumMember(
-                "colorSpace",
-                "PredefinedColorSpace",
-                &predefined_color_spaces,
-                "srgb",
-                exec,
-            )).?;
+            const color_space = try color_space_gate.read(reader, "colorSpace", "srgb", exec);
             const color_type = (try reader.enumMember(
                 "colorType",
                 "CanvasPixelFormat",
@@ -190,20 +172,11 @@ pub fn Creation(comptime interface: []const u8) type {
             // getter on it still runs, and it has to run *after* colorSpace's.
             _ = try reader.boolean("xrCompatible", false);
 
-            // The second gate. `rec2020` and the other three are members of
+            // The second gate. `rec2020` and the other four are members of
             // PredefinedColorSpace, so they clear the conversion above and are
             // refused here instead — by a message that names no property and
             // says "the type" where the conversion says "type".
-            for (canvas_color_spaces) |candidate| {
-                if (std.mem.eql(u8, candidate, color_space)) break;
-            } else {
-                return dictionary.throwTypeError(try std.fmt.allocPrint(
-                    exec.call_arena,
-                    Reader.message_prefix ++
-                        "The provided value '{s}' is not a valid enum value of the type PredefinedColorSpace.",
-                    .{color_space},
-                ), exec);
-            }
+            _ = try color_space_gate.canvasSpace(Reader.message_prefix, color_space, exec);
 
             return .{
                 .two_d = .{

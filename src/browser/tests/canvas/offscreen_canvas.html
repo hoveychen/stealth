@@ -81,9 +81,10 @@
   testing.expectEqual(imageData.data[2], 0);
   testing.expectEqual(imageData.data[3], 0);
 
-  // Zero or negative dimensions should throw.
-  testing.expectError('Index or size', () => ctx.getImageData(0, 0, 0, 10));
-  testing.expectError('Index or size', () => ctx.getImageData(0, 0, 10, -5));
+  // A zero size throws; a negative one is normalised instead (measured --
+  // probes/canvas-image-data-settings-2.js).
+  testing.expectError('The source width is 0.', () => ctx.getImageData(0, 0, 0, 10));
+  testing.expectEqual(5, ctx.getImageData(0, 0, 10, -5).height);
 }
 </script>
 
@@ -477,6 +478,125 @@
         "'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value " +
         "'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
       threw(() => c.getContext('2d', { colorSpace: 'nonesuch' })));
+  }
+}
+</script>
+
+<script id="OffscreenCanvasRenderingContext2D#image data settings">
+{
+  // `getImageData`'s fifth argument and `createImageData`'s third: the
+  // ImageDataSettings dictionary, which decides the colour space the bytes are
+  // converted *to* on the way out. Readings from
+  // probes/canvas-image-data-settings{,-2}.js.
+  const threw = (f) => { try { f(); return null; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const painted = (notation) => {
+    const ctx = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = notation;
+    ctx.fillRect(0, 0, 1, 1);
+    return ctx;
+  };
+  const p3 = (notation) => hex(painted(notation).getImageData(0, 0, 1, 1, { colorSpace: 'display-p3' }).data);
+
+  // The bitmap is srgb, so reading it back as display-p3 is the axis reachable
+  // without the canvas itself being display-p3 (that is P2's).
+  testing.expectEqual('ff0000ff', hex(painted('#ff0000').getImageData(0, 0, 1, 1).data));
+  testing.expectEqual('ff0000ff', hex(painted('#ff0000').getImageData(0, 0, 1, 1, { colorSpace: 'srgb' }).data));
+  testing.expectEqual('ea3323ff', p3('#ff0000'));
+  testing.expectEqual('75fb4cff', p3('#00ff00'));
+  testing.expectEqual('0000f5ff', p3('#0000ff'));
+  // Grey, white and black sit on the diagonal the two spaces share.
+  testing.expectEqual('808080ff', p3('#808080'));
+  testing.expectEqual('ffffffff', p3('#ffffff'));
+  testing.expectEqual('000000ff', p3('#000000'));
+  // Alpha rides through untouched, and the bytes converted are unpremultiplied.
+  testing.expectEqual('ea332380', p3('rgba(255, 0, 0, 0.5)'));
+  // A display-p3 notation lands as srgb bytes on an srgb canvas and converts
+  // back out to a *third* value, which is the round trip losing the gamut.
+  testing.expectEqual('ff1b7fff', hex(painted('color(display-p3 1 0.25 0.5)').getImageData(0, 0, 1, 1).data));
+  testing.expectEqual('ea3b7fff', p3('color(display-p3 1 0.25 0.5)'));
+
+  // What the ImageData claims, and what an untouched pixel is in either space.
+  testing.expectEqual('display-p3',
+    painted('#ff0000').getImageData(0, 0, 1, 1, { colorSpace: 'display-p3' }).colorSpace);
+  testing.expectEqual('rgba-unorm8',
+    painted('#ff0000').getImageData(0, 0, 1, 1, { colorSpace: 'display-p3' }).pixelFormat);
+  testing.expectEqual('srgb', painted('#ff0000').getImageData(0, 0, 1, 1).colorSpace);
+  testing.expectEqual('00000000',
+    hex(new OffscreenCanvas(1, 1).getContext('2d').getImageData(0, 0, 1, 1, { colorSpace: 'display-p3' }).data));
+  // The window may hang off the bitmap; only the overlap is converted.
+  testing.expectEqual('ea3323ff00000000',
+    hex(painted('#ff0000').getImageData(0, 0, 2, 1, { colorSpace: 'display-p3' }).data));
+
+  // The refusals name this interface and this method, and come in the same two
+  // gates as getContext's dictionary.
+  const prefix = "Failed to execute 'getImageData' on 'OffscreenCanvasRenderingContext2D': ";
+  testing.expectEqual(
+    'TypeError: ' + prefix + "Failed to read the 'colorSpace' property from 'ImageDataSettings': " +
+      "The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+    threw(() => painted('#ff0000').getImageData(0, 0, 1, 1, { colorSpace: 'nonesuch' })));
+  testing.expectEqual(
+    'TypeError: ' + prefix +
+      "The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
+    threw(() => painted('#ff0000').getImageData(0, 0, 1, 1, { colorSpace: 'rec2020' })));
+  testing.expectEqual(
+    'TypeError: ' + prefix + "Failed to read the 'pixelFormat' property from 'ImageDataSettings': " +
+      "The provided value 'rgba-uint8' is not a valid enum value of type ImageDataPixelFormat.",
+    threw(() => painted('#ff0000').getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-uint8' })));
+  // A non-object is refused here, unlike getContext's dictionary; an array and
+  // a null are read as an empty one.
+  testing.expectEqual(
+    'TypeError: ' + prefix + "The provided value is not of type 'ImageDataSettings'.",
+    threw(() => painted('#ff0000').getImageData(0, 0, 1, 1, 'nope')));
+  testing.expectEqual('srgb', painted('#ff0000').getImageData(0, 0, 1, 1, []).colorSpace);
+  testing.expectEqual('srgb', painted('#ff0000').getImageData(0, 0, 1, 1, null).colorSpace);
+
+  // The dictionary is read before the rect is looked at, so a zero-sized window
+  // and a bad member together report the member.
+  testing.expectEqual(
+    'TypeError: ' + prefix + "Failed to read the 'colorSpace' property from 'ImageDataSettings': " +
+      "The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+    threw(() => painted('#ff0000').getImageData(0, 0, 0, 0, { colorSpace: 'nonesuch' })));
+  // The rect's own refusals name the dimension. A *negative* size is not one of
+  // them: it is normalised about the origin, which is what we refused before.
+  testing.expectEqual('IndexSizeError: ' + prefix + 'The source width is 0.',
+    threw(() => painted('#ff0000').getImageData(0, 0, 0, 1)));
+  testing.expectEqual('IndexSizeError: ' + prefix + 'The source height is 0.',
+    threw(() => painted('#ff0000').getImageData(0, 0, 1, 0)));
+  {
+    const ctx = new OffscreenCanvas(2, 2).getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(0, 0, 2, 2);
+    const read = (sx, sy, sw, sh) => {
+      const d = ctx.getImageData(sx, sy, sw, sh);
+      return `${d.width}x${d.height} ${hex(d.data)}`;
+    };
+    // `sx` moves by `sw`, so the window lands on the *other* side of the origin
+    // rather than merely being made positive in place.
+    testing.expectEqual('1x1 ff0000ff', read(1, 0, -1, 1));
+    testing.expectEqual('1x1 00000000', read(0, 0, -1, 1));
+    testing.expectEqual('1x1 ff0000ff', read(2, 0, -1, 1));
+    testing.expectEqual('1x1 ff0000ff', read(0, 1, 1, -1));
+  }
+
+  // createImageData takes the same dictionary, and from a source ImageData
+  // inherits its settings rather than being handed any.
+  {
+    const ctx = new OffscreenCanvas(2, 2).getContext('2d');
+    testing.expectEqual('display-p3', ctx.createImageData(1, 1, { colorSpace: 'display-p3' }).colorSpace);
+    testing.expectEqual('rgba-float16', ctx.createImageData(1, 1, { pixelFormat: 'rgba-float16' }).pixelFormat);
+    const source = new ImageData(2, 3, { colorSpace: 'display-p3' });
+    const inherited = ctx.createImageData(source);
+    testing.expectEqual('display-p3', inherited.colorSpace);
+    testing.expectEqual('2x3', `${inherited.width}x${inherited.height}`);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': " +
+        "The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
+      threw(() => ctx.createImageData(1, 1, { colorSpace: 'rec2020' })));
+    testing.expectEqual(
+      "TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': " +
+        "The provided value is not of type 'ImageDataSettings'.",
+      threw(() => ctx.createImageData(1, 1, 'nope')));
   }
 }
 </script>

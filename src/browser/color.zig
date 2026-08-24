@@ -1002,3 +1002,128 @@ fn polar(comptime rectangular: fn (f64, f64, f64) [3]f64, lch: [3]f64) [3]f64 {
     const hue = std.math.degreesToRadians(lch[2]);
     return rectangular(lch[0], lch[1] * @cos(hue), lch[1] * @sin(hue));
 }
+
+// ---------------------------------------------------------------------------
+// Canvas bitmaps
+//
+// A canvas bitmap and an ImageData each carry one of *two* colour spaces, not
+// the whole PredefinedColorSpace family: srgb and display-p3. The conversion
+// between them is a colour-space conversion like the ones above, but it runs
+// over bytes rather than over a parsed notation — `getImageData` converts the
+// pixels it hands back into the space the caller asked for.
+// ---------------------------------------------------------------------------
+
+/// The two a canvas bitmap or an ImageData can be in.
+pub const CanvasSpace = enum {
+    srgb,
+    @"display-p3",
+};
+
+/// RGBA bytes moved from one canvas space to the other, in place, four at a
+/// time. Alpha is not a colour and rides through untouched; the RGB bytes are
+/// unpremultiplied on both sides, which is what the measurement says — an
+/// `rgba(255, 0, 0, 0.5)` pixel reads back `ff000080` as srgb and `ea332380` as
+/// display-p3, so the same conversion the opaque red gets (see the readings in
+/// results/canvas-image-data-settings-2.chrome.json).
+pub fn convertCanvasPixels(from: CanvasSpace, to: CanvasSpace, bytes: []u8) void {
+    if (from == to) {
+        return;
+    }
+    const matrix: Matrix = switch (from) {
+        .srgb => srgb_linear_to_p3_linear,
+        .@"display-p3" => p3_linear_to_srgb_linear,
+    };
+    var offset: usize = 0;
+    while (offset + 4 <= bytes.len) : (offset += 4) {
+        const pixel = bytes[offset..][0..4];
+        const linear = matrixApply(matrix, .{
+            srgbToLinear(@as(f64, @floatFromInt(pixel[0])) / 255),
+            srgbToLinear(@as(f64, @floatFromInt(pixel[1])) / 255),
+            srgbToLinear(@as(f64, @floatFromInt(pixel[2])) / 255),
+        });
+        for (pixel[0..3], linear) |*channel, value| {
+            channel.* = RGBA.round255(srgbFromLinear(value) * 255);
+        }
+    }
+}
+
+/// Both canvas spaces share sRGB's transfer function, so the conversion is one
+/// matrix: `display_p3_to_xyz` into XYZ and `xyz_to_srgb` back out, composed.
+const p3_linear_to_srgb_linear: Matrix = matrixMultiply(xyz_to_srgb, display_p3_to_xyz);
+
+/// The other direction, which no matrix above spells: sRGB's own to-XYZ matrix
+/// is not one of them, so this is the inverse of the composition rather than a
+/// second composition.
+const srgb_linear_to_p3_linear: Matrix = matrixInvert(p3_linear_to_srgb_linear);
+
+fn matrixMultiply(a: Matrix, b: Matrix) Matrix {
+    var out: Matrix = undefined;
+    for (0..3) |row| {
+        for (0..3) |column| {
+            out[row * 3 + column] =
+                a[row * 3] * b[column] +
+                a[row * 3 + 1] * b[3 + column] +
+                a[row * 3 + 2] * b[6 + column];
+        }
+    }
+    return out;
+}
+
+/// Cramer's rule. Every matrix here is a colour-space basis and so invertible.
+fn matrixInvert(m: Matrix) Matrix {
+    const cofactors: Matrix = .{
+        m[4] * m[8] - m[5] * m[7], m[5] * m[6] - m[3] * m[8], m[3] * m[7] - m[4] * m[6],
+        m[2] * m[7] - m[1] * m[8], m[0] * m[8] - m[2] * m[6], m[1] * m[6] - m[0] * m[7],
+        m[1] * m[5] - m[2] * m[4], m[2] * m[3] - m[0] * m[5], m[0] * m[4] - m[1] * m[3],
+    };
+    const determinant = m[0] * cofactors[0] + m[1] * cofactors[1] + m[2] * cofactors[2];
+    var out: Matrix = undefined;
+    for (0..3) |row| {
+        for (0..3) |column| {
+            // Transposed on the way out: the adjugate is the cofactor matrix's
+            // transpose.
+            out[row * 3 + column] = cofactors[column * 3 + row] / determinant;
+        }
+    }
+    return out;
+}
+
+test "color: canvas space conversion matches Chrome's own readbacks" {
+    // Every pair measured on a headed Chrome 150 by painting an srgb canvas and
+    // reading it back in both spaces
+    // (results/canvas-image-data-settings-2.chrome.json). The matrices are
+    // derived rather than transcribed, so these are what pin them.
+    const cases = [_]struct { srgb: [4]u8, p3: [4]u8 }{
+        .{ .srgb = .{ 0xff, 0x00, 0x00, 0xff }, .p3 = .{ 0xea, 0x33, 0x23, 0xff } },
+        .{ .srgb = .{ 0x00, 0xff, 0x00, 0xff }, .p3 = .{ 0x75, 0xfb, 0x4c, 0xff } },
+        .{ .srgb = .{ 0x00, 0x00, 0xff, 0xff }, .p3 = .{ 0x00, 0x00, 0xf5, 0xff } },
+        .{ .srgb = .{ 0x80, 0x80, 0x80, 0xff }, .p3 = .{ 0x80, 0x80, 0x80, 0xff } },
+        .{ .srgb = .{ 0xff, 0x1b, 0x7f, 0xff }, .p3 = .{ 0xea, 0x3b, 0x7f, 0xff } },
+        .{ .srgb = .{ 0xff, 0xff, 0xff, 0xff }, .p3 = .{ 0xff, 0xff, 0xff, 0xff } },
+        .{ .srgb = .{ 0x00, 0x00, 0x00, 0xff }, .p3 = .{ 0x00, 0x00, 0x00, 0xff } },
+        // Alpha is carried, not converted.
+        .{ .srgb = .{ 0xff, 0x00, 0x00, 0x80 }, .p3 = .{ 0xea, 0x33, 0x23, 0x80 } },
+        .{ .srgb = .{ 0x00, 0x00, 0x00, 0x00 }, .p3 = .{ 0x00, 0x00, 0x00, 0x00 } },
+    };
+    for (cases) |case| {
+        var out = case.srgb;
+        convertCanvasPixels(.srgb, .@"display-p3", &out);
+        try std.testing.expectEqualSlices(u8, &case.p3, &out);
+    }
+    // The other direction, measured on a display-p3 canvas: `ff407f` there is
+    // `ff1c7e` read back as srgb, and its own `ea3323` is srgb's pure red.
+    var back: [4]u8 = .{ 0xff, 0x40, 0x7f, 0xff };
+    convertCanvasPixels(.@"display-p3", .srgb, &back);
+    try std.testing.expectEqualSlices(u8, &.{ 0xff, 0x1c, 0x7e, 0xff }, &back);
+    back = .{ 0xea, 0x33, 0x23, 0xff };
+    convertCanvasPixels(.@"display-p3", .srgb, &back);
+    try std.testing.expectEqualSlices(u8, &.{ 0xff, 0x00, 0x00, 0xff }, &back);
+    // More than one pixel at a time, and a tail too short to be one.
+    var pair: [8]u8 = .{ 0xff, 0x00, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff };
+    convertCanvasPixels(.srgb, .@"display-p3", &pair);
+    try std.testing.expectEqualSlices(
+        u8,
+        &.{ 0xea, 0x33, 0x23, 0xff, 0x00, 0x00, 0xf5, 0xff },
+        &pair,
+    );
+}

@@ -20,9 +20,11 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../js/js.zig");
+const color = @import("../color.zig");
 const Page = @import("../Page.zig");
+const dictionary = @import("dictionary.zig");
+const color_space_gate = @import("canvas/color_space.zig");
 
-const String = lp.String;
 const Execution = js.Execution;
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/ImageData/ImageData
@@ -31,15 +33,73 @@ const ImageData = @This();
 _rc: lp.RC = .{},
 _width: u32,
 _height: u32,
+_settings: Settings = .{},
 _data: js.ArrayBufferRef(.uint8_clamped).Global,
 
-pub const ConstructorSettings = struct {
-    /// Specifies the color space of the image data.
-    /// Can be set to "srgb" for the sRGB color space or "display-p3" for the display-p3 color space.
-    colorSpace: String = .wrap("srgb"),
-    /// Specifies the pixel format.
-    /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/createImageData#pixelformat
-    pixelFormat: String = .wrap("rgba-unorm8"),
+/// `ImageDataSettings`: the dictionary this constructor shares with
+/// `createImageData` and `getImageData`, and the two members it carries.
+///
+/// It is *not* read the way getContext's dictionary is, even though both take a
+/// PredefinedColorSpace: a non-object argument here is refused where there it
+/// takes the defaults. Measured in probes/canvas-image-data-settings{,-2}.js:
+///
+///   getImageData(0, 0, 1, 1, 'nope') -> TypeError: … The provided value is not
+///                                       of type 'ImageDataSettings'.
+///   getContext('2d', 'nope')         -> the defaults
+///
+/// An array and a null are objects enough to be read as an empty dictionary in
+/// both.
+pub const Settings = struct {
+    color_space: color.CanvasSpace = .srgb,
+    pixel_format: PixelFormat = .@"rgba-unorm8",
+
+    /// `ImageDataPixelFormat`, whose two members are the whole enum.
+    ///
+    /// We answer `rgba-float16` back and still hand out a Uint8ClampedArray of
+    /// one byte per channel, where Chrome hands out a Float16Array of the same
+    /// four *elements* holding 0..1 floats. Refusing the member outright — what
+    /// this did before — is the louder divergence of the two: no real Chrome
+    /// throws here, and a widget that asks for float16 canvases (the Turnstile
+    /// one asks for two of its four) would see the throw without reading a
+    /// single pixel.
+    pub const PixelFormat = enum {
+        @"rgba-unorm8",
+        @"rgba-float16",
+    };
+
+    const pixel_formats = [_][]const u8{ "rgba-unorm8", "rgba-float16" };
+
+    /// The reader for one entry point. `Reader` carries the prefix that says
+    /// where the call came from — "Failed to construct 'ImageData': " against
+    /// "Failed to execute 'getImageData' on 'CanvasRenderingContext2D': " — and
+    /// is the only thing the three differ in.
+    pub fn Reading(comptime Reader: type) type {
+        return struct {
+            pub fn read(settings: ?js.Value, exec: *const Execution) !Settings {
+                const reader = try Reader.read(settings, exec);
+                // Alphabetical, which is the order Blink reads them in: a
+                // throwing `colorSpace` getter pre-empts `pixelFormat`'s.
+                const space = try color_space_gate.read(reader, "colorSpace", "srgb", exec);
+                const format = (try reader.enumMember(
+                    "pixelFormat",
+                    "ImageDataPixelFormat",
+                    &pixel_formats,
+                    "rgba-unorm8",
+                    exec,
+                )).?;
+                return .{
+                    // Gate two, after both members have been read, as it is on
+                    // getContext's dictionary.
+                    .color_space = try color_space_gate.canvasSpace(
+                        Reader.message_prefix,
+                        space,
+                        exec,
+                    ),
+                    .pixel_format = std.meta.stringToEnum(PixelFormat, format).?,
+                };
+            }
+        };
+    }
 };
 
 /// This has many constructors:
@@ -54,25 +114,19 @@ pub const ConstructorSettings = struct {
 /// ```
 ///
 /// We currently support only the first 2.
-pub fn init(
-    width: u32,
-    height: u32,
-    maybe_settings: ?ConstructorSettings,
-    exec: *Execution,
-) !*ImageData {
+pub fn constructor(width: u32, height: u32, settings: ?js.Value, exec: *Execution) !*ImageData {
+    const Reading = Settings.Reading(dictionary.Reader("ImageData", "ImageDataSettings"));
+    return init(width, height, try Reading.read(settings, exec), exec);
+}
+
+/// The creator the three entry points share, past the point where the settings
+/// have been read — each of them reads them with its own message prefix.
+pub fn init(width: u32, height: u32, settings: Settings, exec: *Execution) !*ImageData {
     // Though arguments are unsigned long, these are capped to max. i32 on Chrome.
     // https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/html/canvas/image_data.cc#L61
     const max_i32 = std.math.maxInt(i32);
     if (width == 0 or width > max_i32 or height == 0 or height > max_i32) {
         return error.IndexSizeError;
-    }
-
-    const settings: ConstructorSettings = maybe_settings orelse .{};
-    if (settings.colorSpace.eql(comptime .wrap("srgb")) == false) {
-        return error.TypeError;
-    }
-    if (settings.pixelFormat.eql(comptime .wrap("rgba-unorm8")) == false) {
-        return error.TypeError;
     }
 
     var size, var overflown = @mulWithOverflow(width, height);
@@ -88,6 +142,7 @@ pub fn init(
     return exec._factory.create(ImageData{
         ._width = width,
         ._height = height,
+        ._settings = settings,
         ._data = try exec.js.local.?.createTypedArray(.uint8_clamped, size).persist(),
     });
 }
@@ -108,12 +163,17 @@ pub fn acquireRef(self: *ImageData) void {
 pub fn structuredSerialize(self: *const ImageData, writer: *js.StructuredWriter) !void {
     writer.writeUint32(self._width);
     writer.writeUint32(self._height);
+    // A clone keeps the settings: they are as much of the object as the bytes.
+    writer.writeUint32(@intFromEnum(self._settings.color_space));
+    writer.writeUint32(@intFromEnum(self._settings.pixel_format));
     writer.writeBytes(self._data.local(writer.local).slice());
 }
 
 pub fn structuredDeserialize(reader: *js.StructuredReader, page: *Page) !*ImageData {
     const width = try reader.readUint32();
     const height = try reader.readUint32();
+    const color_space = try reader.readUint32();
+    const pixel_format = try reader.readUint32();
     const bytes = try reader.readBytes();
 
     const data = reader.local.createTypedArray(.uint8_clamped, bytes.len);
@@ -122,6 +182,11 @@ pub fn structuredDeserialize(reader: *js.StructuredReader, page: *Page) !*ImageD
     return page.factory.create(ImageData{
         ._width = width,
         ._height = height,
+        ._settings = .{
+            .color_space = std.enums.fromInt(color.CanvasSpace, color_space) orelse .srgb,
+            .pixel_format = std.enums.fromInt(Settings.PixelFormat, pixel_format) orelse
+                .@"rgba-unorm8",
+        },
         ._data = try data.persist(),
     });
 }
@@ -138,6 +203,14 @@ pub fn getData(self: *const ImageData) js.ArrayBufferRef(.uint8_clamped).Global 
     return self._data;
 }
 
+pub fn getColorSpace(self: *const ImageData) []const u8 {
+    return @tagName(self._settings.color_space);
+}
+
+pub fn getPixelFormat(self: *const ImageData) []const u8 {
+    return @tagName(self._settings.pixel_format);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(ImageData);
 
@@ -147,10 +220,13 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(ImageData.init, .{});
+    pub const constructor = bridge.constructor(ImageData.constructor, .{});
 
-    pub const colorSpace = bridge.property("srgb", .{ .template = false, .readonly = true });
-    pub const pixelFormat = bridge.property("rgba-unorm8", .{ .template = false, .readonly = true });
+    // Prototype getters, not own values: `Object.getOwnPropertyDescriptor` on
+    // an instance answers undefined for both, and on the prototype answers a
+    // getter (measured -- probes/canvas-image-data-settings-2.js).
+    pub const colorSpace = bridge.accessor(ImageData.getColorSpace, null, .{});
+    pub const pixelFormat = bridge.accessor(ImageData.getPixelFormat, null, .{});
 
     pub const data = bridge.accessor(ImageData.getData, null, .{});
     pub const width = bridge.accessor(ImageData.getWidth, null, .{});

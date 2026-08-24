@@ -144,60 +144,12 @@ pub fn setGlobalAlpha(self: *CanvasRenderingContext2D, value: f64) void {
     }
 }
 
-const WidthOrImageData = union(enum) {
-    width: u32,
-    image_data: *ImageData,
-};
-
-pub fn createImageData(
-    _: *const CanvasRenderingContext2D,
-    width_or_image_data: WidthOrImageData,
-    /// If `ImageData` variant preferred, this is null.
-    maybe_height: ?u32,
-    /// Can be used if width and height provided.
-    maybe_settings: ?ImageData.ConstructorSettings,
-    exec: *Execution,
-) !*ImageData {
-    switch (width_or_image_data) {
-        .width => |width| {
-            const height = maybe_height orelse return error.TypeError;
-            return ImageData.init(width, height, maybe_settings, exec);
-        },
-        .image_data => |image_data| {
-            return ImageData.init(image_data._width, image_data._height, null, exec);
-        },
-    }
-}
-
 pub fn putImageData(_: *const CanvasRenderingContext2D, _: *ImageData, _: f64, _: f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64) void {}
 
-pub fn getImageData(
-    self: *const CanvasRenderingContext2D,
-    sx: i32,
-    sy: i32,
-    sw: i32,
-    sh: i32,
-    exec: *Execution,
-) !*ImageData {
-    if (sw <= 0 or sh <= 0) {
-        return error.IndexSizeError;
-    }
-
-    const image_data = try ImageData.init(@intCast(sw), @intCast(sh), null, exec);
-    // Freshly created, so it is already transparent black: `readPixels` only
-    // has to overwrite the part of the window that overlaps the canvas.
-    const out = image_data._data.local(exec.js.local.?).slice();
-    self._surface.readPixels(
-        self._canvas.getWidth(),
-        self._canvas.getHeight(),
-        sx,
-        sy,
-        @intCast(sw),
-        @intCast(sh),
-        out,
-    );
-    return image_data;
-}
+/// Both of these are the same code on either context but for the interface name
+/// their refusals carry, so they live in the mixin.
+pub const createImageData = draw.createImageData;
+pub const getImageData = draw.getImageData;
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/getContextAttributes
 pub fn getContextAttributes(self: *const CanvasRenderingContext2D) attributes.TwoD {

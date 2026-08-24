@@ -36,7 +36,9 @@ const path = @import("path.zig");
 const Surface = @import("raster.zig");
 const state = @import("context_state.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
+const ImageData = @import("../ImageData.zig");
 const ImageBitmap = @import("ImageBitmap.zig");
+const dictionary = @import("../dictionary.zig");
 const DOMException = @import("../DOMException.zig");
 const CanvasElement = @import("../element/html/Canvas.zig");
 const OffscreenCanvas = @import("OffscreenCanvas.zig");
@@ -440,6 +442,124 @@ pub fn Mixin(comptime T: type) type {
             self._transform = Transform.identity;
             self._path.begin();
             self._saved.clearRetainingCapacity();
+        }
+
+        // --- image data ----------------------------------------------------
+
+        /// One dictionary reader per method, differing only in the prefix its
+        /// refusals carry.
+        fn ImageDataSettings(comptime method: []const u8) type {
+            return ImageData.Settings.Reading(dictionary.MethodReader(
+                T.JsApi.Meta.name,
+                method,
+                "ImageDataSettings",
+            ));
+        }
+
+        const WidthOrImageData = union(enum) {
+            width: u32,
+            image_data: *ImageData,
+        };
+
+        pub fn createImageData(
+            _: *const T,
+            width_or_image_data: WidthOrImageData,
+            /// If `ImageData` variant preferred, this is null.
+            maybe_height: ?u32,
+            /// Can be used if width and height provided.
+            settings: ?js.Value,
+            exec: *Execution,
+        ) !*ImageData {
+            switch (width_or_image_data) {
+                .width => |w| {
+                    const read = try ImageDataSettings("createImageData").read(settings, exec);
+                    const h = maybe_height orelse return error.TypeError;
+                    return ImageData.init(w, h, read, exec);
+                },
+                // From a source ImageData the settings are inherited rather
+                // than given: `createImageData(new ImageData(2, 2,
+                // {colorSpace: 'display-p3'}))` answers display-p3 (measured --
+                // probes/canvas-image-data-settings.js).
+                .image_data => |image_data| {
+                    return ImageData.init(
+                        image_data._width,
+                        image_data._height,
+                        image_data._settings,
+                        exec,
+                    );
+                },
+            }
+        }
+
+        pub fn getImageData(
+            self: *const T,
+            sx: i32,
+            sy: i32,
+            sw: i32,
+            sh: i32,
+            settings: ?js.Value,
+            exec: *Execution,
+        ) !*ImageData {
+            // Read before the rect is looked at, which is the order a page can
+            // see: a zero-sized window and a bad member together report the
+            // member (measured).
+            const read = try ImageDataSettings("getImageData").read(settings, exec);
+            const window = try imageDataWindow(sx, sy, sw, sh, exec);
+
+            const image_data = try ImageData.init(window.width, window.height, read, exec);
+            // Freshly created, so it is already transparent black: `readPixels`
+            // only has to overwrite the part of the window that overlaps the
+            // canvas.
+            const out = image_data._data.local(exec.js.local.?).slice();
+            self._surface.readPixels(
+                width(self),
+                height(self),
+                window.x,
+                window.y,
+                window.width,
+                window.height,
+                out,
+            );
+            // The bitmap is srgb whatever the context was created with — a
+            // canvas carrying its own colour space is still to come — so this
+            // converts *from* srgb rather than from
+            // `_attributes.colorSpace`. Passing the attribute here instead
+            // would convert an srgb byte as though it were already display-p3,
+            // which is further from Chrome than not converting at all.
+            color.convertCanvasPixels(.srgb, read.color_space, out);
+            return image_data;
+        }
+
+        const Window = struct { x: i32, y: i32, width: u32, height: u32 };
+
+        /// The rect `getImageData` reads. A negative size is not a refusal: the
+        /// window is flipped about the origin, so `getImageData(1, 0, -1, 1)` on
+        /// a painted 2x2 answers the pixel at x=0 and `(0, 0, -1, 1)` answers
+        /// the transparent one off the left edge. A *zero* size is a refusal,
+        /// and it names the dimension (measured --
+        /// probes/canvas-image-data-settings-2.js).
+        fn imageDataWindow(sx: i32, sy: i32, sw: i32, sh: i32, exec: *Execution) !Window {
+            if (sw == 0) {
+                return throwSourceZero("width", exec);
+            }
+            if (sh == 0) {
+                return throwSourceZero("height", exec);
+            }
+            return .{
+                .x = if (sw < 0) sx +% sw else sx,
+                .y = if (sh < 0) sy +% sh else sy,
+                .width = @abs(sw),
+                .height = @abs(sh),
+            };
+        }
+
+        fn throwSourceZero(comptime dimension: []const u8, exec: *Execution) anyerror {
+            return dictionary.throwDom(
+                "IndexSizeError",
+                "Failed to execute 'getImageData' on '" ++ T.JsApi.Meta.name ++
+                    "': The source " ++ dimension ++ " is 0.",
+                exec,
+            );
         }
     };
 }

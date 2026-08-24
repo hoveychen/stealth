@@ -330,11 +330,13 @@
   const element = document.createElement("canvas");
   const ctx = element.getContext("2d");
 
-  // Zero or negative width/height should throw IndexSizeError.
-  testing.expectError('Index or size', () => ctx.getImageData(0, 0, 0, 10));
-  testing.expectError('Index or size', () => ctx.getImageData(0, 0, 10, 0));
-  testing.expectError('Index or size', () => ctx.getImageData(0, 0, -5, 10));
-  testing.expectError('Index or size', () => ctx.getImageData(0, 0, 10, -5));
+  // A zero-sized window is an IndexSizeError naming the dimension. A negative
+  // size is *not*: it is normalised about the origin and answers a rect of that
+  // size (measured -- probes/canvas-image-data-settings-2.js).
+  testing.expectError('The source width is 0.', () => ctx.getImageData(0, 0, 0, 10));
+  testing.expectError('The source height is 0.', () => ctx.getImageData(0, 0, 10, 0));
+  testing.expectEqual(5, ctx.getImageData(0, 0, -5, 10).width);
+  testing.expectEqual(5, ctx.getImageData(0, 0, 10, -5).height);
 }
 </script>
 
@@ -1305,5 +1307,51 @@
   testing.expectEqual(
     'alpha,colorSpace,colorType,desynchronized,toneMapping,willReadFrequently',
     Object.keys(attrs(undefined)).join(','));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#image data settings">
+{
+  // The same ImageDataSettings machinery as on an OffscreenCanvas, differing
+  // only in the interface its refusals name. Readings from
+  // probes/canvas-image-data-settings-2.js.
+  const threw = (f) => { try { f(); return null; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const painted = () => {
+    const element = document.createElement('canvas');
+    element.width = 1;
+    element.height = 1;
+    const ctx = element.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(0, 0, 1, 1);
+    return ctx;
+  };
+
+  testing.expectEqual('ff0000ff', hex(painted().getImageData(0, 0, 1, 1).data));
+  testing.expectEqual('ea3323ff',
+    hex(painted().getImageData(0, 0, 1, 1, { colorSpace: 'display-p3' }).data));
+  testing.expectEqual('display-p3',
+    painted().getImageData(0, 0, 1, 1, { colorSpace: 'display-p3' }).colorSpace);
+
+  const prefix = "Failed to execute 'getImageData' on 'CanvasRenderingContext2D': ";
+  testing.expectEqual(
+    'TypeError: ' + prefix + "Failed to read the 'colorSpace' property from 'ImageDataSettings': " +
+      "The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+    threw(() => painted().getImageData(0, 0, 1, 1, { colorSpace: 'nonesuch' })));
+  testing.expectEqual(
+    'TypeError: ' + prefix +
+      "The provided value 'display-p3-linear' is not a valid enum value of the type PredefinedColorSpace.",
+    threw(() => painted().getImageData(0, 0, 1, 1, { colorSpace: 'display-p3-linear' })));
+  testing.expectEqual('IndexSizeError: ' + prefix + 'The source width is 0.',
+    threw(() => painted().getImageData(0, 0, 0, 1)));
+  testing.expectEqual('IndexSizeError: ' + prefix + 'The source height is 0.',
+    threw(() => painted().getImageData(0, 0, 1, 0)));
+
+  testing.expectEqual(
+    "TypeError: Failed to execute 'createImageData' on 'CanvasRenderingContext2D': Failed to " +
+      "read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' " +
+      'is not a valid enum value of type PredefinedColorSpace.',
+    threw(() => painted().createImageData(1, 1, { colorSpace: 'nonesuch' })));
+  testing.expectEqual('display-p3', painted().createImageData(1, 1, { colorSpace: 'display-p3' }).colorSpace);
 }
 </script>
