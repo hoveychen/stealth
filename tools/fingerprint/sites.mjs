@@ -60,6 +60,38 @@ export const ANTIBOT = [
     // the snapshots taken before either was known.
     { name: 'x-sony', vendor: 'akamai', url: 'https://www.sony.com/', settleMs: 25000, guards: 'challenge' },
     { name: 'x-zillow', vendor: 'perimeterx', url: 'https://www.zillow.com/', settleMs: 25000, guards: 'challenge' },
+
+    // --- the second batch (2026-08-24) -----------------------------------
+    //
+    // Fifteen stations turned out to leave exactly one station where headed
+    // Chrome passes and this engine does not, which is too coarse a net to
+    // steer by: a single station cannot say whether a change helped or whether
+    // that station simply moved. These were screened with a bare curl first and
+    // only the ones that actually guard the door are here — sixteen other
+    // candidates answered 200 to curl and were dropped rather than kept as
+    // stations that can only ever say "pass".
+    //
+    // Every `vendor` below is read off the *measured* response, not assumed:
+    // `x-datadome` and `cf-mitigated` name themselves in a header, Akamai and
+    // Kasada by `server:`/`x-kpsdk-*`, and PerimeterX by its cookie. Where the
+    // headers name nobody the prefix stays `x-`, the way sony and zillow did
+    // until their pages were read.
+    { name: 'cf-ubereats', vendor: 'cloudflare', url: 'https://www.ubereats.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-doordash', vendor: 'cloudflare', url: 'https://www.doordash.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-glassdoor', vendor: 'cloudflare', url: 'https://www.glassdoor.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-etsy', vendor: 'datadome', url: 'https://www.etsy.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-seloger', vendor: 'datadome', url: 'https://www.seloger.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-saks', vendor: 'datadome', url: 'https://www.saksfifthavenue.com/', settleMs: 25000, guards: 'challenge' },
+    // DataDome behind Cloudflare: the 403 is CF's edge, the cookie is DataDome's.
+    { name: 'dd-allopneus', vendor: 'datadome', url: 'https://www.allopneus.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'ak-homedepot', vendor: 'akamai', url: 'https://www.homedepot.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'ak-macys', vendor: 'akamai', url: 'https://www.macys.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'ak-kohls', vendor: 'akamai', url: 'https://www.kohls.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'ak-expedia', vendor: 'akamai', url: 'https://www.expedia.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'px-wayfair', vendor: 'perimeterx', url: 'https://www.wayfair.com/', settleMs: 25000, guards: 'challenge' },
+    // Kasada, which no station covered before this one.
+    { name: 'ks-canadagoose', vendor: 'kasada', url: 'https://www.canadagoose.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'x-hyatt', vendor: 'unattributed', url: 'https://www.hyatt.com/', settleMs: 25000, guards: 'challenge' },
 ];
 
 // What a guard's own page looks like from inside it. Signals are recorded raw
@@ -118,6 +150,19 @@ export const extractAntibot = `(() => {
       accessDenied: /^access denied$/i.test(document.title.trim()) ||
         /you don't have permission to access this page/i.test(text),
       reference: /reference #?\\s*[0-9a-f.]{10,}/i.test(text),
+    },
+    // Kasada. Recorded, not judged -- see the note in antibot-sweep's
+    // \`verdict\`: these marks stay set on a page Kasada *served*, so a rule on
+    // them scores a pass as a challenge. What they are good for is attribution:
+    // knowing which guard is behind a reading. Measured off canadagoose's own
+    // refusal -- the bootstrap assigns \`window.KPSDK\` before anything else
+    // runs, and the script it pulls sits under a pair of uuid path segments
+    // (\`/<uuid>/<uuid>/ips.js\`), which is what separates it from an ordinary
+    // asset path. An unsolved interstitial is 681 bytes with no text at all,
+    // which \`empty\` and the status rule catch without help.
+    kasada: {
+      sdk: typeof window.KPSDK !== 'undefined',
+      script: srcs.some((s) => /\\/[0-9a-f]{8}-[0-9a-f-]{27}\\/[0-9a-f]{8}-[0-9a-f-]{27}\\//.test(s)),
     },
     // Any guard's last resort: an empty document with nothing on it.
     empty: text.trim().length === 0,
