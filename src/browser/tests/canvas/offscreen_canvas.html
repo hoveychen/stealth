@@ -828,3 +828,95 @@
   }
 }
 </script>
+
+<script id="OffscreenCanvasRenderingContext2D#opaque canvas">
+{
+  // `{alpha: false}` is not a hint: the bitmap *is* opaque black, so a script
+  // reads a different pixel back without drawing anything, every paint
+  // composites against black instead of keeping its own alpha, and clearRect
+  // returns to black rather than to transparent. Readings from
+  // probes/canvas-alpha-semantics.js.
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const ctx = (settings) => new OffscreenCanvas(1, 1)
+    .getContext('2d', { willReadFrequently: true, ...settings });
+  const filled = (settings, notation) => {
+    const c = ctx(settings);
+    c.fillStyle = notation;
+    c.fillRect(0, 0, 1, 1);
+    return hex(c.getImageData(0, 0, 1, 1).data);
+  };
+
+  // Untouched, which is the cheapest tell of the three.
+  testing.expectEqual('000000ff', hex(ctx({ alpha: false }).getImageData(0, 0, 1, 1).data));
+  testing.expectEqual('00000000', hex(ctx({ alpha: true }).getImageData(0, 0, 1, 1).data));
+  testing.expectEqual(false, ctx({ alpha: false }).getContextAttributes().alpha);
+
+  // An opaque paint is the same either way; a translucent one is not.
+  testing.expectEqual('ff0000ff', filled({ alpha: false }, '#ff0000'));
+  testing.expectEqual('800000ff', filled({ alpha: false }, 'rgba(255, 0, 0, 0.5)'));
+  testing.expectEqual('ff000080', filled({ alpha: true }, 'rgba(255, 0, 0, 0.5)'));
+  testing.expectEqual('000040ff', filled({ alpha: false }, 'rgba(0, 0, 255, 0.25)'));
+  testing.expectEqual('0000ff40', filled({ alpha: true }, 'rgba(0, 0, 255, 0.25)'));
+  // A fully transparent paint leaves the black where it is.
+  testing.expectEqual('000000ff', filled({ alpha: false }, 'transparent'));
+  testing.expectEqual('00000000', filled({ alpha: true }, 'transparent'));
+
+  // globalAlpha composites the same way the colour's own alpha does.
+  {
+    const c = ctx({ alpha: false });
+    c.globalAlpha = 0.5;
+    c.fillStyle = '#ff0000';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('800000ff', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+
+  // Two translucent fills, so the second composites over the first's result.
+  {
+    const c = ctx({ alpha: false });
+    c.fillStyle = 'rgba(255, 0, 0, 0.5)';
+    c.fillRect(0, 0, 1, 1);
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('c00000ff', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+  {
+    const c = ctx({ alpha: true });
+    c.fillStyle = 'rgba(255, 0, 0, 0.5)';
+    c.fillRect(0, 0, 1, 1);
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('ff0000c0', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+
+  // clearRect goes back to the background, whichever one that is.
+  {
+    const c = ctx({ alpha: false });
+    c.fillStyle = '#ff0000';
+    c.fillRect(0, 0, 1, 1);
+    c.clearRect(0, 0, 1, 1);
+    testing.expectEqual('000000ff', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+  {
+    const c = ctx({ alpha: true });
+    c.fillStyle = '#ff0000';
+    c.fillRect(0, 0, 1, 1);
+    c.clearRect(0, 0, 1, 1);
+    testing.expectEqual('00000000', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+
+  // Resizing drops the bitmap back to the background rather than to zero.
+  {
+    const canvas = new OffscreenCanvas(1, 1);
+    const c = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+    c.fillStyle = '#ff0000';
+    c.fillRect(0, 0, 1, 1);
+    canvas.width = 2;
+    testing.expectEqual('000000ff', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+
+  // An opaque display-p3 canvas: black is black in either space, and the
+  // translucent red is the *p3* red composited against it.
+  testing.expectEqual('000000ff',
+    hex(ctx({ alpha: false, colorSpace: 'display-p3' }).getImageData(0, 0, 1, 1).data));
+  testing.expectEqual('751a12ff',
+    filled({ alpha: false, colorSpace: 'display-p3' }, 'rgba(255, 0, 0, 0.5)'));
+}
+</script>

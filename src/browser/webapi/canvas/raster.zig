@@ -61,6 +61,25 @@ height: u32 = 0,
 /// Straight (non-premultiplied) RGBA8, row-major, `width * height * 4` long.
 /// Empty until something actually draws.
 pixels: []u8 = &.{},
+/// What the bitmap is where nothing has been painted, which `{alpha: false}`
+/// changes from transparent black to opaque black. A page can read that back
+/// without drawing anything, and every paint onto it composites against black
+/// rather than being stored with its own alpha (measured --
+/// probes/canvas-alpha-semantics.js).
+background: Background = .transparent,
+
+pub const Background = enum {
+    transparent,
+    /// `{alpha: false}`.
+    black,
+
+    fn pixel(self: Background) [4]u8 {
+        return switch (self) {
+            .transparent => .{ 0, 0, 0, 0 },
+            .black => .{ 0, 0, 0, 255 },
+        };
+    }
+};
 
 /// Roughly a 2896x2896 canvas. Past this we simply refuse to back the canvas,
 /// and every operation degrades to the old no-op behaviour. Fingerprinting
@@ -95,7 +114,7 @@ pub fn ensure(self: *Surface, width: u32, height: u32) ?[]u8 {
     }
 
     const pixels = self.arena.alloc(u8, @intCast(bytes)) catch return null;
-    @memset(pixels, 0);
+    fill(pixels, self.background);
 
     self.reset();
     self.pixels = pixels;
@@ -193,7 +212,20 @@ pub fn clearRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, 
     while (row < bounds.y1) : (row += 1) {
         const from = (row * canvas_width + bounds.x0) * 4;
         const to = (row * canvas_width + bounds.x1) * 4;
-        @memset(pixels[from..to], 0);
+        fill(pixels[from..to], self.background);
+    }
+}
+
+/// Every pixel of `bytes` set to `background`.
+fn fill(bytes: []u8, background: Background) void {
+    if (background == .transparent) {
+        @memset(bytes, 0);
+        return;
+    }
+    const pixel = background.pixel();
+    var offset: usize = 0;
+    while (offset + 4 <= bytes.len) : (offset += 4) {
+        @memcpy(bytes[offset..][0..4], &pixel);
     }
 }
 
@@ -505,12 +537,18 @@ pub fn clearPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_h
             if (hits == 0) continue;
             const at = (row * canvas_width + col) * 4;
             if (hits == samples * samples) {
-                @memset(pixels[at..][0..4], 0);
+                @memcpy(pixels[at..][0..4], &self.background.pixel());
                 continue;
             }
-            const keep = 1 - @as(f64, @floatFromInt(hits)) / (samples * samples);
+            const covered = @as(f64, @floatFromInt(hits)) / (samples * samples);
+            if (self.background == .black) {
+                // Clearing part of an opaque canvas paints that much black over
+                // it; the pixel stays opaque either way.
+                blend(pixels[at..][0..4], RGBA.Named.black, covered);
+                continue;
+            }
             const alpha: f64 = @floatFromInt(pixels[at + 3]);
-            pixels[at + 3] = @intFromFloat(std.math.clamp(@round(alpha * keep), 0, 255));
+            pixels[at + 3] = @intFromFloat(std.math.clamp(@round(alpha * (1 - covered)), 0, 255));
         }
     }
 }
@@ -543,7 +581,14 @@ fn disc(arena: Allocator, out: *Path, at: Point, radius: f64) void {
 /// be `sw * sh * 4` long and already zeroed. The window may sit partly (or
 /// entirely) outside the canvas; those pixels stay transparent black.
 pub fn readPixels(self: *const Surface, canvas_width: u32, canvas_height: u32, sx: i64, sy: i64, sw: u32, sh: u32, out: []u8) void {
-    const pixels = self.peek(canvas_width, canvas_height) orelse return;
+    // An opaque canvas that has never been painted still reads back as opaque
+    // black, so the absence of a buffer is not the absence of pixels. `out`
+    // arrives zeroed, which is already right for a transparent one.
+    const pixels: ?[]const u8 = self.peek(canvas_width, canvas_height);
+    if (pixels == null and self.background == .transparent) {
+        return;
+    }
+    const background = self.background.pixel();
 
     var row: u32 = 0;
     while (row < sh) : (row += 1) {
@@ -558,9 +603,14 @@ pub fn readPixels(self: *const Surface, canvas_width: u32, canvas_height: u32, s
             if (src_x < 0 or src_x >= canvas_width) {
                 continue;
             }
-            const from: usize = (@as(usize, @intCast(src_y)) * canvas_width + @as(usize, @intCast(src_x))) * 4;
             const to: usize = (@as(usize, row) * sw + col) * 4;
-            @memcpy(out[to..][0..4], pixels[from..][0..4]);
+            if (pixels) |have| {
+                const from: usize = (@as(usize, @intCast(src_y)) * canvas_width +
+                    @as(usize, @intCast(src_x))) * 4;
+                @memcpy(out[to..][0..4], have[from..][0..4]);
+            } else {
+                @memcpy(out[to..][0..4], &background);
+            }
         }
     }
 }

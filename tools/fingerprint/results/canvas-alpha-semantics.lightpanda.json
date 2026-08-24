@@ -1,0 +1,35 @@
+{
+ "opaque": {
+  "initial": "000000ff",
+  "initial, alpha true": "00000000",
+  "attributes": "false",
+  "fill #ff0000": "ff0000ff",
+  "fill #ff0000, alpha true": "ff0000ff",
+  "fill rgba(255, 0, 0, 0.5)": "800000ff",
+  "fill rgba(255, 0, 0, 0.5), alpha true": "ff000080",
+  "fill rgba(0, 0, 255, 0.25)": "000040ff",
+  "fill rgba(0, 0, 255, 0.25), alpha true": "0000ff40",
+  "fill transparent": "000000ff",
+  "fill transparent, alpha true": "00000000",
+  "globalAlpha 0.5 then red": "800000ff",
+  "clearRect": "000000ff",
+  "clearRect, alpha true": "00000000",
+  "two half reds": "c00000ff",
+  "two half reds, alpha true": "ff0000c0",
+  "resize": "000000ff",
+  "p3 initial": "000000ff",
+  "p3 half red": "751a12ff",
+  "convertToBlob size": "async, see below"
+ },
+ "premultiplied": {
+  "rgba(255, 0, 0, 0.5)": "ff000080",
+  "rgba(200, 100, 50, 0.3)": "c864324d",
+  "rgba(1, 2, 3, 0.004)": "01020301",
+  "rgba(255, 255, 255, 0.1)": "ffffff1a",
+  "rgba(128, 128, 128, 0.5)": "80808080",
+  "rgba(255, 0, 0, 0.996)": "ff0000fe",
+  "rgba(37, 213, 91, 0.62)": "25d55b9e",
+  "globalAlpha 0.3 over solid": "c864324d",
+  "putImageData": "00000000"
+ }
+}

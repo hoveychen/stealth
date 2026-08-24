@@ -127,7 +127,10 @@ pub fn getContext(
         if (std.mem.eql(u8, context_type, "2d")) {
             const ctx = try frame._factory.create(CanvasRenderingContext2D{
                 ._canvas = self,
-                ._surface = .{ .arena = frame.arena },
+                ._surface = .{
+                    .arena = frame.arena,
+                    .background = if (created.two_d.alpha) .transparent else .black,
+                },
                 ._attributes = created.two_d,
             });
             break :blk .{ .@"2d" = ctx };

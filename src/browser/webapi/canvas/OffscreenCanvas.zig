@@ -141,7 +141,10 @@ pub fn getContext(
     self._cached = switch (requested) {
         .@"2d" => .{ .@"2d" = try exec._factory.create(OffscreenCanvasRenderingContext2D{
             ._canvas = self,
-            ._surface = .{ .arena = exec.arena },
+            ._surface = .{
+                .arena = exec.arena,
+                .background = if (created.two_d.alpha) .transparent else .black,
+            },
             ._attributes = created.two_d,
         }) },
         .webgl => .{ .webgl = try exec._factory.create(WebGLRenderingContext{ ._canvas = .{ .offscreen = self }, ._gl = .init(exec.arena), ._attributes = created.gl }) },
@@ -223,7 +226,9 @@ pub fn transferToImageBitmap(self: *OffscreenCanvas, exec: *Execution) !*ImageBi
             // context's state — transform, paint, path — is untouched; only
             // resizing resets that.
             taken = context._surface;
-            context._surface = .{ .arena = taken.arena };
+            // The emptied surface keeps the canvas opaque, so a transferred
+            // opaque canvas reads back as opaque black rather than transparent.
+            context._surface = .{ .arena = taken.arena, .background = taken.background };
         },
         // Chrome's bitmap carries the cleared colour off a WebGL canvas, but
         // nothing is rasterised behind one here — the same gap
