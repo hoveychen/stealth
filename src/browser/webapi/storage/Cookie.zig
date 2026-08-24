@@ -767,6 +767,28 @@ test "Jar: add" {
     try expectCookies(&.{ .{ "over", "9000!!" }, .{ "spice", "flows" }, .{ "over", "9002" } }, jar);
 }
 
+// A page deletes a cookie by re-setting it with an expiry in the past, and it
+// writes that date in whatever spelling its own code produced. Akamai's macys
+// interstitial clears `bm_lso` with `Thu, 01 Jan 1970 00:00:00 UTC`; an expiry
+// we fail to parse is dropped, which downgrades the deletion into a session
+// cookie holding the empty value -- and because that entry sorts ahead of the
+// real one, `document.cookie` then answers the page's own read-back with "".
+test "Jar: a past expiry deletes whichever way the zone is spelled" {
+    const now = lp.datetime.timestamp(.real);
+    for ([_][]const u8{ "GMT", "UT", "UTC", "Z" }) |zone| {
+        var jar = Jar.init(testing.allocator, null);
+        defer jar.deinit();
+
+        try jar.add(try Cookie.parse(testing.allocator, test_url, "bm_lso=abc"), now, false);
+        try testing.expectEqual(1, jar.cookies.items.len);
+
+        var buf: [64]u8 = undefined;
+        const clear = try std.fmt.bufPrint(&buf, "bm_lso=;expires=Thu, 01 Jan 1970 00:00:00 {s}", .{zone});
+        try jar.add(try Cookie.parse(testing.allocator, test_url, clear), now, false);
+        try testing.expectEqual(0, jar.cookies.items.len);
+    }
+}
+
 test "Jar: non-HTTP add must not replace or duplicate an HttpOnly cookie" {
     const now = lp.datetime.timestamp(.real);
 
