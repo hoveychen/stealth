@@ -410,7 +410,20 @@ fn createSnapshotContext(
             }
         }
 
-        if (@hasDecl(JsApi.Meta, "name") and !no_interface_object) {
+        // WebIDL [Exposed] on the *interface*, as opposed to on a member: an
+        // interface the realm is not in has no interface object on that global
+        // at all. The type still needs its template and class id -- both realms
+        // share one JsApiLookup -- so the gate is here, at the one place a name
+        // reaches a global, and not in the type lists.
+        //
+        // A worker's `performance` is the same Performance instance shape as a
+        // window's, so it travels in worker_common_apis with PerformanceTiming
+        // and PerformanceNavigation in tow; Chrome exposes neither of those two
+        // in a worker (measured, probes/expr-worker-surface.js).
+        const interface_exposed = comptime if (@hasDecl(JsApi.Meta, "exposed")) JsApi.Meta.exposed else Caller.Function.Opts.Exposed.both;
+        const in_realm = comptime interface_exposed == .both or interface_exposed == realm.asExposed();
+
+        if (@hasDecl(JsApi.Meta, "name") and !no_interface_object and in_realm) {
             if (@hasDecl(JsApi.Meta, "constructor_alias")) {
                 // Both names, and both non-enumerable: an interface object is
                 // never enumerable on the global, and neither is a legacy
@@ -439,7 +452,16 @@ fn createSnapshotContext(
             // constructor_alias above, this does not rename the class: the
             // function keeps Meta.name, which is what Chrome reports for
             // webkitRTCPeerConnection.name.
-            if (@hasDecl(JsApi.Meta, "constructor_aliases")) {
+            //
+            // Window-only, all of them. Chrome's Window carries 14 webkit-
+            // prefixed names and its dedicated worker carries four, and the
+            // four are WorkerGlobalScope operations (webkitRequestFileSystem
+            // and friends) rather than interface objects -- not one legacy
+            // alias crosses into that realm (measured,
+            // probes/expr-worker-surface.js). DOMMatrix and URL are the two
+            // alias-bearing interfaces a worker does have, so without this gate
+            // WebKitCSSMatrix and webkitURL leak in behind them.
+            if (@hasDecl(JsApi.Meta, "constructor_aliases") and realm == .window) {
                 inline for (JsApi.Meta.constructor_aliases) |alias| {
                     const alias_name = v8.v8__String__NewFromUtf8(isolate, alias.ptr, v8.kNormal, @intCast(alias.len));
                     var maybe_alias: v8.MaybeBool = undefined;
@@ -464,7 +486,7 @@ fn createSnapshotContext(
         //
         // CSS, console and WebAssembly read back the same way there; only the
         // WebGPU flag holders go through this path so far.
-        if (comptime namespace_global) {
+        if (comptime namespace_global and in_realm) {
             const object_template = v8.v8__FunctionTemplate__InstanceTemplate(templates[template_index]).?;
             const namespace_obj = v8.v8__ObjectTemplate__NewInstance(object_template, context).?;
 

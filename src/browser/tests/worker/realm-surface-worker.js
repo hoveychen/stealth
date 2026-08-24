@@ -56,6 +56,13 @@ self.onmessage = () => {
     typeof_CookieStore: typeof CookieStore,
     typeof_CookieChangeEvent: typeof CookieChangeEvent,
     has_cookieStore: 'cookieStore' in self,
+    // Window-only interface objects that reached this realm by riding along
+    // with a type list rather than through an [Exposed] decision of their own:
+    // the two legacy navigation-timing interfaces travel with Performance, and
+    // the two legacy vendor-prefixed constructor names travel with DOMMatrix
+    // and URL.
+    window_only_interfaces: ['PerformanceNavigation', 'PerformanceTiming',
+      'WebKitCSSMatrix', 'webkitURL'].filter((n) => n in self).join(','),
 
     // console is own on self and nowhere else.
     holder_console: holderOf('console'),

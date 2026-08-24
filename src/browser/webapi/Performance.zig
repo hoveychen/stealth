@@ -1234,6 +1234,10 @@ pub const PerformanceTiming = struct {
 
         pub const Meta = struct {
             pub const name = "PerformanceTiming";
+            // [Exposed=Window]. The only way here is performance.timing, which
+            // is window-gated too, so the interface object was the whole of
+            // this type's presence in a worker realm.
+            pub const exposed: js.Caller.Function.Opts.Exposed = .window;
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -1289,6 +1293,9 @@ pub const PerformanceNavigation = struct {
 
         pub const Meta = struct {
             pub const name = "PerformanceNavigation";
+            // [Exposed=Window], same as PerformanceTiming above: performance
+            // .navigation is the only reference and it is window-gated.
+            pub const exposed: js.Caller.Function.Opts.Exposed = .window;
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
             pub const empty_with_no_proto = true;

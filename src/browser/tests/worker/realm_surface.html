@@ -59,6 +59,13 @@ in results/probes/expr-worker-surface.chrome.json).
       testing.expectEqual('undefined', data.typeof_CookieChangeEvent);
       testing.expectEqual(false, data.has_cookieStore);
 
+      // Neither legacy navigation-timing interface is exposed in a worker, and
+      // Chrome's worker realm carries no vendor-prefixed constructor alias at
+      // all: all 14 of the webkit-prefixed names its Window has are absent
+      // there, and the four webkit* names its worker does carry are
+      // WorkerGlobalScope operations rather than interface objects.
+      testing.expectEqual('', data.window_only_interfaces);
+
       // console is an own data property of the global and is not on the
       // interface prototype behind it.
       testing.expectEqual('self', data.holder_console);
