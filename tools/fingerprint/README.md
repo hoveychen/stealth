@@ -12520,3 +12520,66 @@ four rows still answer the live-site oracle (`ff1b7fff`, `ff407fff`,
 `canvas-premultiplied-encode`'s remaining three are the legacy-notation
 premultiply described in the section above (`hsl(30 60% 40% / 0.5)`), an
 `oklch()` row, and `globalAlpha 0.5` on a p3 canvas. None of them is this axis.
+
+## A shadow is three box blurs, and the radius is device space (2026-08-24)
+
+`shadowBlur` is stored here and reaches no pixel. It is the largest single
+divergence left in the widget's 48×48 render — that scene sets five of them,
+11, 16, 3, 4 and 14 — so `probes/canvas-shadow-blur.js` measured what Chrome
+actually puts down before anything is implemented.
+
+The shape is offset clear of its own shadow, so every reading is the shadow
+alone. Two sweeps: a 4×4 square, whose centre row is the kernel *squared*
+because a separable blur hands back the product of the two axes, and a
+full-height 4-wide bar, whose centre row is the one-dimensional kernel itself.
+
+**The radius is not transformed.** The same sweep under the widget's own
+`scale(0.384, 0.384)`, with the shape's coordinates divided by the scale so the
+device shape is identical, produces byte-identical profiles at every radius. A
+`shadowOffsetX` is not transformed either, and that one is visible as an
+absence: dividing the offset by 0.384 puts the shadow at device x=129 on a
+96-wide bitmap and nothing is drawn at all.
+
+**The kernel is Skia's three box passes.** With σ = `shadowBlur` / 2 and
+
+    window = max(1, floor(σ · 3·√(2π) / 4 + 0.5))
+
+three box convolutions reproduce Chrome's bytes exactly — every pixel, no
+residual — at nine radii:
+
+| σ ≥ 2 | window | passes (width, left offset) | error |
+|---|---|---|---|
+| blur 4 | 4 | (4,1) (4,2) (5,2) | **0** |
+| blur 5 | 5 | (5,2) (5,2) (5,2) | **0** |
+| blur 6 | 6 | (6,2) (6,3) (7,3) | **0** |
+| blur 8 | 8 | (8,3) (8,4) (9,4) | **0** |
+| blur 11 | 10 | (10,4) (10,5) (11,5) | **0** |
+| blur 14 | 13 | (13,6) (13,6) (13,6) | **0** |
+| blur 16 | 15 | (15,7) (15,7) (15,7) | **0** |
+| blur 20 | 19 | (19,9) (19,9) (19,9) | **0** |
+| blur 32 | 30 | (30,14) (30,15) (31,15) | **0** |
+
+An odd window is three equal centred boxes; an even one is (w, w, w+1) with the
+first box shifted one to the left, which is how Skia keeps an even box centred.
+
+**Below σ = 2 it is not that.** Blur 3 (σ 1.5) is 28 off the best box triple,
+blur 2 is 104 off and blur 1 is 100 off, so Skia takes its small-sigma path there
+instead. Blur 1 fits an exact Gaussian at σ ≈ 0.39 and blur 2 and 3 fit neither
+cleanly — the threshold sits exactly at σ = 2, and one of the widget's five
+radii (3) is under it. That branch is still unnamed.
+
+**The rest of the shadow state**, one reading each at blur 8:
+
+| reading | Chrome | says |
+|---|---|---|
+| opaque shape, opaque shadow | `ff00000f ff00001f ff00000c` | the reference |
+| `shadowColor` at α 0.5 | `ff000008 ff000010 ff000006` | the colour's alpha multiplies the coverage |
+| shape at α 0.5 | `ff000008 ff000010 ff000006` | so does the shape's — identical to the row above |
+| `shadowColor: transparent` | nothing | drawn at all |
+| blur 0 with an offset | `ff0000ff` | the silhouette in `shadowColor`, no spread |
+| no offset | shadow either side, shape on top | the shadow goes *under* the shape |
+| a 2px stroke | `ff00001f ff00003a ff000017` | strokes cast one too, which is four of the widget's five |
+
+This engine answers 39 of the probe's 40 readings differently: it draws no
+shadow at all, and the one it matches is the transparent `shadowColor` that
+draws nothing in either.
