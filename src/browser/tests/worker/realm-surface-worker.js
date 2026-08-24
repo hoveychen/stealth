@@ -63,6 +63,19 @@ self.onmessage = () => {
     // and URL.
     window_only_interfaces: ['PerformanceNavigation', 'PerformanceTiming',
       'WebKitCSSMatrix', 'webkitURL'].filter((n) => n in self).join(','),
+    // One name out of each family this realm was missing entirely.
+    missing_families: ['VideoDecoder', 'AudioData', 'EncodedVideoChunk',
+      'ImageDecoder', 'ImageBitmap', 'ImageBitmapRenderingContext', 'Scheduler',
+      'TaskController', 'CacheStorage', 'NetworkInformation',
+      'PerformanceResourceTiming', 'PerformanceServerTiming', 'USB', 'USBDevice',
+      'HID', 'HIDDevice', 'Serial', 'SerialPort', 'ServiceWorkerRegistration',
+      'PushManager'].filter((n) => typeof self[n] !== 'function').join(','),
+    // The families that have to stay out: a member of each takes a *Frame, and
+    // a worker realm cannot be handed its owner's Frame. Chrome's worker has
+    // all of these, so this is a measured shortfall rather than a match --
+    // closing it needs worker-owned state, not another name in a list.
+    frame_bound: ['GPU', 'TrustedTypePolicyFactory', 'FontFace', 'MediaSource',
+      'CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
 
     // console is own on self and nowhere else.
     holder_console: holderOf('console'),

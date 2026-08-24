@@ -1567,6 +1567,66 @@ const worker_common_apis = [_]type{
     // there. FileSystemSyncAccessHandle itself is Exposed=DedicatedWorker, so it
     // is named in DedicatedWorkerJsApis alone rather than here.
     @import("../webapi/file_system_access.zig"),
+
+    // Everything below closes part of the shortfall this list's old
+    // "TODO: Expand" carried: interfaces this engine already implements for the
+    // page realm and a Chrome worker also carries (measured against
+    // results/probes/expr-worker-surface.chrome.json).
+    //
+    // The cut is drawn by a hard constraint rather than by taste: not one
+    // member of any of these types takes a `*Frame`. A worker realm cannot be
+    // handed its owner's Frame -- see the comment on getGlobalArg in Caller.zig,
+    // which is a live SIGABRT on the Cloudflare station and not a style
+    // preference -- so the Frame-taking families stay out even though Chrome's
+    // worker has them: WebGPU (GPU.wgslLanguageFeatures), Trusted Types, the
+    // font families, MediaSource, and the typed-OM transform components.
+    //
+    // WebCodecs: the encode/decode pipeline is the reason a page moves media
+    // work into a worker at all, so all four codecs and every chunk and frame
+    // type is Exposed=(Window,Worker).
+    @import("../webapi/webcodecs/chunks.zig"),
+    @import("../webapi/webcodecs/codecs.zig"),
+    @import("../webapi/webcodecs/frames.zig"),
+    @import("../webapi/webcodecs/image_decoder.zig"),
+    // An ImageBitmap is the transferable image handle a worker decodes into,
+    // and its canvas context comes along with it.
+    @import("../webapi/canvas/ImageBitmap.zig"),
+    @import("../webapi/canvas/ImageBitmapRenderingContext.zig"),
+    // The prioritised-task scheduler. `self.scheduler` was already here; the
+    // interface objects behind it were not.
+    @import("../webapi/scheduler.zig"),
+    @import("../webapi/storage/cache_storage.zig"),
+    @import("../webapi/NetworkInformation.zig"),
+    // Resource and server timing are the two Performance entry types a worker
+    // gets; the rest of the timing family is window-only (measured). Their
+    // shared PerformanceEntry prototype is already in this realm.
+    @import("../webapi/performance/timing.zig").ResourceTiming,
+    @import("../webapi/performance/timing.zig").ServerTiming,
+    // The device families, whole: a Chrome worker carries every USB, HID and
+    // Serial interface object even though the WorkerNavigator members that hand
+    // them out are window-only.
+    @import("../webapi/navigator/usb.zig"),
+    @import("../webapi/navigator/hid_serial.zig"),
+    // Only the three device entry points out of devices.zig. The other ten it
+    // registers -- Bluetooth, Clipboard, ServiceWorkerContainer, XRSystem and
+    // friends -- are window-only.
+    @import("../webapi/navigator/devices.zig").HID,
+    @import("../webapi/navigator/devices.zig").Serial,
+    @import("../webapi/navigator/devices.zig").USB,
+    // The service-worker client surface, minus the two of service_worker.zig's
+    // twelve that a dedicated worker does not carry: ServiceWorker itself and
+    // CookieStoreManager (the cookie store is Window and ServiceWorker only,
+    // which is why CookieStore is absent from this realm too).
+    @import("../webapi/service_worker.zig").ServiceWorkerRegistration,
+    @import("../webapi/service_worker.zig").PushManager,
+    @import("../webapi/service_worker.zig").PushSubscription,
+    @import("../webapi/service_worker.zig").PushSubscriptionOptions,
+    @import("../webapi/service_worker.zig").BackgroundFetchManager,
+    @import("../webapi/service_worker.zig").BackgroundFetchRecord,
+    @import("../webapi/service_worker.zig").BackgroundFetchRegistration,
+    @import("../webapi/service_worker.zig").SyncManager,
+    @import("../webapi/service_worker.zig").PeriodicSyncManager,
+    @import("../webapi/service_worker.zig").NavigationPreloadManager,
 };
 
 pub const DedicatedWorkerJsApis = flattenTypes(&([_]type{

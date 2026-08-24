@@ -131,12 +131,12 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(false, w.secure);
       testing.expectEqual('', w.gated.join(' '));
       testing.expectEqual(6, w.ungated.length);
-      // 207 own names on a secure owner (worker/secure_context.html), less the
-      // 13 gated ones this engine has in the worker realm. The gap to the
-      // secure count is 13 now rather than 14: cookieStore used to be the
-      // fourteenth, and the worker realm does not carry it at all any more
-      // (worker/realm_surface.html).
-      testing.expectEqual(194, w.count);
+      // 259 own names on a secure owner (worker/secure_context.html), less the
+      // 43 gated ones this engine has in the worker realm. The gap used to be
+      // 13; the 52 interface objects the realm gained are 43 [SecureContext]
+      // ones -- USB, HID, Serial, the caches, the service-worker client surface
+      // -- and 9 unconditional ones.
+      testing.expectEqual(216, w.count);
     });
   }
 </script>

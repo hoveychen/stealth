@@ -66,6 +66,14 @@ in results/probes/expr-worker-surface.chrome.json).
       // WorkerGlobalScope operations rather than interface objects.
       testing.expectEqual('', data.window_only_interfaces);
 
+      // And the other direction: the interface objects this engine already had
+      // for the page realm and a Chrome worker carries too.
+      testing.expectEqual('', data.missing_families);
+
+      // Still missing, and not by an oversight in a list: see the comment on
+      // getGlobalArg in js/Caller.zig.
+      testing.expectEqual('', data.frame_bound);
+
       // console is an own data property of the global and is not on the
       // interface prototype behind it.
       testing.expectEqual('self', data.holder_console);
