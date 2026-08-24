@@ -325,3 +325,31 @@ test "cdp.runtime: consoleAPICalled describes an argument without running page c
     }
     try testing.expectEqual(@as(usize, 3), seen);
 }
+
+// A promise is an ordinary thing to log -- `console.log(fetch(url))` is a line
+// people write -- and puppeteer enables Runtime the moment it attaches, so this
+// path is on for any real crawler. Describing one overflowed the stack and took
+// the process with it; DOM nodes, Proxies, WeakMaps and self-referential
+// objects all describe fine (tools/fingerprint/console-args.mjs).
+test "cdp.runtime: consoleAPICalled describes a promise argument" {
+    testing.silenceLog(&.{.js});
+
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const bc = try ctx.loadBrowserContext(.{ .id = "BID-CONSPR", .url = "hi.html", .target_id = "FID-00000CONPR".* });
+    try ctx.processMessage(.{ .id = 60, .method = "Runtime.enable" });
+
+    const frame = bc.mainFrame() orelse unreachable;
+    var ls: js.Local.Scope = undefined;
+    frame.js.localScope(&ls);
+    defer ls.deinit();
+
+    _ = try ls.local.exec(
+        \\console.log(Promise.resolve(1));
+        \\console.log(new Promise(() => {}));
+        \\console.log((async () => 1)());
+    , null);
+
+    try ctx.expectSentEvent("Runtime.consoleAPICalled", .{ .type = "log" }, .{});
+}
