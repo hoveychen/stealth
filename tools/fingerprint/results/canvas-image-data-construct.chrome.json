@@ -42,6 +42,30 @@
   "one argument": "throw:TypeError: Failed to construct 'ImageData': 2 arguments required, but only 1 present.",
   "width alone": "throw:TypeError: Failed to construct 'ImageData': 2 arguments required, but only 1 present."
  },
+ "order": {
+  "wrong format and length % 4": "throw:InvalidStateError: Failed to construct 'ImageData': Float16Array must use rgba-float16 pixelFormat.",
+  "wrong format and empty": "throw:InvalidStateError: Failed to construct 'ImageData': Float16Array must use rgba-float16 pixelFormat.",
+  "wrong format and width 0": "throw:IndexSizeError: Failed to construct 'ImageData': The source width is zero or not a number.",
+  "bad pixelFormat and length % 4": "throw:TypeError: Failed to construct 'ImageData': Failed to read the 'pixelFormat' property from 'ImageDataSettings': The provided value 'nope' is not a valid enum value of type ImageDataPixelFormat.",
+  "bad colorSpace and empty": "throw:TypeError: Failed to construct 'ImageData': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nope' is not a valid enum value of type PredefinedColorSpace.",
+  "width 0 and length % 4": "throw:IndexSizeError: Failed to construct 'ImageData': The source width is zero or not a number.",
+  "width 0 and empty": "throw:IndexSizeError: Failed to construct 'ImageData': The source width is zero or not a number.",
+  "huge width and length % 4": "throw:IndexSizeError: Failed to construct 'ImageData': The requested image size exceeds the supported range.",
+  "height 0 and width 0": "throw:IndexSizeError: Failed to construct 'ImageData': The source width is zero or not a number."
+ },
+ "sized": {
+  "0 x 1": "throw:IndexSizeError: Failed to construct 'ImageData': The source width is zero or not a number.",
+  "1 x 0": "throw:IndexSizeError: Failed to construct 'ImageData': The source height is zero or not a number.",
+  "0 x 0": "throw:IndexSizeError: Failed to construct 'ImageData': The source width is zero or not a number.",
+  "-1 x 1": "throw:IndexSizeError: Failed to construct 'ImageData': The requested image size exceeds the supported range.",
+  "1 x -1": "throw:IndexSizeError: Failed to construct 'ImageData': The requested image size exceeds the supported range.",
+  "1e10 x 1": "throw:IndexSizeError: Failed to construct 'ImageData': The requested image size exceeds the supported range.",
+  "2147483647 x 2147483647": "throw:IndexSizeError: Failed to construct 'ImageData': The requested image size exceeds the supported range.",
+  "NaN x 1": "throw:IndexSizeError: Failed to construct 'ImageData': The source width is zero or not a number.",
+  "1.9 x 1.9": "srgb rgba-unorm8 1x1 Uint8ClampedArray len=4",
+  "'2' x '3'": "srgb rgba-unorm8 2x3 Uint8ClampedArray len=24",
+  "65536 x 65536": "throw:IndexSizeError: Failed to construct 'ImageData': The requested image size exceeds the supported range."
+ },
  "created": {
   "createImageData(data, w, h)": "throw:TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': Value is not of type 'long'."
  },

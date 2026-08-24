@@ -98,6 +98,44 @@
   refusals['one argument'] = ask(() => shape(new ImageData(new Uint8ClampedArray(4))));
   refusals['width alone'] = ask(() => shape(new ImageData(1)));
 
+  // --- which check runs first -----------------------------------------------
+  // Each of these fails two ways at once, so the sentence names the order.
+  const order = {};
+  order['wrong format and length % 4'] = ask(() => shape(
+    new ImageData(new Float16Array(5), 1, 1)));
+  order['wrong format and empty'] = ask(() => shape(
+    new ImageData(new Float16Array(0), 1)));
+  order['wrong format and width 0'] = ask(() => shape(
+    new ImageData(new Float16Array(4), 0, 1)));
+  order['bad pixelFormat and length % 4'] = ask(() => shape(
+    new ImageData(new Uint8ClampedArray(5), 1, 1, { pixelFormat: 'nope' })));
+  order['bad colorSpace and empty'] = ask(() => shape(
+    new ImageData(new Uint8ClampedArray(0), 1, 1, { colorSpace: 'nope' })));
+  order['width 0 and length % 4'] = ask(() => shape(
+    new ImageData(new Uint8ClampedArray(5), 0, 1)));
+  order['width 0 and empty'] = ask(() => shape(
+    new ImageData(new Uint8ClampedArray(0), 0, 1)));
+  order['huge width and length % 4'] = ask(() => shape(
+    new ImageData(new Uint8ClampedArray(5), -1, 1)));
+  order['height 0 and width 0'] = ask(() => shape(
+    new ImageData(new Uint8ClampedArray(4), 0, 0)));
+
+  // --- the size forms' own refusals ----------------------------------------
+  // The same sentences as above, reached without a data array, plus what the
+  // two `unsigned long` arguments do with a value that is not one.
+  const sized = {};
+  sized['0 x 1'] = ask(() => shape(new ImageData(0, 1)));
+  sized['1 x 0'] = ask(() => shape(new ImageData(1, 0)));
+  sized['0 x 0'] = ask(() => shape(new ImageData(0, 0)));
+  sized['-1 x 1'] = ask(() => shape(new ImageData(-1, 1)));
+  sized['1 x -1'] = ask(() => shape(new ImageData(1, -1)));
+  sized['1e10 x 1'] = ask(() => shape(new ImageData(1e10, 1)));
+  sized['2147483647 x 2147483647'] = ask(() => shape(new ImageData(2147483647, 2147483647)));
+  sized['NaN x 1'] = ask(() => shape(new ImageData(NaN, 1)));
+  sized['1.9 x 1.9'] = ask(() => shape(new ImageData(1.9, 1.9)));
+  sized["'2' x '3'"] = ask(() => shape(new ImageData('2', '3')));
+  sized['65536 x 65536'] = ask(() => shape(new ImageData(65536, 65536)));
+
   // --- createImageData's own data form, if it has one ----------------------
   const created = {};
   created['createImageData(data, w, h)'] = ask(() => {
@@ -163,5 +201,5 @@
     const back = structuredClone(d);
     return `${shape(back)} ${[...back.data].join(' ')}`;
   });
-  return { forms, aliasing, formats, refusals, created, float32 };
+  return { forms, aliasing, formats, refusals, order, sized, created, float32 };
 })()

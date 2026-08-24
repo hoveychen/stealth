@@ -1304,3 +1304,141 @@
   }
 }
 </script>
+
+<script id="OffscreenCanvasRenderingContext2D#ImageData data constructor">
+{
+  // `new ImageData(data, sw)` / `(data, sw, sh)` / `(data, sw, sh, settings)`:
+  // the three forms that hand it pixels rather than a size. They can disagree
+  // with themselves in ways the size forms cannot, and each disagreement has
+  // its own sentence. Readings from probes/canvas-image-data-construct.js.
+  const shape = (d) => `${d.colorSpace} ${d.pixelFormat} ${d.width}x${d.height} ` +
+    `${d.data.constructor.name} len=${d.data.length}`;
+  const threw = (f) => { try { f(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const P = "Failed to construct 'ImageData': ";
+
+  // The height is inferred from what is left of the array.
+  testing.expectEqual('srgb rgba-unorm8 1x2 Uint8ClampedArray len=8',
+    shape(new ImageData(new Uint8ClampedArray(8), 1)));
+  testing.expectEqual('srgb rgba-unorm8 1x2 Uint8ClampedArray len=8',
+    shape(new ImageData(new Uint8ClampedArray(8), 1, 2)));
+  testing.expectEqual('display-p3 rgba-unorm8 1x1 Uint8ClampedArray len=4',
+    shape(new ImageData(new Uint8ClampedArray(4), 1, 1, { colorSpace: 'display-p3' })));
+  testing.expectEqual('srgb rgba-unorm8 1x1 Uint8ClampedArray len=4',
+    shape(new ImageData(new Uint8ClampedArray(4), 1, 1, undefined)));
+  testing.expectEqual('srgb rgba-unorm8 1x2 Uint8ClampedArray len=8',
+    shape(new ImageData(new Uint8ClampedArray(8), 1, undefined)));
+  // With a fourth argument the height is converted rather than inferred, so an
+  // undefined one is a zero.
+  testing.expectEqual(`IndexSizeError: ${P}The source height is zero or not a number.`,
+    threw(() => new ImageData(new Uint8ClampedArray(8), 1, undefined, { colorSpace: 'display-p3' })));
+
+  // The array is taken over rather than copied: it is the same object, writes
+  // go both ways, and a view onto part of a buffer keeps its offset.
+  {
+    const array = new Uint8ClampedArray(4);
+    const d = new ImageData(array, 1, 1);
+    testing.expectEqual(true, d.data === array);
+    array[0] = 200;
+    d.data[1] = 100;
+    testing.expectEqual('200,100', `${d.data[0]},${array[1]}`);
+  }
+  {
+    const array = new Uint8ClampedArray(new ArrayBuffer(12), 4, 4);
+    const d = new ImageData(array, 1, 1);
+    testing.expectEqual('4 4 12',
+      `${d.data.length} ${d.data.byteOffset} ${d.data.buffer.byteLength}`);
+  }
+
+  // The array's type has to be the one the pixelFormat names, and each of the
+  // three names itself when it is not.
+  testing.expectEqual('srgb rgba-float16 1x1 Float16Array len=4',
+    shape(new ImageData(new Float16Array(4), 1, 1, { pixelFormat: 'rgba-float16' })));
+  testing.expectEqual('srgb rgba-float32 1x1 Float32Array len=4',
+    shape(new ImageData(new Float32Array(4), 1, 1, { pixelFormat: 'rgba-float32' })));
+  testing.expectEqual('srgb rgba-unorm8 1x1 Uint8ClampedArray len=4',
+    shape(new ImageData(new Uint8ClampedArray(4), 1, 1, { pixelFormat: 'rgba-unorm8' })));
+  testing.expectEqual(`InvalidStateError: ${P}Float16Array must use rgba-float16 pixelFormat.`,
+    threw(() => new ImageData(new Float16Array(4), 1, 1)));
+  testing.expectEqual(`InvalidStateError: ${P}Float16Array must use rgba-float16 pixelFormat.`,
+    threw(() => new ImageData(new Float16Array(4), 1, 1, { pixelFormat: 'rgba-unorm8' })));
+  testing.expectEqual(`InvalidStateError: ${P}Uint8ClampedArray must use rgba-unorm8 pixelFormat.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), 1, 1, { pixelFormat: 'rgba-float16' })));
+  testing.expectEqual(`InvalidStateError: ${P}Float32Array must use rgba-float32 pixelFormat.`,
+    threw(() => new ImageData(new Float32Array(4), 1, 1)));
+
+  // Any other first argument is not this overload at all: it is a width, and
+  // the arguments after it move up a slot — so a third argument that is a
+  // number is read as the settings dictionary and refused for being one.
+  for (const notAnArray of [new Uint8Array(4), [0, 0, 0, 0], new ArrayBuffer(4), null]) {
+    testing.expectEqual(`TypeError: ${P}The provided value is not of type 'ImageDataSettings'.`,
+      threw(() => new ImageData(notAnArray, 1, 1)));
+  }
+
+  // Every way the arguments can disagree, each with its own sentence.
+  testing.expectEqual(`InvalidStateError: ${P}The input data length is not a multiple of 4.`,
+    threw(() => new ImageData(new Uint8ClampedArray(5), 1, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The input data length is not a multiple of (4 * width).`,
+    threw(() => new ImageData(new Uint8ClampedArray(8), 3)));
+  testing.expectEqual(
+    `IndexSizeError: ${P}The input data length is not equal to (4 * width * height).`,
+    threw(() => new ImageData(new Uint8ClampedArray(8), 1, 3)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), 0, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The source height is zero or not a number.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), 1, 0)));
+  testing.expectEqual(`InvalidStateError: ${P}The input data has zero elements.`,
+    threw(() => new ImageData(new Uint8ClampedArray(0), 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), -1, 1)));
+  testing.expectEqual(`TypeError: ${P}The provided value is not of type 'ImageDataSettings'.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), 1, 1, 'nope')));
+  testing.expectEqual(`TypeError: ${P}2 arguments required, but only 0 present.`,
+    threw(() => new ImageData()));
+  testing.expectEqual(`TypeError: ${P}2 arguments required, but only 1 present.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4))));
+  testing.expectEqual(`TypeError: ${P}2 arguments required, but only 1 present.`,
+    threw(() => new ImageData(1)));
+
+  // Which refusal wins, for the calls that earn two at once.
+  testing.expectEqual(`InvalidStateError: ${P}Float16Array must use rgba-float16 pixelFormat.`,
+    threw(() => new ImageData(new Float16Array(5), 1, 1)));
+  testing.expectEqual(`InvalidStateError: ${P}Float16Array must use rgba-float16 pixelFormat.`,
+    threw(() => new ImageData(new Float16Array(0), 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(new Float16Array(4), 0, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(new Uint8ClampedArray(5), 0, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(new Uint8ClampedArray(5), -1, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), 0, 0)));
+
+  // And the size forms reach the same sentences without a data array.
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(0, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The source height is zero or not a number.`,
+    threw(() => new ImageData(1, 0)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(0, 0)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(NaN, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(-1, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(1, -1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(1e10, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(65536, 65536)));
+  // Both arguments are `unsigned long`, so these truncate rather than refuse.
+  testing.expectEqual('srgb rgba-unorm8 1x1 Uint8ClampedArray len=4', shape(new ImageData(1.9, 1.9)));
+  testing.expectEqual('srgb rgba-unorm8 2x3 Uint8ClampedArray len=24', shape(new ImageData('2', '3')));
+
+  // A detached array has no elements at all, so it reaches the zero-elements
+  // refusal above. There is no assertion for it here: `structuredClone`'s
+  // `transfer` option does not detach the buffer in this engine yet, so the
+  // array a test could build is never actually detached. The probe carries that
+  // row (`refusals | detached buffer`) and it is the transfer that is missing,
+  // not this constructor.
+}
+</script>
