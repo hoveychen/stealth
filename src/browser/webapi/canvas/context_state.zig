@@ -34,6 +34,7 @@ const std = @import("std");
 
 const js = @import("../../js/js.zig");
 const dictionary = @import("../dictionary.zig");
+const canvas_objects = @import("canvas_objects.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -110,11 +111,40 @@ pub fn Accessors(comptime T: type) type {
             };
         }
 
+        /// A colour attribute: parsed on assignment, read back serialised, and
+        /// left alone when the value does not parse — the same three rules
+        /// `fillStyle` follows, because it is the same grammar.
+        ///
+        /// This used to be `freeform`, which stored the source text. Measured
+        /// on Chrome 150: `ctx.shadowColor = 'red'` reads back `#ff0000` and
+        /// `rgb(43,22,233)` reads back `#2b16e9`, so storing `red` is a value
+        /// no browser reports. It is read surface, not just shape: Akamai's
+        /// macys interstitial assigns `shadowColor` twice and reads it back
+        /// both times (see tools/fingerprint/probes/probe-canvas-order.js).
+        pub fn colour(comptime field: []const u8) type {
+            return struct {
+                pub fn get(self: *const T) []const u8 {
+                    return @field(self._state, field);
+                }
+                pub fn set(self: *T, value: []const u8, exec: *js.Execution) void {
+                    const style = canvas_objects.PaintStyle.parseColour(value) orelse return;
+                    const paint: canvas_objects.PaintStyle = .{ .style = style };
+                    const read = paint.read(exec.arena) catch return;
+                    switch (read) {
+                        .text => |text| @field(self._state, field) = text,
+                        // `paint` was built without an object arm, so the other
+                        // two are unreachable rather than merely unhandled.
+                        else => unreachable,
+                    }
+                }
+            };
+        }
+
         /// A string attribute we do not validate, only store. Used for the
-        /// ones whose grammar is a whole CSS value (filter, shadowColor,
-        /// letterSpacing) — we keep what we were given rather than pretend to
-        /// parse it, which is visible only to a script that sets something
-        /// invalid and reads it back.
+        /// ones whose grammar is a whole CSS value (filter, letterSpacing) —
+        /// we keep what we were given rather than pretend to parse it, which is
+        /// visible only to a script that sets something invalid and reads it
+        /// back.
         pub fn freeform(comptime field: []const u8) type {
             return struct {
                 pub fn get(self: *const T) []const u8 {
