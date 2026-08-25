@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<head></head>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+Taking an <iframe> out of the document destroys the navigable inside it. The
+element keeps existing, and so does any Window reference a script captured, but
+the frame is gone: it stops counting in `window.length`, `contentWindow` and
+`contentDocument` answer null, and the captured Window reports itself closed.
+Putting the same element back builds a *new* navigable rather than reviving the
+old one.
+
+Every value below was measured on Chrome 151 through
+`tools/fingerprint/probes/expr-iframe-detach.js`, on both arms, on the same
+local page. Before this, `window.length` only ever grew: the macys interstitial
+creates hidden iframes and removes them again, and the reading the collector
+took there was 5 frames where Chrome had 2.
+
+One measured difference is deliberately not pinned here: Chrome answers
+`about:blank` for the captured window's `location.href` and keeps its `document`
+readable, which this engine already does, but Chrome also empties that document
+(the discarded navigable is not the document the element would hand out again).
+Nothing in this engine tears the old document down, so the old document stays as
+it was.
+-->
+
+<script id="removing_the_element_discards_the_frame">
+  testing.onload(() => {
+    const f = document.createElement('iframe');
+    f.style.display = 'none';
+    document.body.appendChild(f);
+
+    testing.expectEqual(1, window.length);
+    testing.expectEqual(1, window.frames.length);
+
+    const saved = f.contentWindow;
+    const savedDoc = f.contentDocument;
+    testing.expectTrue(saved !== null);
+
+    f.remove();
+
+    testing.expectEqual(0, window.length);
+    testing.expectEqual(0, window.frames.length);
+    testing.expectEqual(undefined, window[0]);
+    testing.expectEqual(null, f.contentWindow);
+    testing.expectEqual(null, f.contentDocument);
+
+    // The captured reference survives -- the loader macys.com serves keeps one
+    // of these for the life of the page -- and says it is closed.
+    testing.expectTrue(saved.closed);
+    testing.expectEqual(null, saved.parent);
+    testing.expectTrue(savedDoc !== null);
+
+    // Re-inserting the element builds a new navigable, not the old one.
+    document.body.appendChild(f);
+    testing.expectEqual(1, window.length);
+    testing.expectFalse(f.contentWindow === saved);
+    testing.expectFalse(f.contentDocument === savedDoc);
+    f.remove();
+    testing.expectEqual(0, window.length);
+  });
+</script>
+
+<script id="every_way_out_of_the_document_counts">
+  testing.onload(() => {
+    const mk = () => {
+      const f = document.createElement('iframe');
+      f.style.display = 'none';
+      document.body.appendChild(f);
+      return f;
+    };
+
+    // removeChild, from the parent's side.
+    const a = mk();
+    testing.expectEqual(1, window.length);
+    a.parentNode.removeChild(a);
+    testing.expectEqual(0, window.length);
+
+    // Moved into a detached parent: still a removal from the document, and
+    // attaching that parent again brings a fresh frame in.
+    const b = mk();
+    const holder = document.createElement('div');
+    holder.appendChild(b);
+    testing.expectEqual(0, window.length);
+    document.body.appendChild(holder);
+    testing.expectEqual(1, window.length);
+    holder.remove();
+    testing.expectEqual(0, window.length);
+
+    // A whole subtree wiped at once.
+    const box = document.createElement('div');
+    document.body.appendChild(box);
+    const c = document.createElement('iframe');
+    c.style.display = 'none';
+    box.appendChild(c);
+    testing.expectEqual(1, window.length);
+    box.innerHTML = '';
+    testing.expectEqual(0, window.length);
+    testing.expectEqual(0, document.getElementsByTagName('iframe').length);
+    box.remove();
+  });
+</script>
+</body>
+</html>
