@@ -1800,6 +1800,24 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const nodeType = bridge.accessor(Node.getNodeType, null, .{});
+    pub const nodeName = bridge.accessor(struct {
+        fn wrap(self: *const Node, frame: *Frame) []const u8 {
+            return self.getNodeName(frame, &frame.buf);
+        }
+    }.wrap, null, .{});
+    pub const baseURI = bridge.accessor(_baseURI, null, .{});
+    pub const isConnected = bridge.accessor(Node.isConnected, null, .{});
+    pub const ownerDocument = bridge.accessor(Node.ownerDocument, null, .{});
+    pub const parentNode = bridge.accessor(Node.parentNode, null, .{});
+    pub const parentElement = bridge.accessor(Node.parentElement, null, .{});
+    pub const childNodes = bridge.accessor(Node.childNodes, null, .{ .cache = .{ .private = "child_nodes" } });
+    pub const firstChild = bridge.accessor(Node.firstChild, null, .{});
+    pub const lastChild = bridge.accessor(Node.lastChild, null, .{});
+    pub const previousSibling = bridge.accessor(Node.previousSibling, null, .{});
+    pub const nextSibling = bridge.accessor(Node.nextSibling, null, .{});
+    pub const nodeValue = bridge.accessor(Node.getNodeValue, Node.setNodeValue, .{ .ce_reactions = true });
+    pub const textContent = bridge.accessor(_textContext, Node.setTextContent, .{ .ce_reactions = true });
     pub const ELEMENT_NODE = bridge.property(1, .{ .template = true });
     pub const ATTRIBUTE_NODE = bridge.property(2, .{ .template = true });
     pub const TEXT_NODE = bridge.property(3, .{ .template = true });
@@ -1807,27 +1825,6 @@ pub const JsApi = struct {
     pub const ENTITY_REFERENCE_NODE = bridge.property(5, .{ .template = true });
     pub const ENTITY_NODE = bridge.property(6, .{ .template = true });
     pub const PROCESSING_INSTRUCTION_NODE = bridge.property(7, .{ .template = true });
-    pub const COMMENT_NODE = bridge.property(8, .{ .template = true });
-    pub const DOCUMENT_NODE = bridge.property(9, .{ .template = true });
-    pub const DOCUMENT_TYPE_NODE = bridge.property(10, .{ .template = true });
-    pub const DOCUMENT_FRAGMENT_NODE = bridge.property(11, .{ .template = true });
-    pub const NOTATION_NODE = bridge.property(12, .{ .template = true });
-
-    pub const DOCUMENT_POSITION_DISCONNECTED = bridge.property(0x01, .{ .template = true });
-    pub const DOCUMENT_POSITION_PRECEDING = bridge.property(0x02, .{ .template = true });
-    pub const DOCUMENT_POSITION_FOLLOWING = bridge.property(0x04, .{ .template = true });
-    pub const DOCUMENT_POSITION_CONTAINS = bridge.property(0x08, .{ .template = true });
-    pub const DOCUMENT_POSITION_CONTAINED_BY = bridge.property(0x10, .{ .template = true });
-    pub const DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC = bridge.property(0x20, .{ .template = true });
-
-    pub const nodeName = bridge.accessor(struct {
-        fn wrap(self: *const Node, frame: *Frame) []const u8 {
-            return self.getNodeName(frame, &frame.buf);
-        }
-    }.wrap, null, .{});
-    pub const nodeType = bridge.accessor(Node.getNodeType, null, .{});
-
-    pub const textContent = bridge.accessor(_textContext, Node.setTextContent, .{ .ce_reactions = true });
     fn _textContext(self: *Node, frame: *const Frame) !?[]const u8 {
         // cdata and attributes can return value directly, avoiding the copy
         switch (self._type) {
@@ -1845,41 +1842,40 @@ pub const JsApi = struct {
         }
     }
 
-    pub const firstChild = bridge.accessor(Node.firstChild, null, .{});
-    pub const lastChild = bridge.accessor(Node.lastChild, null, .{});
-    pub const nextSibling = bridge.accessor(Node.nextSibling, null, .{});
-    pub const previousSibling = bridge.accessor(Node.previousSibling, null, .{});
-    pub const parentNode = bridge.accessor(Node.parentNode, null, .{});
-    pub const parentElement = bridge.accessor(Node.parentElement, null, .{});
+    pub const COMMENT_NODE = bridge.property(8, .{ .template = true });
+    pub const DOCUMENT_NODE = bridge.property(9, .{ .template = true });
+    pub const DOCUMENT_TYPE_NODE = bridge.property(10, .{ .template = true });
+    pub const DOCUMENT_FRAGMENT_NODE = bridge.property(11, .{ .template = true });
+    pub const NOTATION_NODE = bridge.property(12, .{ .template = true });
+    pub const DOCUMENT_POSITION_DISCONNECTED = bridge.property(0x01, .{ .template = true });
+    pub const DOCUMENT_POSITION_PRECEDING = bridge.property(0x02, .{ .template = true });
+    pub const DOCUMENT_POSITION_FOLLOWING = bridge.property(0x04, .{ .template = true });
+    pub const DOCUMENT_POSITION_CONTAINS = bridge.property(0x08, .{ .template = true });
+    pub const DOCUMENT_POSITION_CONTAINED_BY = bridge.property(0x10, .{ .template = true });
+    pub const DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC = bridge.property(0x20, .{ .template = true });
     pub const appendChild = bridge.function(Node.appendChild, .{ .ce_reactions = true });
-    pub const childNodes = bridge.accessor(Node.childNodes, null, .{ .cache = .{ .private = "child_nodes" } });
-    pub const isConnected = bridge.accessor(Node.isConnected, null, .{});
-    pub const ownerDocument = bridge.accessor(Node.ownerDocument, null, .{});
-    pub const hasChildNodes = bridge.function(Node.hasChildNodes, .{});
-    pub const isSameNode = bridge.function(Node.isSameNode, .{ .arity = 1 });
+    pub const cloneNode = bridge.function(Node.cloneNode, .{ .ce_reactions = true });
+    pub const compareDocumentPosition = bridge.function(Node.compareDocumentPosition, .{});
     pub const contains = bridge.function(Node.contains, .{ .arity = 1 });
-    pub const removeChild = bridge.function(Node.removeChild, .{ .ce_reactions = true });
-    pub const nodeValue = bridge.accessor(Node.getNodeValue, Node.setNodeValue, .{ .ce_reactions = true });
-    pub const insertBefore = bridge.function(_insertBefore, .{ .ce_reactions = true });
+    pub const getRootNode = bridge.function(_getRootNode, .{});
     fn _insertBefore(self: *Node, new_node: *Node, ref_node: js.Nullable(*Node), frame: *Frame) !*Node {
         return self.insertBefore(new_node, ref_node.value, frame);
     }
-    pub const replaceChild = bridge.function(Node.replaceChild, .{ .ce_reactions = true });
-    pub const normalize = bridge.function(Node.normalize, .{ .ce_reactions = true });
-    pub const cloneNode = bridge.function(Node.cloneNode, .{ .ce_reactions = true });
-    pub const compareDocumentPosition = bridge.function(Node.compareDocumentPosition, .{});
-    pub const getRootNode = bridge.function(_getRootNode, .{});
+    pub const hasChildNodes = bridge.function(Node.hasChildNodes, .{});
+    pub const insertBefore = bridge.function(_insertBefore, .{ .ce_reactions = true });
+    pub const isDefaultNamespace = bridge.function(Node.isDefaultNamespace, .{ .arity = 1 });
+    pub const isEqualNode = bridge.function(Node.isEqualNode, .{});
+    pub const isSameNode = bridge.function(Node.isSameNode, .{ .arity = 1 });
     // The `options` argument is optional in JS; default it before calling the
     // (non-optional) Node.getRootNode.
     fn _getRootNode(self: *Node, opts: ?GetRootNodeOpts) *Node {
         return self.getRootNode(opts orelse .{});
     }
-    pub const isEqualNode = bridge.function(Node.isEqualNode, .{});
     pub const lookupNamespaceURI = bridge.function(Node.lookupNamespaceURI, .{ .arity = 1 });
     pub const lookupPrefix = bridge.function(Node.lookupPrefix, .{ .arity = 1 });
-    pub const isDefaultNamespace = bridge.function(Node.isDefaultNamespace, .{ .arity = 1 });
-
-    pub const baseURI = bridge.accessor(_baseURI, null, .{});
+    pub const normalize = bridge.function(Node.normalize, .{ .ce_reactions = true });
+    pub const removeChild = bridge.function(Node.removeChild, .{ .ce_reactions = true });
+    pub const replaceChild = bridge.function(Node.replaceChild, .{ .ce_reactions = true });
     fn _baseURI(self: *Node, frame: *const Frame) []const u8 {
         const doc = self.ownerDocumentIncludingSelf(frame) orelse return frame.base();
         if (doc._frame) |doc_frame| {

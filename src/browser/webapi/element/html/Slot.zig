@@ -165,9 +165,9 @@ pub const JsApi = struct {
     const reflect = Element.Reflect(Slot);
 
     pub const name = reflect.string("name");
-    pub const assignedNodes = bridge.function(Slot.assignedNodes, .{});
-    pub const assignedElements = bridge.function(Slot.assignedElements, .{});
     pub const assign = bridge.function(Slot.assign, .{});
+    pub const assignedElements = bridge.function(Slot.assignedElements, .{});
+    pub const assignedNodes = bridge.function(Slot.assignedNodes, .{});
 };
 
 const testing = @import("../../../../testing.zig");

@@ -47,13 +47,13 @@ pub const JsApi = struct {
 
     const reflect = Element.Reflect(Source);
 
-    pub const height = reflect.unsignedLong("height", .{});
-    pub const media = reflect.string("media");
-    pub const sizes = reflect.string("sizes");
     pub const src = bridge.accessor(Source.getSrc, Source.setSrc, .{ .ce_reactions = true });
-    pub const srcset = reflect.string("srcset");
     pub const @"type" = reflect.string("type");
+    pub const srcset = reflect.string("srcset");
+    pub const sizes = reflect.string("sizes");
+    pub const media = reflect.string("media");
     pub const width = reflect.unsignedLong("width", .{});
+    pub const height = reflect.unsignedLong("height", .{});
 };
 
 const testing = @import("../../../../testing.zig");

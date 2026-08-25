@@ -44,6 +44,9 @@
       XRView: 'index',                                 // projectionMatrix, transform
       SharedWorker: 'port',                            // onerror
       CookieStore: 'set',                              // onchange
+      Crypto: 'getRandomValues',                       // subtle, randomUUID
+      WebGLRenderingContext: 'drawingBufferStorage',   // makeXRCompatible
+      WebGL2RenderingContext: 'drawingBufferStorage',  // makeXRCompatible
     };
     for (const name of Object.keys(AFTER)) {
       testing.expectEqual('function', typeof globalThis[name], { desc: name + ' is a global' });

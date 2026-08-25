@@ -30,11 +30,10 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(Param);
-    pub const valueType = reflect.string("valuetype");
-    pub const @"type" = reflect.string("type");
-
     pub const name = reflect.string("name");
     pub const value = reflect.string("value");
+    pub const @"type" = reflect.string("type");
+    pub const valueType = reflect.string("valuetype");
 };
 
 const testing = @import("../../../../testing.zig");
