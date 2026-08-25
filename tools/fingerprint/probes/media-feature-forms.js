@@ -20,6 +20,8 @@
         '(max-resolution: 256dpi)', '(max-resolution:256dpi)',
         '(min-resolution: .625dppx)', '(min-resolution: 0.5x)', '(min-resolution: 0dppx)',
         '(min-resolution: 30dpcm)', '(max-resolution: 30dpcm)', '(max-resolution: 50dpcm)',
+        '(min-resolution: 1)', '(min-resolution: 5.dppx)', '(min-resolution: -1dppx)',
+        '(min-resolution: dppx)', '(min-resolution: 1.5dppx)', '(max-resolution: 50dpi)',
         '(resolution: 1dppx)', '(resolution = 1dppx)', '(resolution > 50dpi)', '(resolution < 50dpi)',
         '(min-width: 100px)', '(min-width:100px)', '(max-width: 5000px)', '(max-width:5000px)',
         '(color-index: 0)', '(max-color-index: 4)', '(min-color-index: 0)', '(color-index = 0)',

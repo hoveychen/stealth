@@ -13093,3 +13093,59 @@ than about the browser. Not counted as differences either: `screen` (800x600 on
 headless Chrome), `innerHeight`, and `prefers-color-scheme` (headless Chrome
 defaults to dark) — those are readings of the harness, and the chapter above
 already has them.
+
+## The resolution ladder answers now, and two `max-` bounds were backwards (2026-08-25)
+
+The chapter above put ~55 of Kasada's ~60 wrong booleans on the resolution walk.
+That is now closed, and `probes/media-feature-forms.js` grew the forms needed to
+say so: the `dpcm` rungs, the `monochrome` and `grid` range prefixes, decimal
+ratios, and the `device-posture` boolean form. Both arms, same URL, headed UA on
+the Chrome side — `results/mq-feature-value-gaps.json` has all 64 queries with
+the pre-fix lightpanda column alongside.
+
+**Seventeen queries flipped, and the `matches` column is now identical on every
+query in scope.** What was wrong:
+
+| query | Chrome | before |
+|---|---|---|
+| `(min-resolution: 0.625dppx)` | true | false |
+| `(min-resolution: .625dppx)` | true | false |
+| `(min-resolution: 0.5x)` | true | false |
+| `(min-resolution: 50dpi)` | true | false |
+| `(max-resolution: 256dpi)` | true | false |
+| `(min-resolution: 30dpcm)` | true | false |
+| `(max-resolution: 50dpcm)` | true | false |
+| `(max-color-index: 4)` | true | false |
+| `(max-monochrome: 4)` | true | false |
+| `(max-aspect-ratio: 2.125)` | true | false |
+| `(max-device-aspect-ratio: 2.125)` | true | false |
+| `(min-aspect-ratio: 1.5/2.5)` | true | false |
+| `(device-posture: continuous)` | true | false |
+| `(device-posture)` | true | false |
+
+Three separate causes, and only the first was the one the read log pointed at:
+
+- **A resolution was an integer.** `dppx` and `x` took whole numbers only, `dpi`
+  parsed only when it divided by 96, and `dpcm` was rejected outright. That is
+  what makes a binary search wrong at *every* rung rather than at one bound —
+  and why the ladder converged on `5.96e-7dppx`.
+- **A `max-` bound was being equated, not compared.** `max-color-index` shared
+  an `== 0` with the bare feature, and `max-monochrome` did the same one line
+  below it. `color-index` is 0 here, which is *under* every bound, so the right
+  answer is true for all of them. The plan only named `max-color-index`; the
+  probe found `max-monochrome` because it went looking for the same shape.
+- **A `<ratio>` term was an integer.** MQ4 widened both terms to `<number>`;
+  Chrome serializes `2.125` back as `2.125 / 1`.
+
+Two near-misses worth keeping: `(max-resolution: 30dpcm)` was false before and
+is false now, but only because `dpcm` used to be rejected — it is false for the
+right reason now (30dpcm is 0.79dppx, below 1). And `(max-grid: 0)` /
+`(min-grid: 0)` are false in Chrome: `grid` is discrete and takes no range
+prefix, so recognising them would have been the anomaly. Both are pinned by
+tests so the next pass over this file does not "fix" them.
+
+What is left on this probe is two other plans, not this one: the eight `<`, `>`
+and `=` queries are `mq-range-syntax`, and sixteen `.media` values still echo the
+input instead of the normalized form (`(min-resolution:0.625dppx)` and
+`.625dppx` both print as written) — that is `mq-media-serialization`, which
+x-hyatt does not read.
