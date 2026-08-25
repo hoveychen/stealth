@@ -26,9 +26,15 @@
 // fitted to: no codecs parameter means the container's bare answer, and a
 // codecs parameter means every codec listed must be one the container accepts
 // for that API.
+//
+// "One the container accepts" is not string equality for the four codecs that
+// carry a profile and a level in the string. codec.zig reduces those to a key
+// the whole profile shares, so a level the generator never asked about still
+// answers — the gap Kasada found by asking about avc1.42c00d.
 
 const std = @import("std");
 
+const codec = @import("codec.zig");
 const chrome_mimes = @import("chrome_mimes.zig");
 
 pub const PlayResponse = chrome_mimes.PlayResponse;
@@ -81,10 +87,31 @@ fn find(container: []const u8) ?*const chrome_mimes.Container {
     return null;
 }
 
-fn accepts(list: []const []const u8, codec: []const u8) bool {
+// A codec naming a profile and a level answers the same as any other member of
+// its family and profile, so the table's one measured spelling stands in for
+// all of them — see codec.zig. Everything else is matched as written.
+fn accepts(list: []const []const u8, name: []const u8) bool {
+    var asked_buf: [codec.key_len_max]u8 = undefined;
+    const asked = switch (codec.classify(name, &asked_buf)) {
+        .literal => {
+            for (list) |known| {
+                if (std.mem.eql(u8, known, name)) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        .invalid => return false,
+        .key => |k| k,
+    };
+
+    var known_buf: [codec.key_len_max]u8 = undefined;
     for (list) |known| {
-        if (std.mem.eql(u8, known, codec)) {
-            return true;
+        switch (codec.classify(known, &known_buf)) {
+            .key => |k| if (std.mem.eql(u8, k, asked)) {
+                return true;
+            },
+            .literal, .invalid => {},
         }
     }
     return false;
@@ -93,11 +120,11 @@ fn accepts(list: []const []const u8, codec: []const u8) bool {
 fn everyCodecAccepted(codecs: []const u8, list: []const []const u8) bool {
     var it = std.mem.splitScalar(u8, codecs, ',');
     while (it.next()) |raw| {
-        const codec = std.mem.trim(u8, raw, &std.ascii.whitespace);
-        if (codec.len == 0) {
+        const name = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        if (name.len == 0) {
             continue;
         }
-        if (!accepts(list, codec)) {
+        if (!accepts(list, name)) {
             return false;
         }
     }

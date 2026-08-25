@@ -42,18 +42,31 @@ const CONTAINERS = [
     'video/x-msvideo', 'video/avi', 'video/3gpp', 'video/3gpp2', 'video/x-m4v',
     'video/mpeg', 'video/x-flv', 'video/mp2t', 'video/x-ms-wmv',
     'application/ogg', 'application/x-mpegurl', 'application/vnd.apple.mpegurl',
-    'application/octet-stream',
+    'audio/x-mpegurl', 'application/octet-stream',
 ];
 
+// One member per profile of each parametrised family, because the profile is
+// what moves the answer: in video/mp4 avc1 profile 0x64 records and 0x6E does
+// not, hvc1 profile 1 records and 2 does not, av01 profile 0 records and 1 does
+// not. Levels within a profile agree, so one level each is enough — that is the
+// rule codecKey() encodes. The bare four-character names are MediaRecorder's
+// "pick a default" spellings and are not parametrised at all.
 const CODECS = [
     '1', 'vorbis', 'opus', 'flac', 'mp3', 'mp4a.40.2', 'mp4a.40.5', 'mp4a.69', 'mp4a.6B',
     'mp4a.a5', 'mp4a.a6', 'ac-3', 'ec-3', 'theora', 'speex', 'pcm', 'alaw', 'ulaw',
-    'avc1.42E01E', 'avc1.42001E', 'avc1.4D401E', 'avc1.64001E', 'avc3.42E01E',
-    'hvc1.1.6.L93.B0', 'hev1.1.6.L93.B0', 'vp8', 'vp9', 'vp09.00.10.08', 'vp09.02.10.10',
-    'av01.0.05M.08', 'av01.0.05M.10', 'h264', 'h265', 'mpeg4', 'dvh1.05.07', 'ulpfec',
+    'avc1.42E01E', 'avc1.42001E', 'avc1.4D401E', 'avc1.53001E', 'avc1.56001E',
+    'avc1.58001E', 'avc1.64001E', 'avc1.6E001E', 'avc1.76001E', 'avc1.7A001E',
+    'avc1.80001E', 'avc1.F4001E', 'avc3.42E01E', 'avc1', 'avc3',
+    'hvc1.1.6.L93.B0', 'hev1.1.6.L93.B0', 'hvc1.2.4.L120.B0', 'hev1.2.4.L120.B0',
+    'hvc1', 'hev1', 'vp8', 'vp9', 'vp09.00.10.08', 'vp09.01.10.08', 'vp09.02.10.10',
+    'vp09.03.10.10', 'vp09', 'av01.0.05M.08', 'av01.0.05M.10', 'av01.1.05M.08',
+    'av01.2.05M.10', 'av01', 'h264', 'h265', 'mpeg4', 'dvh1.05.07', 'ulpfec',
 ];
 
-// Types the model must reproduce without having been fitted to them.
+// Types the model must reproduce without having been fitted to them. The
+// second group is levels, tiers and bit depths no probe above asked for: they
+// are the whole point of parsing a codec string rather than looking it up, and
+// they are what Kasada asked hyatt.com's visitors about.
 const VALIDATION = [
     'video/mp4; codecs="avc1.42E01E, mp4a.40.2"', 'video/webm; codecs="vp8, vorbis"',
     'video/webm; codecs="vp9, opus"', 'video/ogg; codecs="theora, vorbis"',
@@ -61,24 +74,41 @@ const VALIDATION = [
     'video/mp4; codecs="bogus"', 'bogus/type', 'video/mp4; codecs=""', '',
     'video/mp4 ; codecs="avc1.42E01E"', 'video/mp4;codecs=avc1.42E01E',
     'audio/webm; codecs="opus, vorbis"', 'video/webm; codecs="vp8, opus"',
+
+    'video/mp4; codecs="avc1.42c00d"', 'video/mp4; codecs="avc1.640033"',
+    'video/mp4; codecs="avc1.4d001f"', 'video/mp4;codecs=avc1.64003E,mp4a.40.2',
+    'video/mp4;codecs=avc3.64003E,opus', 'video/mp4;codecs=hvc1.1.6.L186.B0,mp4a.40.2',
+    'video/mp4;codecs=hev1.1.6.L186.B0,opus', 'video/mp4;codecs=av01.0.19M.08,mp4a.40.2',
+    'video/mp4; codecs="av01.0.19H.08"', 'video/mp4; codecs="av01.0.19M.12"',
+    'video/mp4; codecs="hvc1.1.6.L255.B0"', 'video/webm; codecs="vp09.00.51.08"',
+    'video/mp4; codecs="avc1.2C001E"', 'video/mp4; codecs="avc1.42E01"',
+    'video/mp4; codecs="av01.3.19M.08"', 'video/mp4; codecs="av01.0.19M.09"',
+    'audio/x-mpegurl; codecs="avc1.64003E"',
 ];
 
-// Case-variant spellings. All three APIs fold case for the container, EXCEPT
-// that MediaRecorder rejects an upper-case mp4 container while accepting an
-// upper-case webm one. That is one Chrome code path being case-sensitive where
-// its neighbour is not; rather than encode the oddity, the model folds case
-// throughout and any resulting divergence is measured and reported below, so it
-// is a known gap rather than an unnoticed one.
-const CASE_PROBES = [
+// Spellings the model is measured against but knowingly does not reproduce.
+// Each is one Chrome code path doing something its neighbour does not, and each
+// is written into the generated file's header so it stays a known gap rather
+// than an unnoticed one.
+//
+//   * Case: all three APIs fold case for the container, EXCEPT that
+//     MediaRecorder rejects an upper-case mp4 container while accepting an
+//     upper-case webm one. The model folds case throughout.
+//   * A recognised AVC profile at a level Annex A does not define, and the four
+//     profiles Chrome parses but cannot decode: Chrome answers "maybe" to
+//     canPlayType, which a set of accepted codecs cannot express.
+const KNOWN_DIVERGENCES = [
     'VIDEO/MP4', 'AUDIO/MPEG', 'Video/MP4; codecs="avc1.42E01E"', 'video/MP4',
     'video/mp4; CODECS="avc1.42E01E"', 'video/mp4; codecs="AVC1.42E01E"',
     'AUDIO/WEBM; codecs="opus"',
+    'video/mp4; codecs="avc1.42E0FF"', 'video/mp4; codecs="avc1.7A001E"',
+    'video/mp4; codecs="avc1.53001E"',
 ];
 
 const PROBE = `(() => {
   const CONTAINERS = ${JSON.stringify(CONTAINERS)};
   const CODECS = ${JSON.stringify(CODECS)};
-  const VALIDATION = ${JSON.stringify([...VALIDATION, ...CASE_PROBES])};
+  const VALIDATION = ${JSON.stringify([...VALIDATION, ...KNOWN_DIVERGENCES])};
   const v = document.createElement('video');
   const a = new Audio();
   const ask = (t) => ({
@@ -103,9 +133,11 @@ const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-mimes-'));
 const flags = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`, '--no-first-run', '--no-default-browser-check'];
 if (!headed) flags.push('--headless=new');
 // CDP_ENDPOINT points this at a Chrome we did not spawn -- the Linux container
-// from linux-chrome.mjs, whose tables are the ones that belong in the tree now
-// that the engine claims Linux. Without it, the only measurable Chrome is the
-// macOS one on this machine.
+// from linux-chrome.mjs. Which of the two belongs in the tree follows
+// claimed_platform.zig, and that says macOS, so the default (this machine's
+// Chrome) is the right one. It matters here more than in most tables: whether
+// MediaRecorder takes HEVC in an mp4 container is whether the platform has a
+// hardware encoder for it, and macOS does where the Linux container does not.
 const ENDPOINT = process.env.CDP_ENDPOINT ?? null;
 const proc = ENDPOINT ? null : spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
 proc?.stdout.resume();
@@ -132,6 +164,58 @@ function collapseElement(r, where) {
     return r.audio;
 }
 
+// The JS side of src/browser/webapi/media/codec.zig: four codecs pack a profile
+// and a level into the string, and Chrome parses those fields rather than
+// looking the whole string up, so one measured spelling stands in for every
+// other level of the same profile. Keep the two in step — the validation pass
+// below is what catches them drifting apart.
+const AVC_PROFILES = [0x42, 0x4d, 0x53, 0x56, 0x58, 0x64, 0x6e, 0x76, 0x7a, 0x80, 0xf4];
+const AVC_LEVELS = [9, 10, 11, 12, 13, 20, 21, 22, 30, 31, 32, 40, 41, 42, 50, 51, 52, 60, 61, 62];
+const VP9_LEVELS = [10, 11, 20, 21, 30, 31, 40, 41, 50, 51, 52, 60, 61, 62];
+const DEPTHS = ['08', '10', '12'];
+
+// 'literal' — not one of the four. null — one of them, spelled in a way Chrome's
+// parser rejects. Otherwise the key its whole profile shares.
+function codecKey(codec) {
+    const parametrised = (p) => codec.startsWith(p + '.');
+    if (parametrised('avc1') || parametrised('avc3')) {
+        const rest = codec.slice(5);
+        if (!/^[0-9a-fA-F]{6}$/.test(rest)) return null;
+        const id = parseInt(rest, 16);
+        const profile = (id >> 16) & 0xff;
+        if (!AVC_PROFILES.includes(profile) || !AVC_LEVELS.includes(id & 0xff)) return null;
+        return 'avc.' + profile.toString(16).padStart(2, '0');
+    }
+    if (parametrised('hvc1') || parametrised('hev1')) {
+        const f = codec.slice(5).split('.');
+        if (f.length < 3 || !f[0].length || f[0].length > 3 || !f[1].length) return null;
+        if (f[2].length < 2 || (f[2][0] !== 'L' && f[2][0] !== 'H')) return null;
+        return 'hevc.' + f[0];
+    }
+    if (parametrised('av01')) {
+        const f = codec.slice(5).split('.');
+        if (f.length < 3 || !/^[0-2]$/.test(f[0])) return null;
+        if (!/^\d\d[MH]$/.test(f[1]) || Number(f[1].slice(0, 2)) > 31) return null;
+        if (!DEPTHS.includes(f[2])) return null;
+        return 'av1.' + f[0];
+    }
+    if (parametrised('vp09')) {
+        const f = codec.slice(5).split('.');
+        if (f.length < 3 || !/^0[0-3]$/.test(f[0])) return null;
+        if (!/^\d\d$/.test(f[1]) || !VP9_LEVELS.includes(Number(f[1]))) return null;
+        if (!DEPTHS.includes(f[2])) return null;
+        return 'vp09.' + f[0];
+    }
+    return 'literal';
+}
+
+function accepts(list, codec) {
+    const key = codecKey(codec);
+    if (key === 'literal') return list.includes(codec);
+    if (key === null) return false;
+    return list.some((known) => codecKey(known) === key);
+}
+
 // The model: a type resolves to its container's bare answer when no codecs are
 // given, and otherwise every listed codec must be in that container's accepted
 // set for that API.
@@ -152,9 +236,9 @@ function predict(table, type, emptyType) {
     }
     if (codecs.length === 0) return entry.bare;
     return {
-        play: codecs.every((c) => entry.play_codecs.includes(c)) ? 'probably' : '',
-        mse: codecs.every((c) => entry.mse_codecs.includes(c)),
-        mr: codecs.every((c) => entry.mr_codecs.includes(c)),
+        play: codecs.every((c) => accepts(entry.play_codecs, c)) ? 'probably' : '',
+        mse: codecs.every((c) => accepts(entry.mse_codecs, c)),
+        mr: codecs.every((c) => accepts(entry.mr_codecs, c)),
     };
 }
 
@@ -199,7 +283,7 @@ try {
     const emptyMeasured = validation.find((x) => x.t === '');
     const emptyType = { mse: emptyMeasured.r.mse, mr: emptyMeasured.r.mr };
 
-    const caseProbes = new Set(CASE_PROBES);
+    const knownDivergences = new Set(KNOWN_DIVERGENCES);
     const failures = [];
     const divergences = [];
     for (const { t, r: actual } of validation) {
@@ -207,7 +291,7 @@ try {
         const want = { play: collapseElement(actual, t), mse: actual.mse, mr: actual.mr };
         if (got.play === want.play && got.mse === want.mse && got.mr === want.mr) continue;
         const line = `${JSON.stringify(t)}: this engine ${JSON.stringify(got)} vs Chrome ${JSON.stringify(want)}`;
-        (caseProbes.has(t) ? divergences : failures).push(line);
+        (knownDivergences.has(t) ? divergences : failures).push(line);
     }
     if (failures.length) {
         throw new Error('the derived model disagrees with Chrome on:\n  ' + failures.join('\n  '));
@@ -215,7 +299,13 @@ try {
     for (const d of divergences) console.log(`  known divergence: ${d}`);
 
     const entries = [...table.values()].sort((a, b) => (a.container < b.container ? -1 : 1));
-    const codecList = (list) => (list.length === 0 ? '&.{}' : '&.{ ' + list.map(zigString).join(', ') + ' }');
+    // zig fmt puts no spaces inside a one-element initialiser and spaces inside
+    // a longer one, so match it here rather than leave the file failing --check.
+    const codecList = (list) => {
+        if (list.length === 0) return '&.{}';
+        if (list.length === 1) return '&.{' + zigString(list[0]) + '}';
+        return '&.{ ' + list.map(zigString).join(', ') + ' }';
+    };
     const lines = [
         '// GENERATED by tools/fingerprint/dump-media-mimes.mjs — do not hand-edit.',
         '//',
@@ -224,8 +314,10 @@ try {
         '//',
         ...(divergences.length ? [
             '// Known divergences from Chrome, measured by the generator and left',
-            '// unmodelled because each is one Chrome code path folding case where its',
-            '// neighbour does not:',
+            '// unmodelled: the first group is one Chrome code path folding case where',
+            '// its neighbour does not, the second is Chrome answering "maybe" to a',
+            '// codec it parsed but cannot decode, which a set of accepted codecs has',
+            '// no way to say:',
             ...divergences.map((d) => `//   ${d}`),
             '//',
         ] : []),
