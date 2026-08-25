@@ -1560,6 +1560,41 @@ pub fn recordPropertyRead(self: *Context, comptime key: []const u8) void {
     self.property_read_seq += 1;
 }
 
+// How many distinct keys the argument-level log is allowed to mint. The plain
+// log's key set is bounded by the surface itself; keyed by argument it is
+// bounded by whatever the page passes, and one jQuery-shaped page asking
+// `getElementById` for every row of a table would otherwise grow the frame
+// arena without limit. Past the cap, calls still count -- against the bare
+// member, which is what the plain log would have said anyway.
+const max_property_read_keys = 8192;
+
+// The argument-level twin of `recordPropertyRead`. `key` is built per call and
+// lives on the caller's stack, so unlike the comptime path this one owns a copy
+// the first time it sees a key.
+pub fn recordPropertyReadDynamic(self: *Context, key: []const u8, comptime bare: []const u8) void {
+    if (comptime lp.IS_DEBUG == false) return;
+
+    const allocator = self.arena.allocator();
+    if (self.property_reads.count() >= max_property_read_keys and !self.property_reads.contains(key)) {
+        return self.recordPropertyRead(bare);
+    }
+
+    const gop = self.property_reads.getOrPut(allocator, key) catch return;
+    if (gop.found_existing) {
+        gop.value_ptr.count += 1;
+        return;
+    }
+    gop.key_ptr.* = self.arena.dupe(u8, key) catch {
+        // The entry is already in the map keyed by a slice that is about to go
+        // out of scope; drop it rather than leave the map pointing at the
+        // caller's stack.
+        _ = self.property_reads.remove(key);
+        return;
+    };
+    gop.value_ptr.* = .{ .count = 1, .first_seq = self.property_read_seq };
+    self.property_read_seq += 1;
+}
+
 // Emitted in first-read order, not hash order: the sequence is the point.
 fn dumpPropertyReads(self: *Context) void {
     if (comptime lp.IS_DEBUG == false) return;
