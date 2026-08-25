@@ -438,7 +438,11 @@ fn appendFrameExecutions(frame: *Frame, origin: []const u8, arena: Allocator, li
 const testing = @import("../testing.zig");
 
 test "Page: js_error_count" {
-    testing.expectLog(&.{ .js, .js, .js });
+    // Two lines, one per uncaught exception. There used to be a third: the
+    // timer callback went through Function.call, which logs the exception it
+    // swallows, and it now goes through callRethrow, which hands the exception
+    // on to be reported instead of swallowing it.
+    testing.expectLog(&.{ .js, .js });
 
     // One uncaught top-level script exception, one uncaught timer-callback
     // exception.

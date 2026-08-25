@@ -84,7 +84,13 @@
 
   window.reportError('Plain string error');
 
-  testing.expectEqual('Plain string error', evt.message);
+  // Chrome writes "Uncaught " in front of every reported error, whatever was
+  // reported -- a string included ("Uncaught reported string", measured on
+  // 151).
+  testing.expectEqual('Uncaught Plain string error', evt.message);
+  // Chrome fills these in from the reporting call site; we do not have the
+  // stack to hand at this point, so they stay empty. A page that reads them
+  // can tell the two apart.
   testing.expectEqual('', evt.filename);
   testing.expectEqual(0, evt.lineno);
   testing.expectEqual(0, evt.colno);
