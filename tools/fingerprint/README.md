@@ -13068,3 +13068,38 @@ replay, watching the functions around offset 137986.
 If that is what it turns out to be, the finding is uncomfortable: the number
 Akamai reads is not work we are skipping, it is work we are doing too well, and
 closing it means deliberately being slower rather than being more correct.
+
+### Making this engine slower does not move the counter (2026-08-24, same round)
+
+Two experiments, both on the replay, both negative — and together they close the
+"we are simply faster" reading of the gap.
+
+**A busy-wait inside the window does nothing.** `probes/probe-slow-window.js`
+spins for 640ms of wall clock at the sensor's opening GET, which is where
+Chrome's 680ms sits. Confirmed spent (23.5M spins, `burned:640ms` in the marks).
+The counter came back **14** — unchanged. So it is not the elapsed time between
+the GET and the POST.
+
+**Nor is it how fast our JavaScript runs.** `--v8-flags-unsafe` takes flags
+straight to V8, so the engine can be slowed on purpose. On the synthetic state
+machine (5954867 steps) those flags bite:
+
+| flags | synthetic hash |
+|---|---|
+| (none) | 58ms |
+| `--no-opt` | 55ms |
+| `--jitless` | **496ms** |
+
+An 8.5x slower interpreter, and the counter in the payload stayed at 6-11 across
+`--jitless`, `--no-turbofan`, and `--no-maglev --no-turbofan`. If this engine
+were running that 5.9M-step hash at all, `--jitless` would have pushed the
+number into the hundreds.
+
+**So we are not doing the work more efficiently — we are not doing it in that
+window.** Which puts the question back where the evidence already pointed: both
+arms reach the same 496251-character source and slice it identically (total
+555557 bytes of `substr` results on both sides), Chrome hashes it before its
+first POST, and we do not. Chrome pays it once and reports 5 on its second pass,
+so its result is cached across reloads — the sensor reads storage 22 times — and
+that cache is a place worth looking at next: what does the challenge script store
+after hashing, and does its lookup answer differently here?
