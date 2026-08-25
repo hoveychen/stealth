@@ -1277,6 +1277,32 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    if (std.mem.eql(u8, path, "/redirect_nav_timing")) {
+        // 302 to a document, staying on this origin. Navigation Timing exposes
+        // a redirect chain only when every hop passes the timing allow check,
+        // so this is the hop Chrome reports (redirectCount 1, measured against
+        // Chrome 151 on tools/fingerprint/scratch/redirect-server.mjs).
+        return req.respond("", .{
+            .status = .found,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "/src/browser/tests/mcp_nav.html" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/redirect_nav_timing_cross")) {
+        // The same hop onto the localhost alias, which is a different origin on
+        // the same server. Chrome hides this one: redirectCount, redirectStart
+        // and redirectEnd all read 0 while fetchStart still moves past it
+        // (measured, same sitting).
+        return req.respond("", .{
+            .status = .found,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "http://localhost:9582/src/browser/tests/mcp_nav.html" },
+            },
+        });
+    }
+
     if (std.mem.eql(u8, path, "/download/report.csv")) {
         // A file download: Content-Disposition: attachment drives the
         // Browser.setDownloadBehavior path (issue #2701).

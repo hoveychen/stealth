@@ -283,8 +283,16 @@ pub fn navigationResponseStarted(
     content_encoding: []const u8,
     next_hop_protocol: []const u8,
     times: http.ResponseTimes,
+    redirect: http.RedirectTiming,
 ) void {
     const at = self.now();
+    // A redirected navigation has two fetches in it, and both Navigation Timing
+    // levels are defined against the second one: fetchStart moves to where the
+    // last redirect response landed, which is also the anchor the final hop's
+    // connection walk below is measured from. Chrome reports fetchStart == 0
+    // for the redirect it hides and a moved fetchStart for the one it shows, so
+    // this part happens either way.
+    self.navigationRedirected(redirect);
     // The document's own connection walk, same as any subresource's. What
     // navigationStarted stamped were placeholders: it had nothing to measure
     // yet, and leaving them said the document resolved and connected in the
@@ -297,6 +305,54 @@ pub fn navigationResponseStarted(
     self._nav.content_encoding = content_encoding;
     self._nav.next_hop_protocol = next_hop_protocol;
     self._nav_phase = .response;
+}
+
+/// Folds the redirect chain the transfer walked into the navigation record.
+///
+/// Navigation Timing exposes a chain only when every hop passed the timing allow
+/// check, which for a plain document means every hop stayed on one origin.
+/// Chrome 151 on a same-origin 302 reports redirectCount 1 with redirectStart at
+/// the first fetch and redirectEnd where the hop landed; on a cross-origin 302 it
+/// reports 0 for all three (measured against the two `/redirect_nav_timing*`
+/// routes in testing.zig). Either way `fetchStart` moves to the end of the
+/// chain: the document really did start fetching second.
+fn navigationRedirected(self: *Performance, redirect: http.RedirectTiming) void {
+    if (redirect.count == 0) {
+        return;
+    }
+
+    const first_fetch_start = self._nav.fetch_start;
+    const chain_end = self.relativeMs(redirect.end_micros);
+    // A hop measured as landing before the navigation began is a clock reading
+    // we should not turn into a negative milestone.
+    self._nav.fetch_start = @max(first_fetch_start, chain_end);
+
+    if (redirect.same_origin == false) {
+        return;
+    }
+    self._nav.redirect_count = redirect.count;
+    self._nav.redirect_start = first_fetch_start;
+    self._nav.redirect_end = self._nav.fetch_start;
+}
+
+/// A boot-relative microsecond stamp as milliseconds on this document's
+/// timeline, clamped the same way `now()` is -- a milestone finer than the
+/// clock beside it would hand back resolution the clamp exists to withhold.
+fn relativeMs(self: *const Performance, micros: u64) f64 {
+    const clamped = clamp(@intCast(micros), self._clock_resolution_micros);
+    const origin: i64 = @intCast(self._time_origin);
+    return @as(f64, @floatFromInt(clamped - origin)) / 1000.0;
+}
+
+/// The URL the document was finally served from, which is what Chrome names the
+/// navigation entry after. `navigationStarted` only knows the URL that was
+/// asked for, and a redirect makes those two different -- an entry still named
+/// after the request is a document claiming it never redirected.
+pub fn navigationUrl(self: *Performance, url: []const u8) void {
+    self._nav_name = url;
+    if (self._nav_entry) |entry| {
+        entry._proto._proto._name = url;
+    }
 }
 
 /// `len` is what the chunk decoded to; `encoded_total` is what the whole body
@@ -1120,6 +1176,46 @@ pub const PerformanceTiming = struct {
         return 0;
     }
 
+    /// Chrome fills this from the TLS handshake and only leaves it at 0 when
+    /// there was none -- a plain-HTTP document, or one served off a socket that
+    /// was already open. It was hardwired to 0 here while the modern navigation
+    /// entry reported the real number from the same reading, so an https
+    /// document that spent time connecting claimed no handshake: a shape Chrome
+    /// cannot produce (tools/fingerprint/scratch/expr-nav-timing-https.js calls
+    /// that pair `impossibleShape`).
+    ///
+    /// 0 is the answer for "no handshake" rather than the epoch origin, which is
+    /// what `epoch` would make of a 0 offset -- "the navigation began" is a very
+    /// different claim from "this did not happen".
+    fn secureConnectionStart(self: *const PerformanceTiming) f64 {
+        const offset = self.perf()._nav.secure_connection_start;
+        if (offset == 0) {
+            return 0;
+        }
+        return self.epoch(.started, offset);
+    }
+
+    /// The redirect pair is gated on the count rather than on the offsets being
+    /// non-zero: a chain that is not reportable leaves the offsets at 0, and a
+    /// reportable one can legitimately start within the same rounded
+    /// millisecond as the time origin. See Performance.navigationRedirected for
+    /// which chains are reportable.
+    fn redirectStart(self: *const PerformanceTiming) f64 {
+        const p = self.perf();
+        if (p._nav.redirect_count == 0) {
+            return 0;
+        }
+        return self.epoch(.started, p._nav.redirect_start);
+    }
+
+    fn redirectEnd(self: *const PerformanceTiming) f64 {
+        const p = self.perf();
+        if (p._nav.redirect_count == 0) {
+            return 0;
+        }
+        return self.epoch(.started, p._nav.redirect_end);
+    }
+
     fn fetchStart(self: *const PerformanceTiming) f64 {
         return self.epoch(.started, self.perf()._nav.fetch_start);
     }
@@ -1206,7 +1302,7 @@ pub const PerformanceTiming = struct {
     fn json(self: *const PerformanceTiming) PerformanceTiming.Json {
         return .{
             .connectStart = self.connectStart(),
-            .secureConnectionStart = 0,
+            .secureConnectionStart = self.secureConnectionStart(),
             .unloadEventEnd = 0,
             .domainLookupStart = self.domainLookupStart(),
             .domainLookupEnd = self.domainLookupEnd(),
@@ -1215,14 +1311,14 @@ pub const PerformanceTiming = struct {
             .responseEnd = self.responseEnd(),
             .requestStart = self.requestStart(),
             .domLoading = self.responseStart(),
-            .redirectStart = 0,
+            .redirectStart = self.redirectStart(),
             .loadEventEnd = self.loadEventEnd(),
             .domComplete = self.domComplete(),
             .navigationStart = self.navigationStart(),
             .loadEventStart = self.loadEventStart(),
             .domContentLoadedEventEnd = self.domContentLoadedEventEnd(),
             .unloadEventStart = 0,
-            .redirectEnd = 0,
+            .redirectEnd = self.redirectEnd(),
             .domInteractive = self.domInteractive(),
             .fetchStart = self.fetchStart(),
             .domContentLoadedEventStart = self.domContentLoadedEventStart(),
@@ -1247,14 +1343,14 @@ pub const PerformanceTiming = struct {
         pub const navigationStart = bridge.accessor(T.navigationStart, null, .{});
         pub const unloadEventStart = bridge.accessor(T.zero, null, .{});
         pub const unloadEventEnd = bridge.accessor(T.zero, null, .{});
-        pub const redirectStart = bridge.accessor(T.zero, null, .{});
-        pub const redirectEnd = bridge.accessor(T.zero, null, .{});
+        pub const redirectStart = bridge.accessor(T.redirectStart, null, .{});
+        pub const redirectEnd = bridge.accessor(T.redirectEnd, null, .{});
         pub const fetchStart = bridge.accessor(T.fetchStart, null, .{});
         pub const domainLookupStart = bridge.accessor(T.domainLookupStart, null, .{});
         pub const domainLookupEnd = bridge.accessor(T.domainLookupEnd, null, .{});
         pub const connectStart = bridge.accessor(T.connectStart, null, .{});
         pub const connectEnd = bridge.accessor(T.connectEnd, null, .{});
-        pub const secureConnectionStart = bridge.accessor(T.zero, null, .{});
+        pub const secureConnectionStart = bridge.accessor(T.secureConnectionStart, null, .{});
         pub const requestStart = bridge.accessor(T.requestStart, null, .{});
         pub const responseStart = bridge.accessor(T.responseStart, null, .{});
         pub const responseEnd = bridge.accessor(T.responseEnd, null, .{});
@@ -1279,13 +1375,39 @@ pub const PerformanceNavigation = struct {
     // Padding to avoid zero-size struct, which causes identity_map pointer collisions.
     _pad: bool = false,
 
+    fn perf(self: *const PerformanceNavigation) *const Performance {
+        return @alignCast(@fieldParentPtr("_navigation", self));
+    }
+
     pub const Json = struct {
         type: u16,
         redirectCount: u32,
     };
 
-    fn json(_: *const PerformanceNavigation) PerformanceNavigation.Json {
-        return .{ .type = 0, .redirectCount = 0 };
+    fn json(self: *const PerformanceNavigation) PerformanceNavigation.Json {
+        return .{ .type = self.navigationType(), .redirectCount = self.redirectCount() };
+    }
+
+    /// The Level 1 spelling of the navigation type the Level 2 entry reports as
+    /// a string. Level 1 has no name for anything else, so a navigation that is
+    /// neither a reload nor a history traversal is TYPE_NAVIGATE.
+    fn navigationType(self: *const PerformanceNavigation) u16 {
+        const kind = self.perf()._nav.navigation_type;
+        if (std.mem.eql(u8, kind, "reload")) {
+            return 1;
+        }
+        if (std.mem.eql(u8, kind, "back_forward")) {
+            return 2;
+        }
+        return 0;
+    }
+
+    /// Zero unless the document arrived through a reportable redirect chain --
+    /// see Performance.navigationRedirected for which chains those are. This was
+    /// a hardwired 0, so a document that only existed because of a redirect said
+    /// none had happened while Chrome answered 1 (measured).
+    fn redirectCount(self: *const PerformanceNavigation) u32 {
+        return self.perf()._nav.redirect_count;
     }
 
     pub const JsApi = struct {
@@ -1298,16 +1420,26 @@ pub const PerformanceNavigation = struct {
             pub const exposed: js.Caller.Function.Opts.Exposed = .window;
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
+            // No `empty_with_no_proto`: that stores no pointer back to the Zig
+            // instance, so an accessor here would receive a static empty struct
+            // rather than the `_navigation` field of a Performance -- fine while
+            // both attributes were hardwired constants, useless now that they
+            // read the navigation record. PerformanceTiming next door is the
+            // same one-field shape and has always been TAO-backed.
         };
 
-        pub const @"type" = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const redirectCount = bridge.property(0.0, .{ .template = false, .readonly = true });
+        const T = PerformanceNavigation;
+
+        // The two attributes are getters and the four TYPE_ constants are data
+        // properties -- measured on Chrome 151, which is also what the IDL says
+        // (readonly attribute vs const). All six were data properties here.
+        pub const @"type" = bridge.accessor(T.navigationType, null, .{});
+        pub const redirectCount = bridge.accessor(T.redirectCount, null, .{});
         pub const TYPE_NAVIGATE = bridge.property(0, .{ .template = false, .readonly = true });
         pub const TYPE_RELOAD = bridge.property(1, .{ .template = false, .readonly = true });
         pub const TYPE_BACK_FORWARD = bridge.property(2, .{ .template = false, .readonly = true });
         pub const TYPE_RESERVED = bridge.property(255, .{ .template = false, .readonly = true });
-        pub const toJSON = bridge.function(PerformanceNavigation.json, .{});
+        pub const toJSON = bridge.function(T.json, .{});
     };
 };
 
@@ -1320,4 +1452,112 @@ test "WebApi: Performance resource entries" {
     // The stylesheet is one of the loads under test, so it has to actually go
     // out: the runner leaves external stylesheets off by default.
     try testing.htmlRunner("performance_resource.html", .{ .load_external_stylesheets = true });
+}
+
+test "WebApi: Performance level 1 timing reports the TLS handshake" {
+    // No test server here speaks TLS, so the handshake is staged on the
+    // navigation record exactly as `Timing.setConnectionMilestones` fills it
+    // from libcurl's `appconnect` reading. Chrome over https puts
+    // secureConnectionStart between connectStart and connectEnd; an https
+    // document that spent time connecting and still reports 0 is a shape
+    // Chrome cannot produce (tools/fingerprint/scratch/expr-nav-timing-https.js
+    // calls that pair `impossibleShape`).
+    var p = Performance.init(clock_resolution_micros);
+    p.navigationStarted("https://example.com/", "navigate");
+    p._nav.connect_start = 10;
+    p._nav.secure_connection_start = 20;
+    p._nav.connect_end = 69;
+
+    // Read through toJSON, which is the surface a script that stringifies
+    // `performance.timing` walks -- and the one the widget was measured
+    // walking.
+    const origin: f64 = @floatFromInt(p.epochOriginMs());
+    {
+        const j = p._timing.json();
+        try testing.expectEqual(origin + 20, j.secureConnectionStart);
+        try testing.expect(j.secureConnectionStart > j.connectStart);
+        try testing.expect(j.secureConnectionStart < j.connectEnd);
+    }
+
+    // Over plain HTTP there is no handshake to time, and Level 1 reports that
+    // as 0 rather than as the epoch origin -- which is what every other
+    // unreached milestone reads too.
+    p._nav.secure_connection_start = 0;
+    try testing.expectEqual(0, p._timing.json().secureConnectionStart);
+}
+
+test "WebApi: Performance reports a same-origin navigation redirect" {
+    // Chrome 151 on a same-origin 302, measured against
+    // tools/fingerprint/scratch/redirect-server.mjs: redirectCount 1 on both
+    // Navigation Timing levels, redirectStart/redirectEnd non-zero, fetchStart
+    // sitting exactly on redirectEnd, and the entry named after the document
+    // that actually loaded rather than the URL the navigation asked for.
+    const session = testing.test_session;
+    defer session.closeAllPages();
+
+    const page = try session.createPage();
+    defer page.close();
+    try page.navigate("http://127.0.0.1:9582/redirect_nav_timing", .{});
+
+    var runner = session.runner(.{});
+    try runner.waitForFrame(page.frame_id, 2000, .{ .until = .done });
+
+    const frame = page.frame().?;
+    var ls: js.Local.Scope = undefined;
+    frame.js.localScope(&ls);
+    defer ls.deinit();
+
+    try expectAllTrue(&ls.local, &.{
+        "performance.navigation.redirectCount === 1",
+        "performance.getEntriesByType('navigation')[0].redirectCount === 1",
+        "performance.timing.redirectStart > 0",
+        "performance.timing.redirectEnd >= performance.timing.redirectStart",
+        "performance.timing.fetchStart >= performance.timing.redirectEnd",
+        "performance.getEntriesByType('navigation')[0].redirectEnd > 0",
+        "performance.getEntriesByType('navigation')[0].fetchStart >= performance.getEntriesByType('navigation')[0].redirectEnd",
+        "performance.getEntriesByType('navigation')[0].name === location.href",
+    });
+}
+
+test "WebApi: Performance hides a cross-origin navigation redirect" {
+    // The other half of the same reading: a hop onto the localhost alias is a
+    // different origin, so the timing allow check fails and Chrome reports no
+    // redirect at all -- while fetchStart still moves past it, because the
+    // document really did arrive second (measured, same sitting).
+    const session = testing.test_session;
+    defer session.closeAllPages();
+
+    const page = try session.createPage();
+    defer page.close();
+    try page.navigate("http://127.0.0.1:9582/redirect_nav_timing_cross", .{});
+
+    var runner = session.runner(.{});
+    try runner.waitForFrame(page.frame_id, 2000, .{ .until = .done });
+
+    const frame = page.frame().?;
+    var ls: js.Local.Scope = undefined;
+    frame.js.localScope(&ls);
+    defer ls.deinit();
+
+    try expectAllTrue(&ls.local, &.{
+        "performance.navigation.redirectCount === 0",
+        "performance.getEntriesByType('navigation')[0].redirectCount === 0",
+        "performance.timing.redirectStart === 0",
+        "performance.timing.redirectEnd === 0",
+        "performance.getEntriesByType('navigation')[0].redirectStart === 0",
+        "performance.getEntriesByType('navigation')[0].redirectEnd === 0",
+        "performance.getEntriesByType('navigation')[0].name === location.href",
+    });
+}
+
+/// Evaluates each expression and fails naming the first one that was not true,
+/// so a row of related invariants can be asserted without one `expect` per line.
+fn expectAllTrue(local: *const js.Local, exprs: []const []const u8) !void {
+    for (exprs) |expr| {
+        const value = try local.exec(expr, null);
+        if (value.toBool() == false) {
+            std.debug.print("expected true: {s}\n", .{expr});
+            return error.TestUnexpectedResult;
+        }
+    }
 }
