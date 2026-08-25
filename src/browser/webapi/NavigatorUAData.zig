@@ -57,38 +57,72 @@ pub fn toJSON(_: *const NavigatorUAData, exec: *const Execution) struct {
 // the hints the caller asked for. Upstream ignored `hints` and returned
 // everything, which is a behavioural difference a page can see in one call:
 // asking for nothing and getting formFactor back is not something Chrome does.
+// The keys come out in UADataValues' member order, which is alphabetical, not
+// in the order the caller listed its hints — WebIDL builds the dictionary by
+// walking its own members. Chrome does that too (measured on 151: asking for
+// architecture, bitness, model, platformVersion, uaFullVersion, fullVersionList,
+// wow64, formFactors hands back architecture, bitness, brands, formFactors,
+// fullVersionList, mobile, model, platform, platformVersion, uaFullVersion,
+// wow64), and it is one JSON.stringify away from being visible.
+const Hint = enum {
+    architecture,
+    bitness,
+    brands,
+    formFactors,
+    fullVersionList,
+    mobile,
+    model,
+    platform,
+    platformVersion,
+    uaFullVersion,
+    wow64,
+
+    // The low-entropy three come back whatever was asked for.
+    fn alwaysPresent(self: Hint) bool {
+        return switch (self) {
+            .brands, .mobile, .platform => true,
+            else => false,
+        };
+    }
+};
+
 pub fn getHighEntropyValues(_: *const NavigatorUAData, hints: []const []const u8, exec: *const Execution) !js.Promise {
     const local = exec.js.local.?;
     const values = local.newObject();
 
-    // Always present, whatever was asked for.
-    _ = try values.set("brands", brandList(exec), .{});
-    _ = try values.set("mobile", false, .{});
-    _ = try values.set("platform", uaPlatform(exec), .{});
+    for (std.enums.values(Hint)) |hint| {
+        if (!hint.alwaysPresent()) {
+            const name = @tagName(hint);
+            var asked = false;
+            for (hints) |requested| {
+                // Unknown hints are ignored, as in Chrome.
+                if (std.mem.eql(u8, requested, name)) {
+                    asked = true;
+                    break;
+                }
+            }
+            if (!asked) {
+                continue;
+            }
+        }
 
-    for (hints) |hint| {
-        if (std.mem.eql(u8, hint, "architecture")) {
-            _ = try values.set("architecture", uaArchitecture(), .{});
-        } else if (std.mem.eql(u8, hint, "bitness")) {
-            _ = try values.set("bitness", uaBitness(), .{});
-        } else if (std.mem.eql(u8, hint, "model")) {
-            _ = try values.set("model", "", .{});
-        } else if (std.mem.eql(u8, hint, "platformVersion")) {
+        switch (hint) {
+            .architecture => _ = try values.set("architecture", uaArchitecture(), .{}),
+            .bitness => _ = try values.set("bitness", uaBitness(), .{}),
+            .brands => _ = try values.set("brands", brandList(exec), .{}),
+            .formFactors => _ = try values.set("formFactors", [_][]const u8{"Desktop"}, .{}),
+            .fullVersionList => _ = try values.set("fullVersionList", fullVersionList(exec), .{}),
+            .mobile => _ = try values.set("mobile", false, .{}),
+            .model => _ = try values.set("model", "", .{}),
+            .platform => _ = try values.set("platform", uaPlatform(exec), .{}),
             // The OS version, from the platform claim rather than from a syscall
             // on the host — see claimed_platform.zig. Not a hint we can decline
             // by answering "": that empty string is itself one platform's answer
             // (the Linux Chrome's) and a mismatch under the other's claim.
-            _ = try values.set("platformVersion", uaPlatformVersion(), .{});
-        } else if (std.mem.eql(u8, hint, "uaFullVersion")) {
-            _ = try values.set("uaFullVersion", uaFullVersion(exec), .{});
-        } else if (std.mem.eql(u8, hint, "fullVersionList")) {
-            _ = try values.set("fullVersionList", fullVersionList(exec), .{});
-        } else if (std.mem.eql(u8, hint, "wow64")) {
-            _ = try values.set("wow64", false, .{});
-        } else if (std.mem.eql(u8, hint, "formFactors")) {
-            _ = try values.set("formFactors", [_][]const u8{"Desktop"}, .{});
+            .platformVersion => _ = try values.set("platformVersion", uaPlatformVersion(), .{}),
+            .uaFullVersion => _ = try values.set("uaFullVersion", uaFullVersion(exec), .{}),
+            .wow64 => _ = try values.set("wow64", false, .{}),
         }
-        // Unknown hints are ignored, as in Chrome.
     }
 
     return local.resolvePromise(values);
@@ -149,6 +183,8 @@ pub const JsApi = struct {
     pub const brands = bridge.accessor(NavigatorUAData.getBrands, null, .{});
     pub const mobile = bridge.accessor(NavigatorUAData.getMobile, null, .{});
     pub const platform = bridge.accessor(NavigatorUAData.getPlatform, null, .{});
-    pub const toJSON = bridge.function(NavigatorUAData.toJSON, .{});
+    // getHighEntropyValues before toJSON: that is the order Chrome's prototype
+    // lists them in, and Object.getOwnPropertyNames() reports it.
     pub const getHighEntropyValues = bridge.function(NavigatorUAData.getHighEntropyValues, .{});
+    pub const toJSON = bridge.function(NavigatorUAData.toJSON, .{});
 };

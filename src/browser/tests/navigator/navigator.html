@@ -201,8 +201,18 @@
   // The brand version has to be the one the user-agent string carries.
   testing.expectEqual(true, navigator.userAgent.includes('Chrome/151.'));
 
-  // Same instance returned on repeated access
+  // Same instance returned on repeated access. Chrome builds a fresh
+  // NavigatorUAData per read and answers false here (measured on 151); matching
+  // that would mean a new object, and a new entry in the identity map, for
+  // every read a page makes, so this one stays as it is on purpose.
   testing.expectEqual(true, navigator.userAgentData === navigator.userAgentData);
+
+  // Chrome's own order for these; a prototype's property order is one
+  // getOwnPropertyNames() away from being read.
+  testing.expectEqual(
+    'brands,mobile,platform,getHighEntropyValues,toJSON,constructor',
+    Object.getOwnPropertyNames(NavigatorUAData.prototype).join(','),
+  );
 
   const json = navigator.userAgentData.toJSON();
   testing.expectEqual(false, json.mobile);
@@ -224,6 +234,17 @@
     state.resolve();
 
     await state.done(() => {
+      // The keys come back in UADataValues' member order -- alphabetical --
+      // not in the order the hints were listed. WebIDL builds the dictionary by
+      // walking its own members, and Chrome 151 answers exactly this list for
+      // the eight hints below. It is one JSON.stringify away from being read.
+      testing.expectEqual(
+        'architecture,brands,fullVersionList,mobile,platform,platformVersion',
+        Object.keys(v).join(','),
+      );
+      testing.expectEqual('brands,formFactors,mobile,platform', Object.keys(asked).join(','));
+      testing.expectEqual('brands,mobile,platform', Object.keys(none).join(','));
+
       testing.expectEqual(false, v.mobile);
       testing.expectEqual(navigator.userAgentData.platform, v.platform);
       testing.expectEqual(true, Array.isArray(v.brands));
