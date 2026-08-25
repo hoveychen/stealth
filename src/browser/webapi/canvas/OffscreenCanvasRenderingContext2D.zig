@@ -162,7 +162,9 @@ pub fn reset(self: *OffscreenCanvasRenderingContext2D) void {
     draw.resetDrawing(self);
 }
 
-pub fn drawFocusIfNeeded(_: *OffscreenCanvasRenderingContext2D, _: js.Value, _: ?js.Value) void {}
+// `drawFocusIfNeeded` is deliberately absent: it rings the element the path
+// stands in for, and an offscreen context has no element. Chrome registers it
+// on `CanvasRenderingContext2D` alone.
 
 /// No path is ever built, so nothing is ever inside one.
 pub fn isPointInPath(_: *const OffscreenCanvasRenderingContext2D, _: js.Value, _: f64, _: ?js.Value) bool {
@@ -268,7 +270,6 @@ pub const JsApi = struct {
     pub const reset = bridge.function(OffscreenCanvasRenderingContext2D.reset, .{});
     pub const roundRect = bridge.function(OffscreenCanvasRenderingContext2D.roundRect, .{ .arity = 4 });
     pub const ellipse = bridge.function(OffscreenCanvasRenderingContext2D.ellipse, .{ .arity = 7 });
-    pub const drawFocusIfNeeded = bridge.function(OffscreenCanvasRenderingContext2D.drawFocusIfNeeded, .{ .noop = true });
     pub const isPointInPath = bridge.function(OffscreenCanvasRenderingContext2D.isPointInPath, .{});
     pub const isPointInStroke = bridge.function(OffscreenCanvasRenderingContext2D.isPointInStroke, .{});
     pub const createLinearGradient = bridge.function(OffscreenCanvasRenderingContext2D.createLinearGradient, .{});
