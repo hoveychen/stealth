@@ -83,6 +83,9 @@ _device_posture: ?*devices.DevicePosture = null,
 _hid: ?*devices.HID = null,
 _serial: ?*devices.Serial = null,
 _usb: ?*devices.USB = null,
+// Only a worker realm fills this: a Window's `navigator.connection` comes off
+// `window._connection`, built with the rest of the Window in `Frame.init`.
+_connection: ?*NetworkInformation = null,
 _xr: ?*devices.XRSystem = null,
 
 pub const init: Navigator = .{};
@@ -336,6 +339,37 @@ fn device(comptime T: type, slot: *?*T, frame: *Frame) !*T {
     const created = try frame._factory.eventTarget(T{ ._proto = undefined });
     slot.* = created;
     return created;
+}
+
+// The same thing again for a realm with no Frame. A worker's navigator carries
+// `connection`, `hid`, `serial` and `usb` in Chrome (measured), and the only
+// thing `device` wanted the Frame for was the object factory -- which the
+// Execution has. The slots are the ones on *this* Navigator, and a
+// WorkerNavigator owns its own, so each realm ends up with its own instance,
+// stable across reads, exactly like the Window realm's.
+fn deviceInRealm(comptime T: type, slot: *?*T, exec: *Execution) !*T {
+    if (slot.*) |existing| {
+        return existing;
+    }
+    const created = try exec._factory.eventTarget(T{ ._proto = undefined });
+    slot.* = created;
+    return created;
+}
+
+pub fn getConnectionInRealm(self: *Navigator, exec: *Execution) !*NetworkInformation {
+    return deviceInRealm(NetworkInformation, &self._connection, exec);
+}
+
+pub fn getHidInRealm(self: *Navigator, exec: *Execution) !*devices.HID {
+    return deviceInRealm(devices.HID, &self._hid, exec);
+}
+
+pub fn getSerialInRealm(self: *Navigator, exec: *Execution) !*devices.Serial {
+    return deviceInRealm(devices.Serial, &self._serial, exec);
+}
+
+pub fn getUsbInRealm(self: *Navigator, exec: *Execution) !*devices.USB {
+    return deviceInRealm(devices.USB, &self._usb, exec);
 }
 
 pub fn getWakeLock(self: *Navigator, exec: *Execution) !*devices.WakeLock {

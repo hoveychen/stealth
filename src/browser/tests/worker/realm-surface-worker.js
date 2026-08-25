@@ -72,6 +72,25 @@ self.onmessage = async () => {
     typeof_WorkerNavigator: typeof WorkerNavigator,
     typeof_Navigator: typeof Navigator,
     wn_proto_own: ask(() => Object.getOwnPropertyNames(WorkerNavigator.prototype).sort().join(',')),
+    // Unsorted, because declaration order is itself a reading a collector can
+    // take, and Chrome's is not alphabetical.
+    // `constructor` is left out: the bridge installs it after the declared
+    // members, Chrome installs it in the middle (right after `connection` here),
+    // and that placement is the same for every interface this engine builds --
+    // not something this surface can fix on its own.
+    wn_proto_order: ask(() => Object.getOwnPropertyNames(WorkerNavigator.prototype)
+      .filter((n) => n !== 'constructor').join(',')),
+    // The services a Chrome worker reaches through its navigator. The Akamai
+    // collector on macys.com asks this realm for `connection` twice per worker
+    // (measured with the engine's own unknown_prop log), so its absence was
+    // visible from inside the guard.
+    wn_services: ask(() => ['connection', 'hid', 'mediaCapabilities', 'serial', 'usb', 'locks']
+      .map((n) => `${n}=${navigator[n] === undefined ? 'absent' : Object.prototype.toString.call(navigator[n])}`)
+      .join(' ')),
+    wn_connection: ask(() => [navigator.connection.effectiveType, navigator.connection.rtt,
+      navigator.connection.downlink, navigator.connection.saveData].join('/')),
+    wn_connection_stable: ask(() => navigator.connection === navigator.connection),
+    wn_connection_is_event_target: ask(() => navigator.connection instanceof EventTarget),
     // The window-only members a WorkerNavigator must not carry. `webdriver` is
     // the one that matters: answering `false` is answering a question that is
     // never asked here.

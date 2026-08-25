@@ -40,7 +40,9 @@ const Navigator = @import("Navigator.zig");
 const Permissions = @import("Permissions.zig");
 const StorageManager = @import("StorageManager.zig");
 const NavigatorUAData = @import("NavigatorUAData.zig");
+const NetworkInformation = @import("NetworkInformation.zig");
 const services = @import("navigator/services.zig");
+const devices = @import("navigator/devices.zig");
 
 const Execution = js.Execution;
 
@@ -115,6 +117,39 @@ pub fn getStorageBuckets(self: *WorkerNavigator, exec: *Execution) !*services.St
     return self._navigator.getStorageBuckets(exec);
 }
 
+// The four EventTarget-backed services a Chrome worker's navigator carries.
+// They used to be missing here because the Window path builds them from a
+// Frame's factory; `Navigator.deviceInRealm` builds them from the Execution's,
+// which a worker realm has. The Akamai collector on macys.com reads
+// `connection` inside each of its two SharedWorkers -- twice each -- so the
+// absence was measurable from inside the guard, through the engine's own
+// unknown_prop log.
+pub fn getConnection(self: *WorkerNavigator, exec: *Execution) !*NetworkInformation {
+    return self._navigator.getConnectionInRealm(exec);
+}
+
+pub fn getHid(self: *WorkerNavigator, exec: *Execution) !*devices.HID {
+    return self._navigator.getHidInRealm(exec);
+}
+
+pub fn getSerial(self: *WorkerNavigator, exec: *Execution) !*devices.Serial {
+    return self._navigator.getSerialInRealm(exec);
+}
+
+pub fn getUsb(self: *WorkerNavigator, exec: *Execution) !*devices.USB {
+    return self._navigator.getUsbInRealm(exec);
+}
+
+// These two were already Execution-shaped on the Navigator; they only needed
+// declaring here.
+pub fn getMediaCapabilities(self: *WorkerNavigator, exec: *Execution) !*services.MediaCapabilities {
+    return self._navigator.getMediaCapabilities(exec);
+}
+
+pub fn getLocks(self: *WorkerNavigator, exec: *Execution) !*services.LockManager {
+    return self._navigator.getLocks(exec);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(WorkerNavigator);
 
@@ -126,12 +161,8 @@ pub const JsApi = struct {
 
     // Declaration order is Chrome 151's own
     // `Object.getOwnPropertyNames(WorkerNavigator.prototype)` order, measured in
-    // a blob worker. The six it carries that are still missing here --
-    // connection, hid, mediaCapabilities, serial, usb, locks -- resolve through
-    // a Frame, and `Caller.getGlobalArg` has no Frame to hand a worker realm.
-    // `gpu` and `storageBuckets` used to be among them: the only thing either
-    // wanted the Frame for was `_factory`, which is on the Execution, so asking
-    // for the right argument was the whole of it.
+    // a blob worker -- `constructor` is the bridge's, and Chrome puts it after
+    // `connection`, which is why the list below is not alphabetical.
     pub const hardwareConcurrency = bridge.accessor(WorkerNavigator.getHardwareConcurrency, null, .{});
     pub const appCodeName = bridge.accessor(WorkerNavigator.getAppCodeName, null, .{});
     pub const appName = bridge.accessor(WorkerNavigator.getAppName, null, .{});
@@ -142,9 +173,15 @@ pub const JsApi = struct {
     pub const language = bridge.accessor(WorkerNavigator.getLanguage, null, .{});
     pub const languages = bridge.accessor(WorkerNavigator.getLanguages, null, .{});
     pub const onLine = bridge.accessor(WorkerNavigator.getOnLine, null, .{});
+    pub const connection = bridge.accessor(WorkerNavigator.getConnection, null, .{});
+    pub const hid = bridge.accessor(WorkerNavigator.getHid, null, .{});
+    pub const mediaCapabilities = bridge.accessor(WorkerNavigator.getMediaCapabilities, null, .{});
     pub const permissions = bridge.accessor(WorkerNavigator.getPermissions, null, .{});
+    pub const serial = bridge.accessor(WorkerNavigator.getSerial, null, .{});
+    pub const usb = bridge.accessor(WorkerNavigator.getUsb, null, .{});
     pub const deviceMemory = bridge.accessor(WorkerNavigator.getDeviceMemory, null, .{});
     pub const userAgentData = bridge.accessor(WorkerNavigator.getUserAgentData, null, .{});
+    pub const locks = bridge.accessor(WorkerNavigator.getLocks, null, .{});
     pub const storage = bridge.accessor(WorkerNavigator.getStorage, null, .{});
     pub const gpu = bridge.accessor(WorkerNavigator.getGpu, null, .{});
     pub const storageBuckets = bridge.accessor(WorkerNavigator.getStorageBuckets, null, .{});
