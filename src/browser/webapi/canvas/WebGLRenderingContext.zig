@@ -25,19 +25,16 @@ const objects = @import("webgl_objects.zig");
 const gl_state = @import("webgl_state.zig");
 const attributes = @import("context_attributes.zig");
 const gpu_table = @import("gpu.zig");
+const extensions = @import("webgl_extensions.zig");
 const gpu = gpu_table.gpu;
 const DOMException = @import("../DOMException.zig");
 
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
-    return &.{
+    return &([_]type{
         WebGLRenderingContext,
-        // Extension types should be runtime generated. We might want
-        // to revisit this.
-        Extension.Type.WEBGL_debug_renderer_info,
-        Extension.Type.WEBGL_lose_context,
-    };
+    } ++ extensions.all);
 }
 
 const WebGLRenderingContext = @This();
@@ -106,45 +103,45 @@ pub const Surface = union(enum) {
 /// rather than taken from a spec page. MDN's list is shorter still:
 /// https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Using_Extensions#extension_list
 pub const Extension = union(enum) {
-    ANGLE_instanced_arrays: void,
-    EXT_blend_minmax: void,
-    EXT_clip_control: void,
-    EXT_color_buffer_half_float: void,
-    EXT_depth_clamp: void,
-    EXT_disjoint_timer_query: void,
-    EXT_float_blend: void,
-    EXT_frag_depth: void,
-    EXT_polygon_offset_clamp: void,
-    EXT_shader_texture_lod: void,
-    EXT_texture_compression_bptc: void,
-    EXT_texture_compression_rgtc: void,
-    EXT_texture_filter_anisotropic: void,
-    EXT_texture_mirror_clamp_to_edge: void,
-    EXT_sRGB: void,
-    KHR_parallel_shader_compile: void,
-    OES_element_index_uint: void,
-    OES_fbo_render_mipmap: void,
-    OES_standard_derivatives: void,
-    OES_texture_float: void,
-    OES_texture_float_linear: void,
-    OES_texture_half_float: void,
-    OES_texture_half_float_linear: void,
-    OES_vertex_array_object: void,
-    WEBGL_blend_func_extended: void,
-    WEBGL_color_buffer_float: void,
-    WEBGL_compressed_texture_astc: void,
-    WEBGL_compressed_texture_etc: void,
-    WEBGL_compressed_texture_etc1: void,
-    WEBGL_compressed_texture_pvrtc: void,
-    WEBGL_compressed_texture_s3tc: void,
-    WEBGL_compressed_texture_s3tc_srgb: void,
-    WEBGL_debug_renderer_info: *Type.WEBGL_debug_renderer_info,
-    WEBGL_debug_shaders: void,
-    WEBGL_depth_texture: void,
-    WEBGL_draw_buffers: void,
-    WEBGL_lose_context: *Type.WEBGL_lose_context,
-    WEBGL_multi_draw: void,
-    WEBGL_polygon_mode: void,
+    ANGLE_instanced_arrays: *extensions.ANGLE_instanced_arrays,
+    EXT_blend_minmax: *extensions.EXT_blend_minmax,
+    EXT_clip_control: *extensions.EXT_clip_control,
+    EXT_color_buffer_half_float: *extensions.EXT_color_buffer_half_float,
+    EXT_depth_clamp: *extensions.EXT_depth_clamp,
+    EXT_disjoint_timer_query: *extensions.EXT_disjoint_timer_query,
+    EXT_float_blend: *extensions.EXT_float_blend,
+    EXT_frag_depth: *extensions.EXT_frag_depth,
+    EXT_polygon_offset_clamp: *extensions.EXT_polygon_offset_clamp,
+    EXT_shader_texture_lod: *extensions.EXT_shader_texture_lod,
+    EXT_texture_compression_bptc: *extensions.EXT_texture_compression_bptc,
+    EXT_texture_compression_rgtc: *extensions.EXT_texture_compression_rgtc,
+    EXT_texture_filter_anisotropic: *extensions.EXT_texture_filter_anisotropic,
+    EXT_texture_mirror_clamp_to_edge: *extensions.EXT_texture_mirror_clamp_to_edge,
+    EXT_sRGB: *extensions.EXT_sRGB,
+    KHR_parallel_shader_compile: *extensions.KHR_parallel_shader_compile,
+    OES_element_index_uint: *extensions.OES_element_index_uint,
+    OES_fbo_render_mipmap: *extensions.OES_fbo_render_mipmap,
+    OES_standard_derivatives: *extensions.OES_standard_derivatives,
+    OES_texture_float: *extensions.OES_texture_float,
+    OES_texture_float_linear: *extensions.OES_texture_float_linear,
+    OES_texture_half_float: *extensions.OES_texture_half_float,
+    OES_texture_half_float_linear: *extensions.OES_texture_half_float_linear,
+    OES_vertex_array_object: *extensions.OES_vertex_array_object,
+    WEBGL_blend_func_extended: *extensions.WEBGL_blend_func_extended,
+    WEBGL_color_buffer_float: *extensions.WEBGL_color_buffer_float,
+    WEBGL_compressed_texture_astc: *extensions.WEBGL_compressed_texture_astc,
+    WEBGL_compressed_texture_etc: *extensions.WEBGL_compressed_texture_etc,
+    WEBGL_compressed_texture_etc1: *extensions.WEBGL_compressed_texture_etc1,
+    WEBGL_compressed_texture_pvrtc: *extensions.WEBGL_compressed_texture_pvrtc,
+    WEBGL_compressed_texture_s3tc: *extensions.WEBGL_compressed_texture_s3tc,
+    WEBGL_compressed_texture_s3tc_srgb: *extensions.WEBGL_compressed_texture_s3tc_srgb,
+    WEBGL_debug_renderer_info: *extensions.WEBGL_debug_renderer_info,
+    WEBGL_debug_shaders: *extensions.WEBGL_debug_shaders,
+    WEBGL_depth_texture: *extensions.WEBGL_depth_texture,
+    WEBGL_draw_buffers: *extensions.WEBGL_draw_buffers,
+    WEBGL_lose_context: *extensions.WEBGL_lose_context,
+    WEBGL_multi_draw: *extensions.WEBGL_multi_draw,
+    WEBGL_polygon_mode: *extensions.WEBGL_polygon_mode,
 
     /// Reified enum type from the fields of this union.
     const Kind = blk: {
@@ -178,63 +175,9 @@ pub const Extension = union(enum) {
         return map.get(name);
     }
 
-    /// Extension types.
-    pub const Type = struct {
-        pub const WEBGL_debug_renderer_info = struct {
-            _: u8 = 0,
-            pub const UNMASKED_VENDOR_WEBGL: u64 = 0x9245;
-            pub const UNMASKED_RENDERER_WEBGL: u64 = 0x9246;
-
-            pub const JsApi = struct {
-                pub const bridge = js.Bridge(WEBGL_debug_renderer_info);
-
-                pub const Meta = struct {
-                    pub const name = "WEBGL_debug_renderer_info";
-
-                    // A WebGL extension has no interface object: Chrome answers
-                    // undefined for globalThis.WEBGL_debug_renderer_info and its
-                    // prototype owns no `constructor`. The brand is not the
-                    // extension string either -- measured on a headed Chrome 150,
-                    // Object.prototype.toString.call(gl.getExtension(...)) reads
-                    // '[object WebGLDebugRendererInfo]'.
-                    pub const no_interface_object = true;
-                    pub const to_string_tag = "WebGLDebugRendererInfo";
-
-                    pub const prototype_chain = bridge.prototypeChain();
-                    pub var class_id: bridge.ClassId = undefined;
-                };
-
-                pub const UNMASKED_VENDOR_WEBGL = bridge.property(WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL, .{ .template = false, .readonly = true });
-                pub const UNMASKED_RENDERER_WEBGL = bridge.property(WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL, .{ .template = false, .readonly = true });
-            };
-        };
-
-        pub const WEBGL_lose_context = struct {
-            _: u8 = 0,
-            pub fn loseContext(_: *const WEBGL_lose_context) void {}
-            pub fn restoreContext(_: *const WEBGL_lose_context) void {}
-
-            pub const JsApi = struct {
-                pub const bridge = js.Bridge(WEBGL_lose_context);
-
-                pub const Meta = struct {
-                    pub const name = "WEBGL_lose_context";
-
-                    // Same as WEBGL_debug_renderer_info above: no global name,
-                    // no `constructor`, and a CamelCase brand that is not the
-                    // extension string. '[object WebGLLoseContext]' measured.
-                    pub const no_interface_object = true;
-                    pub const to_string_tag = "WebGLLoseContext";
-
-                    pub const prototype_chain = bridge.prototypeChain();
-                    pub var class_id: bridge.ClassId = undefined;
-                };
-
-                pub const loseContext = bridge.function(WEBGL_lose_context.loseContext, .{ .noop = true });
-                pub const restoreContext = bridge.function(WEBGL_lose_context.restoreContext, .{ .noop = true });
-            };
-        };
-    };
+    /// Extension types, all 52 of them generated from a measurement of
+    /// the reference Chrome. See webgl_extensions.zig.
+    pub const Type = extensions;
 };
 
 // The GLenum constants, and every `getParameter` answer below, are transcribed
@@ -747,19 +690,21 @@ pub fn getExtension(self: *WebGLRenderingContext, name: []const u8, exec: *Execu
         }
     }
 
-    return switch (tag) {
-        .WEBGL_debug_renderer_info => {
-            const info = try exec._factory.create(Extension.Type.WEBGL_debug_renderer_info{});
-            // Opens the getParameter gate, and only for this context.
-            self._debug_renderer_info = true;
-            return .{ .WEBGL_debug_renderer_info = info };
+    // Opens the getParameter gate, and only for this context.
+    if (tag == .WEBGL_debug_renderer_info) {
+        self._debug_renderer_info = true;
+    }
+
+    // Every extension answers with its own interface object: Chrome has one per
+    // extension and a script that feature-detects with `if (gl.getExtension(x))`
+    // needs something truthy back.
+    switch (tag) {
+        inline else => |comptime_enum| {
+            const T = @field(extensions, @tagName(comptime_enum));
+            const object = try exec._factory.create(T{});
+            return @unionInit(Extension, @tagName(comptime_enum), object);
         },
-        .WEBGL_lose_context => {
-            const ctx = try exec._factory.create(Extension.Type.WEBGL_lose_context{});
-            return .{ .WEBGL_lose_context = ctx };
-        },
-        inline else => |comptime_enum| @unionInit(Extension, @tagName(comptime_enum), {}),
-    };
+    }
 }
 
 /// Every extension either reference Chrome advertises, in Chrome's order —

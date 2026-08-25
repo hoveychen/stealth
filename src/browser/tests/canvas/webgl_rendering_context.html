@@ -142,6 +142,80 @@
   testing.expectEqual(renderer, lower.getParameter(0x9246));
 }
 
+// Every extension this context advertises hands back its own interface object,
+// the way Chrome does. Before this the union payload was void for all but two
+// of them, which marshalled to undefined -- so getSupportedExtensions listed
+// 39 names and getExtension then refused 37 of them, a contradiction no browser
+// produces and one that flips any `if (gl.getExtension(name))` feature test.
+//
+// The brands are measured (Chrome 150, results/webgl-extension-brands.json) and
+// irregular enough that deriving them from the extension string would be wrong:
+// EXT_sRGB brands as EXTsRGB, EXT_shader_texture_lod as EXTShaderTextureLOD.
+{
+  const brands = {
+    "ANGLE_instanced_arrays": "ANGLEInstancedArrays",
+    "EXT_blend_minmax": "EXTBlendMinMax",
+    "EXT_clip_control": "EXTClipControl",
+    "EXT_color_buffer_half_float": "EXTColorBufferHalfFloat",
+    "EXT_depth_clamp": "EXTDepthClamp",
+    "EXT_disjoint_timer_query": "EXTDisjointTimerQuery",
+    "EXT_float_blend": "EXTFloatBlend",
+    "EXT_frag_depth": "EXTFragDepth",
+    "EXT_polygon_offset_clamp": "EXTPolygonOffsetClamp",
+    "EXT_shader_texture_lod": "EXTShaderTextureLOD",
+    "EXT_texture_compression_bptc": "EXTTextureCompressionBPTC",
+    "EXT_texture_compression_rgtc": "EXTTextureCompressionRGTC",
+    "EXT_texture_filter_anisotropic": "EXTTextureFilterAnisotropic",
+    "EXT_texture_mirror_clamp_to_edge": "EXTTextureMirrorClampToEdge",
+    "EXT_sRGB": "EXTsRGB",
+    "KHR_parallel_shader_compile": "KHRParallelShaderCompile",
+    "OES_element_index_uint": "OESElementIndexUint",
+    "OES_fbo_render_mipmap": "OESFboRenderMipmap",
+    "OES_standard_derivatives": "OESStandardDerivatives",
+    "OES_texture_float": "OESTextureFloat",
+    "OES_texture_float_linear": "OESTextureFloatLinear",
+    "OES_texture_half_float": "OESTextureHalfFloat",
+    "OES_texture_half_float_linear": "OESTextureHalfFloatLinear",
+    "OES_vertex_array_object": "OESVertexArrayObject",
+    "WEBGL_blend_func_extended": "WebGLBlendFuncExtended",
+    "WEBGL_color_buffer_float": "WebGLColorBufferFloat",
+    "WEBGL_compressed_texture_astc": "WebGLCompressedTextureASTC",
+    "WEBGL_compressed_texture_etc": "WebGLCompressedTextureETC",
+    "WEBGL_compressed_texture_etc1": "WebGLCompressedTextureETC1",
+    "WEBGL_compressed_texture_pvrtc": "WebGLCompressedTexturePVRTC",
+    "WEBGL_compressed_texture_s3tc": "WebGLCompressedTextureS3TC",
+    "WEBGL_compressed_texture_s3tc_srgb": "WebGLCompressedTextureS3TCsRGB",
+    "WEBGL_debug_renderer_info": "WebGLDebugRendererInfo",
+    "WEBGL_debug_shaders": "WebGLDebugShaders",
+    "WEBGL_depth_texture": "WebGLDepthTexture",
+    "WEBGL_draw_buffers": "WebGLDrawBuffers",
+    "WEBGL_lose_context": "WebGLLoseContext",
+    "WEBGL_multi_draw": "WebGLMultiDraw",
+    "WEBGL_polygon_mode": "WebGLPolygonMode",
+  };
+
+  const gl = document.createElement("canvas").getContext("webgl");
+  const advertised = gl.getSupportedExtensions();
+
+  // What the engine advertises is exactly what it grants.
+  testing.expectEqual(Object.keys(brands).length, advertised.length);
+  for (const name of advertised) {
+    testing.expectEqual(true, brands[name] !== undefined);
+    // A fresh context each time, so an earlier getExtension cannot be what
+    // makes a later one answer.
+    const own = document.createElement("canvas").getContext("webgl");
+    const ext = own.getExtension(name);
+    testing.expectEqual(true, ext !== null && ext !== undefined);
+    testing.expectEqual(`[object ${brands[name]}]`, Object.prototype.toString.call(ext));
+    // No interface object and no constructor of its own, like the two that
+    // already had types.
+    testing.expectEqual("undefined", typeof globalThis[brands[name]]);
+  }
+
+  // A name nothing advertises is still refused.
+  testing.expectEqual(null, gl.getExtension("NOPE_not_real"));
+}
+
 // WEBGL_lose_context
 {
   const element = document.createElement("canvas");
