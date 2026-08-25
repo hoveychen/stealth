@@ -71,6 +71,16 @@ const headed = process.argv.includes('--headed');
 // real refusals, which is the failure mode detector-sweep.mjs's header comment
 // describes from the other direction.
 const fresh = process.argv.includes('--fresh');
+// A script to run before anything on each new document, via
+// Page.addScriptToEvaluateOnNewDocument. This is how a candidate engine change
+// gets tried against the live station before it is written in Zig: patch the
+// surface from JS, see whether the verdict moves, and only then decide whether
+// the engine should behave that way. Repeatable. Unlike Runtime.enable, the
+// registration itself is not visible to the page -- only whatever the script
+// does is -- but it is still an asymmetry between the arms, so a run that uses
+// it is not a two-arm reading of stock behaviour.
+const injects = process.argv.reduce((acc, a, i) => (
+    a === '--inject' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc), []);
 // Record every request and every console line, not just the document responses.
 // What a challenge does is a conversation -- fetch the orchestrate script, POST
 // the result back, reload -- and which turn of it is missing is the whole
@@ -458,6 +468,10 @@ try {
         await cdp.send('Emulation.setDeviceMetricsOverride', {
             width: w, height: h, deviceScaleFactor: 1, mobile: false,
         }, sessionId);
+        for (const f of injects) {
+            await cdp.send('Page.addScriptToEvaluateOnNewDocument',
+                { source: await fs.readFile(path.resolve(repo, f), 'utf8') }, sessionId);
+        }
         return { cdp, sessionId };
     }
 
