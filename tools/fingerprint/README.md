@@ -12943,3 +12943,59 @@ sampling profile's chain (`cRK` ← `H8Y` ← `g5Y` ← `HrY` ← `PUY` ← `cBK
 `RjY` ← anonymous@31999, offsets into `results/b41-macys-bodies/02-*`) is a map
 into a capture that is now on disk and replayable, and the burn is one call deep
 in a flattened dispatcher whose case ids both arms enter identically.
+
+### The burn is a per-character hash in the *challenge* script, and it sits between the GET and the POST (2026-08-24, same round)
+
+`Profiler.takePreciseCoverage` resets its counters on every call, so the first
+snapshot after a navigation is exactly the window that ends when the main thread
+first yields — and on this page that is the end of the burn. Reading it instead
+of diffing it puts the work in the challenge script, not the sensor:
+
+| executions | function | offset |
+|---|---|---|
+| 5896530 | `MOm` (the `while` body) | 138027 |
+| 496241 | `kTh` (`return a.length`) | 137757 |
+| 496239 | `DTh`, `rOm`, `ENh`, `T4h`, `K8m` | 120754 … 495657 |
+
+496239 is the length of the challenge script's own source (the file is 496256
+bytes), and the code at offset 137986 is a hash over it driven by a state
+machine that reassigns its own step function every iteration:
+
+    function MOm(WLh, pDh) {
+        var hTh = { WLh: WLh, Phh: pDh, nzh: 0, Gdh: 0, czh: DTh };
+        while (!hTh.czh());
+        return hTh['Phh'] >>> 0;
+    }
+
+That shape is not what makes Chrome slow: `probes/expr-state-machine-hash.js`
+runs the same 5954867 steps over the same 496239 characters in **27ms in Chrome
+and 28ms here**. So Chrome's 650ms is that loop plus whatever the real step
+functions do per step, and the question is only whether we run it at all.
+
+`probes/probe-hash-timeline.js` stamps every 50000th `charCodeAt` and every XHR
+open/send, which lines the two arms up:
+
+| | Chrome | lightpanda |
+|---|---|---|
+| chars 50k → 550k | 49ms → 95ms | 76ms → 231ms |
+| `open GET …<sitekey>` | 104ms | 248ms |
+| `send` first sensor POST | **783ms** | **295ms** |
+| chars 600k | 796ms | 399ms |
+
+Chrome spends **680ms between the GET and the POST with no character reads at
+all**; we spend 46ms there. So the two arms do comparable `charCodeAt` work
+(635673 vs 650797 over a run) but only one of them pays for the hash inside the
+window the payload's counter covers — MOm reads its characters some other way
+(indexing, or `codePointAt`), which is also why wrapping `charCodeAt` never
+showed it.
+
+Ruled out along the way: it is not script execution order. A page whose first
+`<script src>` answers 400ms late and whose second answers immediately runs them
+`slow, fast` in *both* engines, so a parser-inserted script is not being run out
+of document order here.
+
+**The open question, stated precisely:** does this engine call `MOm` with the
+496239-character source at all, and if it does, why does that call not land
+between the GET at 248ms and the POST at 295ms? Counting it needs an instrument
+that survives the guard — the source cannot be rewritten (see the note in
+`akamai-replay.mjs`), and the reads it makes are not on any wrappable method.
