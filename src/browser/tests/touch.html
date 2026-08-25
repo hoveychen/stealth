@@ -98,3 +98,40 @@
     testing.expectEqual('undefined', typeof document.createTouchList);
   }
 </script>
+
+<script id=create_event_refused>
+  {
+    // The TouchEvent constructor exists on desktop Chrome, but the legacy
+    // createEvent factory never learned the name: a desktop build has touch
+    // event feature detection off, so the type is simply not in the table.
+    // Measured on a headed Chrome 150 (maxTouchPoints 0, 'ontouchstart' in
+    // window false, yet new TouchEvent('touchstart') works).
+    testing.expectEqual('function', typeof TouchEvent);
+    testing.expectEqual('[object TouchEvent]',
+      Object.prototype.toString.call(new TouchEvent('touchstart')));
+
+    for (const name of ['TouchEvent', 'touchevent', 'TouchEvents']) {
+      let thrown = 'created ' + name;
+      try {
+        document.createEvent(name);
+      } catch (e) {
+        thrown = e.name + ': ' + e.message;
+      }
+      testing.expectEqual(
+        "NotSupportedError: Failed to execute 'createEvent' on 'Document': " +
+          "The provided event type ('" + name + "') is invalid.",
+        thrown);
+    }
+
+    // The neighbouring types the same factory does know stay constructible.
+    for (const [name, brand] of [
+      ['MouseEvent', '[object MouseEvent]'],
+      ['UIEvent', '[object UIEvent]'],
+      ['CustomEvent', '[object CustomEvent]'],
+      ['KeyboardEvent', '[object KeyboardEvent]'],
+    ]) {
+      testing.expectEqual(brand,
+        Object.prototype.toString.call(document.createEvent(name)));
+    }
+  }
+</script>
