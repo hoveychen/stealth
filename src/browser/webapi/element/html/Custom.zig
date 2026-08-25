@@ -336,6 +336,15 @@ fn invokeCallback(self: *Custom, comptime callback_name: [:0]const u8, args: any
     js_element.callMethod(void, callback_name, args) catch return;
 }
 
+// Whether this element's JS wrapper is its own. An upgraded element's wrapper
+// belongs to the author's class -- the constructor, the callbacks and the
+// prototype all come from there, so resolution has to keep reaching this type.
+// An element with no definition is just an HTMLElement, and Chrome gives it
+// HTMLElement.prototype with no level in between.
+pub fn ownsWrapper(self: *const Custom) bool {
+    return self._definition != null;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Custom);
 
@@ -359,10 +368,16 @@ pub const JsApi = struct {
         // own-property is deleted off this prototype, so the lookup walks up to
         // HTMLElement's and both the identity and the name come out Chrome's.
         //
-        // Not fixed by this: the extra prototype level is still there, so
-        // `Object.getPrototypeOf(el) === HTMLElement.prototype` stays false
-        // where Chrome says true. Removing the level means giving this type no
-        // JS class at all, which the bridge has no way to express today.
         pub const no_interface_object = true;
+
+        // ...and no class of its own either. This type is storage: it holds the
+        // tag name and the upgrade machinery, and `element.is(Custom)` reaches
+        // it through `_type`, not through the JS wrapper. Resolving the wrapper
+        // here would interpose a prototype level between the element and
+        // HTMLElement.prototype, and Chrome has none --
+        // `Object.getPrototypeOf(el) === HTMLElement.prototype` reads true
+        // there. An *upgraded* element is unaffected: its prototype comes from
+        // the author's class via new.target, not from this resolution.
+        pub const no_own_wrapper = true;
     };
 };

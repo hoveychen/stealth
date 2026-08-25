@@ -16,6 +16,9 @@
   // Not just a same-named class: Chrome hands out HTMLElement itself.
   testing.expectEqual(true, el.constructor === HTMLElement)
   testing.expectEqual('HTMLElement', el.constructor.name)
+  // And no interposed prototype: Chrome hands out HTMLElement.prototype
+  // itself, so a page walking the chain sees no extra level to name.
+  testing.expectEqual(true, Object.getPrototypeOf(el) === HTMLElement.prototype)
   testing.expectEqual(true, el instanceof HTMLElement)
   testing.expectEqual('MY-WIDGET', el.tagName)
   testing.expectEqual('[object HTMLElement]', Object.prototype.toString.call(el))
