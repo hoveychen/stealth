@@ -13346,3 +13346,39 @@ than left as a count:
   `TypeError: … The provided value cannot be converted to a sequence.` when the
   argument is not one. Ours accepts anything. That is argument conversion, which
   is its own gap and not a return value.
+
+## createEvent knew a name no desktop browser knows (2026-08-25)
+
+`probes/kasada-argument-followup.js` asks five event types of the legacy
+`document.createEvent` factory, and four of them answered the same on both arms.
+The fifth:
+
+| | Chrome 150 | engine, before |
+|---|---|---|
+| `createEvent('TouchEvent')` | `NotSupportedError` | `[object TouchEvent]` |
+
+The same Chrome has `typeof TouchEvent === 'function'` and builds
+`new TouchEvent('touchstart')` without complaint. Both facts are true at once
+because they come from different tables: the constructor is on the global
+unconditionally, while the `createEvent` factory only carries an entry when the
+build has touch event feature detection on, and a desktop build does not —
+`navigator.maxTouchPoints` is 0 and `'ontouchstart' in window` is false on the
+machine that answered. So the refusal is not "TouchEvent does not exist here",
+it is "that string is not in this table", and Chrome says so with the same
+message it gives any unknown name, original casing echoed:
+
+```
+Failed to execute 'createEvent' on 'Document': The provided event type ('TouchEvent') is invalid.
+```
+
+We had a `touchevent` branch, so one call to a factory nobody has used since
+2015 reported a touch-enabled event table alongside a mouse-only
+`maxTouchPoints: 0` — a contradiction cheaper to read than to fake. Deleting the
+branch is the whole fix: the `invalidEventType` path already produced Chrome's
+exact message, and `new TouchEvent(...)` still works, because it never went
+through here.
+
+The probe's 38 rows are now down to four differences, none of them this:
+`toDataURL` for `image/jpeg` and `image/webp` still fall back to png (its own
+plan), and `innerHeight` / `screen` differ because the two harnesses use
+different viewports.

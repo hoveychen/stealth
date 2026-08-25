@@ -1,5 +1,5 @@
 {
-  "when": "2026-08-25T07:56:50.909Z",
+  "when": "2026-08-25T10:52:00.000Z",
   "url": "https://example.com/",
   "chrome": {
     "webgl.before.37446": null,
@@ -42,15 +42,15 @@
     "screen": "800x600"
   },
   "lightpanda": {
-    "webgl.before.37446": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
-    "webgl.before.37445": "Google Inc. (Apple)",
+    "webgl.before.37446": null,
+    "webgl.before.37445": null,
     "webgl.ext": true,
     "webgl.after.37446": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
     "webgl.after.37445": "Google Inc. (Apple)",
     "webgl.VENDOR": "WebKit",
     "webgl.RENDERER": "WebKit WebGL",
-    "webgl2.before.37446": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
-    "webgl2.before.37445": "Google Inc. (Apple)",
+    "webgl2.before.37446": null,
+    "webgl2.before.37445": null,
     "webgl2.ext": true,
     "webgl2.after.37446": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
     "webgl2.after.37445": "Google Inc. (Apple)",
@@ -63,7 +63,7 @@
     "toDataURL image/gif": "data:image/png",
     "toDataURL image/avif": "data:image/png",
     "convertToBlob": "have",
-    "createEvent TouchEvent": "[object TouchEvent]",
+    "createEvent TouchEvent": "threw:NotSupportedError",
     "createEvent MouseEvent": "[object MouseEvent]",
     "createEvent UIEvent": "[object UIEvent]",
     "createEvent CustomEvent": "[object CustomEvent]",
@@ -76,7 +76,7 @@
     "mq bogus": false,
     "mq bogus media": "(min-bogus: 1px)",
     "mq color-index": true,
-    "mq device-posture": false,
+    "mq device-posture": true,
     "innerWidth": 1920,
     "innerHeight": 1080,
     "screen": "1920x1080"
