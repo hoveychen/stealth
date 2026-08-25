@@ -13281,7 +13281,9 @@ against headed Chrome:
 * It needs the loader. Dropping `public/…` — the 230 KB loader, and with it the
   `e/*.js` modules whose URLs it derives — makes every sample correct again.
   Dropping the challenge script, or the sensor script, changes nothing: both
-  still leak. (`akamai-replay.mjs --drop <substring>` answers matching URLs with
+  still leak. Narrowed once more: `--drop /e/` empties the four modules while
+  leaving the loader itself in place, and that still leaks — so it is the
+  loader, not what it loads. (`akamai-replay.mjs --drop <substring>` answers matching URLs with
   an empty body; the guard will not complete, so this is for "which script flips
   X", not for readings.)
 * It does not reproduce from a plain page. Frame with and without a src, src
