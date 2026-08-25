@@ -3,11 +3,11 @@
   "canvas colorSpace rec2020": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
   "canvas colorSpace nonesuch": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
   "canvas colorType float32": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorType' property from 'CanvasContextCreationAttributesModule': The provided value 'float32' is not a valid enum value of type CanvasPixelFormat.",
-  "imagedata rec2020": "TypeError: ",
-  "imagedata nonesuch": "TypeError: ",
-  "imagedata srgb-linear": "TypeError: ",
-  "getImageData rec2020": "srgb",
-  "getImageData nonesuch": "srgb"
+  "imagedata rec2020": "TypeError: Failed to construct 'ImageData': The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
+  "imagedata nonesuch": "TypeError: Failed to construct 'ImageData': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+  "imagedata srgb-linear": "TypeError: Failed to construct 'ImageData': The provided value 'srgb-linear' is not a valid enum value of the type PredefinedColorSpace.",
+  "getImageData rec2020": "TypeError: Failed to execute 'getImageData' on 'OffscreenCanvasRenderingContext2D': The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
+  "getImageData nonesuch": "TypeError: Failed to execute 'getImageData' on 'OffscreenCanvasRenderingContext2D': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace."
  },
  "willReadFrequently": {
   "\"undefined\"": "{\"alpha\":true,\"colorSpace\":\"srgb\",\"colorType\":\"unorm8\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":false}",

@@ -39,10 +39,10 @@
  },
  "imageDataColorSpace": {
   "srgb": "srgb",
-  "display-p3": "throw:TypeError: ",
-  "rec2020": "throw:TypeError: ",
-  "srgb-linear": "throw:TypeError: ",
-  "nonesuch": "throw:TypeError: "
+  "display-p3": "display-p3",
+  "rec2020": "throw:TypeError: Failed to construct 'ImageData': The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
+  "srgb-linear": "throw:TypeError: Failed to construct 'ImageData': The provided value 'srgb-linear' is not a valid enum value of the type PredefinedColorSpace.",
+  "nonesuch": "throw:TypeError: Failed to construct 'ImageData': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace."
  },
  "unknownType": {
   "nonesuch + bad colorSpace": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'bad' is not a valid enum value of type PredefinedColorSpace.",
@@ -50,9 +50,9 @@
   "2d after webgl, bad colorSpace": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'bad' is not a valid enum value of type PredefinedColorSpace."
  },
  "opaque": {
-  "alpha:false initial pixel": "0,0,0,0",
+  "alpha:false initial pixel": "0,0,0,255",
   "alpha:true initial pixel": "0,0,0,0",
-  "alpha:false semi-transparent fill": "255,0,0,128",
-  "alpha:false clearRect": "0,0,0,0"
+  "alpha:false semi-transparent fill": "128,0,0,255",
+  "alpha:false clearRect": "0,0,0,255"
  }
 }
