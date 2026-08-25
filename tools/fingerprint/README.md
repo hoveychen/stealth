@@ -13229,3 +13229,79 @@ Two traps worth restating, both walked into again this round:
   what `MOm` reads characters with, 496,239 times. An earlier note claimed the
   hash "does not use charCodeAt" and concluded this engine never runs it. It
   does; both arms do; the counter simply never measured it.
+
+### The four extra `getContext` calls were one call and a wrapped realm (2026-08-25)
+
+`probe-canvas-order.js` now numbers every receiver (`canvas#2`, `2d#1`, `gl2#1`),
+logs the call site for `getContext` / `toDataURL`, keeps the whole stack for
+those rows in `__probe.gcStacks`, and wraps the WebGL contexts as well. The
+replay server grew `--stall-challenge <ms>`, which holds the `?t=` reply so the
+interstitial never reloads: one cycle then runs to completion in both arms and
+the two sequences can be diffed line for line instead of guessed at by settle.
+
+With receivers on, the "four extra calls" resolves into **one** extra call plus
+reordering. Grouped by call site, both arms make the same number of everything
+except the sensor's `SNK < TEY` site, where Chrome calls `getContext('webgl')`
+once and this engine twice. The stacks say which of the two:
+
+    Chrome:  SNK <- TEY <- OV(sensor:167101) <- whY
+    ours:    SNK <- TEY <- OV(sensor:167085) <- whY      <-- extra
+             SNK <- TEY <- OV(sensor:167101) <- whY
+
+`whY` (sensor offset 172621) creates a `display:none` iframe, appends it, sets
+`src="https://"`, and calls `OV(iframe)`, which runs the same collector on both
+windows: `TEY(iframe.contentWindow)` at 167085 and `TEY(window)` at 167101. The
+collector's last field (`case C5`, offset ~550700) is
+`win.document.createElement('canvas')` → `getContext('webgl')` →
+`WEBGL_debug_renderer_info` → the two `UNMASKED_*` strings. **The sensor is
+comparing the child frame's GPU strings against the top frame's.**
+
+So both arms make both calls. The probe only wraps the *top* frame's
+prototypes, so in Chrome the child frame's call is invisible — and in this
+engine it is not:
+
+    chain:  HTMLCanvasElement=TOP+ownGetContext -> HTMLElement=TOP -> Element=TOP
+            -> Node=TOP -> EventTarget=TOP -> Object=TOP
+    doc:    HTMLDocument=TOP -> Document=TOP -> Node=TOP -> ...
+    but:    iframe.contentWindow.HTMLCanvasElement !== HTMLCanvasElement
+
+The child window has its own realm and its own interface objects, while
+`contentWindow.document` — and everything that document creates — comes back
+wrapped in the **parent's** realm. A guard that compares the two windows is
+looking straight at that.
+
+What is established about the trigger, all on the offline replay, lightpanda
+against headed Chrome:
+
+* It is not the sensor's frame. A control iframe the probe creates itself
+  (`__probe.control`, sampled at inject / 100 / 300 / … / 5000 ms) leaks the
+  same way on that page. Chrome never does, at any sample.
+* It is not there at parse time: the `inject` sample is correct in both arms and
+  every later sample leaks.
+* It needs the loader. Dropping `public/…` — the 230 KB loader, and with it the
+  `e/*.js` modules whose URLs it derives — makes every sample correct again.
+  Dropping the challenge script, or the sensor script, changes nothing: both
+  still leak. (`akamai-replay.mjs --drop <substring>` answers matching URLs with
+  an empty body; the guard will not complete, so this is for "which script flips
+  X", not for readings.)
+* It does not reproduce from a plain page. Frame with and without a src, src
+  before or after append, src assigned after the frame is live, five frames,
+  parser-created frames, create/remove churn, and calls made from parse time, a
+  microtask, a timer and the load event: `expr-iframe-realm.js`,
+  `expr-iframe-realm-wrap.js` and a handful of scratch pages all say both arms
+  are correct. Whatever the loader does, that list does not contain it.
+
+Two more readings taken along the way, both real and neither explained:
+
+* **`document.domain = document.domain` costs this engine its own child
+  frames.** Assign the same value it already has, and a child frame created
+  afterwards throws `SecurityError: The operation is insecure` on
+  `contentWindow.document`, while one created before throws
+  `TypeError: no access`. Chrome keeps full access in both orders. Reproducible
+  from a plain page — this one has a minimal repro and does not need the replay.
+* After a failed navigation to `https://`, Chrome's frame reports
+  `about:blank#blocked` where ours stays on `about:blank`.
+
+And a probe artifact to not mistake for a finding: `getParameter` enum *names*
+come off the first context the probe sees, so an arm whose first context is
+WebGL1 prints raw numbers for the WebGL2-only enums. The values were identical.

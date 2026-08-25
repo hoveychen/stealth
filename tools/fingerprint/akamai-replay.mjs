@@ -40,6 +40,14 @@ const PORT = Number(arg('--port', 10380));
 const injects = process.argv.reduce((acc, a, i) => (
     a === '--inject' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc), []);
 const quiet = process.argv.includes('--quiet');
+// URL substrings to answer with an empty body, for bisecting which of the
+// page's scripts causes an effect. Repeatable. The guard will not complete with
+// a script missing -- this is for "which script flips X", not for readings.
+const drops = process.argv.reduce((acc, a, i) => (
+    a === '--drop' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc), []);
+// Milliseconds to hold the `?t=` challenge-id reply, i.e. how long to keep the
+// interstitial from reloading itself. 0 replays the site's own behaviour.
+const stall = Number(arg('--stall-challenge', 0));
 // DO NOT REWRITE THE GUARD'S SOURCE TEXT. Tried and measured: marking each of
 // the sensor script's 631 `case <ident>:` labels with a `__M(<offset>);` call,
 // to trace which case bodies ran, produced a page that loads, runs 5986 marks
@@ -99,8 +107,22 @@ const server = http.createServer(async (req, res) => {
         const head = (body.match(/"sensor_data":"([^"]{0,80})/)?.[1] ?? body.slice(0, 60)).replace(/\\/g, '');
         console.log(`  POST ${chunks.reduce((n, c) => n + c.length, 0)}B  ${head}`);
         const t = /[?&]t=/.test(p);
+        // The `?t=` reply is what the interstitial's poller is waiting for, and
+        // answering it makes the page `location.reload(true)` -- which wipes
+        // `window.__probe` and leaves a page-side log that belongs to whichever
+        // cycle the settle happened to land in. Holding that one reply keeps a
+        // single cycle alive for as long as the reading needs, so both arms can
+        // be compared at their own pace instead of against the wall clock.
+        if (t && stall) await new Promise((r) => setTimeout(r, stall));
         res.writeHead(t ? 200 : 201, { 'content-type': 'application/json' });
         res.end('{"success":true}');
+        return;
+    }
+
+    if (drops.some((d) => p.includes(d))) {
+        console.log(`  dropped ${p}`);
+        res.writeHead(200, { 'content-type': 'application/javascript' });
+        res.end('');
         return;
     }
 
