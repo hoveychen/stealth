@@ -1476,13 +1476,37 @@ pub fn readPixels(self: *const Surface, canvas_width: u32, canvas_height: u32, s
             }
             const from: usize = @as(usize, @intCast(src_y)) * canvas_width +
                 @as(usize, @intCast(src_x));
-            const pixel = straight(self.load(from)).toRGBA();
-            out[to] = pixel.r;
-            out[to + 1] = pixel.g;
-            out[to + 2] = pixel.b;
-            out[to + 3] = pixel.a;
+            const pixel = switch (self.channels) {
+                .unorm8 => straightUnit(self.pixels[from * 4 ..][0..4]),
+                .float16 => straightHalf(self.halves[from * 4 ..][0..4]),
+            };
+            for (out[to..][0..4], pixel) |*byte, channel| byte.* = toUnorm8(channel);
         }
     }
+}
+
+/// A normalised channel as the byte a readback answers, which is Skia's
+/// `to_unorm`: clamped into the unit range, scaled, and rounded with ties going
+/// to the *even* neighbour rather than away from zero.
+///
+/// The tie is reachable and the two rules disagree there. Measured
+/// (probes/canvas-gradient-paint.js): a stored 6 over an alpha of 36 is exactly
+/// 42.5 once scaled, and Chrome answers 42. That is what `_mm_cvtps_epi32` and
+/// `vcvtnq_s32_f32` do by default, which is how Skia gets there — it converts,
+/// it does not round and then truncate.
+fn toUnorm8(value: f32) u8 {
+    const scaled = std.math.clamp(value, 0, 1) * 255;
+    const below = @floor(scaled);
+    const fraction = scaled - below;
+    const rounded = if (fraction > 0.5)
+        below + 1
+    else if (fraction < 0.5)
+        below
+    else if (@mod(below, 2) == 0)
+        below
+    else
+        below + 1;
+    return @intFromFloat(rounded);
 }
 
 /// One straight-alpha pixel in the premultiplied form the bitmap stores, which
@@ -1727,6 +1751,53 @@ test "raster: a translucent fill reads back Chrome's bytes" {
     for (cases, 0..) |case, i| {
         surface.reset();
         surface.fillRect(1, 1, 0, 0, 1, 1, .{ .flat = .fromRGBA(case.paint) }, case.global_alpha, .source_over);
+
+        var out = [_]u8{0} ** 4;
+        surface.readPixels(1, 1, 0, 0, 1, 1, &out);
+        testing.expectEqualSlices(u8, &case.want, &out) catch |err| {
+            std.debug.print("case {d}\n", .{i});
+            return err;
+        };
+    }
+}
+
+test "raster: the readback is f32 and a tie goes to even" {
+    var buffer: [1024]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+    var surface = Surface{ .arena = fba.allocator() };
+    defer surface.reset();
+
+    // Two readings that between them pin the width the un-premultiply is done
+    // at and the rounding it ends with. Both are stored-over-alpha pairs a
+    // gradient's alpha ramp puts down (probes/canvas-gradient-paint.js), and
+    // Chrome's answer is one below what the obvious arithmetic gives:
+    //
+    //   stored 18, alpha 68 -- 18/68 is exactly 67.5 in f64, so rounding half
+    //   away from zero answers 68. In f32 the same value is 67.49999237, under
+    //   the half, and Chrome answers 67. So the width is f32.
+    //
+    //   stored 6, alpha 36 -- exactly 42.5 in f32 as well, so the width alone
+    //   does not decide it. Chrome answers 42, the even one. That is what
+    //   `_mm_cvtps_epi32` and `vcvtnq_s32_f32` do, and so what Skia's
+    //   `to_unorm` does.
+    //
+    // The paints are the straight colours that store those bytes: 68 at an
+    // alpha of 68 premultiplies to 18.13, and 43 at 36 to 6.07.
+    const cases = [_]struct {
+        paint: RGBA,
+        want: [4]u8,
+    }{
+        .{ .paint = .{ .r = 68, .g = 68, .b = 68, .a = 68 }, .want = .{ 67, 67, 67, 68 } },
+        .{ .paint = .{ .r = 43, .g = 43, .b = 43, .a = 36 }, .want = .{ 42, 42, 42, 36 } },
+        // A control that is nowhere near a tie, so it reads the same either
+        // way and a regression here is not about rounding at all.
+        .{ .paint = .{ .r = 200, .g = 100, .b = 50, .a = 77 }, .want = .{ 199, 99, 50, 77 } },
+    };
+
+    for (cases, 0..) |case, i| {
+        surface.reset();
+        surface.fillRect(1, 1, 0, 0, 1, 1, .{ .flat = .fromRGBA(case.paint) }, 1, .source_over);
 
         var out = [_]u8{0} ** 4;
         surface.readPixels(1, 1, 0, 0, 1, 1, &out);
