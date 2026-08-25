@@ -163,9 +163,8 @@
 
 // Every extension 2.0 advertises hands back its own named interface object, the
 // same way 1.0's do. Before this the union carried one anonymous empty struct
-// for all but two of them, so 34 of 36 branded as [object Object] -- and their
-// prototype being Object.prototype meant `for (const k in ext)` reached
-// __defineGetter__ and toString, members no extension has.
+// for all but two of them, so 34 of 36 branded as [object Object] and their
+// prototype *was* Object.prototype -- twelve members no extension has.
 //
 // Brands measured off Chrome 150, results/webgl-extension-brands.json. The one
 // name this claim does not advertise, OVR_multiview2, is measured too: a Chrome
@@ -229,14 +228,15 @@
     const ext = own.getExtension(name);
     testing.expectEqual(true, ext !== null && ext !== undefined, { desc: name });
     testing.expectEqual(`[object ${brands[name]}]`, Object.prototype.toString.call(ext), { desc: name });
-    // No interface object of its own, and nothing from Object.prototype in the
-    // enumerable set -- the anonymous struct used to put __defineGetter__ and
-    // friends there.
+    // No interface object of its own.
     testing.expectEqual("undefined", typeof globalThis[brands[name]], { desc: name });
-    for (const key in ext) {
-      testing.expectEqual(false, key.startsWith("__"), { desc: name + "." + key });
-      testing.expectEqual(false, key === "toString", { desc: name + "." + key });
-    }
+    // And a prototype of its own: the anonymous struct's was Object.prototype,
+    // so getOwnPropertyNames on it answered __defineGetter__, hasOwnProperty and
+    // ten more -- non-enumerable, so a for-in missed them, but a script reading
+    // the prototype saw twelve members no WebGL extension has.
+    const proto = Object.getPrototypeOf(ext);
+    testing.expectEqual(false, proto === Object.prototype, { desc: name });
+    testing.expectEqual(false, Object.getOwnPropertyNames(proto).includes("hasOwnProperty"), { desc: name });
   }
 
   // Extension members, spot-checked against the measurement: a GLenum here has

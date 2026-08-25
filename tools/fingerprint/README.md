@@ -13231,3 +13231,66 @@ own gaps, found while measuring this one:
 - `getError()` after the gated read is **1280 (`INVALID_ENUM`) in Chrome and 0
   here**, because our `getError` is a constant `NO_ERROR`. The gated read is one
   way in; any invalid enum is another.
+
+## The engine advertised 75 extensions and handed back 4 (2026-08-25)
+
+`getSupportedExtensions()` listed 39 names on WebGL 1 and 36 on WebGL 2.
+`getExtension()` then answered `undefined` for 37 of the 39 and `[object Object]`
+for 34 of the 36. One expression — `if (gl.getExtension(name))` — took the wrong
+branch on 71 of the 75, on a context that had just claimed all of them.
+
+The two halves failed differently, which is why they read as one gap only after
+being measured. WebGL 1's union carried a `void` payload: nothing to marshal, so
+`undefined`. WebGL 2's carried a single anonymous `struct {}` standing in for 34
+names at once, so every one of them branded as `[object Object]` — and its
+prototype *was* `Object.prototype`, so a script reading the prototype got
+`__defineGetter__`, `hasOwnProperty` and ten more members no WebGL extension has.
+
+`probes/webgl-extension-brands.js` is the ground truth: every advertised name
+put back through `getExtension`, and for each one the brand, the prototype's
+member names, and each member's value — GLenums as the numbers the driver
+reports, methods as `fn/<arity>`. 53 interfaces, 213 member slots.
+
+The brands are why this had to be measured rather than derived from the extension
+string. There is no rule that survives the list:
+
+| extension | brand |
+|---|---|
+| `EXT_sRGB` | `EXTsRGB` |
+| `EXT_shader_texture_lod` | `EXTShaderTextureLOD` |
+| `OES_fbo_render_mipmap` | `OESFboRenderMipmap` |
+| `WEBGL_compressed_texture_s3tc_srgb` | `WebGLCompressedTextureS3TCsRGB` |
+| `EXT_disjoint_timer_query_webgl2` | `EXTDisjointTimerQueryWebGL2` |
+| `NV_shader_noperspective_interpolation` | `NVShaderNoperspectiveInterpolation` |
+
+So `webgl_extensions.zig` is generated — `tools/fingerprint/gen-webgl-extensions.mjs`
+transcribes the results JSON — and both contexts construct from it with the same
+four steps: check the advertised list, look the name up case-insensitively,
+open the `WEBGL_debug_renderer_info` gate if that is the one asked for, construct.
+Both arms now agree on all 77 keys of the probe with no difference in brand,
+prototype member set, member value or arity.
+
+**One name had no reading behind it, and it was not harmless.** `OVR_multiview2`
+is SwiftShader-only: the macOS/Metal driver the reference run used never
+advertises it, so the probe could not see it — while `gpu.zig`'s *linux* table
+does advertise it. Under a linux claim the engine would have listed a name it
+then refused, which is the exact contradiction this work removed. Guessing
+`OVRMultiview2` from the string was available and, on this list, would have been
+a coin flip. Forcing the same Chrome onto SwiftShader was not expensive:
+
+```
+--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader
+```
+
+It advertises the name, the brand *is* `[object OVRMultiview2]`, and the five
+members and their GLenums are recorded under `chrome_swiftshader` in the results
+JSON — its own key, because the rest of that run is a different GPU table. That
+run also advertised `EXT_disjoint_timer_query_webgl2`, which the linux table says
+SwiftShader lacks; a timer query is the host's to grant, so that is a host
+difference and not a correction to the table.
+
+**Still short of Chrome: the methods are no-ops.** Arity matches, so `fn.length`
+does; the return value does not. `getSupportedProfiles`,
+`getTranslatedShaderSource` and `isVertexArrayOES` answer something in Chrome and
+`undefined` here. That needs its own two-arm measurement — which is why this
+probe records arity and not return values.

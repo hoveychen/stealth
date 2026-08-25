@@ -1,5 +1,5 @@
 // Transcribes results/webgl-extension-brands.json into the Zig source for the
-// WebGL extension interface objects. There are 52 of them carrying 208 members
+// WebGL extension interface objects. There are 53 of them carrying 213 members
 // between them, every value measured off a reference Chrome, and hand-copying
 // that many GLenums is how a typo becomes a fingerprint. So the file is
 // generated and committed, and this script is how it is regenerated when the
