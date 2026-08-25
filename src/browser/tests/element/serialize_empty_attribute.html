@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!-- The HTML fragment serialisation algorithm has exactly one form for an
+     attribute: the name, `="`, the escaped value, `"`. There is no shorthand for
+     an empty value and no exemption for the attributes that happen to be
+     boolean ones -- `checked` is written `checked=""` like every other empty
+     attribute is. Chrome 151 does this, measured; writing the bare name instead
+     is a difference a page can read off its own markup with one property
+     access, and it appears on the most ordinary form controls there are. -->
+
+<script id="empty_boolean_attributes_keep_the_equals_form">
+  {
+    const host = document.createElement('div')
+    host.innerHTML = '<input type="checkbox" checked><button disabled>x</button>'
+    testing.expectEqual(
+      '<input type="checkbox" checked=""><button disabled="">x</button>',
+      host.innerHTML)
+
+    // Same through the property, not just the parsed attribute.
+    const box = document.createElement('input')
+    box.type = 'checkbox'
+    box.setAttribute('checked', '')
+    testing.expectEqual('<input type="checkbox" checked="">', box.outerHTML)
+  }
+</script>
+
+<script id="empty_ordinary_attributes_were_already_right">
+  {
+    // The contrast that shows the rule is uniform: an attribute nobody calls
+    // boolean has always serialised with the empty value spelled out.
+    const host = document.createElement('div')
+    host.innerHTML = '<div data-x="" title="">t</div>'
+    testing.expectEqual('<div data-x="" title="">t</div>', host.innerHTML)
+  }
+</script>
+
+<script id="a_boolean_attribute_with_a_value_keeps_it">
+  {
+    // `checked="false"` is still a checked attribute -- the value is preserved
+    // verbatim, which is the case that proves the serialiser is not simply
+    // rewriting every boolean attribute to the empty string.
+    const host = document.createElement('div')
+    host.innerHTML = '<input type="checkbox" checked="false">'
+    testing.expectEqual('<input type="checkbox" checked="false">', host.innerHTML)
+  }
+</script>

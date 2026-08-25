@@ -22,6 +22,7 @@ const Frame = @import("Frame.zig");
 const Node = @import("webapi/Node.zig");
 const Slot = @import("webapi/element/html/Slot.zig");
 const IFrame = @import("webapi/element/html/IFrame.zig");
+const Template = @import("webapi/element/html/Template.zig");
 
 pub const Opts = struct {
     with_base: bool = false,
@@ -175,6 +176,10 @@ fn _deep(node: *Node, opts: Opts, comptime force_slot: bool, writer: *std.Io.Wri
                         try writer.writeByte('\n');
                     }
                 }
+            } else if (el.is(Template)) |template| {
+                // A template's own childNodes are always empty; what it holds
+                // lives in its content fragment, and that is what serializes.
+                try children(template._content.asNode(), opts, writer, frame);
             } else {
                 try children(node, opts, writer, frame);
             }

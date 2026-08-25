@@ -205,6 +205,33 @@
 }
 </script>
 
+<script id=serialized_as_a_descendant>
+{
+  // A template reached as a descendant serializes its content fragment, the
+  // same as when it is the serialization root. Chrome 151 agrees.
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = '<template id="through-parent"><b>parsed</b></template>';
+  testing.expectEqual('<template id="through-parent"><b>parsed</b></template>', wrapper.innerHTML);
+
+  // One level deeper, so it's the recursive path and not the direct child one.
+  const outer = document.createElement('div');
+  outer.appendChild(wrapper);
+  testing.expectEqual('<div><template id="through-parent"><b>parsed</b></template></div>', outer.innerHTML);
+
+  // Content set through the innerHTML setter, not the parser.
+  const built = document.createElement('template');
+  built.innerHTML = '<i>built</i>';
+  const holder = document.createElement('section');
+  holder.appendChild(built);
+  testing.expectEqual('<template><i>built</i></template>', holder.innerHTML);
+
+  // A template nested inside another template's content.
+  const nest = document.createElement('div');
+  nest.innerHTML = '<template><template><em>deep</em></template></template>';
+  testing.expectEqual('<template><template><em>deep</em></template></template>', nest.innerHTML);
+}
+</script>
+
 <script id=textContent_empty>
 {
   const template = $('#basic');
