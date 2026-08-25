@@ -13149,3 +13149,43 @@ and `=` queries are `mq-range-syntax`, and sixteen `.media` values still echo th
 input instead of the normalized form (`(min-resolution:0.625dppx)` and
 `.625dppx` both print as written) — that is `mq-media-serialization`, which
 x-hyatt does not read.
+
+## The range form was answering false to all of it (2026-08-25)
+
+The eight `<`, `>` and `=` queries the chapter above left to this plan now
+answer, and the probe grew to 97 queries to pin down the half a "does it
+evaluate" check cannot see: *which* shapes Chrome calls malformed.
+`results/mq-range-syntax.json` has both arms. **Zero mismatches on the matches
+column.**
+
+What was wrong was not a value, it was that `evalFeature` only knew two shapes —
+`name: value` and a bare `name`. An operator matched neither, so `(width >
+100px)` fell through to the boolean branch, failed to find `width >` as a
+feature name, and answered false. All eight, always.
+
+The measurements that shaped the implementation, none of which the plan named:
+
+| query | Chrome | why |
+|---|---|---|
+| `(100px < width)` | true | the value may sit on either side; the comparison flips |
+| `(600px <= width <= 5000px)` | true | two-sided is two comparisons on one value |
+| `(600px < width > 1200px)` | false | both operators must point the same way |
+| `(600px <= width = 1200px)` | false | and neither may be `=` |
+| `(width>100px)` | true | the operator needs no surrounding whitespace |
+| `(orientation = landscape)` | false | discrete features have no ordering |
+| `(hover = hover)` | false | ditto — the value being right does not help |
+| `(grid = 0)` | false | ditto |
+| `(min-width >= 600px)` | false | a prefix and an operator are mutually exclusive |
+
+So the range form applies to exactly seven features — `width`, `height`,
+`resolution`, `color`, `color-index`, `monochrome`, `aspect-ratio` and their
+`device-` spellings. That whitelist is the reason the last four rows answer
+false deliberately rather than by falling off the end of a chain of `if`s, and
+they are pinned by tests.
+
+**A trap for anyone re-running this probe:** `(height >= 1080px)` and
+`(aspect-ratio = 16/9)` are *false* in the Chrome arm and *true* in ours. That
+is not a gap. `(width = 1920px)` is true in both, so the width agrees — but the
+headless harness viewport is not 1080 tall and its `screen` is 800x600, which is
+the same viewport/screen axis the earlier chapters call out. Five rows are
+excluded on that basis and the acceptance script names them.

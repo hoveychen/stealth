@@ -38,6 +38,10 @@
 //!   - Number values: `<resolution>` in `dppx` / `x` / `dpi` / `dpcm` and both
 //!     `<ratio>` terms take a fractional CSS `<number>`.
 //!   - Operators: `,` (OR), `and`, `not`, `only`.
+//!   - Range form (MQ4 §2.4) on the range-type features: `(width > 600px)`,
+//!     the reversed `(600px < width)`, and the two-sided
+//!     `(600px <= width <= 1200px)`, with `<`, `<=`, `>`, `>=` and `=`.
+//!     Discrete features and already-prefixed ones take no operator.
 //!
 //! The interaction features and the display descriptors answer for one fixed
 //! device persona, and it has to stay consistent with the rest of the fork:
@@ -284,6 +288,12 @@ fn evalFeature(text: []const u8, viewport: Viewport) bool {
     const trimmed = trimWsAndComments(text);
     if (trimmed.len == 0) return false;
 
+    // The MQ4 range form is tried first: what distinguishes it from the legacy
+    // `name: value` one is the operator, and no well-formed query has both.
+    // `evalRange` hands back null when there is no operator at all, so a plain
+    // feature falls through untouched.
+    if (evalRange(trimmed, viewport)) |result| return result;
+
     if (indexOfScalarSkippingComments(trimmed, ':')) |colon| {
         const name = trimWsAndComments(trimmed[0..colon]);
         const value = trimWsAndComments(trimmed[colon + 1 ..]);
@@ -511,6 +521,177 @@ fn evalBoolean(name: []const u8, viewport: Viewport) bool {
         std.mem.eql(u8, lname, "prefers-contrast")) return true;
 
     return false;
+}
+
+const RangeOp = enum { lt, le, gt, ge, eq };
+
+/// The range-type media features — the ones whose value is a number, a length,
+/// a resolution or a ratio, and so can be ordered. MQ4 gives only these the
+/// range form: a discrete feature like `orientation` or `hover` has no ordering
+/// to compare against, and a feature that already carries a `min-` / `max-`
+/// prefix may not take an operator as well. Chrome answers false to both
+/// (measured), so the whitelist is the point rather than an optimisation.
+const RangeFeature = enum { width, height, resolution, color, color_index, monochrome, aspect_ratio };
+
+fn parseRangeFeature(name: []const u8) ?RangeFeature {
+    if (name.len > 32) return null;
+    var buf: [32]u8 = undefined;
+    const lname = std.ascii.lowerString(&buf, name);
+
+    // The window box matches the viewport in this fork, so the device- lengths
+    // are the same numbers — the same equivalence evalNameValue relies on.
+    if (std.mem.eql(u8, lname, "width") or std.mem.eql(u8, lname, "device-width")) return .width;
+    if (std.mem.eql(u8, lname, "height") or std.mem.eql(u8, lname, "device-height")) return .height;
+    if (std.mem.eql(u8, lname, "resolution")) return .resolution;
+    if (std.mem.eql(u8, lname, "color")) return .color;
+    if (std.mem.eql(u8, lname, "color-index")) return .color_index;
+    if (std.mem.eql(u8, lname, "monochrome")) return .monochrome;
+    if (std.mem.eql(u8, lname, "aspect-ratio") or std.mem.eql(u8, lname, "device-aspect-ratio")) return .aspect_ratio;
+    return null;
+}
+
+fn rangeFeatureValue(feature: RangeFeature, viewport: Viewport) f64 {
+    return switch (feature) {
+        .width => @floatFromInt(viewport.width),
+        .height => @floatFromInt(viewport.height),
+        .resolution => DEVICE_PIXEL_RATIO,
+        .color => @floatFromInt(COLOR_BITS_PER_CHANNEL),
+        .color_index => @floatFromInt(COLOR_INDEX),
+        .monochrome => @floatFromInt(MONOCHROME_BITS),
+        .aspect_ratio => @as(f64, @floatFromInt(viewport.width)) / @as(f64, @floatFromInt(viewport.height)),
+    };
+}
+
+/// The bound in whatever value space the feature reads in, so both sides of the
+/// comparison are the same scalar.
+fn parseRangeBound(feature: RangeFeature, text: []const u8) ?f64 {
+    return switch (feature) {
+        .width, .height => @floatFromInt(parseLengthPx(text) orelse return null),
+        .resolution => parseResolutionDppx(text),
+        .color, .color_index, .monochrome => @floatFromInt(parseInteger(text) orelse return null),
+        .aspect_ratio => parseRatio(text),
+    };
+}
+
+/// A `<ratio>` as a single scalar, for the range form. IEEE division is
+/// correctly rounded and 1920/1080 is exactly the real number 16/9, so both
+/// spellings land on the same double and still compare equal — the property
+/// `compareRatio` gets from cross-multiplying.
+fn parseRatio(text: []const u8) ?f64 {
+    const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
+    const slash = std.mem.indexOfScalar(u8, trimmed, '/') orelse return parseNumber(trimmed);
+    const num = parseNumber(trimmed[0..slash]) orelse return null;
+    const den = parseNumber(trimmed[slash + 1 ..]) orelse return null;
+    if (den == 0) return null;
+    return num / den;
+}
+
+fn compareOp(lhs: f64, op: RangeOp, rhs: f64) bool {
+    return switch (op) {
+        .lt => lhs < rhs,
+        .le => lhs <= rhs,
+        .gt => lhs > rhs,
+        .ge => lhs >= rhs,
+        .eq => lhs == rhs,
+    };
+}
+
+/// Reading `a < b` as a statement about `b` instead of `a` reverses it, which
+/// is what lets the feature sit on either side of the operator.
+fn flipOp(op: RangeOp) RangeOp {
+    return switch (op) {
+        .lt => .gt,
+        .le => .ge,
+        .gt => .lt,
+        .ge => .le,
+        .eq => .eq,
+    };
+}
+
+const OpMatch = struct { op: RangeOp, len: usize };
+
+fn matchRangeOp(s: []const u8, i: usize) ?OpMatch {
+    const eq_next = i + 1 < s.len and s[i + 1] == '=';
+    return switch (s[i]) {
+        '<' => if (eq_next) .{ .op = .le, .len = 2 } else .{ .op = .lt, .len = 1 },
+        '>' => if (eq_next) .{ .op = .ge, .len = 2 } else .{ .op = .gt, .len = 1 },
+        '=' => .{ .op = .eq, .len = 1 },
+        else => null,
+    };
+}
+
+/// MQ4 range form: `(width > 600px)`, the reversed `(600px < width)`, or the
+/// two-sided `(600px <= width <= 1200px)`. Returns null — not false — when
+/// `text` holds no operator, so `evalFeature` can fall through to the legacy
+/// `name: value` form; anything with an operator is answered here, malformed
+/// or not.
+fn evalRange(text: []const u8, viewport: Viewport) ?bool {
+    var parts: [3][]const u8 = undefined;
+    var ops: [2]RangeOp = undefined;
+    var n_ops: usize = 0;
+
+    var start: usize = 0;
+    var i: usize = 0;
+    while (i < text.len) {
+        if (i + 1 < text.len and text[i] == '/' and text[i + 1] == '*') {
+            const close = std.mem.indexOfPos(u8, text, i + 2, "*/") orelse return null;
+            i = close + 2;
+            continue;
+        }
+        if (matchRangeOp(text, i)) |m| {
+            // A third operator is malformed, but it is still a range query, so
+            // it answers false rather than falling through to `name: value`.
+            if (n_ops == 2) return false;
+            parts[n_ops] = text[start..i];
+            ops[n_ops] = m.op;
+            n_ops += 1;
+            i += m.len;
+            start = i;
+            continue;
+        }
+        i += 1;
+    }
+    if (n_ops == 0) return null;
+    parts[n_ops] = text[start..];
+
+    if (n_ops == 1) {
+        const lhs = trimWsAndComments(parts[0]);
+        const rhs = trimWsAndComments(parts[1]);
+        if (parseRangeFeature(lhs)) |feature| {
+            const bound = parseRangeBound(feature, rhs) orelse return false;
+            return compareOp(rangeFeatureValue(feature, viewport), ops[0], bound);
+        }
+        if (parseRangeFeature(rhs)) |feature| {
+            const bound = parseRangeBound(feature, lhs) orelse return false;
+            return compareOp(rangeFeatureValue(feature, viewport), flipOp(ops[0]), bound);
+        }
+        return false;
+    }
+
+    // Two-sided: the feature is in the middle, and per MQ4 both operators have
+    // to point the same way. `(600px < width > 1200px)` is malformed and so is
+    // an `=` on either side — both measured false in Chrome.
+    if (!sameDirection(ops[0], ops[1])) return false;
+    const feature = parseRangeFeature(trimWsAndComments(parts[1])) orelse return false;
+    const low = parseRangeBound(feature, trimWsAndComments(parts[0])) orelse return false;
+    const high = parseRangeBound(feature, trimWsAndComments(parts[2])) orelse return false;
+    const value = rangeFeatureValue(feature, viewport);
+    return compareOp(value, flipOp(ops[0]), low) and compareOp(value, ops[1], high);
+}
+
+fn sameDirection(a: RangeOp, b: RangeOp) bool {
+    const descending = struct {
+        fn f(op: RangeOp) ?bool {
+            return switch (op) {
+                .lt, .le => false,
+                .gt, .ge => true,
+                .eq => null,
+            };
+        }
+    }.f;
+    const a_dir = descending(a) orelse return false;
+    const b_dir = descending(b) orelse return false;
+    return a_dir == b_dir;
 }
 
 const RatioCompare = enum { eq, ge, le };
@@ -1016,14 +1197,101 @@ test "MediaQuery: unimplemented units fail closed" {
     try testing.expect(!matches("(min-width: 50vw)", v));
 }
 
-test "MediaQuery: range syntax is unsupported (fails closed)" {
-    const v = Viewport.default;
-    // MQ4 range form is not implemented — should evaluate false rather than
-    // accidentally matching via the `width` boolean form.
-    try testing.expect(!matches("(width >= 600px)", v));
+// MQ4's range form, which Kasada uses on x-hyatt alongside the legacy one.
+// Every structural expectation here was measured on a headed Chrome through
+// tools/fingerprint/probes/media-feature-forms.js — including which shapes are
+// malformed, which is the half a "does it evaluate at all" probe cannot see.
+test "MediaQuery: range syntax, one-sided" {
+    const v = Viewport.default; // 1920x1080
+    try testing.expect(matches("(width >= 600px)", v));
+    try testing.expect(matches("(width >= 1920px)", v));
+    try testing.expect(matches("(width <= 1920px)", v));
+    try testing.expect(matches("(width = 1920px)", v));
+    try testing.expect(matches("(width > 100px)", v));
+    try testing.expect(matches("(width < 5000px)", v));
+    try testing.expect(!matches("(width > 1920px)", v));
     try testing.expect(!matches("(width <= 600px)", v));
     try testing.expect(!matches("(width < 100px)", v));
+
+    // The operator needs no surrounding whitespace; Chrome normalizes it back
+    // in with a space either side.
+    try testing.expect(matches("(width>100px)", v));
+    try testing.expect(matches("(width>=1920px)", v));
+    try testing.expect(!matches("(width>1920px)", v));
+
+    try testing.expect(matches("(height > 100px)", v));
+    try testing.expect(matches("(height >= 1080px)", v));
+    try testing.expect(matches("(device-width > 100px)", v));
+}
+
+// `(100px < width)` is the same query as `(width > 100px)`: the value may sit
+// on either side, and which side it is on flips the comparison.
+test "MediaQuery: range syntax, feature on the right" {
+    const v = Viewport.default;
+    try testing.expect(matches("(100px < width)", v));
+    try testing.expect(matches("(1920px = width)", v));
+    try testing.expect(matches("(1920px <= width)", v));
+    try testing.expect(!matches("(100px > width)", v));
+    try testing.expect(!matches("(5000px < width)", v));
+}
+
+test "MediaQuery: range syntax, two-sided" {
+    const v = Viewport.default;
+    try testing.expect(matches("(600px <= width <= 5000px)", v));
+    try testing.expect(matches("(600px < width < 5000px)", v));
+    try testing.expect(matches("(5000px >= width >= 600px)", v));
     try testing.expect(!matches("(600px <= width <= 1200px)", v));
+
+    // Both operators have to point the same way, and neither may be `=`.
+    try testing.expect(!matches("(600px < width > 1200px)", v));
+    try testing.expect(!matches("(600px <= width = 1200px)", v));
+    try testing.expect(!matches("(600px = width = 1200px)", v));
+}
+
+test "MediaQuery: range syntax on the numeric descriptors" {
+    const v = Viewport.default;
+    try testing.expect(matches("(resolution = 1dppx)", v));
+    try testing.expect(matches("(resolution >= 1dppx)", v));
+    try testing.expect(matches("(resolution <= 1dppx)", v));
+    try testing.expect(matches("(resolution > 50dpi)", v));
+    try testing.expect(!matches("(resolution < 50dpi)", v));
+    try testing.expect(!matches("(resolution > 2dppx)", v));
+
+    try testing.expect(matches("(color = 8)", v));
+    try testing.expect(matches("(color > 4)", v));
+    try testing.expect(matches("(color <= 8)", v));
+    try testing.expect(!matches("(color > 8)", v));
+    try testing.expect(matches("(color-index = 0)", v));
+    try testing.expect(matches("(color-index >= 0)", v));
+    try testing.expect(matches("(monochrome = 0)", v));
+    try testing.expect(!matches("(monochrome > 0)", v));
+
+    // A ratio still compares as a fraction: 16/9 and 1920/1080 are one value.
+    try testing.expect(matches("(aspect-ratio = 16/9)", v));
+    try testing.expect(matches("(aspect-ratio = 1920/1080)", v));
+    try testing.expect(matches("(device-aspect-ratio = 16/9)", v));
+    try testing.expect(matches("(aspect-ratio > 1.5)", v));
+    try testing.expect(!matches("(aspect-ratio = 1.7)", v));
+}
+
+// Only range-type features take the range form. A discrete feature does not,
+// and neither does an already-prefixed one — all measured false in Chrome, so
+// evaluating them here would be the anomaly.
+test "MediaQuery: range syntax is rejected where Chrome rejects it" {
+    const v = Viewport.default;
+    try testing.expect(!matches("(orientation = landscape)", v));
+    try testing.expect(!matches("(hover = hover)", v));
+    try testing.expect(!matches("(grid = 0)", v));
+    try testing.expect(!matches("(device-posture = continuous)", v));
+    try testing.expect(!matches("(min-width >= 600px)", v));
+    try testing.expect(!matches("(max-width <= 5000px)", v));
+
+    // Still fails closed on a malformed bound or a missing side.
+    try testing.expect(!matches("(width >= 600)", v));
+    try testing.expect(!matches("(width >= foo)", v));
+    try testing.expect(!matches("(width >=)", v));
+    try testing.expect(!matches("(>= 600px)", v));
+    try testing.expect(!matches("(nonsense > 4)", v));
 }
 
 test "MediaQuery: decimal lengths are rejected" {

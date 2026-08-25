@@ -34,6 +34,22 @@
         '(device-posture: continuous)', '(device-posture: folded)', '(device-posture)',
         '(device-posture: none)',
         '(width > 100px)', '(width < 5000px)', '(height > 100px)',
+        // MQ4 range syntax, every shape of it.
+        '(width >= 1920px)', '(width <= 1920px)', '(width > 1920px)', '(width = 1920px)',
+        '(width>100px)', '(width>=1920px)',
+        '(100px < width)', '(100px > width)', '(1920px = width)',
+        '(600px <= width <= 1200px)', '(600px <= width <= 5000px)',
+        '(600px < width < 5000px)', '(5000px >= width >= 600px)',
+        '(600px < width > 1200px)', '(600px <= width = 1200px)',
+        '(height >= 1080px)', '(device-width > 100px)',
+        '(resolution >= 1dppx)', '(resolution <= 1dppx)', '(resolution > 2dppx)',
+        '(aspect-ratio = 16/9)', '(aspect-ratio = 1920/1080)', '(aspect-ratio > 1.5)',
+        '(device-aspect-ratio = 16/9)',
+        '(monochrome = 0)', '(color-index >= 0)', '(color <= 8)',
+        // Discrete features take no range form, and a min-/max- prefix cannot
+        // be combined with one.
+        '(orientation = landscape)', '(hover = hover)', '(grid = 0)',
+        '(device-posture = continuous)', '(min-width >= 600px)', '(max-width <= 5000px)',
         '(update: fast)', '(scripting: enabled)', '(overflow-block: scroll)',
     ];
     for (const q of qs) {
