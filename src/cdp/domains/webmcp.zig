@@ -291,6 +291,11 @@ pub fn onToolRemoved(
 const testing = @import("../testing.zig");
 
 test "cdp.WebMCP: enable replays existing tools" {
+    // The fixture registers through `navigator.modelContext`, gated off unless
+    // WebMCP was asked for -- and a CDP-only mode asks with `--webmcp`.
+    testing.setWebMcp(true);
+    defer testing.setWebMcp(false);
+
     var ctx = try testing.context();
     defer ctx.deinit();
 
@@ -326,6 +331,11 @@ test "cdp.WebMCP: enable replays existing tools" {
 }
 
 test "cdp.WebMCP: register fires toolsAdded after enable" {
+    // The fixture registers through `navigator.modelContext`, gated off unless
+    // WebMCP was asked for -- and a CDP-only mode asks with `--webmcp`.
+    testing.setWebMcp(true);
+    defer testing.setWebMcp(false);
+
     var ctx = try testing.context();
     defer ctx.deinit();
 
@@ -362,6 +372,11 @@ test "cdp.WebMCP: register fires toolsAdded after enable" {
 }
 
 test "cdp.WebMCP: invokeTool fires toolInvoked + toolResponded" {
+    // The fixture registers through `navigator.modelContext`, gated off unless
+    // WebMCP was asked for -- and a CDP-only mode asks with `--webmcp`.
+    testing.setWebMcp(true);
+    defer testing.setWebMcp(false);
+
     var ctx = try testing.context();
     defer ctx.deinit();
 
@@ -402,6 +417,11 @@ test "cdp.WebMCP: invokeTool fires toolInvoked + toolResponded" {
 }
 
 test "cdp.WebMCP: invokeTool unknown name" {
+    // The fixture registers through `navigator.modelContext`, gated off unless
+    // WebMCP was asked for -- and a CDP-only mode asks with `--webmcp`.
+    testing.setWebMcp(true);
+    defer testing.setWebMcp(false);
+
     var ctx = try testing.context();
     defer ctx.deinit();
 
@@ -431,6 +451,11 @@ test "cdp.WebMCP: invokeTool unknown name" {
 }
 
 test "cdp.WebMCP: cancelInvocation" {
+    // The fixture registers through `navigator.modelContext`, gated off unless
+    // WebMCP was asked for -- and a CDP-only mode asks with `--webmcp`.
+    testing.setWebMcp(true);
+    defer testing.setWebMcp(false);
+
     var ctx = try testing.context();
     defer ctx.deinit();
 

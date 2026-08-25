@@ -14,9 +14,11 @@
     // deprecatedRunAdAuctionEnforcesKAnonymity, while V8 puts ours last, and
     // that position isn't something a binding can choose.
     //
-    // modelContext is ours and not Chrome's — it's the WebMCP surface this fork
-    // exists to expose, so it stays, parked at the end where it perturbs the
-    // rest of the order least.
+    // `modelContext` is no longer excused here. It is this fork's WebMCP
+    // surface and Chrome has no such name, and Kasada was measured reading it
+    // twice on x-hyatt — one own name is enough to separate this engine from
+    // every real browser, so outside `lightpanda mcp` (and `--webmcp`) the
+    // whole surface is gated off and the name table matches Chrome's exactly.
     const chrome150 = [
       'vendorSub', 'productSub', 'vendor', 'maxTouchPoints', 'scheduling',
       'userActivation', 'geolocation', 'doNotTrack', 'webkitTemporaryStorage',
@@ -41,8 +43,9 @@
       'registerProtocolHandler', 'unregisterProtocolHandler',
     ];
     const ours = Object.getOwnPropertyNames(Navigator.prototype)
-      .filter((n) => n !== 'constructor' && n !== 'modelContext');
+      .filter((n) => n !== 'constructor');
     testing.expectEqual(chrome150, ours);
+    testing.expectEqual(false, 'modelContext' in navigator);
   }
 </script>
 

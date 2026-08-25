@@ -43,6 +43,13 @@ for, and both should stay off for any run whose point is to look like a browser:
 - `--web-bot-auth-key-file` / `--web-bot-auth-keyid` / `--web-bot-auth-domain`
   (all three required) add `Signature-Agent`, `Signature-Input` and `Signature`
   headers: an Ed25519-signed, cryptographically attested "I am a bot".
+- `--webmcp` puts this fork's WebMCP surface back on the page:
+  `navigator.modelContext` plus the `ModelContext` / `ModelContextClient`
+  interface objects. Chrome has none of those three names, and Kasada was
+  measured reading `navigator.modelContext` twice on x-hyatt, so one expression
+  separates the engine from every real browser. The `mcp` command carries the
+  surface unconditionally — that is what it is for — and the CDP `WebMCP` domain
+  needs this flag to be usable from `serve`.
 
 ## Conventions
 

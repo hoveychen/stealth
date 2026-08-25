@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The WebMCP surface is off unless it was asked for: `lightpanda mcp`, or
+  `--webmcp` on the modes that only speak CDP. Every other run has to look like
+  Chrome, and Chrome has none of these three names — `navigator.modelContext`
+  alone was read twice by Kasada on x-hyatt, so it is a one-expression tell.
+
+  This file is the gated half; webmcp/model_context.html is the enabled half.
+-->
+
+<script id=navigator_member_gone>
+  testing.expectEqual(false, 'modelContext' in navigator);
+  testing.expectEqual(undefined, navigator.modelContext);
+  // Not just shadowed: the accessor is off the prototype, so the name is not in
+  // the table a fingerprinter hashes.
+  testing.expectEqual(
+    false,
+    Object.getOwnPropertyNames(Navigator.prototype).includes('modelContext'),
+  );
+  testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(Navigator.prototype, 'modelContext'));
+</script>
+
+<script id=interface_objects_gone>
+  testing.expectEqual('undefined', typeof ModelContext);
+  testing.expectEqual('undefined', typeof ModelContextClient);
+  testing.expectEqual(false, 'ModelContext' in window);
+  testing.expectEqual(false, 'ModelContextClient' in window);
+  const own = Object.getOwnPropertyNames(window);
+  testing.expectEqual(false, own.includes('ModelContext'));
+  testing.expectEqual(false, own.includes('ModelContextClient'));
+</script>

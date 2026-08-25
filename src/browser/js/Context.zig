@@ -410,6 +410,52 @@ pub fn hideSecureContextGlobals(self: *Context) void {
     }
 }
 
+// Takes this fork's WebMCP surface off the window realm, for a run that did not
+// ask for it (`Config.enableWebMcp`). Three names, and Chrome carries none of
+// them: the `ModelContext` / `ModelContextClient` interface objects on the
+// global, and `modelContext` on Navigator.prototype.
+//
+// Kasada reads `navigator.modelContext` -- twice, at seq 369 of the main realm
+// on x-hyatt (tools/fingerprint/results/prop-reads-hyatt.json). Its enumeration
+// of Navigator's own names right before that says it compares the name table
+// too, not only the values, so a getter answering undefined would not have
+// helped: the name has to be gone.
+//
+// Delete-only, like hideSecureContextGlobals, and for the same reason -- every
+// context is built fresh from the V8 snapshot, and Env.createContext runs the
+// gate again for each one, in-place navigations included.
+//
+// The member lives on Navigator.prototype, which is not on the global's
+// prototype chain, so it is reached through the interface object. This runs
+// before any script of the document, so `window.Navigator` is still V8's.
+pub fn hideWebMcpSurface(self: *Context) void {
+    var ls: js.Local.Scope = undefined;
+    self.localScope(&ls);
+    defer ls.deinit();
+
+    const global = self.globalObject(&ls.local);
+    _ = global.delete("ModelContext");
+    _ = global.delete("ModelContextClient");
+
+    const navigator_interface = global.get("Navigator") catch |err| {
+        log.err(.js, "webmcp gate", .{ .err = err });
+        return;
+    };
+    if (navigator_interface.isObject() == false) {
+        return;
+    }
+    const prototype = navigator_interface.toObject().get("prototype") catch |err| {
+        log.err(.js, "webmcp gate", .{ .err = err });
+        return;
+    };
+    if (prototype.isObject() == false) {
+        return;
+    }
+    if (prototype.toObject().delete("modelContext") != true) {
+        log.err(.js, "webmcp gate", .{ .member = "modelContext" });
+    }
+}
+
 // Takes SharedArrayBuffer off this context's global, for a document that is not
 // cross-origin isolated.
 //
