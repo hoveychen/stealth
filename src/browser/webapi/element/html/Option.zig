@@ -100,14 +100,12 @@ pub fn asNode(self: *Option) *Node {
 }
 
 pub fn getValue(self: *Option, frame: *Frame) []const u8 {
-    // If value attribute exists, use that; otherwise use text content (stripped)
+    // If value attribute exists, use that; otherwise the `text` IDL attribute,
+    // which is already stripped and collapsed.
     if (self._value) |v| {
         return v;
     }
-
-    const node = self.asNode();
-    const text = node.getTextContentAlloc(frame.local_arena) catch return "";
-    return std.mem.trim(u8, text, &std.ascii.whitespace);
+    return stripAndCollapse(self.asNode(), frame.local_arena);
 }
 
 pub fn setValue(self: *Option, value: []const u8, frame: *Frame) !void {
@@ -118,7 +116,43 @@ pub fn setValue(self: *Option, value: []const u8, frame: *Frame) !void {
 
 pub fn getText(self: *const Option, frame: *Frame) []const u8 {
     const node: *Node = @constCast(self.asConstElement().asConstNode());
-    return node.getTextContentAlloc(frame.call_arena) catch "";
+    return stripAndCollapse(node, frame.call_arena);
+}
+
+// `text` is not textContent: the spec strips *and collapses* ASCII whitespace
+// over the concatenated descendant text. A pretty-printed <select> otherwise
+// hands every label back with the source indentation still attached, which is
+// what a scraper reading option labels ends up storing.
+// https://html.spec.whatwg.org/#dom-option-text
+fn stripAndCollapse(node: *Node, allocator: std.mem.Allocator) []const u8 {
+    const text = node.getTextContentAlloc(allocator) catch return "";
+    // HTML's "ASCII whitespace" is exactly these five; std.ascii.whitespace
+    // also carries the vertical tab, which this must not fold.
+    const ws = [_]u8{ ' ', '\t', '\n', '\r', 0x0C };
+    const trimmed = std.mem.trim(u8, text, &ws);
+    if (trimmed.len == 0) {
+        return "";
+    }
+
+    // Collapse in place: the run is never longer than what it replaces, and
+    // `trimmed` is a fresh allocation this call owns.
+    const buf = @constCast(trimmed);
+    var len: usize = 0;
+    var in_ws = false;
+    for (trimmed) |c| {
+        if (std.mem.indexOfScalar(u8, &ws, c) != null) {
+            in_ws = true;
+            continue;
+        }
+        if (in_ws) {
+            buf[len] = ' ';
+            len += 1;
+            in_ws = false;
+        }
+        buf[len] = c;
+        len += 1;
+    }
+    return buf[0..len];
 }
 
 pub fn setText(self: *Option, value: []const u8, frame: *Frame) !void {
