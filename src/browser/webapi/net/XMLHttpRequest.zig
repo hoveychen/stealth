@@ -318,6 +318,13 @@ pub fn send(self: *XMLHttpRequest, body_: ?BodyInit, exec_: *const Execution) !v
 
     self._perf_fetch_start = exec.performance().now();
 
+    // XHR §4.5.6 send(), step 11: for an async request, loadstart is fired
+    // here, before any fetching -- at readyState 1, with both counters at zero,
+    // and before send() returns to its caller. Chrome does exactly that
+    // (measured on 151); this used to wait for the response headers and arrive
+    // at readyState 2 instead.
+    try self._proto.dispatch(.load_start, .{ .loaded = 0, .total = 0 }, exec);
+
     transfer.submit() catch |err| {
         // don't releaseSelfRef, submit() has taken ownership and will call
         // our error callback
@@ -362,16 +369,48 @@ pub fn getResponseHeader(self: *const XMLHttpRequest, name: []const u8) ?[]const
 }
 
 pub fn getAllResponseHeaders(self: *const XMLHttpRequest, exec: *const Execution) ![]const u8 {
-    if (self._ready_state != .done) {
-        // MDN says this should return null, but it seems to return an empty string
-        // in every browser. Specs are too hard for a dumbo like me to understand.
+    // Empty until the headers are in -- MDN says null, but every browser
+    // answers with the empty string -- and readable from then on, not only once
+    // the body has arrived (measured on Chrome 151: the readyState 2 handler
+    // already sees the full list).
+    if (@intFromEnum(self._ready_state) < @intFromEnum(ReadyState.headers_received)) {
         return "";
     }
 
-    var buf = std.Io.Writer.Allocating.init(exec.local_arena);
-    for (self._response_headers.items) |entry| {
-        try buf.writer.writeAll(entry);
-        try buf.writer.writeAll("\r\n");
+    // XHR §4.6.5: lowercase every name, combine repeats of one name into a
+    // single `, `-joined line, and sort the lines by name. Chrome's output is
+    // exactly that (`X-Dup: one` + `X-Dup: two` comes back as
+    // `x-dup: one, two`); ours used to be the wire order, in the wire's case,
+    // with the repeats left apart.
+    const arena = exec.local_arena;
+
+    var combined: std.ArrayListUnmanaged(struct { name: []const u8, value: []const u8 }) = .empty;
+    try combined.ensureTotalCapacity(arena, self._response_headers.items.len);
+
+    outer: for (self._response_headers.items) |entry| {
+        const colon = std.mem.indexOfScalar(u8, entry, ':') orelse continue;
+        const name = try std.ascii.allocLowerString(arena, entry[0..colon]);
+        const value = std.mem.trimStart(u8, entry[colon + 1 ..], " ");
+
+        for (combined.items) |*seen| {
+            if (std.mem.eql(u8, seen.name, name)) {
+                seen.value = try std.mem.concat(arena, u8, &.{ seen.value, ", ", value });
+                continue :outer;
+            }
+        }
+        combined.appendAssumeCapacity(.{ .name = name, .value = value });
+    }
+
+    const Sort = struct {
+        fn byName(_: void, a: @TypeOf(combined.items[0]), b: @TypeOf(combined.items[0])) bool {
+            return std.mem.lessThan(u8, a.name, b.name);
+        }
+    };
+    std.mem.sort(@TypeOf(combined.items[0]), combined.items, {}, Sort.byName);
+
+    var buf = std.Io.Writer.Allocating.init(arena);
+    for (combined.items) |header| {
+        try buf.writer.print("{s}: {s}\r\n", .{ header.name, header.value });
     }
     return buf.written();
 }
@@ -561,9 +600,10 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
     defer ls.deinit();
 
     try self.stateChanged(.headers_received, exec);
-    try self._proto.dispatch(.load_start, .{ .loaded = 0, .total = self._response_len orelse 0 }, exec);
-    try self.stateChanged(.loading, exec);
 
+    // LOADING belongs to the first body chunk (XHR §4.5.6, "process response
+    // body chunk"), not to the headers: a script that reads responseText from
+    // the readyState 3 handler is meant to find something there. Chrome agrees.
     return .proceed;
 }
 
@@ -571,6 +611,8 @@ fn httpDataCallback(transfer: *Transfer, data: []const u8) !void {
     const self: *XMLHttpRequest = @ptrCast(@alignCast(transfer.req.ctx));
     self._perf_encoded_body_size = transfer.encodedBodySize();
     try self._response_data.appendSlice(self._arena.allocator(), data);
+
+    try self.stateChanged(.loading, self._exec);
 
     try self._proto.dispatch(.progress, .{
         .total = self._response_len orelse 0,

@@ -36,7 +36,7 @@
       testing.expectEqual(200, req.status);
       testing.expectEqual('OK', req.statusText);
       testing.expectEqual('text/html; charset=utf-8', req.getResponseHeader('Content-Type'));
-      testing.expectEqual('content-length: 100\r\nContent-Type: text/html; charset=utf-8\r\n', req.getAllResponseHeaders());
+      testing.expectEqual('content-length: 100\r\ncontent-type: text/html; charset=utf-8\r\n', req.getAllResponseHeaders());
       testing.expectEqual(100, req.responseText.length);
       testing.expectEqual(req.responseText.length, req.response.length);
       testing.expectEqual('http://127.0.0.1:9582/xhr', req.responseURL);
@@ -728,6 +728,55 @@
     await state.done(() => {
       testing.expectEqual(200, req.status);
       testing.expectEqual('zstd works', req.responseText);
+    });
+  }
+</script>
+
+<script id=xhr_event_order_and_header_names type=module>
+  {
+    // Three readings off a headless Chrome 151, all of them things the Akamai
+    // sensor can see because it proxies send() and hooks readystatechange:
+    //
+    //   - loadstart fires inside send(), at readyState 1, before send()
+    //     returns. It used to arrive with the response headers, at 2.
+    //   - readyState 3 waits for the first body chunk, so responseText is
+    //     already non-empty when it arrives. It used to be announced along with
+    //     the headers, with nothing to read yet.
+    //   - getAllResponseHeaders() answers from HEADERS_RECEIVED on, with every
+    //     name lowercased and the lines sorted by name, per XHR §4.6.5.
+    const state = await testing.async();
+    const req = new XMLHttpRequest();
+    const log = [];
+    const note = (tag) => log.push(tag + ':' + req.readyState);
+
+    let atHeaders = null, textAtLoading = null;
+    for (const name of ['loadstart', 'progress', 'load']) {
+      req.addEventListener(name, () => note(name));
+    }
+    req.onreadystatechange = () => {
+      note('rsc');
+      if (req.readyState === 2) atHeaders = req.getAllResponseHeaders();
+      if (req.readyState === 3 && textAtLoading === null) textAtLoading = req.responseText;
+    };
+    req.addEventListener('load', () => state.resolve());
+
+    req.open('GET', 'http://127.0.0.1:9582/xhr/headers_order');
+    note('afterOpen');
+    req.send();
+    note('afterSend');
+
+    await state.done(() => {
+      testing.expectEqual(
+        'rsc:1,afterOpen:1,loadstart:1,afterSend:1,rsc:2,rsc:3,progress:3,rsc:4,load:4',
+        log.join(','),
+      );
+      const headers = 'a-first: yes\r\ncontent-length: 5\r\n' +
+        'content-type: text/plain\r\nx-zed: last\r\n';
+      testing.expectEqual(headers, atHeaders);
+      testing.expectEqual(headers, req.getAllResponseHeaders());
+      testing.expectEqual('hello', textAtLoading);
+      // Case-insensitive lookup still finds the name as it came off the wire.
+      testing.expectEqual('last', req.getResponseHeader('X-Zed'));
     });
   }
 </script>

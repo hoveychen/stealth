@@ -743,15 +743,24 @@ pub const Listener = struct {
     }
 
     fn reportExceptionValue(local: *const js.Local, exc: js.Value) void {
-        switch (local.ctx.global) {
-            .frame => |frame| frame.window.reportError(exc, frame) catch |err| {
-                log.warn(.event, "listener report error", .{ .err = err });
-            },
-            // No worker error-event plumbing here (yet); still count it.
-            .worker => local.ctx.page.recordJsError(error.JsException),
-        }
+        reportUncaught(local, exc);
     }
 };
+
+/// Hands an uncaught exception to the global that owns `local`: window.onerror
+/// gets its five arguments and an ErrorEvent reaches the "error" listeners.
+/// Every place an exception can escape into nothing wants this -- a script
+/// body, an event listener, a scheduled callback -- because to the page they
+/// are all the same event.
+pub fn reportUncaught(local: *const js.Local, exc: js.Value) void {
+    switch (local.ctx.global) {
+        .frame => |frame| frame.window.reportError(exc, frame) catch |err| {
+            log.warn(.event, "report uncaught error", .{ .err = err });
+        },
+        // No worker error-event plumbing here (yet); still count it.
+        .worker => local.ctx.page.recordJsError(error.JsException),
+    }
+}
 
 pub const Function = union(enum) {
     value: js.Function.Global,

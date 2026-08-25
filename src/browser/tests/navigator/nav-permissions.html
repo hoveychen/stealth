@@ -237,3 +237,32 @@
     });
   }
 </script>
+
+<script id="permissions_rejection_is_not_unhandled">
+  {
+    // A query() that rejects on the spot must not be reported as unhandled just
+    // because the catch is attached on the next line. Chrome retracts the
+    // report when a handler arrives in the same turn, so a page that catches
+    // every one of these sees no unhandledrejection at all -- measured against
+    // headless Chrome 151 with the Akamai sensor, which catches all nine of the
+    // queries it makes and got six spurious events here and none there.
+    //
+    // No await above this: the report happens while the calling script is still
+    // on the stack, and a microtask checkpoint is a no-op once we are inside
+    // one, so there is nothing left to reproduce after the first await.
+    const unhandled = [];
+    const onUnhandled = (e) => {
+      unhandled.push(String(e.reason && e.reason.name));
+      e.preventDefault();
+    };
+    window.addEventListener('unhandledrejection', onUnhandled);
+
+    // Both rejecting shapes: the TypeError of an unknown name, and the one name
+    // that answers with a DOMException instead.
+    navigator.permissions.query({ name: 'speaker' }).catch(() => {});
+    navigator.permissions.query({ name: 'push' }).catch(() => {});
+    testing.expectEqual('', unhandled.join(','));
+
+    window.removeEventListener('unhandledrejection', onUnhandled);
+  }
+</script>

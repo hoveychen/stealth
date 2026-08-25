@@ -15,7 +15,7 @@
   window.reportError(err);
 
   testing.expectEqual(true, callbackCalled);
-  testing.expectEqual(true, receivedArgs.message.includes('Test error'));
+  testing.expectEqual('Uncaught Error: Test error', receivedArgs.message);
   testing.expectEqual(err, receivedArgs.error);
 
   window.onerror = null;
@@ -207,5 +207,48 @@
 
   window.onerror = null;
   window.removeEventListener('error', listener);
+}
+</script>
+
+<script id=onerrorUncaughtInCallback type=module>
+{
+  // An exception that escapes a scheduled callback is reported the same way one
+  // escaping a script or an event listener is: window.onerror gets its five
+  // arguments and an ErrorEvent reaches the "error" listeners. Chrome 151,
+  // measured -- a setTimeout callback reading a property of undefined delivered
+  // "Uncaught TypeError: Cannot read properties of undefined" to both.
+  //
+  // Only script and listener exceptions used to be reported; the timer, frame
+  // and idle callbacks logged theirs and dispatched nothing, so a page watching
+  // its own errors saw a callback that neither ran nor failed.
+  const state = await testing.async();
+  const seen = [];
+  const onError = (message, source, lineno, colno, error) => {
+    seen.push('handler:' + String(message) + ':' + (error && error.name));
+  };
+  const listener = (e) => {
+    seen.push('listener:' + Object.prototype.toString.call(e) + ':' + e.cancelable);
+  };
+  window.onerror = onError;
+  window.addEventListener('error', listener);
+
+  setTimeout(() => { window.__nothing.here; }, 1);
+  requestAnimationFrame(() => { window.__nothing.here; });
+  await new Promise((r) => setTimeout(r, 120));
+
+  window.onerror = null;
+  window.removeEventListener('error', listener);
+  state.resolve();
+
+  await state.done(() => {
+    const message = 'Uncaught TypeError: Cannot read properties of undefined ' +
+      "(reading 'here')";
+    testing.expectEqual([
+      'handler:' + message + ':TypeError',
+      'listener:[object ErrorEvent]:true',
+      'handler:' + message + ':TypeError',
+      'listener:[object ErrorEvent]:true',
+    ], seen);
+  });
 }
 </script>

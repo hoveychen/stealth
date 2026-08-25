@@ -832,9 +832,17 @@ pub fn reportError(self: *Window, err: js.Value, frame: *Frame) !void {
     self._reporting_error = true;
     defer self._reporting_error = false;
 
+    // "Uncaught " leads every one of these in Chrome (measured on 151): an
+    // exception out of a timer, one out of a script, a thrown plain string
+    // ("Uncaught a plain string"), and window.reportError's own argument
+    // ("Uncaught Error: explicit"). The message is user-agent-defined, so the
+    // only ground truth is what Chrome writes.
+    const described = err.toStringSlice() catch "Unknown error";
+    const message = try std.fmt.allocPrint(frame.call_arena, "Uncaught {s}", .{described});
+
     const error_event = try ErrorEvent.initTrusted(comptime .wrap("error"), .{
         .@"error" = try err.persist(),
-        .message = err.toStringSlice() catch "Unknown error",
+        .message = message,
         .bubbles = false,
         .cancelable = true,
     }, frame._page);

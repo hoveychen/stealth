@@ -730,6 +730,18 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    // Deliberately out of alphabetical order and mixed case, so that what
+    // getAllResponseHeaders() does to the names is visible.
+    if (std.mem.eql(u8, path, "/xhr/headers_order")) {
+        return req.respond("hello", .{
+            .extra_headers = &.{
+                .{ .name = "X-Zed", .value = "last" },
+                .{ .name = "Content-Type", .value = "text/plain" },
+                .{ .name = "A-First", .value = "yes" },
+            },
+        });
+    }
+
     // Never answers: the caller is expected to give up first, either from
     // xhr.timeout or from the engine-wide --http-timeout. Used by
     // net/xhr_timeout.html to tell those two apart.

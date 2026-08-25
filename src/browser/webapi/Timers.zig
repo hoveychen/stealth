@@ -25,6 +25,7 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../js/js.zig");
+const EventManagerBase = @import("../EventManagerBase.zig");
 
 const log = lp.log;
 
@@ -212,6 +213,34 @@ const ScheduleCallback = struct {
         self.arena.release();
     }
 
+    // An exception that escapes a scheduled callback is reported to the global
+    // -- window.onerror with its five arguments, an ErrorEvent at the "error"
+    // listeners -- exactly as one escaping a script or an event listener is.
+    // Chrome does that for a timer, a frame callback and an idle callback alike
+    // (measured on 151); this used to log and dispatch nothing, so a page
+    // watching its own errors saw a callback that neither ran nor failed.
+    // callRethrow is what puts the exception value past the internal TryCatch
+    // and within reach of ours.
+    fn invoke(self: *ScheduleCallback, ls: *js.Local.Scope, comptime what: []const u8, args: anytype) void {
+        var try_catch: js.TryCatch = undefined;
+        try_catch.init(&ls.local);
+        defer try_catch.deinit();
+
+        ls.toLocal(self.cb).callRethrow(void, args) catch |err| {
+            if (err == error.ExecutionTerminated) {
+                return;
+            }
+            log.warn(.js, what, .{ .name = self.name, .err = err });
+            if (try_catch.exceptionValue()) |exc| {
+                // Counting is reportUncaught's job on this path -- it records
+                // the error on the page itself, the way the script path does.
+                EventManagerBase.reportUncaught(&ls.local, exc);
+            } else {
+                self.exec.page.recordJsError(err);
+            }
+        };
+    }
+
     fn run(ptr: *anyopaque) !?u32 {
         const self: *ScheduleCallback = @ptrCast(@alignCast(ptr));
         if (self.removed) {
@@ -231,26 +260,17 @@ const ScheduleCallback = struct {
         switch (self.mode) {
             .idle => {
                 const IdleDeadline = @import("IdleDeadline.zig");
-                ls.toLocal(self.cb).call(void, .{IdleDeadline{}}) catch |err| {
-                    self.exec.page.recordJsError(err);
-                    log.warn(.js, "idleCallback", .{ .name = self.name, .err = err });
-                };
+                self.invoke(&ls, "idleCallback", .{IdleDeadline{}});
             },
             .animation_frame => {
                 const now = switch (self.exec.js.global) {
                     .frame => |frame| frame.window._performance.now(),
                     .worker => |worker| worker._performance.now(),
                 };
-                ls.toLocal(self.cb).call(void, .{now}) catch |err| {
-                    self.exec.page.recordJsError(err);
-                    log.warn(.js, "RAF", .{ .name = self.name, .err = err });
-                };
+                self.invoke(&ls, "RAF", .{now});
             },
             .normal => {
-                ls.toLocal(self.cb).call(void, self.params) catch |err| {
-                    self.exec.page.recordJsError(err);
-                    log.warn(.js, "timer", .{ .name = self.name, .err = err });
-                };
+                self.invoke(&ls, "timer", self.params);
             },
         }
         ls.local.runMicrotasks();

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<script id=script_load_failure_setup>
+  // What a page watching its own subresources sees. error events from a failed
+  // load do not bubble, so only a capturing window listener catches them --
+  // which is what the Akamai sensor registers.
+  window.__seen = [];
+  window.addEventListener('error', (e) => {
+    const t = e.target;
+    window.__seen.push(
+      (t && t.tagName ? t.tagName : 'window') + ':' +
+      Object.prototype.toString.call(e) + ':' + e.bubbles + ':' + e.cancelable,
+    );
+  }, true);
+  // Nothing has been asked for yet.
+  testing.expectEqual(0, window.__seen.length);
+</script>
+
+<!--
+  Two ways for a parser-inserted <script src> to fail. Both are blocking loads,
+  so both go through the synchronous fetch.
+
+  The first never reaches a server at all: nothing listens on port 9, so there
+  is no status to look at. That used to return the transport error all the way
+  up to Frame.scriptAddedCallback, which logged it and dispatched nothing.
+
+  The second answers with a 404, which always did fire.
+
+  Chrome 151 fires a plain, non-bubbling, non-cancelable Event named error at
+  the element for both -- measured against a page with one <script src> pointing
+  at a closed port and another at a missing path.
+-->
+<script src="http://127.0.0.1:9/never-listening.js"></script>
+<script src="http://127.0.0.1:9582/404.js"></script>
+
+<script id=script_load_failure type=module>
+  {
+    const state = await testing.async();
+    await new Promise((r) => setTimeout(r, 50));
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual(
+        'SCRIPT:[object Event]:false:false,SCRIPT:[object Event]:false:false',
+        window.__seen.join(','),
+      );
+      // The 404 body is valid JS; a browser that ran it anyway would leave this
+      // behind. Neither failing load may execute.
+      testing.expectEqual(undefined, window.__404_body_executed);
+    });
+  }
+</script>
