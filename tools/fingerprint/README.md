@@ -13065,9 +13065,20 @@ What survived that second pass, all confirmed on both arms at
 | `MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.64003E,mp4a.40.2')` | `true` | `false` |
 | `document.createEvent('TouchEvent')` | throws `NotSupportedError` | `[object TouchEvent]` |
 
-The serialization row is the widest of these by a distance: it is not a feature
-we are missing, it is every query the page makes coming back in the form it was
-written rather than the form the spec says to print. Kasada asked 227 of them.
+The serialization row is the widest of these in principle — it is not a feature
+we are missing, it is every query coming back in the form it was written rather
+than the form the spec says to print — but **x-hyatt does not read it**. The log
+settles that: `MediaQueryList.media` never appears, and `MediaQueryList.matches`
+appears once with `occurrences: 431`, one read per query. Kasada asks and takes
+the boolean.
+
+Which puts the value grammar and the range forms ahead of it here, because
+those are what `matches` answers with. Of the 227 booleans Kasada collected,
+about 60 come back different from Chrome's, and ~55 of those are the resolution
+walk alone: the binary search converges on a `devicePixelRatio` below
+`5.96e-7dppx`, a number no browser reports. The remainder of the 81 matchMedia
+differences are the viewport and screen readings the chapter above already
+covers, plus `prefers-color-scheme`.
 
 `(min-resolution: 1dppx)` and `(min-resolution: 2dppx)` both answer correctly,
 which is why the plain read log never showed anything here — the gap is in the
