@@ -743,7 +743,10 @@ fn collectExternalReferences() [countExternalReferences()]isize {
                     continue;
                 }
 
-                references[idx] = @bitCast(@intFromPtr(value.getter));
+                // The recorder, not the bare getter: attachClass installs the
+                // wrapped pointer and V8 refuses to serialize a callback the
+                // table doesn't name. Outside Debug logReads is the identity.
+                references[idx] = @bitCast(@intFromPtr(bridge.logReads(JsApi, d.name, value).getter));
                 idx += 1;
                 if (value.setter) |setter| {
                     references[idx] = @bitCast(@intFromPtr(setter));
@@ -753,7 +756,7 @@ fn collectExternalReferences() [countExternalReferences()]isize {
                 if (value.wpt_only and wpt_extensions_enabled == false) {
                     continue;
                 }
-                references[idx] = @bitCast(@intFromPtr(value.func));
+                references[idx] = @bitCast(@intFromPtr(bridge.logReads(JsApi, d.name, value).func));
                 idx += 1;
             } else if (T == bridge.Iterator) {
                 references[idx] = @bitCast(@intFromPtr(value.func));
@@ -1093,7 +1096,7 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     // later in this function.
                     continue;
                 }
-                attachAccessorProperty(name, value, isolate, template, signature, define_on orelse member_template, own_properties);
+                attachAccessorProperty(name, bridge.logReads(JsApi, name, value), isolate, template, signature, define_on orelse member_template, own_properties);
             },
             bridge.Function => {
                 if (value.wpt_only and wpt_extensions_enabled == false) {
@@ -1106,14 +1109,15 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     continue;
                 }
 
+                const logged = bridge.logReads(JsApi, name, value);
                 if (value.static and !own_properties) {
-                    attachOperationProperty(name, value, isolate, signature, template, v8.None);
+                    attachOperationProperty(name, logged, isolate, signature, template, v8.None);
                 } else {
                     // Web IDL: operations on the interface prototype object
                     // (and mirrored onto [Global] instances) are enumerable,
                     // unless the member opted out (window.webkitURL).
                     const attribute: v8.PropertyAttribute = if (value.enumerable) v8.None else v8.DontEnum;
-                    attachOperationProperty(name, value, isolate, signature, define_on orelse member_template, attribute);
+                    attachOperationProperty(name, logged, isolate, signature, define_on orelse member_template, attribute);
                 }
             },
             bridge.Indexed => {
@@ -1190,7 +1194,11 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                 // unforgeable members aren't only applied directly on the
                 // instance, they're also applied directly on every child instance
                 switch (u.member) {
-                    .accessor => |accessor| attachAccessorProperty(u.name, accessor, isolate, template, signature, instance, false),
+                    // Keyed on the declaring interface, not the one it's being
+                    // installed on: an unforgeable lands on every inheriting
+                    // instance, and the reference table registered it once,
+                    // under its owner.
+                    .accessor => |accessor| attachAccessorProperty(u.name, bridge.logReads(u.Owner, u.name, accessor), isolate, template, signature, instance, false),
                     // Web IDL: an unforgeable operation is a non-writable,
                     // non-configurable own data property of the instance --
                     // `Object.getOwnPropertyDescriptor(location, 'reload')`
@@ -1202,7 +1210,7 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                         if (operation.enumerable == false) {
                             attribute |= v8.DontEnum;
                         }
-                        attachOperationProperty(u.name, operation, isolate, signature, instance, attribute);
+                        attachOperationProperty(u.name, bridge.logReads(u.Owner, u.name, operation), isolate, signature, instance, attribute);
                     },
                 }
             }

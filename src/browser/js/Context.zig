@@ -179,6 +179,25 @@ execution: Execution,
 
 unknown_properties: (if (lp.IS_DEBUG) std.StringHashMapUnmanaged(UnknownPropertyStat) else void) = if (lp.IS_DEBUG) .{} else {},
 
+// Every interface member the page actually reached, keyed "Interface.member".
+// `unknown_properties` is the complement of this: it names what we don't have,
+// which is only half of what a detector's script tells us. The other half --
+// the members we do have and answer wrongly -- leaves no trace at all unless
+// something records the reads themselves, and a page that reads `navigator.
+// webdriver` and moves on is indistinguishable from one that never asked.
+//
+// Recording is behind `log.enabled(.prop_read, .debug)` rather than plain
+// IS_DEBUG because this fires on every accessor and operation call, not just
+// the handful that miss; a page doing real work walks through tens of
+// thousands. Turn it on with
+// `--log-level debug --log-filter-scopes -all,+prop_read`.
+property_reads: (if (lp.IS_DEBUG) std.StringHashMapUnmanaged(PropertyReadStat) else void) = if (lp.IS_DEBUG) .{} else {},
+
+// Hands out `PropertyReadStat.first_seq`. The order the members were first
+// reached in is the part a value diff can't reconstruct afterwards: it says
+// which answer the script branched on before it stopped asking.
+property_read_seq: (if (lp.IS_DEBUG) u32 else void) = if (lp.IS_DEBUG) 0 else {},
+
 // The two `size` functions the queuing strategies hand out. They belong to
 // the realm, not to the instance: every ByteLengthQueuingStrategy in a
 // context reports the same function object, and so does every
@@ -278,6 +297,7 @@ pub fn deinit(self: *Context) void {
                 .first_stack = kv.value_ptr.first_stack,
             });
         }
+        self.dumpPropertyReads();
     }
 
     const env = self.env;
@@ -1473,3 +1493,52 @@ const UnknownPropertyStat = struct {
     count: usize,
     first_stack: []const u8,
 };
+
+const PropertyReadStat = struct {
+    count: usize,
+    first_seq: u32,
+};
+
+// Called from the wrappers Snapshot puts around every accessor getter and
+// operation callback. `key` is comptime ("Navigator.userAgent"), so nothing is
+// formatted or duped per call -- a repeat read is one hash lookup and an
+// increment.
+pub fn recordPropertyRead(self: *Context, comptime key: []const u8) void {
+    if (comptime lp.IS_DEBUG == false) return;
+    const gop = self.property_reads.getOrPut(self.arena.allocator(), key) catch return;
+    if (gop.found_existing) {
+        gop.value_ptr.count += 1;
+        return;
+    }
+    gop.value_ptr.* = .{ .count = 1, .first_seq = self.property_read_seq };
+    self.property_read_seq += 1;
+}
+
+// Emitted in first-read order, not hash order: the sequence is the point.
+fn dumpPropertyReads(self: *Context) void {
+    if (comptime lp.IS_DEBUG == false) return;
+    if (self.property_reads.count() == 0) return;
+
+    const Entry = struct { key: []const u8, stat: PropertyReadStat };
+    const allocator = self.arena.allocator();
+    const entries = allocator.alloc(Entry, self.property_reads.count()) catch return;
+
+    var i: usize = 0;
+    var it = self.property_reads.iterator();
+    while (it.next()) |kv| : (i += 1) {
+        entries[i] = .{ .key = kv.key_ptr.*, .stat = kv.value_ptr.* };
+    }
+    std.mem.sort(Entry, entries, {}, struct {
+        fn lessThan(_: void, a: Entry, b: Entry) bool {
+            return a.stat.first_seq < b.stat.first_seq;
+        }
+    }.lessThan);
+
+    for (entries) |e| {
+        log.debug(.prop_read, "property read", .{
+            .seq = e.stat.first_seq,
+            .property = e.key,
+            .occurrences = e.stat.count,
+        });
+    }
+}
