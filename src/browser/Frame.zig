@@ -3534,8 +3534,59 @@ pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpt
                 link._sheet = null;
                 self._style_manager.sheetModified();
             }
+        } else if (el.is(IFrame)) |iframe| {
+            // An <iframe> out of the document takes its navigable with it.
+            discardIFrameNavigable(iframe);
         }
     }
+}
+
+/// The nested navigable an <iframe> element held is destroyed when the element
+/// leaves the document (HTML §iframe, "remove the nested navigable"). What a
+/// page can see of that: the frame stops counting in `window.length` and
+/// `window[N]`, the element's `contentWindow` and `contentDocument` answer null,
+/// and a Window reference captured before the removal reports `closed`. Putting
+/// the same element back builds a new navigable rather than reviving this one,
+/// which `_executed = false` arranges: the insertion path treats it as an iframe
+/// that has never run.
+///
+/// All of that is measured on Chrome 151 in
+/// `tools/fingerprint/probes/expr-iframe-detach.js`; the reading that sent us
+/// looking was the macys interstitial, which creates hidden iframes and removes
+/// them again -- Chrome counted 2 frames there where this engine counted 5.
+fn discardIFrameNavigable(iframe: *IFrame) void {
+    const window = iframe._window orelse return;
+    const frame = window._frame;
+    const parent = frame.parent orelse return;
+
+    for (parent.child_frames.items, 0..) |f, i| {
+        if (f == frame) {
+            parent.child_frames_sorted = false;
+            _ = parent.child_frames.swapRemove(i);
+            break;
+        }
+    }
+
+    // Same predicate Session.zig uses for a re-navigated frame: the parent is
+    // still counting this frame's load unless the frame already reported in.
+    if (frame._delays_parent_load and !frame._parent_notified) {
+        frame._parent_notified = true;
+        parent.pendingLoadCompleted();
+    }
+
+    window._closed = true;
+    iframe._window = null;
+    iframe._executed = false;
+
+    const page = frame._page;
+    page.session.idb.detachContext(frame.js);
+    frame.js.scheduler.reset();
+    frame.abortTransfers();
+
+    // Not torn down: a script can be holding this Window (the Akamai loader
+    // keeps one for the life of the page), so the Frame outlives its navigable
+    // and is freed with the page -- same trade-off as `Window.close`.
+    page.closed_frames.append(page.frame_arena, frame) catch @panic("OOM");
 }
 
 // The TreeWalker isn't shadow DOM aware, so this is correctly scoped to direct

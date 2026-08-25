@@ -253,8 +253,15 @@ pub fn getTop(self: *Window, frame: *Frame) Access {
     return Access.init(frame.window, p.window);
 }
 
-pub fn getParent(self: *Window, frame: *Frame) Access {
+pub fn getParent(self: *Window, frame: *Frame) ?Access {
     if (self._frame.parent) |p| {
+        // A child frame whose <iframe> left the document has no parent: the
+        // navigable was destroyed, and Chrome answers null there (measured,
+        // `probes/expr-iframe-detach.js`). A closed popup is not this case --
+        // popups have no parent frame to begin with.
+        if (self._closed) {
+            return null;
+        }
         return Access.init(frame.window, p.window);
     }
     // A frame with no parent is its own parent -- but which *object* answers
@@ -1908,7 +1915,7 @@ const CrossOriginWindow = struct {
         return self.window.getTop(frame);
     }
 
-    pub fn getParent(self: *CrossOriginWindow, frame: *Frame) Access {
+    pub fn getParent(self: *CrossOriginWindow, frame: *Frame) ?Access {
         return self.window.getParent(frame);
     }
 
