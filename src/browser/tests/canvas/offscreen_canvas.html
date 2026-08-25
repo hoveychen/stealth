@@ -177,6 +177,35 @@
   });
 </script>
 
+<script id="OffscreenCanvas#convertToBlob types" type=module>
+  const state = await testing.async();
+
+  const canvas = new OffscreenCanvas(20, 20);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#4285f4';
+  ctx.fillRect(2, 2, 16, 16);
+
+  // The options bag reads the same way toDataURL's argument does (measured).
+  const seen = [];
+  for (const options of [undefined, {}, { type: 'image/png' }, { type: 'image/jpeg' },
+    { type: 'image/webp' }, { type: 'IMAGE/JPEG' }, { type: 'image/jpg' }, { type: 'image/bogus' }]) {
+    seen.push((await canvas.convertToBlob(options)).type);
+  }
+
+  // Quality reaches the JPEG encoder here too.
+  const lossy = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0 });
+  const better = await canvas.convertToBlob({ type: 'image/jpeg' });
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(
+      'image/png,image/png,image/png,image/jpeg,image/webp,image/jpeg,image/png,image/png',
+      seen.join(','),
+    );
+    testing.expectTrue(lossy.size < better.size);
+  });
+</script>
+
 <script id="OffscreenCanvas#getContext webgl">
 {
   // Chrome hands back a WebGL context for an OffscreenCanvas, and `gl.canvas`

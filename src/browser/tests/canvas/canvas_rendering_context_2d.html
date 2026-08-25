@@ -1243,9 +1243,7 @@
   ctx.fillRect(0, 0, 2, 2);
   testing.expectEqual(red, element.toDataURL());
 
-  // We only encode PNG, so a request for another type falls back to it —
-  // Chrome would answer 'data:image/jpeg;base64,/9j/...' here.
-  testing.expectTrue(element.toDataURL('image/jpeg').startsWith('data:image/png;base64,'));
+  // Everything outside the three types we encode falls back to PNG.
   testing.expectTrue(element.toDataURL('image/bogus').startsWith('data:image/png;base64,'));
 
   // A canvas with no area has no image.
@@ -1282,6 +1280,95 @@
     // The same bytes toDataURL would have base64'd.
     const expected = element.toDataURL().slice('data:image/png;base64,'.length);
     testing.expectEqual(atob(expected).length, blob.size);
+  });
+</script>
+
+<script id="HTMLCanvasElement#toDataURL jpeg and webp">
+{
+  // Chrome encodes exactly three of the IANA image types and falls back to PNG
+  // for the rest. Measured on Chrome 141 with probes/canvas-encode-types.js:
+  // the match is on the whole string, ASCII case-insensitively, so 'image/jpg'
+  // and a type carrying a parameter both miss.
+  const element = document.createElement('canvas');
+  element.width = 20;
+  element.height = 20;
+  const ctx = element.getContext('2d');
+  ctx.fillStyle = '#4285f4';
+  ctx.fillRect(2, 2, 16, 16);
+
+  const mime = (...args) => {
+    const url = element.toDataURL(...args);
+    const semi = url.indexOf(';');
+    return semi === -1 ? url : url.slice(0, semi);
+  };
+
+  testing.expectEqual('data:image/png', mime());
+  testing.expectEqual('data:image/png', mime('image/png'));
+  testing.expectEqual('data:image/jpeg', mime('image/jpeg'));
+  testing.expectEqual('data:image/webp', mime('image/webp'));
+
+  // ASCII case folding, both ways.
+  testing.expectEqual('data:image/jpeg', mime('IMAGE/JPEG'));
+  testing.expectEqual('data:image/webp', mime('Image/WebP'));
+
+  // Near misses. Every one of these is 'data:image/png' on Chrome.
+  const misses = ['image/jpg', 'image/x-png', 'image/gif', 'image/bmp', 'image/apng',
+    'image/avif', 'image/svg+xml', 'image/tiff', 'image/jxr', 'image/vnd.mozilla.apng',
+    'image/vnd.sealedmedia.softseal.jpg', 'image/bogus', ' image/jpeg', 'image/jpeg ',
+    'image/jpeg;q=1', 'image/webp;', 'jpeg', ''];
+  const wrong = misses.filter((t) => mime(t) !== 'data:image/png');
+  testing.expectEqual('', wrong.join(','));
+
+  // The magic bytes each format opens with, as Chrome writes them: a JFIF APP0
+  // right behind the SOI, and a RIFF/WEBP container.
+  testing.expectTrue(element.toDataURL('image/jpeg').startsWith('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB'));
+  testing.expectTrue(element.toDataURL('image/webp').startsWith('data:image/webp;base64,UklGR'));
+
+  // Quality reaches the JPEG encoder: 0 is a real request, and anything that is
+  // not a number in [0, 1] leaves the default 0.92 in place (measured).
+  const byteLength = (...args) => atob(element.toDataURL(...args).split(',')[1]).length;
+  const fallback = byteLength('image/jpeg');
+  testing.expectTrue(byteLength('image/jpeg', 0) < fallback);
+  testing.expectTrue(byteLength('image/jpeg', 1) > fallback);
+  const defaulted = [undefined, -1, 2, NaN, 'x', null, true]
+    .filter((q) => byteLength('image/jpeg', q) !== fallback);
+  testing.expectEqual('', defaulted.join(','));
+  // PNG has no quality knob.
+  testing.expectEqual(byteLength('image/png'), byteLength('image/png', 0));
+
+  // A canvas with no area has no image, whatever type was asked for.
+  const degenerate = document.createElement('canvas');
+  degenerate.width = 0;
+  testing.expectEqual('data:,', degenerate.toDataURL('image/jpeg'));
+}
+</script>
+
+<script id="HTMLCanvasElement#toBlob jpeg and webp" type=module>
+  const state = await testing.async();
+
+  const element = document.createElement('canvas');
+  element.width = 20;
+  element.height = 20;
+  const ctx = element.getContext('2d');
+  ctx.fillStyle = '#4285f4';
+  ctx.fillRect(2, 2, 16, 16);
+
+  const type = (t) => new Promise((resolve) => {
+    element.toBlob((blob) => resolve(blob === null ? 'null' : blob.type), t);
+  });
+
+  const seen = [];
+  for (const t of [undefined, 'image/png', 'image/jpeg', 'image/webp', 'IMAGE/JPEG', 'image/jpg', 'image/bogus']) {
+    seen.push(await type(t));
+  }
+  state.resolve();
+
+  await state.done(() => {
+    // toBlob reads the type the same way toDataURL does.
+    testing.expectEqual(
+      'image/png,image/png,image/jpeg,image/webp,image/jpeg,image/png,image/png',
+      seen.join(','),
+    );
   });
 </script>
 
