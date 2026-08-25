@@ -12918,3 +12918,28 @@ from inside the page, in both arms.
 Also worth a look: on the replay Chrome sends a fourth POST per cycle, ~2.2KB
 and binary (leading tab, NULs, replacement characters), that this engine never
 sends. Not investigated.
+
+### Not lazy compilation, and not a headed-browser cost either (2026-08-24, same round)
+
+`probes/expr-lazy-compile-cost.js` builds a 469492-byte script out of 3000
+distinct functions and separates compiling the outer script, declaring the inner
+ones, calling each once, and calling them again:
+
+| | compile | declare | first call | second call |
+|---|---|---|---|---|
+| headed Chrome | 5ms | 0ms | 10ms | 0ms |
+| lightpanda | 6ms | 0ms | 13ms | 0ms |
+
+Half a megabyte of first-call compilation is 10ms, not 650, and the two engines
+agree — so V8's lazy compilation is not where a 578KB script's first pass goes.
+
+And `sensor-cpu-profile.mjs --headless` on the same replay reports **654** in the
+counter, against 645-698 headed. Whatever the work is, a headless Chrome does it
+too; it is not the window system, the GPU, or a display-server font path.
+
+So the counter's 47x remains unexplained by anything measurable from outside the
+script. The next instrument that can answer it is the script itself: the
+sampling profile's chain (`cRK` ← `H8Y` ← `g5Y` ← `HrY` ← `PUY` ← `cBK` ←
+`RjY` ← anonymous@31999, offsets into `results/b41-macys-bodies/02-*`) is a map
+into a capture that is now on disk and replayable, and the burn is one call deep
+in a flattened dispatcher whose case ids both arms enter identically.
