@@ -138,11 +138,8 @@
     testing.expectEqual('<option value="null">null</option>', new Option(null, null).outerHTML)
     testing.expectEqual('<option>T</option>', new Option('T').outerHTML)
     testing.expectEqual('<option value="6">5</option>', new Option(5, 6).outerHTML)
-    // Chrome writes `selected=""`; this engine writes a bare `selected` for
-    // empty boolean attributes (see formatAttribute in element/Attribute.zig),
-    // which is a serializer-wide difference, not an Option one.
-    testing.expectEqual('<option value="V" selected>T</option>', new Option('T', 'V', true, true).outerHTML)
-    testing.expectEqual('<option value="V" selected>T</option>', new Option('T', 'V', true).outerHTML)
+    testing.expectEqual('<option value="V" selected="">T</option>', new Option('T', 'V', true, true).outerHTML)
+    testing.expectEqual('<option value="V" selected="">T</option>', new Option('T', 'V', true).outerHTML)
     testing.expectEqual(true, new Option('T', 'V', true).defaultSelected)
     testing.expectEqual(true, new Option('T', 'V', true).selected)
 
