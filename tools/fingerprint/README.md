@@ -12614,3 +12614,34 @@ visible in the tails: an erf-integrated Gaussian fitted freely still misses
 Below the kernel there is one more line: `3·sigma <= 1`, Skia's `hasNoBlur`.
 Sigma 0.3 draws the silhouette unblurred and 0.35 blurs, which brackets it
 exactly. Fourteen kernels measured across all three regimes, none unexplained.
+
+## A gradient's geometry is thrown away here (2026-08-24)
+
+`createLinearGradient` and friends keep their stops and discard every
+coordinate they were given, so a gradient fill paints whatever flat colour it
+replaced. The widget's 48×48 scene builds seven of them, which makes this the
+largest block of wrong pixels left in that render now that shadows draw.
+`probes/canvas-gradient-paint.js` measures what Chrome does, ahead of the
+`cfsc-gradient-paint-source` refactor: **26 readings, all 26 different here.**
+
+**The transform is the one in effect when the gradient is *used*, not when it
+is made.** Three rows say it together and they are byte-identical: a gradient
+of 0→32 at the identity, a gradient of 0→16 created under `scale(2, 1)`, and a
+gradient of 0→16 created at the identity and then painted under `scale(2, 1)`
+all give `fb0004ff … 0400fbff`. A `translate(8, 0)` applied only for the fill
+moves the ramp with it.
+
+**The stops interpolate in straight alpha, not premultiplied.** Red opaque to
+*blue* transparent reads `7900827c` in the middle — a blue channel of 130. A
+premultiplied ramp would carry no blue at all there, because premultiplying the
+transparent blue end zeroes it.
+
+**The degenerate cases paint nothing rather than something.** A zero-length
+linear axis, two identical circles, and a gradient with no stops at all are
+each `00000000` all the way across; one stop is that colour everywhere.
+
+Left for the implementation to settle, all of it measured in the probe: where
+a conic gradient's zero angle points, the two-circle cone's extent, what a
+`color(display-p3 …)` stop is kept as (it reads `ff2281`, which is not the
+`ff1b7f` the same notation paints as a flat fill), and which colour wins on a
+pixel that lands exactly on a repeated offset (the later one).
