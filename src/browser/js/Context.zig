@@ -1534,8 +1534,18 @@ fn dumpPropertyReads(self: *Context) void {
         }
     }.lessThan);
 
+    // Every context counts from zero, and a guard's collector runs in several
+    // -- the page, the iframes it makes, its workers. Without the context on
+    // the line, merging the dumps by `seq` interleaves three unrelated walks
+    // into one order that nothing actually performed.
+    const realm: []const u8 = switch (self.global) {
+        .frame => |frame| frame.url,
+        .worker => "worker",
+    };
     for (entries) |e| {
         log.debug(.prop_read, "property read", .{
+            .context = self.id,
+            .realm = realm,
             .seq = e.stat.first_seq,
             .property = e.key,
             .occurrences = e.stat.count,
