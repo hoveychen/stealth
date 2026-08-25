@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<head></head>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+A child frame's document belongs to the child's realm, and reading it from the
+parent must not change that. The wrapper for a Zig object is built in whatever
+v8 context is entered at the moment it is first handed to JS, and it is cached
+in an identity map keyed by the Zig pointer alone -- so the first realm to ask
+for a given object used to own it for the life of the page.
+
+`iframe.contentWindow.document` goes through an accessor on the *child's*
+global, so it enters the child's context and came out right. `contentDocument`
+is an accessor on the parent's HTMLIFrameElement.prototype, so reading it first
+built the child document in the *parent's* realm -- and then everything
+followed, because `createElement` resolved off the parent's Document.prototype
+and calling it entered the parent's context. The child frame's own script saw it
+too: inside the frame, `Object.getPrototypeOf(document) === HTMLDocument.prototype`
+read false.
+
+Measured on the Akamai loader macys.com serves: it reads `contentDocument` on
+frames it did not create, which handed every later-created frame on the page
+parent-realm prototypes. Chrome answers the same in both orders, which is what
+these assertions pin down. Open this file in Firefox to cross-check.
+-->
+
+<script id="content_document_first_keeps_child_realm">
+  testing.onload(() => {
+    const f = document.createElement('iframe');
+    f.style.display = 'none';
+    document.body.appendChild(f);
+
+    // The parent asks first, through its own accessor.
+    const idoc = f.contentDocument;
+    const iwin = f.contentWindow;
+
+    // One document, whichever way it is reached.
+    testing.expectEqual(iwin.document, idoc);
+
+    // It wears the child's prototypes, not ours.
+    testing.expectFalse(Object.getPrototypeOf(idoc) === Object.getPrototypeOf(document));
+    testing.expectTrue(Object.getPrototypeOf(idoc) === iwin.HTMLDocument.prototype);
+    testing.expectFalse(idoc.constructor === document.constructor);
+    testing.expectTrue(idoc.constructor === iwin.HTMLDocument);
+
+    // And so does everything it creates.
+    const canvas = idoc.createElement('canvas');
+    testing.expectFalse(Object.getPrototypeOf(canvas) === HTMLCanvasElement.prototype);
+    testing.expectTrue(Object.getPrototypeOf(canvas) === iwin.HTMLCanvasElement.prototype);
+
+    // The frame's own script agrees -- this is the reading a fingerprinter takes.
+    testing.expectTrue(iwin.eval('Object.getPrototypeOf(document) === HTMLDocument.prototype'));
+    testing.expectTrue(iwin.eval(
+      "Object.getPrototypeOf(document.createElement('canvas')) === HTMLCanvasElement.prototype"));
+
+    f.remove();
+  });
+</script>
+
+<script id="content_window_document_first_keeps_child_realm">
+  testing.onload(() => {
+    const f = document.createElement('iframe');
+    f.style.display = 'none';
+    document.body.appendChild(f);
+
+    // The other order: through the child's own accessor first. This one was
+    // always right, and is here so the pair reads as one claim.
+    const iwin = f.contentWindow;
+    const idoc = iwin.document;
+
+    testing.expectEqual(f.contentDocument, idoc);
+    testing.expectFalse(Object.getPrototypeOf(idoc) === Object.getPrototypeOf(document));
+    testing.expectTrue(Object.getPrototypeOf(idoc) === iwin.HTMLDocument.prototype);
+
+    const canvas = idoc.createElement('canvas');
+    testing.expectTrue(Object.getPrototypeOf(canvas) === iwin.HTMLCanvasElement.prototype);
+
+    testing.expectTrue(iwin.eval('Object.getPrototypeOf(document) === HTMLDocument.prototype'));
+
+    f.remove();
+  });
+</script>
+</body>
+</html>
