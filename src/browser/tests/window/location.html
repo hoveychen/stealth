@@ -89,3 +89,45 @@
   location.hash = "";
   testing.expectEqual(stable_href, location.href);
 </script>
+
+<script id=location_ancestor_origins>
+  // The one API that hands a frame its ancestors' origins. A page that is not
+  // framed gets an empty DOMStringList -- and an empty one answers `item(0)`
+  // with null but `[0]` with undefined, which is two different absences from
+  // the same list (measured on Chrome 151).
+  //
+  // Kasada reads this name twice while scoring x-hyatt. Before it existed here
+  // the read threw a TypeError, which is louder than any value would have been.
+  testing.expectEqual('DOMStringList', location.ancestorOrigins.constructor.name);
+  testing.expectEqual(0, location.ancestorOrigins.length);
+  testing.expectEqual(null, location.ancestorOrigins.item(0));
+  testing.expectEqual(undefined, location.ancestorOrigins[0]);
+  testing.expectEqual(false, location.ancestorOrigins.contains(location.origin));
+  testing.expectEqual('[object DOMStringList]', Object.prototype.toString.call(location.ancestorOrigins));
+
+  // Chrome hands back the same object on every read.
+  testing.expectEqual(true, location.ancestorOrigins === location.ancestorOrigins);
+</script>
+
+<script id=location_ancestor_origins_framed>
+{
+  // A same-origin child sees exactly one ancestor, and a grandchild sees two.
+  const frame = document.createElement('iframe');
+  document.documentElement.appendChild(frame);
+
+  const child = frame.contentWindow.location.ancestorOrigins;
+  testing.expectEqual(1, child.length);
+  testing.expectEqual(location.origin, child[0]);
+  testing.expectEqual(location.origin, child.item(0));
+  testing.expectEqual(true, child.contains(location.origin));
+
+  const nested = frame.contentDocument.createElement('iframe');
+  frame.contentDocument.documentElement.appendChild(nested);
+  const grandchild = nested.contentWindow.location.ancestorOrigins;
+  testing.expectEqual(2, grandchild.length);
+  testing.expectEqual(location.origin, grandchild[0]);
+  testing.expectEqual(location.origin, grandchild[1]);
+
+  frame.remove();
+}
+</script>

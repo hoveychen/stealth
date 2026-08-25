@@ -184,3 +184,31 @@
   );
 }
 </script>
+
+<script id="styleSheets">
+{
+    // A shadow root carries its own StyleSheetList, separate from the
+    // document's: a <style> inside the tree lands here and not in
+    // document.styleSheets. `adoptedStyleSheets` was already here; this is the
+    // other half of DocumentOrShadowRoot, and Kasada reads it while scoring
+    // x-hyatt (before this, reading `.styleSheets` on a shadow root threw).
+    const host = document.createElement('div');
+    document.documentElement.appendChild(host);
+    const shadow = host.attachShadow({ mode: 'open' });
+
+    testing.expectEqual('StyleSheetList', shadow.styleSheets.constructor.name);
+    testing.expectEqual(0, shadow.styleSheets.length);
+    testing.expectEqual(true, shadow.styleSheets === shadow.styleSheets);
+
+    const before = document.styleSheets.length;
+    shadow.innerHTML = '<style>:host { color: red }</style>';
+    testing.expectEqual(1, shadow.styleSheets.length);
+    testing.expectEqual('CSSStyleSheet', shadow.styleSheets[0].constructor.name);
+    testing.expectEqual(1, shadow.styleSheets[0].cssRules.length);
+
+    // The shadow tree's sheet is not the document's.
+    testing.expectEqual(before, document.styleSheets.length);
+
+    host.remove();
+}
+</script>

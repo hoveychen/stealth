@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+`location.ancestorOrigins` is ordered innermost-first: index 0 is the immediate
+parent and the last entry is the top frame. With every frame on one origin that
+ordering is invisible, so the middle frame here is loaded from localhost, which
+is cross-origin to the 127.0.0.1 test page and needs no network to be so.
+
+A cross-origin ancestor is still listed -- this is the one API that hands a
+frame the origins above it whether or not it may talk to them.
+-->
+
+<script id=ancestor_origins_order type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+
+  const report = await new Promise((resolve) => {
+    window.addEventListener('message', function onMessage(e) {
+      window.removeEventListener('message', onMessage);
+      resolve(e.data);
+    });
+    const iframe = document.createElement('iframe');
+    iframe.src = ALT_BASE + 'frames/support/ancestor_origins.html';
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual(null, report.err);
+
+    // The cross-origin child's only ancestor is this page.
+    testing.expectEqual(1, report.own.length);
+    testing.expectEqual(location.origin, report.own.items[0]);
+
+    // Its own child sees both, immediate parent first.
+    testing.expectEqual(2, report.child.length);
+    testing.expectEqual(report.ownOrigin, report.child.items[0]);
+    testing.expectEqual(location.origin, report.child.items[1]);
+  });
+}
+</script>

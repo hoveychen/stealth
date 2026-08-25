@@ -364,3 +364,52 @@
     testing.expectEqual(null, i.getAttribute('formnovalidate'))
   }
 </script>
+
+<script id="webkitEntries">
+  {
+    // Chrome answers a frozen FrozenArray<FileSystemEntry> here, empty until a
+    // directory has actually been dropped, and a *fresh* array on every read.
+    // It is there whatever the input's type is. Kasada reads this name 27
+    // times while scoring x-hyatt -- by far the most-read thing this engine
+    // did not have.
+    //
+    // The freeze is the engine-wide FrozenArray gap (see Viewport.zig and
+    // MediaMetadata.zig): there is no SetIntegrityLevel binding, so the array
+    // handed back here is an ordinary one. Contents and per-read identity are
+    // Chrome's.
+    const file = document.createElement('input');
+    file.type = 'file';
+    testing.expectEqual('Array', file.webkitEntries.constructor.name);
+    testing.expectEqual(0, file.webkitEntries.length);
+    testing.expectEqual(false, file.webkitEntries === file.webkitEntries);
+
+    const plain = document.createElement('input');
+    testing.expectEqual('Array', plain.webkitEntries.constructor.name);
+    testing.expectEqual(0, plain.webkitEntries.length);
+
+    const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'webkitEntries');
+    testing.expectEqual('function', typeof d.get);
+    testing.expectEqual(undefined, d.set);
+  }
+</script>
+
+<script id="webkitdirectory">
+  {
+    // A reflected boolean content attribute, like `multiple` next to it.
+    const i = document.createElement('input');
+    i.type = 'file';
+    testing.expectEqual(false, i.webkitdirectory);
+
+    i.webkitdirectory = true;
+    testing.expectEqual(true, i.webkitdirectory);
+    testing.expectEqual('', i.getAttribute('webkitdirectory'));
+    testing.expectEqual('<input type="file" webkitdirectory="">', i.outerHTML);
+
+    i.webkitdirectory = false;
+    testing.expectEqual(false, i.webkitdirectory);
+    testing.expectEqual(null, i.getAttribute('webkitdirectory'));
+
+    i.setAttribute('webkitdirectory', '');
+    testing.expectEqual(true, i.webkitdirectory);
+  }
+</script>
