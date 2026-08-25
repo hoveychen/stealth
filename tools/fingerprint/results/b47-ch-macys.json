@@ -1,0 +1,152 @@
+{
+  "engine": "chrome",
+  "headed": true,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-25T23:44:44.095Z",
+  "egress": {
+    "fl": "466f110",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787701484.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Chrome/151.0.7922.174",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.23",
+    "WebKit-Version": "537.36 (@39c51c70dd5feca6b6aba5bb7997b595011c553d)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:10992/devtools/browser/a1630741-8ec4-447f-97bd-c1ade7ff163f"
+  },
+  "stations": [
+    {
+      "name": "ak-macys",
+      "vendor": "akamai",
+      "url": "https://www.macys.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://servedby.flashtalking.com/container/12518;131342;14478;iframe/?ns=https%3A%2F%2Fwww.macys.com%2F&ft_referrer=https%3A%2F%2Fwww.macys.com%2F&cachebuster=172845.7279104384",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=243d8345-f682-4dc3-8ef8-f38bef12bd39&u_scsid=fd1c045c-41c9-413d-a3c6-00f1e4c27a5f&u_sclid=20ecfe8e-b456-4db2-a8f9-7c3f083c9df8",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cdn.pbbl.co/i/pp.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://c5f14d5dc65082b237a51d98a037f712.safeframe.googlesyndication.com/safeframe/1-0-45/html/container.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?topUrl=www.macys.com&origin=onetag",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://c5f14d5dc65082b237a51d98a037f712.safeframe.googlesyndication.com/safeframe/1-0-45/html/container.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CNv5goT7vJYDFbX28gcdDKMJUQ;src=3856256;type=global;cat=landing;rcb=1;npa=0;auiddc=691769019.1787701493;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.174%7CChromium%3B151.0.7922.174;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;user_data_mode=c;_tu=IAAB;gtm=45fe68o1v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616986~115938466~115938468~118897920~118897930~119367802~119367810~120385422~120420415;epver=2;em=tv.1~co0.US;dc_random=1787701493_mK7_iwfqrjUj6q34fjgFAGIU7PVNYCPwKw;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F?",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CPeMg4T7vJYDFczg8gcdFbMh3A;src=3856256;type=global;cat=landing;rcb=1;ord=1787701492419;npa=0;auiddc=691769019.1787701493;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.174%7CChromium%3B151.0.7922.174;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68o1v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616986~115938466~115938468~118897920~118897930~119367802~119367810~120385422~120420415;epver=2;dc_random=1787701493_gQx0Yupee-AOxIqX1hGHHPkgfJ6BkR6gig;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F?",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://10289658.fls.doubleclick.net/activityi;dc_pre=CO7zgoT7vJYDFffZ8gcdww4Kzw;src=10289658;type=globmmn;cat=mmn_g0;rcb=2;ord=1787701492419;npa=0;auiddc=691769019.1787701493;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.174%7CChromium%3B151.0.7922.174;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68o1v9190905602za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938466~115938469~118897920~118897930~119367802~119367810~120213116~120385422;epver=2;dc_random=1787701493_C9xMdqn3gdlF8vvPwBkD7dwp59frB9DATg;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F?",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.google.com/recaptcha/api2/aframe",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Macy's - Shop Fashion Clothing & Accessories - Official Site - Macys.com",
+      "landedOn": "https://www.macys.com/",
+      "nodes": 8020,
+      "textLength": 5238,
+      "snippet": "Skip to main content TODAY'S DEALS Today! Up to 60% off activewear Today! Up to 60% off luggage Up to 50% off Back to School Up to 60% off women's shoes See All Ask Macy's Sign In See more of what you",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 27127
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:10992/devtools/browser/a1630741-8ec4-447f-97bd-c1ade7ff163f",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[21102:4936984:0825/164446.121698:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[21102:4936984:0825/164446.122051:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[21102:4937318:0825/164449.574846:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[21102:4937318:0825/164449.576735:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[21102:4937318:0825/164449.582224:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "Created TensorFlow Lite XNNPACK delegate for CPU."
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}
