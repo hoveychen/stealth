@@ -12694,17 +12694,22 @@ Three of the questions the chapter above left open are settled, all first try:
 
 ### What is still off
 
-Two rows and 16 pixels, both understood, neither a gradient problem:
+Two rows and 16 pixels, both understood, neither a gradient problem. One of
+the two has since been closed — see below:
 
-- **`alpha ramp`, 3 pixels.** All three are an un-premultiply that lands on an
-  exact half: 18 stored over an alpha of 68 is 67.5, and Chrome answers 67
-  where this rounds half away from zero to 68. Two of the three come back under
-  the half in f32 (`18 · (1/255) · (1/(68 · (1/255)))` is 67.49999237), and the
-  third is exactly 42.5 in f32 too and needs round-half-to-**even** — which is
-  what `_mm_cvtps_epi32` and `vcvtnq_s32_f32` both do, and what Skia's
-  `to_unorm` therefore does. So the readback is f32 and ties go to even. This
-  is `readPixels`, not the gradient: it would move every canvas reading, so it
-  wants its own sweep before it is changed.
+- ~~**`alpha ramp`, 3 pixels.**~~ **Fixed (2026-08-24).** All three were an
+  un-premultiply that lands on an exact half: 18 stored over an alpha of 68 is
+  67.5, and Chrome answers 67 where this rounded half away from zero to 68. Two
+  of the three come back under the half in f32 (`18 · (1/255) · (1/(68 ·
+  (1/255)))` is 67.49999237), and the third is exactly 42.5 in f32 too and
+  needs round-half-to-**even** — which is what `_mm_cvtps_epi32` and
+  `vcvtnq_s32_f32` both do, and what Skia's `to_unorm` therefore does. So the
+  readback is f32 and ties go to even. It was `readPixels` rather than the
+  gradient, and the sweep it wanted first has now been run: all 23 canvas
+  probes, six leaves moved, every one onto Chrome, and the set that still
+  disagrees after is a strict subset of the set before. It also closed
+  `hwb alpha ramp` and `legacy alpha ramp` in `canvas-gradient-stop-space` and
+  the translucent grayscale fill in `expr-canvas-filter-grayscale`.
 - **`shadow of a ramp`, 13 pixels**, all in the four columns nearest the
   shape's left edge and exact from x = 4 rightwards. So the blur kernel is
   right and the mask's left boundary is not. Modelling it as *blur the rect's
@@ -12763,10 +12768,36 @@ stops to the mixed colour — the same result on the sRGB arm, since
 Eight pixels of 512 are left, and six of them are not about stops at all:
 `hwb alpha ramp` and `legacy alpha ramp` are the same three pixels of the
 un-premultiply tie described in the chapter above, and they are the same three
-pixel indices in both rows. The other two are in `legacy wide legacy`, at the
+pixel indices in both rows. Those six have since gone — the tie was `readPixels`
+and it is fixed. The other two are in `legacy wide legacy`, at the
 ends of the segments either side of a `color(display-p3 0 1 0)` stop, each one
 byte. They are not the Oklab matrices: a reference model in Python drifts on
 the same pixels with either the published inverse pair or this file's, and
 misses one of the two by the same byte in either direction. Something about how
 a display-p3 *stop* reaches sRGB before Oklab is a hair off the canvas
 conversion leg this uses, which is one reading and not enough to move it.
+
+## `run-expr` reads an insecure realm, and the two arms disagree there (2026-08-24)
+
+Worth knowing before trusting any `expr-*` baseline that counts names:
+`run-expr.mjs` evaluates on a freshly created `about:blank` target, and in
+Chrome **that target is not a secure context** — measured, `isSecureContext` is
+`false` on it, and with it go `navigator.xr`, `XRSystem`, `XRWebGLLayer` and
+`WebGLRenderingContext.prototype.makeXRCompatible`. This engine answers
+`isSecureContext: false` on the same target and keeps all of them.
+
+So `expr-context-proto-members` shows one extra WebGL member on this side,
+442 against 443, and that reading is **not** "Chrome has no
+`makeXRCompatible`". Three other probes collected through a real page —
+`probe-descriptor-kind`, `probe-operation-arity`, and `probe-win52`, which
+actually calls it and records the rejection — all have it. Deleting it would
+have been a regression dressed as a fix.
+
+It is a harness artifact rather than a site tell. The [SecureContext] gate runs
+from `Frame.commitSecureContext`, at the two points that commit a document, and
+deliberately not at frame init — a root frame is born at `about:blank` and
+navigates inside the same context, so gating at init would strip the surface
+off every https page. A CDP target that never navigates therefore never gets
+gated. Every path a real page takes does: an http origin commits and gates, and
+a script-created `about:blank` iframe goes through the synthetic-navigation
+branch, which calls it too.
