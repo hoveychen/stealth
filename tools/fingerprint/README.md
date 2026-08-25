@@ -13353,3 +13353,69 @@ Two things that came out of chasing it and are worth not re-deriving:
 
 Real macys is still `empty-document` after the fix, so the realm defect was not
 this station's gate.
+
+### The collector order was the build mode
+
+The ordering difference above is not an engine difference. `zig build` takes its
+optimize mode from `b.standardOptimizeOption(.{})`, which defaults to `Debug` —
+so the binary every tool in this directory picks up by default carries
+`DebugAllocator`, which DWARF-unwinds a stack on every allocation. `sample` on
+the page's process shows it directly (`debug.captureCurrentStackTrace`,
+`BucketHeader.captureStackTrace`). `make build` is the release path; a
+standalone one is `zig build -Doptimize=ReleaseFast -p zig-out-rel` (six
+minutes, 92 MB against Debug's 242 MB).
+
+With the same probe on the same replay, three readings:
+
+| arm | collector groups, in completion order |
+|---|---|
+| Chrome | `wTm` `s9m` `SIm` anon×2 `SNK<TEY` `FSY`×2 |
+| this engine, ReleaseFast | the same, group for group |
+| this engine, Debug | `wTm` **`SNK<TEY`** `s9m` `SIm` `FSY`×2 anon×2 |
+
+The mechanism is readable rather than inferred. `probe-async-origin.js` labels
+every scheduling primitive at registration and keeps that label on a stack while
+its callback runs, so a canvas call carries the task it ran inside. The group
+that moves is driven by a **fixed 1000 ms** `setTimeout` registered by `d1Y`, so
+how much of the queue an arm drains before that deadline decides where the group
+lands — and the Debug build spends 960 ms of the first second completely idle
+mid-chain, not firing even a `setInterval(…, 1)`. "Deterministic, not jitter" was
+right; being three times slower is itself deterministic.
+
+Which makes it a note about method, not about macys: **any reading in this
+directory that turns on timing or ordering has to say which build produced it.**
+Real macys is `empty-document` from either build.
+
+### A ready `async` script waited for the parser, once it stopped jumping it
+
+With both arms on release builds the replay's remaining difference was script
+*execution order*: challenge, then **loader**, then sensor here, against
+challenge, then **sensor**, then loader in Chrome — which is also the order the
+real site's wire capture recorded. The interstitial's shape is
+`<script src=challenge>`, `<script src=…/public/0c64cce… async>`, an inline XHR
+proxy, `<script src=sensor>`, so running the async loader early handed the sensor
+a page whose two hidden frames, patched globals and 1000 ms interval already
+existed.
+
+The minimal version needs no replay, and takes three variants to pin down —
+`Chrome 151`, plain http page, one blocking script that is slow to *run* before
+an `async` tag and a second blocking script after it:
+
+| the async script's fetch | Chrome | this engine, before |
+|---|---|---|
+| still in flight when the parser blocks | async first | async first |
+| response delayed 250 ms | async last | async last |
+| landed while the slow blocking script ran | async **last** | async **second** |
+
+Only the third case separates a queued task from an inline call. `ScriptManager`
+`addFromElement` was making the inline call: on adopting a prescan fetch that had
+already completed it queued the script on `ready_scripts` and then called
+`evaluate()` right there, inside the parser, before the tag of the blocking script
+after it had been tokenised. Not calling it for the parser-inserted async case is
+the whole fix — the next blocking script's evaluation window drains the queue,
+and the end of the parse drains it when there is no next one. All three variants
+now read the same in both arms, and the replay's script order flips to
+challenge, sensor, loader.
+
+Real macys is still `empty-document` (33 nodes rather than 32), so this was not
+the gate either.
