@@ -1508,8 +1508,8 @@ pub const CSSViewTransitionRule = struct {
         return "none";
     }
 
-    pub fn getTypes(_: *const CSSViewTransitionRule) []const []const u8 {
-        return &.{};
+    pub fn getTypes(_: *const CSSViewTransitionRule) js.FrozenArray([]const u8) {
+        return .empty;
     }
 
     pub const JsApi = struct {

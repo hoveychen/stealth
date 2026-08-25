@@ -51,8 +51,8 @@ pub const ScreenDetails = struct {
 
     _proto: *EventTarget,
 
-    pub fn getScreens(_: *const ScreenDetails) []const *ScreenDetailed {
-        return &.{};
+    pub fn getScreens(_: *const ScreenDetails) js.FrozenArray(*ScreenDetailed) {
+        return .empty;
     }
 
     pub fn getCurrentScreen(_: *const ScreenDetails) ?*ScreenDetailed {

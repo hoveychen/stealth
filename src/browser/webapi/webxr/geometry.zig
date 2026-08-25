@@ -717,10 +717,9 @@ pub const XRViewerPose = struct {
         return self._proto;
     }
 
-    /// Chrome's is a FrozenArray; this engine has no way to freeze an array it
-    /// builds, so ours is an ordinary one. Recorded rather than papered over.
-    pub fn getViews(self: *const XRViewerPose) []const *XRView {
-        return self._views;
+    /// A FrozenArray, so it comes back frozen.
+    pub fn getViews(self: *const XRViewerPose) js.FrozenArray(*XRView) {
+        return .{ .items = self._views };
     }
 
     pub const JsApi = struct {

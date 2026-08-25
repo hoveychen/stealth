@@ -217,7 +217,7 @@ pub fn getItems(self: *DataTransfer) *DataTransferItemList {
     return self._item_list;
 }
 
-pub fn getTypes(self: *DataTransfer, frame: *Frame) ![][]const u8 {
+pub fn getTypes(self: *DataTransfer, frame: *Frame) !js.FrozenArray([]const u8) {
     var out: std.ArrayList([]const u8) = .empty;
     var has_files = false;
     for (self._items.items) |it| {
@@ -229,7 +229,7 @@ pub fn getTypes(self: *DataTransfer, frame: *Frame) ![][]const u8 {
     if (has_files) {
         try out.append(frame.local_arena, "Files");
     }
-    return out.toOwnedSlice(frame.local_arena);
+    return .{ .items = try out.toOwnedSlice(frame.local_arena) };
 }
 
 pub fn getDropEffect(self: *const DataTransfer) []const u8 {

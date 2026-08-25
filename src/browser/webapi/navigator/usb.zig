@@ -38,14 +38,13 @@
 //! Everything was measured on a headed Chrome 150 over http://localhost
 //! (win13-chrome.json for the shapes, win13b-chrome.json for the behaviours).
 //!
-//! Two measured differences remain. Chrome's `packets` is a FrozenArray, so
-//! Object.isFrozen(result.packets) is true there and false here -- this engine
-//! has no way to freeze an array it builds. Chrome hands back a fresh array on
-//! every access (measured: result.packets !== result.packets) and so do we,
-//! and the elements are the same objects in both.
+//! `packets` is a FrozenArray and comes back frozen, fresh on every access
+//! (measured: result.packets !== result.packets), with the same element objects
+//! in both.
 //!
-//! And a `sequence<T>` here accepts an Array where Chrome accepts any iterable,
-//! so `new USBIsochronousInTransferResult(new Set([packet]))` builds a result on
+//! One measured difference remains: a `sequence<T>` here accepts an Array where
+//! Chrome accepts any iterable, so
+//! `new USBIsochronousInTransferResult(new Set([packet]))` builds a result on
 //! Chrome and is refused here. Telling a non-Array iterable from a plain object
 //! needs a symbol-keyed property lookup this bridge does not expose; the three
 //! refusal messages that do not need one are all reproduced.
@@ -531,8 +530,8 @@ pub const USBIsochronousInTransferResult = struct {
         return self._data;
     }
 
-    pub fn getPackets(self: *const USBIsochronousInTransferResult) []const *USBIsochronousInTransferPacket {
-        return self._packets;
+    pub fn getPackets(self: *const USBIsochronousInTransferResult) js.FrozenArray(*USBIsochronousInTransferPacket) {
+        return .{ .items = self._packets };
     }
 
     pub const JsApi = struct {
@@ -604,8 +603,8 @@ pub const USBIsochronousOutTransferResult = struct {
         });
     }
 
-    pub fn getPackets(self: *const USBIsochronousOutTransferResult) []const *USBIsochronousOutTransferPacket {
-        return self._packets;
+    pub fn getPackets(self: *const USBIsochronousOutTransferResult) js.FrozenArray(*USBIsochronousOutTransferPacket) {
+        return .{ .items = self._packets };
     }
 
     pub const JsApi = struct {

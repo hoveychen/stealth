@@ -292,16 +292,10 @@ pub const FontFaceSetLoadEvent = struct {
         return self._proto;
     }
 
-    /// Measured: every read hands back a fresh array object
-    /// (`e.fontfaces === e.fontfaces` is false). Chrome's is also frozen; there
-    /// is no freeze binding on js.Array here, so ours is not -- recorded rather
-    /// than faked.
-    pub fn getFontfaces(self: *const FontFaceSetLoadEvent, exec: *const js.Execution) !js.Array {
-        var array = exec.js.local.?.newArray(@intCast(self._fontfaces.len));
-        for (self._fontfaces, 0..) |face, index| {
-            _ = try array.set(@intCast(index), face, .{});
-        }
-        return array;
+    /// A FrozenArray, and measured: every read hands back a fresh frozen array
+    /// object (`e.fontfaces === e.fontfaces` is false).
+    pub fn getFontfaces(self: *const FontFaceSetLoadEvent) js.FrozenArray(*FontFace) {
+        return .{ .items = self._fontfaces };
     }
 
     pub const JsApi = struct {

@@ -183,10 +183,11 @@
     testing.expectEqual('rgba16f', session.preferredReflectionFormat);
     testing.expectEqual(1, session.maxRenderLayers);
     testing.expectEqual(null, session.domOverlayState);
-    // Chrome's is a frozen FrozenArray with a stable identity; this engine
-    // builds a fresh ordinary array on each read and has no way to freeze one,
-    // the same gap navigator/usb.zig already records. The contents match.
+    // A frozen FrozenArray. Chrome's is [SameObject] on top of that and ours is
+    // fresh per read, which is a separate gap -- the freeze and the contents
+    // match.
     testing.expectEqual(['viewer'], session.enabledFeatures);
+    testing.expectTrue(Object.isFrozen(session.enabledFeatures));
 
     testing.expectEqual('[object XRInputSourceArray]', String(session.inputSources));
     testing.expectEqual(0, session.inputSources.length);

@@ -99,8 +99,8 @@ pub fn getUserAgent(_: *const Navigator, exec: *const Execution) []const u8 {
 //
 // Read through http_client rather than off the config so a CDP
 // acceptLanguage override is reflected too.
-pub fn getLanguages(_: *const Navigator, exec: *const Execution) ![]const []const u8 {
-    return parseLanguages(exec.call_arena, exec.session.browser.http_client.getLanguages());
+pub fn getLanguages(_: *const Navigator, exec: *const Execution) !js.FrozenArray([]const u8) {
+    return .{ .items = try parseLanguages(exec.call_arena, exec.session.browser.http_client.getLanguages()) };
 }
 
 pub fn getLanguage(_: *const Navigator, exec: *const Execution) ![]const u8 {

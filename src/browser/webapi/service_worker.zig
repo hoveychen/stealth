@@ -236,9 +236,9 @@ pub const PushManager = struct {
         return noRegistration(exec);
     }
 
-    // A frozen two-element list, in Chrome's own order (measured).
-    fn supportedContentEncodings(_: *const Execution) []const []const u8 {
-        return &.{ "aes128gcm", "aesgcm" };
+    // A frozen two-element FrozenArray, in Chrome's own order (measured).
+    fn supportedContentEncodings(_: *const Execution) js.FrozenArray([]const u8) {
+        return .{ .items = &.{ "aes128gcm", "aesgcm" } };
     }
 
     pub const JsApi = struct {

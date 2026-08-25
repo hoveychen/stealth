@@ -365,8 +365,8 @@ pub const ResourceTiming = struct {
         return "";
     }
 
-    fn serverTiming(_: *const ResourceTiming) []const *ServerTiming {
-        return &.{};
+    fn serverTiming(_: *const ResourceTiming) js.FrozenArray(*ServerTiming) {
+        return .empty;
     }
 
     pub const JsApi = struct {

@@ -29,8 +29,12 @@ _pad: bool = false,
 
 const Brand = Config.HttpHeaders.Brand;
 
-pub fn getBrands(_: *const NavigatorUAData, exec: *const Execution) []const Brand {
-    return brandList(exec);
+/// The attribute is a FrozenArray, so it comes back frozen. `toJSON` and
+/// `getHighEntropyValues` below hand out the same list as a plain
+/// `sequence<>` member of a dictionary, which is not frozen -- so they keep
+/// using `brandList` directly.
+pub fn getBrands(_: *const NavigatorUAData, exec: *const Execution) js.FrozenArray(Brand) {
+    return .{ .items = brandList(exec) };
 }
 
 pub fn getMobile(_: *const NavigatorUAData) bool {

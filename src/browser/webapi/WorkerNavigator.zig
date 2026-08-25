@@ -80,7 +80,7 @@ pub fn getLanguage(self: *const WorkerNavigator, exec: *const Execution) ![]cons
     return self._navigator.getLanguage(exec);
 }
 
-pub fn getLanguages(self: *const WorkerNavigator, exec: *const Execution) ![]const []const u8 {
+pub fn getLanguages(self: *const WorkerNavigator, exec: *const Execution) !js.FrozenArray([]const u8) {
     return self._navigator.getLanguages(exec);
 }
 

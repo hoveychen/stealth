@@ -164,8 +164,8 @@ pub fn takeRecords(self: *PerformanceObserver) ![]*Performance.Entry {
 /// Chrome's thirteen, in Chrome's order (measured, win24-chrome.json). Note
 /// what is *not* here: `taskattribution` is a real entryType with a real
 /// interface, but Chrome leaves it off this list.
-pub fn getSupportedEntryTypes() []const []const u8 {
-    return &.{
+pub fn getSupportedEntryTypes() js.FrozenArray([]const u8) {
+    return .{ .items = &.{
         "element",
         "event",
         "first-input",
@@ -179,7 +179,7 @@ pub fn getSupportedEntryTypes() []const []const u8 {
         "paint",
         "resource",
         "visibility-state",
-    };
+    } };
 }
 
 /// Returns true if observer interested with given entry.

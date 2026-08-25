@@ -79,6 +79,10 @@
     'layout-shift', 'long-animation-frame', 'longtask', 'mark', 'measure',
     'navigation', 'paint', 'resource', 'visibility-state',
   ], PerformanceObserver.supportedEntryTypes);
+  // A static FrozenArray, so it reads back frozen -- the static accessor path
+  // converts its return value the same way an instance one does.
+  testing.expectEqual(true, Object.isFrozen(PerformanceObserver.supportedEntryTypes));
+  testing.expectEqual(false, Object.isExtensible(PerformanceObserver.supportedEntryTypes));
 </script>
 
 <script id="list_get_entries_by_type">

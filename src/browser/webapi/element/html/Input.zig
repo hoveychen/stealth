@@ -1447,12 +1447,10 @@ pub fn getStep(self: *const Input) []const u8 {
 /// than nothing at all, whatever the input's type is, and the difference
 /// between an empty array and `undefined` is what a guard reads.
 ///
-/// A fresh array on every read, which is Chrome's behaviour (measured: two
-/// reads compare unequal). It is not frozen: that is the engine-wide
-/// FrozenArray gap, with no SetIntegrityLevel binding to close it -- see
-/// Viewport.zig and MediaMetadata.zig.
-pub fn getWebkitEntries(_: *const Input) []const *filesystem.Entry {
-    return &.{};
+/// A fresh frozen array on every read, which is Chrome's behaviour (measured:
+/// two reads compare unequal, and each is frozen).
+pub fn getWebkitEntries(_: *const Input) js.FrozenArray(*filesystem.Entry) {
+    return .empty;
 }
 
 pub const JsApi = struct {

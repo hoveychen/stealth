@@ -373,19 +373,21 @@
     // times while scoring x-hyatt -- by far the most-read thing this engine
     // did not have.
     //
-    // The freeze is the engine-wide FrozenArray gap (see Viewport.zig and
-    // MediaMetadata.zig): there is no SetIntegrityLevel binding, so the array
-    // handed back here is an ordinary one. Contents and per-read identity are
-    // Chrome's.
     const file = document.createElement('input');
     file.type = 'file';
     testing.expectEqual('Array', file.webkitEntries.constructor.name);
     testing.expectEqual(0, file.webkitEntries.length);
     testing.expectEqual(false, file.webkitEntries === file.webkitEntries);
+    // An empty FrozenArray is still frozen -- and unlike a non-empty one there
+    // are no indices to carry the evidence, so it is the extensibility bit that
+    // has to be off.
+    testing.expectEqual(true, Object.isFrozen(file.webkitEntries));
+    testing.expectEqual(false, Object.isExtensible(file.webkitEntries));
 
     const plain = document.createElement('input');
     testing.expectEqual('Array', plain.webkitEntries.constructor.name);
     testing.expectEqual(0, plain.webkitEntries.length);
+    testing.expectEqual(true, Object.isFrozen(plain.webkitEntries));
 
     const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'webkitEntries');
     testing.expectEqual('function', typeof d.get);
