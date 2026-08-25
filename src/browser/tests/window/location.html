@@ -25,11 +25,68 @@
 </script>
 
 <script id=location_pathname_setter>
-  testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(Location.prototype, 'pathname').set);
+  testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(location, 'pathname').set);
 </script>
 
 <script id=location_search_setter>
-  testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(Location.prototype, 'search').set);
+  testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(location, 'search').set);
+</script>
+
+<script id=location_unforgeable_members>
+  // Every member of Location is [LegacyUnforgeable]: it is a non-configurable
+  // own property of the instance, and the interface prototype object holds
+  // nothing but `constructor`. Measured on Chrome 151 (about:blank):
+  //
+  //   Object.getOwnPropertyNames(Location.prototype)  -> ['constructor']
+  //   Object.getOwnPropertyDescriptor(location, 'href')
+  //     -> { get, set, enumerable: true, configurable: false }
+  //   Object.getOwnPropertyDescriptor(location, 'reload')
+  //     -> { value, writable: false, enumerable: true, configurable: false }
+  //
+  // An engine that leaves them on the prototype is named by one line --
+  // `Object.getOwnPropertyDescriptor(Location.prototype, 'href')` -- with no
+  // value to compare and no noise to hide in. The operations matter as much as
+  // the attributes: closing only the accessors moves the tell to
+  // `Location.prototype.reload`, it does not shut it.
+  const attributes = ['href', 'origin', 'protocol', 'host', 'hostname', 'port',
+                      'pathname', 'search', 'hash', 'ancestorOrigins'];
+  const operations = ['assign', 'replace', 'reload', 'toString'];
+  const members = attributes.concat(operations);
+
+  testing.expectEqual(['constructor'], Object.getOwnPropertyNames(Location.prototype));
+
+  testing.expectEqual([], members.filter(function(name) {
+    return Object.getOwnPropertyDescriptor(Location.prototype, name) !== undefined;
+  }));
+
+  testing.expectEqual([], members.filter(function(name) {
+    return Object.prototype.hasOwnProperty.call(location, name) === false;
+  }));
+
+  testing.expectEqual([], members.filter(function(name) {
+    const d = Object.getOwnPropertyDescriptor(location, name);
+    return !d || d.configurable !== false || d.enumerable !== true;
+  }));
+
+  // The setter half has to survive the move: a read-only attribute keeps its
+  // missing setter, a writable one keeps its setter.
+  testing.expectEqual([], ['origin', 'ancestorOrigins'].filter(function(name) {
+    return Object.getOwnPropertyDescriptor(location, name).set !== undefined;
+  }));
+  testing.expectEqual([], ['href', 'protocol', 'host', 'hostname', 'port', 'pathname',
+                           'search', 'hash'].filter(function(name) {
+    return typeof Object.getOwnPropertyDescriptor(location, name).set !== 'function';
+  }));
+
+  // An unforgeable operation is a non-writable data property, not an accessor.
+  testing.expectEqual([], operations.filter(function(name) {
+    const d = Object.getOwnPropertyDescriptor(location, name);
+    return typeof d.value !== 'function' || d.writable !== false;
+  }));
+
+  // Non-configurable means the page cannot redefine or delete it.
+  testing.expectEqual(false, delete location.href);
+  testing.expectEqual('function', typeof location.reload);
 </script>
 
 <div id="sec1"></div>
