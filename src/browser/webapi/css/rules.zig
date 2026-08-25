@@ -16,6 +16,7 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
 const Parser = @import("../../css/Parser.zig");
+const Tokenizer = @import("../../css/Tokenizer.zig");
 
 const CSSRule = @import("CSSRule.zig");
 const CSSRuleList = @import("CSSRuleList.zig");
@@ -197,6 +198,10 @@ fn buildAtRule(a: Parser.AtRule, frame: *Frame) BuildError!?*CSSRule {
     if (eql(keyword, "font-palette-values")) return (try CSSFontPaletteValuesRule.init(a.prelude, a.block orelse "", frame))._proto;
     if (eql(keyword, "counter-style")) return (try CSSCounterStyleRule.init(a.prelude, a.block orelse "", frame))._proto;
     if (eql(keyword, "property")) return (try CSSPropertyRule.init(a.prelude, a.block orelse "", frame))._proto;
+    if (eql(keyword, "view-transition")) {
+        const rule = (try CSSViewTransitionRule.init(a.prelude, a.block, frame)) orelse return null;
+        return rule._proto;
+    }
 
     // Anything we do not model keeps the opaque placeholder behaviour that
     // CSS-in-JS libraries depend on for insertRule round-trips (#2459).
@@ -1498,18 +1503,138 @@ pub const CSSStartingStyleRule = struct {
     };
 };
 
-/// `@view-transition`. `navigation` is a keyword, `types` a frozen list.
+/// `@view-transition`, whose two descriptors are validated one at a time.
+///
+/// Every reading here is Chrome 151's, from probes/view-transition-rule.js
+/// (results/probes/view-transition-rule.chrome.json):
+///
+///   - An absent descriptor reads as `""` / `[]`, not as its initial value.
+///   - `navigation` takes `auto` or `none`, folded to lower case; anything else
+///     -- including `auto !important` -- drops the declaration.
+///   - `types` is a whitespace-separated `<custom-ident>` list. `none` alone is
+///     valid and means the empty list, but still serialises. A comma, a
+///     dimension, a string, a CSS-wide keyword, or `none` beside anything else
+///     drops the declaration.
+///   - Last *valid* declaration wins: a bogus repeat leaves the earlier good
+///     one standing.
+///   - `cssText` re-serialises navigation first and types second, whatever
+///     order the source used, and drops any descriptor it does not know.
+///   - `types` is `[SameObject]` on top of being a FrozenArray, so it is the
+///     same frozen array on every read -- hence the accessor cache below,
+///     which is what every other FrozenArray in the engine does not have.
 pub const CSSViewTransitionRule = struct {
     pub const Proto = CSSRule;
 
     _proto: *CSSRule,
+    _navigation: []const u8 = "",
+    /// The validated `types` text, kept for serialisation because `none`
+    /// serialises and yet produces no entries.
+    _types_text: ?[]const u8 = null,
+    _types: []const []const u8 = &.{},
 
-    pub fn getNavigation(_: *const CSSViewTransitionRule) []const u8 {
-        return "none";
+    /// Answers null for the input Chrome does not turn into a rule at all: a
+    /// bare `@view-transition;` with no block, and any non-empty prelude.
+    pub fn init(prelude: []const u8, block: ?[]const u8, frame: *Frame) !?*CSSViewTransitionRule {
+        if (std.mem.trim(u8, prelude, &std.ascii.whitespace).len != 0) return null;
+        const body = block orelse return null;
+
+        var navigation: []const u8 = "";
+        var types_text: ?[]const u8 = null;
+        var types: []const []const u8 = &.{};
+
+        var it = Parser.parseDeclarationsList(body);
+        while (it.next()) |declaration| {
+            if (declaration.important) continue;
+            if (std.ascii.eqlIgnoreCase(declaration.name, "navigation")) {
+                const value = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
+                inline for (.{ "auto", "none" }) |keyword| {
+                    if (std.ascii.eqlIgnoreCase(value, keyword)) {
+                        navigation = keyword;
+                    }
+                }
+                continue;
+            }
+            if (std.ascii.eqlIgnoreCase(declaration.name, "types")) {
+                const parsed = try parseTypes(declaration.value, frame) orelse continue;
+                types_text = parsed.text;
+                types = parsed.list;
+            }
+        }
+
+        const rule = try frame._factory.chained(.{
+            CSSRule{ ._type = undefined },
+            CSSViewTransitionRule{
+                ._proto = undefined,
+                ._navigation = navigation,
+                ._types_text = types_text,
+                ._types = types,
+            },
+        });
+        rule._proto._type = .{ .view_transition = rule };
+        return rule;
     }
 
-    pub fn getTypes(_: *const CSSViewTransitionRule) js.FrozenArray([]const u8) {
-        return .empty;
+    const ParsedTypes = struct {
+        /// The list re-joined with single spaces, which is how Chrome
+        /// serialises it whatever whitespace the source used.
+        text: []const u8,
+        list: []const []const u8,
+    };
+
+    /// The whole declaration is valid or it is dropped: there is no partial
+    /// list. Answers null for the drop.
+    fn parseTypes(value: []const u8, frame: *Frame) !?ParsedTypes {
+        var idents: std.ArrayList([]const u8) = .empty;
+        var saw_none = false;
+
+        var tokenizer: Tokenizer = .{ .input = value };
+        while (tokenizer.next()) |token| switch (token) {
+            .white_space, .comment => {},
+            .ident => |name| {
+                // A CSS-wide keyword is not a custom-ident anywhere, and
+                // `none` is this descriptor's own reserved word: it stands for
+                // the empty list and cannot share the declaration.
+                inline for (.{ "initial", "inherit", "unset", "revert", "revert-layer", "default" }) |reserved| {
+                    if (std.ascii.eqlIgnoreCase(name, reserved)) return null;
+                }
+                if (std.ascii.eqlIgnoreCase(name, "none")) {
+                    if (saw_none or idents.items.len != 0) return null;
+                    saw_none = true;
+                    continue;
+                }
+                if (saw_none) return null;
+                try idents.append(frame.arena, try frame.dupeString(name));
+            },
+            // Anything that is not an ident -- a comma, a dimension, a string,
+            // a function -- invalidates the declaration.
+            else => return null,
+        };
+
+        if (saw_none) return .{ .text = "none", .list = &.{} };
+        if (idents.items.len == 0) return null;
+        return .{
+            .text = try std.mem.join(frame.arena, " ", idents.items),
+            .list = idents.items,
+        };
+    }
+
+    pub fn getNavigation(self: *const CSSViewTransitionRule) []const u8 {
+        return self._navigation;
+    }
+
+    pub fn getTypes(self: *const CSSViewTransitionRule) js.FrozenArray([]const u8) {
+        return .{ .items = self._types };
+    }
+
+    pub fn writeCssText(self: *CSSViewTransitionRule, writer: *std.Io.Writer) !void {
+        try writer.writeAll("@view-transition { ");
+        if (self._navigation.len != 0) {
+            try writer.print("navigation: {s}; ", .{self._navigation});
+        }
+        if (self._types_text) |text| {
+            try writer.print("types: {s}; ", .{text});
+        }
+        try writer.writeAll("}");
     }
 
     pub const JsApi = struct {
@@ -1522,7 +1647,11 @@ pub const CSSViewTransitionRule = struct {
         };
 
         pub const navigation = bridge.accessor(CSSViewTransitionRule.getNavigation, null, .{});
-        pub const types = bridge.accessor(CSSViewTransitionRule.getTypes, null, .{});
+        pub const types = bridge.accessor(
+            CSSViewTransitionRule.getTypes,
+            null,
+            .{ .cache = .{ .private = "view_transition_types" } },
+        );
     };
 };
 

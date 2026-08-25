@@ -71,13 +71,20 @@
 </script>
 
 <script>
-  // Chrome's thirteen, in Chrome's order (measured on a headed Chrome 150).
-  // taskattribution is deliberately absent: it is a real entryType with a real
-  // interface, but Chrome does not advertise it here.
+  // Chrome's fifteen, in Chrome's order, which is alphabetical (measured on a
+  // headed Chrome 151). taskattribution is deliberately absent: it is a real
+  // entryType with a real interface, but Chrome does not advertise it here.
+  //
+  // interaction-contentful-paint and soft-navigation are advertised even though
+  // nothing ever queues one -- their interfaces are on the window here already
+  // (see the unreachable_performance_entry_subclasses block in performance.html)
+  // and Chrome's own buffers for them are empty too, so the list is the only
+  // place the two names are readable.
   testing.expectEqual([
-    'element', 'event', 'first-input', 'largest-contentful-paint',
-    'layout-shift', 'long-animation-frame', 'longtask', 'mark', 'measure',
-    'navigation', 'paint', 'resource', 'visibility-state',
+    'element', 'event', 'first-input', 'interaction-contentful-paint',
+    'largest-contentful-paint', 'layout-shift', 'long-animation-frame',
+    'longtask', 'mark', 'measure', 'navigation', 'paint', 'resource',
+    'soft-navigation', 'visibility-state',
   ], PerformanceObserver.supportedEntryTypes);
   // A static FrozenArray, so it reads back frozen -- the static accessor path
   // converts its return value the same way an instance one does.

@@ -809,15 +809,20 @@ const PrivateSymbols = struct {
     const Private = @import("Private.zig");
 
     child_nodes: Private,
+    // CSSViewTransitionRule.types is [SameObject] as well as a FrozenArray, so
+    // the frozen array is built once per rule and cached here.
+    view_transition_types: Private,
 
     fn init(isolate: *v8.Isolate) PrivateSymbols {
         return .{
             .child_nodes = Private.init(isolate, "child_nodes"),
+            .view_transition_types = Private.init(isolate, "view_transition_types"),
         };
     }
 
     fn deinit(self: *PrivateSymbols) void {
         self.child_nodes.deinit();
+        self.view_transition_types.deinit();
     }
 };
 

@@ -723,3 +723,102 @@
   testing.expectTrue(sheet.cssRules[0].cssText.includes('@layer'));
 }
 </script>
+
+<script id="CSSViewTransitionRule_descriptors">
+{
+  // `@view-transition` parses into a CSSViewTransitionRule, whose two
+  // descriptors are validated one at a time: an invalid one is dropped and
+  // leaves the earlier valid one standing, and `cssText` re-serialises what
+  // survived in the IDL's order rather than the source's.
+  //
+  // Every reading below is Chrome 151's, measured with
+  // probes/view-transition-rule.js
+  // (results/probes/view-transition-rule.chrome.json).
+  const rule = (css) => {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    return sheet.cssRules[0];
+  };
+  const read = (css) => {
+    const r = rule(css);
+    if (!r) return 'no-rule';
+    return [r.constructor.name, r.navigation, '[' + Array.from(r.types).join(',') + ']', r.cssText]
+      .join(' | ');
+  };
+
+  testing.expectEqual(
+    'CSSViewTransitionRule | auto | [a,b] | @view-transition { navigation: auto; types: a b; }',
+    read('@view-transition { navigation: auto; types: a b; }'));
+
+  // An absent descriptor reads as the empty string, not "none".
+  testing.expectEqual(
+    'CSSViewTransitionRule |  | [] | @view-transition { }',
+    read('@view-transition {}'));
+  testing.expectEqual(
+    'CSSViewTransitionRule | none | [] | @view-transition { navigation: none; }',
+    read('@view-transition { navigation: none; }'));
+
+  // navigation takes auto or none and nothing else; the keyword is folded to
+  // lower case, and so is the at-keyword itself.
+  testing.expectEqual(
+    'CSSViewTransitionRule |  | [] | @view-transition { }',
+    read('@view-transition { navigation: sideways; }'));
+  testing.expectEqual(
+    'CSSViewTransitionRule | auto | [A] | @view-transition { navigation: auto; types: A; }',
+    read('@VIEW-TRANSITION { navigation: AUTO; types: A; }'));
+
+  // types is a whitespace-separated custom-ident list. `none` alone means the
+  // empty list but still serialises; combined with anything it is invalid, and
+  // so is a comma, a dimension, a string, a CSS-wide keyword or !important.
+  testing.expectEqual(
+    'CSSViewTransitionRule | auto | [] | @view-transition { navigation: auto; types: none; }',
+    read('@view-transition { navigation: auto; types: none; }'));
+  testing.expectEqual(
+    'CSSViewTransitionRule |  | [a,b] | @view-transition { types: a b; }',
+    read('@view-transition { types:   a\n b  ; }'));
+  testing.expectEqual(
+    'CSSViewTransitionRule |  | [auto] | @view-transition { types: auto; }',
+    read('@view-transition { types: auto; }'));
+  testing.expectEqual(
+    'CSSViewTransitionRule |  | [--custom] | @view-transition { types: --custom; }',
+    read('@view-transition { types: --custom; }'));
+  for (const bad of ['a, b', 'none a', 'none none', '', 'ok 4px', 'initial', 'inherit',
+                     'unset', 'revert', '"a"']) {
+    testing.expectEqual(
+      'CSSViewTransitionRule |  | [] | @view-transition { }',
+      read('@view-transition { types: ' + bad + '; }'), { desc: 'types: ' + bad });
+  }
+  testing.expectEqual(
+    'CSSViewTransitionRule |  | [] | @view-transition { }',
+    read('@view-transition { navigation: auto !important; }'));
+
+  // Last *valid* declaration wins: a bogus repeat does not clobber a good one.
+  testing.expectEqual(
+    'CSSViewTransitionRule |  | [b] | @view-transition { types: b; }',
+    read('@view-transition { types: a; types: b; }'));
+  testing.expectEqual(
+    'CSSViewTransitionRule | auto | [] | @view-transition { navigation: auto; }',
+    read('@view-transition { navigation: auto; navigation: nope; }'));
+
+  // Serialisation order is navigation then types, whatever the source said.
+  testing.expectEqual(
+    'CSSViewTransitionRule | auto | [a] | @view-transition { navigation: auto; types: a; }',
+    read('@view-transition { types: a; navigation: auto; }'));
+
+  // An unknown descriptor is dropped rather than kept for a round trip.
+  testing.expectEqual(
+    'CSSViewTransitionRule | auto | [] | @view-transition { navigation: auto; }',
+    read('@view-transition { navigation: auto; wat: 1; }'));
+
+  // No block and a non-empty prelude both mean no rule at all.
+  testing.expectEqual('no-rule', read('@view-transition;'));
+  testing.expectEqual('no-rule', read('@view-transition foo { navigation: auto; }'));
+
+  // `types` is a [SameObject] FrozenArray: frozen, and the same array object on
+  // every read -- unlike every other FrozenArray in this engine.
+  const r = rule('@view-transition { types: a; }');
+  testing.expectEqual(true, Object.isFrozen(r.types));
+  testing.expectEqual(false, Object.isExtensible(r.types));
+  testing.expectTrue(r.types === r.types);
+}
+</script>
