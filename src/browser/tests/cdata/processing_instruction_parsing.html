@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<body>
+
+<!-- Chrome does not follow the spec's bogus-comment rule for `<?`: it builds a
+     ProcessingInstruction when what follows parses as a usable target. Every
+     expectation below is a measurement against headed Chrome 151. -->
+<div id="basic"><!-- c1 --><?pi foo?><!bogus>text</div>
+<div id="no_data"><?pi?></div>
+<div id="unterminated"><?pi></div>
+<div id="spacey"><?pi one two  three ?></div>
+<div id="newline"><?pi
+newline?></div>
+<div id="qmark_in_target"><?pi?x c?></div>
+<div id="real_comment"><!--?pi foo?--></div>
+<div id="reject_xml"><?xml version="1.0" encoding="utf-8"?></div>
+<div id="reject_xml_dash"><?xml-stylesheet c?></div>
+<div id="accept_xmlfoo"><?xmlfoo c?></div>
+<div id="reject_dot"><?a.b c?></div>
+<div id="reject_colon"><?a:b c?></div>
+<div id="reject_digit"><?9bad target?></div>
+<div id="reject_space_first"><?  leading space?></div>
+<div id="uppercased"><?PI Foo?></div>
+<div id="dashes"><?a-b-c d?></div>
+<div id="leading_underscore"><?_a c?></div>
+
+<script id=parsed_as_processing_instruction>
+{
+  const describe = (n) => [n.nodeType, n.nodeName, n.target ?? null, n.data];
+  const only = (id) => describe(document.getElementById(id).firstChild);
+  const html = (id) => document.getElementById(id).innerHTML;
+
+  // A PI sits between the comments it was written among.
+  testing.expectEqual(
+    '8,7,8,3',
+    Array.from(document.getElementById('basic').childNodes).map((n) => n.nodeType).join(','),
+  );
+  testing.expectEqual('7,pi,pi,foo', describe(document.getElementById('basic').childNodes[1]).join(','));
+  testing.expectEqual('<!-- c1 --><?pi foo?><!--bogus-->text', html('basic'));
+
+  // The target ends at the first whitespace or `?`; one trailing `?` is dropped.
+  testing.expectEqual('7,pi,pi,', only('no_data').join(','));
+  testing.expectEqual('<?pi ?>', html('no_data'));
+  testing.expectEqual('7,pi,pi,', only('unterminated').join(','));
+  testing.expectEqual('7,pi,pi,one two  three ', only('spacey').join(','));
+  testing.expectEqual('7,pi,pi,newline', only('newline').join(','));
+  testing.expectEqual('7,pi,pi,?x c', only('qmark_in_target').join(','));
+
+  // The target is ASCII-lowercased, the way a tag name would be.
+  testing.expectEqual('7,pi,pi,Foo', only('uppercased').join(','));
+  testing.expectEqual('7,a-b-c,a-b-c,d', only('dashes').join(','));
+  testing.expectEqual('7,_a,_a,c', only('leading_underscore').join(','));
+  testing.expectEqual('7,xmlfoo,xmlfoo,c', only('accept_xmlfoo').join(','));
+}
+</script>
+
+<script id=left_as_a_comment>
+{
+  const describe = (n) => [n.nodeType, n.nodeName, n.target ?? null, n.data];
+  const only = (id) => describe(document.getElementById(id).firstChild);
+
+  // A real comment whose text happens to start with `?` stays a comment: the
+  // two are indistinguishable by content, only by how they were written.
+  testing.expectEqual('8,#comment,,?pi foo?', only('real_comment').join(','));
+
+  // `xml` and any `xml-` prefix are refused; `xmlfoo` above is not.
+  testing.expectEqual('8,#comment,,?xml version="1.0" encoding="utf-8"?', only('reject_xml').join(','));
+  testing.expectEqual('8,#comment,,?xml-stylesheet c?', only('reject_xml_dash').join(','));
+
+  // A target has to be [A-Za-z_][A-Za-z0-9_-]*.
+  testing.expectEqual('8,#comment,,?a.b c?', only('reject_dot').join(','));
+  testing.expectEqual('8,#comment,,?a:b c?', only('reject_colon').join(','));
+  testing.expectEqual('8,#comment,,?9bad target?', only('reject_digit').join(','));
+  testing.expectEqual('8,#comment,,?  leading space?', only('reject_space_first').join(','));
+}
+</script>
+
+<script id=fragment_parsing_agrees>
+{
+  // innerHTML goes through the fragment parser, a separate entry point.
+  const d = document.createElement('div');
+  d.innerHTML = '<?pi foo?><!--?pi foo?-->';
+  testing.expectEqual('7,8', Array.from(d.childNodes).map((n) => n.nodeType).join(','));
+  testing.expectEqual('pi', d.firstChild.target);
+  testing.expectEqual('foo', d.firstChild.data);
+  testing.expectEqual('<?pi foo?><!--?pi foo?-->', d.innerHTML);
+
+  // And the serialization round-trips back to the same node.
+  const rt = document.createElement('div');
+  rt.innerHTML = d.innerHTML;
+  testing.expectEqual('7,8', Array.from(rt.childNodes).map((n) => n.nodeType).join(','));
+}
+</script>

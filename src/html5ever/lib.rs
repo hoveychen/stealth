@@ -92,6 +92,7 @@ pub extern "C" fn html5ever_parse_document(
         attach_declarative_shadow_callback: attach_declarative_shadow_callback,
         allow_declarative_shadow: allow_declarative_shadow,
         namespace_declarations: RefCell::new(None),
+        bogus_comment_from_question_mark: Cell::new(false),
     };
 
     let bytes = unsafe { std::slice::from_raw_parts(html, len) };
@@ -167,6 +168,7 @@ pub extern "C" fn html5ever_parse_document_with_encoding(
         attach_declarative_shadow_callback: attach_declarative_shadow_callback,
         allow_declarative_shadow: allow_declarative_shadow,
         namespace_declarations: RefCell::new(None),
+        bogus_comment_from_question_mark: Cell::new(false),
     };
 
     // Parse directly from decoded string
@@ -526,6 +528,7 @@ pub extern "C" fn html5ever_parse_fragment(
         attach_declarative_shadow_callback: attach_declarative_shadow_callback,
         allow_declarative_shadow: allow_declarative_shadow,
         namespace_declarations: RefCell::new(None),
+        bogus_comment_from_question_mark: Cell::new(false),
     };
 
     let bytes = unsafe { std::slice::from_raw_parts(html, len) };
@@ -693,6 +696,7 @@ pub extern "C" fn html5ever_streaming_parser_create(
         attach_declarative_shadow_callback: attach_declarative_shadow_callback,
         allow_declarative_shadow: allow_declarative_shadow,
         namespace_declarations: RefCell::new(None),
+        bogus_comment_from_question_mark: Cell::new(false),
     };
 
     // Create a parser which implements TendrilSink for streaming parsing
@@ -825,6 +829,7 @@ pub extern "C" fn xml5ever_parse_document(
         attach_declarative_shadow_callback: attach_declarative_shadow_callback,
         allow_declarative_shadow: allow_declarative_shadow,
         namespace_declarations: RefCell::new(None),
+        bogus_comment_from_question_mark: Cell::new(false),
     };
 
     let bytes = unsafe { std::slice::from_raw_parts(xml, len) };

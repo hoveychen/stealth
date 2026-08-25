@@ -71,6 +71,58 @@ pub struct Sink<'arena> {
     // tree builder, and `create_element` below puts them back. Always `None` on
     // the HTML path, which has no such stripping.
     pub namespace_declarations: RefCell<Option<Vec<Attribute>>>,
+    // Set by `parse_error` when the tokenizer reports the `<?` that sends it
+    // into the bogus comment state, and consumed by the `create_comment` that
+    // follows. See `split_processing_instruction` for why the provenance is
+    // needed: `<?pi foo?>` and `<!--?pi foo?-->` hand the sink the same text,
+    // and Chrome makes a ProcessingInstruction out of only the first.
+    pub bogus_comment_from_question_mark: Cell<bool>,
+}
+
+// html5ever 0.39's tokenizer, on `<?`, calls `bad_char_error()` and then
+// reconsumes the `?` into the bogus comment state, which runs to the next `>`
+// with nothing else emitted in between. With the default `ParseOpts` the error
+// text is built by `format!("Saw {c} in state {state:?}")`.
+const QUESTION_MARK_IN_TAG_OPEN: &str = "Saw ? in state TagOpen";
+
+// Chrome 151 builds a ProcessingInstruction where the spec asks for a bogus
+// comment. Measured against headed Chrome over ~25 shapes; `txt` is the bogus
+// comment's text, which for `<?` still carries the leading `?`.
+//
+// The target runs to the first whitespace or `?`; a whitespace terminator is
+// swallowed, a `?` is not. One trailing `?` comes off the data. The target is
+// ASCII-lowercased and must look like [A-Za-z_][A-Za-z0-9_-]*, and Chrome
+// refuses `xml` and anything starting with `xml-` (it takes `xmlfoo`).
+fn split_processing_instruction(txt: &str) -> Option<(String, String)> {
+    let rest = txt.strip_prefix('?')?;
+
+    let end = rest
+        .find(|c: char| c.is_ascii_whitespace() || c == '?')
+        .unwrap_or(rest.len());
+    let target = rest[..end].to_ascii_lowercase();
+
+    let first = target.chars().next()?;
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return None;
+    }
+    if !target
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return None;
+    }
+    if target == "xml" || target.starts_with("xml-") {
+        return None;
+    }
+
+    let after = if rest[end..].starts_with(|c: char| c.is_ascii_whitespace()) {
+        &rest[end + 1..]
+    } else {
+        &rest[end..]
+    };
+    let data = after.strip_suffix('?').unwrap_or(after);
+
+    Some((target, data.to_string()))
 }
 
 impl<'arena> TreeSink for Sink<'arena> {
@@ -86,6 +138,9 @@ impl<'arena> TreeSink for Sink<'arena> {
     }
 
     fn parse_error(&self, err: Cow<'static, str>) {
+        if err == QUESTION_MARK_IN_TAG_OPEN {
+            self.bogus_comment_from_question_mark.set(true);
+        }
         unsafe {
             (self.parse_error_callback)(
                 self.ctx,
@@ -160,6 +215,13 @@ impl<'arena> TreeSink for Sink<'arena> {
     }
 
     fn create_comment(&self, txt: StrTendril) -> Ref {
+        // Every comment clears the flag, so a `<?` that turned out not to name
+        // a usable target cannot leak into the next one.
+        if self.bogus_comment_from_question_mark.replace(false) {
+            if let Some((target, data)) = split_processing_instruction(&txt) {
+                return self.create_pi(StrTendril::from(target), StrTendril::from(data));
+            }
+        }
         let str = StringSlice{ ptr: txt.as_ptr(), len: txt.len()};
         unsafe {
             return (self.create_comment_callback)(self.ctx, str);
