@@ -246,60 +246,117 @@ pub fn parse(input: []const u8) !Mime {
     return mime;
 }
 
-/// Prescan the first 1024 bytes of an HTML document for a charset declaration.
-/// Looks for `<meta charset="X">` and `<meta http-equiv="Content-Type" content="...;charset=X">`.
-/// Returns the charset value or null if none found.
+/// The spec's prescan reads the first 1024 bytes of a document. Chrome keeps
+/// reading past that as long as it is still in the head section, and only
+/// applies the window once it has left it.
+const PRESCAN_WINDOW = 1024;
+
+/// The tags Chrome lets the charset scan walk through. Anything else — `<p>`,
+/// `<div>`, `<br>`, `<template>`, `<body>` — is content the tree builder would
+/// have taken out of `<head>`, and ends the head section. `html` and `head`
+/// keep the scan alive too, but only as start tags: `</head>` and `</html>`
+/// end it.
+const HEAD_SECTION_TAGS = [_][]const u8{ "script", "noscript", "style", "link", "meta", "object", "title", "base" };
+
+/// Walks an HTML byte stream the way Chrome hunts for a `<meta charset>`, and
+/// yields every label it finds so the caller can decide which one names a real
+/// encoding. Yielding rather than returning matters: an unusable label does not
+/// end Chrome's search, so `<meta charset="nonsense">` must not shadow a
+/// `<meta charset="utf-8">` further down.
+///
+/// Chrome gives up only once the scan has *both* left the head section and
+/// passed the 1024-byte window. A meta arbitrarily deep inside a long `<head>`
+/// still decides the encoding — measured at 1 MiB — while one sitting after a
+/// `<div>` stops counting past 1024 bytes. And it never re-parses to apply
+/// what it finds: the decoded output is held back until the scan settles, so
+/// text ahead of the meta comes out in the new encoding as well.
+///
 /// See: https://www.w3.org/International/questions/qa-html-encoding-declarations
-pub fn prescanCharset(html: []const u8) ?[]const u8 {
-    const limit = @min(html.len, 1024);
-    const data = html[0..limit];
+pub const MetaCharsetScanner = struct {
+    html: []const u8,
+    pos: usize = 0,
+    in_head_section: bool = true,
 
-    // Scan for <meta tags
-    var pos: usize = 0;
-    while (pos < data.len) {
-        // Find next '<'
-        pos = std.mem.indexOfScalarPos(u8, data, pos, '<') orelse return null;
-        pos += 1;
-        if (pos >= data.len) return null;
+    pub fn next(self: *MetaCharsetScanner) ?[]const u8 {
+        const html = self.html;
+        while (self.pos < html.len) {
+            const lt = std.mem.indexOfScalarPos(u8, html, self.pos, '<') orelse return null;
 
-        // Check for "meta" (case-insensitive)
-        if (pos + 4 >= data.len) return null;
-        var tag_buf: [4]u8 = undefined;
-        _ = std.ascii.lowerString(&tag_buf, data[pos..][0..4]);
-        if (!std.mem.eql(u8, &tag_buf, "meta")) {
-            continue;
-        }
-        pos += 4;
+            // Comments, the doctype and processing instructions are markup the
+            // scan reads over without leaving the head section.
+            if (std.mem.startsWith(u8, html[lt..], "<!--")) {
+                const end = std.mem.indexOfPos(u8, html, lt + 4, "-->") orelse return null;
+                self.pos = end + 3;
+                continue;
+            }
+            if (lt + 1 < html.len and (html[lt + 1] == '!' or html[lt + 1] == '?')) {
+                self.pos = (std.mem.indexOfScalarPos(u8, html, lt + 1, '>') orelse return null) + 1;
+                continue;
+            }
 
-        // Must be followed by whitespace or end of tag
-        if (pos >= data.len) return null;
-        if (data[pos] != ' ' and data[pos] != '\t' and data[pos] != '\n' and
-            data[pos] != '\r' and data[pos] != '/')
-        {
-            continue;
-        }
+            const is_end_tag = lt + 1 < html.len and html[lt + 1] == '/';
+            const name_start = lt + if (is_end_tag) @as(usize, 2) else 1;
+            const name_end = tagNameEnd(html, name_start);
+            if (name_end == name_start) {
+                // Not a tag after all -- a bare '<' in text.
+                self.pos = lt + 1;
+                continue;
+            }
+            const name = html[name_start..name_end];
 
-        // Scan attributes within this meta tag
-        const tag_end = std.mem.indexOfScalarPos(u8, data, pos, '>') orelse return null;
-        const attrs = data[pos..tag_end];
+            // Out of the head section, the byte window is what remains, and a
+            // meta beyond it no longer counts.
+            if (!self.in_head_section and lt >= PRESCAN_WINDOW) return null;
 
-        // Look for charset= attribute directly
-        if (findAttrValue(attrs, "charset")) |charset| {
-            if (charset.len > 0 and charset.len <= 40) return charset;
-        }
+            const tag_end = std.mem.indexOfScalarPos(u8, html, name_end, '>') orelse return null;
+            self.pos = tag_end + 1;
 
-        // Look for http-equiv="content-type" with content="...;charset=X"
-        if (findAttrValue(attrs, "http-equiv")) |he| {
-            if (std.ascii.eqlIgnoreCase(he, "content-type")) {
-                if (findAttrValue(attrs, "content")) |content| {
-                    if (extractCharsetFromContentType(content)) |charset| {
-                        return charset;
-                    }
-                }
+            if (!is_end_tag and eqlTag(name, "meta")) {
+                if (metaCharsetLabel(html[name_end..tag_end])) |label| return label;
+                continue;
+            }
+            if (!inHeadSection(name, is_end_tag)) {
+                self.in_head_section = false;
             }
         }
+        return null;
+    }
+};
 
-        pos = tag_end + 1;
+fn tagNameEnd(html: []const u8, start: usize) usize {
+    var pos = start;
+    while (pos < html.len) : (pos += 1) {
+        switch (html[pos]) {
+            'a'...'z', 'A'...'Z', '0'...'9' => {},
+            else => break,
+        }
+    }
+    return pos;
+}
+
+fn eqlTag(name: []const u8, lower: []const u8) bool {
+    return name.len == lower.len and std.ascii.eqlIgnoreCase(name, lower);
+}
+
+fn inHeadSection(name: []const u8, is_end_tag: bool) bool {
+    for (HEAD_SECTION_TAGS) |tag| {
+        if (eqlTag(name, tag)) return true;
+    }
+    return !is_end_tag and (eqlTag(name, "html") or eqlTag(name, "head"));
+}
+
+/// The charset a single `<meta>` declares, from either spelling, or null when
+/// it declares none.
+fn metaCharsetLabel(attrs: []const u8) ?[]const u8 {
+    if (findAttrValue(attrs, "charset")) |charset| {
+        if (charset.len > 0 and charset.len <= 40) return charset;
+    }
+    if (findAttrValue(attrs, "http-equiv")) |he| {
+        if (std.ascii.eqlIgnoreCase(he, "content-type")) {
+            if (findAttrValue(attrs, "content")) |content| {
+                if (extractCharsetFromContentType(content)) |charset| return charset;
+            }
+        }
     }
     return null;
 }
@@ -1290,36 +1347,77 @@ test "Mime: serialize" {
     try expectSerialize(arena, "x/", "");
 }
 
-test "Mime: prescanCharset" {
+// The first label the scanner yields, which is what a caller that accepts every
+// label would get.
+fn firstMetaCharset(html: []const u8) ?[]const u8 {
+    var scanner: Mime.MetaCharsetScanner = .{ .html = html };
+    return scanner.next();
+}
+
+test "Mime: MetaCharsetScanner" {
     // <meta charset="X">
-    try testing.expectEqual("utf-8", Mime.prescanCharset("<html><head><meta charset=\"utf-8\">").?);
-    try testing.expectEqual("iso-8859-1", Mime.prescanCharset("<html><head><meta charset=\"iso-8859-1\">").?);
-    try testing.expectEqual("shift_jis", Mime.prescanCharset("<meta charset='shift_jis'>").?);
+    try testing.expectEqual("utf-8", firstMetaCharset("<html><head><meta charset=\"utf-8\">").?);
+    try testing.expectEqual("iso-8859-1", firstMetaCharset("<html><head><meta charset=\"iso-8859-1\">").?);
+    try testing.expectEqual("shift_jis", firstMetaCharset("<meta charset='shift_jis'>").?);
 
     // Case-insensitive tag matching
-    try testing.expectEqual("utf-8", Mime.prescanCharset("<META charset=\"utf-8\">").?);
-    try testing.expectEqual("utf-8", Mime.prescanCharset("<Meta charset=\"utf-8\">").?);
+    try testing.expectEqual("utf-8", firstMetaCharset("<META charset=\"utf-8\">").?);
+    try testing.expectEqual("utf-8", firstMetaCharset("<Meta charset=\"utf-8\">").?);
 
     // <meta http-equiv="Content-Type" content="text/html; charset=X">
     try testing.expectEqual(
         "iso-8859-1",
-        Mime.prescanCharset("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-8859-1\">").?,
+        firstMetaCharset("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-8859-1\">").?,
     );
 
     // No charset found
-    try testing.expectEqual(null, Mime.prescanCharset("<html><head><title>Test</title>"));
-    try testing.expectEqual(null, Mime.prescanCharset(""));
-    try testing.expectEqual(null, Mime.prescanCharset("no html here"));
+    try testing.expectEqual(null, firstMetaCharset("<html><head><title>Test</title>"));
+    try testing.expectEqual(null, firstMetaCharset(""));
+    try testing.expectEqual(null, firstMetaCharset("no html here"));
+
+    // A tag whose name merely starts with "meta" is not a <meta>
+    try testing.expectEqual(null, firstMetaCharset("<metadata charset=\"utf-8\">"));
 
     // Self-closing meta without charset must not loop forever
-    try testing.expectEqual(null, Mime.prescanCharset("<meta foo=\"bar\"/>"));
+    try testing.expectEqual(null, firstMetaCharset("<meta foo=\"bar\"/>"));
 
-    // Charset after 1024 bytes should not be found
-    var long_html: [1100]u8 = undefined;
-    @memset(&long_html, ' ');
-    const suffix = "<meta charset=\"windows-1252\">";
-    @memcpy(long_html[1050 .. 1050 + suffix.len], suffix);
-    try testing.expectEqual(null, Mime.prescanCharset(&long_html));
+    // An empty label declares nothing, so the scan moves on to the next meta.
+    try testing.expectEqual("utf-8", firstMetaCharset("<meta charset=\"\"><meta charset=\"utf-8\">").?);
+
+    // Every label is offered in turn: the caller decides which one names a real
+    // encoding, because an unusable label does not end Chrome's search.
+    var scanner: Mime.MetaCharsetScanner = .{
+        .html = "<meta charset=\"nonsense\"><meta name=x><meta charset=\"utf-8\">",
+    };
+    try testing.expectEqual("nonsense", scanner.next().?);
+    try testing.expectEqual("utf-8", scanner.next().?);
+    try testing.expectEqual(null, scanner.next());
+}
+
+test "Mime: MetaCharsetScanner head section" {
+    const fill = "<!--" ++ ("x" ** 1100) ++ "-->";
+
+    // Inside <head> there is no byte ceiling at all.
+    try testing.expectEqual("utf-8", firstMetaCharset("<html><head>" ++ fill ++ "<meta charset=\"utf-8\">").?);
+    try testing.expectEqual(
+        "utf-8",
+        firstMetaCharset("<html><head><title>hi</title><link rel=x>" ++ fill ++ "<meta charset=\"utf-8\">").?,
+    );
+
+    // Content that ends the head section brings the 1024-byte window back.
+    try testing.expectEqual(null, firstMetaCharset("<html><head><div></div>" ++ fill ++ "<meta charset=\"utf-8\">"));
+    try testing.expectEqual(null, firstMetaCharset("<html><head></head><body>" ++ fill ++ "<meta charset=\"utf-8\">"));
+    try testing.expectEqual(null, firstMetaCharset("<html><head></html>" ++ fill ++ "<meta charset=\"utf-8\">"));
+
+    // ... but only the window: a meta out of the head section still counts
+    // while it sits inside the first 1024 bytes.
+    try testing.expectEqual("utf-8", firstMetaCharset("<html><body><meta charset=\"utf-8\">").?);
+
+    // An unterminated comment swallows everything after it.
+    try testing.expectEqual(null, firstMetaCharset("<html><head><!--x<meta charset=\"utf-8\">"));
+
+    // The doctype is not a tag and does not end the head section.
+    try testing.expectEqual("utf-8", firstMetaCharset("<!DOCTYPE html><html><head>" ++ fill ++ "<meta charset=\"utf-8\">").?);
 }
 
 /// The extension-to-content-type table the CDP file inputs already used, and

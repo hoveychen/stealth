@@ -333,6 +333,11 @@ base_url: ?[:0]const u8 = null,
 // Document charset (canonical name from encoding_rs, static lifetime)
 charset: []const u8 = "UTF-8",
 
+// Set while nothing authoritative has named an encoding yet, so `charset` is
+// only the fallback and a `<meta>` in the document may still replace it. The
+// replacement happens in `parse`, where the whole body is in hand.
+_charset_tentative: bool = false,
+
 // Arbitrary buffer. Need to temporarily lowercase a value? Use this. No lifetime
 // guarantee - it's valid until someone else uses it.
 buf: [BUF_SIZE]u8 = undefined,
@@ -1875,6 +1880,25 @@ fn bomCharset(data: []const u8) ?[]const u8 {
     return null;
 }
 
+// The encoding the document names for itself, canonicalised, or null when it
+// names none that answers to an encoding. An unusable label is not the end of
+// the search -- the scanner keeps yielding until one of them lands.
+fn declaredCharset(html: []const u8) ?[]const u8 {
+    var scanner: Mime.MetaCharsetScanner = .{ .html = html };
+    while (scanner.next()) |label| {
+        const info = h5e.encoding_for_label(label.ptr, label.len);
+        if (info.isValid() == false) continue;
+        const name = info.name();
+        // The spec rewrites two encodings when they come from a <meta> rather
+        // than from the header: UTF-16 becomes UTF-8, and x-user-defined
+        // becomes windows-1252.
+        if (isUtf16Encoding(name)) return "UTF-8";
+        if (std.mem.eql(u8, name, "x-user-defined")) return default_html_charset;
+        return name;
+    }
+    return null;
+}
+
 fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
     var self: *Frame = @ptrCast(@alignCast(transfer.req.ctx));
 
@@ -1905,20 +1929,6 @@ fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
             }
             break :blk Mime.sniff(data);
         } orelse .unknown;
-
-        // If the HTTP Content-Type header didn't specify a charset and this is HTML,
-        // prescan the first 1024 bytes for a <meta charset> declaration.
-        var html_prescan_found_charset = false;
-        if (mime.content_type == .text_html and mime.is_default_charset) {
-            if (Mime.prescanCharset(data)) |charset| {
-                html_prescan_found_charset = true;
-                if (charset.len <= 40) {
-                    @memcpy(mime.charset[0..charset.len], charset);
-                    mime.charset[charset.len] = 0;
-                    mime.charset_len = charset.len;
-                }
-            }
-        }
 
         if (comptime lp.IS_DEBUG) {
             log.debug(.frame, "navigate first chunk", .{
@@ -1951,30 +1961,24 @@ fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
                 // A BOM outranks the Content-Type header and any <meta>.
                 // encoding_rs already decodes by the BOM whatever label it was
                 // handed, so this only keeps document.characterSet honest.
+                const charset_str = mime.charsetString();
+                const header_info = h5e.encoding_for_label(charset_str.ptr, charset_str.len);
                 if (bomCharset(data)) |name| {
                     self.charset = name;
+                    self._charset_tentative = false;
+                } else if (!mime.is_default_charset and header_info.isValid()) {
+                    self.charset = header_info.name();
+                    self._charset_tentative = false;
                 } else {
-                    // A label nothing answers to is the same as no label: the
-                    // fallback applies rather than UTF-8.
-                    const declared = !mime.is_default_charset or html_prescan_found_charset;
-                    const charset_str = mime.charsetString();
-                    const info = h5e.encoding_for_label(charset_str.ptr, charset_str.len);
-                    if (declared and info.isValid()) {
-                        const name = info.name();
-                        // The spec rewrites two encodings when they come from a
-                        // <meta> rather than from the header: UTF-16 becomes
-                        // UTF-8, and x-user-defined becomes windows-1252.
-                        self.charset = if (!html_prescan_found_charset)
-                            name
-                        else if (isUtf16Encoding(name))
-                            "UTF-8"
-                        else if (std.mem.eql(u8, name, "x-user-defined"))
-                            default_html_charset
-                        else
-                            name;
-                    } else {
-                        self.charset = default_html_charset;
-                    }
+                    // Nothing authoritative has named an encoding: either the
+                    // header declared none, or the label it declared answers to
+                    // no encoding, which amounts to the same thing (measured:
+                    // Chrome honours a <meta> under a
+                    // `charset=not-a-real-encoding` header). The fallback
+                    // stands for now, and `parse` gives the document itself its
+                    // turn once the whole body is in hand.
+                    self.charset = default_html_charset;
+                    self._charset_tentative = true;
                 }
                 self._parse_state = .{ .html = .{
                     .buffer = .empty,
@@ -2070,6 +2074,18 @@ fn frameDoneCallback(ctx: *anyopaque) !void {
                 }
 
                 const raw_html = html.buffer.items;
+
+                // Chrome's charset scan is not bounded by the response's first
+                // chunk, nor by 1024 bytes while it is still in the head
+                // section, so it only settles once the body is complete. That
+                // is here: the document has been buffered and nothing has been
+                // decoded yet, which is the same position Chrome decodes from.
+                if (self._charset_tentative) {
+                    self._charset_tentative = false;
+                    if (declaredCharset(raw_html)) |name| {
+                        self.charset = name;
+                    }
+                }
 
                 preload.prescan(self, raw_html);
 

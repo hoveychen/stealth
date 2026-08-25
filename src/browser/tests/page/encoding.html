@@ -218,3 +218,79 @@
     });
   }
 </script>
+
+<script id="meta_charset_past_the_prescan_window" type=module>
+  {
+    const state = await testing.async();
+
+    // Chrome keeps scanning <head> for a charset with no byte ceiling: this
+    // meta sits ~1130 bytes in and still decides the encoding. It does not
+    // re-parse to get there -- it holds the decoded output back until the scan
+    // settles, so text ahead of the meta comes out right too (measured against
+    // headed Chrome 151).
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    iframe.src = 'encoding/late_meta.nocharset.html';
+    iframe.onload = () => { state.resolve(); }
+
+    await state.done(() => {
+      testing.expectEqual('UTF-8', iframe.contentDocument.characterSet);
+      testing.expectEqual('Ä', iframe.contentDocument.getElementById('test').textContent);
+    });
+  }
+</script>
+
+<script id="late_meta_charset_in_body_is_ignored" type=module>
+  {
+    const state = await testing.async();
+
+    // The scan only outlives the 1024-byte window while it is still in the
+    // head section. This meta is in <body>, so the fallback stands and the
+    // UTF-8 bytes C3 84 read as their windows-1252 characters.
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    iframe.src = 'encoding/late_meta_in_body.nocharset.html';
+    iframe.onload = () => { state.resolve(); }
+
+    await state.done(() => {
+      testing.expectEqual('windows-1252', iframe.contentDocument.characterSet);
+      testing.expectEqual('Ã„', iframe.contentDocument.getElementById('test').textContent);
+    });
+  }
+</script>
+
+<script id="late_meta_charset_after_a_body_tag_is_ignored" type=module>
+  {
+    const state = await testing.async();
+
+    // Written inside <head>, but a <div> is not head content, so the tree
+    // builder would have moved on -- and so does the scan.
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    iframe.src = 'encoding/late_meta_after_div.nocharset.html';
+    iframe.onload = () => { state.resolve(); }
+
+    await state.done(() => {
+      testing.expectEqual('windows-1252', iframe.contentDocument.characterSet);
+      testing.expectEqual('Ã„', iframe.contentDocument.getElementById('test').textContent);
+    });
+  }
+</script>
+
+<script id="unusable_meta_label_does_not_shadow_a_usable_one" type=module>
+  {
+    const state = await testing.async();
+
+    // A label nothing answers to does not end the search: the next meta gets
+    // its turn.
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    iframe.src = 'encoding/bogus_then_valid.nocharset.html';
+    iframe.onload = () => { state.resolve(); }
+
+    await state.done(() => {
+      testing.expectEqual('UTF-8', iframe.contentDocument.characterSet);
+      testing.expectEqual('Ä', iframe.contentDocument.getElementById('test').textContent);
+    });
+  }
+</script>
