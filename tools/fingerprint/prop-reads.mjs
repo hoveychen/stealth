@@ -167,13 +167,20 @@ row.interfaces = [...new Set(reads.map((r) => r.property.split('.')[0]))].sort()
 row.args = withArgs;
 row.members = [...new Set(reads.map((r) => r.member))].length;
 if (withArgs) {
+    // Deduped by value, not by row: every realm keeps its own map, so a page
+    // that makes three iframes asks `createElement("div")` in four of them and
+    // four rows come back for one question.
     row.arguments = [...new Set(reads.filter((r) => r.argument !== undefined).map((r) => r.member))]
         .sort()
-        .map((member) => ({
-            member,
-            distinct: reads.filter((r) => r.member === member && r.argument !== undefined).length,
-            calls: reads.filter((r) => r.member === member).reduce((n, r) => n + r.occurrences, 0),
-        }))
+        .map((member) => {
+            const rows = reads.filter((r) => r.member === member && r.argument !== undefined);
+            return {
+                member,
+                distinct: new Set(rows.map((r) => r.argument)).size,
+                calls: rows.reduce((n, r) => n + r.occurrences, 0),
+                values: [...new Set(rows.map((r) => r.argument))],
+            };
+        })
         .sort((a, b) => b.distinct - a.distinct);
 }
 
