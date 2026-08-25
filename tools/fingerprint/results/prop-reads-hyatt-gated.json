@@ -1,0 +1,4176 @@
+{
+  "url": "https://www.hyatt.com/",
+  "settleMs": 25000,
+  "when": "2026-08-25T07:12:49.325Z",
+  "reading": {
+    "href": "https://www.hyatt.com/",
+    "title": "",
+    "nodes": 6
+  },
+  "reads": [
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 0,
+      "property": "Window.window",
+      "occurrences": 1199
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 1,
+      "property": "Window.performance",
+      "occurrences": 35
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 2,
+      "property": "Performance.now",
+      "occurrences": 1061
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 3,
+      "property": "TextEncoder.encode",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 4,
+      "property": "Window.document",
+      "occurrences": 163
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 5,
+      "property": "Document.createElement",
+      "occurrences": 86
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 6,
+      "property": "Element.children",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 7,
+      "property": "HTMLElement.style",
+      "occurrences": 138
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 8,
+      "property": "Document.body",
+      "occurrences": 46
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 9,
+      "property": "Node.appendChild",
+      "occurrences": 38
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 10,
+      "property": "HTMLIFrameElement.contentWindow",
+      "occurrences": 91
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 11,
+      "property": "Window.location",
+      "occurrences": 35
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 12,
+      "property": "Location.origin",
+      "occurrences": 13
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 13,
+      "property": "Window.navigator",
+      "occurrences": 284
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 14,
+      "property": "Navigator.userAgent",
+      "occurrences": 25
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 15,
+      "property": "OffscreenCanvas.getContext",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 16,
+      "property": "OffscreenCanvasRenderingContext2D.getContextAttributes",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 17,
+      "property": "Window.setTimeout",
+      "occurrences": 37
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 18,
+      "property": "Node.removeChild",
+      "occurrences": 15
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 19,
+      "property": "Navigator.platform",
+      "occurrences": 20
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 20,
+      "property": "Window.devicePixelRatio",
+      "occurrences": 7
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 21,
+      "property": "Element.getClientRects",
+      "occurrences": 18
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 22,
+      "property": "Window.getComputedStyle",
+      "occurrences": 126
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 23,
+      "property": "DOMRect.width",
+      "occurrences": 36
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 24,
+      "property": "Navigator.language",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 25,
+      "property": "Window.screen",
+      "occurrences": 40
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 26,
+      "property": "Screen.height",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 27,
+      "property": "Screen.width",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 28,
+      "property": "Window.outerHeight",
+      "occurrences": 9
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 29,
+      "property": "Window.outerWidth",
+      "occurrences": 11
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 30,
+      "property": "Window.btoa",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 31,
+      "property": "Window.clearTimeout",
+      "occurrences": 28
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 32,
+      "property": "Window.crypto",
+      "occurrences": 37
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 33,
+      "property": "Crypto.getRandomValues",
+      "occurrences": 30
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 34,
+      "property": "Navigator.webdriver",
+      "occurrences": 7
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 35,
+      "property": "Window.clientInformation",
+      "occurrences": 9
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 36,
+      "property": "Navigator.permissions",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 37,
+      "property": "Permissions.query",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 38,
+      "property": "Navigator.plugins",
+      "occurrences": 12
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 39,
+      "property": "Window.postMessage",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 40,
+      "property": "DOMException.message",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 41,
+      "property": "DOMException.toString",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 42,
+      "property": "Window.chrome",
+      "occurrences": 13
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 43,
+      "property": "Window.top",
+      "occurrences": 8
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 44,
+      "property": "Window.self",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 45,
+      "property": "Window.parent",
+      "occurrences": 9
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 46,
+      "property": "Window.speechSynthesis",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 47,
+      "property": "Window.visualViewport",
+      "occurrences": 11
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 48,
+      "property": "Window.localStorage",
+      "occurrences": 7
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 49,
+      "property": "Window.sessionStorage",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 50,
+      "property": "Window.cookieStore",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 51,
+      "property": "Window.indexedDB",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 52,
+      "property": "Window.origin",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 53,
+      "property": "Window.history",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 54,
+      "property": "Window.navigation",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 55,
+      "property": "Window.CSS",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 56,
+      "property": "Window.customElements",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 57,
+      "property": "Window.onsearch",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 58,
+      "property": "Window.onappinstalled",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 59,
+      "property": "Window.onbeforeinstallprompt",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 60,
+      "property": "Window.onabort",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 61,
+      "property": "Window.onbeforeinput",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 62,
+      "property": "Window.onbeforematch",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 63,
+      "property": "Window.onbeforetoggle",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 64,
+      "property": "Window.onblur",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 65,
+      "property": "Window.oncancel",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 66,
+      "property": "Window.oncanplay",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 67,
+      "property": "Window.oncanplaythrough",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 68,
+      "property": "Window.onchange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 69,
+      "property": "Window.onclick",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 70,
+      "property": "Window.onclose",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 71,
+      "property": "Window.oncommand",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 72,
+      "property": "Window.oncontentvisibilityautostatechange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 73,
+      "property": "Window.oncontextlost",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 74,
+      "property": "Window.oncontextmenu",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 75,
+      "property": "Window.oncontextrestored",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 76,
+      "property": "Window.oncuechange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 77,
+      "property": "Window.ondblclick",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 78,
+      "property": "Window.ondrag",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 79,
+      "property": "Window.ondragend",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 80,
+      "property": "Window.ondragenter",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 81,
+      "property": "Window.ondragleave",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 82,
+      "property": "Window.ondragover",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 83,
+      "property": "Window.ondragstart",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 84,
+      "property": "Window.ondrop",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 85,
+      "property": "Window.ondurationchange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 86,
+      "property": "Window.onemptied",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 87,
+      "property": "Window.onended",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 88,
+      "property": "Window.onerror",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 89,
+      "property": "Window.onfocus",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 90,
+      "property": "Window.onformdata",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 91,
+      "property": "Window.oninput",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 92,
+      "property": "Window.oninvalid",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 93,
+      "property": "Window.onkeydown",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 94,
+      "property": "Window.onkeypress",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 95,
+      "property": "Window.onkeyup",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 96,
+      "property": "Window.onload",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 97,
+      "property": "Window.onloadeddata",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 98,
+      "property": "Window.onloadedmetadata",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 99,
+      "property": "Window.onloadstart",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 100,
+      "property": "Window.onmousedown",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 101,
+      "property": "Window.onmouseenter",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 102,
+      "property": "Window.onmouseleave",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 103,
+      "property": "Window.onmousemove",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 104,
+      "property": "Window.onmouseout",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 105,
+      "property": "Window.onmouseover",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 106,
+      "property": "Window.onmouseup",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 107,
+      "property": "Window.onmousewheel",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 108,
+      "property": "Window.onpause",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 109,
+      "property": "Window.onplay",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 110,
+      "property": "Window.onplaying",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 111,
+      "property": "Window.onprogress",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 112,
+      "property": "Window.onratechange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 113,
+      "property": "Window.onreset",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 114,
+      "property": "Window.onresize",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 115,
+      "property": "Window.onscroll",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 116,
+      "property": "Window.onscrollend",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 117,
+      "property": "Window.onsecuritypolicyviolation",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 118,
+      "property": "Window.onseeked",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 119,
+      "property": "Window.onseeking",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 120,
+      "property": "Window.onselect",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 121,
+      "property": "Window.onslotchange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 122,
+      "property": "Window.onstalled",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 123,
+      "property": "Window.onsubmit",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 124,
+      "property": "Window.onsuspend",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 125,
+      "property": "Window.ontimeupdate",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 126,
+      "property": "Window.ontoggle",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 127,
+      "property": "Window.onvolumechange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 128,
+      "property": "Window.onwaiting",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 129,
+      "property": "Window.onwebkitanimationend",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 130,
+      "property": "Window.onwebkitanimationiteration",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 131,
+      "property": "Window.onwebkitanimationstart",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 132,
+      "property": "Window.onwebkittransitionend",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 133,
+      "property": "Window.onwheel",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 134,
+      "property": "Window.onauxclick",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 135,
+      "property": "Window.ongotpointercapture",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 136,
+      "property": "Window.onlostpointercapture",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 137,
+      "property": "Window.onpointerdown",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 138,
+      "property": "Window.onpointermove",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 139,
+      "property": "Window.onpointerup",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 140,
+      "property": "Window.onpointercancel",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 141,
+      "property": "Window.onpointerover",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 142,
+      "property": "Window.onpointerout",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 143,
+      "property": "Window.onpointerenter",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 144,
+      "property": "Window.onpointerleave",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 145,
+      "property": "Window.onselectstart",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 146,
+      "property": "Window.onselectionchange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 147,
+      "property": "Window.onanimationcancel",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 148,
+      "property": "Window.onanimationend",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 149,
+      "property": "Window.onanimationiteration",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 150,
+      "property": "Window.onanimationstart",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 151,
+      "property": "Window.ontransitionrun",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 152,
+      "property": "Window.ontransitionstart",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 153,
+      "property": "Window.ontransitionend",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 154,
+      "property": "Window.ontransitioncancel",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 155,
+      "property": "Window.onbeforexrselect",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 156,
+      "property": "Window.onafterprint",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 157,
+      "property": "Window.onbeforeprint",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 158,
+      "property": "Window.onbeforeunload",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 159,
+      "property": "Window.onhashchange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 160,
+      "property": "Window.onlanguagechange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 161,
+      "property": "Window.onmessage",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 162,
+      "property": "Window.onmessageerror",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 163,
+      "property": "Window.onoffline",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 164,
+      "property": "Window.ononline",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 165,
+      "property": "Window.onpagehide",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 166,
+      "property": "Window.onpageshow",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 167,
+      "property": "Window.onpopstate",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 168,
+      "property": "Window.onrejectionhandled",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 169,
+      "property": "Window.onstorage",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 170,
+      "property": "Window.onunhandledrejection",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 171,
+      "property": "Window.onunload",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 172,
+      "property": "Window.ondevicemotion",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 173,
+      "property": "Window.ondeviceorientation",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 174,
+      "property": "Window.ondeviceorientationabsolute",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 175,
+      "property": "Window.onpointerrawupdate",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 176,
+      "property": "Window.onpageswap",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 177,
+      "property": "Window.onpagereveal",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 178,
+      "property": "Window.onscrollsnapchange",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 179,
+      "property": "Window.onscrollsnapchanging",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 180,
+      "property": "Window.ongamepadconnected",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 181,
+      "property": "Window.ongamepaddisconnected",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 182,
+      "property": "Window.event",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 183,
+      "property": "Window.frameElement",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 184,
+      "property": "Window.frames",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 185,
+      "property": "Window.length",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 186,
+      "property": "Window.scrollX",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 187,
+      "property": "Window.scrollY",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 188,
+      "property": "Window.pageXOffset",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 189,
+      "property": "Window.pageYOffset",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 190,
+      "property": "Window.isSecureContext",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 191,
+      "property": "Window.crossOriginIsolated",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 192,
+      "property": "Window.originAgentCluster",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 193,
+      "property": "Window.credentialless",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 194,
+      "property": "Window.locationbar",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 195,
+      "property": "Window.menubar",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 196,
+      "property": "Window.personalbar",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 197,
+      "property": "Window.scrollbars",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 198,
+      "property": "Window.statusbar",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 199,
+      "property": "Window.toolbar",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 200,
+      "property": "Window.status",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 201,
+      "property": "Window.external",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 202,
+      "property": "Window.styleMedia",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 203,
+      "property": "Window.trustedTypes",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 204,
+      "property": "Window.crashReport",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 205,
+      "property": "Window.viewport",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 206,
+      "property": "Window.launchQueue",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 207,
+      "property": "Window.caches",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 208,
+      "property": "Window.scheduler",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 209,
+      "property": "Window.innerWidth",
+      "occurrences": 11
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 210,
+      "property": "Window.innerHeight",
+      "occurrences": 11
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 211,
+      "property": "Window.screenX",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 212,
+      "property": "Window.screenY",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 213,
+      "property": "Window.screenLeft",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 214,
+      "property": "Window.screenTop",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 215,
+      "property": "Window.opener",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 216,
+      "property": "Window.closed",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 217,
+      "property": "Window.name",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 218,
+      "property": "Navigator.maxTouchPoints",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 219,
+      "property": "Document.createEvent",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 220,
+      "property": "Navigator.vendor",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 221,
+      "property": "HTMLIFrameElement.srcdoc",
+      "occurrences": 7
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 222,
+      "property": "Navigator.languages",
+      "occurrences": 7
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 223,
+      "property": "Navigator.hardwareConcurrency",
+      "occurrences": 7
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 224,
+      "property": "Document.getElementsByTagName",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 225,
+      "property": "browser.webapi.collections.iterator.Entry(browser.webapi.collections.HTMLCollection.Iterator__struct_46502,null).JsApi.next",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 226,
+      "property": "HTMLScriptElement.src",
+      "occurrences": 7
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 227,
+      "property": "Element.innerHTML",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 228,
+      "property": "Node.baseURI",
+      "occurrences": 12
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 229,
+      "property": "URL.hostname",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 230,
+      "property": "Location.href",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 231,
+      "property": "Location.host",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 232,
+      "property": "Location.protocol",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 233,
+      "property": "Location.port",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 234,
+      "property": "Location.ancestorOrigins",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 235,
+      "property": "Location.hostname",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 236,
+      "property": "Location.pathname",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 237,
+      "property": "Location.search",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 238,
+      "property": "Location.hash",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 239,
+      "property": "Screen.orientation",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 240,
+      "property": "ScreenOrientation.type",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 241,
+      "property": "browser.webapi.collections.iterator.Entry(browser.webapi.collections.DOMStringList.Iterator,\"1\"[0..1]).JsApi.next",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 242,
+      "property": "Console.log",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 243,
+      "property": "PluginArray.length",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 244,
+      "property": "Event.timeStamp",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 245,
+      "property": "Document.readyState",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 246,
+      "property": "Document.head",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 247,
+      "property": "Document.referrer",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 248,
+      "property": "HTMLCanvasElement.getContext",
+      "occurrences": 7
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 249,
+      "property": "WebGL2RenderingContext.getExtension",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 250,
+      "property": "WebGL2RenderingContext.getParameter",
+      "occurrences": 13
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 251,
+      "property": "Performance.memory",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 252,
+      "property": "MemoryInfo.jsHeapSizeLimit",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 253,
+      "property": "Performance.navigation",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 254,
+      "property": "Performance.getEntriesByType",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 255,
+      "property": "PerformanceNavigationTiming.type",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 256,
+      "property": "Plugin.name",
+      "occurrences": 15
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 257,
+      "property": "Document.querySelectorAll",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 258,
+      "property": "NodeList.length",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 259,
+      "property": "Screen.availHeight",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 260,
+      "property": "Screen.availWidth",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 261,
+      "property": "Screen.colorDepth",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 262,
+      "property": "Document.styleSheets",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 263,
+      "property": "StyleSheetList.length",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 264,
+      "property": "browser.webapi.collections.iterator.Entry(browser.webapi.css.StyleSheetList.Iterator,null).JsApi.next",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 265,
+      "property": "Storage.getItem",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 266,
+      "property": "Storage.setItem",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 267,
+      "property": "Performance.timing",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 268,
+      "property": "PerformanceTiming.connectEnd",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 269,
+      "property": "PerformanceTiming.connectStart",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 270,
+      "property": "PerformanceTiming.domContentLoadedEventEnd",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 271,
+      "property": "PerformanceTiming.domContentLoadedEventStart",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 272,
+      "property": "PerformanceTiming.domainLookupEnd",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 273,
+      "property": "PerformanceTiming.domainLookupStart",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 274,
+      "property": "PerformanceTiming.loadEventEnd",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 275,
+      "property": "PerformanceTiming.loadEventStart",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 276,
+      "property": "PerformanceTiming.responseEnd",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 277,
+      "property": "PerformanceTiming.responseStart",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 278,
+      "property": "PerformanceTiming.redirectEnd",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 279,
+      "property": "PerformanceTiming.redirectStart",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 280,
+      "property": "PerformanceTiming.unloadEventEnd",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 281,
+      "property": "PerformanceTiming.unloadEventStart",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 282,
+      "property": "PerformanceTiming.fetchStart",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 283,
+      "property": "PerformanceTiming.navigationStart",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 284,
+      "property": "PerformanceTiming.requestStart",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 285,
+      "property": "PerformanceTiming.domLoading",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 286,
+      "property": "Document.currentScript",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 287,
+      "property": "HTMLScriptElement.innerText",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 288,
+      "property": "HTMLTemplateElement.innerHTML",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 289,
+      "property": "Navigator.userAgentData",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 290,
+      "property": "NavigatorUAData.mobile",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 291,
+      "property": "NavigatorUAData.platform",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 292,
+      "property": "NavigatorUAData.brands",
+      "occurrences": 10
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 293,
+      "property": "Performance.getEntries",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 294,
+      "property": "Window.requestAnimationFrame",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 295,
+      "property": "PerformanceNavigationTiming.toJSON",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 296,
+      "property": "PerformanceTimingConfidence.toJSON",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 297,
+      "property": "Navigator.clipboard",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 298,
+      "property": "Document.onload",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 299,
+      "property": "Document.onclose",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 300,
+      "property": "Document.onfocus",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 301,
+      "property": "Document.onblur",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 302,
+      "property": "Document.onscroll",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 303,
+      "property": "Document.onscrollend",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 304,
+      "property": "Document.onmousedown",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 305,
+      "property": "Document.onmouseenter",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 306,
+      "property": "Document.onmouseleave",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 307,
+      "property": "Document.onmousemove",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 308,
+      "property": "Document.onmouseout",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 309,
+      "property": "Document.onmouseover",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 310,
+      "property": "Document.onmouseup",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 311,
+      "property": "Document.onmousewheel",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 312,
+      "property": "HTMLBodyElement.onload",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 313,
+      "property": "HTMLElement.onclose",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 314,
+      "property": "HTMLBodyElement.onfocus",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 315,
+      "property": "HTMLBodyElement.onblur",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 316,
+      "property": "HTMLBodyElement.onscroll",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 317,
+      "property": "HTMLElement.onscrollend",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 318,
+      "property": "HTMLElement.onmousedown",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 319,
+      "property": "HTMLElement.onmouseenter",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 320,
+      "property": "HTMLElement.onmouseleave",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 321,
+      "property": "HTMLElement.onmousemove",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 322,
+      "property": "HTMLElement.onmouseout",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 323,
+      "property": "HTMLElement.onmouseover",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 324,
+      "property": "HTMLElement.onmouseup",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 325,
+      "property": "HTMLElement.onmousewheel",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 326,
+      "property": "Navigator.vendorSub",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 327,
+      "property": "Navigator.productSub",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 328,
+      "property": "Navigator.scheduling",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 329,
+      "property": "Navigator.userActivation",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 330,
+      "property": "Navigator.geolocation",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 331,
+      "property": "Navigator.doNotTrack",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 332,
+      "property": "Navigator.webkitTemporaryStorage",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 333,
+      "property": "Navigator.webkitPersistentStorage",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 334,
+      "property": "Navigator.windowControlsOverlay",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 335,
+      "property": "Navigator.cookieEnabled",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 336,
+      "property": "Navigator.appCodeName",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 337,
+      "property": "Navigator.appName",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 338,
+      "property": "Navigator.appVersion",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 339,
+      "property": "Navigator.product",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 340,
+      "property": "Navigator.onLine",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 341,
+      "property": "Navigator.mimeTypes",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 342,
+      "property": "Navigator.pdfViewerEnabled",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 343,
+      "property": "Navigator.connection",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 344,
+      "property": "Navigator.deprecatedRunAdAuctionEnforcesKAnonymity",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 345,
+      "property": "Navigator.protectedAudience",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 346,
+      "property": "Navigator.bluetooth",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 347,
+      "property": "Navigator.credentials",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 348,
+      "property": "Navigator.keyboard",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 349,
+      "property": "Navigator.managed",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 350,
+      "property": "Navigator.mediaDevices",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 351,
+      "property": "Navigator.serviceWorker",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 352,
+      "property": "Navigator.virtualKeyboard",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 353,
+      "property": "Navigator.wakeLock",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 354,
+      "property": "Navigator.deviceMemory",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 355,
+      "property": "Navigator.locks",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 356,
+      "property": "Navigator.storage",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 357,
+      "property": "Navigator.gpu",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 358,
+      "property": "Navigator.login",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 359,
+      "property": "Navigator.ink",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 360,
+      "property": "Navigator.mediaCapabilities",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 361,
+      "property": "Navigator.devicePosture",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 362,
+      "property": "Navigator.hid",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 363,
+      "property": "Navigator.mediaSession",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 364,
+      "property": "Navigator.presentation",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 365,
+      "property": "Navigator.serial",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 366,
+      "property": "Navigator.usb",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 367,
+      "property": "Navigator.xr",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 368,
+      "property": "Navigator.storageBuckets",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 369,
+      "property": "Document.documentElement",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 370,
+      "property": "Element.clientWidth",
+      "occurrences": 22
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 371,
+      "property": "Element.clientHeight",
+      "occurrences": 22
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 372,
+      "property": "Document.all",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 373,
+      "property": "HTMLAllCollection.length",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 374,
+      "property": "Node.childNodes",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 375,
+      "property": "Element.outerHTML",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 376,
+      "property": "PerformanceResourceTiming.encodedBodySize",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 377,
+      "property": "PerformanceResourceTiming.decodedBodySize",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 378,
+      "property": "PerformanceResourceTiming.transferSize",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 379,
+      "property": "Element.attachShadow",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 380,
+      "property": "Element.shadowRoot",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 381,
+      "property": "WebGL2RenderingContext.getContextAttributes",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 382,
+      "property": "CanvasRenderingContext2D.save",
+      "occurrences": 12
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 383,
+      "property": "CanvasRenderingContext2D.translate",
+      "occurrences": 12
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 384,
+      "property": "CanvasRenderingContext2D.rotate",
+      "occurrences": 12
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 385,
+      "property": "CanvasRenderingContext2D.fillText",
+      "occurrences": 12
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 386,
+      "property": "CanvasRenderingContext2D.restore",
+      "occurrences": 12
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 387,
+      "property": "CanvasRenderingContext2D.getImageData",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 388,
+      "property": "HTMLCanvasElement.toDataURL",
+      "occurrences": 80
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 389,
+      "property": "Element.setAttribute",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 390,
+      "property": "MediaRecorder.isTypeSupported",
+      "occurrences": 17
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 391,
+      "property": "CSSStyleDeclaration.getPropertyValue",
+      "occurrences": 92
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 392,
+      "property": "Element.getBoundingClientRect",
+      "occurrences": 18
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 393,
+      "property": "DOMRect.x",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 394,
+      "property": "DOMRect.y",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 395,
+      "property": "DOMRectReadOnly.left",
+      "occurrences": 17
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 396,
+      "property": "DOMRectReadOnly.right",
+      "occurrences": 17
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 397,
+      "property": "DOMRectReadOnly.bottom",
+      "occurrences": 17
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 398,
+      "property": "DOMRect.height",
+      "occurrences": 28
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 399,
+      "property": "DOMRectReadOnly.top",
+      "occurrences": 17
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 400,
+      "property": "Element.append",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 401,
+      "property": "Element.remove",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 402,
+      "property": "Node.parentNode",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 403,
+      "property": "Console.debug",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 404,
+      "property": "HTMLElement.offsetWidth",
+      "occurrences": 15
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 405,
+      "property": "HTMLElement.offsetHeight",
+      "occurrences": 16
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 406,
+      "property": "Window.matchMedia",
+      "occurrences": 431
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 407,
+      "property": "MediaQueryList.matches",
+      "occurrences": 431
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 408,
+      "property": "WebGLRenderingContext.getExtension",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 409,
+      "property": "WebGLRenderingContext.getParameter",
+      "occurrences": 155
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 410,
+      "property": "CanvasRenderingContext2D.measureText",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 411,
+      "property": "TextMetrics.width",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 412,
+      "property": "Document.location",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 413,
+      "property": "Console.memory",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 414,
+      "property": "CanvasRenderingContext2D.putImageData",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 415,
+      "property": "History.length",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 416,
+      "property": "EventTarget.addEventListener",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 417,
+      "property": "XMLHttpRequest.open",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 418,
+      "property": "XMLHttpRequest.setRequestHeader",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 419,
+      "property": "XMLHttpRequest.send",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 420,
+      "property": "EventTarget.removeEventListener",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 421,
+      "property": "Element.animate",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 422,
+      "property": "Animation.effect",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 423,
+      "property": "AnimationEffect.getComputedTiming",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 424,
+      "property": "Animation.playbackRate",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 425,
+      "property": "Animation.playState",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 426,
+      "property": "Animation.overallProgress",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 427,
+      "property": "BaseAudioContext.destination",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 428,
+      "property": "BaseAudioContext.sampleRate",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 429,
+      "property": "AudioContext.baseLatency",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 430,
+      "property": "AudioContext.outputLatency",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 431,
+      "property": "AudioDestinationNode.maxChannelCount",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 432,
+      "property": "AudioNode.channelCount",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 433,
+      "property": "AudioNode.channelInterpretation",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 434,
+      "property": "AudioNode.channelCountMode",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 435,
+      "property": "AudioContext.close",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 436,
+      "property": "Keyboard.getLayoutMap",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 437,
+      "property": "StorageManager.estimate",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 438,
+      "property": "DataTransfer.items",
+      "occurrences": 27
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 439,
+      "property": "DataTransferItemList.add",
+      "occurrences": 27
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 440,
+      "property": "DataTransfer.files",
+      "occurrences": 27
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 441,
+      "property": "HTMLInputElement.webkitEntries",
+      "occurrences": 54
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 442,
+      "property": "MimeTypeArray.length",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 443,
+      "property": "NetworkInformation.rtt",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 444,
+      "property": "Window.setInterval",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 445,
+      "property": "HTMLMediaElement.canPlayType",
+      "occurrences": 36
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 446,
+      "property": "browser.webapi.collections.iterator.Entry(browser.webapi.PluginArray.Iterator__struct_49922,null).JsApi.next",
+      "occurrences": 6
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 447,
+      "property": "Plugin.description",
+      "occurrences": 10
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 448,
+      "property": "browser.webapi.collections.iterator.Entry(browser.webapi.PluginArray.Plugin.Iterator__struct_49962,null).JsApi.next",
+      "occurrences": 30
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 449,
+      "property": "MimeType.type",
+      "occurrences": 20
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 450,
+      "property": "MimeType.suffixes",
+      "occurrences": 20
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 451,
+      "property": "UserActivation.isActive",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 452,
+      "property": "Performance.eventCounts",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 453,
+      "property": "browser.webapi.collections.iterator.Entry(browser.webapi.EventCounts.Iterator,null).JsApi.next",
+      "occurrences": 37
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 454,
+      "property": "BarProp.visible",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 455,
+      "property": "VisualViewport.height",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 456,
+      "property": "MemoryInfo.usedJSHeapSize",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 457,
+      "property": "Node.contains",
+      "occurrences": 5
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 458,
+      "property": "VisualViewport.offsetTop",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 459,
+      "property": "Element.childElementCount",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 460,
+      "property": "KeyboardLayoutMap.forEach",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 461,
+      "property": "Crypto.subtle",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 462,
+      "property": "SubtleCrypto.digest",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 463,
+      "property": "Document.hidden",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 464,
+      "property": "CSSStyleDeclaration.setProperty",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 465,
+      "property": "ShadowRoot.styleSheets",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 466,
+      "property": "UserActivation.hasBeenActive",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 467,
+      "property": "Window.fetch",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 468,
+      "property": "Document.hasFocus",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 469,
+      "property": "VisualViewport.offsetLeft",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 470,
+      "property": "Element.checkVisibility",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 471,
+      "property": "MemoryInfo.totalJSHeapSize",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 472,
+      "property": "Document.visibilityState",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 473,
+      "property": "SpeechSynthesis.getVoices",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 474,
+      "property": "VisualViewport.pageLeft",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 475,
+      "property": "VisualViewport.width",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 476,
+      "property": "VisualViewport.scale",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 477,
+      "property": "PerformanceEntry.name",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 478,
+      "property": "PerformanceEntry.duration",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 479,
+      "property": "Screen.pixelDepth",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 480,
+      "property": "VisualViewport.pageTop",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 481,
+      "property": "BaseAudioContext.createOscillator",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 482,
+      "property": "OscillatorNode.frequency",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 483,
+      "property": "BaseAudioContext.currentTime",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 484,
+      "property": "AudioParam.setValueAtTime",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 485,
+      "property": "BaseAudioContext.createDynamicsCompressor",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 486,
+      "property": "DynamicsCompressorNode.threshold",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 487,
+      "property": "DynamicsCompressorNode.knee",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 488,
+      "property": "DynamicsCompressorNode.ratio",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 489,
+      "property": "DynamicsCompressorNode.attack",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 490,
+      "property": "DynamicsCompressorNode.release",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 491,
+      "property": "AudioNode.connect",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 492,
+      "property": "AudioScheduledSourceNode.start",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 493,
+      "property": "OfflineAudioContext.startRendering",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 494,
+      "property": "OfflineAudioCompletionEvent.renderedBuffer",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 495,
+      "property": "AudioBuffer.getChannelData",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 496,
+      "property": "AudioNode.disconnect",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 497,
+      "property": "PerformanceResourceTiming.initiatorType",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 498,
+      "property": "PerformanceResourceTiming.requestStart",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 499,
+      "property": "PerformanceResourceTiming.fetchStart",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 500,
+      "property": "PerformanceResourceTiming.responseStart",
+      "occurrences": 4
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 501,
+      "property": "PerformanceResourceTiming.responseEnd",
+      "occurrences": 3
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 502,
+      "property": "XMLHttpRequest.readyState",
+      "occurrences": 2
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 503,
+      "property": "XMLHttpRequest.status",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 504,
+      "property": "XMLHttpRequest.responseText",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 505,
+      "property": "Document.title",
+      "occurrences": 1
+    },
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "seq": 506,
+      "property": "HTMLCollection.length",
+      "occurrences": 1
+    },
+    {
+      "context": 1,
+      "realm": "about:blank",
+      "seq": 0,
+      "property": "TextEncoder.encode",
+      "occurrences": 6
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 0,
+      "property": "Window.navigator",
+      "occurrences": 33
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 1,
+      "property": "Navigator.webdriver",
+      "occurrences": 4
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 2,
+      "property": "Window.clientInformation",
+      "occurrences": 3
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 3,
+      "property": "Navigator.platform",
+      "occurrences": 1
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 4,
+      "property": "Navigator.plugins",
+      "occurrences": 18
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 5,
+      "property": "PluginArray.length",
+      "occurrences": 8
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 6,
+      "property": "Navigator.userAgent",
+      "occurrences": 3
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 7,
+      "property": "Window.chrome",
+      "occurrences": 1
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 8,
+      "property": "Window.window",
+      "occurrences": 2
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 9,
+      "property": "Navigator.userAgentData",
+      "occurrences": 1
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 10,
+      "property": "NavigatorUAData.mobile",
+      "occurrences": 1
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 11,
+      "property": "NavigatorUAData.platform",
+      "occurrences": 1
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 12,
+      "property": "NavigatorUAData.brands",
+      "occurrences": 10
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 13,
+      "property": "Window.document",
+      "occurrences": 1
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 14,
+      "property": "Document.createElement",
+      "occurrences": 1
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 15,
+      "property": "Element.attachShadow",
+      "occurrences": 1
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "seq": 16,
+      "property": "Element.shadowRoot",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 0,
+      "property": "Window.navigator",
+      "occurrences": 14
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 1,
+      "property": "Navigator.mimeTypes",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 2,
+      "property": "MimeTypeArray.length",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 3,
+      "property": "Navigator.language",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 4,
+      "property": "Navigator.languages",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 5,
+      "property": "Window.chrome",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 6,
+      "property": "Navigator.plugins",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 7,
+      "property": "Navigator.connection",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 8,
+      "property": "NetworkInformation.rtt",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 9,
+      "property": "Window.document",
+      "occurrences": 10
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 10,
+      "property": "Document.createElement",
+      "occurrences": 3
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 11,
+      "property": "HTMLElement.style",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 12,
+      "property": "Window.setInterval",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 13,
+      "property": "Window.setTimeout",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 14,
+      "property": "Navigator.hardwareConcurrency",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 15,
+      "property": "Window.screen",
+      "occurrences": 10
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 16,
+      "property": "Screen.colorDepth",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 17,
+      "property": "Element.attachShadow",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 18,
+      "property": "Element.shadowRoot",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 19,
+      "property": "Document.body",
+      "occurrences": 5
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 20,
+      "property": "Element.childElementCount",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 21,
+      "property": "Screen.pixelDepth",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 22,
+      "property": "Window.locationbar",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 23,
+      "property": "BarProp.visible",
+      "occurrences": 4
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 24,
+      "property": "browser.webapi.collections.iterator.Entry(browser.webapi.PluginArray.Iterator__struct_49922,null).JsApi.next",
+      "occurrences": 6
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 25,
+      "property": "Element.clientWidth",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 26,
+      "property": "Window.pageYOffset",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 27,
+      "property": "Navigator.maxTouchPoints",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 28,
+      "property": "Screen.availWidth",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 29,
+      "property": "Document.head",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 30,
+      "property": "Navigator.platform",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 31,
+      "property": "Window.innerWidth",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 32,
+      "property": "Screen.height",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 33,
+      "property": "Screen.width",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 34,
+      "property": "Window.outerHeight",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 35,
+      "property": "Window.devicePixelRatio",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 36,
+      "property": "Navigator.webdriver",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 37,
+      "property": "Window.pageXOffset",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 38,
+      "property": "Navigator.appVersion",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 39,
+      "property": "Navigator.userAgent",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 40,
+      "property": "Window.personalbar",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 41,
+      "property": "Window.outerWidth",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 42,
+      "property": "Window.isSecureContext",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 43,
+      "property": "Window.toolbar",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 44,
+      "property": "Window.screenY",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 45,
+      "property": "Navigator.deviceMemory",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 46,
+      "property": "Document.styleSheets",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 47,
+      "property": "browser.webapi.collections.iterator.Entry(browser.webapi.css.StyleSheetList.Iterator,null).JsApi.next",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 48,
+      "property": "Window.scrollbars",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 49,
+      "property": "Window.screenX",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 50,
+      "property": "Element.clientHeight",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 51,
+      "property": "Screen.orientation",
+      "occurrences": 2
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 52,
+      "property": "ScreenOrientation.type",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 53,
+      "property": "Screen.availHeight",
+      "occurrences": 1
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "seq": 54,
+      "property": "Window.innerHeight",
+      "occurrences": 1
+    }
+  ],
+  "contexts": [
+    {
+      "context": 0,
+      "realm": "https://www.hyatt.com/",
+      "members": 507
+    },
+    {
+      "context": 1,
+      "realm": "about:blank",
+      "members": 1
+    },
+    {
+      "context": 3,
+      "realm": "about:blank",
+      "members": 17
+    },
+    {
+      "context": 4,
+      "realm": "about:blank",
+      "members": 55
+    }
+  ],
+  "interfaces": [
+    "Animation",
+    "AnimationEffect",
+    "AudioBuffer",
+    "AudioContext",
+    "AudioDestinationNode",
+    "AudioNode",
+    "AudioParam",
+    "AudioScheduledSourceNode",
+    "BarProp",
+    "BaseAudioContext",
+    "CSSStyleDeclaration",
+    "CanvasRenderingContext2D",
+    "Console",
+    "Crypto",
+    "DOMException",
+    "DOMRect",
+    "DOMRectReadOnly",
+    "DataTransfer",
+    "DataTransferItemList",
+    "Document",
+    "DynamicsCompressorNode",
+    "Element",
+    "Event",
+    "EventTarget",
+    "HTMLAllCollection",
+    "HTMLBodyElement",
+    "HTMLCanvasElement",
+    "HTMLCollection",
+    "HTMLElement",
+    "HTMLIFrameElement",
+    "HTMLInputElement",
+    "HTMLMediaElement",
+    "HTMLScriptElement",
+    "HTMLTemplateElement",
+    "History",
+    "Keyboard",
+    "KeyboardLayoutMap",
+    "Location",
+    "MediaQueryList",
+    "MediaRecorder",
+    "MemoryInfo",
+    "MimeType",
+    "MimeTypeArray",
+    "Navigator",
+    "NavigatorUAData",
+    "NetworkInformation",
+    "Node",
+    "NodeList",
+    "OfflineAudioCompletionEvent",
+    "OfflineAudioContext",
+    "OffscreenCanvas",
+    "OffscreenCanvasRenderingContext2D",
+    "OscillatorNode",
+    "Performance",
+    "PerformanceEntry",
+    "PerformanceNavigationTiming",
+    "PerformanceResourceTiming",
+    "PerformanceTiming",
+    "PerformanceTimingConfidence",
+    "Permissions",
+    "Plugin",
+    "PluginArray",
+    "Screen",
+    "ScreenOrientation",
+    "ShadowRoot",
+    "SpeechSynthesis",
+    "Storage",
+    "StorageManager",
+    "StyleSheetList",
+    "SubtleCrypto",
+    "TextEncoder",
+    "TextMetrics",
+    "URL",
+    "UserActivation",
+    "VisualViewport",
+    "WebGL2RenderingContext",
+    "WebGLRenderingContext",
+    "Window",
+    "XMLHttpRequest",
+    "browser"
+  ]
+}

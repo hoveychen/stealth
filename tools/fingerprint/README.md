@@ -6339,7 +6339,9 @@ the `prd/window-surface-extras` merge; see the note after the list):
   `WEBGL_debug_renderer_info`, `WEBGL_lose_context` -- internals and WebGL
   extension objects Chrome keeps unnamed.
 * `ModelContext` / `ModelContextClient` -- this fork's WebMCP surface, kept
-  deliberately (G14 records the same call for `navigator.modelContext`).
+  deliberately at the time (G14 records the same call for
+  `navigator.modelContext`). Both are behind `--webmcp` now; see the WebMCP
+  entry at the end of this file.
 
 **Six of those thirteen names are gone** (`prd/window-surface-extras`): `Css`
 became `no_interface_object`, `setImmediate` / `clearImmediate` came off the
@@ -6354,7 +6356,8 @@ below. The other direction moved with it: the 83 is **36** now, because those 47
 came out of it.
 
 **The remaining five are gone too** (`prd/window-surface-internals`), which takes
-the own-name excess from 7 to **2** — only the WebMCP pair, kept on purpose. All
+the own-name excess from 7 to **2** — only the WebMCP pair, kept on purpose at
+the time and **0** since it went behind `--webmcp`. All
 five became `no_interface_object`, and that flag alone would have been half a fix:
 it takes the name off the window and *keeps* the `Symbol.toStringTag`, and every
 one of the five has a different brand in Chrome than the global name we were
@@ -7246,8 +7249,8 @@ the caveat at the end of this section for that last one. The eight that survive:
 |---|---|---|---|
 | `navigator.hardwareConcurrency` | 8 | 10 | deliberate — `Navigator.zig` |
 | `navigator.deviceMemory` | 8 | **16** | deliberate, on a stale premise |
-| `navigator.ownPropertyNames` | +`modelContext` | — | WebMCP, kept on purpose |
-| `window.ownPropertyNames.count` | 1203 | 1237 | 36 absent, **2 present** |
+| `navigator.ownPropertyNames` | — | — | was +`modelContext`; behind `--webmcp` |
+| `window.ownPropertyNames.count` | 1201 | 1237 | 36 absent, **0 present** |
 | `window.screenX` | 0 | 22 | hardcoded — `Window.zig:1178` |
 | `canvas.toDataURL.fingerprint` | 370 B | 7614 B | no glyph rasteriser, by design |
 | `fonts.widths` | see below | see below | **a bug** |
@@ -7493,13 +7496,14 @@ http origin, Chrome 1237 against lightpanda 1203:
   and the lowercase `documentPictureInPicture` / `fence` / `fetchLater` /
   `sharedStorage`.
 - **present only in lightpanda (2)** — `ModelContext` and `ModelContextClient`,
-  plus `navigator.modelContext` on the navigator prototype.
+  plus `navigator.modelContext` on the navigator prototype. **Both are gone from
+  the default persona now**; see the WebMCP section at the end of this file.
 
 The asymmetry is the point. Missing names put this engine somewhere in Chrome's
 release history; the two extra ones put it nowhere, and `'ModelContext' in
-window` is a one-expression identification. That WebMCP surface is a deliberate
-product feature — this only measures what carrying it in the default persona
-costs.
+window` is a one-expression identification. That is what eventually moved them
+behind a flag — this measured what carrying them in the default persona cost,
+and the read log later showed a guard collecting the bill.
 
 ### Two things this did *not* find
 
@@ -12801,3 +12805,53 @@ off every https page. A CDP target that never navigates therefore never gets
 gated. Every path a real page takes does: an http origin commits and gates, and
 a script-created `about:blank` iframe goes through the synthetic-navigation
 branch, which calls it too.
+
+## The WebMCP surface went behind `--webmcp` (2026-08-25)
+
+Three names this fork carried that no Chrome has: `ModelContext` and
+`ModelContextClient` on the global, and `modelContext` on
+`Navigator.prototype`. The G14 chapter above and the own-name table both record
+them as kept on purpose. They were kept on a premise — that nobody was looking
+at them — and the read log falsified it.
+
+**Kasada reads `navigator.modelContext`.** In `results/prop-reads-hyatt.json`,
+main realm, `seq: 369`, `occurrences: 2`, and it sits in the middle of the run
+of 73 `Navigator.*` reads that walks the interface's own names in order. A guard
+enumerating names and then reading one of them is comparing the *table*, so a
+getter answering `undefined` would not have helped: the name has to be gone.
+
+So the surface is opt-in now. `lightpanda mcp` carries it unconditionally —
+that mode exists for it — and the CDP-only modes ask with `--webmcp`, which is
+what keeps the CDP `WebMCP` domain usable from `serve`: a page cannot register a
+tool through a surface it cannot see. `Env.createContext` runs the gate as a
+third one next to [SecureContext] and cross-origin isolation, and it is
+delete-only for the same reason theirs is — every context is rebuilt from the
+V8 snapshot, so the gate runs again for each, in-place navigations included.
+
+Three readings, all on the gated build:
+
+| reading | before | after |
+|---|---|---|
+| `fetch` / `serve`, the three names | present | absent (`--webmcp` restores all three) |
+| `mcp --cdp-port`, the three names | crashed on connect | present, no flag |
+| `Object.getOwnPropertyNames(window).length`, secure | 1203 | 1201 |
+| x-hyatt read log, main realm | 508 members | 507, `Navigator.modelContext` gone |
+
+The `prop-reads-diff` probe — the 352 members of x-hyatt's read log reachable
+from a singleton — now differs on **27 of 352 between headed-UA Chrome and this
+engine at `https://example.com/`, and not one of them is a name**: 14
+`PerformanceTiming` stamps, 4 `Screen.*` and 5 `Window.screen*` plus
+`innerHeight` / `VisualViewport.height` (headless Chrome's fixed 800x600 against
+our viewport), 2 `MemoryInfo` heap sizes, and `NetworkInformation.rtt`.
+`Navigator.modelContext` is `undefined` on both arms.
+
+**x-hyatt did not flip.** Same sitting, `refused-429`, `doc=429`, 6 nodes. The
+station's blocker is the one the chapter above isolated — `/tl` answers without
+`x-kpsdk-r`, so there is no second navigation — and this was never going to be
+it. What this closes is the one-expression identification, which was real
+whether or not any single station was spending it.
+
+`mcp --cdp-port` is in that table because it did not work at all: three of the
+CDP limits `Connection.init` asks the config for answered for `serve` only, so
+the first client to connect reached `unreachable`. Fixed alongside, since it is
+the only way to read the mcp arm end to end.
