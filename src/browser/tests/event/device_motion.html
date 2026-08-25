@@ -58,3 +58,70 @@
     testing.expectEqual('TypeError', err.name);
   }
 </script>
+
+<script id=listener_earns_one_null_reading type=module>
+{
+  // A desktop with no sensors is not a browser that says nothing: Chrome
+  // starts its sensor provider on the first listener and answers once per
+  // registration with an all-null event -- 43 ms after the first listener,
+  // ~18 ms after each later one, delivered to the whole listener list. A
+  // second listener for the same type earns its own answer; nothing more
+  // arrives after that. Every reading below is off a headless Chrome 151.
+  const state = await testing.async();
+  const seen = [];
+  const rec = (tag) => (e) => seen.push(tag + ':' + e.type);
+  const first = rec('first');
+  window.addEventListener('devicemotion', first);
+  window.addEventListener('deviceorientation', first);
+  window.addEventListener('deviceorientationabsolute', first);
+
+  let motion = null, orientation = null, absolute = null;
+  window.addEventListener('devicemotion', (e) => { motion ??= e; });
+  window.addEventListener('deviceorientation', (e) => { orientation ??= e; });
+  window.addEventListener('deviceorientationabsolute', (e) => { absolute ??= e; });
+
+  await new Promise((r) => setTimeout(r, 300));
+  const firstRound = seen.filter((s) => s.startsWith('first:')).sort().join(' ');
+  seen.length = 0;
+
+  // A later registration gets its own answer, and it reaches the listener that
+  // was already there as well as the new one.
+  window.addEventListener('devicemotion', rec('second'));
+  await new Promise((r) => setTimeout(r, 300));
+  const secondRound = seen.sort().join(' ');
+  seen.length = 0;
+
+  // ...and then it goes quiet again.
+  await new Promise((r) => setTimeout(r, 400));
+  const quiet = seen.join(' ');
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(
+      'first:devicemotion first:deviceorientation first:deviceorientationabsolute',
+      firstRound,
+    );
+    testing.expectEqual('first:devicemotion second:devicemotion', secondRound);
+    testing.expectEqual('', quiet);
+
+    testing.expectEqual(true, motion instanceof DeviceMotionEvent);
+    testing.expectEqual(16, motion.interval);
+    // join() turns null into '', so every reading goes through String() first.
+    testing.expectEqual('null,null,null',
+      [motion.acceleration.x, motion.acceleration.y, motion.acceleration.z].map(String).join(','));
+    testing.expectEqual('null,null,null',
+      [motion.accelerationIncludingGravity.x, motion.accelerationIncludingGravity.y,
+       motion.accelerationIncludingGravity.z].map(String).join(','));
+    testing.expectEqual('null,null,null',
+      [motion.rotationRate.alpha, motion.rotationRate.beta, motion.rotationRate.gamma].map(String).join(','));
+    testing.expectEqual('true,false,false,false',
+      [motion.isTrusted, motion.bubbles, motion.cancelable, motion.composed].join(','));
+
+    testing.expectEqual(true, orientation instanceof DeviceOrientationEvent);
+    testing.expectEqual('false,null,null,null',
+      [orientation.absolute, orientation.alpha, orientation.beta, orientation.gamma].map(String).join(','));
+    testing.expectEqual('true,absolute:true',
+      [absolute.isTrusted, 'absolute:' + absolute.absolute].join(','));
+  });
+}
+</script>

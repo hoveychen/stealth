@@ -28,6 +28,8 @@ const Event = @import("webapi/Event.zig");
 const EventTarget = @import("webapi/EventTarget.zig");
 const Element = @import("webapi/Element.zig");
 const ShadowRoot = @import("webapi/ShadowRoot.zig");
+const device_sensors = @import("webapi/event/device_sensors.zig");
+const global_event_handlers = @import("webapi/global_event_handlers.zig");
 
 const log = lp.log;
 const Allocator = std.mem.Allocator;
@@ -47,10 +49,16 @@ base: EventManagerBase,
 // 'load' event (e.g. amazon product page has no listener and ~350 resources)
 has_dom_load_listener: bool,
 
+// One queued null sensor reading per event type at a time. Chrome answers a
+// burst of registrations once, not once per listener: two devicemotion
+// listeners added in the same tick get a single event between them (measured).
+device_sensor_pending: device_sensors.Pending,
+
 pub fn init(arena: Allocator, frame: *Frame) EventManager {
     return .{
         .frame = frame,
         .has_dom_load_listener = false,
+        .device_sensor_pending = .{},
         .base = EventManagerBase.init(arena),
     };
 }
@@ -62,6 +70,10 @@ pub fn register(self: *EventManager, target: *EventTarget, typ: []const u8, call
     if (target._type == .node and listener.typ.eql(comptime .wrap("load"))) {
         self.has_dom_load_listener = true;
     }
+
+    // A device-motion or -orientation listener earns one null reading, the way
+    // it does on a Chrome with no sensors. See device_sensors.zig.
+    try device_sensors.answer(self, target, typ);
 }
 
 pub fn remove(self: *EventManager, target: *EventTarget, typ: []const u8, callback: Callback, use_capture: bool) void {
@@ -75,7 +87,10 @@ pub fn remove(self: *EventManager, target: *EventTarget, typ: []const u8, callba
 // addEventListener("load") registrations, and its one reader
 // (Frame.processQueuedEvents) checks a node's own handler separately.
 pub fn registerHandler(self: *EventManager, target: *EventTarget, handler: @import("webapi/global_event_handlers.zig").Handler) !void {
-    return self.base.registerHandler(target, handler);
+    try self.base.registerHandler(target, handler);
+    // `window.ondevicemotion = fn` starts the sensor provider the same way
+    // addEventListener does.
+    return device_sensors.answer(self, target, global_event_handlers.toEventType(handler));
 }
 
 pub fn removeHandler(self: *EventManager, target: *EventTarget, handler: @import("webapi/global_event_handlers.zig").Handler) void {
