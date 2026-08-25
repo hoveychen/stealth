@@ -750,6 +750,89 @@ test "MediaQuery: ratio compares as a fraction, not a division" {
     try testing.expect(matches("(aspect-ratio: 1/1)", square));
 }
 
+// Kasada binary-searches devicePixelRatio on x-hyatt: it halves a
+// `min-resolution` bound 24 times, then walks the same ladder again in `dpi`
+// and a third time in `dpcm` — 64 of the 227 distinct matchMedia queries it
+// asked for. Answering only whole `dppx` gets every rung of all three ladders
+// wrong. Every expectation below was measured on a headed Chrome via
+// tools/fingerprint/probes/media-feature-forms.js.
+test "MediaQuery: resolution accepts fractions, dpi and dpcm" {
+    const v = Viewport.default; // devicePixelRatio 1
+
+    // Fractional dppx, in the forms the binary search produces.
+    try testing.expect(matches("(min-resolution: 0.625dppx)", v));
+    try testing.expect(matches("(min-resolution:0.625dppx)", v));
+    try testing.expect(matches("(min-resolution: 0.5x)", v));
+    try testing.expect(matches("(min-resolution: 0dppx)", v));
+    // A leading dot is a valid CSS number; Chrome serializes it back as 0.625.
+    try testing.expect(matches("(min-resolution: .625dppx)", v));
+    try testing.expect(!matches("(min-resolution: 1.5dppx)", v));
+
+    // dpi that is not a multiple of 96, and the max- form.
+    try testing.expect(matches("(min-resolution: 50dpi)", v));
+    try testing.expect(matches("(max-resolution: 256dpi)", v));
+    try testing.expect(!matches("(max-resolution: 50dpi)", v));
+
+    // dpcm: 1in is 2.54cm and CSS fixes 1in at 96px, so 1dppx is ~37.8dpcm.
+    try testing.expect(matches("(min-resolution: 30dpcm)", v));
+    try testing.expect(!matches("(max-resolution: 30dpcm)", v));
+    try testing.expect(matches("(max-resolution: 50dpcm)", v));
+
+    // Still fails closed on a malformed value: a bare number is not a
+    // resolution, `5.` is not a CSS number, and negatives are rejected.
+    try testing.expect(!matches("(min-resolution: 1)", v));
+    try testing.expect(!matches("(min-resolution: 5.dppx)", v));
+    try testing.expect(!matches("(min-resolution: -1dppx)", v));
+    try testing.expect(!matches("(min-resolution: dppx)", v));
+}
+
+// `color-index` and `monochrome` are both 0 on this persona, so every `max-`
+// bound is satisfied and only a 0 `min-` bound is. Sharing one `== 0` between
+// the bare feature and its `max-` form answers the `max-` form backwards.
+test "MediaQuery: max-color-index and max-monochrome compare, not equate" {
+    const v = Viewport.default;
+    try testing.expect(matches("(max-color-index: 4)", v));
+    try testing.expect(matches("(max-color-index: 0)", v));
+    try testing.expect(matches("(max-monochrome: 4)", v));
+    try testing.expect(matches("(max-monochrome: 0)", v));
+
+    // The min- forms only match a 0 bound, and the bare forms only the value.
+    try testing.expect(matches("(min-color-index: 0)", v));
+    try testing.expect(!matches("(min-color-index: 4)", v));
+    try testing.expect(matches("(min-monochrome: 0)", v));
+    try testing.expect(!matches("(min-monochrome: 4)", v));
+    try testing.expect(!matches("(color-index: 4)", v));
+    try testing.expect(!matches("(monochrome: 4)", v));
+
+    // `grid` is a discrete feature with no range prefix — measured false in
+    // Chrome for both, so recognising them here would be the anomaly.
+    try testing.expect(!matches("(max-grid: 0)", v));
+    try testing.expect(!matches("(min-grid: 0)", v));
+}
+
+test "MediaQuery: ratio terms may be decimals" {
+    const v = Viewport.default; // 1920x1080 = 1.777...
+    try testing.expect(matches("(max-aspect-ratio: 2.125)", v));
+    try testing.expect(matches("(max-device-aspect-ratio: 2.125)", v));
+    try testing.expect(matches("(min-aspect-ratio: 1.5/2.5)", v));
+    // 1.7 is below 1920/1080, so these stay false — the decimal has to be
+    // parsed, not just accepted.
+    try testing.expect(!matches("(max-aspect-ratio: 1.7)", v));
+    try testing.expect(!matches("(aspect-ratio: 1.5)", v));
+    try testing.expect(matches("(min-aspect-ratio: 1.7)", v));
+}
+
+// device-posture ships in Chrome and answers `continuous` on a desktop. It is
+// one expression, and not recognising the feature name at all answers false to
+// both values — which no real browser does.
+test "MediaQuery: device-posture is continuous" {
+    const v = Viewport.default;
+    try testing.expect(matches("(device-posture: continuous)", v));
+    try testing.expect(!matches("(device-posture: folded)", v));
+    try testing.expect(!matches("(device-posture: none)", v));
+    try testing.expect(matches("(device-posture)", v));
+}
+
 test "MediaQuery: malformed value is false" {
     const v = Viewport.default;
     try testing.expect(!matches("(min-width: foo)", v));
