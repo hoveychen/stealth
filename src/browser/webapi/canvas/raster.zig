@@ -273,15 +273,49 @@ pub const Gradient = struct {
     /// Sorted by offset, ties in insertion order. Empty means the gradient
     /// paints nothing at all, which is what the spec says and what Chrome does.
     stops: []const Stop,
+    /// Which space the stops' channels are in, and so where the ramp between
+    /// two of them is taken.
+    interpolation: Interpolation = .srgb,
+    /// `ctx.filter`, applied to the mixed colour rather than to each stop.
+    ///
+    /// The two are the same thing on the sRGB arm — `grayscale()` is affine, so
+    /// filtering the ends and interpolating between them is filtering the
+    /// interpolation — but they are not on the Oklab one, where the ramp is not
+    /// linear in these channels. A filter runs on the source graphic *after*
+    /// the shader has produced it, so this is the side to be on.
+    filter: Filter = .none,
+
+    /// Chrome takes a gradient's ramp in one of two places, and which one is
+    /// decided by the *notation* a stop was written in rather than by the
+    /// colour it names or the gamut it needs. `color(srgb 1 0 0)` is the same
+    /// in-gamut red as `#ff0000` and ramps differently; `hwb()` is not a legacy
+    /// notation and ramps the same as hex. One such stop takes the whole
+    /// gradient, not only the segments it ends. All measured —
+    /// probes/canvas-gradient-stop-space.js, sixteen rows of one red-to-blue
+    /// ramp written every way that names it.
+    pub const Interpolation = union(enum) {
+        /// Per channel, on the bitmap's own 0..255 scale: hex, a colour name,
+        /// `rgb()` in either syntax, `hsl()`, `hsla()`, `hwb()`.
+        srgb,
+        /// In Oklab: `color()`, `lab()`, `lch()`, `oklab()`, `oklch()`. The
+        /// payload is the bitmap's space, which the mixed colour has to be
+        /// converted back into — Oklab is absolute, so the way back out is a
+        /// second conversion rather than the identity it is for the arm above.
+        oklab: color.CanvasSpace,
+    };
 
     /// One stop, its colour already resolved the way a flat `fillStyle` would
     /// be — so a stop and a fill written in the same notation are the same
-    /// paint. Alpha stays straight: the ramp interpolates before anything
-    /// premultiplies it (measured — opaque red to *transparent blue* reads a
-    /// blue of 130 in the middle, where a premultiplied ramp carries none).
+    /// paint. Alpha stays straight and is interpolated separately in both
+    /// arms: the ramp runs before anything premultiplies it (measured — opaque
+    /// red to *transparent blue* reads a blue of 130 in the middle, where a
+    /// premultiplied ramp carries none).
     pub const Stop = struct {
         offset: f64,
-        paint: Paint,
+        /// In the gradient's `interpolation` space: the bitmap's own channels
+        /// on 0..255 for `srgb`, and L, a, b for `oklab`.
+        channels: [3]f64,
+        alpha: f64 = 1,
     };
 
     /// The three shapes, one per factory, in the user-space coordinates the
@@ -373,20 +407,60 @@ pub const Gradient = struct {
         // exactly there: both of them are `<= t`, so both are stepped over.
         var above: usize = 0;
         while (above < self.stops.len and self.stops[above].offset <= t) above += 1;
-        if (above == 0) return self.stops[0].paint;
-        if (above == self.stops.len) return self.stops[above - 1].paint;
+        if (above == 0) return self.paintOf(self.stops[0].channels, self.stops[0].alpha);
+        if (above == self.stops.len) {
+            const last = self.stops[above - 1];
+            return self.paintOf(last.channels, last.alpha);
+        }
 
         const from = self.stops[above - 1];
         const to = self.stops[above];
         const span = to.offset - from.offset;
-        if (span <= 0) return to.paint;
+        if (span <= 0) return self.paintOf(to.channels, to.alpha);
         const u = (t - from.offset) / span;
-        return .{
-            .r = from.paint.r + (to.paint.r - from.paint.r) * u,
-            .g = from.paint.g + (to.paint.g - from.paint.g) * u,
-            .b = from.paint.b + (to.paint.b - from.paint.b) * u,
-            .a = from.paint.a + (to.paint.a - from.paint.a) * u,
+        var mixed: [3]f64 = undefined;
+        for (&mixed, from.channels, to.channels) |*channel, start, end| {
+            channel.* = start + (end - start) * u;
+        }
+        return self.paintOf(mixed, from.alpha + (to.alpha - from.alpha) * u);
+    }
+
+    /// A mixed stop as the bitmap takes it: 0..255 in the bitmap's own space,
+    /// unclipped and unquantised, which for the sRGB arm the channels already
+    /// are.
+    fn paintOf(self: Gradient, channels: [3]f64, alpha: f64) Paint {
+        const to = switch (self.interpolation) {
+            .srgb => return self.filter.applyTo(.{
+                .r = channels[0],
+                .g = channels[1],
+                .b = channels[2],
+                .a = alpha,
+            }),
+            .oklab => |space| space,
         };
+        const rgb = color.oklabToSrgb(channels);
+        if (to == .srgb) {
+            return self.filter.applyTo(.{
+                .r = rgb[0] * 255,
+                .g = rgb[1] * 255,
+                .b = rgb[2] * 255,
+                .a = alpha,
+            });
+        }
+        // Oklab is absolute, so a display-p3 bitmap needs the second leg. Only
+        // the srgb one is measured; this is the same conversion every other
+        // colour on the way into such a bitmap takes.
+        const converted = color.convertCanvasUnit(.srgb, to, .{
+            @floatCast(rgb[0]),
+            @floatCast(rgb[1]),
+            @floatCast(rgb[2]),
+        });
+        return self.filter.applyTo(.{
+            .r = @as(f64, converted[0]) * 255,
+            .g = @as(f64, converted[1]) * 255,
+            .b = @as(f64, converted[2]) * 255,
+            .a = alpha,
+        });
     }
 };
 
@@ -1925,6 +1999,15 @@ test "raster: a blend mode reaches a path's partly covered edge" {
 /// both coordinates, so the same ramp read off a different row is different
 /// bytes.
 fn expectGradientRow(geometry: Gradient.Geometry, stops: []const Gradient.Stop, hex: []const u8) !void {
+    return expectGradientRowIn(geometry, stops, .srgb, hex);
+}
+
+fn expectGradientRowIn(
+    geometry: Gradient.Geometry,
+    stops: []const Gradient.Stop,
+    interpolation: Gradient.Interpolation,
+    hex: []const u8,
+) !void {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
 
@@ -1934,6 +2017,7 @@ fn expectGradientRow(geometry: Gradient.Geometry, stops: []const Gradient.Stop, 
         .geometry = geometry,
         .inverse = path_mod.Transform.identity,
         .stops = stops,
+        .interpolation = interpolation,
     } }, 1, .source_over);
 
     var got = [_]u8{0} ** (32 * 4);
@@ -1946,9 +2030,12 @@ fn expectGradientRow(geometry: Gradient.Geometry, stops: []const Gradient.Stop, 
 }
 
 test "raster: a gradient is Chrome's ramp, ordered dither and all" {
-    const red: Paint = .{ .r = 255, .g = 0, .b = 0 };
-    const blue: Paint = .{ .r = 0, .g = 0, .b = 255 };
-    const ends = [_]Gradient.Stop{ .{ .offset = 0, .paint = red }, .{ .offset = 1, .paint = blue } };
+    const red: [3]f64 = .{ 255, 0, 0 };
+    const blue: [3]f64 = .{ 0, 0, 255 };
+    const ends = [_]Gradient.Stop{
+        .{ .offset = 0, .channels = red },
+        .{ .offset = 1, .channels = blue },
+    };
 
     // Chrome 151, row 4 of each of these (probes/canvas-gradient-paint.js).
     //
@@ -1986,9 +2073,9 @@ test "raster: a gradient is Chrome's ramp, ordered dither and all" {
     try expectGradientRow(
         .{ .linear = .{ .x0 = 0, .y0 = 0, .x1 = 32, .y1 = 0 } },
         &.{
-            .{ .offset = 0, .paint = red },
-            .{ .offset = 0.25, .paint = .{ .r = 0, .g = 255, .b = 0 } },
-            .{ .offset = 1, .paint = blue },
+            .{ .offset = 0, .channels = red },
+            .{ .offset = 0.25, .channels = .{ 0, 255, 0 } },
+            .{ .offset = 1, .channels = blue },
         },
         "ef0f00ffcf3000ffaf4f00ff907000ff6f8f00ff50b000ff30cf00ff10f000ff00f905ff00ef10ff00e41aff00da26ff00cf2fff00c53bff00ba45ff00b050ff00a45aff009a65ff008f6fff00857bff007a84ff007090ff00659aff005ba5ff004fafff0045baff003ac4ff0030d0ff0025d9ff001be5ff0010efff0006faff",
     );
@@ -2004,5 +2091,24 @@ test "raster: a gradient is Chrome's ramp, ordered dither and all" {
         .{ .linear = .{ .x0 = 0, .y0 = 0, .x1 = 32, .y1 = 0 } },
         &.{},
         "00000000" ** 32,
+    );
+}
+
+test "raster: a wide-notation stop takes the ramp through Oklab" {
+    const across: Gradient.Geometry = .{ .linear = .{ .x0 = 0, .y0 = 0, .x1 = 32, .y1 = 0 } };
+
+    // The same sRGB red and sRGB blue as the first row of the test above, and a
+    // different ramp: Chrome 151's `color srgb` row
+    // (probes/canvas-gradient-stop-space.js), where the stops are written
+    // `color(srgb 1 0 0)` and `#0000ff`. In gamut, same colours, and the
+    // notation alone moves every pixel of it.
+    try expectGradientRowIn(
+        across,
+        &.{
+            .{ .offset = 0, .channels = color.srgbToOklab(.{ 1, 0, 0 }) },
+            .{ .offset = 1, .channels = color.srgbToOklab(.{ 0, 0, 1 }) },
+        },
+        .{ .oklab = .srgb },
+        "fb1116fff5232cffed2d3affe63546ffde3a4fffd84059ffd04461ffca486affc24a70ffbb4d78ffb44f7fffad5186ffa5518cff9f5393ff975399ff9054a0ff8852a5ff8253acff7a51b1ff7351b8ff6b4fbdff644ec3ff5c4bc9ff5549cfff4c45d4ff4542daff3c3de0ff3539e6ff2b32ebff222bf1ff1720f6ff0910fdff",
     );
 }
