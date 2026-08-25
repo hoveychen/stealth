@@ -1,0 +1,630 @@
+{
+  "url": "http://127.0.0.1:10871/",
+  "settleMs": 20000,
+  "when": "2026-08-25T20:44:51.491Z",
+  "reading": {
+    "href": "http://127.0.0.1:10871/",
+    "title": "",
+    "nodes": 33
+  },
+  "reads": [
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:console",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:console",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:console",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:console",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:console",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:ActiveXObject",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:_Selenium_IDE_Recorder",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:spynner_additional_js_loaded",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "HTMLDocument:$cdc_asdjflasutopfhvcZLmcfl_",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:prototype",
+      "occurrences": 5
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:MMSJShKtPE",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:appMinorVersion",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:  $$__8cvp7cqvgel",
+      "occurrences": 5
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:storeWebWideTrackingException",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:vCGGOXIVwb",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:awesomium",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "HTMLDocument:$chrome_asyncScriptInfo",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:domAutomationController",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:RestrictionTarget",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:rfzvqWxMAU",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:mozAlarms",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:callSelenium",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:getStorageUpdates",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "HTMLDocument:documentMode",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "AudioBuffer:then",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:ContentIndex",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "NetworkInformation:type",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:mozPhoneNumberService",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:brave",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "PermissionStatus:then",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:ApplePaySetup",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:callPhantom",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:InstallTrigger",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:ApplePayError",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:_phantom",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:watinExpressionResult",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:watinExpressionError",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:_sdTrace",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:webdriver",
+      "occurrences": 4
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:OSMJIF",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:mozInnerScreenY",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:XDomainRequest",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:_cf",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:cdc_adoQpoasnfa76pfcZLmcfl_Promise",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:fmget_targets",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:  $$__/cilbup/17",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:browser",
+      "occurrences": 4
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:bmak",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:msManipulationViewsEnabled",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:requestWakeLock",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:ontouchstart",
+      "occurrences": 4
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:opera",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:geb",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:calledPhantom",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:oscpu",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "HTMLInputElement:capture",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:AICreateMonitor",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:ApplePaySetupFeature",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:domAutomation",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:cdc_adoQpoasnfa76pfcZLmcfl_Array",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "FontFaceSet:@@iterator",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:mozConnection",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:webkitGetGamepads",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:spawn",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:SharedArrayBuffer",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:cdc_adoQpoasnfa76pfcZLmcfl_Symbol",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:calledSelenium",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "MessagePort:  $$__onmessage",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:mozIsLocallyAvailable",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Navigator:msMaxTouchPoints",
+      "occurrences": 4
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:emit",
+      "occurrences": 2
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:console",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "Window:$cdc_asdjflasutopfhvcZLmcfl_",
+      "occurrences": 3
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "WorkerNavigator:connection",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "WorkerNavigator:oscpu",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "WorkerNavigator:connection",
+      "occurrences": 1
+    },
+    {
+      "context": -1,
+      "realm": "",
+      "seq": -1,
+      "property": "WorkerNavigator:oscpu",
+      "occurrences": 1
+    }
+  ],
+  "contexts": [
+    {
+      "context": -1,
+      "realm": "",
+      "members": 77
+    }
+  ],
+  "interfaces": [
+    "AudioBuffer:then",
+    "FontFaceSet:@@iterator",
+    "HTMLDocument:$cdc_asdjflasutopfhvcZLmcfl_",
+    "HTMLDocument:$chrome_asyncScriptInfo",
+    "HTMLDocument:documentMode",
+    "HTMLInputElement:capture",
+    "MessagePort:  $$__onmessage",
+    "Navigator:appMinorVersion",
+    "Navigator:brave",
+    "Navigator:getStorageUpdates",
+    "Navigator:mozAlarms",
+    "Navigator:mozConnection",
+    "Navigator:mozIsLocallyAvailable",
+    "Navigator:mozPhoneNumberService",
+    "Navigator:msManipulationViewsEnabled",
+    "Navigator:msMaxTouchPoints",
+    "Navigator:oscpu",
+    "Navigator:requestWakeLock",
+    "Navigator:storeWebWideTrackingException",
+    "Navigator:webkitGetGamepads",
+    "NetworkInformation:type",
+    "PermissionStatus:then",
+    "Window:  $$__/cilbup/17",
+    "Window:  $$__8cvp7cqvgel",
+    "Window:$cdc_asdjflasutopfhvcZLmcfl_",
+    "Window:AICreateMonitor",
+    "Window:ActiveXObject",
+    "Window:ApplePayError",
+    "Window:ApplePaySetup",
+    "Window:ApplePaySetupFeature",
+    "Window:ContentIndex",
+    "Window:InstallTrigger",
+    "Window:MMSJShKtPE",
+    "Window:OSMJIF",
+    "Window:RestrictionTarget",
+    "Window:SharedArrayBuffer",
+    "Window:XDomainRequest",
+    "Window:_Selenium_IDE_Recorder",
+    "Window:_cf",
+    "Window:_phantom",
+    "Window:_sdTrace",
+    "Window:awesomium",
+    "Window:bmak",
+    "Window:browser",
+    "Window:callPhantom",
+    "Window:callSelenium",
+    "Window:calledPhantom",
+    "Window:calledSelenium",
+    "Window:cdc_adoQpoasnfa76pfcZLmcfl_Array",
+    "Window:cdc_adoQpoasnfa76pfcZLmcfl_Promise",
+    "Window:cdc_adoQpoasnfa76pfcZLmcfl_Symbol",
+    "Window:console",
+    "Window:domAutomation",
+    "Window:domAutomationController",
+    "Window:emit",
+    "Window:fmget_targets",
+    "Window:geb",
+    "Window:mozInnerScreenY",
+    "Window:ontouchstart",
+    "Window:opera",
+    "Window:prototype",
+    "Window:rfzvqWxMAU",
+    "Window:spawn",
+    "Window:spynner_additional_js_loaded",
+    "Window:vCGGOXIVwb",
+    "Window:watinExpressionError",
+    "Window:watinExpressionResult",
+    "Window:webdriver",
+    "WorkerNavigator:connection",
+    "WorkerNavigator:oscpu"
+  ]
+}
