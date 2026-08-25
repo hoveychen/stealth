@@ -1349,6 +1349,28 @@ test "Config: external stylesheets load by default" {
     try std.testing.expectEqual(false, off.enableExternalStylesheets());
 }
 
+test "Config: WebMCP is off unless the run asked for it" {
+    // Chrome has none of the three names this fork's WebMCP surface adds, and
+    // Kasada reads one of them, so `serve`/`fetch` -- the modes whose job is to
+    // look like a browser -- start without it.
+    var off = try Config.init(std.testing.allocator, "test", .{ .serve = .{} });
+    defer off.deinit(std.testing.allocator);
+    try std.testing.expectEqual(false, off.enableWebMcp());
+
+    var on = try Config.init(std.testing.allocator, "test", .{ .serve = .{ .webmcp = true } });
+    defer on.deinit(std.testing.allocator);
+    try std.testing.expectEqual(true, on.enableWebMcp());
+
+    var fetch = try Config.init(std.testing.allocator, "test", .{ .fetch = .{} });
+    defer fetch.deinit(std.testing.allocator);
+    try std.testing.expectEqual(false, fetch.enableWebMcp());
+
+    // `mcp` exists to serve WebMCP; the flag is not its to refuse.
+    var mcp = try Config.init(std.testing.allocator, "test", .{ .mcp = .{} });
+    defer mcp.deinit(std.testing.allocator);
+    try std.testing.expectEqual(true, mcp.enableWebMcp());
+}
+
 test "Config: adblockLists splits comma-separated paths" {
     var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
         .adblock_lists = "easylist.txt,easyprivacy.txt",

@@ -444,6 +444,16 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
         if (global_object.delete("SharedArrayBuffer") != true) {
             log.err(.js, "SharedArrayBuffer gate", .{});
         }
+
+        // This fork's WebMCP surface is three names Chrome does not have, and
+        // Kasada was measured reading one of them, so a run that did not ask for
+        // WebMCP does not carry it. Window realm only: the interfaces are
+        // [Exposed=Window] and a worker's navigator never had the member.
+        if (comptime is_frame) {
+            if (self.app.config.enableWebMcp() == false) {
+                context.hideWebMcpSurface();
+            }
+        }
     }
 
     return context;

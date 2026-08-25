@@ -36,6 +36,7 @@ pub const pageTest = base.pageTest;
 pub const newString = base.newString;
 pub const expectLog = base.expectLog;
 pub const silenceLog = base.silenceLog;
+pub const setWebMcp = base.setWebMcp;
 
 const TestContext = struct {
     read_at: usize = 0,

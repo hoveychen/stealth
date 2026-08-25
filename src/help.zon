@@ -462,6 +462,14 @@
     \\          Path to the Ed25519 private key PEM file.
     \\  --web-bot-auth-keyid <STRING>
     \\          The JWK thumbprint of your public key.
+    \\  --webmcp
+    \\          Expose the WebMCP surface to pages: navigator.modelContext and the
+    \\          ModelContext / ModelContextClient interfaces, which is what the CDP
+    \\          WebMCP domain drives. Chrome has none of those three names, so a page
+    \\          can identify the engine off them in one expression — leave this off
+    \\          for any run whose point is to look like a browser. The mcp command
+    \\          exposes them regardless; this flag is for the CDP-only modes.
+    \\          Defaults to false.
     \\  --ws-max-concurrent <INT>
     \\          Maximum number of concurrent WebSocket connections.
     \\          Defaults to 8.
