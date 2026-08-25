@@ -60,6 +60,72 @@ for (const ctx of ['webgl', 'webgl2']) {
     }
 }
 
+// The ten methods that answer something in Chrome. The other 27 are commands
+// that return undefined, so a no-op is already the right answer for them --
+// which is why this table is a table and not a rewrite of the generator.
+// Measured with probes/webgl-extension-method-returns.js; the bodies are
+// hand-written, so they live here rather than in the file this writes.
+//
+// What is deliberately still a no-op: WEBGL_multi_draw's four methods, which in
+// Chrome throw a TypeError when an argument cannot be converted to a sequence.
+// That is argument validation rather than a return value, and it belongs with
+// the rest of WebGL's argument conversion.
+const IMPLEMENTED = {
+    'OES_vertex_array_object.createVertexArrayOES': {
+        args: '(_: *const OES_vertex_array_object, exec: *js.Execution) !*objects.WebGLVertexArrayObjectOES',
+        body: ['    return objects.handle(objects.WebGLVertexArrayObjectOES, exec);'],
+    },
+    'OES_vertex_array_object.bindVertexArrayOES': {
+        args: '(_: *const OES_vertex_array_object, _: ?*objects.WebGLVertexArrayObjectOES) void',
+        body: [],
+    },
+    'OES_vertex_array_object.deleteVertexArrayOES': {
+        args: '(_: *const OES_vertex_array_object, _: ?*objects.WebGLVertexArrayObjectOES) void',
+        body: [],
+    },
+    'OES_vertex_array_object.isVertexArrayOES': {
+        // A handle that was created and never bound is not a vertex array yet,
+        // and nothing here ever binds one -- same answer as the core
+        // isVertexArray on WebGL 2.
+        args: '(_: *const OES_vertex_array_object, _: ?*objects.WebGLVertexArrayObjectOES) bool',
+        body: ['    return false;'],
+    },
+    'EXT_disjoint_timer_query.createQueryEXT': {
+        args: '(_: *const EXT_disjoint_timer_query, exec: *js.Execution) !*objects.WebGLTimerQueryEXT',
+        body: ['    return objects.handle(objects.WebGLTimerQueryEXT, exec);'],
+    },
+    'EXT_disjoint_timer_query.deleteQueryEXT': {
+        args: '(_: *const EXT_disjoint_timer_query, _: ?*objects.WebGLTimerQueryEXT) void',
+        body: [],
+    },
+    'EXT_disjoint_timer_query.isQueryEXT': {
+        args: '(_: *const EXT_disjoint_timer_query, _: ?*objects.WebGLTimerQueryEXT) bool',
+        body: ['    return false;'],
+    },
+    'EXT_disjoint_timer_query.getQueryEXT': {
+        args: '(_: *const EXT_disjoint_timer_query, _: u32, _: u32) ?*objects.WebGLTimerQueryEXT',
+        body: ['    return null;'],
+    },
+    'EXT_disjoint_timer_query.getQueryObjectEXT': {
+        // `any` in WebIDL, and null for a query that never ran.
+        args: '(_: *const EXT_disjoint_timer_query, _: ?*objects.WebGLTimerQueryEXT, _: u32) ?u32',
+        body: ['    return null;'],
+    },
+    'WEBGL_compressed_texture_astc.getSupportedProfiles': {
+        args: '(_: *const WEBGL_compressed_texture_astc) []const []const u8',
+        body: ['    return gpu.astc_profiles;'],
+    },
+    'WEBGL_debug_shaders.getTranslatedShaderSource': {
+        // Chrome answers the ANGLE translation of a compiled shader -- several
+        // kilobytes of Metal Shading Language on the driver this claims to be --
+        // and the empty string for a shader that has not been compiled. There is
+        // no shader translator here, so the uncompiled answer is the only one
+        // that is right; it is still a string, where undefined was not.
+        args: '(_: *const WEBGL_debug_shaders, _: ?*objects.WebGLShader) []const u8',
+        body: ['    return "";'],
+    },
+};
+
 const out = [];
 const w = (s = '') => out.push(s);
 
@@ -93,14 +159,18 @@ w('// EXTsRGB, EXT_shader_texture_lod as EXTShaderTextureLOD,');
 w('// OES_fbo_render_mipmap as OESFboRenderMipmap -- and a GLenum transcribed from');
 w('// a spec page rather than a driver is a value no real browser reports.');
 w('//');
-w('// What is still short of Chrome: the methods are no-ops. One that answers a');
-w('// value in Chrome -- getSupportedProfiles, getTranslatedShaderSource,');
-w('// isVertexArrayOES -- answers undefined here. The arity is right, so');
-w('// `fn.length` matches; the return value does not.');
+w('// 27 of the 37 methods are commands that return nothing in Chrome, so they are');
+w('// no-ops here. The ten that answer a value are implemented, from the IMPLEMENTED');
+w('// table in the generator -- see it for what each answers and why. Two gaps are');
+w('// left on purpose and named there: getTranslatedShaderSource answers the empty');
+w('// string rather than an ANGLE translation, and WEBGL_multi_draw does not refuse');
+w('// an argument that cannot be converted to a sequence.');
 w();
 w('const std = @import("std");');
 w();
 w('const js = @import("../../js/js.zig");');
+w('const objects = @import("webgl_objects.zig");');
+w('const gpu = @import("gpu.zig").gpu;');
 w();
 // Not derived from the JSON -- fixed text, but it lives here because both
 // context files need it and this is the module that owns extension interfaces.
@@ -171,7 +241,18 @@ for (const ext of byName.values()) {
     if (fns.length) {
         w();
         for (const f of fns) {
-            w(`    pub fn ${f.member}(_: *const ${ext.name}) void {}`);
+            const impl = IMPLEMENTED[`${ext.name}.${f.member}`];
+            if (impl) {
+                if (impl.body.length === 0) {
+                    w(`    pub fn ${f.member}${impl.args} {}`);
+                } else {
+                    w(`    pub fn ${f.member}${impl.args} {`);
+                    for (const line of impl.body) w(`    ${line}`);
+                    w('    }');
+                }
+            } else {
+                w(`    pub fn ${f.member}(_: *const ${ext.name}) void {}`);
+            }
         }
     }
     w();
@@ -198,7 +279,11 @@ for (const ext of byName.values()) {
     if (fns.length) {
         w();
         for (const f of fns) {
-            w(`        pub const ${f.member} = bridge.function(${ext.name}.${f.member}, .{ .noop = true, .arity = ${f.arity} });`);
+            // The arity is measured too, and it is not always derivable: all
+            // four OES_vertex_array_object methods report length 0 in Chrome,
+            // nullable argument and all, while isQueryEXT next door reports 1.
+            const noop = IMPLEMENTED[`${ext.name}.${f.member}`] ? '' : ' .noop = true,';
+            w(`        pub const ${f.member} = bridge.function(${ext.name}.${f.member}, .{${noop} .arity = ${f.arity} });`);
         }
     }
     w('    };');

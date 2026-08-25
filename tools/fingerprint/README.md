@@ -13294,3 +13294,55 @@ does; the return value does not. `getSupportedProfiles`,
 `getTranslatedShaderSource` and `isVertexArrayOES` answer something in Chrome and
 `undefined` here. That needs its own two-arm measurement — which is why this
 probe records arity and not return values.
+
+## Ten of the 37 extension methods answer something (2026-08-25)
+
+The extension interface objects match Chrome now, and every method on them had
+Chrome's arity and Chrome's name and a no-op body. For 27 of the 37 that is
+already right — `drawArraysInstancedANGLE`, `blendFunciOES`, `polygonModeWEBGL`
+and the rest are commands, and Chrome returns `undefined` from all of them. The
+other ten answered `undefined` where Chrome answers a value, which is the kind of
+gap that cannot be found by reading method names: `getSupportedProfiles` looks
+like a getter, and so does `getQueryEXT`, but `isVertexArrayOES` and
+`createQueryEXT` do not, and two of those four were already suspected while the
+other two were not.
+
+So `probes/webgl-extension-method-returns.js` calls all 37 with arguments chosen
+per method — a created query, a bound vertex array, a compiled shader — and
+records what comes back. 18 of its 47 rows differed. What was behind them:
+
+| method | Chrome |
+|---|---|
+| `OES_vertex_array_object.createVertexArrayOES` | `[object WebGLVertexArrayObjectOES]` |
+| `OES_vertex_array_object.isVertexArrayOES` | `false` |
+| `EXT_disjoint_timer_query.createQueryEXT` | `[object WebGLTimerQueryEXT]` |
+| `EXT_disjoint_timer_query.isQueryEXT` | `false` |
+| `EXT_disjoint_timer_query.getQueryEXT` | `null` |
+| `EXT_disjoint_timer_query.getQueryObjectEXT` | `null` |
+| `WEBGL_compressed_texture_astc.getSupportedProfiles` | `["ldr", "hdr"]` |
+| `WEBGL_debug_shaders.getTranslatedShaderSource` | ~4KB of Metal Shading Language |
+
+**Two of them are object types nobody had.** `WebGLVertexArrayObjectOES` is not
+`WebGLVertexArrayObject`: same job, different type, and only the core one has an
+interface object on the global. `WebGLTimerQueryEXT` is not `WebGLQuery` either.
+Both are `WebGLObject`-rooted with an empty prototype — no `constructor` on it —
+so the brand is the only thing that names them, which is why `LegacyHandle` in
+`webgl_objects.zig` exists next to `Handle`.
+
+**`getSupportedProfiles` is the driver's answer, not the browser's.** Metal
+reports `["ldr", "hdr"]`; the same Chrome forced onto SwiftShader reports
+`["ldr"]`. So it belongs in `gpu.zig` beside the other per-table readings, not as
+a constant — a claimed-linux run answering `hdr` would contradict its own
+renderer string.
+
+10 of the 47 rows still differ, and both remaining categories are named rather
+than left as a count:
+
+- **`getTranslatedShaderSource` (2 rows).** Chrome answers ANGLE's translation of
+  a *compiled* shader. We answer `""`, which is exactly what Chrome answers for
+  an uncompiled one — the right type where `undefined` was the wrong one, and the
+  content needs a shader translator this engine does not have.
+- **`WEBGL_multi_draw`'s four methods (8 rows).** Chrome throws
+  `TypeError: … The provided value cannot be converted to a sequence.` when the
+  argument is not one. Ours accepts anything. That is argument conversion, which
+  is its own gap and not a return value.

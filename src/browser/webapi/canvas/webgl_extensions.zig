@@ -28,14 +28,18 @@
 // OES_fbo_render_mipmap as OESFboRenderMipmap -- and a GLenum transcribed from
 // a spec page rather than a driver is a value no real browser reports.
 //
-// What is still short of Chrome: the methods are no-ops. One that answers a
-// value in Chrome -- getSupportedProfiles, getTranslatedShaderSource,
-// isVertexArrayOES -- answers undefined here. The arity is right, so
-// `fn.length` matches; the return value does not.
+// 27 of the 37 methods are commands that return nothing in Chrome, so they are
+// no-ops here. The ten that answer a value are implemented, from the IMPLEMENTED
+// table in the generator -- see it for what each answers and why. Two gaps are
+// left on purpose and named there: getTranslatedShaderSource answers the empty
+// string rather than an ANGLE translation, and WEBGL_multi_draw does not refuse
+// an argument that cannot be converted to a sequence.
 
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+const objects = @import("webgl_objects.zig");
+const gpu = @import("gpu.zig").gpu;
 
 /// The enum of an extension union's field names. Both rendering contexts
 /// carry a union of the extensions they advertise; the name a script passes to
@@ -238,12 +242,20 @@ pub const EXT_disjoint_timer_query = struct {
     pub const GPU_DISJOINT_EXT: u32 = 36795;
 
     pub fn beginQueryEXT(_: *const EXT_disjoint_timer_query) void {}
-    pub fn createQueryEXT(_: *const EXT_disjoint_timer_query) void {}
-    pub fn deleteQueryEXT(_: *const EXT_disjoint_timer_query) void {}
+    pub fn createQueryEXT(_: *const EXT_disjoint_timer_query, exec: *js.Execution) !*objects.WebGLTimerQueryEXT {
+        return objects.handle(objects.WebGLTimerQueryEXT, exec);
+    }
+    pub fn deleteQueryEXT(_: *const EXT_disjoint_timer_query, _: ?*objects.WebGLTimerQueryEXT) void {}
     pub fn endQueryEXT(_: *const EXT_disjoint_timer_query) void {}
-    pub fn getQueryEXT(_: *const EXT_disjoint_timer_query) void {}
-    pub fn getQueryObjectEXT(_: *const EXT_disjoint_timer_query) void {}
-    pub fn isQueryEXT(_: *const EXT_disjoint_timer_query) void {}
+    pub fn getQueryEXT(_: *const EXT_disjoint_timer_query, _: u32, _: u32) ?*objects.WebGLTimerQueryEXT {
+        return null;
+    }
+    pub fn getQueryObjectEXT(_: *const EXT_disjoint_timer_query, _: ?*objects.WebGLTimerQueryEXT, _: u32) ?u32 {
+        return null;
+    }
+    pub fn isQueryEXT(_: *const EXT_disjoint_timer_query, _: ?*objects.WebGLTimerQueryEXT) bool {
+        return false;
+    }
     pub fn queryCounterEXT(_: *const EXT_disjoint_timer_query) void {}
 
     pub const JsApi = struct {
@@ -270,12 +282,12 @@ pub const EXT_disjoint_timer_query = struct {
         pub const GPU_DISJOINT_EXT = bridge.property(EXT_disjoint_timer_query.GPU_DISJOINT_EXT, .{ .template = false, .readonly = true });
 
         pub const beginQueryEXT = bridge.function(EXT_disjoint_timer_query.beginQueryEXT, .{ .noop = true, .arity = 2 });
-        pub const createQueryEXT = bridge.function(EXT_disjoint_timer_query.createQueryEXT, .{ .noop = true, .arity = 0 });
-        pub const deleteQueryEXT = bridge.function(EXT_disjoint_timer_query.deleteQueryEXT, .{ .noop = true, .arity = 1 });
+        pub const createQueryEXT = bridge.function(EXT_disjoint_timer_query.createQueryEXT, .{ .arity = 0 });
+        pub const deleteQueryEXT = bridge.function(EXT_disjoint_timer_query.deleteQueryEXT, .{ .arity = 1 });
         pub const endQueryEXT = bridge.function(EXT_disjoint_timer_query.endQueryEXT, .{ .noop = true, .arity = 1 });
-        pub const getQueryEXT = bridge.function(EXT_disjoint_timer_query.getQueryEXT, .{ .noop = true, .arity = 2 });
-        pub const getQueryObjectEXT = bridge.function(EXT_disjoint_timer_query.getQueryObjectEXT, .{ .noop = true, .arity = 2 });
-        pub const isQueryEXT = bridge.function(EXT_disjoint_timer_query.isQueryEXT, .{ .noop = true, .arity = 1 });
+        pub const getQueryEXT = bridge.function(EXT_disjoint_timer_query.getQueryEXT, .{ .arity = 2 });
+        pub const getQueryObjectEXT = bridge.function(EXT_disjoint_timer_query.getQueryObjectEXT, .{ .arity = 2 });
+        pub const isQueryEXT = bridge.function(EXT_disjoint_timer_query.isQueryEXT, .{ .arity = 1 });
         pub const queryCounterEXT = bridge.function(EXT_disjoint_timer_query.queryCounterEXT, .{ .noop = true, .arity = 2 });
     };
 };
@@ -703,10 +715,14 @@ pub const OES_vertex_array_object = struct {
 
     pub const VERTEX_ARRAY_BINDING_OES: u32 = 34229;
 
-    pub fn bindVertexArrayOES(_: *const OES_vertex_array_object) void {}
-    pub fn createVertexArrayOES(_: *const OES_vertex_array_object) void {}
-    pub fn deleteVertexArrayOES(_: *const OES_vertex_array_object) void {}
-    pub fn isVertexArrayOES(_: *const OES_vertex_array_object) void {}
+    pub fn bindVertexArrayOES(_: *const OES_vertex_array_object, _: ?*objects.WebGLVertexArrayObjectOES) void {}
+    pub fn createVertexArrayOES(_: *const OES_vertex_array_object, exec: *js.Execution) !*objects.WebGLVertexArrayObjectOES {
+        return objects.handle(objects.WebGLVertexArrayObjectOES, exec);
+    }
+    pub fn deleteVertexArrayOES(_: *const OES_vertex_array_object, _: ?*objects.WebGLVertexArrayObjectOES) void {}
+    pub fn isVertexArrayOES(_: *const OES_vertex_array_object, _: ?*objects.WebGLVertexArrayObjectOES) bool {
+        return false;
+    }
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(OES_vertex_array_object);
@@ -725,10 +741,10 @@ pub const OES_vertex_array_object = struct {
 
         pub const VERTEX_ARRAY_BINDING_OES = bridge.property(OES_vertex_array_object.VERTEX_ARRAY_BINDING_OES, .{ .template = false, .readonly = true });
 
-        pub const bindVertexArrayOES = bridge.function(OES_vertex_array_object.bindVertexArrayOES, .{ .noop = true, .arity = 0 });
-        pub const createVertexArrayOES = bridge.function(OES_vertex_array_object.createVertexArrayOES, .{ .noop = true, .arity = 0 });
-        pub const deleteVertexArrayOES = bridge.function(OES_vertex_array_object.deleteVertexArrayOES, .{ .noop = true, .arity = 0 });
-        pub const isVertexArrayOES = bridge.function(OES_vertex_array_object.isVertexArrayOES, .{ .noop = true, .arity = 0 });
+        pub const bindVertexArrayOES = bridge.function(OES_vertex_array_object.bindVertexArrayOES, .{ .arity = 0 });
+        pub const createVertexArrayOES = bridge.function(OES_vertex_array_object.createVertexArrayOES, .{ .arity = 0 });
+        pub const deleteVertexArrayOES = bridge.function(OES_vertex_array_object.deleteVertexArrayOES, .{ .arity = 0 });
+        pub const isVertexArrayOES = bridge.function(OES_vertex_array_object.isVertexArrayOES, .{ .arity = 0 });
     };
 };
 
@@ -827,7 +843,9 @@ pub const WEBGL_compressed_texture_astc = struct {
     pub const COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR: u32 = 37852;
     pub const COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR: u32 = 37853;
 
-    pub fn getSupportedProfiles(_: *const WEBGL_compressed_texture_astc) void {}
+    pub fn getSupportedProfiles(_: *const WEBGL_compressed_texture_astc) []const []const u8 {
+        return gpu.astc_profiles;
+    }
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(WEBGL_compressed_texture_astc);
@@ -873,7 +891,7 @@ pub const WEBGL_compressed_texture_astc = struct {
         pub const COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR = bridge.property(WEBGL_compressed_texture_astc.COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR, .{ .template = false, .readonly = true });
         pub const COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR = bridge.property(WEBGL_compressed_texture_astc.COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR, .{ .template = false, .readonly = true });
 
-        pub const getSupportedProfiles = bridge.function(WEBGL_compressed_texture_astc.getSupportedProfiles, .{ .noop = true, .arity = 0 });
+        pub const getSupportedProfiles = bridge.function(WEBGL_compressed_texture_astc.getSupportedProfiles, .{ .arity = 0 });
     };
 };
 
@@ -1069,7 +1087,9 @@ pub const WEBGL_debug_renderer_info = struct {
 pub const WEBGL_debug_shaders = struct {
     _: u8 = 0,
 
-    pub fn getTranslatedShaderSource(_: *const WEBGL_debug_shaders) void {}
+    pub fn getTranslatedShaderSource(_: *const WEBGL_debug_shaders, _: ?*objects.WebGLShader) []const u8 {
+        return "";
+    }
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(WEBGL_debug_shaders);
@@ -1086,7 +1106,7 @@ pub const WEBGL_debug_shaders = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
-        pub const getTranslatedShaderSource = bridge.function(WEBGL_debug_shaders.getTranslatedShaderSource, .{ .noop = true, .arity = 1 });
+        pub const getTranslatedShaderSource = bridge.function(WEBGL_debug_shaders.getTranslatedShaderSource, .{ .arity = 1 });
     };
 };
 

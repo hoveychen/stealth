@@ -45,6 +45,8 @@ pub fn registerTypes() []const type {
         WebGLTexture,
         WebGLTransformFeedback,
         WebGLVertexArrayObject,
+        WebGLVertexArrayObjectOES,
+        WebGLTimerQueryEXT,
         WebGLUniformLocation,
         WebGLActiveInfo,
         WebGLShaderPrecisionFormat,
@@ -84,6 +86,35 @@ fn Handle(comptime js_name: [:0]const u8) type {
 
             pub const Meta = struct {
                 pub const name = js_name;
+                pub const prototype_chain = bridge.prototypeChain();
+                pub var class_id: bridge.ClassId = undefined;
+            };
+        };
+    };
+}
+
+/// The same, for the two handles an extension hands out. They are WebGLObject-
+/// rooted like the rest, but `[LegacyNoInterfaceObject]`: no global, and no
+/// `constructor` on the prototype either, so the brand is the only thing that
+/// names them. Measured, Chrome 150 -- `typeof WebGLVertexArrayObjectOES` is
+/// `undefined` while `typeof WebGLVertexArrayObject` is `function`, and the two
+/// are different types even though a vertex array is a vertex array.
+fn LegacyHandle(comptime js_name: [:0]const u8) type {
+    return struct {
+        const Self = @This();
+
+        pub const Proto = WebGLObject;
+
+        _proto: *WebGLObject,
+        _: u8 = 0,
+
+        pub const JsApi = struct {
+            pub const bridge = js.Bridge(Self);
+
+            pub const Meta = struct {
+                pub const name = js_name;
+                pub const no_interface_object = true;
+                pub const to_string_tag = js_name;
                 pub const prototype_chain = bridge.prototypeChain();
                 pub var class_id: bridge.ClassId = undefined;
             };
@@ -197,6 +228,10 @@ pub const WebGLTexture = Handle("WebGLTexture");
 pub const WebGLTransformFeedback = Handle("WebGLTransformFeedback");
 pub const WebGLVertexArrayObject = Handle("WebGLVertexArrayObject");
 pub const WebGLUniformLocation = PlainHandle("WebGLUniformLocation");
+
+/// The two an extension hands out rather than the context. See LegacyHandle.
+pub const WebGLVertexArrayObjectOES = LegacyHandle("WebGLVertexArrayObjectOES");
+pub const WebGLTimerQueryEXT = LegacyHandle("WebGLTimerQueryEXT");
 
 /// Describes one active attribute or uniform of a linked program. We never link
 /// anything, so `getActiveAttrib`/`getActiveUniform` answer null and this type

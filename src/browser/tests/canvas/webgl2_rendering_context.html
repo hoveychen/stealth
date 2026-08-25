@@ -251,6 +251,13 @@
 
   // A name nothing advertises is still refused.
   testing.expectEqual(null, ctx.getExtension("NOPE_not_real"));
+
+  // The two extensions 2.0 shares with 1.0 that answer something rather than
+  // nothing. Same values here: the profiles are the driver's, not the context's.
+  const astc = ctx.getExtension("WEBGL_compressed_texture_astc");
+  testing.expectEqual(onMac ? "ldr,hdr" : "ldr", astc.getSupportedProfiles().join(","));
+  const shaders = ctx.getExtension("WEBGL_debug_shaders");
+  testing.expectEqual("", shaders.getTranslatedShaderSource(ctx.createShader(ctx.VERTEX_SHADER)));
 }
 </script>
 
