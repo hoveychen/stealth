@@ -43,6 +43,7 @@ pub const Scope = enum {
     not_implemented,
     telemetry,
     unknown_prop,
+    prop_read,
     mcp,
     cache,
     websocket,

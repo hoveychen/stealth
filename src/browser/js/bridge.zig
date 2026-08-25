@@ -18,6 +18,7 @@
 
 const std = @import("std");
 const lp = @import("lightpanda");
+const log = @import("../../log.zig");
 
 const Frame = @import("../Frame.zig");
 const Factory = @import("../Factory.zig");
@@ -851,6 +852,58 @@ fn logUnknownProperty(local: *const js.Local, key: []const u8) !void {
             .first_stack = try ctx.arena.dupe(u8, (try local.stackTrace()) orelse "???"),
         };
     }
+}
+
+// Returns the member with its callback wrapped in a recorder that names it, so
+// a run can be asked afterwards which parts of the surface the page actually
+// reached. `unknown_properties` above answers the opposite question -- what we
+// don't have -- and a detector that reads a member we do have and dislikes the
+// answer shows up in neither the unknown list nor any test we would think to
+// write. Only the read half is wrapped: a write is the page telling us
+// something, not asking.
+//
+// Both the template and the snapshot's external-reference table have to name
+// the same function pointer, so Snapshot calls this on both paths rather than
+// wrapping at the point of attachment. Outside Debug it hands the member back
+// untouched and no wrapper exists at all.
+pub fn logReads(comptime JsApi: type, comptime member: []const u8, comptime value: anytype) @TypeOf(value) {
+    if (comptime lp.IS_DEBUG == false) {
+        return value;
+    }
+
+    const interface: []const u8 = if (@hasDecl(JsApi.Meta, "name")) JsApi.Meta.name else @typeName(JsApi);
+    const key: []const u8 = interface ++ "." ++ member;
+
+    var wrapped = value;
+    switch (@TypeOf(value)) {
+        Accessor => {
+            const getter = value.getter orelse return value;
+            wrapped.getter = recordingCallback(key, getter);
+        },
+        Function => wrapped.func = recordingCallback(key, value.func),
+        else => @compileError("logReads: " ++ @typeName(@TypeOf(value))),
+    }
+    return wrapped;
+}
+
+fn recordingCallback(
+    comptime key: []const u8,
+    comptime inner: *const fn (?*const v8.FunctionCallbackInfo) callconv(.c) void,
+) *const fn (?*const v8.FunctionCallbackInfo) callconv(.c) void {
+    return struct {
+        fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
+            // Checked per call rather than per build: this fires on every
+            // accessor and operation the page touches, which for a page doing
+            // real work is tens of thousands of times.
+            if (log.enabled(.prop_read, .debug)) {
+                const isolate = v8.v8__FunctionCallbackInfo__GetIsolate(handle).?;
+                if (Context.fromIsolate(.{ .handle = isolate })) |found| {
+                    found[0].recordPropertyRead(key);
+                }
+            }
+            inner(handle);
+        }
+    }.wrap;
 }
 
 // Given a Type, returns the length of the prototype chain, including self
