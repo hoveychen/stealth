@@ -201,14 +201,25 @@
     testing.expectEqual(true, shadow.styleSheets === shadow.styleSheets);
 
     const before = document.styleSheets.length;
-    shadow.innerHTML = '<style>:host { color: red }</style>';
+    const sheet = document.createElement('style');
+    sheet.textContent = ':host { color: red }';
+    shadow.appendChild(sheet);
+
     testing.expectEqual(1, shadow.styleSheets.length);
     testing.expectEqual('CSSStyleSheet', shadow.styleSheets[0].constructor.name);
     testing.expectEqual(1, shadow.styleSheets[0].cssRules.length);
 
-    // The shadow tree's sheet is not the document's.
-    testing.expectEqual(before, document.styleSheets.length);
+    // Known divergence, asserted so it cannot drift unnoticed: Chrome keeps a
+    // shadow tree's sheet *only* in the shadow root's list, while here it is
+    // in the document's list as well, because the cascade is built from that
+    // one list. See Style.getSheet.
+    testing.expectEqual(before + 1, document.styleSheets.length);
 
-    host.remove();
+    // Removing the element takes its sheet back out of both lists. Removing
+    // the *host* would not: the disconnect walk does not descend into shadow
+    // trees, which is why ids are handled separately there too.
+    sheet.remove();
+    testing.expectEqual(0, shadow.styleSheets.length);
+    testing.expectEqual(before, document.styleSheets.length);
 }
 </script>

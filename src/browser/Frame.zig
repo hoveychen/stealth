@@ -3452,13 +3452,21 @@ pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpt
 
         popover.removeFromOpen(el, self);
 
-        // If a <style> element is being removed, remove its sheet from the list
+        // If a <style> element is being removed, remove its sheet from every
+        // list that took it. A shadow tree's sheet is in its root's list too,
+        // and that root is no longer reachable by walking up from here --
+        // the element has already left the tree -- which is why the element
+        // remembers the list rather than re-deriving it.
         if (el.is(Element.Html.Style)) |style| {
             if (style._sheet) |sheet| {
                 if (self.document._style_sheets) |sheets| {
                     sheets.remove(sheet);
                 }
+                if (style._sheet_list) |sheets| {
+                    sheets.remove(sheet);
+                }
                 style._sheet = null;
+                style._sheet_list = null;
             }
             self._style_manager.sheetModified();
         } else if (el.is(Element.Html.Link)) |link| {
