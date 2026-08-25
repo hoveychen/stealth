@@ -197,3 +197,31 @@
     testing.expectEqual(false, option.defaultSelected)
   }
 </script>
+
+<!-- `text` is the element's descendant text content with ASCII whitespace
+     *stripped and collapsed*, not the raw textContent. A scraper reading
+     option labels off a pretty-printed <select> gets the indentation
+     otherwise. -->
+<select id="select_ws">
+  <option id="opt_ws">  A  </option>
+  <option id="opt_ws_inner">a
+	  b</option>
+  <option id="opt_ws_only">   </option>
+  <option id="opt_ws_value" value="kept">  keep value  </option>
+</select>
+
+<script id="text_strips_and_collapses">
+  testing.expectEqual('A', $('#opt_ws').text)
+  testing.expectEqual('a b', $('#opt_ws_inner').text)
+  testing.expectEqual('', $('#opt_ws_only').text)
+
+  // textContent is untouched: only `text` normalizes.
+  testing.expectEqual('  A  ', $('#opt_ws').textContent)
+</script>
+
+<script id="value_falls_back_to_collapsed_text">
+  // With no value attribute, value is the `text` IDL -- so it collapses too.
+  testing.expectEqual('a b', $('#opt_ws_inner').value)
+  // An explicit value attribute is returned as authored.
+  testing.expectEqual('kept', $('#opt_ws_value').value)
+</script>
