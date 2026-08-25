@@ -43,7 +43,7 @@ pub fn getType(_: *const StyleMedia) []const u8 {
 // The same evaluation matchMedia()/MediaQueryList.matches goes through, so the
 // two entry points can never disagree.
 pub fn matchMedium(_: *const StyleMedia, query: ?[]const u8, frame: *Frame) bool {
-    return MediaQuery.matches(query orelse "", frame._page.getViewport());
+    return MediaQuery.matches(query orelse "", frame.viewport());
 }
 
 pub const JsApi = struct {

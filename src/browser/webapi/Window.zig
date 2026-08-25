@@ -1216,20 +1216,27 @@ pub fn getScrollY(self: *const Window) u32 {
     return self._scroll_pos.y;
 }
 
+// The frame's own viewport, not the page's: a child frame is laid out in its
+// `<iframe>` element's box and a browser answers that box here. See
+// Frame.viewport.
 pub fn getInnerWidth(_: *const Window, frame: *Frame) u32 {
-    return frame._page.getViewport().width;
+    return frame.viewport().width;
 }
 
 // Faux-layout viewport height, used to decide whether an element is already
 // within view (e.g. scrollIntoViewIfNeeded).
 pub fn getInnerHeight(_: *const Window, frame: *Frame) u32 {
-    return frame._page.getViewport().height;
+    return frame.viewport().height;
 }
 
 // The viewport is the whole screen here, so the window box is the viewport and
 // the window sits at the origin. Real browsers always answer these; scripts
 // read them bare (`outerWidth`, not `window.outerWidth`), so leaving them out
 // turns a fingerprinting probe into a ReferenceError that kills its caller.
+//
+// Unlike inner*, these stay the *page's* viewport in a child frame: outer is the
+// browser window, which a frame does not have one of. Measured on Chrome 151 --
+// a 300x65 iframe's window reports outerWidth 1920 and outerHeight 1080.
 pub fn getOuterWidth(_: *const Window, frame: *Frame) u32 {
     return frame._page.getViewport().width;
 }

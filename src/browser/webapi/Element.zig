@@ -1176,8 +1176,29 @@ pub fn getOrCreateStyle(self: *Element, frame: *Frame) !*CSSStyleDeclaration {
     return gop.value_ptr.*;
 }
 
+// The element's inline `style=` declaration, materializing it from the
+// attribute if nothing has asked for `el.style` yet.
+//
+// A plain map lookup was not enough: the map is filled by getOrCreateStyle,
+// which only runs when script touches `el.style` or the CSSOM does. So an
+// `<iframe style="width:300px;height:65px">` that no script had reached
+// measured as the UA stylesheet's undeclared 300x150 in `dimensions` below,
+// and the child document laid out in that box read 150 tall through both
+// documentElement.clientHeight and window.innerHeight. Reading it once through
+// `el.style` first made the same page answer 65 -- an order dependence, not a
+// layout rule.
+//
+// Same idiom StyleManager.getInlineStyleProperty uses, so the cascade and these
+// callers resolve an inline declaration from the same source.
 fn getStyle(self: *Element, frame: *Frame) ?*CSSStyleDeclaration {
-    return self.ownerFrame(frame)._element_styles.get(self);
+    const owner = self.ownerFrame(frame);
+    return owner._element_styles.get(self) orelse blk: {
+        if (self.getAttributeSafe(comptime .wrap("style")) == null) break :blk null;
+        break :blk self.getOrCreateStyle(owner) catch |err| {
+            log.err(.browser, "Element getOrCreateStyle", .{ .err = err });
+            break :blk null;
+        };
+    };
 }
 
 pub fn setStyle(self: *Element, value: []const u8, frame: *Frame) !void {

@@ -43,11 +43,13 @@ pub fn getMedia(self: *const MediaQueryList) []const u8 {
 }
 
 /// Re-evaluates the stored query against the current viewport on every call
-/// so the result stays in sync with viewport emulation. The viewport comes
-/// from the page (overridable via Emulation.setDeviceMetricsOverride),
-/// matching `Window.innerWidth` / `innerHeight`.
+/// so the result stays in sync with viewport emulation. The viewport is the
+/// frame's own -- the page's for the top-level frame (overridable via
+/// Emulation.setDeviceMetricsOverride), the `<iframe>` element's box for a child
+/// -- matching `Window.innerWidth` / `innerHeight`. A `(max-width: 400px)` query
+/// matches inside a 300x65 frame on a 1920-wide page, measured on Chrome 151.
 pub fn getMatches(self: *const MediaQueryList, frame: *Frame) bool {
-    return MediaQuery.matches(self._media, frame._page.getViewport());
+    return MediaQuery.matches(self._media, frame.viewport());
 }
 
 // TODO: `change` events need to fire on every listener registered here (and

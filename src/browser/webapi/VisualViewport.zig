@@ -55,12 +55,15 @@ pub fn getScale(_: *const VisualViewport) f64 {
     return 1.0;
 }
 
+// The frame's own viewport, the same box `window.innerWidth` reports -- a
+// browser gives a child frame its `<iframe>` element's box here, not the top
+// document's. See Frame.viewport.
 pub fn getWidth(_: *const VisualViewport, frame: *Frame) u32 {
-    return frame._page.getViewport().width;
+    return frame.viewport().width;
 }
 
 pub fn getHeight(_: *const VisualViewport, frame: *Frame) u32 {
-    return frame._page.getViewport().height;
+    return frame.viewport().height;
 }
 
 pub const JsApi = struct {
