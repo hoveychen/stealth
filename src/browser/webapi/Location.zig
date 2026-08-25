@@ -136,6 +136,48 @@ pub fn setPathname(_: *const Location, pathname: []const u8, frame: *Frame) !voi
     }, .{ .script = frame });
 }
 
+/// The four components Chrome lets a page write and we did not. Each rebuilds
+/// the URL around the one part that changed and navigates, exactly the way the
+/// pathname setter above does -- there is no in-place mutation of a Location.
+///
+/// Their absence was readable without ever assigning anything:
+/// `Object.getOwnPropertyDescriptor(location, 'protocol').set` answers
+/// `undefined` on an engine that made the attribute read-only and a function on
+/// Chrome, which is the same shape of tell as the member's placement.
+pub fn setProtocol(_: *const Location, protocol: []const u8, frame: *Frame) !void {
+    const new_url = try U.setProtocol(frame.url, protocol, frame.call_arena);
+    return frame.scheduleNavigation(new_url, .{
+        .reason = .script,
+        .kind = .{ .push = null },
+    }, .{ .script = frame });
+}
+
+pub fn setHost(_: *const Location, host: []const u8, frame: *Frame) !void {
+    const new_url = try U.setHost(frame.url, host, frame.call_arena);
+    return frame.scheduleNavigation(new_url, .{
+        .reason = .script,
+        .kind = .{ .push = null },
+    }, .{ .script = frame });
+}
+
+pub fn setHostname(_: *const Location, hostname: []const u8, frame: *Frame) !void {
+    const new_url = try U.setHostname(frame.url, hostname, frame.call_arena);
+    return frame.scheduleNavigation(new_url, .{
+        .reason = .script,
+        .kind = .{ .push = null },
+    }, .{ .script = frame });
+}
+
+/// An empty string clears the port, which is why the underlying helper takes an
+/// optional: `location.port = ''` drops it rather than writing an empty one.
+pub fn setPort(_: *const Location, port: []const u8, frame: *Frame) !void {
+    const new_url = try U.setPort(frame.url, if (port.len == 0) null else port, frame.call_arena);
+    return frame.scheduleNavigation(new_url, .{
+        .reason = .script,
+        .kind = .{ .push = null },
+    }, .{ .script = frame });
+}
+
 pub fn setSearch(_: *const Location, search: []const u8, frame: *Frame) !void {
     const new_url = try U.setSearch(frame.url, search, frame.call_arena);
     return frame.scheduleNavigation(new_url, .{
@@ -217,12 +259,14 @@ pub const JsApi = struct {
     pub const search = bridge.accessor(Location.getSearch, Location.setSearch, unforgeable);
     pub const hash = bridge.accessor(Location.getHash, Location.setHash, unforgeable);
     pub const pathname = bridge.accessor(Location.getPathname, Location.setPathname, unforgeable);
-    pub const hostname = bridge.accessor(Location.getHostname, null, unforgeable);
-    pub const host = bridge.accessor(Location.getHost, null, unforgeable);
-    pub const port = bridge.accessor(Location.getPort, null, unforgeable);
+    pub const hostname = bridge.accessor(Location.getHostname, Location.setHostname, unforgeable);
+    pub const host = bridge.accessor(Location.getHost, Location.setHost, unforgeable);
+    pub const port = bridge.accessor(Location.getPort, Location.setPort, unforgeable);
+    // `origin` and `ancestorOrigins` are the interface's only two read-only
+    // attributes; every other one is writable on Chrome.
     pub const origin = bridge.accessor(Location.getOrigin, null, unforgeable);
     pub const ancestorOrigins = bridge.accessor(Location.getAncestorOrigins, null, unforgeable);
-    pub const protocol = bridge.accessor(Location.getProtocol, null, unforgeable);
+    pub const protocol = bridge.accessor(Location.getProtocol, Location.setProtocol, unforgeable);
     pub const assign = bridge.function(Location.assign, unforgeable);
     pub const replace = bridge.function(Location.replace, unforgeable);
     pub const reload = bridge.function(Location.reload, unforgeable);
