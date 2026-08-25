@@ -12881,3 +12881,40 @@ Measured on the replay, both arms, same capture:
   the wire. Chrome shows none: the scheme is refused before the network service,
   so CDP never reports them. Not yet checked whether the two arms' *JS-visible*
   outcome for those probes matches.
+
+### The burn is one-time, and nothing we can wrap is holding it (2026-08-24, same round)
+
+Chrome's first load of a fresh profile reports 645-786 in that counter. Its
+*second* cycle through the same interstitial reports 5. Ours reports 14-22 then
+5-9. So the difference is entirely in the first pass over a cold browser, and
+after that the two engines agree.
+
+Wrapping candidates and charging each call, on the replay, both arms:
+
+| wrapped | Chrome's total | counter still |
+|---|---|---|
+| `Date.now` / `performance.now` / `Math.random` (`probe-clock-calls.js`) | 65 + 2 + 62 calls | 667 |
+| `charCodeAt` / `charAt` / `fromCharCode` / `fn.toString` (`probe-hash-work.js`) | 635673 charCodeAt over a 496239-char string | 645 |
+| every string, regex and codec builtin (`probe-native-time.js`) | 1.7ms across all of them | 674 |
+| layout, geometry, canvas entry points (`probe-layout-time.js`) | 8ms (ours: 30ms) | 660 |
+| every method on WebGL / WebAudio / SubtleCrypto / Performance / Navigator / Storage / MediaDevices prototypes (`probe-device-time.js`) | nothing above noise; WebGL and audio are never touched at this stage | 698 |
+
+And the raw work is not the engines' difference: 650k `charCodeAt` at random
+offsets into a 496239-char string plus a 200k-iteration string build runs in
+5/2/3ms on *both* engines (`scratch/expr-cc.js` via `run-expr.mjs`). Creating
+and reading 20k `Error().stack` is 19ms here against 13ms in Chrome, so it is
+not stack capture either.
+
+What is left is engine work inside the JS frame that no page-visible API
+mediates, spent once and never again — V8's lazy compilation of a 578KB script's
+inner functions is the shape that fits (it lands as self time in whichever frame
+first calls each function, and a second load hits the code cache). Both engines
+compile with `kNoCompileOptions` (`src/script/Runtime.zig:308`,
+`src/browser/js/Local.zig:210`), so if that is the answer it is a real
+difference in how much work the two V8s do on first call, and the next step is
+to measure it directly: a synthetic ~500KB script of many large functions, timed
+from inside the page, in both arms.
+
+Also worth a look: on the replay Chrome sends a fourth POST per cycle, ~2.2KB
+and binary (leading tab, NULs, replacement characters), that this engine never
+sends. Not investigated.
