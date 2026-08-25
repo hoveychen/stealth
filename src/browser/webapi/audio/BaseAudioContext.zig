@@ -40,6 +40,7 @@ const AudioListener = @import("AudioListener.zig");
 const PeriodicWave = @import("PeriodicWave.zig");
 const AudioDestinationNode = @import("AudioDestinationNode.zig");
 const worklet = @import("worklet.zig");
+const DOMException = @import("../DOMException.zig");
 const handler_property = @import("../handler_property.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
@@ -302,12 +303,57 @@ pub fn createWaveShaper(self: *BaseAudioContext, exec: *Execution) !*nodes.WaveS
     return nodes.WaveShaperNode.create(self, exec);
 }
 
-// A promise that never settles. There is no decoder behind it, and Chrome's
-// own rejection would name a format failure this engine cannot honestly
-// diagnose; a pending promise is what a script sees while a real decode runs.
-pub fn decodeAudioData(_: *BaseAudioContext, _: ?js.Value, exec: *const Execution) !js.Promise {
-    return exec.js.local.?.createPromiseResolver().promise();
+// There is no decoder behind this, but Chrome always settles: an AudioBuffer
+// for bytes it can decode, an EncodingError for bytes it cannot. Taking the
+// second branch is the honest answer here, and -- unlike the pending promise
+// this used to return -- one the caller can carry on from. macys' Akamai
+// sensor awaits `decodeAudioData(new ArrayBuffer(4))` inside a Promise.all;
+// while that await hung, the sensor never sent its second round and the
+// interstitial never cleared (38th baton, offline replay).
+//
+// Chrome also detaches the buffer it is handed. This does not, for want of a
+// binding for `ArrayBuffer::Detach`, so the DataCloneError a detached buffer
+// gets there has no path to happen here.
+pub fn decodeAudioData(
+    self: *BaseAudioContext,
+    data_: ?js.Value,
+    _: ?js.Function,
+    error_callback: ?js.Function,
+    exec: *const Execution,
+) !js.Promise {
+    const local = exec.js.local.?;
+    var resolver = local.createPromiseResolver();
+
+    const is_buffer = if (data_) |data| data.isArrayBuffer() else false;
+    if (!is_buffer) {
+        // Chrome reports the IDL mismatch through the promise rather than
+        // throwing, and an ArrayBufferView is as wrong as a null (measured).
+        resolver.rejectError("BaseAudioContext.decodeAudioData", .{
+            .type_error = "Failed to execute 'decodeAudioData' on 'BaseAudioContext': " ++
+                "parameter 1 is not of type 'ArrayBuffer'.",
+        });
+        return resolver.promise();
+    }
+
+    resolver.reject("BaseAudioContext.decodeAudioData", DOMException.init(
+        "Unable to decode audio data",
+        "EncodingError",
+    ));
+    const promise = resolver.promise();
+
+    // The legacy callback pair predates the promise and Chrome still honours
+    // it: the error callback gets the same exception, ahead of whatever the
+    // caller attached. Hanging it off the promise is what puts it in that
+    // order. The success half is unreachable while every decode fails, so the
+    // fulfilled slot only has to be something callable.
+    if (error_callback) |callback| {
+        const chained = try promise.thenAndCatch(local.newCallback(unusedFulfilled, self), callback);
+        chained.markAsHandled();
+    }
+    return promise;
 }
+
+fn unusedFulfilled(_: *BaseAudioContext) void {}
 
 // Moves the state and fires statechange. Called by AudioContext's
 // suspend/close; `running` is unreachable — see resume() there.

@@ -1607,3 +1607,70 @@
     );
   }
 </script>
+
+<script id=audio_decode_audio_data type=module>
+{
+  // decodeAudioData used to hand back a promise that never settled, which parks
+  // any caller that awaits it forever -- macys' Akamai sensor sits on exactly
+  // this one inside a Promise.all and never sends its next round. Chrome always
+  // settles: an EncodingError for bytes it cannot decode, and a TypeError,
+  // reported through the promise rather than thrown, for a non-ArrayBuffer.
+  // Every reading below is off a headless Chrome 151.
+  const state = await testing.async();
+  const ctx = new AudioContext();
+
+  const settle = (p) => Promise.race([
+    p.then((v) => 'resolved:' + v, (e) => (e && e.name ? e.name + ': ' + e.message : 'rejected:' + e)),
+    new Promise((r) => setTimeout(() => r('pending'), 200)),
+  ]);
+
+  const zero4 = await settle(ctx.decodeAudioData(new ArrayBuffer(4)));
+  const zero0 = await settle(ctx.decodeAudioData(new ArrayBuffer(0)));
+  const nullArg = await settle(ctx.decodeAudioData(null));
+  const viewArg = await settle(ctx.decodeAudioData(new Uint8Array(4)));
+  const noArg = await settle(Promise.resolve().then(() => ctx.decodeAudioData()));
+  const offline = await settle(new OfflineAudioContext(1, 128, 44100).decodeAudioData(new ArrayBuffer(4)));
+
+  let isDomException = 'pending';
+  await Promise.race([
+    ctx.decodeAudioData(new ArrayBuffer(4)).catch((e) => {
+      isDomException = e instanceof DOMException && e.name === 'EncodingError' && e.code === 0;
+    }),
+    new Promise((r) => setTimeout(r, 200)),
+  ]);
+
+  // The legacy error callback fires with the same exception, and the promise
+  // still rejects -- in that order.
+  const legacy = await new Promise((resolve) => {
+    const seen = [];
+    ctx.decodeAudioData(
+      new ArrayBuffer(4),
+      (buf) => seen.push('success'),
+      (e) => seen.push('error ' + e.name),
+    ).catch((e) => seen.push('promise ' + e.name));
+    setTimeout(() => resolve(seen.join(' | ')), 200);
+  });
+
+  state.resolve();
+  await state.done(() => {
+    const encoding = 'EncodingError: Unable to decode audio data';
+    testing.expectEqual(encoding, zero4);
+    testing.expectEqual(encoding, zero0);
+    testing.expectEqual(encoding, offline);
+    testing.expectEqual(true, isDomException);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'decodeAudioData' on 'BaseAudioContext': parameter 1 is not of type 'ArrayBuffer'.",
+      nullArg,
+    );
+    testing.expectEqual(
+      "TypeError: Failed to execute 'decodeAudioData' on 'BaseAudioContext': parameter 1 is not of type 'ArrayBuffer'.",
+      viewArg,
+    );
+    testing.expectEqual(
+      "TypeError: Failed to execute 'decodeAudioData' on 'BaseAudioContext': 1 argument required, but only 0 present.",
+      noArg,
+    );
+    testing.expectEqual('error EncodingError | promise EncodingError', legacy);
+  });
+}
+</script>
