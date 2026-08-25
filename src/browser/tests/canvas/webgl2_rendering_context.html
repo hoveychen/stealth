@@ -86,6 +86,28 @@
     gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL),
   );
 
+  // Same gate as on WebGL 1 (see webgl_rendering_context.html): until this
+  // context has asked for WEBGL_debug_renderer_info, both pnames answer null.
+  // A fix that reached only one of the two contexts would leave a detector
+  // free to ask the other.
+  {
+    const fresh = () => document.createElement("canvas").getContext("webgl2");
+    const gated = fresh();
+    testing.expectEqual(null, gated.getParameter(0x9245));
+    testing.expectEqual(null, gated.getParameter(0x9246));
+    testing.expectEqual(true, gated.getExtension("WEBGL_debug_renderer_info") !== null);
+    testing.expectEqual(
+      mac ? "Google Inc. (Apple)" : "Google Inc. (Google)",
+      gated.getParameter(0x9245),
+    );
+
+    // Per-context, and a different extension does not open it.
+    testing.expectEqual(null, fresh().getParameter(0x9246));
+    const other = fresh();
+    other.getExtension("WEBGL_lose_context");
+    testing.expectEqual(null, other.getParameter(0x9246));
+  }
+
   // The signed sentinel, which is -1 rather than an unsigned wrap-around.
   testing.expectEqual(-1, gl.TIMEOUT_IGNORED);
 

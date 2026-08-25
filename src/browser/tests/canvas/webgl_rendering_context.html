@@ -100,6 +100,48 @@
   );
 }
 
+// The extension gates the two strings it names. Chrome answers null for 37445
+// and 37446 until WEBGL_debug_renderer_info has been asked for on *that*
+// context, and only then hands the GPU over -- measured on Chrome 150, see
+// tools/fingerprint/results/kasada-argument-followup.json. Kasada spent 138 of
+// its 152 getParameter calls on 37446 alone, so answering it unasked is one
+// expression that separates the engine from a browser.
+{
+  const fresh = () => document.createElement("canvas").getContext("webgl");
+  const mac = navigator.platform === "MacIntel";
+  const vendor = mac ? "Google Inc. (Apple)" : "Google Inc. (Google)";
+  const renderer = mac
+    ? "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
+    : "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)";
+
+  const ctx = fresh();
+  testing.expectEqual(null, ctx.getParameter(0x9245));
+  testing.expectEqual(null, ctx.getParameter(0x9246));
+  testing.expectEqual(true, ctx.getExtension("WEBGL_debug_renderer_info") !== null);
+  testing.expectEqual(vendor, ctx.getParameter(0x9245));
+  testing.expectEqual(renderer, ctx.getParameter(0x9246));
+
+  // The gate is per-context, not per-page: opening it on one context leaves
+  // every other context still answering null.
+  testing.expectEqual(null, fresh().getParameter(0x9246));
+
+  // Listing the extensions is not asking for one.
+  const listed = fresh();
+  testing.expectEqual(true, listed.getSupportedExtensions().includes("WEBGL_debug_renderer_info"));
+  testing.expectEqual(null, listed.getParameter(0x9246));
+
+  // Nor does a different extension open it.
+  const other = fresh();
+  other.getExtension("WEBGL_lose_context");
+  testing.expectEqual(null, other.getParameter(0x9246));
+
+  // getExtension matches the name case-insensitively, so a lowercase spelling
+  // opens the gate too.
+  const lower = fresh();
+  testing.expectEqual(true, lower.getExtension("webgl_debug_renderer_info") !== null);
+  testing.expectEqual(renderer, lower.getParameter(0x9246));
+}
+
 // WEBGL_lose_context
 {
   const element = document.createElement("canvas");
