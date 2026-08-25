@@ -62,6 +62,13 @@ _unpack_color_space: ColorSpace = .srgb,
 /// for the two members WebGL is asked for and never grants.
 _attributes: attributes.Gl = .{},
 
+/// Whether this context has asked for WEBGL_debug_renderer_info, which gates
+/// the only two `getParameter` pnames that name a real GPU. Chrome answers
+/// null for 37445 and 37446 until the extension has been requested, and the
+/// gate is per-context: enabling it on one context leaves every other one
+/// still answering null (measured, Chrome 150). See getParameter below.
+_debug_renderer_info: bool = false,
+
 /// WebIDL `PredefinedColorSpace`, whose only two members these attributes take.
 /// Chrome *ignores* an out-of-range string rather than throwing the TypeError a
 /// WebIDL enum would normally produce -- measured, probe-setter-semantics.
@@ -708,9 +715,13 @@ pub fn getParameter(self: *const WebGLRenderingContext, pname: u32, exec: *Execu
         COLOR_WRITEMASK => boolArray(&.{ true, true, true, true }),
         // WEBGL_debug_renderer_info. Chrome exposes the true GPU behind ANGLE
         // here, which is the single most identifying pair of strings on the
-        // whole WebGL surface, so it has to come from the reference snapshot.
-        Extension.Type.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => .{ .string = gpu.unmasked_vendor },
-        Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => .{ .string = gpu.unmasked_renderer },
+        // whole WebGL surface, so it has to come from the reference snapshot --
+        // but only once this context has asked for the extension that names
+        // these two pnames. Unasked, Chrome answers null and treats the read as
+        // an invalid enum; answering the GPU anyway is a tell in one expression,
+        // and Kasada spent 138 of its 152 getParameter calls on 37446 alone.
+        Extension.Type.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => if (self._debug_renderer_info) .{ .string = gpu.unmasked_vendor } else null,
+        Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => if (self._debug_renderer_info) .{ .string = gpu.unmasked_renderer } else null,
         else => null,
     };
 
@@ -724,7 +735,7 @@ pub fn getParameter(self: *const WebGLRenderingContext, pname: u32, exec: *Execu
 }
 
 /// Enables a WebGL extension.
-pub fn getExtension(_: *const WebGLRenderingContext, name: []const u8, exec: *Execution) !?Extension {
+pub fn getExtension(self: *WebGLRenderingContext, name: []const u8, exec: *Execution) !?Extension {
     const tag = Extension.find(name) orelse return null;
 
     // A name this driver does not advertise answers null, the way Chrome does
@@ -739,6 +750,8 @@ pub fn getExtension(_: *const WebGLRenderingContext, name: []const u8, exec: *Ex
     return switch (tag) {
         .WEBGL_debug_renderer_info => {
             const info = try exec._factory.create(Extension.Type.WEBGL_debug_renderer_info{});
+            // Opens the getParameter gate, and only for this context.
+            self._debug_renderer_info = true;
             return .{ .WEBGL_debug_renderer_info = info };
         },
         .WEBGL_lose_context => {
