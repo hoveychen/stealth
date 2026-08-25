@@ -25,6 +25,13 @@ pub fn getTBodies(self: *Table, frame: *Frame) collections.NodeLive(.child_tag) 
     return collections.NodeLive(.child_tag).init(self.asNode(), .tbody, frame);
 }
 
+// thead rows, then the rows parented by the table or a tbody, then tfoot rows.
+// The ordering lives in TreeWalker.TableRows, next to the reason it cannot be
+// a plain tree walk.
+pub fn getRows(self: *Table, frame: *Frame) collections.NodeLive(.table_rows) {
+    return collections.NodeLive(.table_rows).init(self.asNode(), {}, frame);
+}
+
 pub fn deleteRow(self: *Table, index: i32, frame: *Frame) !void {
     if (index < -1) {
         return error.IndexSizeError;
@@ -182,6 +189,7 @@ pub const JsApi = struct {
     pub const bgColor = reflect.stringNullToEmpty("bgcolor");
     pub const @"align" = reflect.string("align");
 
+    pub const rows = bridge.accessor(Table.getRows, null, .{});
     pub const tBodies = bridge.accessor(Table.getTBodies, null, .{});
     pub const deleteRow = bridge.function(Table.deleteRow, .{ .ce_reactions = true });
     pub const insertRow = bridge.function(Table.insertRow, .{ .ce_reactions = true });

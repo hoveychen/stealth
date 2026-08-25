@@ -199,3 +199,70 @@
     testing.expectEqual(afterStray, row.cells[0]);
   }
 </script>
+
+<!-- `rows` is not a tree-order walk. The spec orders it thead rows first, then
+     the rows whose parent is the table itself or a tbody, then tfoot rows --
+     each group in tree order. The sections are deliberately authored out of
+     order here (tfoot before tbody, thead third), which is legal and was even
+     required by HTML4, so a document-order implementation gets a different
+     answer than Chrome does. Chrome on this markup reads
+     ["h1","loose1","b1","b2","loose2","f1","f2"] (measured, headed 151). -->
+<table id="rows_order">
+  <tr id="ro_loose1"><td>loose1</td></tr>
+  <tfoot><tr id="ro_f1"><td>f1</td></tr></tfoot>
+  <tbody><tr id="ro_b1"><td>b1</td></tr></tbody>
+  <thead><tr id="ro_h1"><td>h1</td></tr></thead>
+  <tbody><tr id="ro_b2"><td>b2</td></tr></tbody>
+  <tr id="ro_loose2"><td>loose2</td></tr>
+  <tfoot><tr id="ro_f2"><td>f2</td></tr></tfoot>
+</table>
+
+<script id="table_rows_spec_order">
+{
+  const t = $('#rows_order')
+  testing.expectEqual(
+    'ro_h1,ro_loose1,ro_b1,ro_b2,ro_loose2,ro_f1,ro_f2',
+    Array.from(t.rows).map(r => r.id).join(','))
+  testing.expectEqual(7, t.rows.length)
+  testing.expectEqual('ro_b1', t.rows[2].id)
+  testing.expectEqual('HTMLCollection', t.rows.constructor.name)
+  // Out of range: the indexed getter gives undefined, item() gives null.
+  testing.expectEqual(undefined, t.rows[7])
+  testing.expectEqual(null, t.rows.item(7))
+
+  // Indexed access by name/id, like any other HTMLCollection.
+  testing.expectEqual('ro_loose2', t.rows.namedItem('ro_loose2').id)
+}
+</script>
+
+<script id="table_rows_is_live">
+{
+  const t = $('#rows_order')
+  const rows = t.rows
+  const added = t.tBodies[1].appendChild(document.createElement('tr'))
+  added.id = 'ro_added'
+  testing.expectEqual(8, rows.length)
+  // It lands after b1 (same tbody) and before b2's tbody, still ahead of tfoot.
+  testing.expectEqual(
+    'ro_h1,ro_loose1,ro_b1,ro_added,ro_b2,ro_loose2,ro_f1,ro_f2',
+    Array.from(rows).map(r => r.id).join(','))
+  added.remove()
+  testing.expectEqual(7, rows.length)
+}
+</script>
+
+<script id="row_index_properties">
+{
+  // rowIndex is the row's position in its table's `rows`; sectionRowIndex is
+  // its position within its own section.
+  testing.expectEqual(0, $('#ro_h1').rowIndex)
+  testing.expectEqual(5, $('#ro_f1').rowIndex)
+  testing.expectEqual(0, $('#ro_b2').sectionRowIndex)
+  testing.expectEqual(0, $('#ro_f2').sectionRowIndex)
+
+  // A row with no table has neither index.
+  const orphan = document.createElement('tr')
+  testing.expectEqual(-1, orphan.rowIndex)
+  testing.expectEqual(-1, orphan.sectionRowIndex)
+}
+</script>

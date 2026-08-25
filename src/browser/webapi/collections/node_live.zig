@@ -40,6 +40,7 @@ const Mode = enum {
     child_elements,
     child_tag,
     cells,
+    table_rows,
     select_options,
     selected_options,
     links,
@@ -82,6 +83,7 @@ const Filters = union(Mode) {
     child_elements,
     child_tag: Element.Tag,
     cells,
+    table_rows,
     select_options,
     selected_options,
     links,
@@ -118,6 +120,8 @@ pub fn NodeLive(comptime mode: Mode) type {
     const TW = switch (mode) {
         .tag, .tag_name, .tag_name_ns, .class_name, .name, .all_elements, .links, .anchors, .form => TreeWalker.FullExcludeSelf,
         .child_elements, .child_tag, .cells => TreeWalker.Children,
+        // Not a tree-order walk: see TreeWalker.TableRows.
+        .table_rows => TreeWalker.TableRows,
         // A select's options can sit one level down, inside an <optgroup>, so
         // these two walk the subtree and filter on the parent instead.
         .select_options, .selected_options => TreeWalker.FullExcludeSelf,
@@ -365,6 +369,9 @@ pub fn NodeLive(comptime mode: Mode) type {
                     const el = node.is(Element) orelse return false;
                     return el.is(Element.Html.TableCell) != null;
                 },
+                // The walker already yields exactly the rows, in the order the
+                // spec asks for, so there is nothing left here to filter.
+                .table_rows => return node._type == .element,
                 .select_options, .selected_options => {
                     const opt = node.is(Element.Html.Option) orelse return false;
 
@@ -478,6 +485,7 @@ pub fn NodeLive(comptime mode: Mode) type {
                 .child_elements => .{ ._data = .{ .child_elements = self } },
                 .child_tag => .{ ._data = .{ .child_tag = self } },
                 .cells => .{ ._data = .{ .cells = self } },
+                .table_rows => .{ ._data = .{ .table_rows = self } },
                 .select_options => .{ ._data = .{ .select_options = self } },
                 .selected_options => .{ ._data = .{ .selected_options = self } },
                 .links => .{ ._data = .{ .links = self } },
