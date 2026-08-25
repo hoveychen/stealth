@@ -13307,3 +13307,49 @@ Two more readings taken along the way, both real and neither explained:
 And a probe artifact to not mistake for a finding: `getParameter` enum *names*
 come off the first context the probe sees, so an arm whose first context is
 WebGL1 prints raw numbers for the WebGL2-only enums. The values were identical.
+
+### It was `contentDocument`, and the realm rule was the bug
+
+The trigger turned out to be one accessor, and the list above missed it because
+every entry on it reads the child document through the *child's* own accessor.
+
+`iframe.contentWindow.document` goes through an accessor on the child's global,
+so it enters the child's v8 context and the wrapper is born in the child's realm.
+`iframe.contentDocument` is an accessor on the parent's
+`HTMLIFrameElement.prototype`, so reading it first built the child's document in
+the *parent's* realm — and, because `mapZigInstanceToJs` caches wrappers in an
+identity map keyed by the Zig pointer with no realm in the key, shared by every
+frame of the page, that answer was permanent. Everything the document created
+followed, since `createElement` was then resolved off the parent's
+`Document.prototype`, and calling it enters the parent's context. The child's own
+script saw it too: inside the frame,
+`Object.getPrototypeOf(document) === HTMLDocument.prototype` read false.
+
+`expr-content-document-realm.js` is the whole thing on a plain page: two frames,
+identical but for the order of the first read. Six fields disagreed with Chrome
+before the fix and none after. Fixed by applying the rule Web IDL already states
+and `Caller.errorLocal` already applies to exceptions — a platform object belongs
+to its relevant realm, and a node's is its node document's frame.
+
+Two things that came out of chasing it and are worth not re-deriving:
+
+* **The loader's tamper check is not a fork in the road.** At offset 50859 it
+  keeps a hidden iframe's `contentWindow` in `Ea`, snapshots
+  `Function.prototype.toString`, and then swaps `fetch`/`eval` for the child
+  frame's if either of the top frame's has been patched — `Gb` asks whether
+  `toString` still spells `[native code]`. Both arms answer yes to both and keep
+  the top frame's (`expr-loader-native-check.js`, identical field for field).
+* **The extra `getContext` is gone, and what is left is an ordering difference.**
+  With the realm defect fixed, both arms make the same eight `getContext` calls
+  on the same receivers with the same arguments, and the sensor's collectors
+  complete in a different order: the one that builds a hidden iframe to compare
+  its `WEBGL_debug_renderer_info` against the top frame's (`SNK`, from `TEY`)
+  lands 36th of 99 here and 87th in Chrome, and the two offscreen-canvas groups
+  swap with it. The sensor drives its collectors through a generator, so the
+  sequence records completion order. Not iframe readiness:
+  `expr-iframe-load-timing.js` has both arms firing `load` synchronously during
+  `appendChild`, with `readyState` already `complete`, at the same position
+  relative to a microtask/macrotask counter.
+
+Real macys is still `empty-document` after the fix, so the realm defect was not
+this station's gate.
