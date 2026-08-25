@@ -13189,3 +13189,45 @@ is not a gap. `(width = 1920px)` is true in both, so the width agrees — but th
 headless harness viewport is not 1080 tall and its `screen` is 800x600, which is
 the same viewport/screen axis the earlier chapters call out. Five rows are
 excluded on that basis and the acceptance script names them.
+
+## The GPU answered before anything asked for it (2026-08-25)
+
+`getParameter(37446)` is the single most-read expression Kasada has: 138 of its
+152 `getParameter` calls on x-hyatt asked for that one pname. We answered it
+with the real string behind ANGLE every time. Chrome answers `null` until the
+context has asked for `WEBGL_debug_renderer_info` — the extension whose two
+constants those pnames *are*. Both arms now agree on all fourteen `webgl*` rows
+of `probes/kasada-argument-followup.js`; before and after are in
+`results/webgl-debug-renderer-gate.json`.
+
+The gate turned out to have a shape worth measuring rather than guessing, so
+`probes/webgl-debug-renderer-gate.js` pins it down:
+
+| question | Chrome | so |
+|---|---|---|
+| enable on context A, read on context B | `null` | the gate is per-context, not per-page |
+| `getSupportedExtensions()` then read | `null` | listing an extension is not asking for one |
+| `getExtension('WEBGL_lose_context')` then read | `null` | a *different* extension does not open it |
+| `getExtension('webgl_debug_renderer_info')` | opens it | the name is matched case-insensitively |
+| `typeof` the gated read | `object` | it is `null`, not `undefined` |
+
+A bool per context, set in `getExtension` and read in `getParameter`, on both
+`WebGLRenderingContext` and `WebGL2RenderingContext` — the two are separate
+types with separate prototypes, and a gate on only one of them is a gate a
+detector walks around by asking the other.
+
+**Two rows in that probe still differ, and neither is the gate.** They are their
+own gaps, found while measuring this one:
+
+- `gl.getExtension('OES_texture_float')` is **truthy in Chrome and falsy here**.
+  Chrome hands back a named interface object — `[object OESTextureFloat]`,
+  `[object EXTBlendMinMax]`, one per extension — where our WebGL 1 union carries
+  a `void` payload that marshals to `undefined`. That is ~35 extensions which
+  `getSupportedExtensions` advertises and `getExtension` then refuses, a
+  self-contradiction in one expression, and any script that feature-detects with
+  `if (gl.getExtension(name))` takes the other branch. WebGL 2 already models
+  this correctly with `supported: struct {}`, though it answers
+  `[object Object]` where Chrome names the interface.
+- `getError()` after the gated read is **1280 (`INVALID_ENUM`) in Chrome and 0
+  here**, because our `getError` is a constant `NO_ERROR`. The gated read is one
+  way in; any invalid enum is another.

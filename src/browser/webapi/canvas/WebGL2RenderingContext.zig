@@ -60,6 +60,10 @@ _unpack_color_space: ColorSpace = .srgb,
 /// for the two members WebGL is asked for and never grants.
 _attributes: attributes.Gl = .{},
 
+/// Whether this context has asked for WEBGL_debug_renderer_info. Same
+/// per-context gate as on WebGL 1; see WebGLRenderingContext.
+_debug_renderer_info: bool = false,
+
 pub const Surface = WebGL1.Surface;
 pub const ColorSpace = WebGL1.ColorSpace;
 
@@ -687,7 +691,7 @@ pub fn getSupportedExtensions(_: *const WebGL2RenderingContext) []const []const 
     return advertised_extension_names;
 }
 
-pub fn getExtension(_: *const WebGL2RenderingContext, name: []const u8, exec: *Execution) !?Extension {
+pub fn getExtension(self: *WebGL2RenderingContext, name: []const u8, exec: *Execution) !?Extension {
     var supported = false;
     for (advertised_extension_names) |candidate| {
         if (std.ascii.eqlIgnoreCase(candidate, name)) {
@@ -700,6 +704,8 @@ pub fn getExtension(_: *const WebGL2RenderingContext, name: []const u8, exec: *E
     }
 
     if (std.ascii.eqlIgnoreCase(name, "WEBGL_debug_renderer_info")) {
+        // Opens the getParameter gate, and only for this context.
+        self._debug_renderer_info = true;
         return .{ .debug_renderer_info = try exec._factory.create(WebGL1.Extension.Type.WEBGL_debug_renderer_info{}) };
     }
     if (std.ascii.eqlIgnoreCase(name, "WEBGL_lose_context")) {
@@ -908,8 +914,11 @@ pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Exec
         COLOR_WRITEMASK => .{ .booleans = &.{ true, true, true, true } },
         // The viewport and scissor box default to the whole drawing buffer.
         VIEWPORT, SCISSOR_BOX => intArray(exec, &.{ 0, 0, @intCast(self._canvas.width()), @intCast(self._canvas.height()) }),
-        WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => .{ .string = gpu.unmasked_vendor },
-        WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => .{ .string = gpu.unmasked_renderer },
+        // Gated on this context having asked for WEBGL_debug_renderer_info;
+        // see WebGLRenderingContext.getParameter for what Chrome answers when
+        // it has not.
+        WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => if (self._debug_renderer_info) .{ .string = gpu.unmasked_vendor } else null,
+        WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => if (self._debug_renderer_info) .{ .string = gpu.unmasked_renderer } else null,
         else => null,
     };
 
