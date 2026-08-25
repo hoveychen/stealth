@@ -1255,6 +1255,49 @@ fn oklabToSrgbLinear(l: f64, a: f64, b: f64) [3]f64 {
     return matrixApply(lms_to_srgb_linear, lms);
 }
 
+/// The way back into Oklab, which only the gradient ramp needs: a stop written
+/// `color()`, `lab()`, `lch()`, `oklab()` or `oklch()` takes the whole gradient
+/// there (measured -- probes/canvas-gradient-stop-space.js).
+///
+/// The two matrices are the inverses of the pair above and are written out
+/// rather than derived, which is how Ottosson publishes them.
+const srgb_linear_to_lms: Matrix = .{
+    0.4122214708, 0.5363325363, 0.0514459929,
+    0.2119034982, 0.6806995451, 0.1073969566,
+    0.0883024619, 0.2817188376, 0.6299787005,
+};
+
+const lms_to_oklab: Matrix = .{
+    0.2104542553, 0.7936177850,  -0.0040720468,
+    1.9779984951, -2.4285922050, 0.4505937099,
+    0.0259040371, 0.7827717662,  -0.8086757660,
+};
+
+/// Gamma-encoded sRGB on the 0..1 scale into Oklab. Out-of-gamut channels ride
+/// through: `srgbToLinear` preserves their sign and `std.math.cbrt` takes a
+/// negative, which is what a `color(display-p3 ...)` stop needs — its sRGB red
+/// is 1.09 and its green is negative, and clipping either one is a byte or more
+/// off Chrome across the whole ramp.
+pub fn srgbToOklab(rgb: [3]f64) [3]f64 {
+    var lms = matrixApply(srgb_linear_to_lms, .{
+        srgbToLinear(rgb[0]),
+        srgbToLinear(rgb[1]),
+        srgbToLinear(rgb[2]),
+    });
+    for (&lms) |*channel| channel.* = std.math.cbrt(channel.*);
+    return matrixApply(lms_to_oklab, lms);
+}
+
+/// And back out, to the same 0..1 gamma-encoded sRGB, equally unclipped.
+pub fn oklabToSrgb(lab: [3]f64) [3]f64 {
+    const linear = oklabToSrgbLinear(lab[0], lab[1], lab[2]);
+    return .{
+        srgbFromLinear(linear[0]),
+        srgbFromLinear(linear[1]),
+        srgbFromLinear(linear[2]),
+    };
+}
+
 /// The polar spelling of a Lab-shaped space: lightness, chroma, hue.
 fn polar(comptime rectangular: fn (f64, f64, f64) [3]f64, lch: [3]f64) [3]f64 {
     const hue = std.math.degreesToRadians(lch[2]);

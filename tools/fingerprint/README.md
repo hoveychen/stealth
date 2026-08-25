@@ -12748,3 +12748,25 @@ alpha still interpolates straight and separately (`hwb alpha ramp` and
 a second time).
 
 `cfsc-gradient-oklab-stops` is the implementation.
+
+### Implemented (2026-08-24)
+
+Fourteen of the sixteen rows are byte-identical now. `color.srgbToOklab` and
+`color.oklabToSrgb` are the two legs; `raster.Gradient.Interpolation` carries
+which space a ramp is in and, for the Oklab arm, the bitmap space to convert
+back into; `CanvasGradient.resolve` makes one pass over the stops and sends the
+whole gradient to Oklab if any of them was written wide. Because the ramp is no
+longer linear in the channels it interpolates, `ctx.filter` moved from the
+stops to the mixed colour — the same result on the sRGB arm, since
+`grayscale()` is affine, and the right one on this one.
+
+Eight pixels of 512 are left, and six of them are not about stops at all:
+`hwb alpha ramp` and `legacy alpha ramp` are the same three pixels of the
+un-premultiply tie described in the chapter above, and they are the same three
+pixel indices in both rows. The other two are in `legacy wide legacy`, at the
+ends of the segments either side of a `color(display-p3 0 1 0)` stop, each one
+byte. They are not the Oklab matrices: a reference model in Python drifts on
+the same pixels with either the published inverse pair or this file's, and
+misses one of the two by the same byte in either direction. Something about how
+a display-p3 *stop* reaches sRGB before Oklab is a hair off the canvas
+conversion leg this uses, which is one reading and not enough to move it.

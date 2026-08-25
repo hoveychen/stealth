@@ -182,16 +182,56 @@ pub const CanvasGradient = struct {
         scratch: Allocator,
         space: color.CanvasSpace,
         channels: color.CanvasChannels,
-    ) []const Surface.Gradient.Stop {
-        var out = scratch.alloc(Surface.Gradient.Stop, self.stops.items.len) catch return &.{};
+    ) Resolved {
+        const none: Resolved = .{ .stops = &.{}, .interpolation = .srgb };
+        // One `color()` / `lab()` / `lch()` / `oklab()` / `oklch()` stop takes
+        // the whole ramp to Oklab, which is why this is a pass over all of them
+        // rather than a decision per pair (measured — a three-stop ramp whose
+        // *last* stop is `color(srgb 0 0 1)` differs from the all-legacy one
+        // across its first sixteen pixels too).
+        var wide = false;
+        for (self.stops.items) |stop| {
+            if (stop.style) |style| {
+                if (style.wide != null) wide = true;
+            }
+        }
+
+        var out = scratch.alloc(Surface.Gradient.Stop, self.stops.items.len) catch return none;
         var kept: usize = 0;
         for (self.stops.items) |stop| {
             const style = stop.style orelse continue;
-            out[kept] = .{ .offset = stop.offset, .paint = style.paint(space, channels) };
+            if (!wide) {
+                const paint = style.paint(space, channels);
+                out[kept] = .{
+                    .offset = stop.offset,
+                    .channels = .{ paint.r, paint.g, paint.b },
+                    .alpha = paint.a,
+                };
+            } else {
+                // The stop's own sRGB, unclipped and unquantised: asking for a
+                // float16 srgb bitmap is how `Style.paint` is told to skip both
+                // (see its `channels` note). A wide stop's red is 1.09 and its
+                // green is negative, and Oklab wants them as they are.
+                const paint = style.paint(.srgb, .float16);
+                out[kept] = .{
+                    .offset = stop.offset,
+                    .channels = color.srgbToOklab(.{ paint.r / 255, paint.g / 255, paint.b / 255 }),
+                    .alpha = paint.a,
+                };
+            }
             kept += 1;
         }
-        return out[0..kept];
+        return .{
+            .stops = out[0..kept],
+            .interpolation = if (wide) .{ .oklab = space } else .srgb,
+        };
     }
+
+    /// The stops as a gradient paints them, plus where their ramp is taken.
+    pub const Resolved = struct {
+        stops: []const Surface.Gradient.Stop,
+        interpolation: Surface.Gradient.Interpolation,
+    };
 
     const prefix = "Failed to execute 'addColorStop' on 'CanvasGradient': ";
 

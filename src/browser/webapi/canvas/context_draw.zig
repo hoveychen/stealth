@@ -156,23 +156,18 @@ pub fn Mixin(comptime T: type) type {
             // drawable under one either, so the arm this falls into never
             // reaches a pixel.
             const inverse = ctm.invert() orelse return flat;
-            var stops = gradient.resolve(scratch, space(self), channels(self));
-            // The filter reaches a gradient stop by stop, which is the same
-            // thing: `grayscale()` is a matrix, so filtering the ends and
-            // interpolating between them is filtering the interpolation.
-            const grey = filter(self);
-            if (grey.grayscale > 0) {
-                const filtered = scratch.alloc(Surface.Gradient.Stop, stops.len) catch return flat;
-                for (filtered, stops) |*into, stop| {
-                    into.* = .{ .offset = stop.offset, .paint = grey.applyTo(stop.paint) };
-                }
-                stops = filtered;
-            }
-            return .{ .gradient = .{
-                .geometry = gradient.geometry,
-                .inverse = inverse,
-                .stops = stops,
-            } };
+            const resolved = gradient.resolve(scratch, space(self), channels(self));
+            return .{
+                .gradient = .{
+                    .geometry = gradient.geometry,
+                    .inverse = inverse,
+                    .stops = resolved.stops,
+                    .interpolation = resolved.interpolation,
+                    // Applied to the mixed colour rather than to each stop, which
+                    // matters only on the Oklab arm — see `raster.Gradient.filter`.
+                    .filter = filter(self),
+                },
+            };
         }
 
         /// The shadow the current state casts, or null when there is none to
