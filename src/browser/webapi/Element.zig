@@ -3066,6 +3066,7 @@ pub const JsApi = struct {
     pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
     pub const onwebkitfullscreenchange = bridge.accessor(handlerAccessor(.onwebkitfullscreenchange).get, handlerAccessor(.onwebkitfullscreenchange).set, .{});
     pub const onwebkitfullscreenerror = bridge.accessor(handlerAccessor(.onwebkitfullscreenerror).get, handlerAccessor(.onwebkitfullscreenerror).set, .{});
+    pub const activeViewTransition = bridge.accessor(Element.getActiveViewTransition, null, .{});
     pub const role = bridge.accessor(reflectedAttribute("role").get, reflectedAttribute("role").set, .{ .ce_reactions = true });
     pub const ariaAtomic = bridge.accessor(reflectedAttribute("aria-atomic").get, reflectedAttribute("aria-atomic").set, .{ .ce_reactions = true });
     pub const ariaAutoComplete = bridge.accessor(reflectedAttribute("aria-autocomplete").get, reflectedAttribute("aria-autocomplete").set, .{ .ce_reactions = true });
@@ -3166,15 +3167,16 @@ pub const JsApi = struct {
     pub const setAttributeNodeNS = bridge.function(Element.setAttributeNode, .{ .ce_reactions = true });
     pub const setHTMLUnsafe = bridge.function(Element.setHTMLUnsafe, .{ .ce_reactions = true });
     pub const setPointerCapture = bridge.function(Element.setPointerCapture, .{ .arity = 1 });
+    pub const startViewTransition = bridge.function(Element.startViewTransition, .{});
     pub const toggleAttribute = bridge.function(Element.toggleAttribute, .{ .ce_reactions = true });
     pub const webkitMatchesSelector = bridge.function(Element.matches, .{});
     pub const webkitRequestFullScreen = bridge.function(Element.webkitRequestFullscreen, .{});
     pub const webkitRequestFullscreen = bridge.function(Element.webkitRequestFullscreen, .{});
     pub const currentCSSZoom = bridge.accessor(Element.getCurrentCSSZoom, null, .{});
     pub const customElementRegistry = bridge.accessor(Element.getCustomElementRegistry, null, .{});
-    pub const activeViewTransition = bridge.accessor(Element.getActiveViewTransition, null, .{});
     pub const ariaColIndexText = bridge.accessor(reflectedAttribute("aria-colindextext").get, reflectedAttribute("aria-colindextext").set, .{ .ce_reactions = true });
     pub const ariaRowIndexText = bridge.accessor(reflectedAttribute("aria-rowindextext").get, reflectedAttribute("aria-rowindextext").set, .{ .ce_reactions = true });
+    pub const ariaActionsElements = bridge.accessor(reflectedElements("aria-actions").get, reflectedElements("aria-actions").set, .{ .ce_reactions = true });
     pub const ariaActiveDescendantElement = bridge.accessor(reflectedElements("aria-activedescendant").get, reflectedElements("aria-activedescendant").set, .{ .ce_reactions = true });
     pub const ariaControlsElements = bridge.accessor(reflectedElements("aria-controls").get, reflectedElements("aria-controls").set, .{ .ce_reactions = true });
     pub const ariaDescribedByElements = bridge.accessor(reflectedElements("aria-describedby").get, reflectedElements("aria-describedby").set, .{ .ce_reactions = true });
@@ -3185,7 +3187,6 @@ pub const JsApi = struct {
     pub const ariaNotify = bridge.function(Element.ariaNotify, .{});
     pub const pseudo = bridge.function(Element.pseudo, .{});
     pub const setHTML = bridge.function(Element.setHTML, .{ .ce_reactions = true });
-    pub const startViewTransition = bridge.function(Element.startViewTransition, .{});
 };
 
 pub const Build = struct {

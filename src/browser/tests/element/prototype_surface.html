@@ -56,11 +56,6 @@
     // headed Chrome 150 (probe-g20a). Own-property order is a fingerprint
     // surface in its own right, so this is an ordered array and not a set.
     //
-    // One deliberate difference: Chrome has `constructor` at index 141 with
-    // `onpointerrawupdate` (a partial interface member) after it. V8 always
-    // puts `constructor` last on a template's prototype, so ours is the same
-    // sequence with those two swapped -- the same engine-level limitation
-    // already recorded for DOMMatrix.setMatrixValue and SVGLength.
     const expected = [
       'title', 'lang', 'translate', 'dir', 'hidden', 'inert', 'accessKey', 'draggable',
       'spellcheck', 'autocapitalize', 'editContext', 'contentEditable', 'enterKeyHint',
@@ -181,7 +176,7 @@
     // The IDREF-list reflections resolve to elements, so they answer null while
     // the attribute is absent and an array once it is set.
     const refs = [
-      'ariaActiveDescendantElement', 'ariaControlsElements', 'ariaDescribedByElements',
+      'ariaActionsElements', 'ariaActiveDescendantElement', 'ariaControlsElements', 'ariaDescribedByElements',
       'ariaDetailsElements', 'ariaErrorMessageElements', 'ariaFlowToElements',
       'ariaLabelledByElements'
     ];
@@ -197,6 +192,24 @@
     testing.expectEqual(el, el.ariaControlsElements[0]);
     el.removeAttribute('aria-controls');
     testing.expectEqual(null, el.ariaControlsElements);
+
+    // aria-actions is the newest of the seven and the one this engine was
+    // missing. Measured on Chrome 151: assigning an array writes the content
+    // attribute as the empty string and the getter still answers the element,
+    // setting the attribute by hand resolves the IDREF, and null clears both.
+    el.ariaActionsElements = [el];
+    testing.expectEqual(1, el.ariaActionsElements.length);
+    testing.expectEqual(el, el.ariaActionsElements[0]);
+    el.ariaActionsElements = null;
+    testing.expectEqual(null, el.ariaActionsElements);
+    el.setAttribute('aria-actions', 'probe');
+    testing.expectEqual(el, el.ariaActionsElements[0]);
+    el.removeAttribute('aria-actions');
+    testing.expectEqual(null, el.ariaActionsElements);
+    // ElementInternals declares the same seven, in the same order.
+    const ei = Object.getOwnPropertyNames(ElementInternals.prototype);
+    testing.expectEqual('ariaRowIndexText,ariaActionsElements,ariaActiveDescendantElement',
+      ei.slice(ei.indexOf('ariaRowIndexText'), ei.indexOf('ariaRowIndexText') + 3).join(','));
   }
 </script>
 
@@ -404,16 +417,15 @@
 
 <script id=element_prototype_full_order>
   {
-    // The whole of Element.prototype, in order, against Chrome 150's own list
-    // with one documented exception: Blink emits `constructor` in the middle of
-    // the run and V8 always appends it. Same exception as Document.prototype.
+    // The whole of Element.prototype, in order, against Chrome 151's own
+    // list, `constructor` included -- Chrome puts it last on this one.
     const expected = [
       'namespaceURI', 'prefix', 'localName', 'tagName', 'id', 'className', 'classList', 'slot',
-      'attributes', 'shadowRoot', 'part', 'assignedSlot', 'innerHTML', 'outerHTML',
-      'scrollTop', 'scrollLeft', 'scrollWidth', 'scrollHeight', 'clientTop', 'clientLeft',
-      'clientWidth', 'clientHeight', 'onbeforecopy', 'onbeforecut', 'onbeforepaste',
-      'onsearch', 'elementTiming', 'onfullscreenchange', 'onfullscreenerror',
-      'onwebkitfullscreenchange', 'onwebkitfullscreenerror', 'role', 'ariaAtomic',
+      'attributes', 'shadowRoot', 'part', 'assignedSlot', 'innerHTML', 'outerHTML', 'scrollTop',
+      'scrollLeft', 'scrollWidth', 'scrollHeight', 'clientTop', 'clientLeft', 'clientWidth',
+      'clientHeight', 'onbeforecopy', 'onbeforecut', 'onbeforepaste', 'onsearch',
+      'elementTiming', 'onfullscreenchange', 'onfullscreenerror', 'onwebkitfullscreenchange',
+      'onwebkitfullscreenerror', 'activeViewTransition', 'role', 'ariaAtomic',
       'ariaAutoComplete', 'ariaBusy', 'ariaBrailleLabel', 'ariaBrailleRoleDescription',
       'ariaChecked', 'ariaColCount', 'ariaColIndex', 'ariaColSpan', 'ariaCurrent',
       'ariaDescription', 'ariaDisabled', 'ariaExpanded', 'ariaHasPopup', 'ariaHidden',
@@ -421,27 +433,26 @@
       'ariaMultiLine', 'ariaMultiSelectable', 'ariaOrientation', 'ariaPlaceholder',
       'ariaPosInSet', 'ariaPressed', 'ariaReadOnly', 'ariaRelevant', 'ariaRequired',
       'ariaRoleDescription', 'ariaRowCount', 'ariaRowIndex', 'ariaRowSpan', 'ariaSelected',
-      'ariaSetSize', 'ariaSort', 'ariaValueMax', 'ariaValueMin', 'ariaValueNow',
-      'ariaValueText', 'children', 'firstElementChild', 'lastElementChild',
-      'childElementCount', 'previousElementSibling', 'nextElementSibling', 'after', 'animate',
-      'append', 'attachShadow', 'before', 'checkVisibility', 'closest', 'computedStyleMap',
-      'getAnimations', 'getAttribute', 'getAttributeNS', 'getAttributeNames',
-      'getAttributeNode', 'getAttributeNodeNS', 'getBoundingClientRect', 'getClientRects',
-      'getElementsByClassName', 'getElementsByTagName', 'getElementsByTagNameNS', 'getHTML',
-      'hasAttribute', 'hasAttributeNS', 'hasAttributes', 'hasPointerCapture',
-      'insertAdjacentElement', 'insertAdjacentHTML', 'insertAdjacentText', 'matches',
-      'moveBefore', 'prepend', 'querySelector', 'querySelectorAll', 'releasePointerCapture',
-      'remove', 'removeAttribute', 'removeAttributeNS', 'removeAttributeNode',
-      'replaceChildren', 'replaceWith', 'requestFullscreen', 'requestPointerLock', 'scroll',
-      'scrollBy', 'scrollIntoView', 'scrollIntoViewIfNeeded', 'scrollTo', 'setAttribute',
-      'setAttributeNS', 'setAttributeNode', 'setAttributeNodeNS', 'setHTMLUnsafe',
-      'setPointerCapture', 'toggleAttribute', 'webkitMatchesSelector',
-      'webkitRequestFullScreen', 'webkitRequestFullscreen', 'currentCSSZoom',
-      'customElementRegistry', 'activeViewTransition', 'ariaColIndexText', 'ariaRowIndexText',
-      'ariaActiveDescendantElement', 'ariaControlsElements', 'ariaDescribedByElements',
-      'ariaDetailsElements', 'ariaErrorMessageElements', 'ariaFlowToElements',
-      'ariaLabelledByElements', 'ariaNotify', 'pseudo', 'setHTML', 'startViewTransition',
-      'constructor'
+      'ariaSetSize', 'ariaSort', 'ariaValueMax', 'ariaValueMin', 'ariaValueNow', 'ariaValueText',
+      'children', 'firstElementChild', 'lastElementChild', 'childElementCount',
+      'previousElementSibling', 'nextElementSibling', 'after', 'animate', 'append',
+      'attachShadow', 'before', 'checkVisibility', 'closest', 'computedStyleMap',
+      'getAnimations', 'getAttribute', 'getAttributeNS', 'getAttributeNames', 'getAttributeNode',
+      'getAttributeNodeNS', 'getBoundingClientRect', 'getClientRects', 'getElementsByClassName',
+      'getElementsByTagName', 'getElementsByTagNameNS', 'getHTML', 'hasAttribute',
+      'hasAttributeNS', 'hasAttributes', 'hasPointerCapture', 'insertAdjacentElement',
+      'insertAdjacentHTML', 'insertAdjacentText', 'matches', 'moveBefore', 'prepend',
+      'querySelector', 'querySelectorAll', 'releasePointerCapture', 'remove', 'removeAttribute',
+      'removeAttributeNS', 'removeAttributeNode', 'replaceChildren', 'replaceWith',
+      'requestFullscreen', 'requestPointerLock', 'scroll', 'scrollBy', 'scrollIntoView',
+      'scrollIntoViewIfNeeded', 'scrollTo', 'setAttribute', 'setAttributeNS', 'setAttributeNode',
+      'setAttributeNodeNS', 'setHTMLUnsafe', 'setPointerCapture', 'startViewTransition',
+      'toggleAttribute', 'webkitMatchesSelector', 'webkitRequestFullScreen',
+      'webkitRequestFullscreen', 'currentCSSZoom', 'customElementRegistry', 'ariaColIndexText',
+      'ariaRowIndexText', 'ariaActionsElements', 'ariaActiveDescendantElement',
+      'ariaControlsElements', 'ariaDescribedByElements', 'ariaDetailsElements',
+      'ariaErrorMessageElements', 'ariaFlowToElements', 'ariaLabelledByElements', 'ariaNotify',
+      'pseudo', 'setHTML', 'constructor'
     ];
     testing.expectEqual(expected, Object.getOwnPropertyNames(Element.prototype));
   }
