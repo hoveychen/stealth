@@ -911,21 +911,95 @@ pub const Shadow = struct {
     }
 };
 
-/// The box window Skia picks for a sigma. Three passes of it approximate a
-/// Gaussian, and the approximation is what Chrome puts on the bitmap: at nine
-/// radii from 4 to 32 three box convolutions reproduce its bytes with no
-/// residual at all (results/canvas-shadow-blur.chrome.json).
-///
-/// Below sigma 2 that stops being true — blur 3 is 28 off across the profile,
-/// blur 2 is 104 off — because Skia takes a small-sigma path there instead.
-/// What that path *is* has not been measured, so this stays on the box triple
-/// everywhere: wrong by a few units a pixel under sigma 2, against wrong by
-/// the whole shadow before.
+/// Skia's own `hasNoBlur`. Under it a shadow is the silhouette itself, and the
+/// line is sharp: sigma 0.3 draws the shape unblurred where 0.35 blurs it
+/// (results/canvas-shadow-blur.chrome.json, the `taps` sweep).
+fn blurs(sigma: f64) bool {
+    return 3 * sigma > 1;
+}
+
+/// Where Skia changes kernel: the box triple above, the discrete Gaussian
+/// below. `SkGaussFilter` asserts the same bound.
+const small_sigma = 2;
+
+/// The box window Skia picks for a sigma of 2 or more. Three passes of it
+/// approximate a Gaussian, and the approximation is what Chrome puts on the
+/// bitmap: at nine radii from 4 to 32 three box convolutions reproduce its
+/// bytes with no residual at all.
 fn blurWindow(sigma: f64) u32 {
     const scaled = @floor(sigma * 3 * @sqrt(2 * std.math.pi) / 4 + 0.5);
     if (!(scaled >= 2)) return 1;
     if (scaled > 512) return 512;
     return @intFromFloat(scaled);
+}
+
+/// A tap this small is where `SkGaussFilter` stops expanding outward.
+const gauss_cutoff = 1.0 / 100.0;
+
+/// Room for every tap the recurrence produces below sigma 2 — nine taps at
+/// sigma 1.95, so five on the half — with slack for the bound itself.
+const max_gauss_taps = 12;
+
+/// The modified Bessel function of the first kind, by its defining series.
+/// The argument is a variance below 4, since only the small-sigma branch asks,
+/// so twenty-odd terms are already past what a double can hold.
+fn besselI(order: u32, x: f64) f64 {
+    var term = std.math.pow(f64, x / 2, @floatFromInt(order));
+    for (1..order + 1) |i| term /= @floatFromInt(i);
+    var sum = term;
+    const square = x * x / 4;
+    var k: u32 = 1;
+    while (k < 24) : (k += 1) {
+        term *= square / (@as(f64, @floatFromInt(k)) * @as(f64, @floatFromInt(k + order)));
+        sum += term;
+    }
+    return sum;
+}
+
+/// Half of Skia's discrete Gaussian, `out[0]` being the centre tap: the
+/// Bessel form `gauss(n) = I_n(var) / e^var` from "Scale-Space for Discrete
+/// Signals", expanded outward by the recurrence until a tap falls below the
+/// cutoff and then normalised to sum to one across the whole kernel.
+///
+/// It is a *discrete* Gaussian and not a sampled one, and the tails are where
+/// that shows: Chrome answers `13,54,121,54,13` at sigma 1, which an
+/// erf-integrated Gaussian fitted freely still misses by 23 across the row.
+/// This form reproduces all eight measured kernels to the byte.
+fn gaussTaps(sigma: f64, out: *[max_gauss_taps]f64) usize {
+    const variance = sigma * sigma;
+    const decay = @exp(variance);
+    out[0] = besselI(0, variance) / decay;
+    out[1] = besselI(1, variance) / decay;
+    var n: usize = 1;
+    while (n + 1 < max_gauss_taps and out[n] > gauss_cutoff) : (n += 1) {
+        out[n + 1] = out[n - 1] - (2 * @as(f64, @floatFromInt(n)) / variance) * out[n];
+    }
+    var kept: usize = 1;
+    while (kept < max_gauss_taps and out[kept] > gauss_cutoff) kept += 1;
+    var total = out[0];
+    for (out[1..kept]) |tap| total += 2 * tap;
+    for (out[0..kept]) |*tap| tap.* /= total;
+    return kept;
+}
+
+/// One symmetric convolution along a line, the counterpart of `boxLine` for
+/// the small-sigma branch. Everything past either end reads as zero.
+fn gaussLine(out: []f64, in: []const f64, taps: []const f64) void {
+    const len: isize = @intCast(in.len);
+    const radius: isize = @intCast(taps.len - 1);
+    for (out, 0..) |*cell, i| {
+        const at: isize = @intCast(i);
+        var sum = taps[0] * in[i];
+        var away: isize = 1;
+        while (away <= radius) : (away += 1) {
+            const tap = taps[@intCast(away)];
+            const before = at - away;
+            const after = at + away;
+            if (before >= 0) sum += tap * in[@intCast(before)];
+            if (after < len) sum += tap * in[@intCast(after)];
+        }
+        cell.* = sum;
+    }
 }
 
 /// The three passes as (width, left offset) pairs. An odd window is three
@@ -945,7 +1019,10 @@ fn blurPasses(window: u32) [3][2]u32 {
 /// reaches past the edge, and a shape that is itself off-canvas can still cast
 /// onto it.
 pub fn shadowMargin(blur: f64) u32 {
-    const window = blurWindow(blur / 2);
+    const sigma = blur / 2;
+    if (!blurs(sigma)) return 0;
+    if (sigma < small_sigma) return max_gauss_taps;
+    const window = blurWindow(sigma);
     if (window <= 1) return 0;
     return window * 3 / 2 + 2;
 }
@@ -984,9 +1061,13 @@ fn boxLine(out: []f64, in: []const f64, n: u32, off: u32) void {
 /// 16 where Chrome has 15, and rounding between the two axes reproduces the
 /// whole profile exactly. Rounding after every individual pass does not.
 fn blurMask(scratch: Allocator, mask: []f64, width: u32, height: u32, sigma: f64) void {
-    const window = blurWindow(sigma);
-    if (window <= 1) return;
-    const passes = blurPasses(window);
+    if (!blurs(sigma)) return;
+    var half: [max_gauss_taps]f64 = undefined;
+    const taps: []const f64 = if (sigma < small_sigma) half[0..gaussTaps(sigma, &half)] else &.{};
+    const window = if (taps.len == 0) blurWindow(sigma) else 0;
+    if (taps.len == 0 and window <= 1) return;
+    const passes = blurPasses(if (window == 0) 1 else window);
+
     const line = scratch.alloc(f64, @max(width, height)) catch return;
     defer scratch.free(line);
     const into = scratch.alloc(f64, @max(width, height)) catch return;
@@ -995,7 +1076,10 @@ fn blurMask(scratch: Allocator, mask: []f64, width: u32, height: u32, sigma: f64
     var y: u32 = 0;
     while (y < height) : (y += 1) {
         const row = mask[y * width ..][0..width];
-        for (passes) |pass| {
+        if (taps.len != 0) {
+            gaussLine(into[0..width], row, taps);
+            @memcpy(row, into[0..width]);
+        } else for (passes) |pass| {
             boxLine(into[0..width], row, pass[0], pass[1]);
             @memcpy(row, into[0..width]);
         }
@@ -1004,7 +1088,10 @@ fn blurMask(scratch: Allocator, mask: []f64, width: u32, height: u32, sigma: f64
     var x: u32 = 0;
     while (x < width) : (x += 1) {
         for (line[0..height], 0..) |*cell, at| cell.* = mask[at * width + x];
-        for (passes) |pass| {
+        if (taps.len != 0) {
+            gaussLine(into[0..height], line[0..height], taps);
+            @memcpy(line[0..height], into[0..height]);
+        } else for (passes) |pass| {
             boxLine(into[0..height], line[0..height], pass[0], pass[1]);
             @memcpy(line[0..height], into[0..height]);
         }

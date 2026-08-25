@@ -1465,6 +1465,41 @@
     ',1,2,4,6,9,12,15,19,23,28,34,39,44,49,53,55,57,58,58,57,55,53,49,44,39,34,28,23,19,15,12,9,6,4,2,1',
     bar(14));
 
+  // A bar *one* pixel wide, so the row is the kernel's taps themselves. Below
+  // sigma 2 Skia leaves the box triple for the discrete Gaussian --
+  // `gauss(n) = I_n(var) / e^var` with `var = sigma * sigma`, expanded outward
+  // until a tap falls below 1/100 and normalised to sum to one. Every kernel
+  // below is Chrome's, to the byte.
+  const taps = (blur) => {
+    const c = new OffscreenCanvas(W, H).getContext('2d', { willReadFrequently: true });
+    c.shadowColor = '#ff0000';
+    c.shadowBlur = blur;
+    c.shadowOffsetX = 48;
+    c.fillStyle = '#000000';
+    c.fillRect(4, -32, 1, H + 64);
+    const d = c.getImageData(0, 16, W, 1).data;
+    const a = [];
+    for (let x = 40; x < 70; x++) a.push(d[x * 4 + 3]);
+    let lo = 0;
+    while (lo < a.length && a[lo] === 0) lo++;
+    let hi = a.length - 1;
+    while (hi >= 0 && a[hi] === 0) hi--;
+    return lo > hi ? 'empty' : a.slice(lo, hi + 1).join(',');
+  };
+  // `3 * sigma <= 1` is Skia's own "no blur at all", and these two brackets it:
+  // the silhouette at sigma 0.3, a kernel at 0.35.
+  testing.expectEqual('255', taps(0.6));
+  testing.expectEqual('14,227,14', taps(0.7));
+  testing.expectEqual('25,204,25', taps(1));
+  testing.expectEqual('6,43,158,43,6', taps(1.5));
+  testing.expectEqual('13,54,121,54,13', taps(2));
+  testing.expectEqual('5,20,56,92,56,20,5', taps(2.5));
+  testing.expectEqual('9,26,55,75,55,26,9', taps(3));
+  testing.expectEqual('4,13,29,51,62,51,29,13,4', taps(3.5));
+  // The last kernel before the box triple takes over, and the first one after.
+  testing.expectEqual('6,15,31,48,56,48,31,15,6', taps(3.9));
+  testing.expectEqual('3,10,19,32,41,45,41,32,19,10,3', taps(4));
+
   // A 4x4 square rather than a bar. A separable blur hands back the product of
   // the two axes, so this row is the kernel squared -- which is the check that
   // the pass runs on both.
