@@ -311,8 +311,8 @@ pub const GPUCommandEncoder = struct {
         const array = attachments.toArray();
         for (0..array.len()) |i| {
             const attachment = try Attachment.read(try array.get(@intCast(i)), exec);
-            _ = try resources.requiredEnum(Attachment, attachment, "loadOp", "GPULoadOp", &.{ "load", "clear" }, exec);
-            _ = try resources.requiredEnum(Attachment, attachment, "storeOp", "GPUStoreOp", &.{ "store", "discard" }, exec);
+            _ = try attachment.requiredEnum("loadOp", "GPULoadOp", &.{ "load", "clear" }, exec);
+            _ = try attachment.requiredEnum("storeOp", "GPUStoreOp", &.{ "store", "discard" }, exec);
             _ = try attachment.interfaceMember("view", resources.GPUTextureView, "GPUTextureView", exec);
         }
 
@@ -551,9 +551,7 @@ pub const GPUCanvasContext = struct {
             exec,
         )).?;
         const gpu = try config.interfaceMember("device", device.GPUDevice, "GPUDevice", exec);
-        const format = try resources.requiredEnum(
-            Reader,
-            config,
+        const format = try config.requiredEnum(
             "format",
             "GPUTextureFormat",
             &resources.core_texture_formats,

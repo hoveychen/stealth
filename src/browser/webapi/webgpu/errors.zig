@@ -167,9 +167,7 @@ pub const GPUPipelineError = struct {
             return dictionary.throwTypeError(NOT_INIT, exec);
         }
         const init = try Init.read(options, exec);
-        const reason = try resources.requiredEnum(
-            Init,
-            init,
+        const reason = try init.requiredEnum(
             "reason",
             "GPUPipelineErrorReason",
             &.{ "validation", "internal" },

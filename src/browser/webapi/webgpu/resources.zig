@@ -141,33 +141,6 @@ fn unsignedMember(
     return @intFromFloat(number);
 }
 
-/// A required WebIDL enumeration member. `dictionary.enumMember` covers the
-/// optional case; this one reads the value once -- the way Chrome does, which
-/// matters when the page defines the member as a getter -- and produces either
-/// the "Required member is undefined." message or the invalid-value one.
-pub fn requiredEnum(
-    comptime Reader: type,
-    reader: Reader,
-    comptime name: []const u8,
-    comptime idl: []const u8,
-    comptime allowed: []const []const u8,
-    exec: *const Execution,
-) ![]const u8 {
-    const member = try reader.required(name, exec);
-    const text = try member.toStringSlice();
-    for (allowed) |candidate| {
-        if (std.mem.eql(u8, candidate, text)) {
-            return candidate;
-        }
-    }
-    return dictionary.throwTypeError(try std.fmt.allocPrint(
-        exec.call_arena,
-        Reader.message_prefix ++ "Failed to read the '" ++ name ++ "' property from '" ++ Reader.dict_name ++
-            "': The provided value '{s}' is not a valid enum value of type " ++ idl ++ ".",
-        .{text},
-    ), exec);
-}
-
 const throwDom = dictionary.throwDom;
 
 pub fn registerTypes() []const type {
@@ -444,7 +417,7 @@ pub fn createTexture(args: []js.Value, exec: *const Execution) !*GPUTexture {
     const descriptor = try Reader.readRequired(try requireDescriptor("createTexture", args, exec), exec);
 
     const extent = try readExtent3D(Reader, descriptor, exec);
-    const format = try requiredEnum(Reader, descriptor, "format", "GPUTextureFormat", &core_texture_formats, exec);
+    const format = try descriptor.requiredEnum("format", "GPUTextureFormat", &core_texture_formats, exec);
     const usage = try unsignedMember(Reader, descriptor, "usage", exec);
     const dimension = (try descriptor.enumMember(
         "dimension",
@@ -508,7 +481,7 @@ pub fn createQuerySet(args: []js.Value, exec: *const Execution) !*GPUQuerySet {
     const Reader = dictionary.MethodReader("GPUDevice", "createQuerySet", "GPUQuerySetDescriptor");
     const descriptor = try Reader.readRequired(try requireDescriptor("createQuerySet", args, exec), exec);
 
-    const kind = try requiredEnum(Reader, descriptor, "type", "GPUQueryType", &.{ "occlusion", "timestamp" }, exec);
+    const kind = try descriptor.requiredEnum("type", "GPUQueryType", &.{ "occlusion", "timestamp" }, exec);
     const count = try unsignedMember(Reader, descriptor, "count", exec);
 
     return exec._factory.create(GPUQuerySet{

@@ -33,6 +33,7 @@ const Node = @import("../Node.zig");
 const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
 
+const dictionary = @import("../dictionary.zig");
 const Headers = @import("Headers.zig");
 const BodyInit = @import("body_init.zig").BodyInit;
 const XMLHttpRequestEventTarget = @import("XMLHttpRequestEventTarget.zig");
@@ -772,41 +773,119 @@ fn parseMethod(method: []const u8) !http.Method {
     return error.InvalidMethod;
 }
 
+// The two Privacy-Sandbox operations Chrome hangs off XMLHttpRequest. Neither
+// does anything here -- there is no attribution store and no token issuer to
+// talk to -- but the interstitial this fork chases proxies
+// XMLHttpRequest.prototype.send, so it is holding the prototype these two names
+// are missing from.
+//
+// Every refusal below is Chrome 151's, measured, and so is the order the checks
+// run in: argument count, then "is the argument an object", then the dictionary
+// read in the dictionary's own declaration order, and only then the readyState
+// gate. A valid dictionary on an UNSENT request still reaches the
+// InvalidStateError; an invalid one on a sent request answers about the
+// dictionary first.
+const AttributionOptions = dictionary.MethodReader(
+    "XMLHttpRequest",
+    "setAttributionReporting",
+    "AttributionReportingRequestOptions",
+);
+
+const PrivateTokenOptions = dictionary.MethodReader(
+    "XMLHttpRequest",
+    "setPrivateToken",
+    "PrivateToken",
+);
+
+/// https://wicg.github.io/attribution-reporting-api/#dom-xmlhttprequest-setattributionreporting
+pub fn setAttributionReporting(self: *XMLHttpRequest, options: js.Value, exec: *const Execution) !void {
+    const reader = try AttributionOptions.readRequired(options, exec);
+    // Both members are plain booleans, so any value converts; only absence is
+    // refused. Read in the dictionary's declaration order, which is why
+    // `{triggerEligible: true}` answers about eventSourceEligible.
+    _ = (try reader.required("eventSourceEligible", exec)).toBool();
+    _ = (try reader.required("triggerEligible", exec)).toBool();
+    return self.requireOpened(AttributionOptions.message_prefix, exec);
+}
+
+/// https://privacycg.github.io/private-state-token-api/#dom-xmlhttprequest-setprivatetoken
+pub fn setPrivateToken(self: *XMLHttpRequest, options: js.Value, exec: *const Execution) !void {
+    const reader = try PrivateTokenOptions.readRequired(options, exec);
+    _ = try reader.requiredEnum("operation", "OperationType", &.{
+        "token-request",
+        "token-redemption",
+        "send-redemption-record",
+    }, exec);
+    // `version` is an unsigned long with no range Chrome enforces here: any
+    // number is taken, and only absence is refused (measured).
+    _ = try reader.required("version", exec);
+    return self.requireOpened(PrivateTokenOptions.message_prefix, exec);
+}
+
+/// The gate both of the two share: the same one `send()` applies, reported as a
+/// DOMException whose message names the operation.
+fn requireOpened(self: *const XMLHttpRequest, comptime prefix: []const u8, exec: *const Execution) !void {
+    if (self._ready_state != .opened or self._send_flag) {
+        return dictionary.throwDom(
+            "InvalidStateError",
+            prefix ++ "The object's state must be OPENED.",
+            exec,
+        );
+    }
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(XMLHttpRequest);
 
     pub const Meta = struct {
         pub const name = "XMLHttpRequest";
+        // Chrome's `constructor` sits here rather than last; the members
+        // below it are the ones Blink installs per context. See
+        // Snapshot.moveConstructorSlots.
+        pub const constructor_after = "setRequestHeader";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Declaration order is own-property order, and that order is itself a
+    // fingerprint: this is Chrome 151's own
+    // `Object.getOwnPropertyNames(XMLHttpRequest.prototype)` verbatim, not the
+    // spec's IDL order and not alphabetical. The five readyState constants sit
+    // between responseText and abort, and responseXML sits behind
+    // `constructor` with the two Privacy-Sandbox operations, because Blink
+    // installs that trio per context.
     pub const constructor = bridge.constructor(XMLHttpRequest.init, .{});
+
+    pub const onreadystatechange = bridge.accessor(XMLHttpRequest.getOnReadyStateChange, XMLHttpRequest.setOnReadyStateChange, .{});
+    pub const readyState = bridge.accessor(XMLHttpRequest.getReadyState, null, .{});
+    pub const timeout = bridge.accessor(XMLHttpRequest.getTimeout, XMLHttpRequest.setTimeout, .{});
+    pub const withCredentials = bridge.accessor(XMLHttpRequest.getWithCredentials, XMLHttpRequest.setWithCredentials, .{});
+    pub const upload = bridge.accessor(XMLHttpRequest.getUpload, null, .{});
+    pub const responseURL = bridge.accessor(XMLHttpRequest.getResponseURL, null, .{});
+    pub const status = bridge.accessor(XMLHttpRequest.getStatus, null, .{});
+    pub const statusText = bridge.accessor(XMLHttpRequest.getStatusText, null, .{});
+    pub const responseType = bridge.accessor(XMLHttpRequest.getResponseType, XMLHttpRequest.setResponseType, .{});
+    pub const response = bridge.accessor(XMLHttpRequest.getResponse, null, .{});
+    pub const responseText = bridge.accessor(XMLHttpRequest.getResponseText, null, .{});
+
     pub const UNSENT = bridge.property(@intFromEnum(XMLHttpRequest.ReadyState.unsent), .{ .template = true });
     pub const OPENED = bridge.property(@intFromEnum(XMLHttpRequest.ReadyState.opened), .{ .template = true });
     pub const HEADERS_RECEIVED = bridge.property(@intFromEnum(XMLHttpRequest.ReadyState.headers_received), .{ .template = true });
     pub const LOADING = bridge.property(@intFromEnum(XMLHttpRequest.ReadyState.loading), .{ .template = true });
     pub const DONE = bridge.property(@intFromEnum(XMLHttpRequest.ReadyState.done), .{ .template = true });
 
-    pub const onreadystatechange = bridge.accessor(XMLHttpRequest.getOnReadyStateChange, XMLHttpRequest.setOnReadyStateChange, .{});
-    pub const upload = bridge.accessor(XMLHttpRequest.getUpload, null, .{});
-    pub const timeout = bridge.accessor(XMLHttpRequest.getTimeout, XMLHttpRequest.setTimeout, .{});
-    pub const withCredentials = bridge.accessor(XMLHttpRequest.getWithCredentials, XMLHttpRequest.setWithCredentials, .{});
-    pub const open = bridge.function(XMLHttpRequest.open, .{});
-    pub const send = bridge.function(XMLHttpRequest.send, .{});
-    pub const responseType = bridge.accessor(XMLHttpRequest.getResponseType, XMLHttpRequest.setResponseType, .{});
-    pub const status = bridge.accessor(XMLHttpRequest.getStatus, null, .{});
-    pub const statusText = bridge.accessor(XMLHttpRequest.getStatusText, null, .{});
-    pub const readyState = bridge.accessor(XMLHttpRequest.getReadyState, null, .{});
-    pub const response = bridge.accessor(XMLHttpRequest.getResponse, null, .{});
-    pub const responseText = bridge.accessor(XMLHttpRequest.getResponseText, null, .{});
-    pub const responseXML = bridge.accessor(XMLHttpRequest.getResponseXML, null, .{});
-    pub const responseURL = bridge.accessor(XMLHttpRequest.getResponseURL, null, .{});
-    pub const setRequestHeader = bridge.function(XMLHttpRequest.setRequestHeader, .{});
-    pub const overrideMimeType = bridge.function(XMLHttpRequest.overrideMimeType, .{});
-    pub const getResponseHeader = bridge.function(XMLHttpRequest.getResponseHeader, .{});
-    pub const getAllResponseHeaders = bridge.function(XMLHttpRequest.getAllResponseHeaders, .{});
     pub const abort = bridge.function(XMLHttpRequest.abort, .{});
+    pub const getAllResponseHeaders = bridge.function(XMLHttpRequest.getAllResponseHeaders, .{});
+    pub const getResponseHeader = bridge.function(XMLHttpRequest.getResponseHeader, .{});
+    pub const open = bridge.function(XMLHttpRequest.open, .{});
+    pub const overrideMimeType = bridge.function(XMLHttpRequest.overrideMimeType, .{});
+    pub const send = bridge.function(XMLHttpRequest.send, .{});
+    pub const setRequestHeader = bridge.function(XMLHttpRequest.setRequestHeader, .{});
+
+    // --- everything below is behind `constructor` in Chrome ---
+    pub const responseXML = bridge.accessor(XMLHttpRequest.getResponseXML, null, .{});
+    pub const setAttributionReporting = bridge.function(XMLHttpRequest.setAttributionReporting, .{});
+    pub const setPrivateToken = bridge.function(XMLHttpRequest.setPrivateToken, .{});
 };
 
 const testing = @import("../../../testing.zig");
