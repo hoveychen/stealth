@@ -324,21 +324,27 @@ pub fn decodeAudioData(
     const local = exec.js.local.?;
     var resolver = local.createPromiseResolver();
 
+    // Both arms go through rejectValue rather than reject/rejectError: those
+    // drain the microtask queue, and draining it here -- with the calling
+    // script still on the stack, before it has had a line to attach its catch
+    // -- reports an unhandled rejection Chrome never reports (measured: Chrome
+    // retracts the report when the handler arrives in the same turn).
     const is_buffer = if (data_) |data| data.isArrayBuffer() else false;
     if (!is_buffer) {
         // Chrome reports the IDL mismatch through the promise rather than
         // throwing, and an ArrayBufferView is as wrong as a null (measured).
-        resolver.rejectError("BaseAudioContext.decodeAudioData", .{
-            .type_error = "Failed to execute 'decodeAudioData' on 'BaseAudioContext': " ++
+        const message = local.isolate.createTypeError(
+            "Failed to execute 'decodeAudioData' on 'BaseAudioContext': " ++
                 "parameter 1 is not of type 'ArrayBuffer'.",
-        });
+        );
+        try resolver.rejectValue(.{ .handle = message, .local = local });
         return resolver.promise();
     }
 
-    resolver.reject("BaseAudioContext.decodeAudioData", DOMException.init(
+    try resolver.rejectValue(try local.zigValueToJs(DOMException.init(
         "Unable to decode audio data",
         "EncodingError",
-    ));
+    ), .{}));
     const promise = resolver.promise();
 
     // The legacy callback pair predates the promise and Chrome still honours

@@ -1616,8 +1616,18 @@
   // settles: an EncodingError for bytes it cannot decode, and a TypeError,
   // reported through the promise rather than thrown, for a non-ArrayBuffer.
   // Every reading below is off a headless Chrome 151.
-  const state = await testing.async();
+  // The rejection must not be reported as unhandled just because the catch is
+  // attached on the next line. Chrome retracts that report, so no
+  // unhandledrejection event fires for a promise handled in the same turn --
+  // and this only shows up while the calling script is still on the stack,
+  // hence before the first await here.
+  const unhandled = [];
+  const onUnhandled = (e) => { unhandled.push(String(e.reason && e.reason.name)); e.preventDefault(); };
+  window.addEventListener('unhandledrejection', onUnhandled);
   const ctx = new AudioContext();
+  ctx.decodeAudioData(new ArrayBuffer(4)).catch(() => {});
+
+  const state = await testing.async();
 
   const settle = (p) => Promise.race([
     p.then((v) => 'resolved:' + v, (e) => (e && e.name ? e.name + ': ' + e.message : 'rejected:' + e)),
@@ -1651,8 +1661,12 @@
     setTimeout(() => resolve(seen.join(' | ')), 200);
   });
 
+  await new Promise((r) => setTimeout(r, 200));
+  window.removeEventListener('unhandledrejection', onUnhandled);
+
   state.resolve();
   await state.done(() => {
+    testing.expectEqual('', unhandled.join(','));
     const encoding = 'EncodingError: Unable to decode audio data';
     testing.expectEqual(encoding, zero4);
     testing.expectEqual(encoding, zero0);
