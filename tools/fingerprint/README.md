@@ -13103,3 +13103,26 @@ first POST, and we do not. Chrome pays it once and reports 5 on its second pass,
 so its result is cached across reloads — the sensor reads storage 22 times — and
 that cache is a place worth looking at next: what does the challenge script store
 after hashing, and does its lookup answer differently here?
+
+### What the storage probe saw (2026-08-24, same round)
+
+`probes/probe-storage-keys.js` logs every `Storage` call and every
+`document.cookie` read with its key and value size, in order. Wrap
+`Storage.prototype`, not the instance — an own property on the instance is never
+reached when the caller goes through the prototype, and the instance version
+logged nothing in either arm.
+
+No cached hash turned up: the keys are `ak_a`, `ak_ax`, `bmint_j`, `TAB_ID`,
+`PIM-SESSION-ID`, `GA_RT2`/`GA_BU2`/`GA_RT3`, plus `dummy` set-and-removed as a
+storage-availability test. Both arms do the same set. So whatever makes Chrome's
+second pass cheap is not a value in Storage.
+
+Two asymmetries did show, neither explained:
+
+* **Our first three `document.cookie` reads return 0 bytes; Chrome's return 31.**
+  By 215ms ours is 31 too. Chrome reads it at 60ms, we read at 90ms, so this may
+  only be ordering — but "the guard reads the cookie jar and finds it empty" is
+  the kind of thing that changes a branch, and it is worth pinning down.
+* Chrome found `TAB_ID` already in storage; we found null and set it. That one is
+  probably an artifact of the driver reusing a Chrome profile directory per
+  port, not a finding — noted so nobody re-reads it as one.
