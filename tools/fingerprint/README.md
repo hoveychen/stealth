@@ -12999,3 +12999,38 @@ of document order here.
 between the GET at 248ms and the POST at 295ms? Counting it needs an instrument
 that survives the guard — the source cannot be rewritten (see the note in
 `akamai-replay.mjs`), and the reads it makes are not on any wrappable method.
+
+### And the input is the same string on both sides (2026-08-24, same round)
+
+`MOm`'s one call site is
+
+    function wNh() { return MOm(r9h(), 358859); }
+    function r9h() { return P9h() + kkh() + typeof hN[l()[VN(LQ)].name]; }
+    function kkh() { return fmh(`${l()[VN(LQ)]}`, Srm() + 1); }
+
+— a template literal over a function, i.e. `Function.prototype.toString`, sliced
+and hashed. Running `probes/probe-native-time.js` against *both* arms says they
+handle the same string with the same operations:
+
+| | Chrome | lightpanda |
+|---|---|---|
+| `str.substr` | 9 calls, longest 496251 | 9 calls, longest 496251 |
+| `str.indexOf` | 91 calls, longest 496251 | 99 calls, longest 496251 |
+| `str.slice` | 73 calls, longest 81102 | 75 calls, longest 81102 |
+| `atob` | 12 calls, longest 81072 | 12 calls, longest 81072 |
+
+So the guard reaches the same 496251-character source in both engines and hands
+the same work to the same hash. Which means the 47x is not *whether* we run it —
+it is what each step costs. The synthetic version of that state machine costs
+27ms in Chrome and 28ms here; the real one costs Chrome ~680ms, so its step
+functions are roughly 25x more expensive per iteration than plain arithmetic
+over a string. Those steps read their operands through the obfuscator's own
+indirection — `hN[...]` where `hN` is the global — and a named lookup on the
+global object is a Blink binding in Chrome and a plain V8 object here. 5.9M of
+those at ~110ns each is the missing 650ms.
+
+That is a hypothesis, not a measurement, and it is the one to test next: time
+5.9M global-object property lookups in both engines. If it holds, the counter
+Akamai reads is not measuring anything we are failing to do — it is measuring
+how much cheaper our bindings are than a real browser's, which is a very
+different kind of problem from every other gap on this station.
