@@ -17,17 +17,20 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // The two handle types `createLinearGradient` and friends hand back, and the
-// paint style that holds one. The rasteriser only knows how to fill with a
-// flat colour, so neither handle paints anything yet; what they do carry is
-// their own identity, because `fillStyle` and `strokeStyle` are
-// `(DOMString or CanvasGradient or CanvasPattern)` and a script that assigns a
-// gradient reads the same object back out. Chrome's prototypes carry exactly
-// `addColorStop` and `setTransform` respectively.
+// paint style that holds one. A gradient carries the geometry and stops the
+// rasteriser evaluates per pixel (see `raster.Gradient`); a pattern still
+// carries nothing, because there are no decoded image pixels to tile. Both
+// carry their own identity either way, because `fillStyle` and `strokeStyle`
+// are `(DOMString or CanvasGradient or CanvasPattern)` and a script that
+// assigns a gradient reads the same object back out. Chrome's prototypes carry
+// exactly `addColorStop` and `setTransform` respectively.
 
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
 const color = @import("../../color.zig");
+
+const Surface = @import("raster.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -42,10 +45,9 @@ pub fn registerTypes() []const type {
 pub const PaintStyle = struct {
     /// The colour the rasteriser paints with, in the form the notation was
     /// written: the bytes, plus whatever of the source the notation needs kept
-    /// (see `color.Style`). A gradient or a pattern leaves it alone, since
-    /// neither carries paint yet — whatever colour they replaced keeps getting
-    /// painted, which is what happened before this too. Giving them real paint
-    /// is the `cfsc-gradient-paint-source` plan.
+    /// (see `color.Style`). Assigning a gradient or a pattern leaves it alone —
+    /// a gradient paints from its own stops instead, and a pattern still has no
+    /// pixels, so whatever colour it replaced keeps getting painted.
     style: color.Style = .{ .rgba = color.RGBA.Named.black },
     /// Set when the last assignment was a gradient or a pattern, in which case
     /// that object — not `style` — is what a script reads back.
@@ -148,36 +150,48 @@ pub const CanvasGradient = struct {
     /// and a 0→16 axis created at the identity and then filled under
     /// `scale(2, 1)`. So there is nothing to resolve until the fill, and this
     /// keeps what it was given.
-    geometry: Geometry,
+    geometry: Surface.Gradient.Geometry,
     /// The stops, kept sorted by offset with ties in insertion order, the way
     /// the spec orders them. A script cannot see them (`Object.keys` on a
     /// gradient is empty in Chrome too); the rasteriser reads them through
-    /// `raster.Source`.
+    /// `resolve` below.
     stops: std.ArrayList(Stop) = .empty,
-
-    /// The three shapes, one per factory. Every coordinate is user space.
-    pub const Geometry = union(enum) {
-        /// `createLinearGradient(x0, y0, x1, y1)`: the ramp runs along the axis
-        /// and is constant across it.
-        linear: struct { x0: f64, y0: f64, x1: f64, y1: f64 },
-        /// `createRadialGradient(x0, y0, r0, x1, y1, r1)`: the ramp runs from
-        /// the start circle to the end one, which need share neither centre nor
-        /// radius.
-        radial: struct { x0: f64, y0: f64, r0: f64, x1: f64, y1: f64, r1: f64 },
-        /// `createConicGradient(angle, x, y)`: the ramp sweeps once around the
-        /// centre, starting `angle` from wherever zero points.
-        conic: struct { angle: f64, x: f64, y: f64 },
-    };
 
     pub const Stop = struct {
         offset: f64,
-        /// The colour as given. Kept because `color.isColor` accepts more
-        /// notations than `color.RGBA.parse` converts, so this is the only
-        /// record of a stop whose colour we recognised but could not read.
+        /// The colour as given. Kept because `color.isColor` accepts three
+        /// notations `color.parseStyle` does not convert — the system colours
+        /// and `color-mix()`, neither of which is read yet — so this is the
+        /// only record of a stop whose colour we recognised but cannot paint.
         text: []const u8,
-        /// Null for exactly those stops.
-        colour: ?color.RGBA,
+        /// Null for exactly those stops. Otherwise the notation as parsed, so
+        /// that a stop and a `fillStyle` written the same way resolve to the
+        /// same paint.
+        style: ?color.Style,
     };
+
+    /// The stops as the rasteriser wants them: offsets in order, colours
+    /// resolved into the bitmap's own space. Allocated on `scratch`, which may
+    /// be a call-lifetime arena — nothing keeps this past the draw.
+    ///
+    /// The stops we could not parse are dropped rather than painted as
+    /// anything: leaving a `color-mix()` stop out narrows the ramp, where
+    /// inventing a colour for it would put the wrong one across a whole band.
+    pub fn resolve(
+        self: *const CanvasGradient,
+        scratch: Allocator,
+        space: color.CanvasSpace,
+        channels: color.CanvasChannels,
+    ) []const Surface.Gradient.Stop {
+        var out = scratch.alloc(Surface.Gradient.Stop, self.stops.items.len) catch return &.{};
+        var kept: usize = 0;
+        for (self.stops.items) |stop| {
+            const style = stop.style orelse continue;
+            out[kept] = .{ .offset = stop.offset, .paint = style.paint(space, channels) };
+            kept += 1;
+        }
+        return out[0..kept];
+    }
 
     const prefix = "Failed to execute 'addColorStop' on 'CanvasGradient': ";
 
@@ -209,7 +223,10 @@ pub const CanvasGradient = struct {
         const stop: Stop = .{
             .offset = offset,
             .text = try exec.arena.dupe(u8, text),
-            .colour = color.RGBA.parse(text) catch null,
+            // The whole grammar, not just the hex and named forms: a stop
+            // written `rgb(…)` or `oklch(…)` is one Chrome paints, and reading
+            // it here is what keeps it from silently dropping out of the ramp.
+            .style = PaintStyle.parseColour(text),
         };
         // Sorted by offset, and a repeated offset goes after the ones already
         // there rather than replacing them: Chrome takes two stops at 0.5.

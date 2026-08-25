@@ -25,12 +25,12 @@
 // the engine hashed to the same value, which is a signal no browser produces.
 //
 // What is here: a *premultiplied* RGBA8 buffer, axis-aligned rectangle fills, a
-// scanline fill and stroke for the flattened paths `path.zig` builds, and
-// source-over compositing under the two separable blend modes of `Composite`
-// below. What is still not here: gradients, image decoding, and glyph
-// rasterisation. Text
-// in particular needs a font rasteriser to land any ink at all, so a text-based
-// canvas fingerprint still will not match Chrome's — see tools/fingerprint.
+// scanline fill and stroke for the flattened paths `path.zig` builds, the three
+// gradients as a per-pixel paint `Source`, and source-over compositing under the
+// two separable blend modes of `Composite` below. What is still not here: image
+// decoding and glyph rasterisation. Text in particular needs a font rasteriser
+// to land any ink at all, so a text-based canvas fingerprint still will not
+// match Chrome's — see tools/fingerprint.
 //
 // Rectangles are rounded to whole pixels rather than antialiased, so a
 // fractional rectangle edge lands one pixel off from Chrome's coverage-blended
@@ -179,17 +179,18 @@ pub const Filter = struct {
 /// what Chrome does, measured on a ramp from opaque to transparent
 /// (probes/canvas-gradient-paint.js, `shadow of a ramp`).
 pub const Source = union(enum) {
-    /// One colour everywhere: a `fillStyle` that is a colour string, and — until
-    /// the arms below exist — a gradient or a pattern too.
+    /// One colour everywhere: a `fillStyle` that is a colour string, and a
+    /// pattern too, which still carries no pixels.
     flat: Paint,
+    /// One of the three `create*Gradient` shapes, with its stops resolved.
+    gradient: Gradient,
 
     /// The colour at a point in *device* space, which the ops ask for at each
-    /// pixel's centre.
+    /// pixel's centre. Transparent black where the gradient covers nothing.
     pub fn at(self: Source, x: f64, y: f64) Paint {
-        _ = x;
-        _ = y;
         return switch (self) {
             .flat => |paint| paint,
+            .gradient => |g| g.at(x, y),
         };
     }
 
@@ -200,6 +201,191 @@ pub const Source = union(enum) {
     pub fn blank(self: Source) bool {
         return switch (self) {
             .flat => |paint| paint.a <= 0,
+            .gradient => |g| g.stops.len == 0,
+        };
+    }
+
+    /// `globalAlpha` as this source multiplies by, which is not the same number
+    /// for the two arms.
+    ///
+    /// A flat fill reaches Skia as a premultiplied eight-bit colour, so its
+    /// opacity is a byte before it is ever applied — black over white at 0.5
+    /// reads 127, which only `128/255` gives (see `opacity`). A gradient is a
+    /// *shader*, and the paint's alpha is scaled into its output in floating
+    /// point instead: the same ramp under `globalAlpha = 0.5` reads a
+    /// premultiplied 125 where the byte would give 126 (measured,
+    /// probes/canvas-gradient-paint.js, `global alpha`).
+    pub fn opacityOf(self: Source, global_alpha: f64) f64 {
+        return switch (self) {
+            .flat => opacity(global_alpha),
+            .gradient => std.math.clamp(global_alpha, 0, 1),
+        };
+    }
+
+    /// How much this source's premultiplied channels are nudged at one device
+    /// pixel before they are rounded into the bitmap, on the 0..255 scale.
+    ///
+    /// Skia dithers a gradient and leaves a flat fill alone, which is why this
+    /// belongs to the source rather than to the store. It is not a detail: a
+    /// ramp reads a byte either side of the exact interpolation often enough
+    /// that ignoring it misses roughly half the pixels of every gradient
+    /// measured (probes/canvas-gradient-paint.js).
+    pub fn dither(self: Source, col: u32, row: u32) f64 {
+        return switch (self) {
+            .flat => 0,
+            .gradient => ditherOffset(col, row),
+        };
+    }
+};
+
+/// Skia's 8x8 ordered dither, from `SkRasterPipeline`'s `dither` stage: the six
+/// low bits of x and y are interleaved and bit-reversed into a Bayer index,
+/// which becomes a signed offset of just under half a byte.
+///
+/// The rate is one part in 255 for an eight-bit bitmap, so on this file's 0..255
+/// scale the offset *is* the matrix value — no scaling on the way out.
+fn ditherOffset(col: u32, row: u32) f64 {
+    const x = col;
+    // Only `x` and `x ^ y` are needed from here on, which is how Skia writes it.
+    const y = row ^ col;
+    const m = ((y & 1) << 5) | ((x & 1) << 4) |
+        ((y & 2) << 2) | ((x & 2) << 1) |
+        ((y & 4) >> 1) | ((x & 4) >> 2);
+    return @as(f64, @floatFromInt(m)) / 64 - 63.0 / 128.0;
+}
+
+/// A gradient as the rasteriser evaluates it: a shape in *user* space, the
+/// inverse of the transform that was in effect when the fill began, and the
+/// stops already resolved into the bitmap's colour space.
+///
+/// The inverse is what makes the user-space shape work: rather than mapping the
+/// gradient forward — which cannot be done for a circle under a non-uniform
+/// scale without it stopping being a circle — each device pixel's centre is
+/// mapped *back* into user space and the ramp evaluated there. That is Skia's
+/// own local-matrix arrangement, and it gives a rotated or skewed gradient for
+/// free.
+pub const Gradient = struct {
+    geometry: Geometry,
+    /// Device space to user space. Null geometry rather than a null transform
+    /// is how a singular matrix is handled: it cannot arise, because a singular
+    /// transform never reaches a draw op with a shape to fill.
+    inverse: path_mod.Transform,
+    /// Sorted by offset, ties in insertion order. Empty means the gradient
+    /// paints nothing at all, which is what the spec says and what Chrome does.
+    stops: []const Stop,
+
+    /// One stop, its colour already resolved the way a flat `fillStyle` would
+    /// be — so a stop and a fill written in the same notation are the same
+    /// paint. Alpha stays straight: the ramp interpolates before anything
+    /// premultiplies it (measured — opaque red to *transparent blue* reads a
+    /// blue of 130 in the middle, where a premultiplied ramp carries none).
+    pub const Stop = struct {
+        offset: f64,
+        paint: Paint,
+    };
+
+    /// The three shapes, one per factory, in the user-space coordinates the
+    /// page wrote. See `CanvasGradient.geometry` for why they are not resolved
+    /// when the gradient is made.
+    pub const Geometry = union(enum) {
+        /// `createLinearGradient(x0, y0, x1, y1)`.
+        linear: struct { x0: f64, y0: f64, x1: f64, y1: f64 },
+        /// `createRadialGradient(x0, y0, r0, x1, y1, r1)`.
+        radial: struct { x0: f64, y0: f64, r0: f64, x1: f64, y1: f64, r1: f64 },
+        /// `createConicGradient(angle, x, y)`.
+        conic: struct { angle: f64, x: f64, y: f64 },
+    };
+
+    /// The ramp position at a user-space point, before it is clamped. Null
+    /// where the gradient covers nothing: a zero-length linear axis, two
+    /// identical circles, and — for the two-circle cone — the region outside
+    /// it, all of which Chrome leaves as transparent black rather than
+    /// extending an end stop over.
+    fn position(self: Gradient, x: f64, y: f64) ?f64 {
+        switch (self.geometry) {
+            .linear => |g| {
+                const dx = g.x1 - g.x0;
+                const dy = g.y1 - g.y0;
+                const length2 = dx * dx + dy * dy;
+                if (length2 == 0) return null;
+                return ((x - g.x0) * dx + (y - g.y0) * dy) / length2;
+            },
+            .radial => |g| {
+                const cdx = g.x1 - g.x0;
+                const cdy = g.y1 - g.y0;
+                const dr = g.r1 - g.r0;
+                const px = x - g.x0;
+                const py = y - g.y0;
+                if (cdx == 0 and cdy == 0) {
+                    // Concentric, which is the common case and needs no
+                    // quadratic: the ramp is the distance from the shared
+                    // centre, measured between the two radii.
+                    if (dr == 0) return null;
+                    return (@sqrt(px * px + py * py) - g.r0) / dr;
+                }
+                // Skia's two-point conical: the largest `s` whose circle —
+                // centre and radius both interpolated by `s` — passes through
+                // the point, and whose radius has not gone negative.
+                const a = cdx * cdx + cdy * cdy - dr * dr;
+                const b = px * cdx + py * cdy + g.r0 * dr;
+                const c = px * px + py * py - g.r0 * g.r0;
+                if (a == 0) {
+                    // The degenerate cone, where the two circles' radii grow
+                    // exactly as fast as their centres separate: one root.
+                    if (b == 0) return null;
+                    const s = c / (2 * b);
+                    return if (g.r0 + s * dr >= 0) s else null;
+                }
+                const discriminant = b * b - a * c;
+                if (discriminant < 0) return null;
+                const root = @sqrt(discriminant);
+                const far = (b + root) / a;
+                const near = (b - root) / a;
+                if (g.r0 + @max(far, near) * dr >= 0) return @max(far, near);
+                if (g.r0 + @min(far, near) * dr >= 0) return @min(far, near);
+                return null;
+            },
+            .conic => |g| {
+                // Zero points along +x and the sweep runs clockwise on screen,
+                // which is what `atan2` gives with y downwards; the angle is
+                // subtracted rather than added (measured, `conic quarter`).
+                const turns = (std.math.atan2(y - g.y, x - g.x) - g.angle) / std.math.tau;
+                // The sweep wraps rather than clamping — a conic gradient has
+                // no outside.
+                return turns - @floor(turns);
+            },
+        }
+    }
+
+    /// The colour at a device-space point.
+    fn at(self: Gradient, x: f64, y: f64) Paint {
+        const nothing: Paint = .{ .r = 0, .g = 0, .b = 0, .a = 0 };
+        if (self.stops.len == 0) return nothing;
+        const user = self.inverse.apply(x, y);
+        const raw = self.position(user.x, user.y) orelse return nothing;
+        if (!std.math.isFinite(raw)) return nothing;
+        // Both ends extend, which is the spec's clamp and the only tiling a
+        // canvas gradient has.
+        const t = std.math.clamp(raw, 0, 1);
+
+        // The first stop past `t`. Walking up rather than down is what makes a
+        // repeated offset resolve to the *later* stop on the pixel that lands
+        // exactly there: both of them are `<= t`, so both are stepped over.
+        var above: usize = 0;
+        while (above < self.stops.len and self.stops[above].offset <= t) above += 1;
+        if (above == 0) return self.stops[0].paint;
+        if (above == self.stops.len) return self.stops[above - 1].paint;
+
+        const from = self.stops[above - 1];
+        const to = self.stops[above];
+        const span = to.offset - from.offset;
+        if (span <= 0) return to.paint;
+        const u = (t - from.offset) / span;
+        return .{
+            .r = from.paint.r + (to.paint.r - from.paint.r) * u,
+            .g = from.paint.g + (to.paint.g - from.paint.g) * u,
+            .b = from.paint.b + (to.paint.b - from.paint.b) * u,
+            .a = from.paint.a + (to.paint.a - from.paint.a) * u,
         };
     }
 };
@@ -471,7 +657,7 @@ pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y
     const bounds = Bounds.clip(x, y, w, h, canvas_width, canvas_height) orelse return;
     if (!self.ensure(canvas_width, canvas_height)) return;
 
-    const global = opacity(global_alpha);
+    const global = source.opacityOf(global_alpha);
     if (global <= 0 or source.blank()) {
         return;
     }
@@ -484,7 +670,7 @@ pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y
             const alpha = global * paint.a;
             if (alpha <= 0) continue;
             const at = row * canvas_width + col;
-            self.store(at, blended(self.load(at), paint, alpha, op));
+            self.store(at, blended(self.load(at), paint, alpha, op, source.dither(col, row)));
         }
     }
 }
@@ -615,7 +801,7 @@ pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_he
     const edges = edgesOf(scratch, p) orelse return;
     const bounds = edgeBounds(edges, canvas_width, canvas_height) orelse return;
 
-    const global = opacity(global_alpha);
+    const global = source.opacityOf(global_alpha);
     if (global <= 0 or source.blank()) {
         return;
     }
@@ -644,7 +830,7 @@ pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_he
             if (alpha <= 0) continue;
             const coverage = @as(f64, @floatFromInt(hits)) / (samples * samples);
             const at = row * canvas_width + col;
-            self.store(at, blended(self.load(at), paint, alpha * coverage, op));
+            self.store(at, blended(self.load(at), paint, alpha * coverage, op, source.dither(col, row)));
         }
     }
 }
@@ -781,7 +967,7 @@ pub fn drawSurface(
             // same order `context_draw`'s `paint` uses for a fill.
             const paint = filter.applyTo(color.convertCanvasPaint(spaces.from, spaces.to, straight(texel)));
             const at = row * canvas_width + col;
-            self.store(at, blended(self.load(at), paint, alpha * paint.a, op));
+            self.store(at, blended(self.load(at), paint, alpha * paint.a, op, 0));
         }
     }
 }
@@ -821,7 +1007,7 @@ pub fn clearPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_h
             if (self.background == .black) {
                 // Clearing part of an opaque canvas paints that much black over
                 // it; the pixel stays opaque either way.
-                self.store(at, blended(self.load(at), .{ .r = 0, .g = 0, .b = 0 }, covered, .source_over));
+                self.store(at, blended(self.load(at), .{ .r = 0, .g = 0, .b = 0 }, covered, .source_over, 0));
                 continue;
             }
             // Premultiplied, so scaling the alpha down means scaling the colour
@@ -1176,7 +1362,7 @@ pub fn castShadow(
             const alpha = cover[(row + margin) * mask.width + col + margin] / 255 * shadow.color.a;
             if (alpha <= 0) continue;
             const at = row * canvas_width + col;
-            self.store(at, blended(self.load(at), shadow.color, alpha, op));
+            self.store(at, blended(self.load(at), shadow.color, alpha, op, 0));
         }
     }
 }
@@ -1368,7 +1554,15 @@ pub fn straightPixels(self: *const Surface, arena: Allocator, canvas_width: u32,
 /// straight-alpha bitmap got wrong: it un-premultiplies a half-alpha 64 back
 /// into 127.5, where a straight bitmap still had the 128 that went in, and the
 /// 106 Chrome reads follows from the 127.5.
-fn blended(dst: [4]f64, paint: Paint, alpha: f64, op: Composite) [4]f64 {
+///
+/// `dither` is the source's ordered-dither offset (see `Source.dither`), added
+/// to each premultiplied output channel. Skia's dither stage sits between the
+/// shader and the blend, and for source-over — every measurement there is —
+/// that is exactly this: the premultiplied source term is the only one the
+/// offset can land on, so adding it to the sum and adding it to the source come
+/// out the same. Under a blend mode the two would part company, and nothing
+/// measured says which Chrome does.
+fn blended(dst: [4]f64, paint: Paint, alpha: f64, op: Composite, dither: f64) [4]f64 {
     const dst_alpha = dst[3] / 255;
     // A blend function needs the backdrop's own colour, and there is none to
     // have when the backdrop is empty: every operator degenerates to
@@ -1390,7 +1584,7 @@ fn blended(dst: [4]f64, paint: Paint, alpha: f64, op: Composite) [4]f64 {
         // arms are the spec's `co`, and the term the source does not cover is
         // `(1 - as) * ab * Cb` — which is `(1 - as)` times the premultiplied
         // channel already sitting there.
-        out[i] = switch (blend_op) {
+        out[i] = dither + switch (blend_op) {
             .source_over => alpha * src + (1 - alpha) * dst[i],
             else => alpha * (1 - dst_alpha) * src +
                 alpha * dst_alpha * blend_op.apply(old, src) +
@@ -1724,4 +1918,91 @@ test "raster: a blend mode reaches a path's partly covered edge" {
     try testing.expectEqualSlices(u8, &.{ 191, 0, 192, 255 }, surface.pixels[3 * 4 ..][0..4]);
     try testing.expectEqualSlices(u8, &.{ 223, 64, 96, 255 }, surface.pixels[4 * 4 ..][0..4]);
     try testing.expectEqualSlices(u8, &.{ 255, 128, 0, 255 }, surface.pixels[5 * 4 ..][0..4]);
+}
+
+/// One 32-wide row of a gradient-filled 32x8 canvas against the hex Chrome
+/// answered for it. The height and the row matter: the dither is a function of
+/// both coordinates, so the same ramp read off a different row is different
+/// bytes.
+fn expectGradientRow(geometry: Gradient.Geometry, stops: []const Gradient.Stop, hex: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+
+    var surface = Surface{ .arena = arena.allocator() };
+    defer surface.reset();
+    surface.fillRect(32, 8, 0, 0, 32, 8, .{ .gradient = .{
+        .geometry = geometry,
+        .inverse = path_mod.Transform.identity,
+        .stops = stops,
+    } }, 1, .source_over);
+
+    var got = [_]u8{0} ** (32 * 4);
+    surface.readPixels(32, 8, 0, 4, 32, 1, &got);
+    var want = [_]u8{0} ** (32 * 4);
+    for (&want, 0..) |*byte, i| {
+        byte.* = try std.fmt.parseInt(u8, hex[i * 2 ..][0..2], 16);
+    }
+    return testing.expectEqualSlices(u8, &want, &got);
+}
+
+test "raster: a gradient is Chrome's ramp, ordered dither and all" {
+    const red: Paint = .{ .r = 255, .g = 0, .b = 0 };
+    const blue: Paint = .{ .r = 0, .g = 0, .b = 255 };
+    const ends = [_]Gradient.Stop{ .{ .offset = 0, .paint = red }, .{ .offset = 1, .paint = blue } };
+
+    // Chrome 151, row 4 of each of these (probes/canvas-gradient-paint.js).
+    //
+    // The rows are not the exact interpolation and cannot be reached by any
+    // rounding of it: at i = 4 the blue channel of the linear ramp is exactly
+    // 35.859 and Chrome stores 35, while at i = 27 it is 219.141 and Chrome
+    // stores 220. Both fall out of Skia's 8x8 ordered dither, which nudges a
+    // gradient's premultiplied channels by up to half a byte before they are
+    // rounded and leaves a flat fill alone. See `ditherOffset`.
+    try expectGradientRow(
+        .{ .linear = .{ .x0 = 0, .y0 = 0, .x1 = 32, .y1 = 0 } },
+        &ends,
+        "fb0004fff3000cffeb0014ffe4001cffdb0023ffd3002cffcb0034ffc4003cffbb0043ffb4004cffab0053ffa4005cff9b0063ff94006cff8b0073ff84007cff7b0083ff74008cff6b0093ff64009cff5b00a3ff5400acff4b00b3ff4400bcff3b00c3ff3400cbff2c00d3ff2400dcff1b00e3ff1400ebff0c00f3ff0400fbff",
+    );
+
+    // A plain disc, read through its own centre, which is the radial arm's
+    // concentric shortcut: the ramp is the distance between the two radii.
+    try expectGradientRow(
+        .{ .radial = .{ .x0 = 16, .y0 = 4, .r0 = 0, .x1 = 16, .y1 = 4, .r1 = 16 } },
+        &ends,
+        "0700f7ff1800e8ff2700d7ff3800c8ff4700b7ff5800a8ff670097ff780088ff870077ff970068ffa70058ffb70049ffc60038ffd70029ffe60019fff4000cfff3000bffe60019ffd60028ffc70039ffb60048ffa70058ff970068ff880078ff770087ff680098ff5700a7ff4800b8ff3700c7ff2800d8ff1700e7ff0800f8ff",
+    );
+
+    // The sweep, which pins where zero points and which way it turns: the row
+    // runs left to right half a pixel below the centre, so it starts just past
+    // the negative x axis at half a turn and comes back round to it.
+    try expectGradientRow(
+        .{ .conic = .{ .angle = 0, .x = 16, .y = 4 } },
+        &ends,
+        "80007eff81007eff81007eff82007eff81007dff82007eff81007dff82007eff82007cff83007dff83007cff84007bff850079ff880078ff8c0072ffa00060ffdf001ffff2000dfff70008fffa0006fffa0004fffc0004fffc0003fffd0003fffc0002fffd0002fffd0002fffe0002fffd0001fffe0002fffd0001fffe0002ff",
+    );
+
+    // Three stops, unevenly spaced, so the ramp is per segment rather than one
+    // interpolation from end to end.
+    try expectGradientRow(
+        .{ .linear = .{ .x0 = 0, .y0 = 0, .x1 = 32, .y1 = 0 } },
+        &.{
+            .{ .offset = 0, .paint = red },
+            .{ .offset = 0.25, .paint = .{ .r = 0, .g = 255, .b = 0 } },
+            .{ .offset = 1, .paint = blue },
+        },
+        "ef0f00ffcf3000ffaf4f00ff907000ff6f8f00ff50b000ff30cf00ff10f000ff00f905ff00ef10ff00e41aff00da26ff00cf2fff00c53bff00ba45ff00b050ff00a45aff009a65ff008f6fff00857bff007a84ff007090ff00659aff005ba5ff004fafff0045baff003ac4ff0030d0ff0025d9ff001be5ff0010efff0006faff",
+    );
+
+    // A zero-length axis and a gradient with no stops paint nothing at all,
+    // rather than extending an end stop over the shape.
+    try expectGradientRow(
+        .{ .linear = .{ .x0 = 8, .y0 = 0, .x1 = 8, .y1 = 0 } },
+        &ends,
+        "00000000" ** 32,
+    );
+    try expectGradientRow(
+        .{ .linear = .{ .x0 = 0, .y0 = 0, .x1 = 32, .y1 = 0 } },
+        &.{},
+        "00000000" ** 32,
+    );
 }
