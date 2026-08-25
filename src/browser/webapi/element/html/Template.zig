@@ -87,17 +87,6 @@ fn setBoolAttribute(self: *Template, name: String, value: bool, frame: *Frame) !
     }
 }
 
-pub fn getOuterHTML(self: *Template, writer: *std.Io.Writer, frame: *Frame) !void {
-    const dump = @import("../../../dump.zig");
-    const el = self.asElement();
-
-    try el.format(writer);
-    try dump.children(self._content.asNode(), .{ .shadow = .skip }, writer, frame);
-    try writer.writeAll("</");
-    try writer.writeAll(el.getTagNameDump());
-    try writer.writeByte('>');
-}
-
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Template);
 
@@ -120,12 +109,8 @@ pub const JsApi = struct {
         return self.setInnerHTML(if (value.isNull()) "" else try value.toZig([]const u8), frame);
     }
 
-    pub const outerHTML = bridge.accessor(_getOuterHTML, null, .{});
-    fn _getOuterHTML(self: *Template, frame: *Frame) ![]const u8 {
-        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
-        try self.getOuterHTML(&buf.writer, frame);
-        return buf.written();
-    }
+    // outerHTML is inherited: dump serializes a template's content fragment
+    // wherever the template appears, so the generic Element path is correct.
 
     pub const shadowRootMode = bridge.accessor(Template.getShadowRootMode, Template.setShadowRootMode, .{ .ce_reactions = true });
 
