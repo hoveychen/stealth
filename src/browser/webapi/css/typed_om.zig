@@ -22,6 +22,7 @@ const DOMMatrix = @import("../DOMMatrix.zig");
 const DOMMatrixReadOnly = @import("../DOMMatrixReadOnly.zig");
 const CSSStyleDeclaration = @import("CSSStyleDeclaration.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
+const units = @import("../../css/units.zig");
 const Css = @import("../Css.zig");
 const Execution = js.Execution;
 
@@ -95,77 +96,12 @@ fn failFmt(frame: *Frame, err: anytype, comptime fmt: []const u8, args: anytype)
 /// [-4, 6), exponent padded to at least two digits. Measured — `1/3` prints
 /// `0.333333` while `.value` still reads back the full double, and `999999.9`
 /// rounds up into `1e+06`.
+///
+/// The rule is not Typed OM's own — a media feature length serialises the same
+/// way, `(min-width:1000000px)` answering `(min-width: 1e+06px)` — so it lives
+/// in css/units.zig and this is the name the rest of this file already calls.
 pub fn writeNumber(writer: *std.Io.Writer, v: f64) SerializeError!void {
-    if (std.math.isNan(v)) return writer.writeAll("NaN");
-    if (std.math.isInf(v)) return writer.writeAll(if (v > 0) "Infinity" else "-Infinity");
-    if (v == 0) return writer.writeAll("0");
-
-    var buf: [64]u8 = undefined;
-    // Rounding to five decimals in scientific form first means the exponent we
-    // branch on is the post-rounding one, exactly as %g does.
-    const formatted = std.fmt.bufPrint(&buf, "{e:.5}", .{v}) catch return error.StringTooLarge;
-
-    var rest = formatted;
-    const negative = rest[0] == '-';
-    if (negative) rest = rest[1..];
-
-    const e_at = std.mem.indexOfScalar(u8, rest, 'e') orelse return error.StringTooLarge;
-    var digits: [6]u8 = undefined;
-    var count: usize = 0;
-    for (rest[0..e_at]) |c| {
-        if (c == '.') continue;
-        if (count == digits.len) break;
-        digits[count] = c;
-        count += 1;
-    }
-    const exponent = std.fmt.parseInt(i32, rest[e_at + 1 ..], 10) catch return error.StringTooLarge;
-
-    if (negative) try writer.writeAll("-");
-
-    if (exponent < -4 or exponent >= 6) {
-        const mantissa = stripTrailingZeros(digits[0..count]);
-        try writer.writeAll(mantissa[0..1]);
-        if (mantissa.len > 1) {
-            try writer.writeAll(".");
-            try writer.writeAll(mantissa[1..]);
-        }
-        const sign: u8 = if (exponent < 0) '-' else '+';
-        try writer.print("e{c}{d:0>2}", .{ sign, @abs(exponent) });
-        return;
-    }
-
-    if (exponent >= 0) {
-        const int_len: usize = @intCast(exponent + 1);
-        if (int_len >= count) {
-            try writer.writeAll(digits[0..count]);
-            for (0..int_len - count) |_| try writer.writeAll("0");
-            return;
-        }
-        try writer.writeAll(digits[0..int_len]);
-        const fraction = stripFraction(digits[int_len..count]);
-        if (fraction.len != 0) {
-            try writer.writeAll(".");
-            try writer.writeAll(fraction);
-        }
-        return;
-    }
-
-    try writer.writeAll("0.");
-    for (0..@intCast(-exponent - 1)) |_| try writer.writeAll("0");
-    try writer.writeAll(stripTrailingZeros(digits[0..count]));
-}
-
-fn stripTrailingZeros(digits: []const u8) []const u8 {
-    var end = digits.len;
-    while (end > 1 and digits[end - 1] == '0') end -= 1;
-    return digits[0..end];
-}
-
-/// Unlike a mantissa, a fraction may strip away entirely: `5px`, not `5.0px`.
-fn stripFraction(digits: []const u8) []const u8 {
-    var end = digits.len;
-    while (end > 0 and digits[end - 1] == '0') end -= 1;
-    return digits[0..end];
+    return units.writeNumber(writer, v);
 }
 
 // ---------------------------------------------------------------------------
@@ -914,8 +850,8 @@ pub const CSSNumericValue = struct {
 
         if (unit_names.len != 0) {
             const slots = try frame.local_arena.alloc(f64, unit_names.len);
-            const units = try frame.local_arena.alloc(Unit, unit_names.len);
-            for (unit_names, units, slots) |name, *unit, *slot| {
+            const wanted = try frame.local_arena.alloc(Unit, unit_names.len);
+            for (unit_names, wanted, slots) |name, *unit, *slot| {
                 unit.* = Unit.parse(name) orelse return frame.js.fail(
                     error.SyntaxError,
                     "Failed to execute 'toSum' on 'CSSNumericValue': Invalid unit for conversion",
@@ -927,7 +863,7 @@ pub const CSSNumericValue = struct {
                 // for conversion", one word off the unit message above.
                 const unit = term.asUnit() orelse return frame.js.fail(error.TypeError, invalid_value);
                 var placed = false;
-                for (units, slots) |target, *slot| {
+                for (wanted, slots) |target, *slot| {
                     const converted = convert(unit._value, unit._unit, target) catch continue;
                     slot.* += converted;
                     placed = true;
@@ -940,8 +876,8 @@ pub const CSSNumericValue = struct {
                     "Failed to execute 'toSum' on 'CSSNumericValue': There were leftover terms that were not converted",
                 );
             }
-            const values = try frame.local_arena.alloc(*CSSNumericValue, units.len);
-            for (units, slots, values) |unit, total, *slot| {
+            const values = try frame.local_arena.alloc(*CSSNumericValue, wanted.len);
+            for (wanted, slots, values) |unit, total, *slot| {
                 slot.* = (try CSSUnitValue.create(total, unit, frame))._proto;
             }
             return CSSMathSum.create(values, frame);

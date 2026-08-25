@@ -123,6 +123,93 @@ pub fn suffix(unit: Unit) []const u8 {
 
 const testing = @import("../../testing.zig");
 
+// ---------------------------------------------------------------------------
+// Number serialisation
+// ---------------------------------------------------------------------------
+
+/// `writeNumber` fails only on a number too long to format, which no finite
+/// double is; spelled out so the callers that need an explicit error set (the
+/// mutually-recursive Typed OM serialisers, the media query one) can name it.
+pub const NumberError = error{ StringTooLarge, WriteFailed };
+
+/// A CSS number as printf `%g` writes it: six significant digits,
+/// trailing zeros dropped, scientific notation once the exponent leaves
+/// [-4, 6), exponent padded to at least two digits. Measured — `1/3` prints
+/// `0.333333` while `.value` still reads back the full double, and `999999.9`
+/// rounds up into `1e+06`.
+pub fn writeNumber(writer: *std.Io.Writer, v: f64) NumberError!void {
+    if (std.math.isNan(v)) return writer.writeAll("NaN");
+    if (std.math.isInf(v)) return writer.writeAll(if (v > 0) "Infinity" else "-Infinity");
+    if (v == 0) return writer.writeAll("0");
+
+    var buf: [64]u8 = undefined;
+    // Rounding to five decimals in scientific form first means the exponent we
+    // branch on is the post-rounding one, exactly as %g does.
+    const formatted = std.fmt.bufPrint(&buf, "{e:.5}", .{v}) catch return error.StringTooLarge;
+
+    var rest = formatted;
+    const negative = rest[0] == '-';
+    if (negative) rest = rest[1..];
+
+    const e_at = std.mem.indexOfScalar(u8, rest, 'e') orelse return error.StringTooLarge;
+    var digits: [6]u8 = undefined;
+    var count: usize = 0;
+    for (rest[0..e_at]) |c| {
+        if (c == '.') continue;
+        if (count == digits.len) break;
+        digits[count] = c;
+        count += 1;
+    }
+    const exponent = std.fmt.parseInt(i32, rest[e_at + 1 ..], 10) catch return error.StringTooLarge;
+
+    if (negative) try writer.writeAll("-");
+
+    if (exponent < -4 or exponent >= 6) {
+        const mantissa = stripTrailingZeros(digits[0..count]);
+        try writer.writeAll(mantissa[0..1]);
+        if (mantissa.len > 1) {
+            try writer.writeAll(".");
+            try writer.writeAll(mantissa[1..]);
+        }
+        const sign: u8 = if (exponent < 0) '-' else '+';
+        try writer.print("e{c}{d:0>2}", .{ sign, @abs(exponent) });
+        return;
+    }
+
+    if (exponent >= 0) {
+        const int_len: usize = @intCast(exponent + 1);
+        if (int_len >= count) {
+            try writer.writeAll(digits[0..count]);
+            for (0..int_len - count) |_| try writer.writeAll("0");
+            return;
+        }
+        try writer.writeAll(digits[0..int_len]);
+        const fraction = stripFraction(digits[int_len..count]);
+        if (fraction.len != 0) {
+            try writer.writeAll(".");
+            try writer.writeAll(fraction);
+        }
+        return;
+    }
+
+    try writer.writeAll("0.");
+    for (0..@intCast(-exponent - 1)) |_| try writer.writeAll("0");
+    try writer.writeAll(stripTrailingZeros(digits[0..count]));
+}
+
+fn stripTrailingZeros(digits: []const u8) []const u8 {
+    var end = digits.len;
+    while (end > 1 and digits[end - 1] == '0') end -= 1;
+    return digits[0..end];
+}
+
+/// Unlike a mantissa, a fraction may strip away entirely: `5px`, not `5.0px`.
+fn stripFraction(digits: []const u8) []const u8 {
+    var end = digits.len;
+    while (end > 0 and digits[end - 1] == '0') end -= 1;
+    return digits[0..end];
+}
+
 test "css units: parse" {
     try testing.expectEqual(Parsed{ .value = 12, .unit = .none }, try parse("12"));
     try testing.expectEqual(Parsed{ .value = -3.5, .unit = .px }, try parse("-3.5px"));

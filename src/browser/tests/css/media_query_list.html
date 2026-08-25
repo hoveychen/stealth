@@ -289,3 +289,62 @@
   testing.expectEqual(true, window.matchMedia('(min-aspect-ratio: 1/2)').matches);
 }
 </script>
+
+<script id=matchMedia_number_forms>
+{
+  // A media-feature number is a full CSS <number>: it may carry an exponent, a
+  // sign and a fraction, and a <length> may be negative (a bound below zero is
+  // useless but well-formed). Every row measured on a headed Chrome 150 whose
+  // viewport was 1920 wide; see results/media-query-serialization.json.
+  const matchRows = [
+    ['(min-width: 1e2px)', true],
+    ['(min-width: 1E-2px)', true],
+    ['(min-width: 100.5px)', true],
+    ['(min-width: 1919.5px)', true],
+    ['(min-width: 1920.5px)', false],
+    ['(min-width: 6.25em)', true],
+    ['(min-width: 119.9375em)', true],
+    ['(min-width: 120.0625em)', false],
+    ['(min-width: -0px)', true],
+    ['(min-width: -1px)', true],
+    // A <resolution> and a <ratio> may not go below zero, and a negative one
+    // is malformed rather than clamped — but -0 is zero, so it is fine.
+    ['(min-resolution: -0dppx)', true],
+    ['(min-resolution: -1dppx)', false],
+    ['(min-aspect-ratio: -1/2)', false],
+    // The length is a float32, so an exponent past its range clamps instead of
+    // becoming infinite, and one below it collapses to zero.
+    ['(min-width: 1e400px)', false],
+    ['(min-width: 1e-400px)', true],
+    // An <integer> takes no exponent and no fraction.
+    ['(color: 1e1)', false],
+    ['(color: 8.0)', false],
+  ];
+  for (const [query, expected] of matchRows) {
+    testing.expectEqual(expected + ' ' + query,
+      window.matchMedia(query).matches + ' ' + query);
+  }
+
+  // Serialisation writes the number back from its value, with six significant
+  // digits — the same rule canvas uses for a gradient offset.
+  const mediaRows = [
+    ['(min-width: 1e2px)', '(min-width: 100px)'],
+    ['(min-width: 1E-2px)', '(min-width: 0.01px)'],
+    ['(min-width: 119.9375em)', '(min-width: 119.938em)'],
+    ['(min-width: 1e400px)', '(min-width: 3.40282e+38px)'],
+    ['(min-width: -0px)', '(min-width: 0px)'],
+    ['(min-width: -1px)', '(min-width: -1px)'],
+    ['(color: -0)', '(color: 0)'],
+    ['(min-resolution: 1e0dppx)', '(min-resolution: 1dppx)'],
+    ['(aspect-ratio: -0/1)', '(aspect-ratio: 0 / 1)'],
+    // and what is still malformed keeps its own text
+    ['(min-width:5.px)', '(min-width:5.px)'],
+    ['(color:1e1)', '(color:1e1)'],
+    ['(min-resolution:-1dppx)', '(min-resolution:-1dppx)'],
+    ['(min-aspect-ratio:-1/2)', '(min-aspect-ratio:-1/2)'],
+  ];
+  for (const [query, expected] of mediaRows) {
+    testing.expectEqual(expected, window.matchMedia(query).media);
+  }
+}
+</script>

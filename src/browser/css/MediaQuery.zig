@@ -65,6 +65,7 @@
 const std = @import("std");
 
 const Viewport = @import("../Viewport.zig");
+const units = @import("units.zig");
 
 /// Returns true if `query` matches the given viewport. Comma-separated
 /// queries are evaluated independently and combined with OR.
@@ -566,7 +567,7 @@ fn rangeFeatureValue(feature: RangeFeature, viewport: Viewport) f64 {
 /// comparison are the same scalar.
 fn parseRangeBound(feature: RangeFeature, text: []const u8) ?f64 {
     return switch (feature) {
-        .width, .height => @floatFromInt(parseLengthPx(text) orelse return null),
+        .width, .height => parseLengthPx(text),
         .resolution => parseResolutionDppx(text),
         .color, .color_index, .monochrome => @floatFromInt(parseInteger(text) orelse return null),
         .aspect_ratio => parseRatio(text),
@@ -752,6 +753,10 @@ fn compareRatio(value: []const u8, width: u32, height: u32, op: RatioCompare) bo
 /// rejecting a unit — gets every rung of a ladder wrong rather than one query.
 fn parseResolutionDppx(value: []const u8) ?f64 {
     const split = splitNumber(std.mem.trim(u8, value, &std.ascii.whitespace)) orelse return null;
+    // Non-negative per MQ4, and malformed rather than clamped below zero. `-0`
+    // is zero and so allowed, which is what Chrome answers to
+    // `(min-resolution: -0dppx)`.
+    if (split.value < 0) return null;
     const unit = std.mem.trim(u8, split.rest, &std.ascii.whitespace);
 
     if (std.ascii.eqlIgnoreCase(unit, "dppx") or std.ascii.eqlIgnoreCase(unit, "x")) return split.value;
@@ -764,17 +769,26 @@ fn parseResolutionDppx(value: []const u8) ?f64 {
 const NumberSplit = struct { value: f64, rest: []const u8 };
 
 /// Scan a leading CSS `<number>` and return it with the unconsumed remainder,
-/// which for a dimension is the unit. Digits, then an optional `.` fraction;
-/// either part may be empty as long as the other is not, so `.625` parses and
-/// bare `.` does not. A `.` with no digit after it is left for the unit, which
-/// makes `5.dppx` malformed rather than `5` with a `.dppx` unit.
+/// which for a dimension is the unit. An optional sign, digits, an optional
+/// `.` fraction, an optional exponent; the integer and fraction parts may not
+/// both be empty, so `.625` parses and bare `.` does not. A `.` with no digit
+/// after it is left for the unit, which makes `5.dppx` malformed rather than
+/// `5` with a `.dppx` unit.
 ///
-/// A leading `-` is rejected outright: `<resolution>` and `<ratio>` are both
-/// non-negative in media features, and per MQ4 a negative one is malformed
-/// rather than clamped.
+/// The sign and the exponent are both here because a CSS `<number>` has them
+/// and Chrome reads them: `(min-width: 1e2px)` matches at 100px and serialises
+/// as `100px`, and `(min-width: -1px)` is a well-formed bound that everything
+/// is above. Which *features* accept a negative is the caller's business —
+/// `<resolution>` and `<ratio>` are non-negative, and per MQ4 a negative one is
+/// malformed rather than clamped, so those two reject `value < 0` themselves.
+/// `-0` passes that test, which is what Chrome does with it too.
 fn splitNumber(s: []const u8) ?NumberSplit {
     var i: usize = 0;
-    if (i < s.len and s[i] == '+') i += 1;
+    var negative = false;
+    if (i < s.len and (s[i] == '+' or s[i] == '-')) {
+        negative = s[i] == '-';
+        i += 1;
+    }
 
     var value: f64 = 0;
     const int_start = i;
@@ -804,53 +818,101 @@ fn splitNumber(s: []const u8) ?NumberSplit {
     }
 
     if (int_digits == 0 and frac_digits == 0) return null;
+
+    // The exponent only counts when a digit follows it: `1e2px` is 100px, while
+    // `1epx` is the number 1 with the unit `epx`, which is no unit at all.
+    if (i < s.len and (s[i] == 'e' or s[i] == 'E')) {
+        var j = i + 1;
+        var exp_negative = false;
+        if (j < s.len and (s[j] == '+' or s[j] == '-')) {
+            exp_negative = s[j] == '-';
+            j += 1;
+        }
+        const exp_start = j;
+        var exponent: i32 = 0;
+        while (j < s.len and std.ascii.isDigit(s[j])) : (j += 1) {
+            // Past the range of a double the extra digits cannot move the
+            // result, and they would overflow the accumulator; keep consuming.
+            if (exponent < 1000) exponent = exponent * 10 + @as(i32, s[j] - '0');
+        }
+        if (j > exp_start) {
+            const signed: f64 = if (exp_negative) -@as(f64, @floatFromInt(exponent)) else @floatFromInt(exponent);
+            value *= std.math.pow(f64, 10, signed);
+            i = j;
+        }
+    }
+
+    if (negative) value = -value;
     return .{ .value = value, .rest = s[i..] };
 }
 
-/// A bare CSS `<number>` filling the whole of `value`, for `<ratio>` terms.
+/// A bare non-negative CSS `<number>` filling the whole of `value`, for
+/// `<ratio>` terms. `-0` is zero and so allowed; anything below it is not.
 fn parseNumber(value: []const u8) ?f64 {
     const split = splitNumber(std.mem.trim(u8, value, &std.ascii.whitespace)) orelse return null;
     if (split.rest.len != 0) return null;
+    if (split.value < 0) return null;
     return split.value;
 }
 
-/// A bare non-negative integer, for the numeric display descriptors.
+/// A bare non-negative integer, for the numeric display descriptors. An
+/// `<integer>` has no fraction and no exponent — Chrome quotes `(color: 8.0)`
+/// and `(color: 1e1)` back rather than reading either — but it does take a
+/// sign, and `-0` is 0.
 fn parseInteger(value: []const u8) ?u32 {
-    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
-    if (trimmed.len == 0) return null;
-    for (trimmed) |c| {
+    var digits = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (digits.len == 0) return null;
+    var negative = false;
+    if (digits[0] == '+' or digits[0] == '-') {
+        negative = digits[0] == '-';
+        digits = digits[1..];
+    }
+    if (digits.len == 0) return null;
+    for (digits) |c| {
         if (!std.ascii.isDigit(c)) return null;
     }
-    return std.fmt.parseInt(u32, trimmed, 10) catch null;
+    const n = std.fmt.parseInt(u32, digits, 10) catch return null;
+    if (negative and n != 0) return null;
+    return n;
 }
 
-/// Parse `<int>px`, `<int>em` (1em=16px), `<int>rem`, or bare `0`.
-/// Negative lengths are rejected per the Media Queries spec (`<length>` in
-/// media features may not be negative). Returns null on any other form.
-fn parseLengthPx(value: []const u8) ?u32 {
+/// Parse `<number>px`, `<number>em` (1em=16px), `<number>rem`, or a bare zero,
+/// into px. Returns null on any other form — the units this engine does not
+/// claim (cm, pt, vw) stay unreadable on purpose, and a unit-less non-zero is
+/// not a length at all.
+///
+/// A `<length>` is a fraction and it may be negative: `(min-width: 1919.5px)`
+/// matches a 1920-wide viewport where `(min-width: 1920.5px)` does not, and
+/// `(min-width: -1px)` is a bound everything clears. Both measured on Chrome
+/// 150 — the earlier integer-only, non-negative reading answered false to all
+/// three.
+fn parseLengthPx(value: []const u8) ?f64 {
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
-    if (trimmed.len == 0) return null;
-    if (trimmed[0] == '-') return null;
+    const split = splitNumber(trimmed) orelse return null;
+    const unit = std.mem.trim(u8, split.rest, &std.ascii.whitespace);
 
-    var i: usize = 0;
-    if (i < trimmed.len and trimmed[i] == '+') i += 1;
-    const num_start = i;
-    while (i < trimmed.len and std.ascii.isDigit(trimmed[i])) i += 1;
-    if (i == num_start) return null;
+    const px = if (unit.len == 0)
+        // Only zero may go without a unit. `(min-width: 100)` is quoted back by
+        // Chrome, not read as 100px.
+        if (split.value == 0) split.value else return null
+    else if (std.ascii.eqlIgnoreCase(unit, "px"))
+        split.value
+    else if (std.ascii.eqlIgnoreCase(unit, "em") or std.ascii.eqlIgnoreCase(unit, "rem"))
+        split.value * 16
+    else
+        return null;
 
-    const num = std.fmt.parseInt(u32, trimmed[num_start..i], 10) catch return null;
-    const unit = std.mem.trim(u8, trimmed[i..], &std.ascii.whitespace);
+    return toFloat32(px);
+}
 
-    if (unit.len == 0) {
-        return if (num == 0) 0 else null;
-    }
-    if (std.ascii.eqlIgnoreCase(unit, "px")) return num;
-    // `em` / `rem`: 1em = 16px. `std.math.mul` returns an error on u32 overflow
-    // (e.g. `268435456em` would otherwise wrap or panic in debug); treat that
-    // as an unparseable length so the query fails closed per MQ4.
-    if (std.ascii.eqlIgnoreCase(unit, "em")) return std.math.mul(u32, num, 16) catch null;
-    if (std.ascii.eqlIgnoreCase(unit, "rem")) return std.math.mul(u32, num, 16) catch null;
-    return null;
+/// A CSS length is a float32 in Chrome, which is visible at both ends: an
+/// exponent past its range clamps to `3.40282e+38` rather than becoming
+/// infinite (`(min-width: 1e400px)` serialises as that and matches false), and
+/// one below it collapses to zero.
+fn toFloat32(value: f64) f64 {
+    const limit = std.math.floatMax(f32);
+    const clamped = std.math.clamp(value, -limit, limit);
+    return @as(f32, @floatCast(clamped));
 }
 
 // ---------------------------------------------------------------------------
@@ -880,7 +942,7 @@ const Unwritable = error{ EchoRaw, NotAll };
 /// The three ways a write can end: the component was unwritable, the writer
 /// failed, or its allocator did. Spelled out rather than inferred because the
 /// condition writers recurse through each other for nested conditions.
-const WriteError = Unwritable || error{ WriteFailed, OutOfMemory };
+const WriteError = Unwritable || units.NumberError || error{OutOfMemory};
 
 /// The canonical text of `query`, in the arena. Comma-separated queries are
 /// serialised independently and joined with `, `.
@@ -1138,8 +1200,8 @@ fn writeNameValue(w: *std.Io.Writer, name: []const u8, value: []const u8) !void 
 
 fn writeValue(w: *std.Io.Writer, feature: Feature, value: []const u8) !void {
     return switch (feature.kind) {
-        .length => writeDimension(w, value, &length_units, true),
-        .resolution => writeDimension(w, value, &resolution_units, false),
+        .length => writeDimension(w, value, .length),
+        .resolution => writeDimension(w, value, .resolution),
         .integer => writeInteger(w, value, null),
         // `grid` is 0 or 1 and nothing else: Chrome quotes `(grid: 2)` back.
         .grid => writeInteger(w, value, 1),
@@ -1153,20 +1215,44 @@ const resolution_units = [_][]const u8{ "dppx", "x", "dpi", "dpcm" };
 
 /// A `<dimension>`: the number in CSS canonical form, the unit lowercased.
 /// `bare_zero_ok` covers `<length>`, where a unitless 0 is legal.
-fn writeDimension(w: *std.Io.Writer, value: []const u8, units: []const []const u8, bare_zero_ok: bool) !void {
+fn writeDimension(w: *std.Io.Writer, value: []const u8, kind: DimensionKind) !void {
     const split = splitNumber(value) orelse return error.EchoRaw;
+    // Only a `<length>` may be negative.
+    if (kind == .resolution and split.value < 0) return error.EchoRaw;
+
+    // The unit is kept as written rather than converted — `6.25em` stays em —
+    // and the number is rounded through the float32 a length is stored in, so
+    // `119.9375em` writes as `119.938em` and `1e400px` as `3.40282e+38px`.
+    // Whether a resolution is stored the same way was not measured, so it keeps
+    // its double.
+    const number = switch (kind) {
+        .length => toFloat32(split.value),
+        .resolution => split.value,
+    };
+
     const unit = std.mem.trim(u8, split.rest, &std.ascii.whitespace);
     if (unit.len == 0) {
-        if (!bare_zero_ok or split.value != 0) return error.EchoRaw;
+        // Only a length may go unitless, and only at zero.
+        if (kind != .length or number != 0) return error.EchoRaw;
         return w.writeAll("0");
     }
+
     var buf: [8]u8 = undefined;
     const lunit = lowerBounded(&buf, unit) orelse return error.EchoRaw;
-    for (units) |known| {
-        if (std.mem.eql(u8, known, lunit)) return w.print("{d}{s}", .{ split.value, lunit });
+    const allowed: []const []const u8 = switch (kind) {
+        .length => &length_units,
+        .resolution => &resolution_units,
+    };
+    for (allowed) |known| {
+        if (std.mem.eql(u8, known, lunit)) {
+            try units.writeNumber(w, number);
+            return w.writeAll(lunit);
+        }
     }
     return error.EchoRaw;
 }
+
+const DimensionKind = enum { length, resolution };
 
 fn writeInteger(w: *std.Io.Writer, value: []const u8, max: ?u32) !void {
     const n = parseInteger(value) orelse return error.EchoRaw;
@@ -1177,21 +1263,30 @@ fn writeInteger(w: *std.Io.Writer, value: []const u8, max: ?u32) !void {
 }
 
 /// `<ratio>` is always written as two numbers around ` / `, so a bare number
-/// grows the `/ 1` the spec says it means. A zero denominator is malformed but
+/// grows the `/ 1` the spec says it means. Its terms do not go through the `%g`
+/// a dimension does: `(aspect-ratio:1000000/1)` answers `1000000 / 1` where
+/// `(min-width:1000000px)` answers `1e+06px` (both measured), so they are
+/// written as they read. A zero denominator is malformed but
 /// still writeable — Chrome answers `(aspect-ratio: 1 / 0)` and false.
 fn writeRatio(w: *std.Io.Writer, value: []const u8) !void {
     if (std.mem.indexOfScalar(u8, value, '/')) |slash| {
         const num = parseNumber(value[0..slash]) orelse return error.EchoRaw;
         const den = parseNumber(value[slash + 1 ..]) orelse return error.EchoRaw;
-        return w.print("{d} / {d}", .{ num, den });
+        return w.print("{d} / {d}", .{ unsign(num), unsign(den) });
     }
     const num = parseNumber(value) orelse return error.EchoRaw;
-    return w.print("{d} / 1", .{num});
+    return w.print("{d} / 1", .{unsign(num)});
 }
 
 /// A discrete feature's value has to be one of that feature's own keywords:
 /// `(pointer: coarse)` is canonicalised while `(orientation: bogus)` is quoted,
 /// even though both answer false.
+/// `-0` is zero, and zero has no sign in a serialisation: Chrome answers
+/// `(aspect-ratio: 0 / 1)` to `(aspect-ratio:-0/1)`.
+fn unsign(v: f64) f64 {
+    return if (v == 0) 0 else v;
+}
+
 fn writeKeyword(w: *std.Io.Writer, value: []const u8, keywords: []const []const u8) !void {
     var buf: [max_value_text]u8 = undefined;
     const lvalue = lowerBounded(&buf, value) orelse return error.EchoRaw;
@@ -1234,8 +1329,8 @@ fn writeRange(w: *std.Io.Writer, split: RangeSplit) !void {
 /// counterpart of `parseRangeBound`.
 fn writeBound(w: *std.Io.Writer, feature: RangeFeature, text: []const u8) !void {
     return switch (feature) {
-        .width, .height => writeDimension(w, text, &length_units, true),
-        .resolution => writeDimension(w, text, &resolution_units, false),
+        .width, .height => writeDimension(w, text, .length),
+        .resolution => writeDimension(w, text, .resolution),
         .color, .color_index, .monochrome => writeInteger(w, text, null),
         .aspect_ratio => writeRatio(w, text),
     };
@@ -1620,8 +1715,15 @@ test "MediaQuery: malformed value is false" {
     const v = Viewport.default;
     try testing.expect(!matches("(min-width: foo)", v));
     try testing.expect(!matches("(min-width:)", v));
-    try testing.expect(!matches("(min-width: -100px)", v));
     try testing.expect(!matches("(min-width: 100xx)", v));
+    // A unitless non-zero is not a length; a unitless zero is.
+    try testing.expect(!matches("(min-width: 100)", v));
+    try testing.expect(matches("(min-width: 0)", v));
+    // A negative `<length>` is well-formed — useless as a bound, but every
+    // viewport is above it. Measured; `<resolution>` and `<ratio>` are the two
+    // that reject a negative outright.
+    try testing.expect(matches("(min-width: -100px)", v));
+    try testing.expect(!matches("(max-width: -100px)", v));
 }
 
 test "MediaQuery: boolean form (feature presence)" {
@@ -1805,11 +1907,25 @@ test "MediaQuery: range syntax is rejected where Chrome rejects it" {
     try testing.expect(!matches("(nonsense > 4)", v));
 }
 
-test "MediaQuery: decimal lengths are rejected" {
+// A `<length>` is a fraction, and the comparison is against the fraction rather
+// than a rounded one: 1920 clears 1919.5 and not 1920.5. All measured on Chrome
+// 150 at a 1920-wide viewport, where the earlier integer-only reading answered
+// false to every row here.
+test "MediaQuery: decimal lengths compare as fractions" {
     const v = Viewport.default;
-    try testing.expect(!matches("(min-width: 600.5px)", v));
-    try testing.expect(!matches("(min-width: 0.5em)", v));
-    try testing.expect(!matches("(width: 1920.0px)", v));
+    try testing.expect(matches("(min-width: 600.5px)", v));
+    try testing.expect(matches("(min-width: 0.5em)", v));
+    try testing.expect(matches("(width: 1920.0px)", v));
+    try testing.expect(matches("(min-width: 1919.5px)", v));
+    try testing.expect(!matches("(min-width: 1920.5px)", v));
+    // 1em is 16px, so the boundary is at 120em.
+    try testing.expect(matches("(min-width: 119.9375em)", v));
+    try testing.expect(!matches("(min-width: 120.0625em)", v));
+    // An exponent counts, and past the float32 range it clamps rather than
+    // going infinite.
+    try testing.expect(matches("(min-width: 1e2px)", v));
+    try testing.expect(matches("(min-width: 1e-400px)", v));
+    try testing.expect(!matches("(min-width: 1e400px)", v));
 }
 
 test "MediaQuery: whitespace-tight and -loose features" {
