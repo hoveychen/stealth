@@ -12801,3 +12801,145 @@ off every https page. A CDP target that never navigates therefore never gets
 gated. Every path a real page takes does: an http origin commits and gates, and
 a script-created `about:blank` iframe goes through the synthetic-navigation
 branch, which calls it too.
+
+## Akamai's sensor says how hard it worked, and we are 40x under (2026-08-24)
+
+`ak-macys` reaches the end of the challenge now. Both arms, one sitting, two
+pairs, `antibot-sweep.mjs --only ak-macys --trace`:
+
+| | headed Chrome | lightpanda |
+|---|---|---|
+| sensor POSTs | 1918 → 5205 → 4652 (`?t=`) → clearance | 1915 → 5182 → 4627 (`?t=`) → **interstitial again** |
+| verdict | pass, 8025-8026 nodes | empty-document, 32 nodes |
+
+So the missing second and third rounds that this station was stuck on for six
+sessions are gone; what is left is that Akamai reads our payload and re-serves
+the door. Its own cleartext header says why it might:
+
+    3;0;1;2048;<n>;<sitekey>;A,B,C,D,E,F;<ciphertext>
+
+`A` is 627-664 from Chrome and 14-22 from us, four runs each, real site and
+replay alike. It is not elapsed time since the sensor script loaded -- Chrome
+POSTs 14ms after that response arrives -- it is CPU: `sensor-cpu-profile.mjs`
+puts 652-664ms of self time in a single function of the sensor script (its name
+is regenerated per session: `UVq`, `cRK`), running as one uninterrupted burn
+right before the POST. We finish whatever that is in 14ms.
+
+### The harness, and it lives in the repo this time
+
+* `sensor-cpu-profile.mjs <url> --body-dir <dir>` — Chrome's sampling profile of
+  a page up to its first POST, plus every response body off the wire. The bodies
+  are the capture; the profile's `url:line:column` are offsets into them.
+* `akamai-replay.mjs --bodies <dir> --port N [--inject probe.js]` — serves one
+  capture back. Hermetic by construction: every `https://<host>/` in the
+  document is rewritten to the local server, because the captured loader derives
+  its module URLs from its own `src` and an earlier round of this work spent
+  three sessions comparing two arms that were fetching *different* code from the
+  live site. POSTs answer 201 `{"success":true}`, or 200 for the `?t=` endpoint
+  the interstitial's inline poller watches. The capture in
+  `results/b41-macys-bodies` replays indefinitely: the sensor never checks the
+  reply.
+* The replay reproduces the gap exactly — Chrome `664,0,0,0,1,0`, lightpanda
+  `14,0,0,0,1,0` — which makes this the first local oracle this station has had.
+
+### What the burn is not
+
+Measured on the replay, both arms, same capture:
+
+* **Not a different branch.** Marking the guard's flattened dispatcher with a
+  counter (`case` id → calls) gives an identical map on both sides: `9:1, 26:1,
+  39:1, 46:4, 54:1, 76:1, 262:1, 391:1, 559:1, 738:1, 749:2, 897:1, 958:1,
+  969:1`. Same cases, same counts, 47x the time.
+* **Not a deadline-polling loop.** `probes/probe-clock-calls.js`: `Date.now` 65
+  vs 54, `Math.random` 62 vs 43, `performance.now` 2 vs 2. Nobody is watching a
+  clock 600 times.
+* **Not per-character hashing of its own source.** It does hash its own source —
+  `probes/probe-hash-work.js` counts `charCodeAt` over a 496239-char string, and
+  496256 is exactly the challenge script's size — but the count is the same on
+  both sides: 635673 (Chrome) vs 650797 (us).
+
+### Two instruments that do not work here
+
+* **`Debugger.enable` stops the guard.** With the domain on, the sensor runs
+  ~5900 statements and then nothing: no POST, in either engine.
+  `Profiler.startPreciseCoverage` works fine *without* it — map scriptIds from
+  the coverage result's own `url` instead of from `Debugger.scriptParsed`.
+* **Rewriting the script's text kills it too.** See the note at the top of
+  `akamai-replay.mjs`. Instrument from outside, with `--inject`.
+
+### Also measured, in passing
+
+* `Runtime.evaluate` with `awaitPromise` never resolves on this engine if the
+  promise settles from a timer — already known (`run-page-probe.mjs` header
+  says so), rediscovered the hard way. Load probes as a page.
+* Chrome clamps `setInterval(f, 1)` to ~4ms: 129 ticks in 500ms, headed, on
+  about:blank (`probes/expr-timer-cadence.js`).
+* On the real site the sensor's `_bm/get_params` is never requested by either
+  arm — an earlier suggestion to capture its response is moot.
+* Our arm issues ~154 `chrome-extension://` HEAD requests (the sensor's
+  extension probe list) and they surface as `UnsupportedProtocol` failures on
+  the wire. Chrome shows none: the scheme is refused before the network service,
+  so CDP never reports them. Not yet checked whether the two arms' *JS-visible*
+  outcome for those probes matches.
+
+### The burn is one-time, and nothing we can wrap is holding it (2026-08-24, same round)
+
+Chrome's first load of a fresh profile reports 645-786 in that counter. Its
+*second* cycle through the same interstitial reports 5. Ours reports 14-22 then
+5-9. So the difference is entirely in the first pass over a cold browser, and
+after that the two engines agree.
+
+Wrapping candidates and charging each call, on the replay, both arms:
+
+| wrapped | Chrome's total | counter still |
+|---|---|---|
+| `Date.now` / `performance.now` / `Math.random` (`probe-clock-calls.js`) | 65 + 2 + 62 calls | 667 |
+| `charCodeAt` / `charAt` / `fromCharCode` / `fn.toString` (`probe-hash-work.js`) | 635673 charCodeAt over a 496239-char string | 645 |
+| every string, regex and codec builtin (`probe-native-time.js`) | 1.7ms across all of them | 674 |
+| layout, geometry, canvas entry points (`probe-layout-time.js`) | 8ms (ours: 30ms) | 660 |
+| every method on WebGL / WebAudio / SubtleCrypto / Performance / Navigator / Storage / MediaDevices prototypes (`probe-device-time.js`) | nothing above noise; WebGL and audio are never touched at this stage | 698 |
+
+And the raw work is not the engines' difference: 650k `charCodeAt` at random
+offsets into a 496239-char string plus a 200k-iteration string build runs in
+5/2/3ms on *both* engines (`probes/expr-charcode-cost.js` via `run-expr.mjs`). Creating
+and reading 20k `Error().stack` is 19ms here against 13ms in Chrome
+(`probes/expr-error-stack-cost.js`), so it is not stack capture either.
+
+What is left is engine work inside the JS frame that no page-visible API
+mediates, spent once and never again — V8's lazy compilation of a 578KB script's
+inner functions is the shape that fits (it lands as self time in whichever frame
+first calls each function, and a second load hits the code cache). Both engines
+compile with `kNoCompileOptions` (`src/script/Runtime.zig:308`,
+`src/browser/js/Local.zig:210`), so if that is the answer it is a real
+difference in how much work the two V8s do on first call, and the next step is
+to measure it directly: a synthetic ~500KB script of many large functions, timed
+from inside the page, in both arms.
+
+Also worth a look: on the replay Chrome sends a fourth POST per cycle, ~2.2KB
+and binary (leading tab, NULs, replacement characters), that this engine never
+sends. Not investigated.
+
+### Not lazy compilation, and not a headed-browser cost either (2026-08-24, same round)
+
+`probes/expr-lazy-compile-cost.js` builds a 469492-byte script out of 3000
+distinct functions and separates compiling the outer script, declaring the inner
+ones, calling each once, and calling them again:
+
+| | compile | declare | first call | second call |
+|---|---|---|---|---|
+| headed Chrome | 5ms | 0ms | 10ms | 0ms |
+| lightpanda | 6ms | 0ms | 13ms | 0ms |
+
+Half a megabyte of first-call compilation is 10ms, not 650, and the two engines
+agree — so V8's lazy compilation is not where a 578KB script's first pass goes.
+
+And `sensor-cpu-profile.mjs --headless` on the same replay reports **654** in the
+counter, against 645-698 headed. Whatever the work is, a headless Chrome does it
+too; it is not the window system, the GPU, or a display-server font path.
+
+So the counter's 47x remains unexplained by anything measurable from outside the
+script. The next instrument that can answer it is the script itself: the
+sampling profile's chain (`cRK` ← `H8Y` ← `g5Y` ← `HrY` ← `PUY` ← `cBK` ←
+`RjY` ← anonymous@31999, offsets into `results/b41-macys-bodies/02-*`) is a map
+into a capture that is now on disk and replayable, and the burn is one call deep
+in a flattened dispatcher whose case ids both arms enter identically.
