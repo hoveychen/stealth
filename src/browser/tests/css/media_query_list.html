@@ -348,3 +348,40 @@
   }
 }
 </script>
+
+<script id=matchMedia_nesting_and_logic>
+{
+  // MQ4 gives a media condition parens, `or`, and a `not` that binds to a
+  // condition rather than to a media type. All rows measured on a headed
+  // Chrome 150 at a 1920x1080 viewport.
+  const rows = [
+    ['((min-width: 100px))', true],
+    ['((min-width: 3000px))', false],
+    ['(((min-width: 100px)))', true],
+    ['not ((min-width: 100px))', false],
+    ['((min-width: 100px) and (max-width: 5000px))', true],
+    ['((min-width: 3000px) or (min-width: 100px))', true],
+    ['(min-width: 100px) or (min-width: 3000px)', true],
+    ['(min-width: 3000px) or (min-width: 4000px)', false],
+    ['screen and ((min-width: 100px))', true],
+    ['(not (min-width: 100px))', false],
+    ['(not (min-width: 3000px))', true],
+    // An empty query is `all`, and `all` matches.
+    ['', true],
+    ['   ', true],
+    // A media type this browser is not answers false — and negating that
+    // answers true, whether the type is a real one it is not or a name no
+    // registry has.
+    ['print', false],
+    ['not print', true],
+    ['not tv', true],
+    ['bogus', false],
+    ['not bogus', true],
+    ['not braille', true],
+  ];
+  for (const [query, expected] of rows) {
+    testing.expectEqual(expected + ' [' + query + ']',
+      window.matchMedia(query).matches + ' [' + query + ']');
+  }
+}
+</script>

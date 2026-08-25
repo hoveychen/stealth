@@ -78,7 +78,9 @@ pub fn matches(query: []const u8, viewport: Viewport) bool {
     if (hasUnterminatedComment(query)) return false;
 
     var rest = trimWsAndComments(query);
-    if (rest.len == 0) return false;
+    // An empty query is `all`, which matches. Chrome answers true to
+    // `matchMedia('')` and to a query of nothing but whitespace.
+    if (rest.len == 0) return true;
 
     while (rest.len > 0) {
         const cut = nextTopLevelComma(rest);
@@ -195,69 +197,133 @@ fn parseMediaType(word: []const u8) ?MediaType {
     return null;
 }
 
+/// One comma-separated query, walked over the same token grammar the
+/// serialiser uses — `tokenize` splits the parens from the identifiers, and
+/// what is not a media type followed by `and`-joined conditions, or a chain of
+/// conditions on its own, has no valid reading and answers false.
 fn matchesSingle(query: []const u8, viewport: Viewport) bool {
-    var negate = false;
-    var type_set: ?MediaType = null;
-    var features_match = true;
-    var saw_token = false;
+    const tokens = tokenize(query) catch return false;
+    const items = tokens.slice();
 
     var i: usize = 0;
-    while (i < query.len) {
-        i = skipWsAndComments(query, i);
-        if (i >= query.len) break;
-
-        if (query[i] == '(') {
-            const end = findClosingParen(query, i) orelse return false;
-            const inner = query[i + 1 .. end];
-            if (!evalFeature(inner, viewport)) features_match = false;
-            saw_token = true;
-            i = end + 1;
-            continue;
-        }
-
-        const start = i;
-        while (i < query.len and isIdentChar(query[i])) {
-            i += 1;
-        }
-
-        const len = i - start;
-        if (len < 2 or len > 16) {
-            return false;
-        }
-
-        var word_buf: [16]u8 = undefined;
-        const word = std.ascii.lowerString(&word_buf, query[start..i]);
-
-        saw_token = true;
-        if (std.mem.eql(u8, word, "not")) {
+    var negate = false;
+    var only = false;
+    if (!items[0].block) {
+        if (std.ascii.eqlIgnoreCase(items[0].text, "not")) {
             negate = true;
-        } else if (std.mem.eql(u8, word, "only")) {
-            // 'only' is a hint to legacy parsers — treat as a no-op qualifier.
-        } else if (std.mem.eql(u8, word, "and")) {
-            // separator between media-type and feature, or between features.
-        } else if (parseMediaType(word)) |t| {
-            type_set = t;
-        } else {
-            // Unknown ident in media-type position: per spec the whole query
-            // is treated as a non-matching type.
-            return false;
+            i = 1;
+        } else if (std.ascii.eqlIgnoreCase(items[0].text, "only")) {
+            // 'only' is a hint to parsers that predate media features; it
+            // qualifies a media type and nothing else.
+            only = true;
+            i = 1;
         }
     }
+    // A bare `not` or `only` names nothing.
+    if (i == items.len) return false;
 
-    if (!saw_token) {
-        return false;
+    if (items[i].block) {
+        if (only) return false;
+        const result = conditionChainMatches(items[i..], viewport) orelse return false;
+        return if (negate) !result else result;
     }
 
-    const type_matches = if (type_set) |t|
-        switch (t) {
-            .all, .screen => true,
-            .print, .speech, .tv => false,
-        }
-    else
-        true;
+    var word_buf: [max_feature_name]u8 = undefined;
+    const media_type = lowerBounded(&word_buf, items[i].text) orelse return false;
+    // A logical keyword where the media type goes.
+    if (isJoiner(media_type)) return false;
+    i += 1;
+
+    // Everything after a media type is `and <condition>`; `or` may not follow
+    // one, and two conditions may not sit side by side.
+    var features_match = true;
+    while (i < items.len) {
+        if (items[i].block or !std.ascii.eqlIgnoreCase(items[i].text, "and")) return false;
+        i += 1;
+        if (i == items.len or !items[i].block) return false;
+        if (!conditionMatches(items[i].text, viewport)) features_match = false;
+        i += 1;
+    }
+
+    // An unknown media type is not this browser, so it answers false — but it
+    // is still a well-formed query, and negating it answers true. `not bogus`
+    // and `not tv` both match (measured); the earlier reading returned false
+    // out of the parse and lost the negation with it.
+    const type_matches = if (parseMediaType(media_type)) |t| switch (t) {
+        .all, .screen => true,
+        .print, .speech, .tv => false,
+    } else false;
 
     const result = type_matches and features_match;
     return if (negate) !result else result;
+}
+
+/// Conditions joined by one repeated keyword, or null when that is not what
+/// the tokens are. Mixing `and` with `or` at one level is malformed in MQ4 —
+/// the parens are what disambiguate — so it has no reading rather than a
+/// guessed precedence.
+fn conditionChainMatches(items: []const Token, viewport: Viewport) ?bool {
+    var i: usize = 0;
+    var result: ?bool = null;
+    var joiner: ?Joiner = null;
+    while (true) {
+        if (!items[i].block) return null;
+        const value = conditionMatches(items[i].text, viewport);
+        result = if (result) |carried| switch (joiner.?) {
+            .@"and" => carried and value,
+            .@"or" => carried or value,
+        } else value;
+        i += 1;
+        if (i == items.len) return result;
+
+        if (items[i].block) return null;
+        const next: Joiner = if (std.ascii.eqlIgnoreCase(items[i].text, "and"))
+            .@"and"
+        else if (std.ascii.eqlIgnoreCase(items[i].text, "or"))
+            .@"or"
+        else
+            return null;
+        if (joiner) |set| {
+            if (set != next) return null;
+        } else {
+            joiner = next;
+        }
+        i += 1;
+        // A trailing joiner with nothing after it.
+        if (i == items.len) return null;
+    }
+}
+
+/// What is inside one pair of parens: a feature, or another condition — MQ4
+/// lets a media condition nest, and `((min-width: 100px))` and
+/// `(not (min-width: 100px))` are both queries Chrome answers.
+fn conditionMatches(inner: []const u8, viewport: Viewport) bool {
+    const text = trimWsAndComments(inner);
+    if (text.len == 0) return false;
+
+    if (text[0] == '(' or startsWithNot(text)) {
+        const tokens = tokenize(text) catch return false;
+        const items = tokens.slice();
+        var negate = false;
+        var start: usize = 0;
+        if (!items[0].block and std.ascii.eqlIgnoreCase(items[0].text, "not")) {
+            negate = true;
+            start = 1;
+        }
+        if (start == items.len) return false;
+        const result = conditionChainMatches(items[start..], viewport) orelse return false;
+        return if (negate) !result else result;
+    }
+
+    return evalFeature(text, viewport);
+}
+
+/// A leading `not` keyword rather than a feature name that happens to begin
+/// with those three letters.
+fn startsWithNot(text: []const u8) bool {
+    if (text.len <= 3) return false;
+    if (!std.ascii.eqlIgnoreCase(text[0..3], "not")) return false;
+    return !isIdentChar(text[3]);
 }
 
 fn findClosingParen(s: []const u8, open: usize) ?usize {
@@ -1439,9 +1505,15 @@ fn isJoiner(lname: []const u8) bool {
 
 const testing = std.testing;
 
-test "MediaQuery: empty query is false" {
-    try testing.expect(!matches("", Viewport.default));
-    try testing.expect(!matches("   ", Viewport.default));
+// An empty media query list is `all` per MQ4, and `all` matches. Measured:
+// `matchMedia('').matches` is true on Chrome 150, and so is a query of nothing
+// but whitespace. An empty *branch* of a comma list is the other way round —
+// there it is `not all` — which is why the two are handled apart.
+test "MediaQuery: empty query is all" {
+    try testing.expect(matches("", Viewport.default));
+    try testing.expect(matches("   ", Viewport.default));
+    try testing.expect(matches("/* just a comment */", Viewport.default));
+    try testing.expect(!matches("(min-width: 3000px),", Viewport.default));
 }
 
 test "MediaQuery: bare media types" {
