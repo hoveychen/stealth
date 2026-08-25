@@ -29,12 +29,14 @@
 //!               `resolution`, `color`, `color-index`, `monochrome`, `grid`,
 //!               `update`, `scripting`, `overflow-block` / `overflow-inline`,
 //!               `hover` / `any-hover`, `pointer` / `any-pointer`,
-//!               `display-mode`, `color-gamut`, `dynamic-range`,
-//!               `forced-colors`, `prefers-color-scheme`,
+//!               `display-mode`, `device-posture`, `color-gamut`,
+//!               `dynamic-range`, `forced-colors`, `prefers-color-scheme`,
 //!               `prefers-reduced-motion`, `prefers-contrast`,
 //!               `prefers-reduced-transparency`.
 //!   - Length values: `<int>px`, `<int>em` (1em = 16px), `<int>rem`,
 //!     and bare `0`.
+//!   - Number values: `<resolution>` in `dppx` / `x` / `dpi` / `dpcm` and both
+//!     `<ratio>` terms take a fractional CSS `<number>`.
 //!   - Operators: `,` (OR), `and`, `not`, `only`.
 //!
 //! The interaction features and the display descriptors answer for one fixed
@@ -299,8 +301,16 @@ fn evalFeature(text: []const u8, viewport: Viewport) bool {
 // choice, for the same reason.
 const COLOR_BITS_PER_CHANNEL: u32 = 8;
 
-// devicePixelRatio, mirroring Window's own property.
-const DEVICE_PIXEL_RATIO: u32 = 1;
+// A colour screen with no indexed palette and no monochrome depth. Both are the
+// numbers Chrome reports (measured); they are named because the `min-` / `max-`
+// forms only read right next to the value they compare against.
+const COLOR_INDEX: u32 = 0;
+const MONOCHROME_BITS: u32 = 0;
+
+// devicePixelRatio, mirroring Window's own property. Held as a float because a
+// resolution bound is a float: `(min-resolution: 0.625dppx)` has to compare
+// against 1 without either side being rounded first.
+const DEVICE_PIXEL_RATIO: f64 = 1;
 
 fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
     if (name.len > 32) {
@@ -380,13 +390,16 @@ fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
         return compareRatio(value, viewport.width, viewport.height, .le);
     }
 
-    if (std.mem.eql(u8, lname, "resolution")) return parseDppx(value) == DEVICE_PIXEL_RATIO;
+    if (std.mem.eql(u8, lname, "resolution")) {
+        const dppx = parseResolutionDppx(value) orelse return false;
+        return dppx == DEVICE_PIXEL_RATIO;
+    }
     if (std.mem.eql(u8, lname, "min-resolution")) {
-        const dppx = parseDppx(value) orelse return false;
+        const dppx = parseResolutionDppx(value) orelse return false;
         return DEVICE_PIXEL_RATIO >= dppx;
     }
     if (std.mem.eql(u8, lname, "max-resolution")) {
-        const dppx = parseDppx(value) orelse return false;
+        const dppx = parseResolutionDppx(value) orelse return false;
         return DEVICE_PIXEL_RATIO <= dppx;
     }
 
@@ -401,10 +414,30 @@ fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
         const n = parseInteger(value) orelse return false;
         return COLOR_BITS_PER_CHANNEL <= n;
     }
-    if (std.mem.eql(u8, lname, "color-index") or std.mem.eql(u8, lname, "max-color-index")) return parseInteger(value) == 0;
-    if (std.mem.eql(u8, lname, "min-color-index")) return parseInteger(value) == 0;
-    if (std.mem.eql(u8, lname, "monochrome") or std.mem.eql(u8, lname, "max-monochrome")) return parseInteger(value) == 0;
-    if (std.mem.eql(u8, lname, "min-monochrome")) return parseInteger(value) == 0;
+    // Both are 0 here, which is exactly the value that makes the `max-` form
+    // match every bound and the `min-` form match only a 0 one. Sharing one
+    // `== 0` between the bare feature and its `max-` form answers the `max-`
+    // form backwards, so each of the three prefixes compares on its own.
+    if (std.mem.eql(u8, lname, "color-index")) return parseInteger(value) == COLOR_INDEX;
+    if (std.mem.eql(u8, lname, "min-color-index")) {
+        const n = parseInteger(value) orelse return false;
+        return COLOR_INDEX >= n;
+    }
+    if (std.mem.eql(u8, lname, "max-color-index")) {
+        const n = parseInteger(value) orelse return false;
+        return COLOR_INDEX <= n;
+    }
+    if (std.mem.eql(u8, lname, "monochrome")) return parseInteger(value) == MONOCHROME_BITS;
+    if (std.mem.eql(u8, lname, "min-monochrome")) {
+        const n = parseInteger(value) orelse return false;
+        return MONOCHROME_BITS >= n;
+    }
+    if (std.mem.eql(u8, lname, "max-monochrome")) {
+        const n = parseInteger(value) orelse return false;
+        return MONOCHROME_BITS <= n;
+    }
+    // `grid` is discrete, not a range feature: Chrome answers false to both
+    // `min-grid` and `max-grid` (measured), so only the bare form is here.
     if (std.mem.eql(u8, lname, "grid")) return parseInteger(value) == 0;
 
     // Keyword descriptors, all measured on a headed Chrome.
@@ -420,6 +453,9 @@ fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
         return std.ascii.eqlIgnoreCase(value, "scroll");
     }
     if (std.mem.eql(u8, lname, "display-mode")) return std.ascii.eqlIgnoreCase(value, "browser");
+    // A desktop display does not fold, and `navigator.devicePosture.type`
+    // already answers `continuous` — the two have to agree.
+    if (std.mem.eql(u8, lname, "device-posture")) return std.ascii.eqlIgnoreCase(value, "continuous");
     if (std.mem.eql(u8, lname, "color-gamut")) return std.ascii.eqlIgnoreCase(value, "srgb");
     if (std.mem.eql(u8, lname, "dynamic-range")) return std.ascii.eqlIgnoreCase(value, "standard");
     if (std.mem.eql(u8, lname, "forced-colors")) return std.ascii.eqlIgnoreCase(value, "none");
@@ -466,6 +502,7 @@ fn evalBoolean(name: []const u8, viewport: Viewport) bool {
     if (std.mem.eql(u8, lname, "scripting")) return true;
     if (std.mem.eql(u8, lname, "overflow-block") or std.mem.eql(u8, lname, "overflow-inline")) return true;
     if (std.mem.eql(u8, lname, "display-mode")) return true;
+    if (std.mem.eql(u8, lname, "device-posture")) return true;
     if (std.mem.eql(u8, lname, "color-gamut")) return true;
     if (std.mem.eql(u8, lname, "dynamic-range")) return true;
     if (std.mem.eql(u8, lname, "prefers-color-scheme")) return true;
@@ -478,24 +515,26 @@ fn evalBoolean(name: []const u8, viewport: Viewport) bool {
 
 const RatioCompare = enum { eq, ge, le };
 
-/// `<ratio>` is `<int> / <int>`, or a single number meaning `n / 1`. Compared
-/// by cross-multiplication so 16/9 and 1920/1080 come out equal.
+/// `<ratio>` is `<number> / <number>`, or a single number meaning `n / 1`.
+/// Both terms are numbers rather than integers — MQ4 widened them, and Chrome
+/// takes `(max-aspect-ratio: 2.125)` and `(min-aspect-ratio: 1.5/2.5)`.
+/// Compared by cross-multiplication so 16/9 and 1920/1080 come out equal.
 fn compareRatio(value: []const u8, width: u32, height: u32, op: RatioCompare) bool {
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
-    var num: u64 = undefined;
-    var den: u64 = undefined;
+    var num: f64 = undefined;
+    var den: f64 = undefined;
     if (std.mem.indexOfScalar(u8, trimmed, '/')) |slash| {
-        num = parseInteger(trimmed[0..slash]) orelse return false;
-        den = parseInteger(trimmed[slash + 1 ..]) orelse return false;
+        num = parseNumber(trimmed[0..slash]) orelse return false;
+        den = parseNumber(trimmed[slash + 1 ..]) orelse return false;
     } else {
-        num = parseInteger(trimmed) orelse return false;
+        num = parseNumber(trimmed) orelse return false;
         den = 1;
     }
     if (den == 0) return false;
 
     // width/height vs num/den  ->  width*den vs num*height
-    const lhs = @as(u64, width) * den;
-    const rhs = num * @as(u64, height);
+    const lhs = @as(f64, @floatFromInt(width)) * den;
+    const rhs = num * @as(f64, @floatFromInt(height));
     return switch (op) {
         .eq => lhs == rhs,
         .ge => lhs >= rhs,
@@ -503,21 +542,73 @@ fn compareRatio(value: []const u8, width: u32, height: u32, op: RatioCompare) bo
     };
 }
 
-/// `<resolution>` in whole `dppx` / `x`. `dpi` and `dpcm` are converted against
-/// the CSS-fixed 96dpi. Fractional resolutions are rejected rather than rounded,
-/// which only ever makes a query fail closed.
-fn parseDppx(value: []const u8) ?u32 {
-    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
-    var i: usize = 0;
-    while (i < trimmed.len and std.ascii.isDigit(trimmed[i])) i += 1;
-    if (i == 0) return null;
-    const num = std.fmt.parseInt(u32, trimmed[0..i], 10) catch return null;
-    const unit = std.mem.trim(u8, trimmed[i..], &std.ascii.whitespace);
+/// `<resolution>` as a fractional dppx, in any of the three units Chrome
+/// accepts. Kasada binary-searches devicePixelRatio by halving a
+/// `min-resolution` bound two dozen times and then walking the same ladder
+/// again in `dpi` and a third time in `dpcm`, so rounding a resolution — or
+/// rejecting a unit — gets every rung of a ladder wrong rather than one query.
+fn parseResolutionDppx(value: []const u8) ?f64 {
+    const split = splitNumber(std.mem.trim(u8, value, &std.ascii.whitespace)) orelse return null;
+    const unit = std.mem.trim(u8, split.rest, &std.ascii.whitespace);
 
-    if (std.ascii.eqlIgnoreCase(unit, "dppx") or std.ascii.eqlIgnoreCase(unit, "x")) return num;
-    if (std.ascii.eqlIgnoreCase(unit, "dpi")) return if (num % 96 == 0) num / 96 else null;
-    if (std.ascii.eqlIgnoreCase(unit, "dpcm")) return null;
+    if (std.ascii.eqlIgnoreCase(unit, "dppx") or std.ascii.eqlIgnoreCase(unit, "x")) return split.value;
+    // CSS fixes 1in at 96px, and an inch is 2.54cm.
+    if (std.ascii.eqlIgnoreCase(unit, "dpi")) return split.value / 96.0;
+    if (std.ascii.eqlIgnoreCase(unit, "dpcm")) return split.value * 2.54 / 96.0;
     return null;
+}
+
+const NumberSplit = struct { value: f64, rest: []const u8 };
+
+/// Scan a leading CSS `<number>` and return it with the unconsumed remainder,
+/// which for a dimension is the unit. Digits, then an optional `.` fraction;
+/// either part may be empty as long as the other is not, so `.625` parses and
+/// bare `.` does not. A `.` with no digit after it is left for the unit, which
+/// makes `5.dppx` malformed rather than `5` with a `.dppx` unit.
+///
+/// A leading `-` is rejected outright: `<resolution>` and `<ratio>` are both
+/// non-negative in media features, and per MQ4 a negative one is malformed
+/// rather than clamped.
+fn splitNumber(s: []const u8) ?NumberSplit {
+    var i: usize = 0;
+    if (i < s.len and s[i] == '+') i += 1;
+
+    var value: f64 = 0;
+    const int_start = i;
+    while (i < s.len and std.ascii.isDigit(s[i])) : (i += 1) {
+        value = value * 10 + @as(f64, @floatFromInt(s[i] - '0'));
+    }
+    const int_digits = i - int_start;
+
+    var frac_digits: usize = 0;
+    if (i + 1 < s.len and s[i] == '.' and std.ascii.isDigit(s[i + 1])) {
+        i += 1;
+        var num: u64 = 0;
+        var den: f64 = 1;
+        while (i < s.len and std.ascii.isDigit(s[i])) : (i += 1) {
+            frac_digits += 1;
+            // A double holds 17 significant digits; past that the numerator
+            // would overflow without moving the value. Keep scanning so the
+            // rest of the token is still consumed, just stop accumulating.
+            if (frac_digits <= 17) {
+                num = num * 10 + (s[i] - '0');
+                den *= 10;
+            }
+        }
+        // Dividing two exact values keeps the result correctly rounded, where
+        // accumulating tenths would drift: 0.625 has to stay 0.625.
+        value += @as(f64, @floatFromInt(num)) / den;
+    }
+
+    if (int_digits == 0 and frac_digits == 0) return null;
+    return .{ .value = value, .rest = s[i..] };
+}
+
+/// A bare CSS `<number>` filling the whole of `value`, for `<ratio>` terms.
+fn parseNumber(value: []const u8) ?f64 {
+    const split = splitNumber(std.mem.trim(u8, value, &std.ascii.whitespace)) orelse return null;
+    if (split.rest.len != 0) return null;
+    return split.value;
 }
 
 /// A bare non-negative integer, for the numeric display descriptors.

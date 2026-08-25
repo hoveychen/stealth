@@ -99,6 +99,28 @@
   testing.expectEqual(1, window.devicePixelRatio);
   testing.expectEqual(true, window.matchMedia('(color: 8)').matches);
   testing.expectEqual(24, screen.colorDepth);
+
+  // devicePixelRatio survives being binary-searched. Kasada narrows it on
+  // x-hyatt by halving a min-resolution bound and then repeating the ladder in
+  // dpi and in dpcm, so a bound either side of 1 has to answer in all three.
+  testing.expectEqual(true, window.matchMedia('(min-resolution: 0.625dppx)').matches);
+  testing.expectEqual(false, window.matchMedia('(min-resolution: 1.5dppx)').matches);
+  testing.expectEqual(true, window.matchMedia('(min-resolution: 50dpi)').matches);
+  testing.expectEqual(true, window.matchMedia('(max-resolution: 256dpi)').matches);
+  testing.expectEqual(true, window.matchMedia('(min-resolution: 30dpcm)').matches);
+  testing.expectEqual(false, window.matchMedia('(max-resolution: 30dpcm)').matches);
+
+  // 0 is the value that makes every max- bound match and only a 0 min- one.
+  testing.expectEqual(true, window.matchMedia('(max-color-index: 4)').matches);
+  testing.expectEqual(true, window.matchMedia('(max-monochrome: 4)').matches);
+  testing.expectEqual(false, window.matchMedia('(min-monochrome: 4)').matches);
+
+  // A ratio term may be a decimal; 1920/1080 sits between these two bounds.
+  testing.expectEqual(true, window.matchMedia('(max-aspect-ratio: 2.125)').matches);
+  testing.expectEqual(false, window.matchMedia('(max-aspect-ratio: 1.7)').matches);
+
+  testing.expectEqual('continuous', pick('device-posture', ['folded', 'continuous']));
+  testing.expectEqual('continuous', navigator.devicePosture.type);
 }
 </script>
 
