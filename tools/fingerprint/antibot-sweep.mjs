@@ -239,6 +239,8 @@ async function teardown() {
 // station is kept in order rather than only the last.
 let docs = [];
 let wire = [];
+// The zero for `--trace` timestamps, reset per station.
+let stationStarted = Date.now();
 // Filled by --attach-frames: the sessions of Chrome's out-of-process iframes.
 const frameSessions = new Set();
 let pageSession = null;
@@ -264,7 +266,14 @@ const onEvent = (msg) => {
     const fromFrame = msg.sessionId !== undefined && msg.sessionId !== pageSession;
     // Which session an event arrived on is a reading in itself: it says the
     // request belongs to the challenge's own iframe rather than to the page.
-    const push = (e) => wire.push(fromFrame ? { ...e, frame: true } : e);
+    // Every trace entry is stamped, relative to the station's own start. A
+    // guard's sensor reports how long its collection took inside its payload --
+    // Akamai's `sensor_data` header carries it in cleartext -- and the only way
+    // to tell that number apart from a counter is to have the wall clock beside
+    // it. Relative rather than absolute because what a reader wants is "the
+    // POST left 650ms after the document arrived", not two epoch timestamps to
+    // subtract by hand.
+    const push = (e) => wire.push({ ...(fromFrame ? { ...e, frame: true } : e), ms: Date.now() - stationStarted });
     if (trace) {
         if (msg.method === 'Network.requestWillBeSent') {
             // The body of the `fo/` POST is the whole client-side half of a
@@ -457,6 +466,7 @@ try {
     for (const station of stations) {
         const row = { name: station.name, vendor: station.vendor, url: station.url, guards: station.guards };
         const started = Date.now();
+        stationStarted = started;
         docs = [];
         wire = [];
         let reading = null;
@@ -496,7 +506,12 @@ try {
         // the exit handler.
         if (exit) row.engineExit = exit;
         row.documents = docs.slice(0, 12);
-        if (trace) row.wire = wire.slice(0, 400);
+        // 400 was not enough for a station that loops. Akamai's interstitial
+        // re-runs its whole conversation on every reload, and one lightpanda
+        // run through macys spent 154 of the first 400 entries on the sensor's
+        // `chrome-extension://` probe list alone -- so the cycle that mattered,
+        // the second one, was cut off.
+        if (trace) row.wire = wire.slice(0, 1200);
         Object.assign(row, verdict(station, reading, docs));
         if (reading) {
             row.title = reading.title;

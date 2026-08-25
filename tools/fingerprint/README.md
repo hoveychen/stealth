@@ -12801,3 +12801,83 @@ off every https page. A CDP target that never navigates therefore never gets
 gated. Every path a real page takes does: an http origin commits and gates, and
 a script-created `about:blank` iframe goes through the synthetic-navigation
 branch, which calls it too.
+
+## Akamai's sensor says how hard it worked, and we are 40x under (2026-08-24)
+
+`ak-macys` reaches the end of the challenge now. Both arms, one sitting, two
+pairs, `antibot-sweep.mjs --only ak-macys --trace`:
+
+| | headed Chrome | lightpanda |
+|---|---|---|
+| sensor POSTs | 1918 → 5205 → 4652 (`?t=`) → clearance | 1915 → 5182 → 4627 (`?t=`) → **interstitial again** |
+| verdict | pass, 8025-8026 nodes | empty-document, 32 nodes |
+
+So the missing second and third rounds that this station was stuck on for six
+sessions are gone; what is left is that Akamai reads our payload and re-serves
+the door. Its own cleartext header says why it might:
+
+    3;0;1;2048;<n>;<sitekey>;A,B,C,D,E,F;<ciphertext>
+
+`A` is 627-664 from Chrome and 14-22 from us, four runs each, real site and
+replay alike. It is not elapsed time since the sensor script loaded -- Chrome
+POSTs 14ms after that response arrives -- it is CPU: `sensor-cpu-profile.mjs`
+puts 652-664ms of self time in a single function of the sensor script (its name
+is regenerated per session: `UVq`, `cRK`), running as one uninterrupted burn
+right before the POST. We finish whatever that is in 14ms.
+
+### The harness, and it lives in the repo this time
+
+* `sensor-cpu-profile.mjs <url> --body-dir <dir>` — Chrome's sampling profile of
+  a page up to its first POST, plus every response body off the wire. The bodies
+  are the capture; the profile's `url:line:column` are offsets into them.
+* `akamai-replay.mjs --bodies <dir> --port N [--inject probe.js]` — serves one
+  capture back. Hermetic by construction: every `https://<host>/` in the
+  document is rewritten to the local server, because the captured loader derives
+  its module URLs from its own `src` and an earlier round of this work spent
+  three sessions comparing two arms that were fetching *different* code from the
+  live site. POSTs answer 201 `{"success":true}`, or 200 for the `?t=` endpoint
+  the interstitial's inline poller watches. The capture in
+  `results/b41-macys-bodies` replays indefinitely: the sensor never checks the
+  reply.
+* The replay reproduces the gap exactly — Chrome `664,0,0,0,1,0`, lightpanda
+  `14,0,0,0,1,0` — which makes this the first local oracle this station has had.
+
+### What the burn is not
+
+Measured on the replay, both arms, same capture:
+
+* **Not a different branch.** Marking the guard's flattened dispatcher with a
+  counter (`case` id → calls) gives an identical map on both sides: `9:1, 26:1,
+  39:1, 46:4, 54:1, 76:1, 262:1, 391:1, 559:1, 738:1, 749:2, 897:1, 958:1,
+  969:1`. Same cases, same counts, 47x the time.
+* **Not a deadline-polling loop.** `probes/probe-clock-calls.js`: `Date.now` 65
+  vs 54, `Math.random` 62 vs 43, `performance.now` 2 vs 2. Nobody is watching a
+  clock 600 times.
+* **Not per-character hashing of its own source.** It does hash its own source —
+  `probes/probe-hash-work.js` counts `charCodeAt` over a 496239-char string, and
+  496256 is exactly the challenge script's size — but the count is the same on
+  both sides: 635673 (Chrome) vs 650797 (us).
+
+### Two instruments that do not work here
+
+* **`Debugger.enable` stops the guard.** With the domain on, the sensor runs
+  ~5900 statements and then nothing: no POST, in either engine.
+  `Profiler.startPreciseCoverage` works fine *without* it — map scriptIds from
+  the coverage result's own `url` instead of from `Debugger.scriptParsed`.
+* **Rewriting the script's text kills it too.** See the note at the top of
+  `akamai-replay.mjs`. Instrument from outside, with `--inject`.
+
+### Also measured, in passing
+
+* `Runtime.evaluate` with `awaitPromise` never resolves on this engine if the
+  promise settles from a timer — already known (`run-page-probe.mjs` header
+  says so), rediscovered the hard way. Load probes as a page.
+* Chrome clamps `setInterval(f, 1)` to ~4ms: 129 ticks in 500ms, headed, on
+  about:blank (`scratch/expr-timer-cadence.js`).
+* On the real site the sensor's `_bm/get_params` is never requested by either
+  arm — an earlier suggestion to capture its response is moot.
+* Our arm issues ~154 `chrome-extension://` HEAD requests (the sensor's
+  extension probe list) and they surface as `UnsupportedProtocol` failures on
+  the wire. Chrome shows none: the scheme is refused before the network service,
+  so CDP never reports them. Not yet checked whether the two arms' *JS-visible*
+  outcome for those probes matches.
