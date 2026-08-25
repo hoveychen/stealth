@@ -398,12 +398,11 @@ pub const JsApi = struct {
     pub const whatToShow = bridge.accessor(DOMTreeWalker.getWhatToShow, null, .{});
     pub const filter = bridge.accessor(DOMTreeWalker.getFilter, null, .{});
     pub const currentNode = bridge.accessor(DOMTreeWalker.getCurrentNode, DOMTreeWalker.setCurrentNode, .{});
-
-    pub const parentNode = bridge.function(DOMTreeWalker.parentNode, .{});
     pub const firstChild = bridge.function(DOMTreeWalker.firstChild, .{});
     pub const lastChild = bridge.function(DOMTreeWalker.lastChild, .{});
-    pub const previousSibling = bridge.function(DOMTreeWalker.previousSibling, .{});
-    pub const nextSibling = bridge.function(DOMTreeWalker.nextSibling, .{});
-    pub const previousNode = bridge.function(DOMTreeWalker.previousNode, .{});
     pub const nextNode = bridge.function(DOMTreeWalker.nextNode, .{});
+    pub const nextSibling = bridge.function(DOMTreeWalker.nextSibling, .{});
+    pub const parentNode = bridge.function(DOMTreeWalker.parentNode, .{});
+    pub const previousNode = bridge.function(DOMTreeWalker.previousNode, .{});
+    pub const previousSibling = bridge.function(DOMTreeWalker.previousSibling, .{});
 };

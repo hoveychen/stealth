@@ -231,14 +231,13 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
     };
 
-    pub const postMessage = bridge.function(MessagePort.postMessage, .{});
-    pub const start = bridge.function(MessagePort.start, .{});
-    pub const close = bridge.function(MessagePort.close, .{});
-
     pub const onmessage = bridge.accessor(MessagePort.getOnMessage, MessagePort.setOnMessage, .{});
     pub const onmessageerror = bridge.accessor(
         @import("handler_property.zig").accessors(MessagePort, .onmessageerror).get,
         @import("handler_property.zig").accessors(MessagePort, .onmessageerror).set,
         .{},
     );
+    pub const close = bridge.function(MessagePort.close, .{});
+    pub const postMessage = bridge.function(MessagePort.postMessage, .{});
+    pub const start = bridge.function(MessagePort.start, .{});
 };

@@ -501,20 +501,17 @@ pub const JsApi = struct {
 
     pub const data = bridge.accessor(CData.getData, CData._setData, .{ .ce_reactions = true });
     pub const length = bridge.accessor(CData.getLength, null, .{});
-
+    pub const previousElementSibling = bridge.accessor(CData.previousElementSibling, null, .{});
+    pub const nextElementSibling = bridge.accessor(CData.nextElementSibling, null, .{});
+    pub const after = bridge.function(CData.after, .{ .ce_reactions = true, .arity = 0 });
     pub const appendData = bridge.function(CData.appendData, .{ .ce_reactions = true });
+    pub const before = bridge.function(CData.before, .{ .ce_reactions = true, .arity = 0 });
     pub const deleteData = bridge.function(CData.deleteData, .{ .ce_reactions = true });
     pub const insertData = bridge.function(CData.insertData, .{ .ce_reactions = true });
-    pub const replaceData = bridge.function(CData.replaceData, .{ .ce_reactions = true });
-    pub const substringData = bridge.function(CData.substringData, .{});
-
     pub const remove = bridge.function(CData.remove, .{ .ce_reactions = true });
-    pub const before = bridge.function(CData.before, .{ .ce_reactions = true, .arity = 0 });
-    pub const after = bridge.function(CData.after, .{ .ce_reactions = true, .arity = 0 });
+    pub const replaceData = bridge.function(CData.replaceData, .{ .ce_reactions = true });
     pub const replaceWith = bridge.function(CData.replaceWith, .{ .ce_reactions = true, .arity = 0 });
-
-    pub const nextElementSibling = bridge.accessor(CData.nextElementSibling, null, .{});
-    pub const previousElementSibling = bridge.accessor(CData.previousElementSibling, null, .{});
+    pub const substringData = bridge.function(CData.substringData, .{});
 };
 
 const testing = @import("../../testing.zig");

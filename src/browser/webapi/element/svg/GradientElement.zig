@@ -106,13 +106,12 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const gradientUnits = bridge.accessor(GradientElement.getGradientUnits, null, .{});
+    pub const gradientTransform = bridge.accessor(GradientElement.getGradientTransform, null, .{});
+    pub const spreadMethod = bridge.accessor(GradientElement.getSpreadMethod, null, .{});
+    pub const href = bridge.accessor(GradientElement.getHref, null, .{});
     pub const SVG_SPREADMETHOD_UNKNOWN = bridge.property(0, .{ .template = true });
     pub const SVG_SPREADMETHOD_PAD = bridge.property(1, .{ .template = true });
     pub const SVG_SPREADMETHOD_REFLECT = bridge.property(2, .{ .template = true });
     pub const SVG_SPREADMETHOD_REPEAT = bridge.property(3, .{ .template = true });
-
-    pub const gradientUnits = bridge.accessor(GradientElement.getGradientUnits, null, .{});
-    pub const spreadMethod = bridge.accessor(GradientElement.getSpreadMethod, null, .{});
-    pub const gradientTransform = bridge.accessor(GradientElement.getGradientTransform, null, .{});
-    pub const href = bridge.accessor(GradientElement.getHref, null, .{});
 };

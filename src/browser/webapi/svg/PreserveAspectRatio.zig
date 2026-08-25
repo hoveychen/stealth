@@ -147,6 +147,8 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const @"align" = bridge.accessor(PreserveAspectRatio.getAlign, PreserveAspectRatio.setAlign, .{});
+    pub const meetOrSlice = bridge.accessor(PreserveAspectRatio.getMeetOrSlice, PreserveAspectRatio.setMeetOrSlice, .{});
     pub const SVG_PRESERVEASPECTRATIO_UNKNOWN = bridge.property(0, .{ .template = true });
     pub const SVG_PRESERVEASPECTRATIO_NONE = bridge.property(1, .{ .template = true });
     pub const SVG_PRESERVEASPECTRATIO_XMINYMIN = bridge.property(2, .{ .template = true });
@@ -161,7 +163,4 @@ pub const JsApi = struct {
     pub const SVG_MEETORSLICE_UNKNOWN = bridge.property(0, .{ .template = true });
     pub const SVG_MEETORSLICE_MEET = bridge.property(1, .{ .template = true });
     pub const SVG_MEETORSLICE_SLICE = bridge.property(2, .{ .template = true });
-
-    pub const @"align" = bridge.accessor(PreserveAspectRatio.getAlign, PreserveAspectRatio.setAlign, .{});
-    pub const meetOrSlice = bridge.accessor(PreserveAspectRatio.getMeetOrSlice, PreserveAspectRatio.setMeetOrSlice, .{});
 };

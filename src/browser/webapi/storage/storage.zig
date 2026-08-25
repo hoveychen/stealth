@@ -218,11 +218,11 @@ pub const View = struct {
         };
 
         pub const length = bridge.accessor(View.getLength, null, .{});
-        pub const getItem = bridge.function(View.getItem, .{});
-        pub const setItem = bridge.function(View.setItem, .{});
-        pub const removeItem = bridge.function(View.removeItem, .{});
         pub const clear = bridge.function(View.clear, .{});
+        pub const getItem = bridge.function(View.getItem, .{});
         pub const key = bridge.function(View.key, .{});
+        pub const removeItem = bridge.function(View.removeItem, .{});
+        pub const setItem = bridge.function(View.setItem, .{});
         pub const @"[str]" = bridge.namedIndexed(View.getItem, View.setItem, View.removeItem, View.keys, View.hasItem, .{ .null_as_undefined = true });
         pub const @"[int]" = bridge.indexedReadWrite(_getByIndex, _setByIndex, _removeByIndex, _indexHas, null, .{ .null_as_undefined = true });
 

@@ -660,15 +660,15 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const objectStoreNames = bridge.accessor(IDBTransaction.getObjectStoreNames, null, .{});
     pub const mode = bridge.accessor(IDBTransaction.getMode, null, .{});
     pub const durability = bridge.accessor(IDBTransaction.getDurability, null, .{});
     pub const db = bridge.accessor(IDBTransaction.getDb, null, .{});
-    pub const objectStoreNames = bridge.accessor(IDBTransaction.getObjectStoreNames, null, .{});
     pub const @"error" = bridge.accessor(IDBTransaction.getError, null, .{ .null_as_undefined = true });
-    pub const objectStore = bridge.function(IDBTransaction.objectStore, .{});
-    pub const abort = bridge.function(IDBTransaction.abort, .{});
-    pub const commit = bridge.function(IDBTransaction.commit, .{});
+    pub const onabort = bridge.accessor(IDBTransaction.getOnAbort, IDBTransaction.setOnAbort, .{});
     pub const oncomplete = bridge.accessor(IDBTransaction.getOnComplete, IDBTransaction.setOnComplete, .{});
     pub const onerror = bridge.accessor(IDBTransaction.getOnError, IDBTransaction.setOnError, .{});
-    pub const onabort = bridge.accessor(IDBTransaction.getOnAbort, IDBTransaction.setOnAbort, .{});
+    pub const abort = bridge.function(IDBTransaction.abort, .{});
+    pub const commit = bridge.function(IDBTransaction.commit, .{});
+    pub const objectStore = bridge.function(IDBTransaction.objectStore, .{});
 };

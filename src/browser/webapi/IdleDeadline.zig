@@ -51,6 +51,6 @@ pub const JsApi = struct {
         pub const empty_with_no_proto = true;
     };
 
-    pub const timeRemaining = bridge.function(IdleDeadline.timeRemaining, .{});
     pub const didTimeout = bridge.accessor(IdleDeadline.getDidTimeout, null, .{});
+    pub const timeRemaining = bridge.function(IdleDeadline.timeRemaining, .{});
 };

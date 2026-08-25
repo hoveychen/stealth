@@ -330,8 +330,10 @@
     testing.expectEqual('function', typeof window.ViewTransitionTypeSet);
     const vt = document.startViewTransition();
     testing.expectEqual('ViewTransition', vt.constructor.name);
-    testing.expectEqual(['finished', 'ready', 'updateCallbackDone', 'types', 'skipTransition',
-                         'transitionRoot', 'waitUntil', 'constructor'],
+    // Chrome 151's own order, re-measured: transitionRoot before
+    // skipTransition, not after (probes/expr-constructor-slot.js).
+    testing.expectEqual(['finished', 'ready', 'updateCallbackDone', 'types', 'transitionRoot',
+                         'skipTransition', 'waitUntil', 'constructor'],
                         Object.getOwnPropertyNames(ViewTransition.prototype));
     testing.expectEqual('HTMLHtmlElement', vt.transitionRoot.constructor.name);
     testing.expectEqual(1, vt.waitUntil.length);

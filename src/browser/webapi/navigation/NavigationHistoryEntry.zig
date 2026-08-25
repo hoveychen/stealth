@@ -114,11 +114,11 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const id = bridge.accessor(NavigationHistoryEntry.id, null, .{});
-    pub const index = bridge.accessor(NavigationHistoryEntry.index, null, .{});
     pub const key = bridge.accessor(NavigationHistoryEntry.key, null, .{});
-    pub const sameDocument = bridge.accessor(NavigationHistoryEntry.sameDocument, null, .{});
+    pub const id = bridge.accessor(NavigationHistoryEntry.id, null, .{});
     pub const url = bridge.accessor(NavigationHistoryEntry.url, null, .{});
-    pub const getState = bridge.function(NavigationHistoryEntry.getState, .{});
+    pub const index = bridge.accessor(NavigationHistoryEntry.index, null, .{});
+    pub const sameDocument = bridge.accessor(NavigationHistoryEntry.sameDocument, null, .{});
     pub const ondispose = bridge.accessor(handlerProperty(NavigationHistoryEntry, .ondispose).get, handlerProperty(NavigationHistoryEntry, .ondispose).set, .{});
+    pub const getState = bridge.function(NavigationHistoryEntry.getState, .{});
 };

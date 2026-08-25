@@ -209,8 +209,8 @@ const Plugin = struct {
         };
 
         pub const name = bridge.accessor(Plugin.getName, null, .{});
-        pub const description = bridge.accessor(Plugin.getDescription, null, .{});
         pub const filename = bridge.accessor(Plugin.getFilename, null, .{});
+        pub const description = bridge.accessor(Plugin.getDescription, null, .{});
         pub const length = bridge.accessor(Plugin.getLength, null, .{});
         pub const @"[int]" = bridge.indexedReadWrite(Plugin.getAtIndex, null, null, queryPluginMimeIndex, mimeIndexes, .{ .null_as_undefined = true });
         pub const @"[str]" = bridge.namedIndexed(Plugin.getByName, null, null, pluginMimeNames, queryPluginMimeName, .{ .null_as_undefined = true });
@@ -341,18 +341,18 @@ pub const JsApi = struct {
     };
 
     pub const length = bridge.accessor(PluginArray.getLength, null, .{});
-    pub const refresh = bridge.function(PluginArray.refresh, .{});
+    pub const item = bridge.function(_item, .{});
     pub const @"[int]" = bridge.indexedReadWrite(PluginArray.getAtIndex, null, null, queryPluginIndex, pluginIndexes, .{ .null_as_undefined = true });
     pub const @"[str]" = bridge.namedIndexed(PluginArray.getByName, null, null, pluginNameList, queryPluginName, .{ .null_as_undefined = true });
     pub const symbol_iterator = bridge.iterator(PluginArray.iterator, .{});
-    pub const item = bridge.function(_item, .{});
+    pub const namedItem = bridge.function(PluginArray.getByName, .{});
     fn _item(self: *const PluginArray, index: i32) ?*Plugin {
         if (index < 0) {
             return null;
         }
         return self.getAtIndex(@intCast(index));
     }
-    pub const namedItem = bridge.function(PluginArray.getByName, .{});
+    pub const refresh = bridge.function(PluginArray.refresh, .{});
 };
 
 // Own-property enumerators. Chrome reports both the indices and the names as

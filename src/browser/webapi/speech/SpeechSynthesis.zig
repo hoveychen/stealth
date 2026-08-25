@@ -233,12 +233,11 @@ pub const JsApi = struct {
     pub const speaking = bridge.accessor(SpeechSynthesis.getSpeaking, null, .{});
     pub const paused = bridge.accessor(SpeechSynthesis.getPaused, null, .{});
     pub const onvoiceschanged = bridge.accessor(handlerProperty(SpeechSynthesis, .onvoiceschanged).get, handlerProperty(SpeechSynthesis, .onvoiceschanged).set, .{});
-
-    pub const getVoices = bridge.function(SpeechSynthesis.getVoices, .{});
-    pub const speak = bridge.function(SpeechSynthesis.speak, .{});
     pub const cancel = bridge.function(SpeechSynthesis.cancel, .{});
+    pub const getVoices = bridge.function(SpeechSynthesis.getVoices, .{});
     pub const pause = bridge.function(SpeechSynthesis.pause, .{});
     pub const @"resume" = bridge.function(SpeechSynthesis.@"resume", .{});
+    pub const speak = bridge.function(SpeechSynthesis.speak, .{});
 };
 
 const testing = @import("../../../testing.zig");

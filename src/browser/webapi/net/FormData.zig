@@ -886,17 +886,17 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(FormData.init, .{});
-    pub const has = bridge.function(FormData.has, .{});
-    pub const get = bridge.function(FormData.get, .{});
-    pub const set = bridge.function(FormData.set, .{});
     pub const append = bridge.function(FormData.append, .{});
-    pub const getAll = bridge.function(FormData.getAll, .{});
     pub const delete = bridge.function(FormData.delete, .{});
-    pub const keys = bridge.function(FormData.keys, .{});
-    pub const values = bridge.function(FormData.values, .{});
+    pub const get = bridge.function(FormData.get, .{});
+    pub const getAll = bridge.function(FormData.getAll, .{});
+    pub const has = bridge.function(FormData.has, .{});
+    pub const set = bridge.function(FormData.set, .{});
     pub const entries = bridge.function(FormData.entries, .{});
-    pub const symbol_iterator = bridge.iterator(FormData.entries, .{});
     pub const forEach = bridge.function(FormData.forEach, .{});
+    pub const keys = bridge.function(FormData.keys, .{});
+    pub const symbol_iterator = bridge.iterator(FormData.entries, .{});
+    pub const values = bridge.function(FormData.values, .{});
 };
 
 const testing = @import("../../../testing.zig");

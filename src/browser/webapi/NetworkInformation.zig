@@ -72,11 +72,11 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const onchange = bridge.accessor(handlerProperty(NetworkInformation, .onchange).get, handlerProperty(NetworkInformation, .onchange).set, .{});
     pub const effectiveType = bridge.accessor(NetworkInformation.getEffectiveType, null, .{});
     pub const rtt = bridge.accessor(NetworkInformation.getRtt, null, .{});
     pub const downlink = bridge.accessor(NetworkInformation.getDownlink, null, .{});
     pub const saveData = bridge.accessor(NetworkInformation.getSaveData, null, .{});
-    pub const onchange = bridge.accessor(handlerProperty(NetworkInformation, .onchange).get, handlerProperty(NetworkInformation, .onchange).set, .{});
 };
 
 const testing = @import("../../testing.zig");

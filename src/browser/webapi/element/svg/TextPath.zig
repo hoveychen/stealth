@@ -63,14 +63,14 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
+    pub const startOffset = bridge.accessor(TextPath.getStartOffset, null, .{});
+    pub const method = bridge.accessor(TextPath.getMethod, null, .{});
+    pub const spacing = bridge.accessor(TextPath.getSpacing, null, .{});
+    pub const href = bridge.accessor(TextPath.getHref, null, .{});
     pub const TEXTPATH_METHODTYPE_UNKNOWN = bridge.property(0, .{ .template = true });
     pub const TEXTPATH_METHODTYPE_ALIGN = bridge.property(1, .{ .template = true });
     pub const TEXTPATH_METHODTYPE_STRETCH = bridge.property(2, .{ .template = true });
     pub const TEXTPATH_SPACINGTYPE_UNKNOWN = bridge.property(0, .{ .template = true });
     pub const TEXTPATH_SPACINGTYPE_AUTO = bridge.property(1, .{ .template = true });
     pub const TEXTPATH_SPACINGTYPE_EXACT = bridge.property(2, .{ .template = true });
-    pub const startOffset = bridge.accessor(TextPath.getStartOffset, null, .{});
-    pub const method = bridge.accessor(TextPath.getMethod, null, .{});
-    pub const spacing = bridge.accessor(TextPath.getSpacing, null, .{});
-    pub const href = bridge.accessor(TextPath.getHref, null, .{});
 };

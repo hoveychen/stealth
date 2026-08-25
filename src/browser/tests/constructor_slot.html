@@ -43,6 +43,7 @@
       XRSession: 'onvisibilitymaskchange',             // initiateRoomCapture
       XRView: 'index',                                 // projectionMatrix, transform
       SharedWorker: 'port',                            // onerror
+      CookieStore: 'set',                              // onchange
     };
     for (const name of Object.keys(AFTER)) {
       testing.expectEqual('function', typeof globalThis[name], { desc: name + ' is a global' });
