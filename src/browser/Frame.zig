@@ -2308,6 +2308,20 @@ pub fn iframeAddedCallback(self: *Frame, iframe: *IFrame) !void {
     iframe._window = new_frame.window;
     errdefer iframe._window = null;
 
+    // A child browsing context starts on an `about:blank` document that inherits
+    // its creator's origin, and `iframe._window` above is already reachable --
+    // so a script reading `iframe.contentDocument` on the same tick as the
+    // element's insertion is reading a same-origin frame. Leaving `origin` at
+    // its null default made that read cross-origin instead: `contentWindow
+    // .document` threw a SecurityError and `contentWindow.origin` with it, on a
+    // frame whose src is a same-origin path. Chrome answers the document and the
+    // parent's origin (scratch/frame-probe/early.html).
+    //
+    // navigate() below sets the real origin as soon as it knows one, and the
+    // about: path does the same inheritance; this only fills the gap before it.
+    new_frame.origin = self.origin;
+    try new_frame.js.setOrigin(self.origin);
+
     // on first load, dispatch frame_created event
     self._session.notification.dispatch(.frame_child_frame_created, &.{
         .parent_id = self._frame_id,
