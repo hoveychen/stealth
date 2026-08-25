@@ -7,7 +7,7 @@
     const state = await testing.async();
     const iframe = document.createElement('iframe');
     document.body.appendChild(iframe);
-    iframe.src = 'encoding/gbk.html';
+    iframe.src = 'encoding/gbk.nocharset.html';
     iframe.onload = () => { state.resolve(); }
 
     await state.done(() => {
@@ -26,7 +26,7 @@
     const state = await testing.async();
     const iframe = document.createElement('iframe');
     document.body.appendChild(iframe);
-    iframe.src = 'encoding/shift_jis.html';
+    iframe.src = 'encoding/shift_jis.nocharset.html';
     iframe.onload = () => { state.resolve(); }
 
     await state.done(() => {
@@ -41,7 +41,7 @@
     const state = await testing.async();
     const iframe = document.createElement('iframe');
     document.body.appendChild(iframe);
-    iframe.src = 'encoding/latin1.html';
+    iframe.src = 'encoding/latin1.nocharset.html';
     iframe.onload = () => { state.resolve(); }
 
     await state.done(() => {
@@ -77,7 +77,7 @@
     // UTF-16 labels back to UTF-8 so ASCII pages stay readable.
     const iframe = document.createElement('iframe');
     document.body.appendChild(iframe);
-    iframe.src = 'encoding/unicode_label.html';
+    iframe.src = 'encoding/unicode_label.nocharset.html';
     iframe.onload = () => { state.resolve(); }
 
     await state.done(() => {
@@ -97,19 +97,92 @@
   {
     const state = await testing.async();
 
-    // Test file with non-UTF-8 bytes but NO charset declaration anywhere.
-    // Without charset info, the bytes are parsed as UTF-8, producing replacement characters.
-    // This documents the "broken" behavior for files without proper encoding declaration.
+    // A file with non-UTF-8 bytes and no charset declaration anywhere. With
+    // nothing to go on the fallback is windows-1252, the way Chrome 151 does
+    // it, so the GBK bytes D6 D0 CE C4 come through as their 1252 characters
+    // rather than as replacement characters.
     const iframe = document.createElement('iframe');
     document.body.appendChild(iframe);
-    iframe.src = 'encoding/no_charset.html';
+    iframe.src = 'encoding/no_charset.nocharset.html';
     iframe.onload = () => { state.resolve(); }
 
     await state.done(() => {
-      // The GBK bytes D6 D0 CE C4 are invalid UTF-8, each becomes U+FFFD
       const text = iframe.contentDocument.getElementById('test').textContent;
-      // Should contain replacement characters (the exact count depends on how invalid bytes are handled)
-      testing.expectTrue(text.includes('\uFFFD'));
+      testing.expectEqual('\u00D6\u00D0\u00CE\u00C4', text);
+      testing.expectTrue(!text.includes('\uFFFD'));
+      testing.expectEqual('windows-1252', iframe.contentDocument.characterSet);
+    });
+  }
+</script>
+
+<script id="default_encoding_is_windows_1252" type=module>
+  {
+    const state = await testing.async();
+
+    // Nothing declares an encoding, so the fallback decides. Measured against
+    // headed Chrome 151: byte C4 reads as "Ä", not as a replacement character.
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    iframe.src = 'encoding/default_charset.nocharset.html';
+    iframe.onload = () => { state.resolve(); }
+
+    await state.done(() => {
+      testing.expectEqual('windows-1252', iframe.contentDocument.characterSet);
+      testing.expectEqual('Ä', iframe.contentDocument.getElementById('test').textContent);
+    });
+  }
+</script>
+
+<script id="unusable_meta_label_falls_back" type=module>
+  {
+    const state = await testing.async();
+
+    // A label no encoding answers to is the same as no label at all, so the
+    // fallback applies rather than UTF-8.
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    iframe.src = 'encoding/bogus_label.nocharset.html';
+    iframe.onload = () => { state.resolve(); }
+
+    await state.done(() => {
+      testing.expectEqual('windows-1252', iframe.contentDocument.characterSet);
+      testing.expectEqual('Ä', iframe.contentDocument.getElementById('test').textContent);
+    });
+  }
+</script>
+
+<script id="meta_x_user_defined_becomes_windows_1252" type=module>
+  {
+    const state = await testing.async();
+
+    // The spec rewrites an x-user-defined *meta* to windows-1252. A header
+    // saying x-user-defined is left alone, which is why this case is a meta.
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    iframe.src = 'encoding/x_user_defined.nocharset.html';
+    iframe.onload = () => { state.resolve(); }
+
+    await state.done(() => {
+      testing.expectEqual('windows-1252', iframe.contentDocument.characterSet);
+      testing.expectEqual('Ä', iframe.contentDocument.getElementById('test').textContent);
+    });
+  }
+</script>
+
+<script id="bom_outranks_content_type_header" type=module>
+  {
+    const state = await testing.async();
+
+    // TestHTTPServer says charset=GB2312 for *.GB2312.html, but the file opens
+    // with a UTF-8 BOM, and a BOM beats every other source.
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    iframe.src = testing.BASE_URL + 'page/encoding/bom_utf8.GB2312.html';
+    iframe.onload = () => { state.resolve(); }
+
+    await state.done(() => {
+      testing.expectEqual('UTF-8', iframe.contentDocument.characterSet);
+      testing.expectEqual('Ä', iframe.contentDocument.getElementById('test').textContent);
     });
   }
 </script>
@@ -123,7 +196,7 @@
     // Per WHATWG URL Standard, query strings use document encoding with NCR fallback.
     const iframe = document.createElement('iframe');
     document.body.appendChild(iframe);
-    iframe.src = 'encoding/gbk.html';
+    iframe.src = 'encoding/gbk.nocharset.html';
     iframe.onload = () => { state.resolve(); }
 
     await state.done(() => {
