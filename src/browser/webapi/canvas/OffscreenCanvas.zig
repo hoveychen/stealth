@@ -23,7 +23,7 @@ const Blob = @import("../Blob.zig");
 const DOMException = @import("../DOMException.zig");
 const ImageBitmap = @import("ImageBitmap.zig");
 const Surface = @import("raster.zig");
-const png = @import("png.zig");
+const encode = @import("encode.zig");
 const OffscreenCanvasRenderingContext2D = @import("OffscreenCanvasRenderingContext2D.zig");
 const WebGLRenderingContext = @import("WebGLRenderingContext.zig");
 const WebGL2RenderingContext = @import("WebGL2RenderingContext.zig");
@@ -183,19 +183,35 @@ pub fn straightPixels(self: *const OffscreenCanvas, arena: Allocator) !?[]u8 {
     };
 }
 
-/// Returns a Promise that resolves to a PNG Blob of the canvas' pixels.
-/// The requested type is ignored; see `HTMLCanvasElement.toDataURL`.
-pub fn convertToBlob(self: *OffscreenCanvas, _: ?js.Value, exec: *Execution) !js.Promise {
+/// Returns a Promise that resolves to a Blob of the canvas' pixels, in
+/// whichever of the encoded types the options bag names; see
+/// `HTMLCanvasElement.toDataURL` and canvas/encode.zig.
+pub fn convertToBlob(self: *OffscreenCanvas, options_: ?js.Value, exec: *Execution) !js.Promise {
+    const options = try BlobOptions.read(options_, exec);
+    const format: encode.Format = .fromType(try options.string("type", "image/png", exec.call_arena));
+    const quality = encode.quality(try options.present("quality"));
+
+    // The degenerate extent is refused after the dictionary is read, which is
+    // the order a page can see: a bad options bag throws over the rejection.
     if (self._width == 0 or self._height == 0) {
         return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.IndexSizeError } });
     }
 
-    const bytes = try png.encode(exec.call_arena, self._width, self._height, try self.straightPixels(exec.call_arena));
+    const bytes = try encode.encode(
+        exec.call_arena,
+        format,
+        self._width,
+        self._height,
+        try self.straightPixels(exec.call_arena),
+        quality,
+    );
     // Upstream's Blob.initFromBytes now takes the Execution (it pins its own
     // arena), not the Page.
-    const blob = try Blob.initFromBytes(bytes, "image/png", exec);
+    const blob = try Blob.initFromBytes(bytes, format.mimeType(), exec);
     return exec.js.local.?.resolvePromise(blob);
 }
+
+const BlobOptions = dictionary.MethodReader("OffscreenCanvas", "convertToBlob", "ImageEncodeOptions");
 
 fn refuseTransfer(exec: *Execution, comptime message: []const u8, name: []const u8) anyerror {
     const local = exec.js.local orelse return error.JsException;
