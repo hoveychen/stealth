@@ -13150,3 +13150,82 @@ settle may be comparing our first pass against Chrome's second, and the
 `charCodeAt` counts (635673 against 650797) are exactly that shape. They agreed,
 which is why nothing downstream turned on them, but they should be re-taken
 per-cycle before anything is built on them.
+
+### The counter is how long the first `navigator.plugins` read took — and it does not decide anything (2026-08-25)
+
+The `A` in `sensor_data`'s plaintext head, `3;0;1;2048;<n>;<sitekey>;A,B,C,D,E,F;<cipher>`,
+is the elapsed milliseconds of **the first `navigator.plugins` read**. It is not
+a hash, not a clock skew, and not something an engine can be made to look right
+at by being slower.
+
+How it was pinned down, in the order the instruments were built:
+
+* `probes/probe-clock-trace.js` — every `Date.now` / `performance.now` /
+  `getTime` / `valueOf` call with its **return value** and the top of its stack,
+  plus XHR open/send in the same log. Chrome's whole 608ms burn sat inside a
+  single bracket whose stack read `LF<g5Y`. Sensor script offset 129058 decodes
+  to `var t0=LF(); var v=H8Y()[…](new RegExp(p,f),arg); var t1=LF(); return {k:v, k2:t1-t0}`
+  — a value **and its own elapsed milliseconds**. Only 987 `charCodeAt` calls
+  fall inside that bracket, so it is not the self-source hash.
+* `probes/probe-regex-split.js` — nothing: no `split`/`replace`/`match` call in
+  either arm was over 1ms or over 4096 characters. The cost is in `H8Y()`.
+* `probes/probe-cycle1-cost.js` — methods **and getters and constructors**,
+  read at a cycle-one settle. `navigator.get plugins`: **632.5ms over 30 reads**
+  in Chrome, second place 0.7ms.
+* `probes/probe-plugins-read.js` — per read. Chrome's **first** costs 643.3ms
+  (stack `Navigator.get<cRK`) and its remaining forty-six cost 0ms. This engine
+  makes the same 140 reads, reports the same `length === 5`, and pays 0ms for
+  every one.
+
+Then it stopped mattering, twice over:
+
+* Chrome only pays it *there*. On a plain page Chrome's first
+  `navigator.plugins` costs 5.2–5.6ms, and reading it once at the top of the
+  interstitial (1.1ms) drops **Chrome's own A to 13** — this engine's range. The
+  640ms is what that read costs when the guard makes it, with the interstitial's
+  1ms poller already running; it is not a fixed initialisation cost.
+* Matching it changes no verdict. `probes/patch-plugins-latency.js` burns
+  610–700ms on the first read (burn, not sleep: the sensor measures a `Date.now`
+  delta), delivered to the live station through the new
+  `antibot-sweep.mjs --inject` (`Page.addScriptToEvaluateOnNewDocument`).
+  Live macys reported A = 642 / 697 / 630 / 684 — dead centre of Chrome's
+  627–786 — and served the interstitial anyway. The control settles it: the
+  Chrome run that **passed** the same afternoon reported **A=14**, which is this
+  engine's own unpatched figure.
+
+**So Akamai's plaintext timings are not the discriminator.** A single passing
+Chrome reports anything from 14 to 786 for the same field. Stop comparing
+durations on this station; compare *whether the call happened at all*.
+
+### Comparing call sequences instead: `probe-canvas-order.js` (2026-08-25)
+
+`probes/probe-canvas-order.js` logs the ordered canvas/text call sequence with
+arguments and return shapes — no timings on purpose. `replay-drive.mjs` drives
+either arm at a chosen settle and prints `window.__probe`. Aligned by cycle
+(Chrome 960ms, this engine 3300ms) the two sequences line up call for call, and
+what is left is small enough to read:
+
+* **`shadowColor` echoed the source text.** `ctx.shadowColor = 'red'` read back
+  `red` where Chrome reads `#ff0000`, and `rgb(43,22,233)` where Chrome reads
+  `#2b16e9`. The interstitial sets it twice and reads it back both times. Fixed
+  — it is the same grammar `fillStyle` already parses, and it was on the
+  `freeform` accessor which only stores.
+* **Still open: we make four `getContext` calls Chrome does not.** After
+  `toDataURL()`, Chrome goes straight to `getContext('webgl2')`; we call
+  `getContext('webgl')` twice first, and at the end we make a second
+  `offscreen.getContext('webgl')` / `('webgl2')` pair where Chrome makes one.
+  A call the other arm never makes is a branch, and a branch is a value we
+  answered differently just before it. The receiver is not logged yet — that is
+  the next thing to add.
+
+Two traps worth restating, both walked into again this round:
+
+* **`window.__probe` resets on the interstitial's reload.** A settle that
+  overshoots reads a *fresh* log from the next cycle, so a probe can look like
+  it recorded nothing (0 rows at a 6000ms settle) or like the guard skipped a
+  whole block. The "Chrome runs a nine-font `measureText` loop and we skip it"
+  scare was exactly this: at a 3300ms settle we run all sixty-two rows.
+* **`ENh(a,b){return a.charCodeAt(b);}`** — challenge script offset 492173 — is
+  what `MOm` reads characters with, 496,239 times. An earlier note claimed the
+  hash "does not use charCodeAt" and concluded this engine never runs it. It
+  does; both arms do; the counter simply never measured it.
