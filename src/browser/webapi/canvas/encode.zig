@@ -27,6 +27,7 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 const png = @import("png.zig");
 const jpeg = @import("jpeg.zig");
+const webp = @import("webp.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -36,6 +37,7 @@ const Allocator = std.mem.Allocator;
 pub const Format = enum {
     png,
     jpeg,
+    webp,
 
     /// Chrome matches the whole string, ASCII case-insensitively. Measured:
     /// `IMAGE/JPEG` is JPEG, while `image/jpg`, `image/jpeg ` and
@@ -47,6 +49,9 @@ pub const Format = enum {
         if (std.ascii.eqlIgnoreCase(requested, "image/jpeg")) {
             return .jpeg;
         }
+        if (std.ascii.eqlIgnoreCase(requested, "image/webp")) {
+            return .webp;
+        }
         return .png;
     }
 
@@ -54,6 +59,7 @@ pub const Format = enum {
         return switch (self) {
             .png => "image/png",
             .jpeg => "image/jpeg",
+            .webp => "image/webp",
         };
     }
 };
@@ -88,6 +94,8 @@ pub fn encode(
     return switch (format) {
         .png => png.encode(allocator, width, height, pixels),
         .jpeg => jpeg.encode(allocator, width, height, pixels, image_quality),
+        // Lossless, so there is no quality to spend; see webp.zig.
+        .webp => webp.encode(allocator, width, height, pixels),
     };
 }
 
@@ -124,8 +132,10 @@ test "encode: the type is matched whole and case-insensitively" {
     try testing.expectEqual(Format.png, Format.fromType(null));
     try testing.expectEqual(Format.png, Format.fromType("image/png"));
     try testing.expectEqual(Format.jpeg, Format.fromType("image/jpeg"));
+    try testing.expectEqual(Format.webp, Format.fromType("image/webp"));
 
     try testing.expectEqual(Format.jpeg, Format.fromType("IMAGE/JPEG"));
+    try testing.expectEqual(Format.webp, Format.fromType("Image/WebP"));
 
     // Every one of these is PNG on Chrome.
     for ([_][]const u8{
@@ -147,6 +157,8 @@ test "encode: each format writes its own magic and its own prefix" {
         .{ .format = .png, .prefix = "data:image/png;base64,iVBORw0KGgo" },
         // The SOI and the JFIF APP0, byte for byte what Chrome opens with.
         .{ .format = .jpeg, .prefix = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB" },
+        // 'RIFF', then the size, then 'WEBP'.
+        .{ .format = .webp, .prefix = "data:image/webp;base64,UklGR" },
     };
     for (expected) |want| {
         const url = try dataUrl(allocator, want.format, 2, 2, &pixels, jpeg.default_quality);
