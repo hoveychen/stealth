@@ -287,6 +287,14 @@ pub fn parsePath(arena: Allocator, url_: ?[:0]const u8, explicit_path: ?[]const 
     return try arena.dupe(u8, owned_path[0 .. last + 1]);
 }
 
+/// A URL host that is an IP literal rather than a name. IPv6 arrives in the
+/// bracketed form the URL carries, which the address parser does not take.
+fn isIpHost(host: []const u8) bool {
+    const bare = if (host.len > 1 and host[0] == '[' and host[host.len - 1] == ']') host[1 .. host.len - 1] else host;
+    _ = std.Io.net.IpAddress.parse(bare, 0) catch return false;
+    return true;
+}
+
 pub fn parseDomain(arena: Allocator, url_: ?[:0]const u8, explicit_domain: ?[]const u8) ![]const u8 {
     var encoded_host: ?[]const u8 = null;
     if (url_) |url| {
@@ -332,6 +340,19 @@ pub fn parseDomain(arena: Allocator, url_: ?[:0]const u8, explicit_domain: ?[]co
                 const subdomain_match = std.mem.endsWith(u8, host, owned_domain);
                 if (exact_match == false and subdomain_match == false) {
                     return error.InvalidDomain;
+                }
+
+                // The dots in an IP address are not label separators, so the
+                // boundary check above is meaningless there: "0.1" ends up a
+                // "subdomain" of 127.0.0.1. RFC 6265 §5.3.5 takes the
+                // domain-attribute on an IP host only when it is identical to
+                // the host, and then the cookie is host-only -- same shape as
+                // the public-suffix case above.
+                if (isIpHost(host)) {
+                    if (exact_match == false) {
+                        return error.InvalidDomain;
+                    }
+                    return owned_domain[1..];
                 }
             }
 
@@ -1283,6 +1304,20 @@ test "Cookie: parse domain" {
     try expectAttribute(.{ .domain = "gov.uk" }, "http://gov.uk/", "b;domain=gov.uk");
     try expectAttribute(.{ .domain = "gov.uk" }, "http://gov.uk/", "b;domain=.gov.uk");
     try expectAttribute(.{ .domain = "api.gov.uk" }, "http://api.gov.uk/", "b;domain=api.gov.uk");
+
+    // An IP-address host has no domain hierarchy to climb, so RFC 6265 §5.3.5
+    // takes the domain-attribute only when it is identical to the host. The
+    // label-boundary check alone would let ".0.1" through on 127.0.0.1, and a
+    // guard that walks the labels looking for the widest domain that sticks
+    // (Akamai's does, measured against a headed Chrome 151) reads that as a
+    // different browser: Chrome needs four rungs there and we stopped at two.
+    try expectError(error.InvalidDomain, "http://127.0.0.1/", "b;domain=.0.1");
+    try expectError(error.InvalidDomain, "http://127.0.0.1/", "b;domain=0.1");
+    try expectError(error.InvalidDomain, "http://127.0.0.1/", "b;domain=.0.0.1");
+    try expectError(error.InvalidDomain, "http://127.0.0.1/", "b;domain=.7.0.0.1");
+    try expectAttribute(.{ .domain = "127.0.0.1" }, "http://127.0.0.1/", "b;domain=127.0.0.1");
+    try expectAttribute(.{ .domain = "127.0.0.1" }, "http://127.0.0.1/", "b;domain=.127.0.0.1");
+    try expectAttribute(.{ .domain = "127.0.0.1" }, "http://127.0.0.1/", "b");
 }
 
 test "Cookie: parse limit" {
