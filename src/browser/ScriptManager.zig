@@ -660,6 +660,10 @@ const PreloadedScript = struct {
 
 const testing = @import("../testing.zig");
 
+test "WebApi: script async order" {
+    try testing.htmlRunner("script_async_order.html", .{});
+}
+
 test "ScriptManager: PreloadedScript.shutdownCallback drops a .loading preload" {
     const page = try testing.pageTest("mcp_nav.html", .{});
     defer page.close();
