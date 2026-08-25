@@ -1,9 +1,9 @@
 {
-  "when": "2026-08-25T07:56:20.164Z",
+  "when": "2026-08-25T00:00:00Z",
   "url": "https://example.com/",
-  "note": "both arms on the same page; chrome with --headed-ua. Generated from probes/kasada-argument-answers.js.",
+  "note": "both arms on the same page; chrome with --headed-ua. Generated from probes/kasada-argument-answers.js. Media rows: 36 canPlayType + 17 MediaRecorder.isTypeSupported, all equal. The rows left are the viewport axis -- the chrome harness runs 800x600 where the engine reports 1920x1080 -- plus example.com's own font, neither of which is an engine gap.",
   "asked": 390,
-  "differed": 101,
+  "differed": 20,
   "chrome": {
     "matchMedia (min-resolution:5dppx)": false,
     "matchMedia (min-resolution:2.5dppx)": false,
@@ -220,8 +220,8 @@
     "matchMedia (max-width: 1875px)": false,
     "matchMedia (min-width: 1937.5px)": false,
     "matchMedia (max-width: 1937.5px)": true,
-    "matchMedia (prefers-color-scheme: light)": false,
-    "matchMedia (prefers-color-scheme: dark)": true,
+    "matchMedia (prefers-color-scheme: light)": true,
+    "matchMedia (prefers-color-scheme: dark)": false,
     "matchMedia (inverted-colors: none)": false,
     "matchMedia (inverted-colors: inverted)": false,
     "matchMedia (aspect-ratio = 0.25)": false,
@@ -400,67 +400,67 @@
     "matchMedia (min-resolution:5dppx)": false,
     "matchMedia (min-resolution:2.5dppx)": false,
     "matchMedia (min-resolution:1.25dppx)": false,
-    "matchMedia (min-resolution:0.625dppx)": false,
-    "matchMedia (min-resolution:0.3125dppx)": false,
-    "matchMedia (min-resolution:0.15625dppx)": false,
-    "matchMedia (min-resolution:0.078125dppx)": false,
-    "matchMedia (min-resolution:0.0390625dppx)": false,
-    "matchMedia (min-resolution:0.01953125dppx)": false,
-    "matchMedia (min-resolution:0.009765625dppx)": false,
-    "matchMedia (min-resolution:0.0048828125dppx)": false,
-    "matchMedia (min-resolution:0.00244140625dppx)": false,
-    "matchMedia (min-resolution:0.001220703125dppx)": false,
-    "matchMedia (min-resolution:0.0006103515625dppx)": false,
-    "matchMedia (min-resolution:0.00030517578125dppx)": false,
-    "matchMedia (min-resolution:0.000152587890625dppx)": false,
-    "matchMedia (min-resolution:0.0000762939453125dppx)": false,
-    "matchMedia (min-resolution:0.00003814697265625dppx)": false,
-    "matchMedia (min-resolution:0.000019073486328125dppx)": false,
-    "matchMedia (min-resolution:0.0000095367431640625dppx)": false,
-    "matchMedia (min-resolution:0.00000476837158203125dppx)": false,
-    "matchMedia (min-resolution:0.000002384185791015625dppx)": false,
-    "matchMedia (min-resolution:0.0000011920928955078125dppx)": false,
-    "matchMedia (min-resolution:5.960464477539062e-7dppx)": false,
+    "matchMedia (min-resolution:0.625dppx)": true,
+    "matchMedia (min-resolution:0.3125dppx)": true,
+    "matchMedia (min-resolution:0.15625dppx)": true,
+    "matchMedia (min-resolution:0.078125dppx)": true,
+    "matchMedia (min-resolution:0.0390625dppx)": true,
+    "matchMedia (min-resolution:0.01953125dppx)": true,
+    "matchMedia (min-resolution:0.009765625dppx)": true,
+    "matchMedia (min-resolution:0.0048828125dppx)": true,
+    "matchMedia (min-resolution:0.00244140625dppx)": true,
+    "matchMedia (min-resolution:0.001220703125dppx)": true,
+    "matchMedia (min-resolution:0.0006103515625dppx)": true,
+    "matchMedia (min-resolution:0.00030517578125dppx)": true,
+    "matchMedia (min-resolution:0.000152587890625dppx)": true,
+    "matchMedia (min-resolution:0.0000762939453125dppx)": true,
+    "matchMedia (min-resolution:0.00003814697265625dppx)": true,
+    "matchMedia (min-resolution:0.000019073486328125dppx)": true,
+    "matchMedia (min-resolution:0.0000095367431640625dppx)": true,
+    "matchMedia (min-resolution:0.00000476837158203125dppx)": true,
+    "matchMedia (min-resolution:0.000002384185791015625dppx)": true,
+    "matchMedia (min-resolution:0.0000011920928955078125dppx)": true,
+    "matchMedia (min-resolution:5.960464477539062e-7dppx)": true,
     "matchMedia (min-resolution:500dpi)": false,
     "matchMedia (min-resolution:250dpi)": false,
     "matchMedia (min-resolution:125dpi)": false,
-    "matchMedia (min-resolution:62.5dpi)": false,
-    "matchMedia (min-resolution:31.25dpi)": false,
-    "matchMedia (min-resolution:15.625dpi)": false,
-    "matchMedia (min-resolution:7.8125dpi)": false,
-    "matchMedia (min-resolution:3.90625dpi)": false,
-    "matchMedia (min-resolution:1.953125dpi)": false,
-    "matchMedia (min-resolution:0.9765625dpi)": false,
-    "matchMedia (min-resolution:0.48828125dpi)": false,
-    "matchMedia (min-resolution:0.244140625dpi)": false,
-    "matchMedia (min-resolution:0.1220703125dpi)": false,
-    "matchMedia (min-resolution:0.06103515625dpi)": false,
-    "matchMedia (min-resolution:0.030517578125dpi)": false,
-    "matchMedia (min-resolution:0.0152587890625dpi)": false,
-    "matchMedia (min-resolution:0.00762939453125dpi)": false,
-    "matchMedia (min-resolution:0.003814697265625dpi)": false,
-    "matchMedia (min-resolution:0.0019073486328125dpi)": false,
-    "matchMedia (min-resolution:0.00095367431640625dpi)": false,
+    "matchMedia (min-resolution:62.5dpi)": true,
+    "matchMedia (min-resolution:31.25dpi)": true,
+    "matchMedia (min-resolution:15.625dpi)": true,
+    "matchMedia (min-resolution:7.8125dpi)": true,
+    "matchMedia (min-resolution:3.90625dpi)": true,
+    "matchMedia (min-resolution:1.953125dpi)": true,
+    "matchMedia (min-resolution:0.9765625dpi)": true,
+    "matchMedia (min-resolution:0.48828125dpi)": true,
+    "matchMedia (min-resolution:0.244140625dpi)": true,
+    "matchMedia (min-resolution:0.1220703125dpi)": true,
+    "matchMedia (min-resolution:0.06103515625dpi)": true,
+    "matchMedia (min-resolution:0.030517578125dpi)": true,
+    "matchMedia (min-resolution:0.0152587890625dpi)": true,
+    "matchMedia (min-resolution:0.00762939453125dpi)": true,
+    "matchMedia (min-resolution:0.003814697265625dpi)": true,
+    "matchMedia (min-resolution:0.0019073486328125dpi)": true,
+    "matchMedia (min-resolution:0.00095367431640625dpi)": true,
     "matchMedia (min-resolution:200dpcm)": false,
     "matchMedia (min-resolution:100dpcm)": false,
     "matchMedia (min-resolution:50dpcm)": false,
-    "matchMedia (min-resolution:25dpcm)": false,
-    "matchMedia (min-resolution:12.5dpcm)": false,
-    "matchMedia (min-resolution:6.25dpcm)": false,
-    "matchMedia (min-resolution:3.125dpcm)": false,
-    "matchMedia (min-resolution:1.5625dpcm)": false,
-    "matchMedia (min-resolution:0.78125dpcm)": false,
-    "matchMedia (min-resolution:0.390625dpcm)": false,
-    "matchMedia (min-resolution:0.1953125dpcm)": false,
-    "matchMedia (min-resolution:0.09765625dpcm)": false,
-    "matchMedia (min-resolution:0.048828125dpcm)": false,
-    "matchMedia (min-resolution:0.0244140625dpcm)": false,
-    "matchMedia (min-resolution:0.01220703125dpcm)": false,
-    "matchMedia (min-resolution:0.006103515625dpcm)": false,
-    "matchMedia (min-resolution:0.0030517578125dpcm)": false,
-    "matchMedia (min-resolution:0.00152587890625dpcm)": false,
-    "matchMedia (min-resolution:0.000762939453125dpcm)": false,
-    "matchMedia (min-resolution:0.0003814697265625dpcm)": false,
+    "matchMedia (min-resolution:25dpcm)": true,
+    "matchMedia (min-resolution:12.5dpcm)": true,
+    "matchMedia (min-resolution:6.25dpcm)": true,
+    "matchMedia (min-resolution:3.125dpcm)": true,
+    "matchMedia (min-resolution:1.5625dpcm)": true,
+    "matchMedia (min-resolution:0.78125dpcm)": true,
+    "matchMedia (min-resolution:0.390625dpcm)": true,
+    "matchMedia (min-resolution:0.1953125dpcm)": true,
+    "matchMedia (min-resolution:0.09765625dpcm)": true,
+    "matchMedia (min-resolution:0.048828125dpcm)": true,
+    "matchMedia (min-resolution:0.0244140625dpcm)": true,
+    "matchMedia (min-resolution:0.01220703125dpcm)": true,
+    "matchMedia (min-resolution:0.006103515625dpcm)": true,
+    "matchMedia (min-resolution:0.0030517578125dpcm)": true,
+    "matchMedia (min-resolution:0.00152587890625dpcm)": true,
+    "matchMedia (min-resolution:0.000762939453125dpcm)": true,
+    "matchMedia (min-resolution:0.0003814697265625dpcm)": true,
     "matchMedia (hover: none)": false,
     "matchMedia (hover: hover)": true,
     "matchMedia (forced-colors: none)": true,
@@ -517,12 +517,12 @@
     "matchMedia (max-color: 16)": true,
     "matchMedia (min-color: 8)": true,
     "matchMedia (max-color: 8)": true,
-    "matchMedia (color-index = 0)": false,
+    "matchMedia (color-index = 0)": true,
     "matchMedia (color-index = 8)": false,
     "matchMedia (color-index > 8)": false,
     "matchMedia (color-index < 0)": false,
     "matchMedia (min-color-index: 4)": false,
-    "matchMedia (max-color-index: 4)": false,
+    "matchMedia (max-color-index: 4)": true,
     "matchMedia (video-dynamic-range: standard)": false,
     "matchMedia (video-dynamic-range: high)": false,
     "matchMedia (prefers-reduced-motion: no-preference)": true,
@@ -531,7 +531,7 @@
     "matchMedia (prefers-contrast: more)": false,
     "matchMedia (prefers-contrast: less)": false,
     "matchMedia (prefers-contrast: custom)": false,
-    "matchMedia (device-posture: continuous)": false,
+    "matchMedia (device-posture: continuous)": true,
     "matchMedia (device-posture: folded)": false,
     "matchMedia (dynamic-range: standard)": true,
     "matchMedia (dynamic-range: high)": false,
@@ -556,13 +556,13 @@
     "matchMedia (device-aspect-ratio > 4)": false,
     "matchMedia (device-aspect-ratio < 0.25)": false,
     "matchMedia (min-device-aspect-ratio: 2.125)": false,
-    "matchMedia (max-device-aspect-ratio: 2.125)": false,
+    "matchMedia (max-device-aspect-ratio: 2.125)": true,
     "matchMedia (resolution = 0dpi)": false,
     "matchMedia (resolution = 512dpi)": false,
     "matchMedia (resolution > 512dpi)": false,
     "matchMedia (resolution < 0dpi)": false,
     "matchMedia (min-resolution: 256dpi)": false,
-    "matchMedia (max-resolution: 256dpi)": false,
+    "matchMedia (max-resolution: 256dpi)": true,
     "matchMedia (any-pointer: none)": false,
     "matchMedia (any-pointer: coarse)": false,
     "matchMedia (any-pointer: fine)": true,
@@ -589,7 +589,7 @@
     "matchMedia (max-height: 1250px)": true,
     "matchMedia (min-height: 1125px)": false,
     "matchMedia (max-height: 1125px)": true,
-    "matchMedia (min-height: 1062.5px)": false,
+    "matchMedia (min-height: 1062.5px)": true,
     "matchMedia (max-height: 1062.5px)": false,
     "matchMedia (pointer: none)": false,
     "matchMedia (pointer: coarse)": false,
@@ -611,7 +611,7 @@
     "matchMedia (min-width: 1875px)": true,
     "matchMedia (max-width: 1875px)": false,
     "matchMedia (min-width: 1937.5px)": false,
-    "matchMedia (max-width: 1937.5px)": false,
+    "matchMedia (max-width: 1937.5px)": true,
     "matchMedia (prefers-color-scheme: light)": true,
     "matchMedia (prefers-color-scheme: dark)": false,
     "matchMedia (inverted-colors: none)": false,
@@ -621,7 +621,7 @@
     "matchMedia (aspect-ratio > 4)": false,
     "matchMedia (aspect-ratio < 0.25)": false,
     "matchMedia (min-aspect-ratio: 2.125)": false,
-    "matchMedia (max-aspect-ratio: 2.125)": false,
+    "matchMedia (max-aspect-ratio: 2.125)": true,
     "matchMedia (prefers-reduced-transparency: no-preference)": true,
     "matchMedia (prefers-reduced-transparency: reduce)": false,
     "canPlayType audio/mpeg;": "probably",
@@ -648,14 +648,14 @@
     "canPlayType video/webm; codecs=\"vp8, vorbis\"": "probably",
     "canPlayType audio/wav;": "maybe",
     "canPlayType video/mp4; codecs=\"mp4v.20.240, mp4a.40.2\"": "",
-    "canPlayType audio/x-mpegurl": "",
+    "canPlayType audio/x-mpegurl": "maybe",
     "canPlayType video/3gpp; codecs=\"mp4v.20.8, samr\"": "",
     "canPlayType audio/x-m4a;": "maybe",
     "canPlayType video/mp4; codecs=\"mp4v.20.8, mp4a.40.2\"": "",
     "canPlayType video/ogg; codecs=opus": "probably",
     "canPlayType audio/wave; codecs=2": "",
     "canPlayType audio/wave; codecs=0": "",
-    "canPlayType video/mp4; codecs=\"avc1.42c00d\"": "",
+    "canPlayType video/mp4; codecs=\"avc1.42c00d\"": "probably",
     "canPlayType video/webm; codecs=vorbis": "probably",
     "canPlayType video/webm; codecs=\"vorbis,vp9\"": "probably",
     "canPlayType audio/mp4; codecs=\"mp4a.40.2\"": "probably",
@@ -667,20 +667,20 @@
     "isTypeSupported video/webm;codecs=h264": true,
     "isTypeSupported audio/webm;codecs=opus": true,
     "isTypeSupported video/mp4": true,
-    "isTypeSupported video/mp4;codecs=avc1.64003E,mp4a.40.2": false,
-    "isTypeSupported video/mp4;codecs=avc1.64003E,opus": false,
-    "isTypeSupported video/mp4;codecs=avc3.64003E,mp4a.40.2": false,
-    "isTypeSupported video/mp4;codecs=avc3.64003E,opus": false,
-    "isTypeSupported video/mp4;codecs=hvc1.1.6.L186.B0,mp4a.40.2": false,
-    "isTypeSupported video/mp4;codecs=hvc1.1.6.L186.B0,opus": false,
-    "isTypeSupported video/mp4;codecs=hev1.1.6.L186.B0,mp4a.40.2": false,
-    "isTypeSupported video/mp4;codecs=hev1.1.6.L186.B0,opus": false,
-    "isTypeSupported video/mp4;codecs=av01.0.19M.08,mp4a.40.2": false,
-    "isTypeSupported video/mp4;codecs=av01.0.19M.08,opus": false,
+    "isTypeSupported video/mp4;codecs=avc1.64003E,mp4a.40.2": true,
+    "isTypeSupported video/mp4;codecs=avc1.64003E,opus": true,
+    "isTypeSupported video/mp4;codecs=avc3.64003E,mp4a.40.2": true,
+    "isTypeSupported video/mp4;codecs=avc3.64003E,opus": true,
+    "isTypeSupported video/mp4;codecs=hvc1.1.6.L186.B0,mp4a.40.2": true,
+    "isTypeSupported video/mp4;codecs=hvc1.1.6.L186.B0,opus": true,
+    "isTypeSupported video/mp4;codecs=hev1.1.6.L186.B0,mp4a.40.2": true,
+    "isTypeSupported video/mp4;codecs=hev1.1.6.L186.B0,opus": true,
+    "isTypeSupported video/mp4;codecs=av01.0.19M.08,mp4a.40.2": true,
+    "isTypeSupported video/mp4;codecs=av01.0.19M.08,opus": true,
     "toDataURL image/png": "data:image/png",
-    "toDataURL image/jpeg": "data:image/png",
+    "toDataURL image/jpeg": "data:image/jpeg",
     "toDataURL image/jpg": "data:image/png",
-    "toDataURL image/webp": "data:image/png",
+    "toDataURL image/webp": "data:image/webp",
     "toDataURL image/bmp": "data:image/png",
     "toDataURL image/x-png": "data:image/png",
     "toDataURL image/gif": "data:image/png",
@@ -757,10 +757,10 @@
     "toDataURL image/vnd.xiff": "data:image/png",
     "toDataURL image/vnd.zbrush.pcx": "data:image/png",
     "toDataURL image/wmf": "data:image/png",
-    "webgl.getParameter 37446": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+    "webgl.getParameter 37446": null,
     "webgl.WEBGL_debug_renderer_info": true,
-    "webgl2.getParameter 37445": "Google Inc. (Apple)",
-    "webgl2.getParameter 37446": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+    "webgl2.getParameter 37445": null,
+    "webgl2.getParameter 37446": null,
     "webgl2.getParameter 33902": "Float32Array:1,1",
     "webgl2.getParameter 7938": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
     "webgl2.getParameter 35377": 69632,
@@ -781,7 +781,7 @@
     "createElement audio": "[object HTMLAudioElement]",
     "createElement video": "[object HTMLVideoElement]",
     "createElement invalidTag": "[object HTMLUnknownElement]",
-    "createEvent TouchEvent": "[object TouchEvent]",
+    "createEvent TouchEvent": "threw:NotSupportedError",
     "createEvent Event": "[object Event]",
     "getPropertyValue font-size": "16px",
     "getPropertyValue height": "1064px",
@@ -789,281 +789,6 @@
     "getPropertyValue color": "rgb(0, 0, 0)"
   },
   "diff": [
-    {
-      "key": "matchMedia (min-resolution:0.625dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.3125dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.15625dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.078125dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0390625dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.01953125dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.009765625dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0048828125dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.00244140625dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.001220703125dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0006103515625dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.00030517578125dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.000152587890625dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0000762939453125dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.00003814697265625dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.000019073486328125dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0000095367431640625dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.00000476837158203125dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.000002384185791015625dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0000011920928955078125dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:5.960464477539062e-7dppx)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:62.5dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:31.25dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:15.625dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:7.8125dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:3.90625dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:1.953125dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.9765625dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.48828125dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.244140625dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.1220703125dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.06103515625dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.030517578125dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0152587890625dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.00762939453125dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.003814697265625dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0019073486328125dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.00095367431640625dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:25dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:12.5dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:6.25dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:3.125dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:1.5625dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.78125dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.390625dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.1953125dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.09765625dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.048828125dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0244140625dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.01220703125dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.006103515625dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0030517578125dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.00152587890625dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.000762939453125dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (min-resolution:0.0003814697265625dpcm)",
-      "chrome": true,
-      "lightpanda": false
-    },
     {
       "key": "matchMedia (min-device-height: 1024px)",
       "chrome": false,
@@ -1098,21 +823,6 @@
       "key": "matchMedia (min-device-height: 1080px)",
       "chrome": false,
       "lightpanda": true
-    },
-    {
-      "key": "matchMedia (color-index = 0)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (max-color-index: 4)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (device-posture: continuous)",
-      "chrome": true,
-      "lightpanda": false
     },
     {
       "key": "matchMedia (min-device-width: 1024px)",
@@ -1150,16 +860,6 @@
       "lightpanda": true
     },
     {
-      "key": "matchMedia (max-device-aspect-ratio: 2.125)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (max-resolution: 256dpi)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
       "key": "matchMedia (min-height: 1000px)",
       "chrome": false,
       "lightpanda": true
@@ -1170,119 +870,14 @@
       "lightpanda": false
     },
     {
-      "key": "matchMedia (max-height: 1062.5px)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (max-width: 1937.5px)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "matchMedia (prefers-color-scheme: light)",
+      "key": "matchMedia (min-height: 1062.5px)",
       "chrome": false,
       "lightpanda": true
     },
     {
-      "key": "matchMedia (prefers-color-scheme: dark)",
+      "key": "matchMedia (max-height: 1062.5px)",
       "chrome": true,
       "lightpanda": false
-    },
-    {
-      "key": "matchMedia (max-aspect-ratio: 2.125)",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "canPlayType audio/x-mpegurl",
-      "chrome": "maybe",
-      "lightpanda": ""
-    },
-    {
-      "key": "canPlayType video/mp4; codecs=\"avc1.42c00d\"",
-      "chrome": "probably",
-      "lightpanda": ""
-    },
-    {
-      "key": "isTypeSupported video/mp4;codecs=avc1.64003E,mp4a.40.2",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "isTypeSupported video/mp4;codecs=avc1.64003E,opus",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "isTypeSupported video/mp4;codecs=avc3.64003E,mp4a.40.2",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "isTypeSupported video/mp4;codecs=avc3.64003E,opus",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "isTypeSupported video/mp4;codecs=hvc1.1.6.L186.B0,mp4a.40.2",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "isTypeSupported video/mp4;codecs=hvc1.1.6.L186.B0,opus",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "isTypeSupported video/mp4;codecs=hev1.1.6.L186.B0,mp4a.40.2",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "isTypeSupported video/mp4;codecs=hev1.1.6.L186.B0,opus",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "isTypeSupported video/mp4;codecs=av01.0.19M.08,mp4a.40.2",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "isTypeSupported video/mp4;codecs=av01.0.19M.08,opus",
-      "chrome": true,
-      "lightpanda": false
-    },
-    {
-      "key": "toDataURL image/jpeg",
-      "chrome": "data:image/jpeg",
-      "lightpanda": "data:image/png"
-    },
-    {
-      "key": "toDataURL image/webp",
-      "chrome": "data:image/webp",
-      "lightpanda": "data:image/png"
-    },
-    {
-      "key": "webgl.getParameter 37446",
-      "chrome": null,
-      "lightpanda": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
-    },
-    {
-      "key": "webgl2.getParameter 37445",
-      "chrome": null,
-      "lightpanda": "Google Inc. (Apple)"
-    },
-    {
-      "key": "webgl2.getParameter 37446",
-      "chrome": null,
-      "lightpanda": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
-    },
-    {
-      "key": "createEvent TouchEvent",
-      "chrome": "threw:NotSupportedError",
-      "lightpanda": "[object TouchEvent]"
     },
     {
       "key": "getPropertyValue height",

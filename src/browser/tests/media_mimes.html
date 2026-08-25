@@ -129,3 +129,46 @@
   testing.expectEqual(true, MediaRecorder.isTypeSupported(''));
 }
 </script>
+
+<script id=media_mimes_parametrised_codecs>
+{
+  // Kasada asked these on hyatt.com and got a different answer here than in
+  // Chrome. A codec string is not a name out of a fixed list — it carries a
+  // profile, a level, a tier and a bit depth, and Chrome parses them. Levels
+  // nobody thought to enumerate still have to answer.
+  const v = document.createElement('video');
+
+  // avc1/avc3 is `profile constraint level` as six hex digits. 0x0d is level
+  // 1.3 and 0x3E is level 6.2; neither was in any hand-written list.
+  testing.expectEqual('probably', v.canPlayType('video/mp4; codecs="avc1.42c00d"'));
+  testing.expectEqual('probably', v.canPlayType('video/mp4; codecs="avc1.64003E"'));
+  testing.expectEqual('probably', v.canPlayType('video/mp4; codecs="avc1.4d001f"'));
+  testing.expectEqual('probably', v.canPlayType('video/mp4; codecs="avc3.64003E"'));
+  // A profile Chrome does not know is still no.
+  testing.expectEqual('', v.canPlayType('video/mp4; codecs="avc1.2C001E"'));
+  testing.expectEqual('', v.canPlayType('video/mp4; codecs="avc1.42E01"'));
+
+  // HEVC and AV1 the same way, and both record on this platform.
+  testing.expectEqual('probably', v.canPlayType('video/mp4; codecs="hvc1.1.6.L186.B0"'));
+  testing.expectEqual('probably', v.canPlayType('video/mp4; codecs="av01.0.19M.08"'));
+
+  // audio/x-mpegurl is a playlist container spelling like the three already
+  // carried; Chrome answers all four alike.
+  testing.expectEqual('maybe', v.canPlayType('audio/x-mpegurl'));
+  testing.expectEqual('maybe', v.canPlayType('audio/mpegurl'));
+
+  // The ten pairs off the read log: a video codec plus an audio one, all of
+  // which MediaRecorder takes in an mp4 container.
+  for (const type of [
+    'video/mp4;codecs=avc1.64003E,mp4a.40.2', 'video/mp4;codecs=avc1.64003E,opus',
+    'video/mp4;codecs=avc3.64003E,mp4a.40.2', 'video/mp4;codecs=avc3.64003E,opus',
+    'video/mp4;codecs=hvc1.1.6.L186.B0,mp4a.40.2', 'video/mp4;codecs=hvc1.1.6.L186.B0,opus',
+    'video/mp4;codecs=hev1.1.6.L186.B0,mp4a.40.2', 'video/mp4;codecs=hev1.1.6.L186.B0,opus',
+    'video/mp4;codecs=av01.0.19M.08,mp4a.40.2', 'video/mp4;codecs=av01.0.19M.08,opus',
+  ]) {
+    testing.expectEqual(true, MediaRecorder.isTypeSupported(type));
+    testing.expectEqual(true, MediaSource.isTypeSupported(type));
+    testing.expectEqual('probably', v.canPlayType(type));
+  }
+}
+</script>
