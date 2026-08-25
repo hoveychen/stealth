@@ -12711,3 +12711,40 @@ Two rows and 16 pixels, both understood, neither a gradient problem:
   flat coverage, then modulate by the ramp* gets to 2 rather than 13, which
   says Chrome is not simply blurring the alpha this engine draws — but 2 is not
   0, and one row is not enough to choose between them.
+
+## The notation, not the colour, picks the ramp's space (2026-08-24)
+
+`probes/canvas-gradient-stop-space.js` is the follow-up the chapter above asked
+for: the same red-to-blue ramp written sixteen ways, so that a row either
+matches the plain hex one or does not. Red to blue is where sRGB and Oklab part
+company hardest, so no colour arithmetic is needed to read the answer.
+
+**Six notations ramp in sRGB and five ramp in Oklab, and the split is not about
+gamut.** `#ff0000`, `rgb(255 0 0)`, `rgb(255, 0, 0)`, `hsl(0 100% 50%)` and
+`hwb(0 0% 0%)` all give the identical row. `color(srgb 1 0 0)` — *the same
+colour, in sRGB, in gamut* — gives a different one, and it is byte-identical to
+what `oklch(0.62796 0.25768 29.234)` and `lab(54.29 80.8 69.89)` give. So what
+decides is which notation was written, not what colour it names or what gamut
+it needs.
+
+That set is exactly the one this engine's `color.Style.wide` already marks:
+`color()`, `lab()`, `lch()`, `oklab()`, `oklch()`. Note `hwb()` is *not* in it,
+even though CSS Color 4 does not call `hwb()` legacy and this engine already
+tracks that elsewhere — `Style.alpha` exists precisely because `hwb()`'s alpha
+stays a float. Whatever Blink is branching on, it is not that flag.
+
+**One such stop takes the whole gradient, not just the segments it ends.** A
+three-stop ramp whose *last* stop is `color(srgb 0 0 1)` differs from the
+all-legacy one across its **first** sixteen pixels as well as its last — and the
+mirror, with the wide stop first, differs across the last sixteen. Neither half
+is left alone, so the space is chosen once for the gradient.
+
+Interpolating in Oklab — sRGB to linear, to LMS, cube roots, to Oklab, lerp,
+and back — reproduces every one of these rows to the byte: `color srgb`,
+`oklch`, `lab`, both three-stop rows, and `wide stop` from the earlier probe.
+Six rows, 192 pixels, no residual. The ordered dither still applies on top, and
+alpha still interpolates straight and separately (`hwb alpha ramp` and
+`legacy alpha ramp` are the same row, which also puts `hwb()` on the sRGB side
+a second time).
+
+`cfsc-gradient-oklab-stops` is the implementation.
