@@ -1216,6 +1216,29 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
         return;
     }
 
+    // Not a Web IDL member: HTML's "create a Location object" steps hang an own
+    // @@toPrimitive of value `undefined` off every Location, so that coercing
+    // one falls back to `toString` rather than reaching for @@toPrimitive and
+    // finding an inherited one. Measured on Chrome 151:
+    //
+    //   Object.getOwnPropertySymbols(location) -> [Symbol(Symbol.toPrimitive)]
+    //   ...descriptor -> { value: undefined, writable: false,
+    //                      enumerable: false, configurable: false }
+    //
+    // The same steps also define an own `valueOf` holding the realm's
+    // %Object.prototype.valueOf%. That one is not here: the value is a
+    // per-context object and a template can only carry snapshot data, so
+    // installing it would have to mint a *different* function -- trading a
+    // missing own property for a wrong identity, which is not a trade.
+    if (@hasDecl(JsApi.Meta, "to_primitive_undefined")) {
+        v8.v8__Template__Set(
+            @ptrCast(instance),
+            @ptrCast(v8.v8__Symbol__GetToPrimitive(isolate)),
+            @ptrCast(v8.v8__Undefined(isolate)),
+            v8.ReadOnly + v8.DontDelete + v8.DontEnum,
+        );
+    }
+
     if (@hasDecl(JsApi.Meta, "htmldda")) {
         v8.v8__ObjectTemplate__MarkAsUndetectable(instance);
         v8.v8__ObjectTemplate__SetCallAsFunctionHandler(instance, JsApi.Meta.callable.func);

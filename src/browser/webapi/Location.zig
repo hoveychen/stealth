@@ -241,6 +241,9 @@ pub const JsApi = struct {
         pub const name = "Location";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // See the comment in Snapshot.attachClass: an own @@toPrimitive of
+        // value undefined, from HTML's Location creation steps.
+        pub const to_primitive_undefined = true;
     };
 
     // Every member of Location is [LegacyUnforgeable]: it lives on the instance
@@ -250,24 +253,33 @@ pub const JsApi = struct {
     // the prototype only has to look one name over at `reload`.
     const unforgeable: js.Caller.Function.Opts = .{ .unforgeable = true, .deletable = false };
 
-    pub const toString = bridge.function(Location.toString, unforgeable);
+    // Declaration order is install order is `Object.getOwnPropertyNames(location)`
+    // order, and with every member unforgeable that list is now a fingerprint of
+    // its own. This is Chrome 151's, which is neither IDL order nor alphabetical:
+    //
+    //   valueOf, ancestorOrigins, href, origin, protocol, host, hostname, port,
+    //   pathname, search, hash, assign, reload, replace, toString
+    //
+    // `valueOf` is the one name we cannot place -- see Snapshot.attachClass for
+    // why -- so ours is Chrome's list with that first entry missing.
+    pub const ancestorOrigins = bridge.accessor(Location.getAncestorOrigins, null, unforgeable);
     pub const href = bridge.accessor(Location.toString, setHref, unforgeable);
     fn setHref(self: *const Location, url: [:0]const u8, frame: *Frame) !void {
         return self.assign(url, frame);
     }
 
-    pub const search = bridge.accessor(Location.getSearch, Location.setSearch, unforgeable);
-    pub const hash = bridge.accessor(Location.getHash, Location.setHash, unforgeable);
-    pub const pathname = bridge.accessor(Location.getPathname, Location.setPathname, unforgeable);
-    pub const hostname = bridge.accessor(Location.getHostname, Location.setHostname, unforgeable);
-    pub const host = bridge.accessor(Location.getHost, Location.setHost, unforgeable);
-    pub const port = bridge.accessor(Location.getPort, Location.setPort, unforgeable);
     // `origin` and `ancestorOrigins` are the interface's only two read-only
     // attributes; every other one is writable on Chrome.
     pub const origin = bridge.accessor(Location.getOrigin, null, unforgeable);
-    pub const ancestorOrigins = bridge.accessor(Location.getAncestorOrigins, null, unforgeable);
     pub const protocol = bridge.accessor(Location.getProtocol, Location.setProtocol, unforgeable);
+    pub const host = bridge.accessor(Location.getHost, Location.setHost, unforgeable);
+    pub const hostname = bridge.accessor(Location.getHostname, Location.setHostname, unforgeable);
+    pub const port = bridge.accessor(Location.getPort, Location.setPort, unforgeable);
+    pub const pathname = bridge.accessor(Location.getPathname, Location.setPathname, unforgeable);
+    pub const search = bridge.accessor(Location.getSearch, Location.setSearch, unforgeable);
+    pub const hash = bridge.accessor(Location.getHash, Location.setHash, unforgeable);
     pub const assign = bridge.function(Location.assign, unforgeable);
-    pub const replace = bridge.function(Location.replace, unforgeable);
     pub const reload = bridge.function(Location.reload, unforgeable);
+    pub const replace = bridge.function(Location.replace, unforgeable);
+    pub const toString = bridge.function(Location.toString, unforgeable);
 };

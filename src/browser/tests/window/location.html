@@ -89,6 +89,37 @@
   testing.expectEqual('function', typeof location.reload);
 </script>
 
+<script id=location_creation_steps>
+  // Two own properties that are not Web IDL members at all -- HTML's "create a
+  // Location object" steps define them straight onto the object. Chrome 151:
+  //
+  //   Object.getOwnPropertySymbols(location) -> [Symbol(Symbol.toPrimitive)]
+  //   ...descriptor -> { value: undefined, writable: false,
+  //                      enumerable: false, configurable: false }
+  //
+  // An undefined @@toPrimitive is not the same as no @@toPrimitive: it stops
+  // the coercion algorithm from walking up to an inherited one, so a Location
+  // always stringifies through `toString`.
+  testing.expectEqual(['Symbol(Symbol.toPrimitive)'], Object.getOwnPropertySymbols(location).map(String));
+
+  const to_primitive = Object.getOwnPropertyDescriptor(location, Symbol.toPrimitive);
+  testing.expectEqual(undefined, to_primitive.value);
+  testing.expectEqual(false, to_primitive.writable);
+  testing.expectEqual(false, to_primitive.enumerable);
+  testing.expectEqual(false, to_primitive.configurable);
+  testing.expectEqual(location.href, `${location}`);
+  testing.expectEqual(location.href, String(location));
+
+  // With every member unforgeable, the own-name list is itself a fingerprint.
+  // Chrome's is neither IDL order nor alphabetical, and it opens with `valueOf`
+  // -- the realm's %Object.prototype.valueOf%, which a template cannot carry
+  // (see Snapshot.attachClass). Ours is Chrome's list without that one name.
+  testing.expectEqual(
+    ['ancestorOrigins', 'href', 'origin', 'protocol', 'host', 'hostname', 'port',
+     'pathname', 'search', 'hash', 'assign', 'reload', 'replace', 'toString'],
+    Object.getOwnPropertyNames(location));
+</script>
+
 <div id="sec1"></div>
 <div id="sec2"></div>
 
