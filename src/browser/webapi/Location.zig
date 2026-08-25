@@ -201,22 +201,29 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const toString = bridge.function(Location.toString, .{});
-    pub const href = bridge.accessor(Location.toString, setHref, .{});
+    // Every member of Location is [LegacyUnforgeable]: it lives on the instance
+    // as a non-configurable own property, and `Location.prototype` is left with
+    // nothing but `constructor` (measured on Chrome 151). This is the whole
+    // interface, operations included -- a detector that finds `href` gone from
+    // the prototype only has to look one name over at `reload`.
+    const unforgeable: js.Caller.Function.Opts = .{ .unforgeable = true, .deletable = false };
+
+    pub const toString = bridge.function(Location.toString, unforgeable);
+    pub const href = bridge.accessor(Location.toString, setHref, unforgeable);
     fn setHref(self: *const Location, url: [:0]const u8, frame: *Frame) !void {
         return self.assign(url, frame);
     }
 
-    pub const search = bridge.accessor(Location.getSearch, Location.setSearch, .{});
-    pub const hash = bridge.accessor(Location.getHash, Location.setHash, .{});
-    pub const pathname = bridge.accessor(Location.getPathname, Location.setPathname, .{});
-    pub const hostname = bridge.accessor(Location.getHostname, null, .{});
-    pub const host = bridge.accessor(Location.getHost, null, .{});
-    pub const port = bridge.accessor(Location.getPort, null, .{});
-    pub const origin = bridge.accessor(Location.getOrigin, null, .{});
-    pub const ancestorOrigins = bridge.accessor(Location.getAncestorOrigins, null, .{});
-    pub const protocol = bridge.accessor(Location.getProtocol, null, .{});
-    pub const assign = bridge.function(Location.assign, .{});
-    pub const replace = bridge.function(Location.replace, .{});
-    pub const reload = bridge.function(Location.reload, .{});
+    pub const search = bridge.accessor(Location.getSearch, Location.setSearch, unforgeable);
+    pub const hash = bridge.accessor(Location.getHash, Location.setHash, unforgeable);
+    pub const pathname = bridge.accessor(Location.getPathname, Location.setPathname, unforgeable);
+    pub const hostname = bridge.accessor(Location.getHostname, null, unforgeable);
+    pub const host = bridge.accessor(Location.getHost, null, unforgeable);
+    pub const port = bridge.accessor(Location.getPort, null, unforgeable);
+    pub const origin = bridge.accessor(Location.getOrigin, null, unforgeable);
+    pub const ancestorOrigins = bridge.accessor(Location.getAncestorOrigins, null, unforgeable);
+    pub const protocol = bridge.accessor(Location.getProtocol, null, unforgeable);
+    pub const assign = bridge.function(Location.assign, unforgeable);
+    pub const replace = bridge.function(Location.replace, unforgeable);
+    pub const reload = bridge.function(Location.reload, unforgeable);
 };

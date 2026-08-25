@@ -1009,7 +1009,10 @@ fn upgradeConstructor(comptime JsApi: type) bridge.Constructor {
 const Unforgeable = struct {
     Owner: type,
     name: [:0]const u8,
-    accessor: bridge.Accessor,
+    member: union(enum) {
+        accessor: bridge.Accessor,
+        operation: bridge.Function,
+    },
 };
 
 fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolate, template: *const v8.FunctionTemplate, define_on: ?*const v8.ObjectTemplate) void {
@@ -1097,32 +1100,20 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     continue;
                 }
 
-                // For non-static functions, use the signature to validate the
-                // receiver, unless the operation has to reject rather than throw.
-                const func_signature = if (value.static or value.rejects_bad_receiver) null else signature;
-                // A member may override its JS-visible name (see Response.json_static)
-                const fn_name = value.js_name orelse name;
-                const js_name = v8.v8__String__NewFromUtf8(isolate, fn_name.ptr, v8.kNormal, @intCast(fn_name.len));
-                const function_template = v8.v8__FunctionTemplate__New__Config(isolate, &.{
-                    .callback = value.func,
-                    // The same string the class name uses, handed to the
-                    // callback as its data: a refusal that names the operation
-                    // ("Failed to execute 'createElement' on 'Document'") has no
-                    // other way to reach the name. See
-                    // Caller.FunctionCallbackInfo.operationName.
-                    .data = @ptrCast(js_name),
-                    .length = value.arity,
-                    .signature = func_signature,
-                }).?;
-                v8.v8__FunctionTemplate__SetClassName(function_template, js_name);
+                if (comptime value.unforgeable) {
+                    // this operation will be handled in the unforgeables loop
+                    // later in this function.
+                    continue;
+                }
+
                 if (value.static and !own_properties) {
-                    v8.v8__Template__Set(@ptrCast(template), js_name, @ptrCast(function_template), v8.None);
+                    attachOperationProperty(name, value, isolate, signature, template, v8.None);
                 } else {
                     // Web IDL: operations on the interface prototype object
                     // (and mirrored onto [Global] instances) are enumerable,
                     // unless the member opted out (window.webkitURL).
                     const attribute: v8.PropertyAttribute = if (value.enumerable) v8.None else v8.DontEnum;
-                    v8.v8__Template__Set(@ptrCast(define_on orelse member_template), js_name, @ptrCast(function_template), attribute);
+                    attachOperationProperty(name, value, isolate, signature, define_on orelse member_template, attribute);
                 }
             },
             bridge.Indexed => {
@@ -1196,9 +1187,24 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
     if (comptime flatten == false) {
         inline for (unforgeables) |u| {
             if (comptime bridge.inheritsOrIs(JsApi, u.Owner)) {
-                // unforgeables attributes aren't only applied directly on the
+                // unforgeable members aren't only applied directly on the
                 // instance, they're also applied directly on every child instance
-                attachAccessorProperty(u.name, u.accessor, isolate, template, signature, instance, false);
+                switch (u.member) {
+                    .accessor => |accessor| attachAccessorProperty(u.name, accessor, isolate, template, signature, instance, false),
+                    // Web IDL: an unforgeable operation is a non-writable,
+                    // non-configurable own data property of the instance --
+                    // `Object.getOwnPropertyDescriptor(location, 'reload')`
+                    // reports writable and configurable both false on Chrome
+                    // 151. An accessor gets the same two bits from
+                    // `deletable = false` plus its missing setter.
+                    .operation => |operation| {
+                        var attribute: v8.PropertyAttribute = v8.ReadOnly + v8.DontDelete;
+                        if (operation.enumerable == false) {
+                            attribute |= v8.DontEnum;
+                        }
+                        attachOperationProperty(u.name, operation, isolate, signature, instance, attribute);
+                    },
+                }
             }
         }
     }
@@ -1244,16 +1250,24 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
     }
 }
 
-// Every [LegacyUnforgeable] accessor. We collect this once so we don't need to
-// keep scanning for this in attachClass
+// Every [LegacyUnforgeable] member. We collect this once so we don't need to
+// keep scanning for this in attachClass. Operations belong here as much as
+// attributes do: Location is unforgeable end to end, and leaving `reload` on
+// the prototype while moving `href` off it swaps one one-line tell for another.
 const unforgeables: []const Unforgeable = blk: {
     @setEvalBranchQuota(100_000);
     var list: []const Unforgeable = &.{};
     for (JsApis) |Api| {
         for (@typeInfo(Api).@"struct".decls) |d| {
             const value = @field(Api, d.name);
-            if (@TypeOf(value) == bridge.Accessor and value.unforgeable and !value.static) {
-                list = list ++ &[_]Unforgeable{.{ .Owner = Api, .name = d.name, .accessor = value }};
+            switch (@TypeOf(value)) {
+                bridge.Accessor => if (value.unforgeable and !value.static) {
+                    list = list ++ &[_]Unforgeable{.{ .Owner = Api, .name = d.name, .member = .{ .accessor = value } }};
+                },
+                bridge.Function => if (value.unforgeable and !value.static) {
+                    list = list ++ &[_]Unforgeable{.{ .Owner = Api, .name = d.name, .member = .{ .operation = value } }};
+                },
+                else => {},
             }
         }
     }
@@ -1270,6 +1284,32 @@ const unforgeables: []const Unforgeable = blk: {
 // interface object. A namespace (own_properties) has no prototype of its own and
 // is reached as an instance, so `CSS.highlights` -- a static accessor -- has to
 // land on the instance template the way a static *operation* already does.
+// Builds an operation's function template and puts it on `target` with the
+// attributes the caller asks for. Split out of the member loop because the
+// [LegacyUnforgeable] pass installs the same operation a second way -- on the
+// instance template, non-writable and non-configurable -- and one builder means
+// the two spellings cannot drift apart.
+fn attachOperationProperty(comptime name: [:0]const u8, value: bridge.Function, isolate: *v8.Isolate, signature: anytype, target: anytype, attribute: v8.PropertyAttribute) void {
+    // A member may override its JS-visible name (see Response.json_static)
+    const fn_name = value.js_name orelse name;
+    const js_name = v8.v8__String__NewFromUtf8(isolate, fn_name.ptr, v8.kNormal, @intCast(fn_name.len));
+    // For non-static functions, use the signature to validate the
+    // receiver, unless the operation has to reject rather than throw.
+    const func_signature = if (value.static or value.rejects_bad_receiver) null else signature;
+    const function_template = v8.v8__FunctionTemplate__New__Config(isolate, &.{
+        .callback = value.func,
+        // The same string the class name uses, handed to the callback as its
+        // data: a refusal that names the operation ("Failed to execute
+        // 'createElement' on 'Document'") has no other way to reach the name.
+        // See Caller.FunctionCallbackInfo.operationName.
+        .data = @ptrCast(js_name),
+        .length = @intCast(value.arity),
+        .signature = func_signature,
+    }).?;
+    v8.v8__FunctionTemplate__SetClassName(function_template, js_name);
+    v8.v8__Template__Set(@ptrCast(target), js_name, @ptrCast(function_template), attribute);
+}
+
 fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, isolate: *v8.Isolate, template: *const v8.FunctionTemplate, signature: anytype, target: anytype, comptime static_on_target: bool) void {
     const js_name = v8.v8__String__NewFromUtf8(isolate, name.ptr, v8.kNormal, @intCast(name.len));
     const getter_signature = if (value.static) null else signature;
