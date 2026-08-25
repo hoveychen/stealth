@@ -40,10 +40,9 @@ _pad: bool = false,
 
 pub const init: Viewport = .{};
 
-/// A frozen one-element FrozenArray. The freeze is the engine-wide FrozenArray
-/// gap -- the array this hands back is an ordinary one -- but the contents and
-/// the fresh-per-read identity are Chrome's.
-pub fn getSegments(_: *const Viewport, frame: *Frame) ![]const *DOMRect {
+/// A frozen one-element FrozenArray, fresh on every read (measured: two reads
+/// are not the same array).
+pub fn getSegments(_: *const Viewport, frame: *Frame) !js.FrozenArray(*DOMRect) {
     const viewport = frame._page.getViewport();
     const rect = try DOMRect.init(
         0,
@@ -54,7 +53,7 @@ pub fn getSegments(_: *const Viewport, frame: *Frame) ![]const *DOMRect {
     );
     const segments = try frame.call_arena.alloc(*DOMRect, 1);
     segments[0] = rect;
-    return segments;
+    return .{ .items = segments };
 }
 
 pub const JsApi = struct {

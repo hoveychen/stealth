@@ -19,6 +19,9 @@
   testing.expectEqual(true, ['MacIntel', 'Linux x86_64'].includes(navigator.platform));
   testing.expectEqual('en-US', navigator.language);
   testing.expectEqual(true, Array.isArray(navigator.languages));
+  // A FrozenArray: frozen and not extensible on every read.
+  testing.expectEqual(true, Object.isFrozen(navigator.languages));
+  testing.expectEqual(false, Object.isExtensible(navigator.languages));
   testing.expectEqual(2, navigator.languages.length);
   testing.expectEqual('en-US', navigator.languages[0]);
   testing.expectEqual('en', navigator.languages[1]);

@@ -494,6 +494,11 @@
     // The pair splits the requested usages: each key keeps only its own.
     out.oaep_public_usages = oaep.publicKey.usages.join(",");
     out.oaep_private_usages = oaep.privateKey.usages.join(",");
+    // `usages` is an `object` in the IDL, not a FrozenArray, and Chrome hands it
+    // back extensible (measured, probes/frozen-array-surfaces.js) -- unlike
+    // every FrozenArray in this engine. The guard is here so the freeze does not
+    // spread to a member that never had it.
+    out.oaep_public_usages_frozen = Object.isFrozen(oaep.publicKey.usages);
     out.oaep_public_extractable = oaep.publicKey.extractable;
     out.oaep_private_extractable = oaep.privateKey.extractable;
     // A pair is two distinct keys, not one object handed back twice.
@@ -528,6 +533,7 @@
       testing.expectEqual("1,0,1", o.oaep_exponent);
       testing.expectEqual("encrypt", o.oaep_public_usages);
       testing.expectEqual("decrypt", o.oaep_private_usages);
+      testing.expectEqual(false, o.oaep_public_usages_frozen);
       testing.expectEqual(true, o.oaep_public_extractable);
       testing.expectEqual(true, o.oaep_private_extractable);
       testing.expectEqual(true, o.oaep_distinct);

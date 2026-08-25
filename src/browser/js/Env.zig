@@ -445,6 +445,14 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
             log.err(.js, "SharedArrayBuffer gate", .{});
         }
 
+        // Every WebIDL FrozenArray comes back frozen and the only freeze this
+        // engine can reach is the JS builtin, so the pristine one is taken here
+        // -- before a script can replace it and make the engine call into page
+        // code on every FrozenArray read.
+        if (context.objectFreeze(&ls.local)) |_| {} else |err| {
+            log.err(.js, "Object.freeze stash", .{ .err = err });
+        }
+
         // This fork's WebMCP surface is three names Chrome does not have, and
         // Kasada was measured reading one of them, so a run that did not ask for
         // WebMCP does not carry it. Window realm only: the interfaces are

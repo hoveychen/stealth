@@ -168,10 +168,9 @@ pub const XRRenderState = struct {
         return self._base_layer;
     }
 
-    /// Chrome's is a frozen FrozenArray; this engine cannot freeze an array it
-    /// builds, so ours is ordinary. Empty either way for an inline session.
-    pub fn getLayers(self: *const XRRenderState) []const *XRLayer {
-        return self._layers;
+    /// A frozen FrozenArray, empty for an inline session.
+    pub fn getLayers(self: *const XRRenderState) js.FrozenArray(*XRLayer) {
+        return .{ .items = self._layers };
     }
 
     pub const JsApi = struct {
@@ -297,8 +296,8 @@ pub const XRSession = struct {
         return "rgba16f";
     }
 
-    pub fn getEnabledFeatures(_: *const XRSession) []const []const u8 {
-        return &.{"viewer"};
+    pub fn getEnabledFeatures(_: *const XRSession) js.FrozenArray([]const u8) {
+        return .{ .items = &.{"viewer"} };
     }
 
     pub fn getMaxRenderLayers(_: *const XRSession) u32 {
@@ -1077,12 +1076,12 @@ pub const XRInputSourcesChangeEvent = struct {
         return self._session;
     }
 
-    pub fn getAdded(self: *const XRInputSourcesChangeEvent) []const *input.XRInputSource {
-        return self._added;
+    pub fn getAdded(self: *const XRInputSourcesChangeEvent) js.FrozenArray(*input.XRInputSource) {
+        return .{ .items = self._added };
     }
 
-    pub fn getRemoved(self: *const XRInputSourcesChangeEvent) []const *input.XRInputSource {
-        return self._removed;
+    pub fn getRemoved(self: *const XRInputSourcesChangeEvent) js.FrozenArray(*input.XRInputSource) {
+        return .{ .items = self._removed };
     }
 
     pub const JsApi = struct {

@@ -560,9 +560,8 @@ pub const CharacterBoundsUpdateEvent = struct {
 /// `navigator.clipboard.onclipboardchange`. The one Event subclass with no type
 /// argument: its arity is 0 and the first argument is the dictionary, so the
 /// type is always 'clipboardchange' and a string there is refused as an init
-/// (measured). `types` is a FrozenArray of MIME strings -- fresh on every read,
-/// though not actually frozen here, which is the engine-wide FrozenArray gap --
-/// and `changeId` is the engine's only WebIDL `bigint`.
+/// (measured). `types` is a FrozenArray of MIME strings -- fresh and frozen on
+/// every read -- and `changeId` is the engine's only WebIDL `bigint`.
 pub const ClipboardChangeEvent = struct {
     pub const Proto = Event;
 
@@ -597,8 +596,8 @@ pub const ClipboardChangeEvent = struct {
         return self._proto;
     }
 
-    pub fn getTypes(self: *const ClipboardChangeEvent) []const []const u8 {
-        return self._types;
+    pub fn getTypes(self: *const ClipboardChangeEvent) js.FrozenArray([]const u8) {
+        return .{ .items = self._types };
     }
 
     /// A BigInt, not a Number: `typeof e.changeId` is 'bigint' in Chrome.

@@ -136,12 +136,14 @@ pub fn asEvent(self: *CookieChangeEvent) *Event {
     return self._proto;
 }
 
-pub fn getChanged(self: *const CookieChangeEvent) []CookieStore.CookieListItem {
-    return self._changed;
+/// Both lists are FrozenArrays and come back frozen (measured on Chrome 151,
+/// probes/frozen-array-surfaces.js).
+pub fn getChanged(self: *const CookieChangeEvent) js.FrozenArray(CookieStore.CookieListItem) {
+    return .{ .items = self._changed };
 }
 
-pub fn getDeleted(self: *const CookieChangeEvent) []CookieStore.CookieListItem {
-    return self._deleted;
+pub fn getDeleted(self: *const CookieChangeEvent) js.FrozenArray(CookieStore.CookieListItem) {
+    return .{ .items = self._deleted };
 }
 
 pub const JsApi = struct {

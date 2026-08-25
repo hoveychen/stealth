@@ -146,9 +146,9 @@ function errorName(fn) {
     let f = new FontFaceSetLoadEvent('loading');
     testing.expectTrue(Array.isArray(f.fontfaces));
     testing.expectEqual(0, f.fontfaces.length);
-    // Chrome's array is frozen; there is no freeze binding on js.Array here, so
-    // ours is not. Recorded rather than faked.
-    testing.expectFalse(Object.isFrozen(f.fontfaces));
+    // A FrozenArray, so it reads back frozen and not extensible.
+    testing.expectTrue(Object.isFrozen(f.fontfaces));
+    testing.expectFalse(Object.isExtensible(f.fontfaces));
     testing.expectFalse(f.fontfaces === f.fontfaces);
 
     const face = new FontFace('A', 'url(a.woff2)');

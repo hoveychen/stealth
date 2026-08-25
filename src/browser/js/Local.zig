@@ -538,6 +538,14 @@ pub fn zigValueToJs(self: *const Local, value: anytype, comptime opts: CallOpts)
                 return self.zigValueToJs(wrap, opts);
             }
 
+            // A WebIDL FrozenArray: the ordinary slice conversion, then the
+            // freeze that is the whole point of the type. See js.FrozenArray.
+            if (@hasDecl(T, "frozen_array")) {
+                const array = try self.zigValueToJs(value.items, opts);
+                try self.freeze(array);
+                return array;
+            }
+
             if (s.is_tuple) {
                 // return the tuple struct as an array
                 var js_arr = self.newArray(@intCast(s.fields.len));
@@ -1674,6 +1682,15 @@ pub fn newException(self: *const Local, ex: anytype) js.Exception {
         .local = self,
         .handle = js_val.handle,
     };
+}
+
+/// `Object.freeze(value)`, through the realm's own function rather than
+/// whatever the page has since left on `Object`. What a WebIDL FrozenArray
+/// needs and the vendored V8 C API cannot do directly — see
+/// `Context.object_freeze`.
+pub fn freeze(self: *const Local, value: js.Value) !void {
+    const func = try self.ctx.objectFreeze(self);
+    _ = try func.call(js.Value, .{value});
 }
 
 pub fn getGlobal(self: *const Local) js.Object {

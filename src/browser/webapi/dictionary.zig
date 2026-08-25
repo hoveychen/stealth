@@ -440,8 +440,8 @@ fn DictionaryWithPrefix(comptime prefix: []const u8, comptime dict: []const u8, 
         /// Answers an i64, so a literal past 64 bits truncates where Chrome
         /// keeps it (`2n ** 64n` reads back 0 here and 18446744073709551616 in
         /// Chrome). Nothing in this engine ever produces a real one and no
-        /// dictionary member that takes one is reachable from a site, so the
-        /// gap is the same order as the FrozenArray gaps elsewhere.
+        /// dictionary member that takes one is reachable from a site, which is
+        /// why the truncation is recorded rather than fixed.
         pub fn bigintMember(self: Self, comptime name: []const u8, default: i64, exec: *const Execution) !i64 {
             const member = (try self.present(name)) orelse return default;
             if (member.isBigInt()) {

@@ -103,8 +103,8 @@ pub const HIDDevice = struct {
         return "";
     }
 
-    pub fn getCollections(_: *const HIDDevice) []const []const u8 {
-        return &.{};
+    pub fn getCollections(_: *const HIDDevice) js.FrozenArray([]const u8) {
+        return .empty;
     }
 
     fn refuse(_: *const HIDDevice, exec: *const Execution) js.Promise {

@@ -20,16 +20,11 @@
 //! -- so it behaves rather than just existing. The artwork is normalised the
 //! way Chrome normalises it: every MediaImage becomes {sizes, src, type} with
 //! empty-string defaults and its `src` resolved against the document base, and
-//! a fresh array comes back on every read.
+//! a fresh frozen array comes back on every read.
 //!
 //! `ChapterInformation` is here because Chrome 150 has it on window and we did
 //! not. It is not on CreepJS's Chrome 115 key list, which is exactly why the
 //! list is a floor and not the scope.
-//!
-//! Known gap, shared with every other FrozenArray in this engine: Chrome
-//! freezes the arrays these getters return and the vendored V8 C API has no
-//! `SetIntegrityLevel` binding, so `Object.isFrozen(m.artwork)` is false here
-//! and true there. Same limitation as navigator/usb.zig and webxr/session.zig.
 //!
 //! Measured on a headed Chrome 150 over http://localhost (p64, p65).
 
@@ -191,10 +186,10 @@ pub const MediaMetadata = struct {
         self._album = try exec.arena.dupe(u8, value);
     }
 
-    /// A fresh array on every read, which is what Chrome does (measured:
-    /// `m.artwork !== m.artwork`).
-    pub fn getArtwork(self: *const MediaMetadata) []const MediaImage {
-        return self._artwork;
+    /// A fresh frozen array on every read, which is what Chrome does
+    /// (measured: `m.artwork !== m.artwork`, and each is frozen).
+    pub fn getArtwork(self: *const MediaMetadata) js.FrozenArray(MediaImage) {
+        return .{ .items = self._artwork };
     }
 
     pub fn setArtwork(self: *MediaMetadata, value: ?js.Value, exec: *const Execution) !void {
@@ -207,8 +202,8 @@ pub const MediaMetadata = struct {
         );
     }
 
-    pub fn getChapterInfo(self: *const MediaMetadata) []const *ChapterInformation {
-        return self._chapters;
+    pub fn getChapterInfo(self: *const MediaMetadata) js.FrozenArray(*ChapterInformation) {
+        return .{ .items = self._chapters };
     }
 
     pub const JsApi = struct {
@@ -247,8 +242,8 @@ pub const ChapterInformation = struct {
         return self._start_time;
     }
 
-    pub fn getArtwork(self: *const ChapterInformation) []const MediaImage {
-        return self._artwork;
+    pub fn getArtwork(self: *const ChapterInformation) js.FrozenArray(MediaImage) {
+        return .{ .items = self._artwork };
     }
 
     pub const JsApi = struct {

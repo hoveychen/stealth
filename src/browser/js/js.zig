@@ -298,6 +298,27 @@ pub fn Nullable(comptime T: type) type {
     };
 }
 
+// A WebIDL `FrozenArray<T>` return value: the members, plus the freeze the
+// binding layer applies before script ever sees the array. Chrome freezes every
+// one of them and leaves every `sequence<T>` extensible, so the distinction is
+// readable from a page in one expression -- measured across sixteen FrozenArray
+// members and four sequence ones (probes/frozen-array-surfaces.js): each
+// FrozenArray reads `Object.isFrozen` true and `Object.isExtensible` false,
+// each sequence the reverse.
+//
+// Returning `[]const T` from the getter would hand back an ordinary array, so
+// the type is what carries the freeze -- there is no way to tell the two IDL
+// kinds apart from the Zig slice alone.
+pub fn FrozenArray(comptime T: type) type {
+    return struct {
+        items: []const T,
+
+        pub const frozen_array = T;
+
+        pub const empty: @This() = .{ .items = &.{} };
+    };
+}
+
 pub const Exception = struct {
     local: *const Local,
     handle: *const v8.Value,

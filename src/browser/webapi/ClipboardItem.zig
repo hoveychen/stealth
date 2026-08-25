@@ -113,12 +113,12 @@ pub fn acquireRef(self: *ClipboardItem) void {
     self._rc.acquire();
 }
 
-pub fn getTypes(self: *const ClipboardItem, exec: *const Execution) ![]const []const u8 {
+pub fn getTypes(self: *const ClipboardItem, exec: *const Execution) !js.FrozenArray([]const u8) {
     const types = try exec.call_arena.alloc([]const u8, self._entries.items.len);
     for (self._entries.items, types) |entry, *out| {
         out.* = entry.type;
     }
-    return types;
+    return .{ .items = types };
 }
 
 pub fn getType(self: *ClipboardItem, mime: []const u8, exec: *const Execution) js.Promise {

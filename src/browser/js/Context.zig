@@ -198,6 +198,17 @@ property_reads: (if (lp.IS_DEBUG) std.StringHashMapUnmanaged(PropertyReadStat) e
 // which answer the script branched on before it stopped asking.
 property_read_seq: (if (lp.IS_DEBUG) u32 else void) = if (lp.IS_DEBUG) 0 else {},
 
+// This realm's own `Object.freeze`, taken off the global before any script has
+// run. Every WebIDL FrozenArray has to come back frozen and the vendored V8 C
+// API exports no `SetIntegrityLevel` (nor `PreventExtensions`), so the freeze
+// goes through the JS builtin -- and it has to be *this* function rather than
+// whatever `Object.freeze` names when the getter runs. A page that replaces it
+// would otherwise both see every FrozenArray read as a call into its own code
+// and get to decide whether the freeze happens at all; in Chrome the freeze is
+// internal and unhookable. Warmed by Env's context setup, with the lazy path
+// below for the contexts built outside it.
+object_freeze: ?js.Function.Global = null,
+
 // The two `size` functions the queuing strategies hand out. They belong to
 // the realm, not to the instance: every ByteLengthQueuingStrategy in a
 // context reports the same function object, and so does every
@@ -549,6 +560,26 @@ pub fn globalObject(self: *Context, local: *const js.Local) js.Object {
         .local = local,
         .handle = v8.v8__Context__Global(local_v8_context).?,
     };
+}
+
+/// This realm's `Object.freeze`, cached on first use. See `object_freeze`.
+pub fn objectFreeze(self: *Context, local: *const js.Local) !js.Function {
+    if (self.object_freeze) |cached| {
+        return cached.local(local);
+    }
+
+    const object = try self.globalObject(local).get("Object");
+    if (object.isObject() == false) {
+        return error.NoObjectFreeze;
+    }
+    const freeze = try object.toObject().get("freeze");
+    if (freeze.isFunction() == false) {
+        return error.NoObjectFreeze;
+    }
+
+    const func: js.Function = .{ .local = local, .handle = @ptrCast(freeze.handle) };
+    self.object_freeze = try func.persist();
+    return func;
 }
 
 pub fn getIncumbent(self: *Context) *Frame {

@@ -56,12 +56,12 @@ pub const Gamepad = struct {
         return false;
     }
 
-    fn axes(_: *const Gamepad) []const f64 {
-        return &.{};
+    fn axes(_: *const Gamepad) js.FrozenArray(f64) {
+        return .empty;
     }
 
-    fn buttons(_: *const Gamepad) []const *GamepadButton {
-        return &.{};
+    fn buttons(_: *const Gamepad) js.FrozenArray(*GamepadButton) {
+        return .empty;
     }
 
     fn actuator(_: *const Gamepad) ?*GamepadHapticActuator {
@@ -121,8 +121,8 @@ pub const GamepadButton = struct {
 pub const GamepadHapticActuator = struct {
     _pad: bool = false,
 
-    fn effects(_: *const GamepadHapticActuator) []const []const u8 {
-        return &.{};
+    fn effects(_: *const GamepadHapticActuator) js.FrozenArray([]const u8) {
+        return .empty;
     }
 
     fn @"type"(_: *const GamepadHapticActuator) []const u8 {
