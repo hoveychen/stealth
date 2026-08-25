@@ -13419,3 +13419,85 @@ challenge, sensor, loader.
 
 Real macys is still `empty-document` (33 nodes rather than 32), so this was not
 the gate either.
+
+### What the collector reads, asked back one member at a time (B46)
+
+Two Debug-only logs on the Context answer the two halves of "what did the guard
+touch": `prop-reads.mjs` lists the members we answered, `unknown-props.mjs` lists
+the members we could not answer at all. Both dump when the context is torn down,
+so the driver has to close the target, and both keep `Runtime.enable` off until
+the settle is over. Pointed at the macys interstitial through
+`akamai-replay.mjs`, they say the collector reaches **311 members across 71
+interfaces in 7 realms** (two of them SharedWorkers) and asks for **77** we do
+not have.
+
+`prop-reads-diff.mjs` turns the first list into a probe both engines can answer
+and re-asks the 104 members reachable from a singleton: **94 identical**, and the
+ten that differ are screen geometry, `devicePixelRatio`, heap sizes and the
+harness's own user agent. That half of the surface is aligned; the interesting
+part was everything the singleton filter had to drop, which
+`probes/probe-collector-answers.js` covers by wrapping the eleven entry points
+the collector calls with arguments (`matchMedia`, `canPlayType`,
+`getComputedStyle`, `getItem`, `measureText`, `getVoices`, `enumerateDevices`,
+`permissions.query`, …) and letting the guard supply them. Call counts and
+answers matched in all but the readings below.
+
+Of the 77 it asked for and we lack, almost every one is a bot-detection sentinel
+that no browser has (`_phantom`, `cdc_adoQpoasnfa76pfcZLmcfl_Array`,
+`domAutomationController`, `watinExpressionResult`, `ApplePaySetup`, …) — absent
+is the right answer there. Three were members Chrome really has, measured on the
+same page in both arms:
+
+| asked for | Chrome | this engine, before |
+|---|---|---|
+| `FontFaceSet[Symbol.iterator]` | iterates | `TypeError: fs is not iterable` |
+| `WorkerNavigator.connection` | `[object NetworkInformation]` | `undefined` |
+| `RestrictionTarget` | a constructor | absent |
+
+The first two are fixed (below). `RestrictionTarget` is left out on purpose: it
+is one of the 19 missing globals whose whole list was already shown not to move
+the payload by a byte (plan note ⑩).
+
+**`window.length` counted frames that no longer existed.** The interstitial
+creates hidden iframes and removes them again, and on the replay it read 5 frames
+here against Chrome's 2. Removing an `<iframe>` from the document destroys the
+navigable inside it: `probes/expr-iframe-detach.js` pins the whole reading —
+`window.length` and `window[N]` fall, `contentWindow` and `contentDocument`
+answer null, a Window captured beforehand reports `closed` and `parent === null`,
+and re-inserting the same element builds a *new* navigable rather than reviving
+the old one. Nothing in the engine reacted to the removal at all; the fix hangs
+off the disconnect walk in `Frame.removeNode`. The replay now reads 2 in both
+arms.
+
+**A worker's navigator was missing six services.** Chrome's
+`WorkerNavigator.prototype` carries `connection`, `hid`, `mediaCapabilities`,
+`serial`, `usb` and `locks`; the comment here used to explain their absence as
+"resolve through a Frame, and a worker realm has none", which was true of the
+object factory only — and the Execution has one. The collector reads
+`connection` twice inside each of its two SharedWorkers.
+
+**`document.fonts` was not a set.** Chrome's FontFaceSet is setlike: `add` stores
+the face, `size` counts, and `entries`/`keys`/`values`/`forEach`/`has`/`delete`/
+`clear`/`Symbol.iterator` all exist, along with `onloading`, `onloadingdone` and
+`onloadingerror`. Here `add` was a no-op returning `this`, `size` was the
+constant 0, and the setlike half did not exist, so iterating threw inside the
+guard. `probes/expr-fontfaceset.js` has the measured semantics (add is
+idempotent, delete answers a bool, clear answers undefined, all three refuse a
+non-FontFace with Chrome's own wording).
+
+Two shapes measured and deliberately not matched, both bridge-wide rather than
+per-interface: Chrome hands out one function object under both `values` and
+`Symbol.iterator` where the bridge builds two, and Chrome installs `constructor`
+in interface order (`WorkerNavigator.prototype` has it between `connection` and
+`hid`, `Navigator.prototype` at index 31 of 83) where the bridge always installs
+it last. The second is worth a plan of its own: it is one comparison away from
+readable on every interface the engine defines.
+
+Real macys is still `empty-document`. `loading="lazy"` is a fourth measured
+difference and is *not* fixed: Chrome does not fetch a lazy image 3000 px below
+the fold (it does fetch one near the viewport), and this engine fetches every
+one — `Image.imageAddedCallback` reflects the attribute and ignores it. Matching
+Chrome needs the element's position, and layout here puts a 3000 px spacer at
+25 px, so there is nothing to threshold against. It is a server-visible extra
+request on any page with lazy images, and it needs a decision rather than a
+patch.
