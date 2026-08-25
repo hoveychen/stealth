@@ -1330,15 +1330,6 @@ pub fn resolveValue(value: anytype) Resolved {
         switch (value._type) {
             inline else => |tag| {
                 const S = T.Subtype(tag);
-                if (comptime S != void and S != T and hasNoOwnWrapper(S)) {
-                    // Runtime, not comptime: the same Zig type covers both the
-                    // undefined element (no class of its own -- it is an
-                    // HTMLElement) and the upgraded one (whose wrapper the
-                    // upgrade machinery owns).
-                    if (value.subtype(S).ownsWrapper() == false) {
-                        return resolveT(T, value);
-                    }
-                }
                 if (S == T or S == void) {
                     // A tag can map to the type itself (e.g. Media.generic), or
                     // to nothing at all (Element.plain -- a namespace with no
@@ -1347,7 +1338,19 @@ pub fn resolveValue(value: anytype) Resolved {
                     // as it gets.
                     return resolveT(T, value);
                 }
-                return resolveValue(value.subtype(S));
+                var resolved = resolveValue(value.subtype(S));
+                if (comptime borrowsProtoClass(S)) {
+                    // Runtime, not comptime: the same Zig type covers both the
+                    // element that has a class to show (an upgraded custom
+                    // element wears its author's) and the one that has none.
+                    // Only the class changes -- the pointer this resolves to,
+                    // and therefore the wrapper's identity, stays put across
+                    // the upgrade that flips the answer.
+                    if (value.subtype(S).ownsWrapperClass() == false) {
+                        resolved.class_id = T.JsApi.Meta.class_id;
+                    }
+                }
+                return resolved;
             },
         }
     }
@@ -1375,15 +1378,17 @@ pub fn resolveValue(value: anytype) Resolved {
     unreachable;
 }
 
-// A subtype that exists for storage on the Zig side but must not show up as a
-// class on the JS side. The value keeps its Zig type -- `element.is(Custom)`
-// goes through `_type` and is unaffected -- while the wrapper stops at the
-// prototype, so no extra level appears in the chain a page can walk.
-fn hasNoOwnWrapper(comptime S: type) bool {
+// A subtype that sometimes has no class of its own to show, and builds its JS
+// object out of its prototype's class instead. Only the template the object is
+// created from moves; the resolved pointer, the prototype chain the TaggedOpaque
+// carries and the finalizer all stay this subtype's, so JS->Zig still lands on
+// it and -- the part that matters -- the identity map still keys on the one
+// pointer that is the element for its whole life.
+fn borrowsProtoClass(comptime S: type) bool {
     if (!@hasDecl(S, "JsApi")) {
         return false;
     }
-    return @hasDecl(S.JsApi.Meta, "no_own_wrapper");
+    return @hasDecl(S.JsApi.Meta, "wrapper_class_from_proto");
 }
 
 fn resolveT(comptime T: type, value: *T) Resolved {
