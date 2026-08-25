@@ -59,6 +59,7 @@ const global_event_handlers = @import("global_event_handlers.zig");
 const ErrorEvent = @import("event/ErrorEvent.zig");
 const MessageEvent = @import("event/MessageEvent.zig");
 const MessagePort = @import("MessagePort.zig");
+const MediaQuery = @import("../css/MediaQuery.zig");
 const MediaQueryList = @import("css/MediaQueryList.zig");
 const storage = @import("storage/storage.zig");
 const idb = @import("storage/idb/idb.zig");
@@ -874,9 +875,12 @@ pub fn reportError(self: *Window, err: js.Value, frame: *Frame) !void {
 }
 
 pub fn matchMedia(_: *const Window, query: []const u8, frame: *Frame) !*MediaQueryList {
+    // `media` is the canonical form of the query, not the text handed in — see
+    // the serialisation section of css/MediaQuery.zig. `matches` still reads
+    // the same query either way, so the stored text is the canonical one.
     return frame._factory.eventTarget(MediaQueryList{
         ._proto = undefined,
-        ._media = try frame.dupeString(query),
+        ._media = try MediaQuery.serialize(frame.arena, query),
     });
 }
 
