@@ -691,11 +691,12 @@ pub fn createEvent(_: *const Document, event_type: []const u8, frame: *Frame) !*
             break :blk (try StorageEvent.init("", null, frame)).asEvent();
         }
 
-        if (std.mem.eql(u8, normalized, "touchevent")) {
-            const TouchEvent = @import("event/TouchEvent.zig");
-            break :blk (try TouchEvent.init("", null, frame)).asEvent();
-        }
-
+        // No "touchevent" branch: the legacy factory only carries a type when
+        // the build has touch event feature detection on, and a desktop Chrome
+        // does not (maxTouchPoints 0, no window.ontouchstart). The TouchEvent
+        // constructor still exists there — createEvent is the one door that
+        // refuses the name, so it answers the same invalid-type refusal as any
+        // other unknown string.
         return invalidEventType(event_type, frame);
     };
 
