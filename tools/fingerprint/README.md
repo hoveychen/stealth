@@ -12873,7 +12873,7 @@ Measured on the replay, both arms, same capture:
   promise settles from a timer — already known (`run-page-probe.mjs` header
   says so), rediscovered the hard way. Load probes as a page.
 * Chrome clamps `setInterval(f, 1)` to ~4ms: 129 ticks in 500ms, headed, on
-  about:blank (`scratch/expr-timer-cadence.js`).
+  about:blank (`probes/expr-timer-cadence.js`).
 * On the real site the sensor's `_bm/get_params` is never requested by either
   arm — an earlier suggestion to capture its response is moot.
 * Our arm issues ~154 `chrome-extension://` HEAD requests (the sensor's
@@ -12901,9 +12901,9 @@ Wrapping candidates and charging each call, on the replay, both arms:
 
 And the raw work is not the engines' difference: 650k `charCodeAt` at random
 offsets into a 496239-char string plus a 200k-iteration string build runs in
-5/2/3ms on *both* engines (`scratch/expr-cc.js` via `run-expr.mjs`). Creating
-and reading 20k `Error().stack` is 19ms here against 13ms in Chrome, so it is
-not stack capture either.
+5/2/3ms on *both* engines (`probes/expr-charcode-cost.js` via `run-expr.mjs`). Creating
+and reading 20k `Error().stack` is 19ms here against 13ms in Chrome
+(`probes/expr-error-stack-cost.js`), so it is not stack capture either.
 
 What is left is engine work inside the JS frame that no page-visible API
 mediates, spent once and never again — V8's lazy compilation of a 578KB script's
