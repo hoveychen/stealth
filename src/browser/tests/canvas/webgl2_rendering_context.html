@@ -160,6 +160,105 @@
     Object.prototype.toString.call(gl.getExtension("WEBGL_lose_context")),
   );
 }
+
+// Every extension 2.0 advertises hands back its own named interface object, the
+// same way 1.0's do. Before this the union carried one anonymous empty struct
+// for all but two of them, so 34 of 36 branded as [object Object] and their
+// prototype *was* Object.prototype -- twelve members no extension has.
+//
+// Brands measured off Chrome 150, results/webgl-extension-brands.json. The one
+// name this claim does not advertise, OVR_multiview2, is measured too: a Chrome
+// forced onto SwiftShader (--use-angle=swiftshader) is the only one that hands
+// it out, and its brand is asserted only on the platform that advertises it,
+// which is not the one these tests run under.
+{
+  const brands = {
+    "EXT_clip_control": "EXTClipControl",
+    "EXT_color_buffer_float": "EXTColorBufferFloat",
+    "EXT_color_buffer_half_float": "EXTColorBufferHalfFloat",
+    "EXT_conservative_depth": "EXTConservativeDepth",
+    "EXT_depth_clamp": "EXTDepthClamp",
+    "EXT_disjoint_timer_query_webgl2": "EXTDisjointTimerQueryWebGL2",
+    "EXT_float_blend": "EXTFloatBlend",
+    "EXT_polygon_offset_clamp": "EXTPolygonOffsetClamp",
+    "EXT_render_snorm": "EXTRenderSnorm",
+    "EXT_texture_compression_bptc": "EXTTextureCompressionBPTC",
+    "EXT_texture_compression_rgtc": "EXTTextureCompressionRGTC",
+    "EXT_texture_filter_anisotropic": "EXTTextureFilterAnisotropic",
+    "EXT_texture_mirror_clamp_to_edge": "EXTTextureMirrorClampToEdge",
+    "EXT_texture_norm16": "EXTTextureNorm16",
+    "KHR_parallel_shader_compile": "KHRParallelShaderCompile",
+    "NV_shader_noperspective_interpolation": "NVShaderNoperspectiveInterpolation",
+    "OES_draw_buffers_indexed": "OESDrawBuffersIndexed",
+    "OES_sample_variables": "OESSampleVariables",
+    "OES_shader_multisample_interpolation": "OESShaderMultisampleInterpolation",
+    "OES_texture_float_linear": "OESTextureFloatLinear",
+    "OVR_multiview2": "OVRMultiview2",
+    "WEBGL_blend_func_extended": "WebGLBlendFuncExtended",
+    "WEBGL_clip_cull_distance": "WebGLClipCullDistance",
+    "WEBGL_compressed_texture_astc": "WebGLCompressedTextureASTC",
+    "WEBGL_compressed_texture_etc": "WebGLCompressedTextureETC",
+    "WEBGL_compressed_texture_etc1": "WebGLCompressedTextureETC1",
+    "WEBGL_compressed_texture_pvrtc": "WebGLCompressedTexturePVRTC",
+    "WEBGL_compressed_texture_s3tc": "WebGLCompressedTextureS3TC",
+    "WEBGL_compressed_texture_s3tc_srgb": "WebGLCompressedTextureS3TCsRGB",
+    "WEBGL_debug_renderer_info": "WebGLDebugRendererInfo",
+    "WEBGL_debug_shaders": "WebGLDebugShaders",
+    "WEBGL_lose_context": "WebGLLoseContext",
+    "WEBGL_multi_draw": "WebGLMultiDraw",
+    "WEBGL_polygon_mode": "WebGLPolygonMode",
+    "WEBGL_provoking_vertex": "WebGLProvokingVertex",
+    "WEBGL_render_shared_exponent": "WebGLRenderSharedExponent",
+    "WEBGL_stencil_texturing": "WebGLStencilTexturing",
+  };
+
+  const onMac = navigator.platform === "MacIntel";
+  const ctx = document.createElement("canvas").getContext("webgl2");
+  const advertised = ctx.getSupportedExtensions();
+
+  // The table is the union of both reference drivers; whichever list this
+  // platform hands out is a subset of it.
+  testing.expectEqual(37, Object.keys(brands).length);
+  testing.expectEqual(onMac ? 36 : 29, advertised.length);
+  for (const name of advertised) {
+    testing.expectEqual(true, brands[name] !== undefined, { desc: name });
+    // A fresh context each time, so an earlier getExtension cannot be what
+    // makes a later one answer.
+    const own = document.createElement("canvas").getContext("webgl2");
+    const ext = own.getExtension(name);
+    testing.expectEqual(true, ext !== null && ext !== undefined, { desc: name });
+    testing.expectEqual(`[object ${brands[name]}]`, Object.prototype.toString.call(ext), { desc: name });
+    // No interface object of its own.
+    testing.expectEqual("undefined", typeof globalThis[brands[name]], { desc: name });
+    // And a prototype of its own: the anonymous struct's was Object.prototype,
+    // so getOwnPropertyNames on it answered __defineGetter__, hasOwnProperty and
+    // ten more -- non-enumerable, so a for-in missed them, but a script reading
+    // the prototype saw twelve members no WebGL extension has.
+    const proto = Object.getPrototypeOf(ext);
+    testing.expectEqual(false, proto === Object.prototype, { desc: name });
+    testing.expectEqual(false, Object.getOwnPropertyNames(proto).includes("hasOwnProperty"), { desc: name });
+  }
+
+  // Extension members, spot-checked against the measurement: a GLenum here has
+  // to be the number the driver reports, not one read off a spec page.
+  const clip = ctx.getExtension("EXT_clip_control");
+  testing.expectEqual(36001, clip.LOWER_LEFT_EXT);
+  testing.expectEqual(37727, clip.ZERO_TO_ONE_EXT);
+  testing.expectEqual(2, clip.clipControlEXT.length);
+  const stencil = ctx.getExtension("WEBGL_stencil_texturing");
+  testing.expectEqual(37098, stencil.DEPTH_STENCIL_TEXTURE_MODE_WEBGL);
+  testing.expectEqual(6401, stencil.STENCIL_INDEX_WEBGL);
+
+  // A name nothing advertises is still refused.
+  testing.expectEqual(null, ctx.getExtension("NOPE_not_real"));
+
+  // The two extensions 2.0 shares with 1.0 that answer something rather than
+  // nothing. Same values here: the profiles are the driver's, not the context's.
+  const astc = ctx.getExtension("WEBGL_compressed_texture_astc");
+  testing.expectEqual(onMac ? "ldr,hdr" : "ldr", astc.getSupportedProfiles().join(","));
+  const shaders = ctx.getExtension("WEBGL_debug_shaders");
+  testing.expectEqual("", shaders.getTranslatedShaderSource(ctx.createShader(ctx.VERTEX_SHADER)));
+}
 </script>
 
 <script id=WebGL2RenderingContext#objects>

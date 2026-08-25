@@ -129,6 +129,12 @@ pub const Gpu = struct {
     /// platform.
     webgl1_unsupported: []const []const u8,
     webgl2_unsupported: []const []const u8,
+
+    /// What `WEBGL_compressed_texture_astc.getSupportedProfiles()` answers. The
+    /// extension is advertised by both drivers and they do not agree on it:
+    /// Metal has the high-dynamic-range profile and SwiftShader does not
+    /// (measured, Chrome 150 forced onto each).
+    astc_profiles: []const []const u8,
 };
 
 const macos: Gpu = .{
@@ -175,6 +181,8 @@ const macos: Gpu = .{
 
     .webgl1_unsupported = &.{},
     .webgl2_unsupported = &.{"OVR_multiview2"},
+
+    .astc_profiles = &.{ "ldr", "hdr" },
 };
 
 const linux: Gpu = .{
@@ -235,6 +243,8 @@ const linux: Gpu = .{
         "WEBGL_provoking_vertex",
         "WEBGL_render_shared_exponent",
     },
+
+    .astc_profiles = &.{"ldr"},
 };
 
 /// The table the engine reports from, following the platform claim.

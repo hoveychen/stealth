@@ -1,0 +1,3763 @@
+{
+  "when": "2026-08-25T08:00:00",
+  "url": "https://example.com/",
+  "note": "Every extension name each context advertises, put back through getExtension. Chrome hands back a named interface object per extension. Both arms now agree on all 77 keys -- 75 interface rows plus the two supported lists -- with no difference in brand, prototype member set, member values or arity.\n\nWhat the first run of this probe (git history, 2026-08-25T02:31) found instead: WebGL 1 answered undefined for 37 of 39, because the union payload was void; WebGL 2 answered [object Object] for 34 of 36, because one anonymous empty struct stood in for all of them -- and its prototype was Object.prototype, so reading the prototype answered __defineGetter__, hasOwnProperty and ten more members no WebGL extension has. getSupportedExtensions listed every name in both arms throughout, so the engine advertised what it then refused.\n\n`values` is the member set per interface: GLenums as the numbers Chrome reports, functions as fn/<arity>. 53 unique interfaces, 213 member slots; an interface advertised by both contexts carries identical members in each. Still short of Chrome: the methods are no-ops, so getSupportedProfiles, getTranslatedShaderSource and isVertexArrayOES have Chrome's arity and not Chrome's return value -- which is why this probe records arity and not return values.",
+  "chrome": {
+    "webgl.supported": [
+      "ANGLE_instanced_arrays",
+      "EXT_blend_minmax",
+      "EXT_clip_control",
+      "EXT_color_buffer_half_float",
+      "EXT_depth_clamp",
+      "EXT_disjoint_timer_query",
+      "EXT_float_blend",
+      "EXT_frag_depth",
+      "EXT_polygon_offset_clamp",
+      "EXT_shader_texture_lod",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_mirror_clamp_to_edge",
+      "EXT_sRGB",
+      "KHR_parallel_shader_compile",
+      "OES_element_index_uint",
+      "OES_fbo_render_mipmap",
+      "OES_standard_derivatives",
+      "OES_texture_float",
+      "OES_texture_float_linear",
+      "OES_texture_half_float",
+      "OES_texture_half_float_linear",
+      "OES_vertex_array_object",
+      "WEBGL_blend_func_extended",
+      "WEBGL_color_buffer_float",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_compressed_texture_pvrtc",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_depth_texture",
+      "WEBGL_draw_buffers",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_polygon_mode"
+    ],
+    "webgl ANGLE_instanced_arrays": {
+      "brand": "[object ANGLEInstancedArrays]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE",
+        "drawArraysInstancedANGLE",
+        "drawElementsInstancedANGLE",
+        "vertexAttribDivisorANGLE"
+      ],
+      "own": [],
+      "protoNames": [
+        "VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE",
+        "drawArraysInstancedANGLE",
+        "drawElementsInstancedANGLE",
+        "vertexAttribDivisorANGLE"
+      ],
+      "values": {
+        "VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE": 35070,
+        "drawArraysInstancedANGLE": "fn/4",
+        "drawElementsInstancedANGLE": "fn/5",
+        "vertexAttribDivisorANGLE": "fn/2"
+      }
+    },
+    "webgl EXT_blend_minmax": {
+      "brand": "[object EXTBlendMinMax]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MAX_EXT",
+        "MIN_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "MAX_EXT",
+        "MIN_EXT"
+      ],
+      "values": {
+        "MIN_EXT": 32775,
+        "MAX_EXT": 32776
+      }
+    },
+    "webgl EXT_clip_control": {
+      "brand": "[object EXTClipControl]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "CLIP_DEPTH_MODE_EXT",
+        "CLIP_ORIGIN_EXT",
+        "LOWER_LEFT_EXT",
+        "NEGATIVE_ONE_TO_ONE_EXT",
+        "UPPER_LEFT_EXT",
+        "ZERO_TO_ONE_EXT",
+        "clipControlEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "CLIP_DEPTH_MODE_EXT",
+        "CLIP_ORIGIN_EXT",
+        "LOWER_LEFT_EXT",
+        "NEGATIVE_ONE_TO_ONE_EXT",
+        "UPPER_LEFT_EXT",
+        "ZERO_TO_ONE_EXT",
+        "clipControlEXT"
+      ],
+      "values": {
+        "LOWER_LEFT_EXT": 36001,
+        "UPPER_LEFT_EXT": 36002,
+        "NEGATIVE_ONE_TO_ONE_EXT": 37726,
+        "ZERO_TO_ONE_EXT": 37727,
+        "CLIP_ORIGIN_EXT": 37724,
+        "CLIP_DEPTH_MODE_EXT": 37725,
+        "clipControlEXT": "fn/2"
+      }
+    },
+    "webgl EXT_color_buffer_half_float": {
+      "brand": "[object EXTColorBufferHalfFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGB16F_EXT",
+        "RGBA16F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGB16F_EXT",
+        "RGBA16F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "values": {
+        "RGBA16F_EXT": 34842,
+        "RGB16F_EXT": 34843,
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT": 33297,
+        "UNSIGNED_NORMALIZED_EXT": 35863
+      }
+    },
+    "webgl EXT_depth_clamp": {
+      "brand": "[object EXTDepthClamp]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "DEPTH_CLAMP_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "DEPTH_CLAMP_EXT"
+      ],
+      "values": {
+        "DEPTH_CLAMP_EXT": 34383
+      }
+    },
+    "webgl EXT_disjoint_timer_query": {
+      "brand": "[object EXTDisjointTimerQuery]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "CURRENT_QUERY_EXT",
+        "GPU_DISJOINT_EXT",
+        "QUERY_COUNTER_BITS_EXT",
+        "QUERY_RESULT_AVAILABLE_EXT",
+        "QUERY_RESULT_EXT",
+        "TIMESTAMP_EXT",
+        "TIME_ELAPSED_EXT",
+        "beginQueryEXT",
+        "createQueryEXT",
+        "deleteQueryEXT",
+        "endQueryEXT",
+        "getQueryEXT",
+        "getQueryObjectEXT",
+        "isQueryEXT",
+        "queryCounterEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "CURRENT_QUERY_EXT",
+        "GPU_DISJOINT_EXT",
+        "QUERY_COUNTER_BITS_EXT",
+        "QUERY_RESULT_AVAILABLE_EXT",
+        "QUERY_RESULT_EXT",
+        "TIMESTAMP_EXT",
+        "TIME_ELAPSED_EXT",
+        "beginQueryEXT",
+        "createQueryEXT",
+        "deleteQueryEXT",
+        "endQueryEXT",
+        "getQueryEXT",
+        "getQueryObjectEXT",
+        "isQueryEXT",
+        "queryCounterEXT"
+      ],
+      "values": {
+        "QUERY_COUNTER_BITS_EXT": 34916,
+        "CURRENT_QUERY_EXT": 34917,
+        "QUERY_RESULT_EXT": 34918,
+        "QUERY_RESULT_AVAILABLE_EXT": 34919,
+        "TIME_ELAPSED_EXT": 35007,
+        "TIMESTAMP_EXT": 36392,
+        "GPU_DISJOINT_EXT": 36795,
+        "beginQueryEXT": "fn/2",
+        "createQueryEXT": "fn/0",
+        "deleteQueryEXT": "fn/1",
+        "endQueryEXT": "fn/1",
+        "getQueryEXT": "fn/2",
+        "getQueryObjectEXT": "fn/2",
+        "isQueryEXT": "fn/1",
+        "queryCounterEXT": "fn/2"
+      }
+    },
+    "webgl EXT_float_blend": {
+      "brand": "[object EXTFloatBlend]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl EXT_frag_depth": {
+      "brand": "[object EXTFragDepth]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl EXT_polygon_offset_clamp": {
+      "brand": "[object EXTPolygonOffsetClamp]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "POLYGON_OFFSET_CLAMP_EXT",
+        "polygonOffsetClampEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "POLYGON_OFFSET_CLAMP_EXT",
+        "polygonOffsetClampEXT"
+      ],
+      "values": {
+        "POLYGON_OFFSET_CLAMP_EXT": 36379,
+        "polygonOffsetClampEXT": "fn/3"
+      }
+    },
+    "webgl EXT_shader_texture_lod": {
+      "brand": "[object EXTShaderTextureLOD]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl EXT_texture_compression_bptc": {
+      "brand": "[object EXTTextureCompressionBPTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT",
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT",
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT": 36492,
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT": 36493,
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT": 36494,
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT": 36495
+      }
+    },
+    "webgl EXT_texture_compression_rgtc": {
+      "brand": "[object EXTTextureCompressionRGTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_RED_RGTC1_EXT",
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_RED_RGTC1_EXT",
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RED_RGTC1_EXT": 36283,
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT": 36284,
+        "COMPRESSED_RED_GREEN_RGTC2_EXT": 36285,
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT": 36286
+      }
+    },
+    "webgl EXT_texture_filter_anisotropic": {
+      "brand": "[object EXTTextureFilterAnisotropic]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT",
+        "TEXTURE_MAX_ANISOTROPY_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT",
+        "TEXTURE_MAX_ANISOTROPY_EXT"
+      ],
+      "values": {
+        "TEXTURE_MAX_ANISOTROPY_EXT": 34046,
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT": 34047
+      }
+    },
+    "webgl EXT_texture_mirror_clamp_to_edge": {
+      "brand": "[object EXTTextureMirrorClampToEdge]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MIRROR_CLAMP_TO_EDGE_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "MIRROR_CLAMP_TO_EDGE_EXT"
+      ],
+      "values": {
+        "MIRROR_CLAMP_TO_EDGE_EXT": 34627
+      }
+    },
+    "webgl EXT_sRGB": {
+      "brand": "[object EXTsRGB]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT",
+        "SRGB8_ALPHA8_EXT",
+        "SRGB_ALPHA_EXT",
+        "SRGB_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT",
+        "SRGB8_ALPHA8_EXT",
+        "SRGB_ALPHA_EXT",
+        "SRGB_EXT"
+      ],
+      "values": {
+        "SRGB_EXT": 35904,
+        "SRGB_ALPHA_EXT": 35906,
+        "SRGB8_ALPHA8_EXT": 35907,
+        "FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT": 33296
+      }
+    },
+    "webgl KHR_parallel_shader_compile": {
+      "brand": "[object KHRParallelShaderCompile]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPLETION_STATUS_KHR"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPLETION_STATUS_KHR"
+      ],
+      "values": {
+        "COMPLETION_STATUS_KHR": 37297
+      }
+    },
+    "webgl OES_element_index_uint": {
+      "brand": "[object OESElementIndexUint]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl OES_fbo_render_mipmap": {
+      "brand": "[object OESFboRenderMipmap]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl OES_standard_derivatives": {
+      "brand": "[object OESStandardDerivatives]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAGMENT_SHADER_DERIVATIVE_HINT_OES"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAGMENT_SHADER_DERIVATIVE_HINT_OES"
+      ],
+      "values": {
+        "FRAGMENT_SHADER_DERIVATIVE_HINT_OES": 35723
+      }
+    },
+    "webgl OES_texture_float": {
+      "brand": "[object OESTextureFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl OES_texture_float_linear": {
+      "brand": "[object OESTextureFloatLinear]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl OES_texture_half_float": {
+      "brand": "[object OESTextureHalfFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "HALF_FLOAT_OES"
+      ],
+      "own": [],
+      "protoNames": [
+        "HALF_FLOAT_OES"
+      ],
+      "values": {
+        "HALF_FLOAT_OES": 36193
+      }
+    },
+    "webgl OES_texture_half_float_linear": {
+      "brand": "[object OESTextureHalfFloatLinear]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl OES_vertex_array_object": {
+      "brand": "[object OESVertexArrayObject]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "VERTEX_ARRAY_BINDING_OES",
+        "bindVertexArrayOES",
+        "createVertexArrayOES",
+        "deleteVertexArrayOES",
+        "isVertexArrayOES"
+      ],
+      "own": [],
+      "protoNames": [
+        "VERTEX_ARRAY_BINDING_OES",
+        "bindVertexArrayOES",
+        "createVertexArrayOES",
+        "deleteVertexArrayOES",
+        "isVertexArrayOES"
+      ],
+      "values": {
+        "VERTEX_ARRAY_BINDING_OES": 34229,
+        "bindVertexArrayOES": "fn/0",
+        "createVertexArrayOES": "fn/0",
+        "deleteVertexArrayOES": "fn/0",
+        "isVertexArrayOES": "fn/0"
+      }
+    },
+    "webgl WEBGL_blend_func_extended": {
+      "brand": "[object WebGLBlendFuncExtended]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL",
+        "ONE_MINUS_SRC1_ALPHA_WEBGL",
+        "ONE_MINUS_SRC1_COLOR_WEBGL",
+        "SRC1_ALPHA_WEBGL",
+        "SRC1_COLOR_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL",
+        "ONE_MINUS_SRC1_ALPHA_WEBGL",
+        "ONE_MINUS_SRC1_COLOR_WEBGL",
+        "SRC1_ALPHA_WEBGL",
+        "SRC1_COLOR_WEBGL"
+      ],
+      "values": {
+        "SRC1_COLOR_WEBGL": 35065,
+        "SRC1_ALPHA_WEBGL": 34185,
+        "ONE_MINUS_SRC1_COLOR_WEBGL": 35066,
+        "ONE_MINUS_SRC1_ALPHA_WEBGL": 35067,
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL": 35068
+      }
+    },
+    "webgl WEBGL_color_buffer_float": {
+      "brand": "[object WebGLColorBufferFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGBA32F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGBA32F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "values": {
+        "RGBA32F_EXT": 34836,
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT": 33297,
+        "UNSIGNED_NORMALIZED_EXT": 35863
+      }
+    },
+    "webgl WEBGL_compressed_texture_astc": {
+      "brand": "[object WebGLCompressedTextureASTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_ASTC_10x10_KHR",
+        "COMPRESSED_RGBA_ASTC_10x5_KHR",
+        "COMPRESSED_RGBA_ASTC_10x6_KHR",
+        "COMPRESSED_RGBA_ASTC_10x8_KHR",
+        "COMPRESSED_RGBA_ASTC_12x10_KHR",
+        "COMPRESSED_RGBA_ASTC_12x12_KHR",
+        "COMPRESSED_RGBA_ASTC_4x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x5_KHR",
+        "COMPRESSED_RGBA_ASTC_8x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR",
+        "getSupportedProfiles"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_ASTC_10x10_KHR",
+        "COMPRESSED_RGBA_ASTC_10x5_KHR",
+        "COMPRESSED_RGBA_ASTC_10x6_KHR",
+        "COMPRESSED_RGBA_ASTC_10x8_KHR",
+        "COMPRESSED_RGBA_ASTC_12x10_KHR",
+        "COMPRESSED_RGBA_ASTC_12x12_KHR",
+        "COMPRESSED_RGBA_ASTC_4x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x5_KHR",
+        "COMPRESSED_RGBA_ASTC_8x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR",
+        "getSupportedProfiles"
+      ],
+      "values": {
+        "COMPRESSED_RGBA_ASTC_4x4_KHR": 37808,
+        "COMPRESSED_RGBA_ASTC_5x4_KHR": 37809,
+        "COMPRESSED_RGBA_ASTC_5x5_KHR": 37810,
+        "COMPRESSED_RGBA_ASTC_6x5_KHR": 37811,
+        "COMPRESSED_RGBA_ASTC_6x6_KHR": 37812,
+        "COMPRESSED_RGBA_ASTC_8x5_KHR": 37813,
+        "COMPRESSED_RGBA_ASTC_8x6_KHR": 37814,
+        "COMPRESSED_RGBA_ASTC_8x8_KHR": 37815,
+        "COMPRESSED_RGBA_ASTC_10x5_KHR": 37816,
+        "COMPRESSED_RGBA_ASTC_10x6_KHR": 37817,
+        "COMPRESSED_RGBA_ASTC_10x8_KHR": 37818,
+        "COMPRESSED_RGBA_ASTC_10x10_KHR": 37819,
+        "COMPRESSED_RGBA_ASTC_12x10_KHR": 37820,
+        "COMPRESSED_RGBA_ASTC_12x12_KHR": 37821,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR": 37840,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR": 37841,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR": 37842,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR": 37843,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR": 37844,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR": 37845,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR": 37846,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR": 37847,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR": 37848,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR": 37849,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR": 37850,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR": 37851,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR": 37852,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR": 37853,
+        "getSupportedProfiles": "fn/0"
+      }
+    },
+    "webgl WEBGL_compressed_texture_etc": {
+      "brand": "[object WebGLCompressedTextureETC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_R11_EAC",
+        "COMPRESSED_RG11_EAC",
+        "COMPRESSED_RGB8_ETC2",
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2",
+        "COMPRESSED_RGBA8_ETC2_EAC",
+        "COMPRESSED_SIGNED_R11_EAC",
+        "COMPRESSED_SIGNED_RG11_EAC",
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC",
+        "COMPRESSED_SRGB8_ETC2",
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_R11_EAC",
+        "COMPRESSED_RG11_EAC",
+        "COMPRESSED_RGB8_ETC2",
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2",
+        "COMPRESSED_RGBA8_ETC2_EAC",
+        "COMPRESSED_SIGNED_R11_EAC",
+        "COMPRESSED_SIGNED_RG11_EAC",
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC",
+        "COMPRESSED_SRGB8_ETC2",
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2"
+      ],
+      "values": {
+        "COMPRESSED_R11_EAC": 37488,
+        "COMPRESSED_SIGNED_R11_EAC": 37489,
+        "COMPRESSED_RG11_EAC": 37490,
+        "COMPRESSED_SIGNED_RG11_EAC": 37491,
+        "COMPRESSED_RGB8_ETC2": 37492,
+        "COMPRESSED_SRGB8_ETC2": 37493,
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37494,
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37495,
+        "COMPRESSED_RGBA8_ETC2_EAC": 37496,
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC": 37497
+      }
+    },
+    "webgl WEBGL_compressed_texture_etc1": {
+      "brand": "[object WebGLCompressedTextureETC1]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGB_ETC1_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGB_ETC1_WEBGL"
+      ],
+      "values": {
+        "COMPRESSED_RGB_ETC1_WEBGL": 36196
+      }
+    },
+    "webgl WEBGL_compressed_texture_pvrtc": {
+      "brand": "[object WebGLCompressedTexturePVRTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG"
+      ],
+      "values": {
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG": 35840,
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG": 35841,
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG": 35842,
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG": 35843
+      }
+    },
+    "webgl WEBGL_compressed_texture_s3tc": {
+      "brand": "[object WebGLCompressedTextureS3TC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT",
+        "COMPRESSED_RGB_S3TC_DXT1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT",
+        "COMPRESSED_RGB_S3TC_DXT1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RGB_S3TC_DXT1_EXT": 33776,
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT": 33777,
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT": 33778,
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT": 33779
+      }
+    },
+    "webgl WEBGL_compressed_texture_s3tc_srgb": {
+      "brand": "[object WebGLCompressedTextureS3TCsRGB]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT": 35916,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT": 35917,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT": 35918,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT": 35919
+      }
+    },
+    "webgl WEBGL_debug_renderer_info": {
+      "brand": "[object WebGLDebugRendererInfo]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "UNMASKED_RENDERER_WEBGL",
+        "UNMASKED_VENDOR_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "UNMASKED_RENDERER_WEBGL",
+        "UNMASKED_VENDOR_WEBGL"
+      ],
+      "values": {
+        "UNMASKED_VENDOR_WEBGL": 37445,
+        "UNMASKED_RENDERER_WEBGL": 37446
+      }
+    },
+    "webgl WEBGL_debug_shaders": {
+      "brand": "[object WebGLDebugShaders]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "getTranslatedShaderSource"
+      ],
+      "own": [],
+      "protoNames": [
+        "getTranslatedShaderSource"
+      ],
+      "values": {
+        "getTranslatedShaderSource": "fn/1"
+      }
+    },
+    "webgl WEBGL_depth_texture": {
+      "brand": "[object WebGLDepthTexture]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "UNSIGNED_INT_24_8_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "UNSIGNED_INT_24_8_WEBGL"
+      ],
+      "values": {
+        "UNSIGNED_INT_24_8_WEBGL": 34042
+      }
+    },
+    "webgl WEBGL_draw_buffers": {
+      "brand": "[object WebGLDrawBuffers]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COLOR_ATTACHMENT0_WEBGL",
+        "COLOR_ATTACHMENT10_WEBGL",
+        "COLOR_ATTACHMENT11_WEBGL",
+        "COLOR_ATTACHMENT12_WEBGL",
+        "COLOR_ATTACHMENT13_WEBGL",
+        "COLOR_ATTACHMENT14_WEBGL",
+        "COLOR_ATTACHMENT15_WEBGL",
+        "COLOR_ATTACHMENT1_WEBGL",
+        "COLOR_ATTACHMENT2_WEBGL",
+        "COLOR_ATTACHMENT3_WEBGL",
+        "COLOR_ATTACHMENT4_WEBGL",
+        "COLOR_ATTACHMENT5_WEBGL",
+        "COLOR_ATTACHMENT6_WEBGL",
+        "COLOR_ATTACHMENT7_WEBGL",
+        "COLOR_ATTACHMENT8_WEBGL",
+        "COLOR_ATTACHMENT9_WEBGL",
+        "DRAW_BUFFER0_WEBGL",
+        "DRAW_BUFFER10_WEBGL",
+        "DRAW_BUFFER11_WEBGL",
+        "DRAW_BUFFER12_WEBGL",
+        "DRAW_BUFFER13_WEBGL",
+        "DRAW_BUFFER14_WEBGL",
+        "DRAW_BUFFER15_WEBGL",
+        "DRAW_BUFFER1_WEBGL",
+        "DRAW_BUFFER2_WEBGL",
+        "DRAW_BUFFER3_WEBGL",
+        "DRAW_BUFFER4_WEBGL",
+        "DRAW_BUFFER5_WEBGL",
+        "DRAW_BUFFER6_WEBGL",
+        "DRAW_BUFFER7_WEBGL",
+        "DRAW_BUFFER8_WEBGL",
+        "DRAW_BUFFER9_WEBGL",
+        "MAX_COLOR_ATTACHMENTS_WEBGL",
+        "MAX_DRAW_BUFFERS_WEBGL",
+        "drawBuffersWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "COLOR_ATTACHMENT0_WEBGL",
+        "COLOR_ATTACHMENT10_WEBGL",
+        "COLOR_ATTACHMENT11_WEBGL",
+        "COLOR_ATTACHMENT12_WEBGL",
+        "COLOR_ATTACHMENT13_WEBGL",
+        "COLOR_ATTACHMENT14_WEBGL",
+        "COLOR_ATTACHMENT15_WEBGL",
+        "COLOR_ATTACHMENT1_WEBGL",
+        "COLOR_ATTACHMENT2_WEBGL",
+        "COLOR_ATTACHMENT3_WEBGL",
+        "COLOR_ATTACHMENT4_WEBGL",
+        "COLOR_ATTACHMENT5_WEBGL",
+        "COLOR_ATTACHMENT6_WEBGL",
+        "COLOR_ATTACHMENT7_WEBGL",
+        "COLOR_ATTACHMENT8_WEBGL",
+        "COLOR_ATTACHMENT9_WEBGL",
+        "DRAW_BUFFER0_WEBGL",
+        "DRAW_BUFFER10_WEBGL",
+        "DRAW_BUFFER11_WEBGL",
+        "DRAW_BUFFER12_WEBGL",
+        "DRAW_BUFFER13_WEBGL",
+        "DRAW_BUFFER14_WEBGL",
+        "DRAW_BUFFER15_WEBGL",
+        "DRAW_BUFFER1_WEBGL",
+        "DRAW_BUFFER2_WEBGL",
+        "DRAW_BUFFER3_WEBGL",
+        "DRAW_BUFFER4_WEBGL",
+        "DRAW_BUFFER5_WEBGL",
+        "DRAW_BUFFER6_WEBGL",
+        "DRAW_BUFFER7_WEBGL",
+        "DRAW_BUFFER8_WEBGL",
+        "DRAW_BUFFER9_WEBGL",
+        "MAX_COLOR_ATTACHMENTS_WEBGL",
+        "MAX_DRAW_BUFFERS_WEBGL",
+        "drawBuffersWEBGL"
+      ],
+      "values": {
+        "COLOR_ATTACHMENT0_WEBGL": 36064,
+        "COLOR_ATTACHMENT1_WEBGL": 36065,
+        "COLOR_ATTACHMENT2_WEBGL": 36066,
+        "COLOR_ATTACHMENT3_WEBGL": 36067,
+        "COLOR_ATTACHMENT4_WEBGL": 36068,
+        "COLOR_ATTACHMENT5_WEBGL": 36069,
+        "COLOR_ATTACHMENT6_WEBGL": 36070,
+        "COLOR_ATTACHMENT7_WEBGL": 36071,
+        "COLOR_ATTACHMENT8_WEBGL": 36072,
+        "COLOR_ATTACHMENT9_WEBGL": 36073,
+        "COLOR_ATTACHMENT10_WEBGL": 36074,
+        "COLOR_ATTACHMENT11_WEBGL": 36075,
+        "COLOR_ATTACHMENT12_WEBGL": 36076,
+        "COLOR_ATTACHMENT13_WEBGL": 36077,
+        "COLOR_ATTACHMENT14_WEBGL": 36078,
+        "COLOR_ATTACHMENT15_WEBGL": 36079,
+        "DRAW_BUFFER0_WEBGL": 34853,
+        "DRAW_BUFFER1_WEBGL": 34854,
+        "DRAW_BUFFER2_WEBGL": 34855,
+        "DRAW_BUFFER3_WEBGL": 34856,
+        "DRAW_BUFFER4_WEBGL": 34857,
+        "DRAW_BUFFER5_WEBGL": 34858,
+        "DRAW_BUFFER6_WEBGL": 34859,
+        "DRAW_BUFFER7_WEBGL": 34860,
+        "DRAW_BUFFER8_WEBGL": 34861,
+        "DRAW_BUFFER9_WEBGL": 34862,
+        "DRAW_BUFFER10_WEBGL": 34863,
+        "DRAW_BUFFER11_WEBGL": 34864,
+        "DRAW_BUFFER12_WEBGL": 34865,
+        "DRAW_BUFFER13_WEBGL": 34866,
+        "DRAW_BUFFER14_WEBGL": 34867,
+        "DRAW_BUFFER15_WEBGL": 34868,
+        "MAX_COLOR_ATTACHMENTS_WEBGL": 36063,
+        "MAX_DRAW_BUFFERS_WEBGL": 34852,
+        "drawBuffersWEBGL": "fn/1"
+      }
+    },
+    "webgl WEBGL_lose_context": {
+      "brand": "[object WebGLLoseContext]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "loseContext",
+        "restoreContext"
+      ],
+      "own": [],
+      "protoNames": [
+        "loseContext",
+        "restoreContext"
+      ],
+      "values": {
+        "loseContext": "fn/0",
+        "restoreContext": "fn/0"
+      }
+    },
+    "webgl WEBGL_multi_draw": {
+      "brand": "[object WebGLMultiDraw]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "multiDrawArraysInstancedWEBGL",
+        "multiDrawArraysWEBGL",
+        "multiDrawElementsInstancedWEBGL",
+        "multiDrawElementsWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "multiDrawArraysInstancedWEBGL",
+        "multiDrawArraysWEBGL",
+        "multiDrawElementsInstancedWEBGL",
+        "multiDrawElementsWEBGL"
+      ],
+      "values": {
+        "multiDrawArraysInstancedWEBGL": "fn/8",
+        "multiDrawArraysWEBGL": "fn/6",
+        "multiDrawElementsInstancedWEBGL": "fn/9",
+        "multiDrawElementsWEBGL": "fn/7"
+      }
+    },
+    "webgl WEBGL_polygon_mode": {
+      "brand": "[object WebGLPolygonMode]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FILL_WEBGL",
+        "LINE_WEBGL",
+        "POLYGON_MODE_WEBGL",
+        "POLYGON_OFFSET_LINE_WEBGL",
+        "polygonModeWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "FILL_WEBGL",
+        "LINE_WEBGL",
+        "POLYGON_MODE_WEBGL",
+        "POLYGON_OFFSET_LINE_WEBGL",
+        "polygonModeWEBGL"
+      ],
+      "values": {
+        "POLYGON_MODE_WEBGL": 2880,
+        "POLYGON_OFFSET_LINE_WEBGL": 10754,
+        "LINE_WEBGL": 6913,
+        "FILL_WEBGL": 6914,
+        "polygonModeWEBGL": "fn/2"
+      }
+    },
+    "webgl2.supported": [
+      "EXT_clip_control",
+      "EXT_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_conservative_depth",
+      "EXT_depth_clamp",
+      "EXT_disjoint_timer_query_webgl2",
+      "EXT_float_blend",
+      "EXT_polygon_offset_clamp",
+      "EXT_render_snorm",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_mirror_clamp_to_edge",
+      "EXT_texture_norm16",
+      "KHR_parallel_shader_compile",
+      "NV_shader_noperspective_interpolation",
+      "OES_draw_buffers_indexed",
+      "OES_sample_variables",
+      "OES_shader_multisample_interpolation",
+      "OES_texture_float_linear",
+      "WEBGL_blend_func_extended",
+      "WEBGL_clip_cull_distance",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_compressed_texture_pvrtc",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_polygon_mode",
+      "WEBGL_provoking_vertex",
+      "WEBGL_render_shared_exponent",
+      "WEBGL_stencil_texturing"
+    ],
+    "webgl2 EXT_clip_control": {
+      "brand": "[object EXTClipControl]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "CLIP_DEPTH_MODE_EXT",
+        "CLIP_ORIGIN_EXT",
+        "LOWER_LEFT_EXT",
+        "NEGATIVE_ONE_TO_ONE_EXT",
+        "UPPER_LEFT_EXT",
+        "ZERO_TO_ONE_EXT",
+        "clipControlEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "CLIP_DEPTH_MODE_EXT",
+        "CLIP_ORIGIN_EXT",
+        "LOWER_LEFT_EXT",
+        "NEGATIVE_ONE_TO_ONE_EXT",
+        "UPPER_LEFT_EXT",
+        "ZERO_TO_ONE_EXT",
+        "clipControlEXT"
+      ],
+      "values": {
+        "LOWER_LEFT_EXT": 36001,
+        "UPPER_LEFT_EXT": 36002,
+        "NEGATIVE_ONE_TO_ONE_EXT": 37726,
+        "ZERO_TO_ONE_EXT": 37727,
+        "CLIP_ORIGIN_EXT": 37724,
+        "CLIP_DEPTH_MODE_EXT": 37725,
+        "clipControlEXT": "fn/2"
+      }
+    },
+    "webgl2 EXT_color_buffer_float": {
+      "brand": "[object EXTColorBufferFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 EXT_color_buffer_half_float": {
+      "brand": "[object EXTColorBufferHalfFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGB16F_EXT",
+        "RGBA16F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGB16F_EXT",
+        "RGBA16F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "values": {
+        "RGBA16F_EXT": 34842,
+        "RGB16F_EXT": 34843,
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT": 33297,
+        "UNSIGNED_NORMALIZED_EXT": 35863
+      }
+    },
+    "webgl2 EXT_conservative_depth": {
+      "brand": "[object EXTConservativeDepth]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 EXT_depth_clamp": {
+      "brand": "[object EXTDepthClamp]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "DEPTH_CLAMP_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "DEPTH_CLAMP_EXT"
+      ],
+      "values": {
+        "DEPTH_CLAMP_EXT": 34383
+      }
+    },
+    "webgl2 EXT_disjoint_timer_query_webgl2": {
+      "brand": "[object EXTDisjointTimerQueryWebGL2]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "GPU_DISJOINT_EXT",
+        "QUERY_COUNTER_BITS_EXT",
+        "TIMESTAMP_EXT",
+        "TIME_ELAPSED_EXT",
+        "queryCounterEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "GPU_DISJOINT_EXT",
+        "QUERY_COUNTER_BITS_EXT",
+        "TIMESTAMP_EXT",
+        "TIME_ELAPSED_EXT",
+        "queryCounterEXT"
+      ],
+      "values": {
+        "QUERY_COUNTER_BITS_EXT": 34916,
+        "TIME_ELAPSED_EXT": 35007,
+        "TIMESTAMP_EXT": 36392,
+        "GPU_DISJOINT_EXT": 36795,
+        "queryCounterEXT": "fn/2"
+      }
+    },
+    "webgl2 EXT_float_blend": {
+      "brand": "[object EXTFloatBlend]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 EXT_polygon_offset_clamp": {
+      "brand": "[object EXTPolygonOffsetClamp]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "POLYGON_OFFSET_CLAMP_EXT",
+        "polygonOffsetClampEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "POLYGON_OFFSET_CLAMP_EXT",
+        "polygonOffsetClampEXT"
+      ],
+      "values": {
+        "POLYGON_OFFSET_CLAMP_EXT": 36379,
+        "polygonOffsetClampEXT": "fn/3"
+      }
+    },
+    "webgl2 EXT_render_snorm": {
+      "brand": "[object EXTRenderSnorm]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 EXT_texture_compression_bptc": {
+      "brand": "[object EXTTextureCompressionBPTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT",
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT",
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT": 36492,
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT": 36493,
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT": 36494,
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT": 36495
+      }
+    },
+    "webgl2 EXT_texture_compression_rgtc": {
+      "brand": "[object EXTTextureCompressionRGTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_RED_RGTC1_EXT",
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_RED_RGTC1_EXT",
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RED_RGTC1_EXT": 36283,
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT": 36284,
+        "COMPRESSED_RED_GREEN_RGTC2_EXT": 36285,
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT": 36286
+      }
+    },
+    "webgl2 EXT_texture_filter_anisotropic": {
+      "brand": "[object EXTTextureFilterAnisotropic]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT",
+        "TEXTURE_MAX_ANISOTROPY_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT",
+        "TEXTURE_MAX_ANISOTROPY_EXT"
+      ],
+      "values": {
+        "TEXTURE_MAX_ANISOTROPY_EXT": 34046,
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT": 34047
+      }
+    },
+    "webgl2 EXT_texture_mirror_clamp_to_edge": {
+      "brand": "[object EXTTextureMirrorClampToEdge]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MIRROR_CLAMP_TO_EDGE_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "MIRROR_CLAMP_TO_EDGE_EXT"
+      ],
+      "values": {
+        "MIRROR_CLAMP_TO_EDGE_EXT": 34627
+      }
+    },
+    "webgl2 EXT_texture_norm16": {
+      "brand": "[object EXTTextureNorm16]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "R16_EXT",
+        "R16_SNORM_EXT",
+        "RG16_EXT",
+        "RG16_SNORM_EXT",
+        "RGB16_EXT",
+        "RGB16_SNORM_EXT",
+        "RGBA16_EXT",
+        "RGBA16_SNORM_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "R16_EXT",
+        "R16_SNORM_EXT",
+        "RG16_EXT",
+        "RG16_SNORM_EXT",
+        "RGB16_EXT",
+        "RGB16_SNORM_EXT",
+        "RGBA16_EXT",
+        "RGBA16_SNORM_EXT"
+      ],
+      "values": {
+        "R16_EXT": 33322,
+        "RG16_EXT": 33324,
+        "RGB16_EXT": 32852,
+        "RGBA16_EXT": 32859,
+        "R16_SNORM_EXT": 36760,
+        "RG16_SNORM_EXT": 36761,
+        "RGB16_SNORM_EXT": 36762,
+        "RGBA16_SNORM_EXT": 36763
+      }
+    },
+    "webgl2 KHR_parallel_shader_compile": {
+      "brand": "[object KHRParallelShaderCompile]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPLETION_STATUS_KHR"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPLETION_STATUS_KHR"
+      ],
+      "values": {
+        "COMPLETION_STATUS_KHR": 37297
+      }
+    },
+    "webgl2 NV_shader_noperspective_interpolation": {
+      "brand": "[object NVShaderNoperspectiveInterpolation]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 OES_draw_buffers_indexed": {
+      "brand": "[object OESDrawBuffersIndexed]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "blendEquationSeparateiOES",
+        "blendEquationiOES",
+        "blendFuncSeparateiOES",
+        "blendFunciOES",
+        "colorMaskiOES",
+        "disableiOES",
+        "enableiOES"
+      ],
+      "own": [],
+      "protoNames": [
+        "blendEquationSeparateiOES",
+        "blendEquationiOES",
+        "blendFuncSeparateiOES",
+        "blendFunciOES",
+        "colorMaskiOES",
+        "disableiOES",
+        "enableiOES"
+      ],
+      "values": {
+        "blendEquationSeparateiOES": "fn/3",
+        "blendEquationiOES": "fn/2",
+        "blendFuncSeparateiOES": "fn/5",
+        "blendFunciOES": "fn/3",
+        "colorMaskiOES": "fn/5",
+        "disableiOES": "fn/2",
+        "enableiOES": "fn/2"
+      }
+    },
+    "webgl2 OES_sample_variables": {
+      "brand": "[object OESSampleVariables]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 OES_shader_multisample_interpolation": {
+      "brand": "[object OESShaderMultisampleInterpolation]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAGMENT_INTERPOLATION_OFFSET_BITS_OES",
+        "MAX_FRAGMENT_INTERPOLATION_OFFSET_OES",
+        "MIN_FRAGMENT_INTERPOLATION_OFFSET_OES"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAGMENT_INTERPOLATION_OFFSET_BITS_OES",
+        "MAX_FRAGMENT_INTERPOLATION_OFFSET_OES",
+        "MIN_FRAGMENT_INTERPOLATION_OFFSET_OES"
+      ],
+      "values": {
+        "MIN_FRAGMENT_INTERPOLATION_OFFSET_OES": 36443,
+        "MAX_FRAGMENT_INTERPOLATION_OFFSET_OES": 36444,
+        "FRAGMENT_INTERPOLATION_OFFSET_BITS_OES": 36445
+      }
+    },
+    "webgl2 OES_texture_float_linear": {
+      "brand": "[object OESTextureFloatLinear]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 WEBGL_blend_func_extended": {
+      "brand": "[object WebGLBlendFuncExtended]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL",
+        "ONE_MINUS_SRC1_ALPHA_WEBGL",
+        "ONE_MINUS_SRC1_COLOR_WEBGL",
+        "SRC1_ALPHA_WEBGL",
+        "SRC1_COLOR_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL",
+        "ONE_MINUS_SRC1_ALPHA_WEBGL",
+        "ONE_MINUS_SRC1_COLOR_WEBGL",
+        "SRC1_ALPHA_WEBGL",
+        "SRC1_COLOR_WEBGL"
+      ],
+      "values": {
+        "SRC1_COLOR_WEBGL": 35065,
+        "SRC1_ALPHA_WEBGL": 34185,
+        "ONE_MINUS_SRC1_COLOR_WEBGL": 35066,
+        "ONE_MINUS_SRC1_ALPHA_WEBGL": 35067,
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL": 35068
+      }
+    },
+    "webgl2 WEBGL_clip_cull_distance": {
+      "brand": "[object WebGLClipCullDistance]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "CLIP_DISTANCE0_WEBGL",
+        "CLIP_DISTANCE1_WEBGL",
+        "CLIP_DISTANCE2_WEBGL",
+        "CLIP_DISTANCE3_WEBGL",
+        "CLIP_DISTANCE4_WEBGL",
+        "CLIP_DISTANCE5_WEBGL",
+        "CLIP_DISTANCE6_WEBGL",
+        "CLIP_DISTANCE7_WEBGL",
+        "MAX_CLIP_DISTANCES_WEBGL",
+        "MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL",
+        "MAX_CULL_DISTANCES_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "CLIP_DISTANCE0_WEBGL",
+        "CLIP_DISTANCE1_WEBGL",
+        "CLIP_DISTANCE2_WEBGL",
+        "CLIP_DISTANCE3_WEBGL",
+        "CLIP_DISTANCE4_WEBGL",
+        "CLIP_DISTANCE5_WEBGL",
+        "CLIP_DISTANCE6_WEBGL",
+        "CLIP_DISTANCE7_WEBGL",
+        "MAX_CLIP_DISTANCES_WEBGL",
+        "MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL",
+        "MAX_CULL_DISTANCES_WEBGL"
+      ],
+      "values": {
+        "MAX_CLIP_DISTANCES_WEBGL": 3378,
+        "MAX_CULL_DISTANCES_WEBGL": 33529,
+        "MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL": 33530,
+        "CLIP_DISTANCE0_WEBGL": 12288,
+        "CLIP_DISTANCE1_WEBGL": 12289,
+        "CLIP_DISTANCE2_WEBGL": 12290,
+        "CLIP_DISTANCE3_WEBGL": 12291,
+        "CLIP_DISTANCE4_WEBGL": 12292,
+        "CLIP_DISTANCE5_WEBGL": 12293,
+        "CLIP_DISTANCE6_WEBGL": 12294,
+        "CLIP_DISTANCE7_WEBGL": 12295
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_astc": {
+      "brand": "[object WebGLCompressedTextureASTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_ASTC_10x10_KHR",
+        "COMPRESSED_RGBA_ASTC_10x5_KHR",
+        "COMPRESSED_RGBA_ASTC_10x6_KHR",
+        "COMPRESSED_RGBA_ASTC_10x8_KHR",
+        "COMPRESSED_RGBA_ASTC_12x10_KHR",
+        "COMPRESSED_RGBA_ASTC_12x12_KHR",
+        "COMPRESSED_RGBA_ASTC_4x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x5_KHR",
+        "COMPRESSED_RGBA_ASTC_8x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR",
+        "getSupportedProfiles"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_ASTC_10x10_KHR",
+        "COMPRESSED_RGBA_ASTC_10x5_KHR",
+        "COMPRESSED_RGBA_ASTC_10x6_KHR",
+        "COMPRESSED_RGBA_ASTC_10x8_KHR",
+        "COMPRESSED_RGBA_ASTC_12x10_KHR",
+        "COMPRESSED_RGBA_ASTC_12x12_KHR",
+        "COMPRESSED_RGBA_ASTC_4x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x5_KHR",
+        "COMPRESSED_RGBA_ASTC_8x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR",
+        "getSupportedProfiles"
+      ],
+      "values": {
+        "COMPRESSED_RGBA_ASTC_4x4_KHR": 37808,
+        "COMPRESSED_RGBA_ASTC_5x4_KHR": 37809,
+        "COMPRESSED_RGBA_ASTC_5x5_KHR": 37810,
+        "COMPRESSED_RGBA_ASTC_6x5_KHR": 37811,
+        "COMPRESSED_RGBA_ASTC_6x6_KHR": 37812,
+        "COMPRESSED_RGBA_ASTC_8x5_KHR": 37813,
+        "COMPRESSED_RGBA_ASTC_8x6_KHR": 37814,
+        "COMPRESSED_RGBA_ASTC_8x8_KHR": 37815,
+        "COMPRESSED_RGBA_ASTC_10x5_KHR": 37816,
+        "COMPRESSED_RGBA_ASTC_10x6_KHR": 37817,
+        "COMPRESSED_RGBA_ASTC_10x8_KHR": 37818,
+        "COMPRESSED_RGBA_ASTC_10x10_KHR": 37819,
+        "COMPRESSED_RGBA_ASTC_12x10_KHR": 37820,
+        "COMPRESSED_RGBA_ASTC_12x12_KHR": 37821,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR": 37840,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR": 37841,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR": 37842,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR": 37843,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR": 37844,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR": 37845,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR": 37846,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR": 37847,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR": 37848,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR": 37849,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR": 37850,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR": 37851,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR": 37852,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR": 37853,
+        "getSupportedProfiles": "fn/0"
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_etc": {
+      "brand": "[object WebGLCompressedTextureETC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_R11_EAC",
+        "COMPRESSED_RG11_EAC",
+        "COMPRESSED_RGB8_ETC2",
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2",
+        "COMPRESSED_RGBA8_ETC2_EAC",
+        "COMPRESSED_SIGNED_R11_EAC",
+        "COMPRESSED_SIGNED_RG11_EAC",
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC",
+        "COMPRESSED_SRGB8_ETC2",
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_R11_EAC",
+        "COMPRESSED_RG11_EAC",
+        "COMPRESSED_RGB8_ETC2",
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2",
+        "COMPRESSED_RGBA8_ETC2_EAC",
+        "COMPRESSED_SIGNED_R11_EAC",
+        "COMPRESSED_SIGNED_RG11_EAC",
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC",
+        "COMPRESSED_SRGB8_ETC2",
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2"
+      ],
+      "values": {
+        "COMPRESSED_R11_EAC": 37488,
+        "COMPRESSED_SIGNED_R11_EAC": 37489,
+        "COMPRESSED_RG11_EAC": 37490,
+        "COMPRESSED_SIGNED_RG11_EAC": 37491,
+        "COMPRESSED_RGB8_ETC2": 37492,
+        "COMPRESSED_SRGB8_ETC2": 37493,
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37494,
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37495,
+        "COMPRESSED_RGBA8_ETC2_EAC": 37496,
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC": 37497
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_etc1": {
+      "brand": "[object WebGLCompressedTextureETC1]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGB_ETC1_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGB_ETC1_WEBGL"
+      ],
+      "values": {
+        "COMPRESSED_RGB_ETC1_WEBGL": 36196
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_pvrtc": {
+      "brand": "[object WebGLCompressedTexturePVRTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG"
+      ],
+      "values": {
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG": 35840,
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG": 35841,
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG": 35842,
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG": 35843
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_s3tc": {
+      "brand": "[object WebGLCompressedTextureS3TC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT",
+        "COMPRESSED_RGB_S3TC_DXT1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT",
+        "COMPRESSED_RGB_S3TC_DXT1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RGB_S3TC_DXT1_EXT": 33776,
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT": 33777,
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT": 33778,
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT": 33779
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_s3tc_srgb": {
+      "brand": "[object WebGLCompressedTextureS3TCsRGB]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT": 35916,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT": 35917,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT": 35918,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT": 35919
+      }
+    },
+    "webgl2 WEBGL_debug_renderer_info": {
+      "brand": "[object WebGLDebugRendererInfo]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "UNMASKED_RENDERER_WEBGL",
+        "UNMASKED_VENDOR_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "UNMASKED_RENDERER_WEBGL",
+        "UNMASKED_VENDOR_WEBGL"
+      ],
+      "values": {
+        "UNMASKED_VENDOR_WEBGL": 37445,
+        "UNMASKED_RENDERER_WEBGL": 37446
+      }
+    },
+    "webgl2 WEBGL_debug_shaders": {
+      "brand": "[object WebGLDebugShaders]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "getTranslatedShaderSource"
+      ],
+      "own": [],
+      "protoNames": [
+        "getTranslatedShaderSource"
+      ],
+      "values": {
+        "getTranslatedShaderSource": "fn/1"
+      }
+    },
+    "webgl2 WEBGL_lose_context": {
+      "brand": "[object WebGLLoseContext]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "loseContext",
+        "restoreContext"
+      ],
+      "own": [],
+      "protoNames": [
+        "loseContext",
+        "restoreContext"
+      ],
+      "values": {
+        "loseContext": "fn/0",
+        "restoreContext": "fn/0"
+      }
+    },
+    "webgl2 WEBGL_multi_draw": {
+      "brand": "[object WebGLMultiDraw]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "multiDrawArraysInstancedWEBGL",
+        "multiDrawArraysWEBGL",
+        "multiDrawElementsInstancedWEBGL",
+        "multiDrawElementsWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "multiDrawArraysInstancedWEBGL",
+        "multiDrawArraysWEBGL",
+        "multiDrawElementsInstancedWEBGL",
+        "multiDrawElementsWEBGL"
+      ],
+      "values": {
+        "multiDrawArraysInstancedWEBGL": "fn/8",
+        "multiDrawArraysWEBGL": "fn/6",
+        "multiDrawElementsInstancedWEBGL": "fn/9",
+        "multiDrawElementsWEBGL": "fn/7"
+      }
+    },
+    "webgl2 WEBGL_polygon_mode": {
+      "brand": "[object WebGLPolygonMode]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FILL_WEBGL",
+        "LINE_WEBGL",
+        "POLYGON_MODE_WEBGL",
+        "POLYGON_OFFSET_LINE_WEBGL",
+        "polygonModeWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "FILL_WEBGL",
+        "LINE_WEBGL",
+        "POLYGON_MODE_WEBGL",
+        "POLYGON_OFFSET_LINE_WEBGL",
+        "polygonModeWEBGL"
+      ],
+      "values": {
+        "POLYGON_MODE_WEBGL": 2880,
+        "POLYGON_OFFSET_LINE_WEBGL": 10754,
+        "LINE_WEBGL": 6913,
+        "FILL_WEBGL": 6914,
+        "polygonModeWEBGL": "fn/2"
+      }
+    },
+    "webgl2 WEBGL_provoking_vertex": {
+      "brand": "[object WebGLProvokingVertex]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FIRST_VERTEX_CONVENTION_WEBGL",
+        "LAST_VERTEX_CONVENTION_WEBGL",
+        "PROVOKING_VERTEX_WEBGL",
+        "provokingVertexWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "FIRST_VERTEX_CONVENTION_WEBGL",
+        "LAST_VERTEX_CONVENTION_WEBGL",
+        "PROVOKING_VERTEX_WEBGL",
+        "provokingVertexWEBGL"
+      ],
+      "values": {
+        "FIRST_VERTEX_CONVENTION_WEBGL": 36429,
+        "LAST_VERTEX_CONVENTION_WEBGL": 36430,
+        "PROVOKING_VERTEX_WEBGL": 36431,
+        "provokingVertexWEBGL": "fn/1"
+      }
+    },
+    "webgl2 WEBGL_render_shared_exponent": {
+      "brand": "[object WebGLRenderSharedExponent]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 WEBGL_stencil_texturing": {
+      "brand": "[object WebGLStencilTexturing]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "DEPTH_STENCIL_TEXTURE_MODE_WEBGL",
+        "STENCIL_INDEX_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "DEPTH_STENCIL_TEXTURE_MODE_WEBGL",
+        "STENCIL_INDEX_WEBGL"
+      ],
+      "values": {
+        "DEPTH_STENCIL_TEXTURE_MODE_WEBGL": 37098,
+        "STENCIL_INDEX_WEBGL": 6401
+      }
+    }
+  },
+  "chrome_swiftshader": {
+    "note": "The same Chrome forced onto SwiftShader (--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader), which is the only way to reach OVR_multiview2: the Metal driver above never advertises it, so its interface is the one name in the WebGL 2 union with no reading in the `chrome` section. Only that one row is recorded here -- the rest of a SwiftShader run belongs to a different GPU table. Renderer string this was taken from: ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver). Its webgl2 list was 30 names against the 29 the linux table in gpu.zig claims; the extra is EXT_disjoint_timer_query_webgl2, which a macOS host's SwiftShader has and the reference Linux one did not. That is a host difference, not a correction to the table.",
+    "webgl2.supported": [
+      "EXT_clip_control",
+      "EXT_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_conservative_depth",
+      "EXT_depth_clamp",
+      "EXT_disjoint_timer_query_webgl2",
+      "EXT_float_blend",
+      "EXT_polygon_offset_clamp",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_mirror_clamp_to_edge",
+      "NV_shader_noperspective_interpolation",
+      "OES_draw_buffers_indexed",
+      "OES_sample_variables",
+      "OES_shader_multisample_interpolation",
+      "OES_texture_float_linear",
+      "OVR_multiview2",
+      "WEBGL_clip_cull_distance",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_polygon_mode",
+      "WEBGL_stencil_texturing"
+    ],
+    "webgl2 OVR_multiview2": {
+      "brand": "[object OVRMultiview2]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR",
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR",
+        "FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR",
+        "MAX_VIEWS_OVR",
+        "framebufferTextureMultiviewOVR"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR",
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR",
+        "FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR",
+        "MAX_VIEWS_OVR",
+        "framebufferTextureMultiviewOVR"
+      ],
+      "values": {
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR": 38448,
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR": 38450,
+        "MAX_VIEWS_OVR": 38449,
+        "FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR": 38451,
+        "framebufferTextureMultiviewOVR": "fn/6"
+      }
+    }
+  },
+  "lightpanda": {
+    "webgl.supported": [
+      "ANGLE_instanced_arrays",
+      "EXT_blend_minmax",
+      "EXT_clip_control",
+      "EXT_color_buffer_half_float",
+      "EXT_depth_clamp",
+      "EXT_disjoint_timer_query",
+      "EXT_float_blend",
+      "EXT_frag_depth",
+      "EXT_polygon_offset_clamp",
+      "EXT_shader_texture_lod",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_mirror_clamp_to_edge",
+      "EXT_sRGB",
+      "KHR_parallel_shader_compile",
+      "OES_element_index_uint",
+      "OES_fbo_render_mipmap",
+      "OES_standard_derivatives",
+      "OES_texture_float",
+      "OES_texture_float_linear",
+      "OES_texture_half_float",
+      "OES_texture_half_float_linear",
+      "OES_vertex_array_object",
+      "WEBGL_blend_func_extended",
+      "WEBGL_color_buffer_float",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_compressed_texture_pvrtc",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_depth_texture",
+      "WEBGL_draw_buffers",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_polygon_mode"
+    ],
+    "webgl ANGLE_instanced_arrays": {
+      "brand": "[object ANGLEInstancedArrays]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE",
+        "drawArraysInstancedANGLE",
+        "drawElementsInstancedANGLE",
+        "vertexAttribDivisorANGLE"
+      ],
+      "own": [],
+      "protoNames": [
+        "VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE",
+        "drawArraysInstancedANGLE",
+        "drawElementsInstancedANGLE",
+        "vertexAttribDivisorANGLE"
+      ],
+      "values": {
+        "VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE": 35070,
+        "drawArraysInstancedANGLE": "fn/4",
+        "drawElementsInstancedANGLE": "fn/5",
+        "vertexAttribDivisorANGLE": "fn/2"
+      }
+    },
+    "webgl EXT_blend_minmax": {
+      "brand": "[object EXTBlendMinMax]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MAX_EXT",
+        "MIN_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "MAX_EXT",
+        "MIN_EXT"
+      ],
+      "values": {
+        "MIN_EXT": 32775,
+        "MAX_EXT": 32776
+      }
+    },
+    "webgl EXT_clip_control": {
+      "brand": "[object EXTClipControl]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "CLIP_DEPTH_MODE_EXT",
+        "CLIP_ORIGIN_EXT",
+        "LOWER_LEFT_EXT",
+        "NEGATIVE_ONE_TO_ONE_EXT",
+        "UPPER_LEFT_EXT",
+        "ZERO_TO_ONE_EXT",
+        "clipControlEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "CLIP_DEPTH_MODE_EXT",
+        "CLIP_ORIGIN_EXT",
+        "LOWER_LEFT_EXT",
+        "NEGATIVE_ONE_TO_ONE_EXT",
+        "UPPER_LEFT_EXT",
+        "ZERO_TO_ONE_EXT",
+        "clipControlEXT"
+      ],
+      "values": {
+        "LOWER_LEFT_EXT": 36001,
+        "UPPER_LEFT_EXT": 36002,
+        "NEGATIVE_ONE_TO_ONE_EXT": 37726,
+        "ZERO_TO_ONE_EXT": 37727,
+        "CLIP_ORIGIN_EXT": 37724,
+        "CLIP_DEPTH_MODE_EXT": 37725,
+        "clipControlEXT": "fn/2"
+      }
+    },
+    "webgl EXT_color_buffer_half_float": {
+      "brand": "[object EXTColorBufferHalfFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGB16F_EXT",
+        "RGBA16F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGB16F_EXT",
+        "RGBA16F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "values": {
+        "RGBA16F_EXT": 34842,
+        "RGB16F_EXT": 34843,
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT": 33297,
+        "UNSIGNED_NORMALIZED_EXT": 35863
+      }
+    },
+    "webgl EXT_depth_clamp": {
+      "brand": "[object EXTDepthClamp]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "DEPTH_CLAMP_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "DEPTH_CLAMP_EXT"
+      ],
+      "values": {
+        "DEPTH_CLAMP_EXT": 34383
+      }
+    },
+    "webgl EXT_disjoint_timer_query": {
+      "brand": "[object EXTDisjointTimerQuery]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "CURRENT_QUERY_EXT",
+        "GPU_DISJOINT_EXT",
+        "QUERY_COUNTER_BITS_EXT",
+        "QUERY_RESULT_AVAILABLE_EXT",
+        "QUERY_RESULT_EXT",
+        "TIMESTAMP_EXT",
+        "TIME_ELAPSED_EXT",
+        "beginQueryEXT",
+        "createQueryEXT",
+        "deleteQueryEXT",
+        "endQueryEXT",
+        "getQueryEXT",
+        "getQueryObjectEXT",
+        "isQueryEXT",
+        "queryCounterEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "CURRENT_QUERY_EXT",
+        "GPU_DISJOINT_EXT",
+        "QUERY_COUNTER_BITS_EXT",
+        "QUERY_RESULT_AVAILABLE_EXT",
+        "QUERY_RESULT_EXT",
+        "TIMESTAMP_EXT",
+        "TIME_ELAPSED_EXT",
+        "beginQueryEXT",
+        "createQueryEXT",
+        "deleteQueryEXT",
+        "endQueryEXT",
+        "getQueryEXT",
+        "getQueryObjectEXT",
+        "isQueryEXT",
+        "queryCounterEXT"
+      ],
+      "values": {
+        "QUERY_COUNTER_BITS_EXT": 34916,
+        "CURRENT_QUERY_EXT": 34917,
+        "QUERY_RESULT_EXT": 34918,
+        "QUERY_RESULT_AVAILABLE_EXT": 34919,
+        "TIME_ELAPSED_EXT": 35007,
+        "TIMESTAMP_EXT": 36392,
+        "GPU_DISJOINT_EXT": 36795,
+        "beginQueryEXT": "fn/2",
+        "createQueryEXT": "fn/0",
+        "deleteQueryEXT": "fn/1",
+        "endQueryEXT": "fn/1",
+        "getQueryEXT": "fn/2",
+        "getQueryObjectEXT": "fn/2",
+        "isQueryEXT": "fn/1",
+        "queryCounterEXT": "fn/2"
+      }
+    },
+    "webgl EXT_float_blend": {
+      "brand": "[object EXTFloatBlend]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl EXT_frag_depth": {
+      "brand": "[object EXTFragDepth]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl EXT_polygon_offset_clamp": {
+      "brand": "[object EXTPolygonOffsetClamp]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "POLYGON_OFFSET_CLAMP_EXT",
+        "polygonOffsetClampEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "POLYGON_OFFSET_CLAMP_EXT",
+        "polygonOffsetClampEXT"
+      ],
+      "values": {
+        "POLYGON_OFFSET_CLAMP_EXT": 36379,
+        "polygonOffsetClampEXT": "fn/3"
+      }
+    },
+    "webgl EXT_shader_texture_lod": {
+      "brand": "[object EXTShaderTextureLOD]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl EXT_texture_compression_bptc": {
+      "brand": "[object EXTTextureCompressionBPTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT",
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT",
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT": 36492,
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT": 36493,
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT": 36494,
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT": 36495
+      }
+    },
+    "webgl EXT_texture_compression_rgtc": {
+      "brand": "[object EXTTextureCompressionRGTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_RED_RGTC1_EXT",
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_RED_RGTC1_EXT",
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RED_RGTC1_EXT": 36283,
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT": 36284,
+        "COMPRESSED_RED_GREEN_RGTC2_EXT": 36285,
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT": 36286
+      }
+    },
+    "webgl EXT_texture_filter_anisotropic": {
+      "brand": "[object EXTTextureFilterAnisotropic]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT",
+        "TEXTURE_MAX_ANISOTROPY_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT",
+        "TEXTURE_MAX_ANISOTROPY_EXT"
+      ],
+      "values": {
+        "TEXTURE_MAX_ANISOTROPY_EXT": 34046,
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT": 34047
+      }
+    },
+    "webgl EXT_texture_mirror_clamp_to_edge": {
+      "brand": "[object EXTTextureMirrorClampToEdge]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MIRROR_CLAMP_TO_EDGE_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "MIRROR_CLAMP_TO_EDGE_EXT"
+      ],
+      "values": {
+        "MIRROR_CLAMP_TO_EDGE_EXT": 34627
+      }
+    },
+    "webgl EXT_sRGB": {
+      "brand": "[object EXTsRGB]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT",
+        "SRGB8_ALPHA8_EXT",
+        "SRGB_ALPHA_EXT",
+        "SRGB_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT",
+        "SRGB8_ALPHA8_EXT",
+        "SRGB_ALPHA_EXT",
+        "SRGB_EXT"
+      ],
+      "values": {
+        "SRGB_EXT": 35904,
+        "SRGB_ALPHA_EXT": 35906,
+        "SRGB8_ALPHA8_EXT": 35907,
+        "FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT": 33296
+      }
+    },
+    "webgl KHR_parallel_shader_compile": {
+      "brand": "[object KHRParallelShaderCompile]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPLETION_STATUS_KHR"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPLETION_STATUS_KHR"
+      ],
+      "values": {
+        "COMPLETION_STATUS_KHR": 37297
+      }
+    },
+    "webgl OES_element_index_uint": {
+      "brand": "[object OESElementIndexUint]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl OES_fbo_render_mipmap": {
+      "brand": "[object OESFboRenderMipmap]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl OES_standard_derivatives": {
+      "brand": "[object OESStandardDerivatives]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAGMENT_SHADER_DERIVATIVE_HINT_OES"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAGMENT_SHADER_DERIVATIVE_HINT_OES"
+      ],
+      "values": {
+        "FRAGMENT_SHADER_DERIVATIVE_HINT_OES": 35723
+      }
+    },
+    "webgl OES_texture_float": {
+      "brand": "[object OESTextureFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl OES_texture_float_linear": {
+      "brand": "[object OESTextureFloatLinear]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl OES_texture_half_float": {
+      "brand": "[object OESTextureHalfFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "HALF_FLOAT_OES"
+      ],
+      "own": [],
+      "protoNames": [
+        "HALF_FLOAT_OES"
+      ],
+      "values": {
+        "HALF_FLOAT_OES": 36193
+      }
+    },
+    "webgl OES_texture_half_float_linear": {
+      "brand": "[object OESTextureHalfFloatLinear]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl OES_vertex_array_object": {
+      "brand": "[object OESVertexArrayObject]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "VERTEX_ARRAY_BINDING_OES",
+        "bindVertexArrayOES",
+        "createVertexArrayOES",
+        "deleteVertexArrayOES",
+        "isVertexArrayOES"
+      ],
+      "own": [],
+      "protoNames": [
+        "VERTEX_ARRAY_BINDING_OES",
+        "bindVertexArrayOES",
+        "createVertexArrayOES",
+        "deleteVertexArrayOES",
+        "isVertexArrayOES"
+      ],
+      "values": {
+        "VERTEX_ARRAY_BINDING_OES": 34229,
+        "bindVertexArrayOES": "fn/0",
+        "createVertexArrayOES": "fn/0",
+        "deleteVertexArrayOES": "fn/0",
+        "isVertexArrayOES": "fn/0"
+      }
+    },
+    "webgl WEBGL_blend_func_extended": {
+      "brand": "[object WebGLBlendFuncExtended]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL",
+        "ONE_MINUS_SRC1_ALPHA_WEBGL",
+        "ONE_MINUS_SRC1_COLOR_WEBGL",
+        "SRC1_ALPHA_WEBGL",
+        "SRC1_COLOR_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL",
+        "ONE_MINUS_SRC1_ALPHA_WEBGL",
+        "ONE_MINUS_SRC1_COLOR_WEBGL",
+        "SRC1_ALPHA_WEBGL",
+        "SRC1_COLOR_WEBGL"
+      ],
+      "values": {
+        "SRC1_COLOR_WEBGL": 35065,
+        "SRC1_ALPHA_WEBGL": 34185,
+        "ONE_MINUS_SRC1_COLOR_WEBGL": 35066,
+        "ONE_MINUS_SRC1_ALPHA_WEBGL": 35067,
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL": 35068
+      }
+    },
+    "webgl WEBGL_color_buffer_float": {
+      "brand": "[object WebGLColorBufferFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGBA32F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGBA32F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "values": {
+        "RGBA32F_EXT": 34836,
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT": 33297,
+        "UNSIGNED_NORMALIZED_EXT": 35863
+      }
+    },
+    "webgl WEBGL_compressed_texture_astc": {
+      "brand": "[object WebGLCompressedTextureASTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_ASTC_10x10_KHR",
+        "COMPRESSED_RGBA_ASTC_10x5_KHR",
+        "COMPRESSED_RGBA_ASTC_10x6_KHR",
+        "COMPRESSED_RGBA_ASTC_10x8_KHR",
+        "COMPRESSED_RGBA_ASTC_12x10_KHR",
+        "COMPRESSED_RGBA_ASTC_12x12_KHR",
+        "COMPRESSED_RGBA_ASTC_4x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x5_KHR",
+        "COMPRESSED_RGBA_ASTC_8x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR",
+        "getSupportedProfiles"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_ASTC_10x10_KHR",
+        "COMPRESSED_RGBA_ASTC_10x5_KHR",
+        "COMPRESSED_RGBA_ASTC_10x6_KHR",
+        "COMPRESSED_RGBA_ASTC_10x8_KHR",
+        "COMPRESSED_RGBA_ASTC_12x10_KHR",
+        "COMPRESSED_RGBA_ASTC_12x12_KHR",
+        "COMPRESSED_RGBA_ASTC_4x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x5_KHR",
+        "COMPRESSED_RGBA_ASTC_8x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR",
+        "getSupportedProfiles"
+      ],
+      "values": {
+        "COMPRESSED_RGBA_ASTC_4x4_KHR": 37808,
+        "COMPRESSED_RGBA_ASTC_5x4_KHR": 37809,
+        "COMPRESSED_RGBA_ASTC_5x5_KHR": 37810,
+        "COMPRESSED_RGBA_ASTC_6x5_KHR": 37811,
+        "COMPRESSED_RGBA_ASTC_6x6_KHR": 37812,
+        "COMPRESSED_RGBA_ASTC_8x5_KHR": 37813,
+        "COMPRESSED_RGBA_ASTC_8x6_KHR": 37814,
+        "COMPRESSED_RGBA_ASTC_8x8_KHR": 37815,
+        "COMPRESSED_RGBA_ASTC_10x5_KHR": 37816,
+        "COMPRESSED_RGBA_ASTC_10x6_KHR": 37817,
+        "COMPRESSED_RGBA_ASTC_10x8_KHR": 37818,
+        "COMPRESSED_RGBA_ASTC_10x10_KHR": 37819,
+        "COMPRESSED_RGBA_ASTC_12x10_KHR": 37820,
+        "COMPRESSED_RGBA_ASTC_12x12_KHR": 37821,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR": 37840,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR": 37841,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR": 37842,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR": 37843,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR": 37844,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR": 37845,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR": 37846,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR": 37847,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR": 37848,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR": 37849,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR": 37850,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR": 37851,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR": 37852,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR": 37853,
+        "getSupportedProfiles": "fn/0"
+      }
+    },
+    "webgl WEBGL_compressed_texture_etc": {
+      "brand": "[object WebGLCompressedTextureETC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_R11_EAC",
+        "COMPRESSED_RG11_EAC",
+        "COMPRESSED_RGB8_ETC2",
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2",
+        "COMPRESSED_RGBA8_ETC2_EAC",
+        "COMPRESSED_SIGNED_R11_EAC",
+        "COMPRESSED_SIGNED_RG11_EAC",
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC",
+        "COMPRESSED_SRGB8_ETC2",
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_R11_EAC",
+        "COMPRESSED_RG11_EAC",
+        "COMPRESSED_RGB8_ETC2",
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2",
+        "COMPRESSED_RGBA8_ETC2_EAC",
+        "COMPRESSED_SIGNED_R11_EAC",
+        "COMPRESSED_SIGNED_RG11_EAC",
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC",
+        "COMPRESSED_SRGB8_ETC2",
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2"
+      ],
+      "values": {
+        "COMPRESSED_R11_EAC": 37488,
+        "COMPRESSED_SIGNED_R11_EAC": 37489,
+        "COMPRESSED_RG11_EAC": 37490,
+        "COMPRESSED_SIGNED_RG11_EAC": 37491,
+        "COMPRESSED_RGB8_ETC2": 37492,
+        "COMPRESSED_SRGB8_ETC2": 37493,
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37494,
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37495,
+        "COMPRESSED_RGBA8_ETC2_EAC": 37496,
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC": 37497
+      }
+    },
+    "webgl WEBGL_compressed_texture_etc1": {
+      "brand": "[object WebGLCompressedTextureETC1]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGB_ETC1_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGB_ETC1_WEBGL"
+      ],
+      "values": {
+        "COMPRESSED_RGB_ETC1_WEBGL": 36196
+      }
+    },
+    "webgl WEBGL_compressed_texture_pvrtc": {
+      "brand": "[object WebGLCompressedTexturePVRTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG"
+      ],
+      "values": {
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG": 35840,
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG": 35841,
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG": 35842,
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG": 35843
+      }
+    },
+    "webgl WEBGL_compressed_texture_s3tc": {
+      "brand": "[object WebGLCompressedTextureS3TC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT",
+        "COMPRESSED_RGB_S3TC_DXT1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT",
+        "COMPRESSED_RGB_S3TC_DXT1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RGB_S3TC_DXT1_EXT": 33776,
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT": 33777,
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT": 33778,
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT": 33779
+      }
+    },
+    "webgl WEBGL_compressed_texture_s3tc_srgb": {
+      "brand": "[object WebGLCompressedTextureS3TCsRGB]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT": 35916,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT": 35917,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT": 35918,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT": 35919
+      }
+    },
+    "webgl WEBGL_debug_renderer_info": {
+      "brand": "[object WebGLDebugRendererInfo]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "UNMASKED_RENDERER_WEBGL",
+        "UNMASKED_VENDOR_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "UNMASKED_RENDERER_WEBGL",
+        "UNMASKED_VENDOR_WEBGL"
+      ],
+      "values": {
+        "UNMASKED_VENDOR_WEBGL": 37445,
+        "UNMASKED_RENDERER_WEBGL": 37446
+      }
+    },
+    "webgl WEBGL_debug_shaders": {
+      "brand": "[object WebGLDebugShaders]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "getTranslatedShaderSource"
+      ],
+      "own": [],
+      "protoNames": [
+        "getTranslatedShaderSource"
+      ],
+      "values": {
+        "getTranslatedShaderSource": "fn/1"
+      }
+    },
+    "webgl WEBGL_depth_texture": {
+      "brand": "[object WebGLDepthTexture]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "UNSIGNED_INT_24_8_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "UNSIGNED_INT_24_8_WEBGL"
+      ],
+      "values": {
+        "UNSIGNED_INT_24_8_WEBGL": 34042
+      }
+    },
+    "webgl WEBGL_draw_buffers": {
+      "brand": "[object WebGLDrawBuffers]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COLOR_ATTACHMENT0_WEBGL",
+        "COLOR_ATTACHMENT10_WEBGL",
+        "COLOR_ATTACHMENT11_WEBGL",
+        "COLOR_ATTACHMENT12_WEBGL",
+        "COLOR_ATTACHMENT13_WEBGL",
+        "COLOR_ATTACHMENT14_WEBGL",
+        "COLOR_ATTACHMENT15_WEBGL",
+        "COLOR_ATTACHMENT1_WEBGL",
+        "COLOR_ATTACHMENT2_WEBGL",
+        "COLOR_ATTACHMENT3_WEBGL",
+        "COLOR_ATTACHMENT4_WEBGL",
+        "COLOR_ATTACHMENT5_WEBGL",
+        "COLOR_ATTACHMENT6_WEBGL",
+        "COLOR_ATTACHMENT7_WEBGL",
+        "COLOR_ATTACHMENT8_WEBGL",
+        "COLOR_ATTACHMENT9_WEBGL",
+        "DRAW_BUFFER0_WEBGL",
+        "DRAW_BUFFER10_WEBGL",
+        "DRAW_BUFFER11_WEBGL",
+        "DRAW_BUFFER12_WEBGL",
+        "DRAW_BUFFER13_WEBGL",
+        "DRAW_BUFFER14_WEBGL",
+        "DRAW_BUFFER15_WEBGL",
+        "DRAW_BUFFER1_WEBGL",
+        "DRAW_BUFFER2_WEBGL",
+        "DRAW_BUFFER3_WEBGL",
+        "DRAW_BUFFER4_WEBGL",
+        "DRAW_BUFFER5_WEBGL",
+        "DRAW_BUFFER6_WEBGL",
+        "DRAW_BUFFER7_WEBGL",
+        "DRAW_BUFFER8_WEBGL",
+        "DRAW_BUFFER9_WEBGL",
+        "MAX_COLOR_ATTACHMENTS_WEBGL",
+        "MAX_DRAW_BUFFERS_WEBGL",
+        "drawBuffersWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "COLOR_ATTACHMENT0_WEBGL",
+        "COLOR_ATTACHMENT10_WEBGL",
+        "COLOR_ATTACHMENT11_WEBGL",
+        "COLOR_ATTACHMENT12_WEBGL",
+        "COLOR_ATTACHMENT13_WEBGL",
+        "COLOR_ATTACHMENT14_WEBGL",
+        "COLOR_ATTACHMENT15_WEBGL",
+        "COLOR_ATTACHMENT1_WEBGL",
+        "COLOR_ATTACHMENT2_WEBGL",
+        "COLOR_ATTACHMENT3_WEBGL",
+        "COLOR_ATTACHMENT4_WEBGL",
+        "COLOR_ATTACHMENT5_WEBGL",
+        "COLOR_ATTACHMENT6_WEBGL",
+        "COLOR_ATTACHMENT7_WEBGL",
+        "COLOR_ATTACHMENT8_WEBGL",
+        "COLOR_ATTACHMENT9_WEBGL",
+        "DRAW_BUFFER0_WEBGL",
+        "DRAW_BUFFER10_WEBGL",
+        "DRAW_BUFFER11_WEBGL",
+        "DRAW_BUFFER12_WEBGL",
+        "DRAW_BUFFER13_WEBGL",
+        "DRAW_BUFFER14_WEBGL",
+        "DRAW_BUFFER15_WEBGL",
+        "DRAW_BUFFER1_WEBGL",
+        "DRAW_BUFFER2_WEBGL",
+        "DRAW_BUFFER3_WEBGL",
+        "DRAW_BUFFER4_WEBGL",
+        "DRAW_BUFFER5_WEBGL",
+        "DRAW_BUFFER6_WEBGL",
+        "DRAW_BUFFER7_WEBGL",
+        "DRAW_BUFFER8_WEBGL",
+        "DRAW_BUFFER9_WEBGL",
+        "MAX_COLOR_ATTACHMENTS_WEBGL",
+        "MAX_DRAW_BUFFERS_WEBGL",
+        "drawBuffersWEBGL"
+      ],
+      "values": {
+        "COLOR_ATTACHMENT0_WEBGL": 36064,
+        "COLOR_ATTACHMENT1_WEBGL": 36065,
+        "COLOR_ATTACHMENT2_WEBGL": 36066,
+        "COLOR_ATTACHMENT3_WEBGL": 36067,
+        "COLOR_ATTACHMENT4_WEBGL": 36068,
+        "COLOR_ATTACHMENT5_WEBGL": 36069,
+        "COLOR_ATTACHMENT6_WEBGL": 36070,
+        "COLOR_ATTACHMENT7_WEBGL": 36071,
+        "COLOR_ATTACHMENT8_WEBGL": 36072,
+        "COLOR_ATTACHMENT9_WEBGL": 36073,
+        "COLOR_ATTACHMENT10_WEBGL": 36074,
+        "COLOR_ATTACHMENT11_WEBGL": 36075,
+        "COLOR_ATTACHMENT12_WEBGL": 36076,
+        "COLOR_ATTACHMENT13_WEBGL": 36077,
+        "COLOR_ATTACHMENT14_WEBGL": 36078,
+        "COLOR_ATTACHMENT15_WEBGL": 36079,
+        "DRAW_BUFFER0_WEBGL": 34853,
+        "DRAW_BUFFER1_WEBGL": 34854,
+        "DRAW_BUFFER2_WEBGL": 34855,
+        "DRAW_BUFFER3_WEBGL": 34856,
+        "DRAW_BUFFER4_WEBGL": 34857,
+        "DRAW_BUFFER5_WEBGL": 34858,
+        "DRAW_BUFFER6_WEBGL": 34859,
+        "DRAW_BUFFER7_WEBGL": 34860,
+        "DRAW_BUFFER8_WEBGL": 34861,
+        "DRAW_BUFFER9_WEBGL": 34862,
+        "DRAW_BUFFER10_WEBGL": 34863,
+        "DRAW_BUFFER11_WEBGL": 34864,
+        "DRAW_BUFFER12_WEBGL": 34865,
+        "DRAW_BUFFER13_WEBGL": 34866,
+        "DRAW_BUFFER14_WEBGL": 34867,
+        "DRAW_BUFFER15_WEBGL": 34868,
+        "MAX_COLOR_ATTACHMENTS_WEBGL": 36063,
+        "MAX_DRAW_BUFFERS_WEBGL": 34852,
+        "drawBuffersWEBGL": "fn/1"
+      }
+    },
+    "webgl WEBGL_lose_context": {
+      "brand": "[object WebGLLoseContext]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "loseContext",
+        "restoreContext"
+      ],
+      "own": [],
+      "protoNames": [
+        "loseContext",
+        "restoreContext"
+      ],
+      "values": {
+        "loseContext": "fn/0",
+        "restoreContext": "fn/0"
+      }
+    },
+    "webgl WEBGL_multi_draw": {
+      "brand": "[object WebGLMultiDraw]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "multiDrawArraysInstancedWEBGL",
+        "multiDrawArraysWEBGL",
+        "multiDrawElementsInstancedWEBGL",
+        "multiDrawElementsWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "multiDrawArraysInstancedWEBGL",
+        "multiDrawArraysWEBGL",
+        "multiDrawElementsInstancedWEBGL",
+        "multiDrawElementsWEBGL"
+      ],
+      "values": {
+        "multiDrawArraysInstancedWEBGL": "fn/8",
+        "multiDrawArraysWEBGL": "fn/6",
+        "multiDrawElementsInstancedWEBGL": "fn/9",
+        "multiDrawElementsWEBGL": "fn/7"
+      }
+    },
+    "webgl WEBGL_polygon_mode": {
+      "brand": "[object WebGLPolygonMode]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FILL_WEBGL",
+        "LINE_WEBGL",
+        "POLYGON_MODE_WEBGL",
+        "POLYGON_OFFSET_LINE_WEBGL",
+        "polygonModeWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "FILL_WEBGL",
+        "LINE_WEBGL",
+        "POLYGON_MODE_WEBGL",
+        "POLYGON_OFFSET_LINE_WEBGL",
+        "polygonModeWEBGL"
+      ],
+      "values": {
+        "POLYGON_MODE_WEBGL": 2880,
+        "POLYGON_OFFSET_LINE_WEBGL": 10754,
+        "LINE_WEBGL": 6913,
+        "FILL_WEBGL": 6914,
+        "polygonModeWEBGL": "fn/2"
+      }
+    },
+    "webgl2.supported": [
+      "EXT_clip_control",
+      "EXT_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_conservative_depth",
+      "EXT_depth_clamp",
+      "EXT_disjoint_timer_query_webgl2",
+      "EXT_float_blend",
+      "EXT_polygon_offset_clamp",
+      "EXT_render_snorm",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_mirror_clamp_to_edge",
+      "EXT_texture_norm16",
+      "KHR_parallel_shader_compile",
+      "NV_shader_noperspective_interpolation",
+      "OES_draw_buffers_indexed",
+      "OES_sample_variables",
+      "OES_shader_multisample_interpolation",
+      "OES_texture_float_linear",
+      "WEBGL_blend_func_extended",
+      "WEBGL_clip_cull_distance",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_compressed_texture_pvrtc",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_polygon_mode",
+      "WEBGL_provoking_vertex",
+      "WEBGL_render_shared_exponent",
+      "WEBGL_stencil_texturing"
+    ],
+    "webgl2 EXT_clip_control": {
+      "brand": "[object EXTClipControl]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "CLIP_DEPTH_MODE_EXT",
+        "CLIP_ORIGIN_EXT",
+        "LOWER_LEFT_EXT",
+        "NEGATIVE_ONE_TO_ONE_EXT",
+        "UPPER_LEFT_EXT",
+        "ZERO_TO_ONE_EXT",
+        "clipControlEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "CLIP_DEPTH_MODE_EXT",
+        "CLIP_ORIGIN_EXT",
+        "LOWER_LEFT_EXT",
+        "NEGATIVE_ONE_TO_ONE_EXT",
+        "UPPER_LEFT_EXT",
+        "ZERO_TO_ONE_EXT",
+        "clipControlEXT"
+      ],
+      "values": {
+        "LOWER_LEFT_EXT": 36001,
+        "UPPER_LEFT_EXT": 36002,
+        "NEGATIVE_ONE_TO_ONE_EXT": 37726,
+        "ZERO_TO_ONE_EXT": 37727,
+        "CLIP_ORIGIN_EXT": 37724,
+        "CLIP_DEPTH_MODE_EXT": 37725,
+        "clipControlEXT": "fn/2"
+      }
+    },
+    "webgl2 EXT_color_buffer_float": {
+      "brand": "[object EXTColorBufferFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 EXT_color_buffer_half_float": {
+      "brand": "[object EXTColorBufferHalfFloat]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGB16F_EXT",
+        "RGBA16F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "RGB16F_EXT",
+        "RGBA16F_EXT",
+        "UNSIGNED_NORMALIZED_EXT"
+      ],
+      "values": {
+        "RGBA16F_EXT": 34842,
+        "RGB16F_EXT": 34843,
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT": 33297,
+        "UNSIGNED_NORMALIZED_EXT": 35863
+      }
+    },
+    "webgl2 EXT_conservative_depth": {
+      "brand": "[object EXTConservativeDepth]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 EXT_depth_clamp": {
+      "brand": "[object EXTDepthClamp]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "DEPTH_CLAMP_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "DEPTH_CLAMP_EXT"
+      ],
+      "values": {
+        "DEPTH_CLAMP_EXT": 34383
+      }
+    },
+    "webgl2 EXT_disjoint_timer_query_webgl2": {
+      "brand": "[object EXTDisjointTimerQueryWebGL2]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "GPU_DISJOINT_EXT",
+        "QUERY_COUNTER_BITS_EXT",
+        "TIMESTAMP_EXT",
+        "TIME_ELAPSED_EXT",
+        "queryCounterEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "GPU_DISJOINT_EXT",
+        "QUERY_COUNTER_BITS_EXT",
+        "TIMESTAMP_EXT",
+        "TIME_ELAPSED_EXT",
+        "queryCounterEXT"
+      ],
+      "values": {
+        "QUERY_COUNTER_BITS_EXT": 34916,
+        "TIME_ELAPSED_EXT": 35007,
+        "TIMESTAMP_EXT": 36392,
+        "GPU_DISJOINT_EXT": 36795,
+        "queryCounterEXT": "fn/2"
+      }
+    },
+    "webgl2 EXT_float_blend": {
+      "brand": "[object EXTFloatBlend]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 EXT_polygon_offset_clamp": {
+      "brand": "[object EXTPolygonOffsetClamp]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "POLYGON_OFFSET_CLAMP_EXT",
+        "polygonOffsetClampEXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "POLYGON_OFFSET_CLAMP_EXT",
+        "polygonOffsetClampEXT"
+      ],
+      "values": {
+        "POLYGON_OFFSET_CLAMP_EXT": 36379,
+        "polygonOffsetClampEXT": "fn/3"
+      }
+    },
+    "webgl2 EXT_render_snorm": {
+      "brand": "[object EXTRenderSnorm]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 EXT_texture_compression_bptc": {
+      "brand": "[object EXTTextureCompressionBPTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT",
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT",
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT": 36492,
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT": 36493,
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT": 36494,
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT": 36495
+      }
+    },
+    "webgl2 EXT_texture_compression_rgtc": {
+      "brand": "[object EXTTextureCompressionRGTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_RED_RGTC1_EXT",
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_RED_RGTC1_EXT",
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RED_RGTC1_EXT": 36283,
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT": 36284,
+        "COMPRESSED_RED_GREEN_RGTC2_EXT": 36285,
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT": 36286
+      }
+    },
+    "webgl2 EXT_texture_filter_anisotropic": {
+      "brand": "[object EXTTextureFilterAnisotropic]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT",
+        "TEXTURE_MAX_ANISOTROPY_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT",
+        "TEXTURE_MAX_ANISOTROPY_EXT"
+      ],
+      "values": {
+        "TEXTURE_MAX_ANISOTROPY_EXT": 34046,
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT": 34047
+      }
+    },
+    "webgl2 EXT_texture_mirror_clamp_to_edge": {
+      "brand": "[object EXTTextureMirrorClampToEdge]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MIRROR_CLAMP_TO_EDGE_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "MIRROR_CLAMP_TO_EDGE_EXT"
+      ],
+      "values": {
+        "MIRROR_CLAMP_TO_EDGE_EXT": 34627
+      }
+    },
+    "webgl2 EXT_texture_norm16": {
+      "brand": "[object EXTTextureNorm16]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "R16_EXT",
+        "R16_SNORM_EXT",
+        "RG16_EXT",
+        "RG16_SNORM_EXT",
+        "RGB16_EXT",
+        "RGB16_SNORM_EXT",
+        "RGBA16_EXT",
+        "RGBA16_SNORM_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "R16_EXT",
+        "R16_SNORM_EXT",
+        "RG16_EXT",
+        "RG16_SNORM_EXT",
+        "RGB16_EXT",
+        "RGB16_SNORM_EXT",
+        "RGBA16_EXT",
+        "RGBA16_SNORM_EXT"
+      ],
+      "values": {
+        "R16_EXT": 33322,
+        "RG16_EXT": 33324,
+        "RGB16_EXT": 32852,
+        "RGBA16_EXT": 32859,
+        "R16_SNORM_EXT": 36760,
+        "RG16_SNORM_EXT": 36761,
+        "RGB16_SNORM_EXT": 36762,
+        "RGBA16_SNORM_EXT": 36763
+      }
+    },
+    "webgl2 KHR_parallel_shader_compile": {
+      "brand": "[object KHRParallelShaderCompile]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPLETION_STATUS_KHR"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPLETION_STATUS_KHR"
+      ],
+      "values": {
+        "COMPLETION_STATUS_KHR": 37297
+      }
+    },
+    "webgl2 NV_shader_noperspective_interpolation": {
+      "brand": "[object NVShaderNoperspectiveInterpolation]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 OES_draw_buffers_indexed": {
+      "brand": "[object OESDrawBuffersIndexed]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "blendEquationSeparateiOES",
+        "blendEquationiOES",
+        "blendFuncSeparateiOES",
+        "blendFunciOES",
+        "colorMaskiOES",
+        "disableiOES",
+        "enableiOES"
+      ],
+      "own": [],
+      "protoNames": [
+        "blendEquationSeparateiOES",
+        "blendEquationiOES",
+        "blendFuncSeparateiOES",
+        "blendFunciOES",
+        "colorMaskiOES",
+        "disableiOES",
+        "enableiOES"
+      ],
+      "values": {
+        "blendEquationSeparateiOES": "fn/3",
+        "blendEquationiOES": "fn/2",
+        "blendFuncSeparateiOES": "fn/5",
+        "blendFunciOES": "fn/3",
+        "colorMaskiOES": "fn/5",
+        "disableiOES": "fn/2",
+        "enableiOES": "fn/2"
+      }
+    },
+    "webgl2 OES_sample_variables": {
+      "brand": "[object OESSampleVariables]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 OES_shader_multisample_interpolation": {
+      "brand": "[object OESShaderMultisampleInterpolation]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAGMENT_INTERPOLATION_OFFSET_BITS_OES",
+        "MAX_FRAGMENT_INTERPOLATION_OFFSET_OES",
+        "MIN_FRAGMENT_INTERPOLATION_OFFSET_OES"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAGMENT_INTERPOLATION_OFFSET_BITS_OES",
+        "MAX_FRAGMENT_INTERPOLATION_OFFSET_OES",
+        "MIN_FRAGMENT_INTERPOLATION_OFFSET_OES"
+      ],
+      "values": {
+        "MIN_FRAGMENT_INTERPOLATION_OFFSET_OES": 36443,
+        "MAX_FRAGMENT_INTERPOLATION_OFFSET_OES": 36444,
+        "FRAGMENT_INTERPOLATION_OFFSET_BITS_OES": 36445
+      }
+    },
+    "webgl2 OES_texture_float_linear": {
+      "brand": "[object OESTextureFloatLinear]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 WEBGL_blend_func_extended": {
+      "brand": "[object WebGLBlendFuncExtended]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL",
+        "ONE_MINUS_SRC1_ALPHA_WEBGL",
+        "ONE_MINUS_SRC1_COLOR_WEBGL",
+        "SRC1_ALPHA_WEBGL",
+        "SRC1_COLOR_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL",
+        "ONE_MINUS_SRC1_ALPHA_WEBGL",
+        "ONE_MINUS_SRC1_COLOR_WEBGL",
+        "SRC1_ALPHA_WEBGL",
+        "SRC1_COLOR_WEBGL"
+      ],
+      "values": {
+        "SRC1_COLOR_WEBGL": 35065,
+        "SRC1_ALPHA_WEBGL": 34185,
+        "ONE_MINUS_SRC1_COLOR_WEBGL": 35066,
+        "ONE_MINUS_SRC1_ALPHA_WEBGL": 35067,
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL": 35068
+      }
+    },
+    "webgl2 WEBGL_clip_cull_distance": {
+      "brand": "[object WebGLClipCullDistance]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "CLIP_DISTANCE0_WEBGL",
+        "CLIP_DISTANCE1_WEBGL",
+        "CLIP_DISTANCE2_WEBGL",
+        "CLIP_DISTANCE3_WEBGL",
+        "CLIP_DISTANCE4_WEBGL",
+        "CLIP_DISTANCE5_WEBGL",
+        "CLIP_DISTANCE6_WEBGL",
+        "CLIP_DISTANCE7_WEBGL",
+        "MAX_CLIP_DISTANCES_WEBGL",
+        "MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL",
+        "MAX_CULL_DISTANCES_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "CLIP_DISTANCE0_WEBGL",
+        "CLIP_DISTANCE1_WEBGL",
+        "CLIP_DISTANCE2_WEBGL",
+        "CLIP_DISTANCE3_WEBGL",
+        "CLIP_DISTANCE4_WEBGL",
+        "CLIP_DISTANCE5_WEBGL",
+        "CLIP_DISTANCE6_WEBGL",
+        "CLIP_DISTANCE7_WEBGL",
+        "MAX_CLIP_DISTANCES_WEBGL",
+        "MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL",
+        "MAX_CULL_DISTANCES_WEBGL"
+      ],
+      "values": {
+        "MAX_CLIP_DISTANCES_WEBGL": 3378,
+        "MAX_CULL_DISTANCES_WEBGL": 33529,
+        "MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL": 33530,
+        "CLIP_DISTANCE0_WEBGL": 12288,
+        "CLIP_DISTANCE1_WEBGL": 12289,
+        "CLIP_DISTANCE2_WEBGL": 12290,
+        "CLIP_DISTANCE3_WEBGL": 12291,
+        "CLIP_DISTANCE4_WEBGL": 12292,
+        "CLIP_DISTANCE5_WEBGL": 12293,
+        "CLIP_DISTANCE6_WEBGL": 12294,
+        "CLIP_DISTANCE7_WEBGL": 12295
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_astc": {
+      "brand": "[object WebGLCompressedTextureASTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_ASTC_10x10_KHR",
+        "COMPRESSED_RGBA_ASTC_10x5_KHR",
+        "COMPRESSED_RGBA_ASTC_10x6_KHR",
+        "COMPRESSED_RGBA_ASTC_10x8_KHR",
+        "COMPRESSED_RGBA_ASTC_12x10_KHR",
+        "COMPRESSED_RGBA_ASTC_12x12_KHR",
+        "COMPRESSED_RGBA_ASTC_4x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x5_KHR",
+        "COMPRESSED_RGBA_ASTC_8x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR",
+        "getSupportedProfiles"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_ASTC_10x10_KHR",
+        "COMPRESSED_RGBA_ASTC_10x5_KHR",
+        "COMPRESSED_RGBA_ASTC_10x6_KHR",
+        "COMPRESSED_RGBA_ASTC_10x8_KHR",
+        "COMPRESSED_RGBA_ASTC_12x10_KHR",
+        "COMPRESSED_RGBA_ASTC_12x12_KHR",
+        "COMPRESSED_RGBA_ASTC_4x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x4_KHR",
+        "COMPRESSED_RGBA_ASTC_5x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x5_KHR",
+        "COMPRESSED_RGBA_ASTC_6x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x5_KHR",
+        "COMPRESSED_RGBA_ASTC_8x6_KHR",
+        "COMPRESSED_RGBA_ASTC_8x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR",
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR",
+        "getSupportedProfiles"
+      ],
+      "values": {
+        "COMPRESSED_RGBA_ASTC_4x4_KHR": 37808,
+        "COMPRESSED_RGBA_ASTC_5x4_KHR": 37809,
+        "COMPRESSED_RGBA_ASTC_5x5_KHR": 37810,
+        "COMPRESSED_RGBA_ASTC_6x5_KHR": 37811,
+        "COMPRESSED_RGBA_ASTC_6x6_KHR": 37812,
+        "COMPRESSED_RGBA_ASTC_8x5_KHR": 37813,
+        "COMPRESSED_RGBA_ASTC_8x6_KHR": 37814,
+        "COMPRESSED_RGBA_ASTC_8x8_KHR": 37815,
+        "COMPRESSED_RGBA_ASTC_10x5_KHR": 37816,
+        "COMPRESSED_RGBA_ASTC_10x6_KHR": 37817,
+        "COMPRESSED_RGBA_ASTC_10x8_KHR": 37818,
+        "COMPRESSED_RGBA_ASTC_10x10_KHR": 37819,
+        "COMPRESSED_RGBA_ASTC_12x10_KHR": 37820,
+        "COMPRESSED_RGBA_ASTC_12x12_KHR": 37821,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR": 37840,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR": 37841,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR": 37842,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR": 37843,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR": 37844,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR": 37845,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR": 37846,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR": 37847,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR": 37848,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR": 37849,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR": 37850,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR": 37851,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR": 37852,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR": 37853,
+        "getSupportedProfiles": "fn/0"
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_etc": {
+      "brand": "[object WebGLCompressedTextureETC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_R11_EAC",
+        "COMPRESSED_RG11_EAC",
+        "COMPRESSED_RGB8_ETC2",
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2",
+        "COMPRESSED_RGBA8_ETC2_EAC",
+        "COMPRESSED_SIGNED_R11_EAC",
+        "COMPRESSED_SIGNED_RG11_EAC",
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC",
+        "COMPRESSED_SRGB8_ETC2",
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_R11_EAC",
+        "COMPRESSED_RG11_EAC",
+        "COMPRESSED_RGB8_ETC2",
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2",
+        "COMPRESSED_RGBA8_ETC2_EAC",
+        "COMPRESSED_SIGNED_R11_EAC",
+        "COMPRESSED_SIGNED_RG11_EAC",
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC",
+        "COMPRESSED_SRGB8_ETC2",
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2"
+      ],
+      "values": {
+        "COMPRESSED_R11_EAC": 37488,
+        "COMPRESSED_SIGNED_R11_EAC": 37489,
+        "COMPRESSED_RG11_EAC": 37490,
+        "COMPRESSED_SIGNED_RG11_EAC": 37491,
+        "COMPRESSED_RGB8_ETC2": 37492,
+        "COMPRESSED_SRGB8_ETC2": 37493,
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37494,
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37495,
+        "COMPRESSED_RGBA8_ETC2_EAC": 37496,
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC": 37497
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_etc1": {
+      "brand": "[object WebGLCompressedTextureETC1]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGB_ETC1_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGB_ETC1_WEBGL"
+      ],
+      "values": {
+        "COMPRESSED_RGB_ETC1_WEBGL": 36196
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_pvrtc": {
+      "brand": "[object WebGLCompressedTexturePVRTC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG",
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG"
+      ],
+      "values": {
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG": 35840,
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG": 35841,
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG": 35842,
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG": 35843
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_s3tc": {
+      "brand": "[object WebGLCompressedTextureS3TC]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT",
+        "COMPRESSED_RGB_S3TC_DXT1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT",
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT",
+        "COMPRESSED_RGB_S3TC_DXT1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_RGB_S3TC_DXT1_EXT": 33776,
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT": 33777,
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT": 33778,
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT": 33779
+      }
+    },
+    "webgl2 WEBGL_compressed_texture_s3tc_srgb": {
+      "brand": "[object WebGLCompressedTextureS3TCsRGB]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT"
+      ],
+      "own": [],
+      "protoNames": [
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT"
+      ],
+      "values": {
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT": 35916,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT": 35917,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT": 35918,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT": 35919
+      }
+    },
+    "webgl2 WEBGL_debug_renderer_info": {
+      "brand": "[object WebGLDebugRendererInfo]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "UNMASKED_RENDERER_WEBGL",
+        "UNMASKED_VENDOR_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "UNMASKED_RENDERER_WEBGL",
+        "UNMASKED_VENDOR_WEBGL"
+      ],
+      "values": {
+        "UNMASKED_VENDOR_WEBGL": 37445,
+        "UNMASKED_RENDERER_WEBGL": 37446
+      }
+    },
+    "webgl2 WEBGL_debug_shaders": {
+      "brand": "[object WebGLDebugShaders]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "getTranslatedShaderSource"
+      ],
+      "own": [],
+      "protoNames": [
+        "getTranslatedShaderSource"
+      ],
+      "values": {
+        "getTranslatedShaderSource": "fn/1"
+      }
+    },
+    "webgl2 WEBGL_lose_context": {
+      "brand": "[object WebGLLoseContext]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "loseContext",
+        "restoreContext"
+      ],
+      "own": [],
+      "protoNames": [
+        "loseContext",
+        "restoreContext"
+      ],
+      "values": {
+        "loseContext": "fn/0",
+        "restoreContext": "fn/0"
+      }
+    },
+    "webgl2 WEBGL_multi_draw": {
+      "brand": "[object WebGLMultiDraw]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "multiDrawArraysInstancedWEBGL",
+        "multiDrawArraysWEBGL",
+        "multiDrawElementsInstancedWEBGL",
+        "multiDrawElementsWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "multiDrawArraysInstancedWEBGL",
+        "multiDrawArraysWEBGL",
+        "multiDrawElementsInstancedWEBGL",
+        "multiDrawElementsWEBGL"
+      ],
+      "values": {
+        "multiDrawArraysInstancedWEBGL": "fn/8",
+        "multiDrawArraysWEBGL": "fn/6",
+        "multiDrawElementsInstancedWEBGL": "fn/9",
+        "multiDrawElementsWEBGL": "fn/7"
+      }
+    },
+    "webgl2 WEBGL_polygon_mode": {
+      "brand": "[object WebGLPolygonMode]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FILL_WEBGL",
+        "LINE_WEBGL",
+        "POLYGON_MODE_WEBGL",
+        "POLYGON_OFFSET_LINE_WEBGL",
+        "polygonModeWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "FILL_WEBGL",
+        "LINE_WEBGL",
+        "POLYGON_MODE_WEBGL",
+        "POLYGON_OFFSET_LINE_WEBGL",
+        "polygonModeWEBGL"
+      ],
+      "values": {
+        "POLYGON_MODE_WEBGL": 2880,
+        "POLYGON_OFFSET_LINE_WEBGL": 10754,
+        "LINE_WEBGL": 6913,
+        "FILL_WEBGL": 6914,
+        "polygonModeWEBGL": "fn/2"
+      }
+    },
+    "webgl2 WEBGL_provoking_vertex": {
+      "brand": "[object WebGLProvokingVertex]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FIRST_VERTEX_CONVENTION_WEBGL",
+        "LAST_VERTEX_CONVENTION_WEBGL",
+        "PROVOKING_VERTEX_WEBGL",
+        "provokingVertexWEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "FIRST_VERTEX_CONVENTION_WEBGL",
+        "LAST_VERTEX_CONVENTION_WEBGL",
+        "PROVOKING_VERTEX_WEBGL",
+        "provokingVertexWEBGL"
+      ],
+      "values": {
+        "FIRST_VERTEX_CONVENTION_WEBGL": 36429,
+        "LAST_VERTEX_CONVENTION_WEBGL": 36430,
+        "PROVOKING_VERTEX_WEBGL": 36431,
+        "provokingVertexWEBGL": "fn/1"
+      }
+    },
+    "webgl2 WEBGL_render_shared_exponent": {
+      "brand": "[object WebGLRenderSharedExponent]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [],
+      "own": [],
+      "protoNames": [],
+      "values": {}
+    },
+    "webgl2 WEBGL_stencil_texturing": {
+      "brand": "[object WebGLStencilTexturing]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "DEPTH_STENCIL_TEXTURE_MODE_WEBGL",
+        "STENCIL_INDEX_WEBGL"
+      ],
+      "own": [],
+      "protoNames": [
+        "DEPTH_STENCIL_TEXTURE_MODE_WEBGL",
+        "STENCIL_INDEX_WEBGL"
+      ],
+      "values": {
+        "DEPTH_STENCIL_TEXTURE_MODE_WEBGL": 37098,
+        "STENCIL_INDEX_WEBGL": 6401
+      }
+    }
+  }
+}

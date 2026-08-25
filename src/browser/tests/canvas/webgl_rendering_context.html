@@ -142,6 +142,80 @@
   testing.expectEqual(renderer, lower.getParameter(0x9246));
 }
 
+// Every extension this context advertises hands back its own interface object,
+// the way Chrome does. Before this the union payload was void for all but two
+// of them, which marshalled to undefined -- so getSupportedExtensions listed
+// 39 names and getExtension then refused 37 of them, a contradiction no browser
+// produces and one that flips any `if (gl.getExtension(name))` feature test.
+//
+// The brands are measured (Chrome 150, results/webgl-extension-brands.json) and
+// irregular enough that deriving them from the extension string would be wrong:
+// EXT_sRGB brands as EXTsRGB, EXT_shader_texture_lod as EXTShaderTextureLOD.
+{
+  const brands = {
+    "ANGLE_instanced_arrays": "ANGLEInstancedArrays",
+    "EXT_blend_minmax": "EXTBlendMinMax",
+    "EXT_clip_control": "EXTClipControl",
+    "EXT_color_buffer_half_float": "EXTColorBufferHalfFloat",
+    "EXT_depth_clamp": "EXTDepthClamp",
+    "EXT_disjoint_timer_query": "EXTDisjointTimerQuery",
+    "EXT_float_blend": "EXTFloatBlend",
+    "EXT_frag_depth": "EXTFragDepth",
+    "EXT_polygon_offset_clamp": "EXTPolygonOffsetClamp",
+    "EXT_shader_texture_lod": "EXTShaderTextureLOD",
+    "EXT_texture_compression_bptc": "EXTTextureCompressionBPTC",
+    "EXT_texture_compression_rgtc": "EXTTextureCompressionRGTC",
+    "EXT_texture_filter_anisotropic": "EXTTextureFilterAnisotropic",
+    "EXT_texture_mirror_clamp_to_edge": "EXTTextureMirrorClampToEdge",
+    "EXT_sRGB": "EXTsRGB",
+    "KHR_parallel_shader_compile": "KHRParallelShaderCompile",
+    "OES_element_index_uint": "OESElementIndexUint",
+    "OES_fbo_render_mipmap": "OESFboRenderMipmap",
+    "OES_standard_derivatives": "OESStandardDerivatives",
+    "OES_texture_float": "OESTextureFloat",
+    "OES_texture_float_linear": "OESTextureFloatLinear",
+    "OES_texture_half_float": "OESTextureHalfFloat",
+    "OES_texture_half_float_linear": "OESTextureHalfFloatLinear",
+    "OES_vertex_array_object": "OESVertexArrayObject",
+    "WEBGL_blend_func_extended": "WebGLBlendFuncExtended",
+    "WEBGL_color_buffer_float": "WebGLColorBufferFloat",
+    "WEBGL_compressed_texture_astc": "WebGLCompressedTextureASTC",
+    "WEBGL_compressed_texture_etc": "WebGLCompressedTextureETC",
+    "WEBGL_compressed_texture_etc1": "WebGLCompressedTextureETC1",
+    "WEBGL_compressed_texture_pvrtc": "WebGLCompressedTexturePVRTC",
+    "WEBGL_compressed_texture_s3tc": "WebGLCompressedTextureS3TC",
+    "WEBGL_compressed_texture_s3tc_srgb": "WebGLCompressedTextureS3TCsRGB",
+    "WEBGL_debug_renderer_info": "WebGLDebugRendererInfo",
+    "WEBGL_debug_shaders": "WebGLDebugShaders",
+    "WEBGL_depth_texture": "WebGLDepthTexture",
+    "WEBGL_draw_buffers": "WebGLDrawBuffers",
+    "WEBGL_lose_context": "WebGLLoseContext",
+    "WEBGL_multi_draw": "WebGLMultiDraw",
+    "WEBGL_polygon_mode": "WebGLPolygonMode",
+  };
+
+  const gl = document.createElement("canvas").getContext("webgl");
+  const advertised = gl.getSupportedExtensions();
+
+  // What the engine advertises is exactly what it grants.
+  testing.expectEqual(Object.keys(brands).length, advertised.length);
+  for (const name of advertised) {
+    testing.expectEqual(true, brands[name] !== undefined);
+    // A fresh context each time, so an earlier getExtension cannot be what
+    // makes a later one answer.
+    const own = document.createElement("canvas").getContext("webgl");
+    const ext = own.getExtension(name);
+    testing.expectEqual(true, ext !== null && ext !== undefined);
+    testing.expectEqual(`[object ${brands[name]}]`, Object.prototype.toString.call(ext));
+    // No interface object and no constructor of its own, like the two that
+    // already had types.
+    testing.expectEqual("undefined", typeof globalThis[brands[name]]);
+  }
+
+  // A name nothing advertises is still refused.
+  testing.expectEqual(null, gl.getExtension("NOPE_not_real"));
+}
+
 // WEBGL_lose_context
 {
   const element = document.createElement("canvas");
@@ -151,6 +225,66 @@
 
   loseContext.loseContext();
   loseContext.restoreContext();
+}
+
+// The extension methods that answer something. All 37 of them across the 53
+// interfaces have Chrome's arity, and all of them used to be no-ops -- which is
+// right for the 27 that are commands and wrong for the ten that return a value.
+// Measured with probes/webgl-extension-method-returns.js.
+{
+  const gl = document.createElement("canvas").getContext("webgl");
+  const onMac = navigator.platform === "MacIntel";
+
+  // OES_vertex_array_object hands out a handle of its own: WebGLObject-rooted
+  // like every other GPU handle, but branded WebGLVertexArrayObjectOES and with
+  // no interface object -- a different type from WebGL 2's core
+  // WebGLVertexArrayObject, which does have one.
+  const vaoExt = gl.getExtension("OES_vertex_array_object");
+  const vao = vaoExt.createVertexArrayOES();
+  testing.expectEqual("[object WebGLVertexArrayObjectOES]", Object.prototype.toString.call(vao));
+  testing.expectEqual("undefined", typeof globalThis.WebGLVertexArrayObjectOES);
+  testing.expectEqual(true, vao instanceof WebGLObject);
+  testing.expectEqual(0, Object.getOwnPropertyNames(Object.getPrototypeOf(vao)).length);
+  // A handle that was created and never bound is not a vertex array yet, which
+  // is what Chrome answers here.
+  testing.expectEqual(false, vaoExt.isVertexArrayOES(vao));
+  testing.expectEqual(undefined, vaoExt.bindVertexArrayOES(vao));
+  testing.expectEqual(undefined, vaoExt.deleteVertexArrayOES(vao));
+  // Every one of the four reports length 0, nullable argument and all.
+  for (const m of ["bindVertexArrayOES", "createVertexArrayOES", "deleteVertexArrayOES", "isVertexArrayOES"]) {
+    testing.expectEqual(0, vaoExt[m].length, { desc: m });
+  }
+
+  // The same shape for the timer query, which only the Metal driver advertises.
+  const timer = gl.getExtension("EXT_disjoint_timer_query");
+  testing.expectEqual(onMac, timer !== null);
+  if (timer) {
+    const query = timer.createQueryEXT();
+    testing.expectEqual("[object WebGLTimerQueryEXT]", Object.prototype.toString.call(query));
+    testing.expectEqual("undefined", typeof globalThis.WebGLTimerQueryEXT);
+    testing.expectEqual(true, query instanceof WebGLObject);
+    testing.expectEqual(false, timer.isQueryEXT(query));
+    testing.expectEqual(null, timer.getQueryEXT(timer.TIME_ELAPSED_EXT, timer.CURRENT_QUERY_EXT));
+    testing.expectEqual(null, timer.getQueryObjectEXT(query, timer.QUERY_RESULT_AVAILABLE_EXT));
+    testing.expectEqual(undefined, timer.beginQueryEXT(timer.TIME_ELAPSED_EXT, query));
+    testing.expectEqual(undefined, timer.endQueryEXT(timer.TIME_ELAPSED_EXT));
+    testing.expectEqual(undefined, timer.queryCounterEXT(query, timer.TIMESTAMP_EXT));
+    testing.expectEqual(undefined, timer.deleteQueryEXT(query));
+  }
+
+  // Which ASTC profiles the driver has, and it is not the same answer on both:
+  // Metal reports both, SwiftShader only the low-dynamic-range one.
+  const astc = gl.getExtension("WEBGL_compressed_texture_astc");
+  testing.expectEqual(onMac ? "ldr,hdr" : "ldr", astc.getSupportedProfiles().join(","));
+  testing.expectEqual(true, Array.isArray(astc.getSupportedProfiles()));
+
+  // A shader that has not been compiled has no translation, and Chrome answers
+  // the empty string rather than undefined. What it answers for a *compiled*
+  // shader is the ANGLE translation -- Metal Shading Language, ~4KB of it --
+  // which needs a shader translator this engine does not have.
+  const shaders = gl.getExtension("WEBGL_debug_shaders");
+  testing.expectEqual("", shaders.getTranslatedShaderSource(gl.createShader(gl.VERTEX_SHADER)));
+  testing.expectEqual(1, shaders.getTranslatedShaderSource.length);
 }
 </script>
 

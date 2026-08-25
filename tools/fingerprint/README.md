@@ -13231,3 +13231,118 @@ own gaps, found while measuring this one:
 - `getError()` after the gated read is **1280 (`INVALID_ENUM`) in Chrome and 0
   here**, because our `getError` is a constant `NO_ERROR`. The gated read is one
   way in; any invalid enum is another.
+
+## The engine advertised 75 extensions and handed back 4 (2026-08-25)
+
+`getSupportedExtensions()` listed 39 names on WebGL 1 and 36 on WebGL 2.
+`getExtension()` then answered `undefined` for 37 of the 39 and `[object Object]`
+for 34 of the 36. One expression — `if (gl.getExtension(name))` — took the wrong
+branch on 71 of the 75, on a context that had just claimed all of them.
+
+The two halves failed differently, which is why they read as one gap only after
+being measured. WebGL 1's union carried a `void` payload: nothing to marshal, so
+`undefined`. WebGL 2's carried a single anonymous `struct {}` standing in for 34
+names at once, so every one of them branded as `[object Object]` — and its
+prototype *was* `Object.prototype`, so a script reading the prototype got
+`__defineGetter__`, `hasOwnProperty` and ten more members no WebGL extension has.
+
+`probes/webgl-extension-brands.js` is the ground truth: every advertised name
+put back through `getExtension`, and for each one the brand, the prototype's
+member names, and each member's value — GLenums as the numbers the driver
+reports, methods as `fn/<arity>`. 53 interfaces, 213 member slots.
+
+The brands are why this had to be measured rather than derived from the extension
+string. There is no rule that survives the list:
+
+| extension | brand |
+|---|---|
+| `EXT_sRGB` | `EXTsRGB` |
+| `EXT_shader_texture_lod` | `EXTShaderTextureLOD` |
+| `OES_fbo_render_mipmap` | `OESFboRenderMipmap` |
+| `WEBGL_compressed_texture_s3tc_srgb` | `WebGLCompressedTextureS3TCsRGB` |
+| `EXT_disjoint_timer_query_webgl2` | `EXTDisjointTimerQueryWebGL2` |
+| `NV_shader_noperspective_interpolation` | `NVShaderNoperspectiveInterpolation` |
+
+So `webgl_extensions.zig` is generated — `tools/fingerprint/gen-webgl-extensions.mjs`
+transcribes the results JSON — and both contexts construct from it with the same
+four steps: check the advertised list, look the name up case-insensitively,
+open the `WEBGL_debug_renderer_info` gate if that is the one asked for, construct.
+Both arms now agree on all 77 keys of the probe with no difference in brand,
+prototype member set, member value or arity.
+
+**One name had no reading behind it, and it was not harmless.** `OVR_multiview2`
+is SwiftShader-only: the macOS/Metal driver the reference run used never
+advertises it, so the probe could not see it — while `gpu.zig`'s *linux* table
+does advertise it. Under a linux claim the engine would have listed a name it
+then refused, which is the exact contradiction this work removed. Guessing
+`OVRMultiview2` from the string was available and, on this list, would have been
+a coin flip. Forcing the same Chrome onto SwiftShader was not expensive:
+
+```
+--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader
+```
+
+It advertises the name, the brand *is* `[object OVRMultiview2]`, and the five
+members and their GLenums are recorded under `chrome_swiftshader` in the results
+JSON — its own key, because the rest of that run is a different GPU table. That
+run also advertised `EXT_disjoint_timer_query_webgl2`, which the linux table says
+SwiftShader lacks; a timer query is the host's to grant, so that is a host
+difference and not a correction to the table.
+
+**Still short of Chrome: the methods are no-ops.** Arity matches, so `fn.length`
+does; the return value does not. `getSupportedProfiles`,
+`getTranslatedShaderSource` and `isVertexArrayOES` answer something in Chrome and
+`undefined` here. That needs its own two-arm measurement — which is why this
+probe records arity and not return values.
+
+## Ten of the 37 extension methods answer something (2026-08-25)
+
+The extension interface objects match Chrome now, and every method on them had
+Chrome's arity and Chrome's name and a no-op body. For 27 of the 37 that is
+already right — `drawArraysInstancedANGLE`, `blendFunciOES`, `polygonModeWEBGL`
+and the rest are commands, and Chrome returns `undefined` from all of them. The
+other ten answered `undefined` where Chrome answers a value, which is the kind of
+gap that cannot be found by reading method names: `getSupportedProfiles` looks
+like a getter, and so does `getQueryEXT`, but `isVertexArrayOES` and
+`createQueryEXT` do not, and two of those four were already suspected while the
+other two were not.
+
+So `probes/webgl-extension-method-returns.js` calls all 37 with arguments chosen
+per method — a created query, a bound vertex array, a compiled shader — and
+records what comes back. 18 of its 47 rows differed. What was behind them:
+
+| method | Chrome |
+|---|---|
+| `OES_vertex_array_object.createVertexArrayOES` | `[object WebGLVertexArrayObjectOES]` |
+| `OES_vertex_array_object.isVertexArrayOES` | `false` |
+| `EXT_disjoint_timer_query.createQueryEXT` | `[object WebGLTimerQueryEXT]` |
+| `EXT_disjoint_timer_query.isQueryEXT` | `false` |
+| `EXT_disjoint_timer_query.getQueryEXT` | `null` |
+| `EXT_disjoint_timer_query.getQueryObjectEXT` | `null` |
+| `WEBGL_compressed_texture_astc.getSupportedProfiles` | `["ldr", "hdr"]` |
+| `WEBGL_debug_shaders.getTranslatedShaderSource` | ~4KB of Metal Shading Language |
+
+**Two of them are object types nobody had.** `WebGLVertexArrayObjectOES` is not
+`WebGLVertexArrayObject`: same job, different type, and only the core one has an
+interface object on the global. `WebGLTimerQueryEXT` is not `WebGLQuery` either.
+Both are `WebGLObject`-rooted with an empty prototype — no `constructor` on it —
+so the brand is the only thing that names them, which is why `LegacyHandle` in
+`webgl_objects.zig` exists next to `Handle`.
+
+**`getSupportedProfiles` is the driver's answer, not the browser's.** Metal
+reports `["ldr", "hdr"]`; the same Chrome forced onto SwiftShader reports
+`["ldr"]`. So it belongs in `gpu.zig` beside the other per-table readings, not as
+a constant — a claimed-linux run answering `hdr` would contradict its own
+renderer string.
+
+10 of the 47 rows still differ, and both remaining categories are named rather
+than left as a count:
+
+- **`getTranslatedShaderSource` (2 rows).** Chrome answers ANGLE's translation of
+  a *compiled* shader. We answer `""`, which is exactly what Chrome answers for
+  an uncompiled one — the right type where `undefined` was the wrong one, and the
+  content needs a shader translator this engine does not have.
+- **`WEBGL_multi_draw`'s four methods (8 rows).** Chrome throws
+  `TypeError: … The provided value cannot be converted to a sequence.` when the
+  argument is not one. Ours accepts anything. That is argument conversion, which
+  is its own gap and not a return value.
