@@ -190,10 +190,9 @@
   // Chrome's own prototype member lists, measured. A missing or extra member
   // here is exactly the kind of thing a fingerprint script enumerates.
   //
-  // AudioContext.prototype now matches Chrome's set exactly. The *order* still
-  // differs in one place -- Blink puts `constructor` in the middle and V8 can
-  // only put it last -- which is why this compares sorted names; the unsorted
-  // order is pinned in audio_media_stream_nodes below.
+  // AudioContext.prototype matches Chrome's set exactly. This compares sorted
+  // names; the unsorted order, `constructor` slot included, is pinned in
+  // audio_media_stream_nodes below.
   testing.expectEqual(
     ['baseLatency', 'close', 'constructor', 'createMediaElementSource', 'createMediaStreamDestination',
      'createMediaStreamSource', 'getOutputTimestamp', 'onerror', 'onsinkchange', 'outputLatency',
@@ -628,14 +627,14 @@
   }
 
   // Chrome's AudioContext.prototype order, with the three factories between
-  // `close` and `getOutputTimestamp`. One known deviation, the same one the
-  // whole batch runs into: Blink puts `constructor` before sinkId/onsinkchange/
-  // setSinkId and V8 can only put it last, so this asserts our order with
-  // `constructor` moved to the end.
+  // `close` and `getOutputTimestamp`, and `constructor` where Blink puts it:
+  // after playbackStats, ahead of sinkId/onsinkchange/setSinkId. V8 appends
+  // its own entry last; Snapshot.moveConstructorSlots puts that tail back
+  // behind it.
   testing.expectEqual(
     'baseLatency outputLatency onerror close createMediaElementSource ' +
     'createMediaStreamDestination createMediaStreamSource getOutputTimestamp ' +
-    'resume suspend playbackStats sinkId onsinkchange setSinkId constructor',
+    'resume suspend playbackStats constructor sinkId onsinkchange setSinkId',
     proto(AudioContext));
 
   // --- MediaStreamAudioDestinationNode ---

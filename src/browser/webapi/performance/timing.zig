@@ -585,6 +585,10 @@ pub const NavigationTiming = struct {
 
         pub const Meta = struct {
             pub const name = "PerformanceNavigationTiming";
+            // Chrome's `constructor` sits here rather than last; the members
+            // below it are the ones Blink installs per context. See
+            // Snapshot.moveConstructorSlots.
+            pub const constructor_after = "confidence";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };

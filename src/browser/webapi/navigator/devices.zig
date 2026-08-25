@@ -413,6 +413,10 @@ pub const HID = struct {
 
         pub const Meta = struct {
             pub const name = "HID";
+            // Chrome's `constructor` sits here rather than last; the members
+            // below it are the ones Blink installs per context. See
+            // Snapshot.moveConstructorSlots.
+            pub const constructor_after = "getDevices";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -446,6 +450,10 @@ pub const Serial = struct {
 
         pub const Meta = struct {
             pub const name = "Serial";
+            // Chrome's `constructor` sits here rather than last; the members
+            // below it are the ones Blink installs per context. See
+            // Snapshot.moveConstructorSlots.
+            pub const constructor_after = "getPorts";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -479,6 +487,10 @@ pub const USB = struct {
 
         pub const Meta = struct {
             pub const name = "USB";
+            // Chrome's `constructor` sits here rather than last; the members
+            // below it are the ones Blink installs per context. See
+            // Snapshot.moveConstructorSlots.
+            pub const constructor_after = "getDevices";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };

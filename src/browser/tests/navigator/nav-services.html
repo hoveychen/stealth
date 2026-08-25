@@ -394,8 +394,10 @@
       testing.expectEqual('function', typeof StorageBucket);
       testing.expectEqual('[object StorageBucket]', Object.prototype.toString.call(bucket));
       testing.expectEqual(
+        // `constructor` sits after setExpires, ahead of the runtime-enabled
+        // tail -- Chrome's own order, see Snapshot.moveConstructorSlots.
         ['name', 'indexedDB', 'caches', 'estimate', 'expires', 'getDirectory',
-         'persisted', 'setExpires', 'persist', 'constructor'],
+         'persisted', 'setExpires', 'constructor', 'persist'],
         Object.getOwnPropertyNames(StorageBucket.prototype),
       );
       testing.expectEqual('probe', bucket.name);

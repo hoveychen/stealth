@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<script id=constructor_sits_where_blink_put_it>
+  {
+    // `constructor` is not always the last own name of an interface prototype
+    // object. V8 appends it once the template's members are in, so a template-
+    // built prototype reports it last; Blink installs a second batch of
+    // members per context -- the runtime-flag and secure-context gated ones --
+    // and those land *after* V8's append. So Chrome's `constructor` sits at
+    // the boundary between the two batches, and the boundary is a number any
+    // script reads with one Object.getOwnPropertyNames.
+    //
+    // Each row is the member Chrome's `constructor` immediately follows,
+    // measured on Chrome 151 over https by
+    // tools/fingerprint/probes/expr-constructor-slot.js. The tail that follows
+    // it is quoted in the comment so a future reading has something to check
+    // against.
+    const AFTER = {
+      Screen: 'orientation',                          // onchange, isExtended
+      ReadableStreamDefaultReader: 'releaseLock',      // closed, cancel
+      ReadableStreamBYOBReader: 'releaseLock',         // closed, cancel
+      PerformanceNavigationTiming: 'confidence',       // notRestoredReasons
+      Performance: 'now',                              // timing, navigation, memory, eventCounts, interactionCount
+      MathMLElement: 'focusGroupStart',                // onpointerrawupdate
+      HTMLElement: 'focusGroupStart',                  // onpointerrawupdate
+      Document: 'writeln',                             // fragmentDirective, onpointerrawupdate, browsingTopics, ...
+      DOMMatrix: 'translateSelf',                      // setMatrixValue
+      BaseAudioContext: 'decodeAudioData',             // audioWorklet
+      AudioContext: 'playbackStats',                   // sinkId, onsinkchange, setSinkId
+      GPUSupportedLimits: 'maxImmediateSize',          // maxStorageBuffersInFragmentStage, ...
+      GPUTexture: 'destroy',                           // textureBindingViewDimension
+      MediaKeys: 'setServerCertificate',               // getStatusForPolicy
+      ServiceWorkerRegistration: 'paymentManager',     // backgroundFetch, periodicSync, sync, ...
+      HID: 'getDevices',                               // requestDevice
+      IdentityCredential: 'isAutoSelected',            // configURL
+      ServiceWorker: 'postMessage',                    // onerror
+      Serial: 'getPorts',                              // requestPort
+      StorageBucket: 'setExpires',                     // persist
+      USB: 'getDevices',                               // requestDevice
+      XRDepthInformation: 'rawValueToMeters',          // projectionMatrix, transform
+      XRFrame: 'getLightEstimate',                     // detectedPlanes
+      XRSession: 'onvisibilitymaskchange',             // initiateRoomCapture
+      XRView: 'index',                                 // projectionMatrix, transform
+      SharedWorker: 'port',                            // onerror
+    };
+    for (const name of Object.keys(AFTER)) {
+      testing.expectEqual('function', typeof globalThis[name], { desc: name + ' is a global' });
+      const names = Object.getOwnPropertyNames(globalThis[name].prototype);
+      const at = names.indexOf('constructor');
+      testing.expectEqual(AFTER[name], names[at - 1], { desc: name + ': constructor follows' });
+    }
+  }
+</script>
+
+<script id=the_tail_after_constructor_keeps_its_order>
+  {
+    // Moving `constructor` up must not reshuffle the members it moved past:
+    // they keep Blink's order among themselves, and they keep the kind and
+    // attributes they had. Two spot checks, one accessor batch and one that
+    // mixes an accessor with an operation.
+    const perf = Object.getOwnPropertyNames(Performance.prototype);
+    const at = perf.indexOf('constructor');
+    testing.expectEqual('timing,navigation,memory,eventCounts,interactionCount',
+      perf.slice(at + 1).join(','), { desc: 'Performance tail order' });
+
+    const usb = Object.getOwnPropertyNames(USB.prototype);
+    testing.expectEqual('requestDevice', usb.slice(usb.indexOf('constructor') + 1).join(','),
+      { desc: 'USB tail order' });
+
+    const d = Object.getOwnPropertyDescriptor(Performance.prototype, 'memory');
+    testing.expectEqual('function', typeof d.get, { desc: 'memory is still a getter' });
+    testing.expectEqual(undefined, d.set, { desc: 'memory has no setter' });
+    testing.expectEqual(true, d.enumerable, { desc: 'memory is enumerable' });
+    testing.expectEqual(true, d.configurable, { desc: 'memory is configurable' });
+    testing.expectEqual('get memory', d.get.name, { desc: 'memory getter name' });
+
+    const s = Object.getOwnPropertyDescriptor(DOMMatrix.prototype, 'setMatrixValue');
+    testing.expectEqual('function', typeof s.value, { desc: 'setMatrixValue is a method' });
+    testing.expectEqual(true, s.writable, { desc: 'setMatrixValue is writable' });
+    testing.expectEqual(true, s.enumerable, { desc: 'setMatrixValue is enumerable' });
+    testing.expectEqual(true, s.configurable, { desc: 'setMatrixValue is configurable' });
+    testing.expectEqual('setMatrixValue', s.value.name, { desc: 'setMatrixValue name' });
+    testing.expectEqual(1, s.value.length, { desc: 'setMatrixValue length' });
+  }
+</script>
+
+<script id=a_moved_member_still_answers>
+  {
+    // The reinstall has to keep the binding, not just the shape: a moved
+    // getter still reads through to the instance, and a moved operation still
+    // rejects a foreign receiver the way an unmoved one does.
+    testing.expectEqual('number', typeof performance.memory.usedJSHeapSize,
+      { desc: 'performance.memory still reads' });
+    testing.expectEqual('number', typeof performance.now(),
+      { desc: 'performance.now still reads' });
+    // setMatrixValue is one of the members that moves past `constructor`, so
+    // its signature check is the one worth re-reading. Both arms answer
+    // "Illegal invocation" here (probes were run against Chrome too: the
+    // promise-returning movers reject instead of throwing, so they are not
+    // the check to make).
+    testing.expectError('Illegal invocation', () => DOMMatrix.prototype.setMatrixValue.call({}));
+  }
+</script>

@@ -600,6 +600,10 @@ pub const XRSession = struct {
 
         pub const Meta = struct {
             pub const name = "XRSession";
+            // Chrome's `constructor` sits here rather than last; the members
+            // below it are the ones Blink installs per context. See
+            // Snapshot.moveConstructorSlots.
+            pub const constructor_after = "onvisibilitymaskchange";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -842,6 +846,10 @@ pub const XRFrame = struct {
 
         pub const Meta = struct {
             pub const name = "XRFrame";
+            // Chrome's `constructor` sits here rather than last; the members
+            // below it are the ones Blink installs per context. See
+            // Snapshot.moveConstructorSlots.
+            pub const constructor_after = "getLightEstimate";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };

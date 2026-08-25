@@ -560,7 +560,69 @@ fn createSnapshotContext(
         _ = v8.v8__Script__Run(script, context) orelse return error.ScriptRunFailed;
     }
 
+    // Last, because it reads back the prototypes everything above installed.
+    try moveConstructorSlots(isolate, context);
+
     return v8.v8__SnapshotCreator__AddContext(snapshot_creator, context);
+}
+
+// V8 appends `constructor` to a template's prototype object once the template's
+// own members are in, so every prototype this engine builds reports it last.
+// Blink's does not: Chrome installs a second batch of members per context --
+// the runtime-flag and secure-context gated ones -- and that batch lands after
+// V8's append, which leaves `constructor` sitting at the boundary between the
+// two. Measured on Chrome 151 over https
+// (tools/fingerprint/probes/expr-constructor-slot.js): 89 of its 923 interface
+// prototypes report `constructor` somewhere other than last, and 26 of those
+// are interfaces whose member list this engine already matches name for name --
+// so the slot is the only thing left to read, and one
+// Object.getOwnPropertyNames reads it.
+//
+// A binding cannot pick the slot: the members go on a Template and V8 decides
+// where its own entry goes. What a binding *can* do is put them back. String
+// keys enumerate in insertion order, so deleting the members that belong after
+// `constructor` and defining them again -- with the descriptor they already
+// have, so the getter, the setter, the arity and the attributes are the same
+// objects -- moves them behind it without touching anything else. This runs
+// once while the snapshot is being built, so a page pays nothing for it.
+//
+// Interfaces name their slot with `Meta.constructor_after`, the member Chrome's
+// `constructor` immediately follows. A name rather than an index: the index
+// moves whenever anything else on the interface changes, and a stale index
+// would reshuffle the prototype silently.
+fn moveConstructorSlots(isolate: *v8.Isolate, context: ?*const v8.Context) !void {
+    const code_str = comptime blk: {
+        @setEvalBranchQuota(200_000);
+        var table: []const u8 = "";
+        for (JsApis) |JsApi| {
+            if (!@hasDecl(JsApi.Meta, "constructor_after")) continue;
+            const after = JsApi.Meta.constructor_after;
+            if (!@hasDecl(JsApi.Meta, "name")) {
+                @compileError(@typeName(JsApi) ++ ": constructor_after needs an interface name");
+            }
+            if (@hasDecl(JsApi.Meta, "no_interface_object") or @hasDecl(JsApi.Meta, "namespace_global")) {
+                @compileError(JsApi.Meta.name ++ ": constructor_after needs an interface object to reach the prototype");
+            }
+            if (!@hasDecl(JsApi, after)) {
+                @compileError(JsApi.Meta.name ++ ": constructor_after names '" ++ after ++ "', which is not a member");
+            }
+            table = table ++ "'" ++ JsApi.Meta.name ++ "','" ++ after ++ "',";
+        }
+        break :blk "(function(t){for(var i=0;i<t.length;i+=2){" ++
+            "var c=globalThis[t[i]];if(typeof c!=='function')continue;" ++
+            "var p=c.prototype;if(!p)continue;" ++
+            "var n=Object.getOwnPropertyNames(p),k=n.indexOf(t[i+1]);" ++
+            // Nothing to do when the anchor is missing (a realm that gates the
+            // member out) or when `constructor` already sits ahead of it.
+            "if(k<0||n.indexOf('constructor')<k)continue;" ++
+            "for(var j=k+1;j<n.length;j++){var m=n[j];if(m==='constructor')continue;" ++
+            "var d=Object.getOwnPropertyDescriptor(p,m);if(!d||!d.configurable)continue;" ++
+            "delete p[m];Object.defineProperty(p,m,d);}}})([" ++ table ++ "])";
+    };
+
+    const code = v8.v8__String__NewFromUtf8(isolate, code_str.ptr, v8.kNormal, @intCast(code_str.len));
+    const script = v8.v8__Script__Compile(context, code, null) orelse return error.ScriptCompileFailed;
+    _ = v8.v8__Script__Run(script, context) orelse return error.ScriptRunFailed;
 }
 
 fn hasGatedMember(comptime JsApi: type) bool {
@@ -1414,4 +1476,8 @@ fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, i
 const testing = @import("../../testing.zig");
 test "Snapshot: Symbol.toStringTag" {
     try testing.htmlRunner("to_string_tag.html", .{});
+}
+
+test "Snapshot: constructor slot" {
+    try testing.htmlRunner("constructor_slot.html", .{});
 }

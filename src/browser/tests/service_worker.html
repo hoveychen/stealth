@@ -7,16 +7,17 @@
   reachable from script: navigator.serviceWorker never hands out a registration,
   so shape is the whole surface.
 
-  Two member lists deliberately differ from Chrome's: Blink puts `onerror` after
-  `constructor` on ServiceWorker and six runtime-enabled members after it on
-  ServiceWorkerRegistration, and V8 can only append `constructor` last.
+  Both lists carry `constructor` where Blink puts it: before `onerror` on
+  ServiceWorker, and before the seven runtime-enabled members on
+  ServiceWorkerRegistration. V8 appends its own entry last, and
+  Snapshot.moveConstructorSlots puts those tails back behind it.
 -->
 
 <script id=shapes>
   {
     const shapes = {
-      ServiceWorker: ['scriptURL', 'state', 'onstatechange', 'postMessage', 'onerror', 'constructor'],
-      ServiceWorkerRegistration: ['installing', 'waiting', 'active', 'navigationPreload', 'scope', 'updateViaCache', 'onupdatefound', 'unregister', 'update', 'paymentManager', 'backgroundFetch', 'periodicSync', 'sync', 'cookies', 'pushManager', 'getNotifications', 'showNotification', 'constructor'],
+      ServiceWorker: ['scriptURL', 'state', 'onstatechange', 'postMessage', 'constructor', 'onerror'],
+      ServiceWorkerRegistration: ['installing', 'waiting', 'active', 'navigationPreload', 'scope', 'updateViaCache', 'onupdatefound', 'unregister', 'update', 'paymentManager', 'constructor', 'backgroundFetch', 'periodicSync', 'sync', 'cookies', 'pushManager', 'getNotifications', 'showNotification'],
       PushManager: ['getSubscription', 'permissionState', 'subscribe', 'constructor'],
       PushSubscription: ['endpoint', 'expirationTime', 'options', 'getKey', 'toJSON', 'unsubscribe', 'constructor'],
       PushSubscriptionOptions: ['userVisibleOnly', 'applicationServerKey', 'constructor'],

@@ -205,21 +205,20 @@
 <script id=deviceChoosers type=module>
   {
     const state = await testing.async();
-    // Chrome puts `constructor` before requestDevice on these three
-    // (['onconnect','ondisconnect','getDevices','constructor','requestDevice'])
-    // — a Blink artefact of requestDevice sitting behind its own flag. V8 gives
-    // us prototype.constructor first and our members after, so the constructor
-    // lands last here. Every name matches; only its position doesn't.
+    // Chrome puts `constructor` before requestDevice on these three — a Blink
+    // artefact of requestDevice sitting behind its own flag, so it is installed
+    // per context, after V8 has already appended `constructor`.
+    // Snapshot.moveConstructorSlots reinstalls that tail to match.
     testing.expectEqual(
-      ['onconnect', 'ondisconnect', 'getDevices', 'requestDevice', 'constructor'],
+      ['onconnect', 'ondisconnect', 'getDevices', 'constructor', 'requestDevice'],
       Object.getOwnPropertyNames(HID.prototype),
     );
     testing.expectEqual(
-      ['onconnect', 'ondisconnect', 'getPorts', 'requestPort', 'constructor'],
+      ['onconnect', 'ondisconnect', 'getPorts', 'constructor', 'requestPort'],
       Object.getOwnPropertyNames(Serial.prototype),
     );
     testing.expectEqual(
-      ['onconnect', 'ondisconnect', 'getDevices', 'requestDevice', 'constructor'],
+      ['onconnect', 'ondisconnect', 'getDevices', 'constructor', 'requestDevice'],
       Object.getOwnPropertyNames(USB.prototype),
     );
     testing.expectEqual(1, HID.prototype.requestDevice.length);

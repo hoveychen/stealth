@@ -30,9 +30,9 @@
   const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
 
   // Chrome's own order, verbatim. `getStatusForPolicy` really does sit after
-  // `constructor` on MediaKeys -- it comes from a separate partial interface --
-  // and V8 can only put `constructor` last, so ours differs there by design.
-  testing.expectEqual('createSession setServerCertificate getStatusForPolicy constructor', proto(MediaKeys));
+  // `constructor` on MediaKeys -- it comes from a separate partial interface,
+  // which is exactly the batch Snapshot.moveConstructorSlots reinstalls.
+  testing.expectEqual('createSession setServerCertificate constructor getStatusForPolicy', proto(MediaKeys));
   testing.expectEqual('keySystem createMediaKeys getConfiguration constructor', proto(MediaKeySystemAccess));
   testing.expectEqual('size get has entries forEach keys values constructor', proto(MediaKeyStatusMap));
   testing.expectEqual(

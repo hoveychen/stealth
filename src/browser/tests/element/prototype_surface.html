@@ -88,7 +88,10 @@
       'oncopy', 'oncut', 'onpaste', 'dataset', 'nonce', 'autofocus', 'tabIndex', 'style',
       'attributeStyleMap', 'attachInternals', 'blur', 'click', 'focus', 'hidePopover',
       'showPopover', 'togglePopover', 'onscrollsnapchange', 'onscrollsnapchanging',
-      'focusGroup', 'focusGroupStart', 'onpointerrawupdate', 'constructor'
+      // `constructor` before onpointerrawupdate: Chrome's own slot, the
+      // boundary between the template's members and the ones Blink installs
+      // per context. See Snapshot.moveConstructorSlots.
+      'focusGroup', 'focusGroupStart', 'constructor', 'onpointerrawupdate'
     ];
     testing.expectEqual(expected, Object.getOwnPropertyNames(HTMLElement.prototype));
     testing.expectEqual('HTMLElement', HTMLElement.prototype[Symbol.toStringTag]);
