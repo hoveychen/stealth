@@ -1862,6 +1862,19 @@ fn isUtf16Encoding(charset: []const u8) bool {
     return std.mem.eql(u8, charset, "UTF-16LE") or std.mem.eql(u8, charset, "UTF-16BE");
 }
 
+// What an HTML document decodes as when nothing usable declares an encoding.
+// Chrome 151 answers windows-1252 for a bare `text/html`, for no Content-Type
+// at all, and for a label no encoding answers to.
+const default_html_charset = "windows-1252";
+
+// A BOM decides the encoding on its own, ahead of every other source.
+fn bomCharset(data: []const u8) ?[]const u8 {
+    if (std.mem.startsWith(u8, data, "\xEF\xBB\xBF")) return "UTF-8";
+    if (std.mem.startsWith(u8, data, "\xFF\xFE")) return "UTF-16LE";
+    if (std.mem.startsWith(u8, data, "\xFE\xFF")) return "UTF-16BE";
+    return null;
+}
+
 fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
     var self: *Frame = @ptrCast(@alignCast(transfer.req.ctx));
 
@@ -1935,11 +1948,33 @@ fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
         switch (mime.content_type) {
             .text_html => {
                 // Normalize and store the charset using encoding_rs canonical names
-                const charset_str = mime.charsetString();
-                const info = h5e.encoding_for_label(charset_str.ptr, charset_str.len);
-                if (info.isValid()) {
-                    const name = info.name();
-                    self.charset = if (html_prescan_found_charset and isUtf16Encoding(name)) "UTF-8" else name;
+                // A BOM outranks the Content-Type header and any <meta>.
+                // encoding_rs already decodes by the BOM whatever label it was
+                // handed, so this only keeps document.characterSet honest.
+                if (bomCharset(data)) |name| {
+                    self.charset = name;
+                } else {
+                    // A label nothing answers to is the same as no label: the
+                    // fallback applies rather than UTF-8.
+                    const declared = !mime.is_default_charset or html_prescan_found_charset;
+                    const charset_str = mime.charsetString();
+                    const info = h5e.encoding_for_label(charset_str.ptr, charset_str.len);
+                    if (declared and info.isValid()) {
+                        const name = info.name();
+                        // The spec rewrites two encodings when they come from a
+                        // <meta> rather than from the header: UTF-16 becomes
+                        // UTF-8, and x-user-defined becomes windows-1252.
+                        self.charset = if (!html_prescan_found_charset)
+                            name
+                        else if (isUtf16Encoding(name))
+                            "UTF-8"
+                        else if (std.mem.eql(u8, name, "x-user-defined"))
+                            default_html_charset
+                        else
+                            name;
+                    } else {
+                        self.charset = default_html_charset;
+                    }
                 }
                 self._parse_state = .{ .html = .{
                     .buffer = .empty,

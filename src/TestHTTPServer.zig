@@ -171,12 +171,19 @@ fn getContentType(file_path: []const u8) []const u8 {
         return "text/html; charset=GB2312";
     }
 
-    if (std.mem.endsWith(u8, file_path, ".html")) {
+    // A response with no charset at all decodes as windows-1252, so a test
+    // that wants the <meta> prescan or the fallback to decide asks for it by
+    // name. Everything else is served as what the corpus is written in.
+    if (std.mem.endsWith(u8, file_path, ".nocharset.html")) {
         return "text/html";
     }
 
+    if (std.mem.endsWith(u8, file_path, ".html")) {
+        return "text/html; charset=utf-8";
+    }
+
     if (std.mem.endsWith(u8, file_path, ".htm")) {
-        return "text/html";
+        return "text/html; charset=utf-8";
     }
 
     if (std.mem.endsWith(u8, file_path, ".xml")) {
