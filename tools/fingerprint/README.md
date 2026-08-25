@@ -12645,3 +12645,69 @@ a conic gradient's zero angle points, the two-circle cone's extent, what a
 `color(display-p3 …)` stop is kept as (it reads `ff2281`, which is not the
 `ff1b7f` the same notation paints as a flat fill), and which colour wins on a
 pixel that lands exactly on a repeated offset (the later one).
+
+## Skia dithers a gradient, and that is half its bytes (2026-08-24)
+
+The gradients paint now: 23 of the 26 readings above are byte-identical, where
+before every one of them was wrong. What took the longest was not the geometry.
+
+The exact interpolation is not what Chrome stores. `linear across` is red to
+blue over 32 pixels, so pixel *i* wants a blue of `255 · (i + 0.5) / 32` — and
+at i = 4 that is 35.859 while Chrome stores **35**, and at i = 27 it is 219.141
+while Chrome stores **220**. Neither rounding nor truncation nor a 256-entry
+ramp cache reaches both. What does is `SkRasterPipeline`'s `dither` stage: an
+8x8 ordered Bayer matrix, indexed by interleaving and bit-reversing the low
+three bits of *x* and *x^y*, scaled to one part in 255 and added to the
+premultiplied channels before they are rounded. It fires on a gradient and not
+on a flat fill, so it belongs to the paint source rather than to the store, and
+it is worth roughly half the pixels of every ramp measured.
+
+Alpha is not dithered — `alpha ramp same hue` is the exact interpolation to the
+byte — and the offset lands on the premultiplied value, not the straight one:
+`alpha ramp`'s pixel 0 stores a blue of 3 where the undithered premultiply
+gives 3.92, and reads back as 3 rather than 4.
+
+**`globalAlpha` is a byte for a flat fill and a float for a gradient.** A flat
+fill reaches Skia as a premultiplied eight-bit colour, which is why black over
+white at 0.5 reads 127 and only `128/255` explains it. A gradient is a shader
+and the paint's alpha is scaled into its output in floating point: the same
+ramp under `globalAlpha = 0.5` stores a premultiplied 125 where the byte gives
+126. One measurement each way, and they disagree.
+
+Three of the questions the chapter above left open are settled, all first try:
+
+- **A conic gradient's zero points along +x and the sweep follows `atan2` with
+  y downwards**, the angle subtracted rather than added.
+- **The two-circle cone is Skia's two-point conical**: the larger root of the
+  quadratic whose circle passes through the point, rejected when the radius
+  there has gone negative — which is what makes the region outside the cone
+  transparent rather than an extended end stop.
+- **A `color(display-p3 …)` stop interpolates in Oklab.** That is the whole of
+  why it reads `ff2281` where the same notation paints `ff1b7f` as a flat fill:
+  the stop is not being kept in a wider gamut, the *ramp* is being taken
+  somewhere else. Converting both ends to Oklab, interpolating there and
+  converting back reproduces all 32 pixels of `wide stop` exactly, where no
+  per-channel sRGB ramp reproduces even one — a solver over every start colour
+  at quarter-byte resolution finds nothing that fits. This is CSS Color 4's
+  default interpolation space, which applies to any pair that is not both
+  legacy sRGB. It is not implemented yet; `cfsc-gradient-oklab-stops` is it.
+
+### What is still off
+
+Two rows and 16 pixels, both understood, neither a gradient problem:
+
+- **`alpha ramp`, 3 pixels.** All three are an un-premultiply that lands on an
+  exact half: 18 stored over an alpha of 68 is 67.5, and Chrome answers 67
+  where this rounds half away from zero to 68. Two of the three come back under
+  the half in f32 (`18 · (1/255) · (1/(68 · (1/255)))` is 67.49999237), and the
+  third is exactly 42.5 in f32 too and needs round-half-to-**even** — which is
+  what `_mm_cvtps_epi32` and `vcvtnq_s32_f32` both do, and what Skia's
+  `to_unorm` therefore does. So the readback is f32 and ties go to even. This
+  is `readPixels`, not the gradient: it would move every canvas reading, so it
+  wants its own sweep before it is changed.
+- **`shadow of a ramp`, 13 pixels**, all in the four columns nearest the
+  shape's left edge and exact from x = 4 rightwards. So the blur kernel is
+  right and the mask's left boundary is not. Modelling it as *blur the rect's
+  flat coverage, then modulate by the ramp* gets to 2 rather than 13, which
+  says Chrome is not simply blurring the alpha this engine draws — but 2 is not
+  0, and one row is not enough to choose between them.
