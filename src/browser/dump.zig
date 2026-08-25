@@ -164,7 +164,7 @@ fn _deep(node: *Node, opts: Opts, comptime force_slot: bool, writer: *std.Io.Wri
 
             if (opts.with_frames and el.is(IFrame) != null) {
                 const iframe = el.as(IFrame);
-                if (iframe.getContentDocument()) |doc| {
+                if (iframe.contentDocumentUnchecked()) |doc| {
                     // A frame's document should always ahave a frame, but
                     // I'm not willing to crash a release build on that assertion.
                     if (comptime lp.IS_DEBUG) {

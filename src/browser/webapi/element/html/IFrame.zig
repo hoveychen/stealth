@@ -52,7 +52,24 @@ pub fn getContentWindow(self: *const IFrame, frame: *Frame) ?Window.Access {
     return Window.Access.init(frame.window, frame_window);
 }
 
-pub fn getContentDocument(self: *const IFrame) ?*Document {
+// Null when the child is cross-origin. contentWindow next to this one goes
+// through Window.Access, which hands a cross-origin caller the safelisted proxy;
+// this took no `frame` at all and returned the live Document, so every guard the
+// proxy puts up was reachable around it -- `f.contentDocument.cookie`,
+// `.defaultView`, and from there the whole other realm. Measured on Chrome 151:
+// null (scratch/expr-cross-origin-proxy-shape.js).
+pub fn getContentDocument(self: *const IFrame, frame: *Frame) ?*Document {
+    const window = self._window orelse return null;
+    return switch (Window.Access.init(frame.window, window)) {
+        .window => |w| w._document,
+        .cross_origin => null,
+    };
+}
+
+/// The child's document without the origin check, for the engine's own readers
+/// rather than a script's. `--dump` writes the whole page including its frames,
+/// and it is not a caller the same-origin policy is about.
+pub fn contentDocumentUnchecked(self: *const IFrame) ?*Document {
     const window = self._window orelse return null;
     return window._document;
 }

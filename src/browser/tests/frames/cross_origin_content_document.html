@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+`iframe.contentDocument` on a cross-origin frame is null. This engine handed
+back the live Document: IFrame.getContentDocument returned `window._document`
+with no origin check at all, while contentWindow next to it went through
+Window.Access.init. So every same-origin-policy guard the WindowProxy puts up
+was reachable around it -- `f.contentDocument.cookie`, `.documentElement`,
+`.defaultView` and from there the whole other realm.
+
+Measured on headless Chrome 151 against a real cross-origin child
+(scratch/expr-cross-origin-proxy-shape.js): `contentDocument` is null, `=== null`
+is true, and `getSVGDocument()` answers null too. The same-origin block below is
+the control -- nothing about a same-origin frame moves.
+
+localhost is cross-origin to the 127.0.0.1 test page, so the child is a real
+cross-origin frame without needing the network.
+-->
+
+<iframe id=early src="support/post_to_parent.html"></iframe>
+<script id=child_frame_inherits_creator_origin_before_navigation>
+{
+  // Read on the same tick the element was inserted, before the frame has
+  // navigated. A child browsing context starts on an about:blank document that
+  // inherits its creator's origin, so this is a same-origin read -- Chrome
+  // answers the document and the parent's origin
+  // (scratch/frame-probe/early.html). The frame was created with origin null
+  // here, which made the origin check above call it cross-origin: contentDocument
+  // came back null and contentWindow.document threw a SecurityError, on a frame
+  // whose src is a same-origin path.
+  const f = document.getElementById('early');
+
+  testing.expectTrue(f.contentDocument !== null);
+  testing.expectEqual('[object HTMLDocument]',
+    Object.prototype.toString.call(f.contentDocument));
+  testing.expectEqual('[object HTMLDocument]',
+    Object.prototype.toString.call(f.contentWindow.document));
+  testing.expectEqual(window.origin, f.contentWindow.origin);
+}
+</script>
+
+<script id=cross_origin_content_document_is_null type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+
+  const iframe = document.createElement('iframe');
+  iframe.src = ALT_BASE + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual(null, iframe.contentDocument);
+    testing.expectTrue(iframe.contentDocument === null);
+
+    // contentWindow still answers -- it is the WindowProxy, and the safelist on
+    // it is what a cross-origin script is allowed to reach.
+    testing.expectEqual('object', typeof iframe.contentWindow);
+    testing.expectEqual('function', typeof iframe.contentWindow.postMessage);
+
+    // And the reads the document used to open up stay shut.
+    testing.expectError('SecurityError', () => iframe.contentWindow.document);
+  });
+}
+</script>
+
+<script id=same_origin_content_document_still_answers type=module>
+{
+  const state = await testing.async();
+
+  const iframe = document.createElement('iframe');
+  iframe.src = testing.BASE_URL + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectTrue(iframe.contentDocument !== null);
+    testing.expectEqual('[object HTMLDocument]',
+      Object.prototype.toString.call(iframe.contentDocument));
+    testing.expectEqual(iframe.contentWindow.document, iframe.contentDocument);
+  });
+}
+</script>
