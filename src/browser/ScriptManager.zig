@@ -422,7 +422,21 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
                     errdefer transfer.deinit();
                     try frame.headersForRequest(transfer);
                 }
-                const response = try self.base.client.syncRequest(transfer);
+                // A blocking load that never gets a status -- connection
+                // refused, DNS failure, a timeout -- is an error event on the
+                // element just as much as a 404 is. Chrome fires one for both
+                // (measured on 151 with a <script src> pointing at a closed
+                // port); this used to hand the transport error back up to
+                // Frame.scriptAddedCallback, which logged it and dispatched
+                // nothing. The async path already fires it, through
+                // Script.errorCallback.
+                const response = self.base.client.syncRequest(transfer) catch |err| {
+                    log.info(.http, "script fetch failed", .{ .url = remote_url, .err = err, .ctx = ctx });
+                    handover = true;
+                    script.executeCallback(comptime .wrap("error"));
+                    script.deinit();
+                    return;
+                };
 
                 // Take the body's arena rather than releasing it: `source`
                 // has to outlive this call, up to script.deinit().
