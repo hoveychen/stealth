@@ -1,0 +1,395 @@
+{
+ "probe": "tools/fingerprint/probes/media-feature-forms.js",
+ "url": "https://example.com/",
+ "note": "matches | media, per arm. Chrome headed-UA headless: viewport is 1920 wide but not 1080 tall and screen is 800x600, so height- and aspect-ratio-absolute rows read the harness, not a gap.",
+ "queries": {
+  "(min-resolution: 0.625dppx)": {
+   "chrome": "true | (min-resolution: 0.625dppx)",
+   "lightpanda": "true | (min-resolution: 0.625dppx)"
+  },
+  "(min-resolution:0.625dppx)": {
+   "chrome": "true | (min-resolution: 0.625dppx)",
+   "lightpanda": "true | (min-resolution:0.625dppx)"
+  },
+  "(min-resolution: 1dppx)": {
+   "chrome": "true | (min-resolution: 1dppx)",
+   "lightpanda": "true | (min-resolution: 1dppx)"
+  },
+  "(min-resolution:1dppx)": {
+   "chrome": "true | (min-resolution: 1dppx)",
+   "lightpanda": "true | (min-resolution:1dppx)"
+  },
+  "(min-resolution: 2dppx)": {
+   "chrome": "false | (min-resolution: 2dppx)",
+   "lightpanda": "false | (min-resolution: 2dppx)"
+  },
+  "(min-resolution:2dppx)": {
+   "chrome": "false | (min-resolution: 2dppx)",
+   "lightpanda": "false | (min-resolution:2dppx)"
+  },
+  "(min-resolution: 50dpi)": {
+   "chrome": "true | (min-resolution: 50dpi)",
+   "lightpanda": "true | (min-resolution: 50dpi)"
+  },
+  "(min-resolution:50dpi)": {
+   "chrome": "true | (min-resolution: 50dpi)",
+   "lightpanda": "true | (min-resolution:50dpi)"
+  },
+  "(max-resolution: 256dpi)": {
+   "chrome": "true | (max-resolution: 256dpi)",
+   "lightpanda": "true | (max-resolution: 256dpi)"
+  },
+  "(max-resolution:256dpi)": {
+   "chrome": "true | (max-resolution: 256dpi)",
+   "lightpanda": "true | (max-resolution:256dpi)"
+  },
+  "(min-resolution: .625dppx)": {
+   "chrome": "true | (min-resolution: 0.625dppx)",
+   "lightpanda": "true | (min-resolution: .625dppx)"
+  },
+  "(min-resolution: 0.5x)": {
+   "chrome": "true | (min-resolution: 0.5x)",
+   "lightpanda": "true | (min-resolution: 0.5x)"
+  },
+  "(min-resolution: 0dppx)": {
+   "chrome": "true | (min-resolution: 0dppx)",
+   "lightpanda": "true | (min-resolution: 0dppx)"
+  },
+  "(min-resolution: 30dpcm)": {
+   "chrome": "true | (min-resolution: 30dpcm)",
+   "lightpanda": "true | (min-resolution: 30dpcm)"
+  },
+  "(max-resolution: 30dpcm)": {
+   "chrome": "false | (max-resolution: 30dpcm)",
+   "lightpanda": "false | (max-resolution: 30dpcm)"
+  },
+  "(max-resolution: 50dpcm)": {
+   "chrome": "true | (max-resolution: 50dpcm)",
+   "lightpanda": "true | (max-resolution: 50dpcm)"
+  },
+  "(min-resolution: 1)": {
+   "chrome": "false | (min-resolution: 1)",
+   "lightpanda": "false | (min-resolution: 1)"
+  },
+  "(min-resolution: 5.dppx)": {
+   "chrome": "false | (min-resolution: 5.dppx)",
+   "lightpanda": "false | (min-resolution: 5.dppx)"
+  },
+  "(min-resolution: -1dppx)": {
+   "chrome": "false | (min-resolution: -1dppx)",
+   "lightpanda": "false | (min-resolution: -1dppx)"
+  },
+  "(min-resolution: dppx)": {
+   "chrome": "false | (min-resolution: dppx)",
+   "lightpanda": "false | (min-resolution: dppx)"
+  },
+  "(min-resolution: 1.5dppx)": {
+   "chrome": "false | (min-resolution: 1.5dppx)",
+   "lightpanda": "false | (min-resolution: 1.5dppx)"
+  },
+  "(max-resolution: 50dpi)": {
+   "chrome": "false | (max-resolution: 50dpi)",
+   "lightpanda": "false | (max-resolution: 50dpi)"
+  },
+  "(resolution: 1dppx)": {
+   "chrome": "true | (resolution: 1dppx)",
+   "lightpanda": "true | (resolution: 1dppx)"
+  },
+  "(resolution = 1dppx)": {
+   "chrome": "true | (resolution = 1dppx)",
+   "lightpanda": "true | (resolution = 1dppx)"
+  },
+  "(resolution > 50dpi)": {
+   "chrome": "true | (resolution > 50dpi)",
+   "lightpanda": "true | (resolution > 50dpi)"
+  },
+  "(resolution < 50dpi)": {
+   "chrome": "false | (resolution < 50dpi)",
+   "lightpanda": "false | (resolution < 50dpi)"
+  },
+  "(min-width: 100px)": {
+   "chrome": "true | (min-width: 100px)",
+   "lightpanda": "true | (min-width: 100px)"
+  },
+  "(min-width:100px)": {
+   "chrome": "true | (min-width: 100px)",
+   "lightpanda": "true | (min-width:100px)"
+  },
+  "(max-width: 5000px)": {
+   "chrome": "true | (max-width: 5000px)",
+   "lightpanda": "true | (max-width: 5000px)"
+  },
+  "(max-width:5000px)": {
+   "chrome": "true | (max-width: 5000px)",
+   "lightpanda": "true | (max-width:5000px)"
+  },
+  "(color-index: 0)": {
+   "chrome": "true | (color-index: 0)",
+   "lightpanda": "true | (color-index: 0)"
+  },
+  "(max-color-index: 4)": {
+   "chrome": "true | (max-color-index: 4)",
+   "lightpanda": "true | (max-color-index: 4)"
+  },
+  "(min-color-index: 0)": {
+   "chrome": "true | (min-color-index: 0)",
+   "lightpanda": "true | (min-color-index: 0)"
+  },
+  "(color-index = 0)": {
+   "chrome": "true | (color-index = 0)",
+   "lightpanda": "true | (color-index = 0)"
+  },
+  "(color: 8)": {
+   "chrome": "true | (color: 8)",
+   "lightpanda": "true | (color: 8)"
+  },
+  "(min-color: 8)": {
+   "chrome": "true | (min-color: 8)",
+   "lightpanda": "true | (min-color: 8)"
+  },
+  "(max-color: 8)": {
+   "chrome": "true | (max-color: 8)",
+   "lightpanda": "true | (max-color: 8)"
+  },
+  "(color = 8)": {
+   "chrome": "true | (color = 8)",
+   "lightpanda": "true | (color = 8)"
+  },
+  "(color > 4)": {
+   "chrome": "true | (color > 4)",
+   "lightpanda": "true | (color > 4)"
+  },
+  "(monochrome: 0)": {
+   "chrome": "true | (monochrome: 0)",
+   "lightpanda": "true | (monochrome: 0)"
+  },
+  "(max-monochrome: 4)": {
+   "chrome": "true | (max-monochrome: 4)",
+   "lightpanda": "true | (max-monochrome: 4)"
+  },
+  "(min-monochrome: 0)": {
+   "chrome": "true | (min-monochrome: 0)",
+   "lightpanda": "true | (min-monochrome: 0)"
+  },
+  "(min-monochrome: 4)": {
+   "chrome": "false | (min-monochrome: 4)",
+   "lightpanda": "false | (min-monochrome: 4)"
+  },
+  "(grid: 0)": {
+   "chrome": "true | (grid: 0)",
+   "lightpanda": "true | (grid: 0)"
+  },
+  "(max-grid: 0)": {
+   "chrome": "false | (max-grid: 0)",
+   "lightpanda": "false | (max-grid: 0)"
+  },
+  "(min-grid: 0)": {
+   "chrome": "false | (min-grid: 0)",
+   "lightpanda": "false | (min-grid: 0)"
+  },
+  "(min-aspect-ratio: 1/2)": {
+   "chrome": "true | (min-aspect-ratio: 1 / 2)",
+   "lightpanda": "true | (min-aspect-ratio: 1/2)"
+  },
+  "(max-aspect-ratio: 2.125)": {
+   "chrome": "true | (max-aspect-ratio: 2.125 / 1)",
+   "lightpanda": "true | (max-aspect-ratio: 2.125)"
+  },
+  "(aspect-ratio = 1.7)": {
+   "chrome": "false | (aspect-ratio = 1.7 / 1)",
+   "lightpanda": "false | (aspect-ratio = 1.7)"
+  },
+  "(min-device-aspect-ratio: 1/2)": {
+   "chrome": "true | (min-device-aspect-ratio: 1 / 2)",
+   "lightpanda": "true | (min-device-aspect-ratio: 1/2)"
+  },
+  "(max-device-aspect-ratio: 2.125)": {
+   "chrome": "true | (max-device-aspect-ratio: 2.125 / 1)",
+   "lightpanda": "true | (max-device-aspect-ratio: 2.125)"
+  },
+  "(min-aspect-ratio: 1.5/2.5)": {
+   "chrome": "true | (min-aspect-ratio: 1.5 / 2.5)",
+   "lightpanda": "true | (min-aspect-ratio: 1.5/2.5)"
+  },
+  "(max-aspect-ratio: 1.7)": {
+   "chrome": "false | (max-aspect-ratio: 1.7 / 1)",
+   "lightpanda": "false | (max-aspect-ratio: 1.7)"
+  },
+  "(aspect-ratio: 1.5)": {
+   "chrome": "false | (aspect-ratio: 1.5 / 1)",
+   "lightpanda": "false | (aspect-ratio: 1.5)"
+  },
+  "(device-posture: continuous)": {
+   "chrome": "true | (device-posture: continuous)",
+   "lightpanda": "true | (device-posture: continuous)"
+  },
+  "(device-posture: folded)": {
+   "chrome": "false | (device-posture: folded)",
+   "lightpanda": "false | (device-posture: folded)"
+  },
+  "(device-posture)": {
+   "chrome": "true | (device-posture)",
+   "lightpanda": "true | (device-posture)"
+  },
+  "(device-posture: none)": {
+   "chrome": "false | (device-posture: none)",
+   "lightpanda": "false | (device-posture: none)"
+  },
+  "(width > 100px)": {
+   "chrome": "true | (width > 100px)",
+   "lightpanda": "true | (width > 100px)"
+  },
+  "(width < 5000px)": {
+   "chrome": "true | (width < 5000px)",
+   "lightpanda": "true | (width < 5000px)"
+  },
+  "(height > 100px)": {
+   "chrome": "true | (height > 100px)",
+   "lightpanda": "true | (height > 100px)"
+  },
+  "(width >= 1920px)": {
+   "chrome": "true | (width >= 1920px)",
+   "lightpanda": "true | (width >= 1920px)"
+  },
+  "(width <= 1920px)": {
+   "chrome": "true | (width <= 1920px)",
+   "lightpanda": "true | (width <= 1920px)"
+  },
+  "(width > 1920px)": {
+   "chrome": "false | (width > 1920px)",
+   "lightpanda": "false | (width > 1920px)"
+  },
+  "(width = 1920px)": {
+   "chrome": "true | (width = 1920px)",
+   "lightpanda": "true | (width = 1920px)"
+  },
+  "(width>100px)": {
+   "chrome": "true | (width > 100px)",
+   "lightpanda": "true | (width>100px)"
+  },
+  "(width>=1920px)": {
+   "chrome": "true | (width >= 1920px)",
+   "lightpanda": "true | (width>=1920px)"
+  },
+  "(100px < width)": {
+   "chrome": "true | (100px < width)",
+   "lightpanda": "true | (100px < width)"
+  },
+  "(100px > width)": {
+   "chrome": "false | (100px > width)",
+   "lightpanda": "false | (100px > width)"
+  },
+  "(1920px = width)": {
+   "chrome": "true | (1920px = width)",
+   "lightpanda": "true | (1920px = width)"
+  },
+  "(600px <= width <= 1200px)": {
+   "chrome": "false | (600px <= width <= 1200px)",
+   "lightpanda": "false | (600px <= width <= 1200px)"
+  },
+  "(600px <= width <= 5000px)": {
+   "chrome": "true | (600px <= width <= 5000px)",
+   "lightpanda": "true | (600px <= width <= 5000px)"
+  },
+  "(600px < width < 5000px)": {
+   "chrome": "true | (600px < width < 5000px)",
+   "lightpanda": "true | (600px < width < 5000px)"
+  },
+  "(5000px >= width >= 600px)": {
+   "chrome": "true | (5000px >= width >= 600px)",
+   "lightpanda": "true | (5000px >= width >= 600px)"
+  },
+  "(600px < width > 1200px)": {
+   "chrome": "false | (600px < width > 1200px)",
+   "lightpanda": "false | (600px < width > 1200px)"
+  },
+  "(600px <= width = 1200px)": {
+   "chrome": "false | (600px <= width = 1200px)",
+   "lightpanda": "false | (600px <= width = 1200px)"
+  },
+  "(height >= 1080px)": {
+   "chrome": "false | (height >= 1080px)",
+   "lightpanda": "true | (height >= 1080px)"
+  },
+  "(device-width > 100px)": {
+   "chrome": "true | (device-width > 100px)",
+   "lightpanda": "true | (device-width > 100px)"
+  },
+  "(resolution >= 1dppx)": {
+   "chrome": "true | (resolution >= 1dppx)",
+   "lightpanda": "true | (resolution >= 1dppx)"
+  },
+  "(resolution <= 1dppx)": {
+   "chrome": "true | (resolution <= 1dppx)",
+   "lightpanda": "true | (resolution <= 1dppx)"
+  },
+  "(resolution > 2dppx)": {
+   "chrome": "false | (resolution > 2dppx)",
+   "lightpanda": "false | (resolution > 2dppx)"
+  },
+  "(aspect-ratio = 16/9)": {
+   "chrome": "false | (aspect-ratio = 16 / 9)",
+   "lightpanda": "true | (aspect-ratio = 16/9)"
+  },
+  "(aspect-ratio = 1920/1080)": {
+   "chrome": "false | (aspect-ratio = 1920 / 1080)",
+   "lightpanda": "true | (aspect-ratio = 1920/1080)"
+  },
+  "(aspect-ratio > 1.5)": {
+   "chrome": "true | (aspect-ratio > 1.5 / 1)",
+   "lightpanda": "true | (aspect-ratio > 1.5)"
+  },
+  "(device-aspect-ratio = 16/9)": {
+   "chrome": "false | (device-aspect-ratio = 16 / 9)",
+   "lightpanda": "true | (device-aspect-ratio = 16/9)"
+  },
+  "(monochrome = 0)": {
+   "chrome": "true | (monochrome = 0)",
+   "lightpanda": "true | (monochrome = 0)"
+  },
+  "(color-index >= 0)": {
+   "chrome": "true | (color-index >= 0)",
+   "lightpanda": "true | (color-index >= 0)"
+  },
+  "(color <= 8)": {
+   "chrome": "true | (color <= 8)",
+   "lightpanda": "true | (color <= 8)"
+  },
+  "(orientation = landscape)": {
+   "chrome": "false | (orientation = landscape)",
+   "lightpanda": "false | (orientation = landscape)"
+  },
+  "(hover = hover)": {
+   "chrome": "false | (hover = hover)",
+   "lightpanda": "false | (hover = hover)"
+  },
+  "(grid = 0)": {
+   "chrome": "false | (grid = 0)",
+   "lightpanda": "false | (grid = 0)"
+  },
+  "(device-posture = continuous)": {
+   "chrome": "false | (device-posture = continuous)",
+   "lightpanda": "false | (device-posture = continuous)"
+  },
+  "(min-width >= 600px)": {
+   "chrome": "false | (min-width >= 600px)",
+   "lightpanda": "false | (min-width >= 600px)"
+  },
+  "(max-width <= 5000px)": {
+   "chrome": "false | (max-width <= 5000px)",
+   "lightpanda": "false | (max-width <= 5000px)"
+  },
+  "(update: fast)": {
+   "chrome": "true | (update: fast)",
+   "lightpanda": "true | (update: fast)"
+  },
+  "(scripting: enabled)": {
+   "chrome": "true | (scripting: enabled)",
+   "lightpanda": "true | (scripting: enabled)"
+  },
+  "(overflow-block: scroll)": {
+   "chrome": "true | (overflow-block: scroll)",
+   "lightpanda": "true | (overflow-block: scroll)"
+  }
+ }
+}
