@@ -161,14 +161,23 @@ pub fn takeRecords(self: *PerformanceObserver) ![]*Performance.Entry {
     return records;
 }
 
-/// Chrome's thirteen, in Chrome's order (measured, win24-chrome.json). Note
-/// what is *not* here: `taskattribution` is a real entryType with a real
-/// interface, but Chrome leaves it off this list.
+/// Chrome's fifteen, in Chrome's order, which is alphabetical (measured on
+/// Chrome 151, probes/performance-entry-types.js). Note what is *not* here:
+/// `taskattribution` is a real entryType with a real interface, but Chrome
+/// leaves it off this list.
+///
+/// `interaction-contentful-paint` and `soft-navigation` are advertised without
+/// anything ever queueing one -- Chrome's own buffers for both are empty on a
+/// plain page too (measured), and their interfaces are already on the window
+/// here (see timing.zig's "Prototype surface only" block). So the list is the
+/// only place the two names show, and leaving them out made this list two
+/// entries short of every real Chrome.
 pub fn getSupportedEntryTypes() js.FrozenArray([]const u8) {
     return .{ .items = &.{
         "element",
         "event",
         "first-input",
+        "interaction-contentful-paint",
         "largest-contentful-paint",
         "layout-shift",
         "long-animation-frame",
@@ -178,6 +187,7 @@ pub fn getSupportedEntryTypes() js.FrozenArray([]const u8) {
         "navigation",
         "paint",
         "resource",
+        "soft-navigation",
         "visibility-state",
     } };
 }
