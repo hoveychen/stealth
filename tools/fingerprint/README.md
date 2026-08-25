@@ -13034,3 +13034,37 @@ That is a hypothesis, not a measurement, and it is the one to test next: time
 Akamai reads is not measuring anything we are failing to do — it is measuring
 how much cheaper our bindings are than a real browser's, which is a very
 different kind of problem from every other gap on this station.
+
+### Refuted: our bindings are *slower*, not faster (2026-08-24, same round)
+
+The hypothesis above is wrong, and the measurement that would have decided it
+takes two minutes, so it should have been made before the hypothesis was
+written. 2M iterations, `run-expr.mjs`, both arms:
+
+| | Chrome | lightpanda |
+|---|---|---|
+| `self['Array']` | 3ms | 15ms |
+| `self.document` | 2ms | **170ms** |
+| `document.title` | 8ms | **341ms** |
+| the same shape on a plain object | 2ms | 2ms |
+
+Chrome's DOM accessors are inline-cached to near-free; ours cost 40-85x more.
+So if the guard's hash steps read through the DOM at all, we would be the slow
+arm, not the fast one.
+
+And `probes/probe-slice-results.js` -- which records the *result* length of every
+string-producing call rather than the receiver's -- says the two arms hand their
+hash the same bytes: `substr` 9 calls, longest 453466, **total 555557 on both**;
+`slice` longest 81072 on both; `fn.toString` longest 496251, total 5556509
+against 5556637.
+
+Same input, same step count, same shape, and a synthetic version of that state
+machine costs 27ms in Chrome and 28ms here. Chrome pays 680ms for the real one.
+The remaining explanation is that V8 tiers the two differently on this code --
+an interpreter-versus-optimised gap is the right order of magnitude -- and the
+way to check is Chrome with `--js-flags="--trace-opt --trace-deopt"` on the
+replay, watching the functions around offset 137986.
+
+If that is what it turns out to be, the finding is uncomfortable: the number
+Akamai reads is not work we are skipping, it is work we are doing too well, and
+closing it means deliberately being slower rather than being more correct.
