@@ -59,6 +59,26 @@ fn _resolve(self: PromiseResolver, value: anytype) !void {
     if (!out.has_value or !out.value) {
         return error.FailedToResolvePromise;
     }
+    checkpoint(local);
+}
+
+// HTML's microtask checkpoint only happens once the JS stack is empty, and a
+// non-zero call_depth says it is not: some script called into us and is waiting
+// for this function to return. Draining there runs reactions in the middle of
+// that script, which is visible -- a promise settled by a synchronous API and
+// caught on the very next line gets reported as unhandled, because the
+// checkpoint that decides "unhandled" has already been and gone by the time the
+// catch is attached. Chrome reports none of those; measured against headless
+// Chrome 151, the Akamai sensor's nine permissions.query calls produced six
+// unhandledrejection events here and zero there.
+//
+// At call_depth 0 the settle comes from the outside -- a timer, an event, a
+// finished request -- and every one of those entry points runs a checkpoint of
+// its own once it is done, so the queue is not left sitting.
+fn checkpoint(local: *const js.Local) void {
+    if (local.ctx.call_depth > 0) {
+        return;
+    }
     local.runMicrotasks();
 }
 
@@ -109,12 +129,12 @@ fn _reject(self: PromiseResolver, value: anytype) !void {
     const local = self.local;
     const js_val = try local.zigValueToJs(value, .{});
     try self.rejectValue(js_val);
-    local.runMicrotasks();
+    checkpoint(local);
 }
 
-/// Rejects with an already-built JS value, without running a microtask
-/// checkpoint. For use while the calling script is still on the stack, where
-/// draining the queue would run unrelated reactions mid-script.
+/// Rejects with an already-built JS value, never running a microtask
+/// checkpoint. `reject` and `rejectError` skip the checkpoint too whenever the
+/// calling script is still on the stack; this one skips it unconditionally.
 pub fn rejectValue(self: PromiseResolver, value: js.Value) !void {
     var out: v8.MaybeBool = undefined;
     v8.v8__Promise__Resolver__Reject(self.handle, self.local.handle, value.handle, &out);
