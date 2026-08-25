@@ -856,6 +856,10 @@ pub fn maxPendingConnections(self: *const Config) u31 {
 pub fn cdpMaxMessageSize(self: *const Config) u32 {
     return switch (self.mode) {
         .serve => |opts| opts.cdp_max_message_size,
+        // `mcp --cdp-port` runs a CDP server without carrying serve's flags for
+        // it, so it takes serve's defaults. Same shape as
+        // cdpMaxPendingConnections above.
+        .mcp => 1024 * 1024,
         else => unreachable,
     };
 }
@@ -863,6 +867,7 @@ pub fn cdpMaxMessageSize(self: *const Config) u32 {
 pub fn metricsEndpointEnabled(self: *const Config) bool {
     return switch (self.mode) {
         .serve => |opts| !opts.disable_metrics,
+        .mcp => true,
         else => unreachable,
     };
 }
@@ -877,6 +882,7 @@ pub fn dumpMetricsOnExit(self: *const Config) bool {
 pub fn cdpMaxHTTPMessageSize(self: *const Config) u14 {
     return switch (self.mode) {
         .serve => |opts| opts.cdp_max_http_message_size,
+        .mcp => 4096,
         else => unreachable,
     };
 }
@@ -1347,6 +1353,23 @@ test "Config: external stylesheets load by default" {
     } });
     defer off.deinit(std.testing.allocator);
     try std.testing.expectEqual(false, off.enableExternalStylesheets());
+}
+
+test "Config: the CDP limits answer for mcp's second listener too" {
+    // `mcp --cdp-port` advertises a CDP server, and Connection.init asks the
+    // config for these three the moment a client connects. They used to answer
+    // for `serve` only, so the first connection reached `unreachable` -- the
+    // whole mcp+CDP path crashed on contact.
+    var mcp = try Config.init(std.testing.allocator, "test", .{ .mcp = .{} });
+    defer mcp.deinit(std.testing.allocator);
+    try std.testing.expectEqual(1024 * 1024, mcp.cdpMaxMessageSize());
+    try std.testing.expectEqual(4096, mcp.cdpMaxHTTPMessageSize());
+    try std.testing.expectEqual(true, mcp.metricsEndpointEnabled());
+
+    // Unchanged for the mode that owns the flags.
+    var serve = try Config.init(std.testing.allocator, "test", .{ .serve = .{ .disable_metrics = true } });
+    defer serve.deinit(std.testing.allocator);
+    try std.testing.expectEqual(false, serve.metricsEndpointEnabled());
 }
 
 test "Config: WebMCP is off unless the run asked for it" {
