@@ -28,6 +28,16 @@
                 const proto = Object.getPrototypeOf(ext);
                 const members = [];
                 for (const k in ext) members.push(k);
+                // The member values, which are what a script actually reads --
+                // a GLenum here has to be the number Chrome reports, so it is
+                // measured rather than transcribed from a spec page. Functions
+                // are recorded by arity instead of value.
+                const values = {};
+                for (const k of proto ? Object.getOwnPropertyNames(proto) : []) {
+                    if (k === 'constructor') continue;
+                    const v = ext[k];
+                    values[k] = typeof v === 'function' ? 'fn/' + v.length : v;
+                }
                 out[key] = {
                     brand: brand,
                     ctor: proto && proto.constructor ? proto.constructor.name : null,
@@ -37,6 +47,7 @@
                     members: members.sort(),
                     own: Object.getOwnPropertyNames(ext).sort(),
                     protoNames: proto ? Object.getOwnPropertyNames(proto).sort() : null,
+                    values: values,
                 };
             } catch (e) {
                 out[key] = 'threw:' + (e && e.name);

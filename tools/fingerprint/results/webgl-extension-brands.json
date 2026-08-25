@@ -1,7 +1,7 @@
 {
-  "when": "2026-08-25T02:25:52",
+  "when": "2026-08-25T02:31:29",
   "url": "https://example.com/",
-  "note": "Every extension name each context advertises, put back through getExtension. Chrome hands back a named interface object per extension; WebGL 1 here answers undefined for 37 of 39 (a void union payload) and WebGL 2 answers [object Object] for 34 of 36 (an anonymous empty struct). getSupportedExtensions lists all of them in both arms, so the engine advertises what it then refuses. protoNames is the member set to reproduce per interface.",
+  "note": "Every extension name each context advertises, put back through getExtension. Chrome hands back a named interface object per extension; WebGL 1 here answers undefined for 37 of 39 (a void union payload) and WebGL 2 answers [object Object] for 34 of 36 (an anonymous empty struct). getSupportedExtensions lists all of them in both arms, so the engine advertises what it then refuses. `values` is the member set to reproduce per interface: GLenums as the numbers Chrome reports, functions as fn/<arity>. 52 unique interfaces, 208 unique member slots; an interface advertised by both contexts carries identical members in each.",
   "chrome": {
     "webgl.supported": [
       "ANGLE_instanced_arrays",
@@ -60,7 +60,13 @@
         "drawArraysInstancedANGLE",
         "drawElementsInstancedANGLE",
         "vertexAttribDivisorANGLE"
-      ]
+      ],
+      "values": {
+        "VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE": 35070,
+        "drawArraysInstancedANGLE": "fn/4",
+        "drawElementsInstancedANGLE": "fn/5",
+        "vertexAttribDivisorANGLE": "fn/2"
+      }
     },
     "webgl EXT_blend_minmax": {
       "brand": "[object EXTBlendMinMax]",
@@ -74,7 +80,11 @@
       "protoNames": [
         "MAX_EXT",
         "MIN_EXT"
-      ]
+      ],
+      "values": {
+        "MIN_EXT": 32775,
+        "MAX_EXT": 32776
+      }
     },
     "webgl EXT_clip_control": {
       "brand": "[object EXTClipControl]",
@@ -98,7 +108,16 @@
         "UPPER_LEFT_EXT",
         "ZERO_TO_ONE_EXT",
         "clipControlEXT"
-      ]
+      ],
+      "values": {
+        "LOWER_LEFT_EXT": 36001,
+        "UPPER_LEFT_EXT": 36002,
+        "NEGATIVE_ONE_TO_ONE_EXT": 37726,
+        "ZERO_TO_ONE_EXT": 37727,
+        "CLIP_ORIGIN_EXT": 37724,
+        "CLIP_DEPTH_MODE_EXT": 37725,
+        "clipControlEXT": "fn/2"
+      }
     },
     "webgl EXT_color_buffer_half_float": {
       "brand": "[object EXTColorBufferHalfFloat]",
@@ -116,7 +135,13 @@
         "RGB16F_EXT",
         "RGBA16F_EXT",
         "UNSIGNED_NORMALIZED_EXT"
-      ]
+      ],
+      "values": {
+        "RGBA16F_EXT": 34842,
+        "RGB16F_EXT": 34843,
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT": 33297,
+        "UNSIGNED_NORMALIZED_EXT": 35863
+      }
     },
     "webgl EXT_depth_clamp": {
       "brand": "[object EXTDepthClamp]",
@@ -128,7 +153,10 @@
       "own": [],
       "protoNames": [
         "DEPTH_CLAMP_EXT"
-      ]
+      ],
+      "values": {
+        "DEPTH_CLAMP_EXT": 34383
+      }
     },
     "webgl EXT_disjoint_timer_query": {
       "brand": "[object EXTDisjointTimerQuery]",
@@ -168,7 +196,24 @@
         "getQueryObjectEXT",
         "isQueryEXT",
         "queryCounterEXT"
-      ]
+      ],
+      "values": {
+        "QUERY_COUNTER_BITS_EXT": 34916,
+        "CURRENT_QUERY_EXT": 34917,
+        "QUERY_RESULT_EXT": 34918,
+        "QUERY_RESULT_AVAILABLE_EXT": 34919,
+        "TIME_ELAPSED_EXT": 35007,
+        "TIMESTAMP_EXT": 36392,
+        "GPU_DISJOINT_EXT": 36795,
+        "beginQueryEXT": "fn/2",
+        "createQueryEXT": "fn/0",
+        "deleteQueryEXT": "fn/1",
+        "endQueryEXT": "fn/1",
+        "getQueryEXT": "fn/2",
+        "getQueryObjectEXT": "fn/2",
+        "isQueryEXT": "fn/1",
+        "queryCounterEXT": "fn/2"
+      }
     },
     "webgl EXT_float_blend": {
       "brand": "[object EXTFloatBlend]",
@@ -176,7 +221,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl EXT_frag_depth": {
       "brand": "[object EXTFragDepth]",
@@ -184,7 +230,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl EXT_polygon_offset_clamp": {
       "brand": "[object EXTPolygonOffsetClamp]",
@@ -198,7 +245,11 @@
       "protoNames": [
         "POLYGON_OFFSET_CLAMP_EXT",
         "polygonOffsetClampEXT"
-      ]
+      ],
+      "values": {
+        "POLYGON_OFFSET_CLAMP_EXT": 36379,
+        "polygonOffsetClampEXT": "fn/3"
+      }
     },
     "webgl EXT_shader_texture_lod": {
       "brand": "[object EXTShaderTextureLOD]",
@@ -206,7 +257,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl EXT_texture_compression_bptc": {
       "brand": "[object EXTTextureCompressionBPTC]",
@@ -224,7 +276,13 @@
         "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
         "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
         "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT": 36492,
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT": 36493,
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT": 36494,
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT": 36495
+      }
     },
     "webgl EXT_texture_compression_rgtc": {
       "brand": "[object EXTTextureCompressionRGTC]",
@@ -242,7 +300,13 @@
         "COMPRESSED_RED_RGTC1_EXT",
         "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
         "COMPRESSED_SIGNED_RED_RGTC1_EXT"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RED_RGTC1_EXT": 36283,
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT": 36284,
+        "COMPRESSED_RED_GREEN_RGTC2_EXT": 36285,
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT": 36286
+      }
     },
     "webgl EXT_texture_filter_anisotropic": {
       "brand": "[object EXTTextureFilterAnisotropic]",
@@ -256,7 +320,11 @@
       "protoNames": [
         "MAX_TEXTURE_MAX_ANISOTROPY_EXT",
         "TEXTURE_MAX_ANISOTROPY_EXT"
-      ]
+      ],
+      "values": {
+        "TEXTURE_MAX_ANISOTROPY_EXT": 34046,
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT": 34047
+      }
     },
     "webgl EXT_texture_mirror_clamp_to_edge": {
       "brand": "[object EXTTextureMirrorClampToEdge]",
@@ -268,7 +336,10 @@
       "own": [],
       "protoNames": [
         "MIRROR_CLAMP_TO_EDGE_EXT"
-      ]
+      ],
+      "values": {
+        "MIRROR_CLAMP_TO_EDGE_EXT": 34627
+      }
     },
     "webgl EXT_sRGB": {
       "brand": "[object EXTsRGB]",
@@ -286,7 +357,13 @@
         "SRGB8_ALPHA8_EXT",
         "SRGB_ALPHA_EXT",
         "SRGB_EXT"
-      ]
+      ],
+      "values": {
+        "SRGB_EXT": 35904,
+        "SRGB_ALPHA_EXT": 35906,
+        "SRGB8_ALPHA8_EXT": 35907,
+        "FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT": 33296
+      }
     },
     "webgl KHR_parallel_shader_compile": {
       "brand": "[object KHRParallelShaderCompile]",
@@ -298,7 +375,10 @@
       "own": [],
       "protoNames": [
         "COMPLETION_STATUS_KHR"
-      ]
+      ],
+      "values": {
+        "COMPLETION_STATUS_KHR": 37297
+      }
     },
     "webgl OES_element_index_uint": {
       "brand": "[object OESElementIndexUint]",
@@ -306,7 +386,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl OES_fbo_render_mipmap": {
       "brand": "[object OESFboRenderMipmap]",
@@ -314,7 +395,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl OES_standard_derivatives": {
       "brand": "[object OESStandardDerivatives]",
@@ -326,7 +408,10 @@
       "own": [],
       "protoNames": [
         "FRAGMENT_SHADER_DERIVATIVE_HINT_OES"
-      ]
+      ],
+      "values": {
+        "FRAGMENT_SHADER_DERIVATIVE_HINT_OES": 35723
+      }
     },
     "webgl OES_texture_float": {
       "brand": "[object OESTextureFloat]",
@@ -334,7 +419,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl OES_texture_float_linear": {
       "brand": "[object OESTextureFloatLinear]",
@@ -342,7 +428,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl OES_texture_half_float": {
       "brand": "[object OESTextureHalfFloat]",
@@ -354,7 +441,10 @@
       "own": [],
       "protoNames": [
         "HALF_FLOAT_OES"
-      ]
+      ],
+      "values": {
+        "HALF_FLOAT_OES": 36193
+      }
     },
     "webgl OES_texture_half_float_linear": {
       "brand": "[object OESTextureHalfFloatLinear]",
@@ -362,7 +452,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl OES_vertex_array_object": {
       "brand": "[object OESVertexArrayObject]",
@@ -382,7 +473,14 @@
         "createVertexArrayOES",
         "deleteVertexArrayOES",
         "isVertexArrayOES"
-      ]
+      ],
+      "values": {
+        "VERTEX_ARRAY_BINDING_OES": 34229,
+        "bindVertexArrayOES": "fn/0",
+        "createVertexArrayOES": "fn/0",
+        "deleteVertexArrayOES": "fn/0",
+        "isVertexArrayOES": "fn/0"
+      }
     },
     "webgl WEBGL_blend_func_extended": {
       "brand": "[object WebGLBlendFuncExtended]",
@@ -402,7 +500,14 @@
         "ONE_MINUS_SRC1_COLOR_WEBGL",
         "SRC1_ALPHA_WEBGL",
         "SRC1_COLOR_WEBGL"
-      ]
+      ],
+      "values": {
+        "SRC1_COLOR_WEBGL": 35065,
+        "SRC1_ALPHA_WEBGL": 34185,
+        "ONE_MINUS_SRC1_COLOR_WEBGL": 35066,
+        "ONE_MINUS_SRC1_ALPHA_WEBGL": 35067,
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL": 35068
+      }
     },
     "webgl WEBGL_color_buffer_float": {
       "brand": "[object WebGLColorBufferFloat]",
@@ -418,7 +523,12 @@
         "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
         "RGBA32F_EXT",
         "UNSIGNED_NORMALIZED_EXT"
-      ]
+      ],
+      "values": {
+        "RGBA32F_EXT": 34836,
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT": 33297,
+        "UNSIGNED_NORMALIZED_EXT": 35863
+      }
     },
     "webgl WEBGL_compressed_texture_astc": {
       "brand": "[object WebGLCompressedTextureASTC]",
@@ -486,7 +596,38 @@
         "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR",
         "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR",
         "getSupportedProfiles"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RGBA_ASTC_4x4_KHR": 37808,
+        "COMPRESSED_RGBA_ASTC_5x4_KHR": 37809,
+        "COMPRESSED_RGBA_ASTC_5x5_KHR": 37810,
+        "COMPRESSED_RGBA_ASTC_6x5_KHR": 37811,
+        "COMPRESSED_RGBA_ASTC_6x6_KHR": 37812,
+        "COMPRESSED_RGBA_ASTC_8x5_KHR": 37813,
+        "COMPRESSED_RGBA_ASTC_8x6_KHR": 37814,
+        "COMPRESSED_RGBA_ASTC_8x8_KHR": 37815,
+        "COMPRESSED_RGBA_ASTC_10x5_KHR": 37816,
+        "COMPRESSED_RGBA_ASTC_10x6_KHR": 37817,
+        "COMPRESSED_RGBA_ASTC_10x8_KHR": 37818,
+        "COMPRESSED_RGBA_ASTC_10x10_KHR": 37819,
+        "COMPRESSED_RGBA_ASTC_12x10_KHR": 37820,
+        "COMPRESSED_RGBA_ASTC_12x12_KHR": 37821,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR": 37840,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR": 37841,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR": 37842,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR": 37843,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR": 37844,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR": 37845,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR": 37846,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR": 37847,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR": 37848,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR": 37849,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR": 37850,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR": 37851,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR": 37852,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR": 37853,
+        "getSupportedProfiles": "fn/0"
+      }
     },
     "webgl WEBGL_compressed_texture_etc": {
       "brand": "[object WebGLCompressedTextureETC]",
@@ -516,7 +657,19 @@
         "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC",
         "COMPRESSED_SRGB8_ETC2",
         "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_R11_EAC": 37488,
+        "COMPRESSED_SIGNED_R11_EAC": 37489,
+        "COMPRESSED_RG11_EAC": 37490,
+        "COMPRESSED_SIGNED_RG11_EAC": 37491,
+        "COMPRESSED_RGB8_ETC2": 37492,
+        "COMPRESSED_SRGB8_ETC2": 37493,
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37494,
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37495,
+        "COMPRESSED_RGBA8_ETC2_EAC": 37496,
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC": 37497
+      }
     },
     "webgl WEBGL_compressed_texture_etc1": {
       "brand": "[object WebGLCompressedTextureETC1]",
@@ -528,7 +681,10 @@
       "own": [],
       "protoNames": [
         "COMPRESSED_RGB_ETC1_WEBGL"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RGB_ETC1_WEBGL": 36196
+      }
     },
     "webgl WEBGL_compressed_texture_pvrtc": {
       "brand": "[object WebGLCompressedTexturePVRTC]",
@@ -546,7 +702,13 @@
         "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG",
         "COMPRESSED_RGB_PVRTC_2BPPV1_IMG",
         "COMPRESSED_RGB_PVRTC_4BPPV1_IMG"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG": 35840,
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG": 35841,
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG": 35842,
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG": 35843
+      }
     },
     "webgl WEBGL_compressed_texture_s3tc": {
       "brand": "[object WebGLCompressedTextureS3TC]",
@@ -564,7 +726,13 @@
         "COMPRESSED_RGBA_S3TC_DXT3_EXT",
         "COMPRESSED_RGBA_S3TC_DXT5_EXT",
         "COMPRESSED_RGB_S3TC_DXT1_EXT"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RGB_S3TC_DXT1_EXT": 33776,
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT": 33777,
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT": 33778,
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT": 33779
+      }
     },
     "webgl WEBGL_compressed_texture_s3tc_srgb": {
       "brand": "[object WebGLCompressedTextureS3TCsRGB]",
@@ -582,7 +750,13 @@
         "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
         "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
         "COMPRESSED_SRGB_S3TC_DXT1_EXT"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT": 35916,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT": 35917,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT": 35918,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT": 35919
+      }
     },
     "webgl WEBGL_debug_renderer_info": {
       "brand": "[object WebGLDebugRendererInfo]",
@@ -596,7 +770,11 @@
       "protoNames": [
         "UNMASKED_RENDERER_WEBGL",
         "UNMASKED_VENDOR_WEBGL"
-      ]
+      ],
+      "values": {
+        "UNMASKED_VENDOR_WEBGL": 37445,
+        "UNMASKED_RENDERER_WEBGL": 37446
+      }
     },
     "webgl WEBGL_debug_shaders": {
       "brand": "[object WebGLDebugShaders]",
@@ -608,7 +786,10 @@
       "own": [],
       "protoNames": [
         "getTranslatedShaderSource"
-      ]
+      ],
+      "values": {
+        "getTranslatedShaderSource": "fn/1"
+      }
     },
     "webgl WEBGL_depth_texture": {
       "brand": "[object WebGLDepthTexture]",
@@ -620,7 +801,10 @@
       "own": [],
       "protoNames": [
         "UNSIGNED_INT_24_8_WEBGL"
-      ]
+      ],
+      "values": {
+        "UNSIGNED_INT_24_8_WEBGL": 34042
+      }
     },
     "webgl WEBGL_draw_buffers": {
       "brand": "[object WebGLDrawBuffers]",
@@ -700,7 +884,44 @@
         "MAX_COLOR_ATTACHMENTS_WEBGL",
         "MAX_DRAW_BUFFERS_WEBGL",
         "drawBuffersWEBGL"
-      ]
+      ],
+      "values": {
+        "COLOR_ATTACHMENT0_WEBGL": 36064,
+        "COLOR_ATTACHMENT1_WEBGL": 36065,
+        "COLOR_ATTACHMENT2_WEBGL": 36066,
+        "COLOR_ATTACHMENT3_WEBGL": 36067,
+        "COLOR_ATTACHMENT4_WEBGL": 36068,
+        "COLOR_ATTACHMENT5_WEBGL": 36069,
+        "COLOR_ATTACHMENT6_WEBGL": 36070,
+        "COLOR_ATTACHMENT7_WEBGL": 36071,
+        "COLOR_ATTACHMENT8_WEBGL": 36072,
+        "COLOR_ATTACHMENT9_WEBGL": 36073,
+        "COLOR_ATTACHMENT10_WEBGL": 36074,
+        "COLOR_ATTACHMENT11_WEBGL": 36075,
+        "COLOR_ATTACHMENT12_WEBGL": 36076,
+        "COLOR_ATTACHMENT13_WEBGL": 36077,
+        "COLOR_ATTACHMENT14_WEBGL": 36078,
+        "COLOR_ATTACHMENT15_WEBGL": 36079,
+        "DRAW_BUFFER0_WEBGL": 34853,
+        "DRAW_BUFFER1_WEBGL": 34854,
+        "DRAW_BUFFER2_WEBGL": 34855,
+        "DRAW_BUFFER3_WEBGL": 34856,
+        "DRAW_BUFFER4_WEBGL": 34857,
+        "DRAW_BUFFER5_WEBGL": 34858,
+        "DRAW_BUFFER6_WEBGL": 34859,
+        "DRAW_BUFFER7_WEBGL": 34860,
+        "DRAW_BUFFER8_WEBGL": 34861,
+        "DRAW_BUFFER9_WEBGL": 34862,
+        "DRAW_BUFFER10_WEBGL": 34863,
+        "DRAW_BUFFER11_WEBGL": 34864,
+        "DRAW_BUFFER12_WEBGL": 34865,
+        "DRAW_BUFFER13_WEBGL": 34866,
+        "DRAW_BUFFER14_WEBGL": 34867,
+        "DRAW_BUFFER15_WEBGL": 34868,
+        "MAX_COLOR_ATTACHMENTS_WEBGL": 36063,
+        "MAX_DRAW_BUFFERS_WEBGL": 34852,
+        "drawBuffersWEBGL": "fn/1"
+      }
     },
     "webgl WEBGL_lose_context": {
       "brand": "[object WebGLLoseContext]",
@@ -714,7 +935,11 @@
       "protoNames": [
         "loseContext",
         "restoreContext"
-      ]
+      ],
+      "values": {
+        "loseContext": "fn/0",
+        "restoreContext": "fn/0"
+      }
     },
     "webgl WEBGL_multi_draw": {
       "brand": "[object WebGLMultiDraw]",
@@ -732,7 +957,13 @@
         "multiDrawArraysWEBGL",
         "multiDrawElementsInstancedWEBGL",
         "multiDrawElementsWEBGL"
-      ]
+      ],
+      "values": {
+        "multiDrawArraysInstancedWEBGL": "fn/8",
+        "multiDrawArraysWEBGL": "fn/6",
+        "multiDrawElementsInstancedWEBGL": "fn/9",
+        "multiDrawElementsWEBGL": "fn/7"
+      }
     },
     "webgl WEBGL_polygon_mode": {
       "brand": "[object WebGLPolygonMode]",
@@ -752,7 +983,14 @@
         "POLYGON_MODE_WEBGL",
         "POLYGON_OFFSET_LINE_WEBGL",
         "polygonModeWEBGL"
-      ]
+      ],
+      "values": {
+        "POLYGON_MODE_WEBGL": 2880,
+        "POLYGON_OFFSET_LINE_WEBGL": 10754,
+        "LINE_WEBGL": 6913,
+        "FILL_WEBGL": 6914,
+        "polygonModeWEBGL": "fn/2"
+      }
     },
     "webgl2.supported": [
       "EXT_clip_control",
@@ -814,7 +1052,16 @@
         "UPPER_LEFT_EXT",
         "ZERO_TO_ONE_EXT",
         "clipControlEXT"
-      ]
+      ],
+      "values": {
+        "LOWER_LEFT_EXT": 36001,
+        "UPPER_LEFT_EXT": 36002,
+        "NEGATIVE_ONE_TO_ONE_EXT": 37726,
+        "ZERO_TO_ONE_EXT": 37727,
+        "CLIP_ORIGIN_EXT": 37724,
+        "CLIP_DEPTH_MODE_EXT": 37725,
+        "clipControlEXT": "fn/2"
+      }
     },
     "webgl2 EXT_color_buffer_float": {
       "brand": "[object EXTColorBufferFloat]",
@@ -822,7 +1069,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl2 EXT_color_buffer_half_float": {
       "brand": "[object EXTColorBufferHalfFloat]",
@@ -840,7 +1088,13 @@
         "RGB16F_EXT",
         "RGBA16F_EXT",
         "UNSIGNED_NORMALIZED_EXT"
-      ]
+      ],
+      "values": {
+        "RGBA16F_EXT": 34842,
+        "RGB16F_EXT": 34843,
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT": 33297,
+        "UNSIGNED_NORMALIZED_EXT": 35863
+      }
     },
     "webgl2 EXT_conservative_depth": {
       "brand": "[object EXTConservativeDepth]",
@@ -848,7 +1102,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl2 EXT_depth_clamp": {
       "brand": "[object EXTDepthClamp]",
@@ -860,7 +1115,10 @@
       "own": [],
       "protoNames": [
         "DEPTH_CLAMP_EXT"
-      ]
+      ],
+      "values": {
+        "DEPTH_CLAMP_EXT": 34383
+      }
     },
     "webgl2 EXT_disjoint_timer_query_webgl2": {
       "brand": "[object EXTDisjointTimerQueryWebGL2]",
@@ -880,7 +1138,14 @@
         "TIMESTAMP_EXT",
         "TIME_ELAPSED_EXT",
         "queryCounterEXT"
-      ]
+      ],
+      "values": {
+        "QUERY_COUNTER_BITS_EXT": 34916,
+        "TIME_ELAPSED_EXT": 35007,
+        "TIMESTAMP_EXT": 36392,
+        "GPU_DISJOINT_EXT": 36795,
+        "queryCounterEXT": "fn/2"
+      }
     },
     "webgl2 EXT_float_blend": {
       "brand": "[object EXTFloatBlend]",
@@ -888,7 +1153,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl2 EXT_polygon_offset_clamp": {
       "brand": "[object EXTPolygonOffsetClamp]",
@@ -902,7 +1168,11 @@
       "protoNames": [
         "POLYGON_OFFSET_CLAMP_EXT",
         "polygonOffsetClampEXT"
-      ]
+      ],
+      "values": {
+        "POLYGON_OFFSET_CLAMP_EXT": 36379,
+        "polygonOffsetClampEXT": "fn/3"
+      }
     },
     "webgl2 EXT_render_snorm": {
       "brand": "[object EXTRenderSnorm]",
@@ -910,7 +1180,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl2 EXT_texture_compression_bptc": {
       "brand": "[object EXTTextureCompressionBPTC]",
@@ -928,7 +1199,13 @@
         "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
         "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
         "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RGBA_BPTC_UNORM_EXT": 36492,
+        "COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT": 36493,
+        "COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT": 36494,
+        "COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT": 36495
+      }
     },
     "webgl2 EXT_texture_compression_rgtc": {
       "brand": "[object EXTTextureCompressionRGTC]",
@@ -946,7 +1223,13 @@
         "COMPRESSED_RED_RGTC1_EXT",
         "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
         "COMPRESSED_SIGNED_RED_RGTC1_EXT"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RED_RGTC1_EXT": 36283,
+        "COMPRESSED_SIGNED_RED_RGTC1_EXT": 36284,
+        "COMPRESSED_RED_GREEN_RGTC2_EXT": 36285,
+        "COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT": 36286
+      }
     },
     "webgl2 EXT_texture_filter_anisotropic": {
       "brand": "[object EXTTextureFilterAnisotropic]",
@@ -960,7 +1243,11 @@
       "protoNames": [
         "MAX_TEXTURE_MAX_ANISOTROPY_EXT",
         "TEXTURE_MAX_ANISOTROPY_EXT"
-      ]
+      ],
+      "values": {
+        "TEXTURE_MAX_ANISOTROPY_EXT": 34046,
+        "MAX_TEXTURE_MAX_ANISOTROPY_EXT": 34047
+      }
     },
     "webgl2 EXT_texture_mirror_clamp_to_edge": {
       "brand": "[object EXTTextureMirrorClampToEdge]",
@@ -972,7 +1259,10 @@
       "own": [],
       "protoNames": [
         "MIRROR_CLAMP_TO_EDGE_EXT"
-      ]
+      ],
+      "values": {
+        "MIRROR_CLAMP_TO_EDGE_EXT": 34627
+      }
     },
     "webgl2 EXT_texture_norm16": {
       "brand": "[object EXTTextureNorm16]",
@@ -998,7 +1288,17 @@
         "RGB16_SNORM_EXT",
         "RGBA16_EXT",
         "RGBA16_SNORM_EXT"
-      ]
+      ],
+      "values": {
+        "R16_EXT": 33322,
+        "RG16_EXT": 33324,
+        "RGB16_EXT": 32852,
+        "RGBA16_EXT": 32859,
+        "R16_SNORM_EXT": 36760,
+        "RG16_SNORM_EXT": 36761,
+        "RGB16_SNORM_EXT": 36762,
+        "RGBA16_SNORM_EXT": 36763
+      }
     },
     "webgl2 KHR_parallel_shader_compile": {
       "brand": "[object KHRParallelShaderCompile]",
@@ -1010,7 +1310,10 @@
       "own": [],
       "protoNames": [
         "COMPLETION_STATUS_KHR"
-      ]
+      ],
+      "values": {
+        "COMPLETION_STATUS_KHR": 37297
+      }
     },
     "webgl2 NV_shader_noperspective_interpolation": {
       "brand": "[object NVShaderNoperspectiveInterpolation]",
@@ -1018,7 +1321,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl2 OES_draw_buffers_indexed": {
       "brand": "[object OESDrawBuffersIndexed]",
@@ -1042,7 +1346,16 @@
         "colorMaskiOES",
         "disableiOES",
         "enableiOES"
-      ]
+      ],
+      "values": {
+        "blendEquationSeparateiOES": "fn/3",
+        "blendEquationiOES": "fn/2",
+        "blendFuncSeparateiOES": "fn/5",
+        "blendFunciOES": "fn/3",
+        "colorMaskiOES": "fn/5",
+        "disableiOES": "fn/2",
+        "enableiOES": "fn/2"
+      }
     },
     "webgl2 OES_sample_variables": {
       "brand": "[object OESSampleVariables]",
@@ -1050,7 +1363,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl2 OES_shader_multisample_interpolation": {
       "brand": "[object OESShaderMultisampleInterpolation]",
@@ -1066,7 +1380,12 @@
         "FRAGMENT_INTERPOLATION_OFFSET_BITS_OES",
         "MAX_FRAGMENT_INTERPOLATION_OFFSET_OES",
         "MIN_FRAGMENT_INTERPOLATION_OFFSET_OES"
-      ]
+      ],
+      "values": {
+        "MIN_FRAGMENT_INTERPOLATION_OFFSET_OES": 36443,
+        "MAX_FRAGMENT_INTERPOLATION_OFFSET_OES": 36444,
+        "FRAGMENT_INTERPOLATION_OFFSET_BITS_OES": 36445
+      }
     },
     "webgl2 OES_texture_float_linear": {
       "brand": "[object OESTextureFloatLinear]",
@@ -1074,7 +1393,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl2 WEBGL_blend_func_extended": {
       "brand": "[object WebGLBlendFuncExtended]",
@@ -1094,7 +1414,14 @@
         "ONE_MINUS_SRC1_COLOR_WEBGL",
         "SRC1_ALPHA_WEBGL",
         "SRC1_COLOR_WEBGL"
-      ]
+      ],
+      "values": {
+        "SRC1_COLOR_WEBGL": 35065,
+        "SRC1_ALPHA_WEBGL": 34185,
+        "ONE_MINUS_SRC1_COLOR_WEBGL": 35066,
+        "ONE_MINUS_SRC1_ALPHA_WEBGL": 35067,
+        "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL": 35068
+      }
     },
     "webgl2 WEBGL_clip_cull_distance": {
       "brand": "[object WebGLClipCullDistance]",
@@ -1126,7 +1453,20 @@
         "MAX_CLIP_DISTANCES_WEBGL",
         "MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL",
         "MAX_CULL_DISTANCES_WEBGL"
-      ]
+      ],
+      "values": {
+        "MAX_CLIP_DISTANCES_WEBGL": 3378,
+        "MAX_CULL_DISTANCES_WEBGL": 33529,
+        "MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL": 33530,
+        "CLIP_DISTANCE0_WEBGL": 12288,
+        "CLIP_DISTANCE1_WEBGL": 12289,
+        "CLIP_DISTANCE2_WEBGL": 12290,
+        "CLIP_DISTANCE3_WEBGL": 12291,
+        "CLIP_DISTANCE4_WEBGL": 12292,
+        "CLIP_DISTANCE5_WEBGL": 12293,
+        "CLIP_DISTANCE6_WEBGL": 12294,
+        "CLIP_DISTANCE7_WEBGL": 12295
+      }
     },
     "webgl2 WEBGL_compressed_texture_astc": {
       "brand": "[object WebGLCompressedTextureASTC]",
@@ -1194,7 +1534,38 @@
         "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR",
         "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR",
         "getSupportedProfiles"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RGBA_ASTC_4x4_KHR": 37808,
+        "COMPRESSED_RGBA_ASTC_5x4_KHR": 37809,
+        "COMPRESSED_RGBA_ASTC_5x5_KHR": 37810,
+        "COMPRESSED_RGBA_ASTC_6x5_KHR": 37811,
+        "COMPRESSED_RGBA_ASTC_6x6_KHR": 37812,
+        "COMPRESSED_RGBA_ASTC_8x5_KHR": 37813,
+        "COMPRESSED_RGBA_ASTC_8x6_KHR": 37814,
+        "COMPRESSED_RGBA_ASTC_8x8_KHR": 37815,
+        "COMPRESSED_RGBA_ASTC_10x5_KHR": 37816,
+        "COMPRESSED_RGBA_ASTC_10x6_KHR": 37817,
+        "COMPRESSED_RGBA_ASTC_10x8_KHR": 37818,
+        "COMPRESSED_RGBA_ASTC_10x10_KHR": 37819,
+        "COMPRESSED_RGBA_ASTC_12x10_KHR": 37820,
+        "COMPRESSED_RGBA_ASTC_12x12_KHR": 37821,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR": 37840,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR": 37841,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR": 37842,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR": 37843,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR": 37844,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR": 37845,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR": 37846,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR": 37847,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR": 37848,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR": 37849,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR": 37850,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR": 37851,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR": 37852,
+        "COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR": 37853,
+        "getSupportedProfiles": "fn/0"
+      }
     },
     "webgl2 WEBGL_compressed_texture_etc": {
       "brand": "[object WebGLCompressedTextureETC]",
@@ -1224,7 +1595,19 @@
         "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC",
         "COMPRESSED_SRGB8_ETC2",
         "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_R11_EAC": 37488,
+        "COMPRESSED_SIGNED_R11_EAC": 37489,
+        "COMPRESSED_RG11_EAC": 37490,
+        "COMPRESSED_SIGNED_RG11_EAC": 37491,
+        "COMPRESSED_RGB8_ETC2": 37492,
+        "COMPRESSED_SRGB8_ETC2": 37493,
+        "COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37494,
+        "COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2": 37495,
+        "COMPRESSED_RGBA8_ETC2_EAC": 37496,
+        "COMPRESSED_SRGB8_ALPHA8_ETC2_EAC": 37497
+      }
     },
     "webgl2 WEBGL_compressed_texture_etc1": {
       "brand": "[object WebGLCompressedTextureETC1]",
@@ -1236,7 +1619,10 @@
       "own": [],
       "protoNames": [
         "COMPRESSED_RGB_ETC1_WEBGL"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RGB_ETC1_WEBGL": 36196
+      }
     },
     "webgl2 WEBGL_compressed_texture_pvrtc": {
       "brand": "[object WebGLCompressedTexturePVRTC]",
@@ -1254,7 +1640,13 @@
         "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG",
         "COMPRESSED_RGB_PVRTC_2BPPV1_IMG",
         "COMPRESSED_RGB_PVRTC_4BPPV1_IMG"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RGB_PVRTC_4BPPV1_IMG": 35840,
+        "COMPRESSED_RGB_PVRTC_2BPPV1_IMG": 35841,
+        "COMPRESSED_RGBA_PVRTC_4BPPV1_IMG": 35842,
+        "COMPRESSED_RGBA_PVRTC_2BPPV1_IMG": 35843
+      }
     },
     "webgl2 WEBGL_compressed_texture_s3tc": {
       "brand": "[object WebGLCompressedTextureS3TC]",
@@ -1272,7 +1664,13 @@
         "COMPRESSED_RGBA_S3TC_DXT3_EXT",
         "COMPRESSED_RGBA_S3TC_DXT5_EXT",
         "COMPRESSED_RGB_S3TC_DXT1_EXT"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_RGB_S3TC_DXT1_EXT": 33776,
+        "COMPRESSED_RGBA_S3TC_DXT1_EXT": 33777,
+        "COMPRESSED_RGBA_S3TC_DXT3_EXT": 33778,
+        "COMPRESSED_RGBA_S3TC_DXT5_EXT": 33779
+      }
     },
     "webgl2 WEBGL_compressed_texture_s3tc_srgb": {
       "brand": "[object WebGLCompressedTextureS3TCsRGB]",
@@ -1290,7 +1688,13 @@
         "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
         "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
         "COMPRESSED_SRGB_S3TC_DXT1_EXT"
-      ]
+      ],
+      "values": {
+        "COMPRESSED_SRGB_S3TC_DXT1_EXT": 35916,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT": 35917,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT": 35918,
+        "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT": 35919
+      }
     },
     "webgl2 WEBGL_debug_renderer_info": {
       "brand": "[object WebGLDebugRendererInfo]",
@@ -1304,7 +1708,11 @@
       "protoNames": [
         "UNMASKED_RENDERER_WEBGL",
         "UNMASKED_VENDOR_WEBGL"
-      ]
+      ],
+      "values": {
+        "UNMASKED_VENDOR_WEBGL": 37445,
+        "UNMASKED_RENDERER_WEBGL": 37446
+      }
     },
     "webgl2 WEBGL_debug_shaders": {
       "brand": "[object WebGLDebugShaders]",
@@ -1316,7 +1724,10 @@
       "own": [],
       "protoNames": [
         "getTranslatedShaderSource"
-      ]
+      ],
+      "values": {
+        "getTranslatedShaderSource": "fn/1"
+      }
     },
     "webgl2 WEBGL_lose_context": {
       "brand": "[object WebGLLoseContext]",
@@ -1330,7 +1741,11 @@
       "protoNames": [
         "loseContext",
         "restoreContext"
-      ]
+      ],
+      "values": {
+        "loseContext": "fn/0",
+        "restoreContext": "fn/0"
+      }
     },
     "webgl2 WEBGL_multi_draw": {
       "brand": "[object WebGLMultiDraw]",
@@ -1348,7 +1763,13 @@
         "multiDrawArraysWEBGL",
         "multiDrawElementsInstancedWEBGL",
         "multiDrawElementsWEBGL"
-      ]
+      ],
+      "values": {
+        "multiDrawArraysInstancedWEBGL": "fn/8",
+        "multiDrawArraysWEBGL": "fn/6",
+        "multiDrawElementsInstancedWEBGL": "fn/9",
+        "multiDrawElementsWEBGL": "fn/7"
+      }
     },
     "webgl2 WEBGL_polygon_mode": {
       "brand": "[object WebGLPolygonMode]",
@@ -1368,7 +1789,14 @@
         "POLYGON_MODE_WEBGL",
         "POLYGON_OFFSET_LINE_WEBGL",
         "polygonModeWEBGL"
-      ]
+      ],
+      "values": {
+        "POLYGON_MODE_WEBGL": 2880,
+        "POLYGON_OFFSET_LINE_WEBGL": 10754,
+        "LINE_WEBGL": 6913,
+        "FILL_WEBGL": 6914,
+        "polygonModeWEBGL": "fn/2"
+      }
     },
     "webgl2 WEBGL_provoking_vertex": {
       "brand": "[object WebGLProvokingVertex]",
@@ -1386,7 +1814,13 @@
         "LAST_VERTEX_CONVENTION_WEBGL",
         "PROVOKING_VERTEX_WEBGL",
         "provokingVertexWEBGL"
-      ]
+      ],
+      "values": {
+        "FIRST_VERTEX_CONVENTION_WEBGL": 36429,
+        "LAST_VERTEX_CONVENTION_WEBGL": 36430,
+        "PROVOKING_VERTEX_WEBGL": 36431,
+        "provokingVertexWEBGL": "fn/1"
+      }
     },
     "webgl2 WEBGL_render_shared_exponent": {
       "brand": "[object WebGLRenderSharedExponent]",
@@ -1394,7 +1828,8 @@
       "global": "undefined",
       "members": [],
       "own": [],
-      "protoNames": []
+      "protoNames": [],
+      "values": {}
     },
     "webgl2 WEBGL_stencil_texturing": {
       "brand": "[object WebGLStencilTexturing]",
@@ -1408,7 +1843,11 @@
       "protoNames": [
         "DEPTH_STENCIL_TEXTURE_MODE_WEBGL",
         "STENCIL_INDEX_WEBGL"
-      ]
+      ],
+      "values": {
+        "DEPTH_STENCIL_TEXTURE_MODE_WEBGL": 37098,
+        "STENCIL_INDEX_WEBGL": 6401
+      }
     }
   },
   "lightpanda": {
@@ -1497,7 +1936,11 @@
       "protoNames": [
         "UNMASKED_RENDERER_WEBGL",
         "UNMASKED_VENDOR_WEBGL"
-      ]
+      ],
+      "values": {
+        "UNMASKED_VENDOR_WEBGL": 37445,
+        "UNMASKED_RENDERER_WEBGL": 37446
+      }
     },
     "webgl WEBGL_debug_shaders": "undefined",
     "webgl WEBGL_depth_texture": "undefined",
@@ -1514,7 +1957,11 @@
       "protoNames": [
         "loseContext",
         "restoreContext"
-      ]
+      ],
+      "values": {
+        "loseContext": "fn/0",
+        "restoreContext": "fn/0"
+      }
     },
     "webgl WEBGL_multi_draw": "undefined",
     "webgl WEBGL_polygon_mode": "undefined",
@@ -1575,7 +2022,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_color_buffer_float": {
       "brand": "[object Object]",
@@ -1596,7 +2055,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_color_buffer_half_float": {
       "brand": "[object Object]",
@@ -1617,7 +2088,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_conservative_depth": {
       "brand": "[object Object]",
@@ -1638,7 +2121,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_depth_clamp": {
       "brand": "[object Object]",
@@ -1659,7 +2154,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_disjoint_timer_query_webgl2": {
       "brand": "[object Object]",
@@ -1680,7 +2187,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_float_blend": {
       "brand": "[object Object]",
@@ -1701,7 +2220,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_polygon_offset_clamp": {
       "brand": "[object Object]",
@@ -1722,7 +2253,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_render_snorm": {
       "brand": "[object Object]",
@@ -1743,7 +2286,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_texture_compression_bptc": {
       "brand": "[object Object]",
@@ -1764,7 +2319,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_texture_compression_rgtc": {
       "brand": "[object Object]",
@@ -1785,7 +2352,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_texture_filter_anisotropic": {
       "brand": "[object Object]",
@@ -1806,7 +2385,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_texture_mirror_clamp_to_edge": {
       "brand": "[object Object]",
@@ -1827,7 +2418,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 EXT_texture_norm16": {
       "brand": "[object Object]",
@@ -1848,7 +2451,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 KHR_parallel_shader_compile": {
       "brand": "[object Object]",
@@ -1869,7 +2484,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 NV_shader_noperspective_interpolation": {
       "brand": "[object Object]",
@@ -1890,7 +2517,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 OES_draw_buffers_indexed": {
       "brand": "[object Object]",
@@ -1911,7 +2550,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 OES_sample_variables": {
       "brand": "[object Object]",
@@ -1932,7 +2583,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 OES_shader_multisample_interpolation": {
       "brand": "[object Object]",
@@ -1953,7 +2616,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 OES_texture_float_linear": {
       "brand": "[object Object]",
@@ -1974,7 +2649,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_blend_func_extended": {
       "brand": "[object Object]",
@@ -1995,7 +2682,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_clip_cull_distance": {
       "brand": "[object Object]",
@@ -2016,7 +2715,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_compressed_texture_astc": {
       "brand": "[object Object]",
@@ -2037,7 +2748,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_compressed_texture_etc": {
       "brand": "[object Object]",
@@ -2058,7 +2781,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_compressed_texture_etc1": {
       "brand": "[object Object]",
@@ -2079,7 +2814,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_compressed_texture_pvrtc": {
       "brand": "[object Object]",
@@ -2100,7 +2847,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_compressed_texture_s3tc": {
       "brand": "[object Object]",
@@ -2121,7 +2880,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_compressed_texture_s3tc_srgb": {
       "brand": "[object Object]",
@@ -2142,7 +2913,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_debug_renderer_info": {
       "brand": "[object WebGLDebugRendererInfo]",
@@ -2156,7 +2939,11 @@
       "protoNames": [
         "UNMASKED_RENDERER_WEBGL",
         "UNMASKED_VENDOR_WEBGL"
-      ]
+      ],
+      "values": {
+        "UNMASKED_VENDOR_WEBGL": 37445,
+        "UNMASKED_RENDERER_WEBGL": 37446
+      }
     },
     "webgl2 WEBGL_debug_shaders": {
       "brand": "[object Object]",
@@ -2177,7 +2964,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_lose_context": {
       "brand": "[object WebGLLoseContext]",
@@ -2191,7 +2990,11 @@
       "protoNames": [
         "loseContext",
         "restoreContext"
-      ]
+      ],
+      "values": {
+        "loseContext": "fn/0",
+        "restoreContext": "fn/0"
+      }
     },
     "webgl2 WEBGL_multi_draw": {
       "brand": "[object Object]",
@@ -2212,7 +3015,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_polygon_mode": {
       "brand": "[object Object]",
@@ -2233,7 +3048,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_provoking_vertex": {
       "brand": "[object Object]",
@@ -2254,7 +3081,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_render_shared_exponent": {
       "brand": "[object Object]",
@@ -2275,7 +3114,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     },
     "webgl2 WEBGL_stencil_texturing": {
       "brand": "[object Object]",
@@ -2296,7 +3147,19 @@
         "toLocaleString",
         "toString",
         "valueOf"
-      ]
+      ],
+      "values": {
+        "__defineGetter__": "fn/2",
+        "__defineSetter__": "fn/2",
+        "hasOwnProperty": "fn/1",
+        "__lookupGetter__": "fn/1",
+        "__lookupSetter__": "fn/1",
+        "isPrototypeOf": "fn/1",
+        "propertyIsEnumerable": "fn/1",
+        "toString": "fn/0",
+        "valueOf": "fn/0",
+        "toLocaleString": "fn/0"
+      }
     }
   }
 }
