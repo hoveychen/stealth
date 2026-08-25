@@ -136,6 +136,48 @@ pub fn setPathname(_: *const Location, pathname: []const u8, frame: *Frame) !voi
     }, .{ .script = frame });
 }
 
+/// The four components Chrome lets a page write and we did not. Each rebuilds
+/// the URL around the one part that changed and navigates, exactly the way the
+/// pathname setter above does -- there is no in-place mutation of a Location.
+///
+/// Their absence was readable without ever assigning anything:
+/// `Object.getOwnPropertyDescriptor(location, 'protocol').set` answers
+/// `undefined` on an engine that made the attribute read-only and a function on
+/// Chrome, which is the same shape of tell as the member's placement.
+pub fn setProtocol(_: *const Location, protocol: []const u8, frame: *Frame) !void {
+    const new_url = try U.setProtocol(frame.url, protocol, frame.call_arena);
+    return frame.scheduleNavigation(new_url, .{
+        .reason = .script,
+        .kind = .{ .push = null },
+    }, .{ .script = frame });
+}
+
+pub fn setHost(_: *const Location, host: []const u8, frame: *Frame) !void {
+    const new_url = try U.setHost(frame.url, host, frame.call_arena);
+    return frame.scheduleNavigation(new_url, .{
+        .reason = .script,
+        .kind = .{ .push = null },
+    }, .{ .script = frame });
+}
+
+pub fn setHostname(_: *const Location, hostname: []const u8, frame: *Frame) !void {
+    const new_url = try U.setHostname(frame.url, hostname, frame.call_arena);
+    return frame.scheduleNavigation(new_url, .{
+        .reason = .script,
+        .kind = .{ .push = null },
+    }, .{ .script = frame });
+}
+
+/// An empty string clears the port, which is why the underlying helper takes an
+/// optional: `location.port = ''` drops it rather than writing an empty one.
+pub fn setPort(_: *const Location, port: []const u8, frame: *Frame) !void {
+    const new_url = try U.setPort(frame.url, if (port.len == 0) null else port, frame.call_arena);
+    return frame.scheduleNavigation(new_url, .{
+        .reason = .script,
+        .kind = .{ .push = null },
+    }, .{ .script = frame });
+}
+
 pub fn setSearch(_: *const Location, search: []const u8, frame: *Frame) !void {
     const new_url = try U.setSearch(frame.url, search, frame.call_arena);
     return frame.scheduleNavigation(new_url, .{
@@ -199,24 +241,45 @@ pub const JsApi = struct {
         pub const name = "Location";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // See the comment in Snapshot.attachClass: an own @@toPrimitive of
+        // value undefined, from HTML's Location creation steps.
+        pub const to_primitive_undefined = true;
     };
 
-    pub const toString = bridge.function(Location.toString, .{});
-    pub const href = bridge.accessor(Location.toString, setHref, .{});
+    // Every member of Location is [LegacyUnforgeable]: it lives on the instance
+    // as a non-configurable own property, and `Location.prototype` is left with
+    // nothing but `constructor` (measured on Chrome 151). This is the whole
+    // interface, operations included -- a detector that finds `href` gone from
+    // the prototype only has to look one name over at `reload`.
+    const unforgeable: js.Caller.Function.Opts = .{ .unforgeable = true, .deletable = false };
+
+    // Declaration order is install order is `Object.getOwnPropertyNames(location)`
+    // order, and with every member unforgeable that list is now a fingerprint of
+    // its own. This is Chrome 151's, which is neither IDL order nor alphabetical:
+    //
+    //   valueOf, ancestorOrigins, href, origin, protocol, host, hostname, port,
+    //   pathname, search, hash, assign, reload, replace, toString
+    //
+    // `valueOf` is the one name we cannot place -- see Snapshot.attachClass for
+    // why -- so ours is Chrome's list with that first entry missing.
+    pub const ancestorOrigins = bridge.accessor(Location.getAncestorOrigins, null, unforgeable);
+    pub const href = bridge.accessor(Location.toString, setHref, unforgeable);
     fn setHref(self: *const Location, url: [:0]const u8, frame: *Frame) !void {
         return self.assign(url, frame);
     }
 
-    pub const search = bridge.accessor(Location.getSearch, Location.setSearch, .{});
-    pub const hash = bridge.accessor(Location.getHash, Location.setHash, .{});
-    pub const pathname = bridge.accessor(Location.getPathname, Location.setPathname, .{});
-    pub const hostname = bridge.accessor(Location.getHostname, null, .{});
-    pub const host = bridge.accessor(Location.getHost, null, .{});
-    pub const port = bridge.accessor(Location.getPort, null, .{});
-    pub const origin = bridge.accessor(Location.getOrigin, null, .{});
-    pub const ancestorOrigins = bridge.accessor(Location.getAncestorOrigins, null, .{});
-    pub const protocol = bridge.accessor(Location.getProtocol, null, .{});
-    pub const assign = bridge.function(Location.assign, .{});
-    pub const replace = bridge.function(Location.replace, .{});
-    pub const reload = bridge.function(Location.reload, .{});
+    // `origin` and `ancestorOrigins` are the interface's only two read-only
+    // attributes; every other one is writable on Chrome.
+    pub const origin = bridge.accessor(Location.getOrigin, null, unforgeable);
+    pub const protocol = bridge.accessor(Location.getProtocol, Location.setProtocol, unforgeable);
+    pub const host = bridge.accessor(Location.getHost, Location.setHost, unforgeable);
+    pub const hostname = bridge.accessor(Location.getHostname, Location.setHostname, unforgeable);
+    pub const port = bridge.accessor(Location.getPort, Location.setPort, unforgeable);
+    pub const pathname = bridge.accessor(Location.getPathname, Location.setPathname, unforgeable);
+    pub const search = bridge.accessor(Location.getSearch, Location.setSearch, unforgeable);
+    pub const hash = bridge.accessor(Location.getHash, Location.setHash, unforgeable);
+    pub const assign = bridge.function(Location.assign, unforgeable);
+    pub const reload = bridge.function(Location.reload, unforgeable);
+    pub const replace = bridge.function(Location.replace, unforgeable);
+    pub const toString = bridge.function(Location.toString, unforgeable);
 };

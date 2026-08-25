@@ -25,11 +25,99 @@
 </script>
 
 <script id=location_pathname_setter>
-  testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(Location.prototype, 'pathname').set);
+  testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(location, 'pathname').set);
 </script>
 
 <script id=location_search_setter>
-  testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(Location.prototype, 'search').set);
+  testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(location, 'search').set);
+</script>
+
+<script id=location_unforgeable_members>
+  // Every member of Location is [LegacyUnforgeable]: it is a non-configurable
+  // own property of the instance, and the interface prototype object holds
+  // nothing but `constructor`. Measured on Chrome 151 (about:blank):
+  //
+  //   Object.getOwnPropertyNames(Location.prototype)  -> ['constructor']
+  //   Object.getOwnPropertyDescriptor(location, 'href')
+  //     -> { get, set, enumerable: true, configurable: false }
+  //   Object.getOwnPropertyDescriptor(location, 'reload')
+  //     -> { value, writable: false, enumerable: true, configurable: false }
+  //
+  // An engine that leaves them on the prototype is named by one line --
+  // `Object.getOwnPropertyDescriptor(Location.prototype, 'href')` -- with no
+  // value to compare and no noise to hide in. The operations matter as much as
+  // the attributes: closing only the accessors moves the tell to
+  // `Location.prototype.reload`, it does not shut it.
+  const attributes = ['href', 'origin', 'protocol', 'host', 'hostname', 'port',
+                      'pathname', 'search', 'hash', 'ancestorOrigins'];
+  const operations = ['assign', 'replace', 'reload', 'toString'];
+  const members = attributes.concat(operations);
+
+  testing.expectEqual(['constructor'], Object.getOwnPropertyNames(Location.prototype));
+
+  testing.expectEqual([], members.filter(function(name) {
+    return Object.getOwnPropertyDescriptor(Location.prototype, name) !== undefined;
+  }));
+
+  testing.expectEqual([], members.filter(function(name) {
+    return Object.prototype.hasOwnProperty.call(location, name) === false;
+  }));
+
+  testing.expectEqual([], members.filter(function(name) {
+    const d = Object.getOwnPropertyDescriptor(location, name);
+    return !d || d.configurable !== false || d.enumerable !== true;
+  }));
+
+  // The setter half has to survive the move: a read-only attribute keeps its
+  // missing setter, a writable one keeps its setter.
+  testing.expectEqual([], ['origin', 'ancestorOrigins'].filter(function(name) {
+    return Object.getOwnPropertyDescriptor(location, name).set !== undefined;
+  }));
+  testing.expectEqual([], ['href', 'protocol', 'host', 'hostname', 'port', 'pathname',
+                           'search', 'hash'].filter(function(name) {
+    return typeof Object.getOwnPropertyDescriptor(location, name).set !== 'function';
+  }));
+
+  // An unforgeable operation is a non-writable data property, not an accessor.
+  testing.expectEqual([], operations.filter(function(name) {
+    const d = Object.getOwnPropertyDescriptor(location, name);
+    return typeof d.value !== 'function' || d.writable !== false;
+  }));
+
+  // Non-configurable means the page cannot redefine or delete it.
+  testing.expectEqual(false, delete location.href);
+  testing.expectEqual('function', typeof location.reload);
+</script>
+
+<script id=location_creation_steps>
+  // Two own properties that are not Web IDL members at all -- HTML's "create a
+  // Location object" steps define them straight onto the object. Chrome 151:
+  //
+  //   Object.getOwnPropertySymbols(location) -> [Symbol(Symbol.toPrimitive)]
+  //   ...descriptor -> { value: undefined, writable: false,
+  //                      enumerable: false, configurable: false }
+  //
+  // An undefined @@toPrimitive is not the same as no @@toPrimitive: it stops
+  // the coercion algorithm from walking up to an inherited one, so a Location
+  // always stringifies through `toString`.
+  testing.expectEqual(['Symbol(Symbol.toPrimitive)'], Object.getOwnPropertySymbols(location).map(String));
+
+  const to_primitive = Object.getOwnPropertyDescriptor(location, Symbol.toPrimitive);
+  testing.expectEqual(undefined, to_primitive.value);
+  testing.expectEqual(false, to_primitive.writable);
+  testing.expectEqual(false, to_primitive.enumerable);
+  testing.expectEqual(false, to_primitive.configurable);
+  testing.expectEqual(location.href, `${location}`);
+  testing.expectEqual(location.href, String(location));
+
+  // With every member unforgeable, the own-name list is itself a fingerprint.
+  // Chrome's is neither IDL order nor alphabetical, and it opens with `valueOf`
+  // -- the realm's %Object.prototype.valueOf%, which a template cannot carry
+  // (see Snapshot.attachClass). Ours is Chrome's list without that one name.
+  testing.expectEqual(
+    ['ancestorOrigins', 'href', 'origin', 'protocol', 'host', 'hostname', 'port',
+     'pathname', 'search', 'hash', 'assign', 'reload', 'replace', 'toString'],
+    Object.getOwnPropertyNames(location));
 </script>
 
 <div id="sec1"></div>
