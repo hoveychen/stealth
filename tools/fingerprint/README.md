@@ -13445,3 +13445,66 @@ probe turned up eleven more rows where `matches` differs for the same kind of
 reason — a fractional `em`, a nested `((…))`, an `or`, an empty query, a negated
 unknown media type — all of them evaluator gaps this plan deliberately did not
 touch, and all of them named in `results/media-query-serialization.json`.
+
+## The serialiser was right and the evaluator was wrong, thirteen rows over (2026-08-25)
+
+Writing `media` from the parse rather than the input left the wider probe with
+two media rows differing and *thirteen* `matches` rows differing — the
+serialisation had become the more accurate half of the same module. Every one of
+the thirteen was a rule the evaluator never had, and they group into two:
+
+**A media feature's number is a full CSS `<number>`, and a `<length>` is a
+float.** The scanner took digits and an optional fraction and nothing else, so
+five spellings of a perfectly ordinary bound answered backwards:
+
+| query | Chrome 150 | engine, before |
+|---|---|---|
+| `(min-width: 1e2px)` | true | false |
+| `(min-width: 100.5px)` | true | false |
+| `(min-width: 6.25em)` | true | false |
+| `(min-width: 1919.5px)` | true | false |
+| `(min-width: -1px)` | true | false |
+
+The last row is the one that had to be measured rather than reasoned about. A
+negative `<length>` is *well-formed* — useless as a bound, but every viewport is
+above it, and `(max-width: -1px)` is correspondingly false. A `<resolution>` and
+a `<ratio>` are the two that reject a negative outright, so the rule lives with
+each feature instead of in the scanner. `-0` passes all three, because `-0` is
+zero: `(min-resolution: -0dppx)` matches and serialises as `0dppx`.
+
+And the length is a **float32**. `(min-width: 1e400px)` clamps to
+`3.40282e+38px` rather than going infinite, `1e-400px` collapses to `0px`, and
+`119.9375em` serialises as `119.938em` — printf `%g`, six significant digits,
+which is the routine `webapi/css/typed_om.zig` already had for Typed OM. It moved
+to `css/units.zig` rather than being written twice. A ratio's terms are *not*
+written that way: `(aspect-ratio:1000000/1)` answers `1000000 / 1` where
+`(min-width:1000000px)` answers `1e+06px`, both measured.
+
+**A media condition nests, takes `or`, and negates.** The evaluator scanned
+tokens and ANDed every parenthesised feature it found, which is four wrong
+answers wearing one coat:
+
+| query | Chrome 150 | engine, before |
+|---|---|---|
+| `((min-width: 100px))` | true | false — read as a feature named `(min-width` |
+| `(a) or (b)` | or | and — `or` was accepted as a no-op separator |
+| `''` | true | false — an empty query is `all` |
+| `not bogus` | true | false — the unknown type returned out of the parse |
+
+That last one is the instructive one. An unknown media type answers false
+because it is not this browser, but it is still a *well-formed* query, so
+negating it answers true — and the old code returned out of the parse the moment
+it saw an ident it did not know, throwing the negation away with it. `not tv` and
+`not print` were false for the same reason.
+
+`matches` now walks `tokenize`, the same token split the serialiser writes from,
+so the two halves agree on what a query *is* by construction. After it, the
+119-row probe is **identical on every media row** and down to three `matches`
+rows, all three the two harnesses' viewports (`16 / 9` is true at 1920x1080 and
+false at Chrome's 800x600).
+
+One row moved on its own between two runs of the *same* Chrome:
+`(prefers-color-scheme:dark)` answered true in the morning and false in the
+afternoon. That is the host's appearance setting reaching into the browser, not a
+gap in either engine — worth naming because a probe that reads it will disagree
+with itself.

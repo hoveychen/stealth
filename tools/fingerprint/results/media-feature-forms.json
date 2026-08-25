@@ -1,5 +1,5 @@
 {
-  "when": "2026-08-25T12:15:00.000Z",
+  "when": "2026-08-25T14:05:00.000Z",
   "url": "https://example.com/",
   "chrome": {
     "(min-resolution: 0.625dppx)": "true | (min-resolution: 0.625dppx)",
