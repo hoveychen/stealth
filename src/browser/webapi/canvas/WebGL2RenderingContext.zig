@@ -33,6 +33,7 @@ const objects = @import("webgl_objects.zig");
 const gl_state = @import("webgl_state.zig");
 const attributes = @import("context_attributes.zig");
 const gpu_table = @import("gpu.zig");
+const extensions = @import("webgl_extensions.zig");
 const gpu = gpu_table.gpu;
 const DOMException = @import("../DOMException.zig");
 const WebGL1 = @import("WebGLRenderingContext.zig");
@@ -634,64 +635,69 @@ pub const MAX_CLIENT_WAIT_TIMEOUT_WEBGL: u32 = 0x9247;
 /// and names it drops because they became core. Order is Chrome's, which is
 /// alphabetical. This is the union of both reference drivers; which of them the
 /// claimed one actually has is `advertised_extension_names` below.
-const extension_names = [_][]const u8{
-    "EXT_clip_control",
-    "EXT_color_buffer_float",
-    "EXT_color_buffer_half_float",
-    "EXT_conservative_depth",
-    "EXT_depth_clamp",
-    "EXT_disjoint_timer_query_webgl2",
-    "EXT_float_blend",
-    "EXT_polygon_offset_clamp",
-    "EXT_render_snorm",
-    "EXT_texture_compression_bptc",
-    "EXT_texture_compression_rgtc",
-    "EXT_texture_filter_anisotropic",
-    "EXT_texture_mirror_clamp_to_edge",
-    "EXT_texture_norm16",
-    "KHR_parallel_shader_compile",
-    "NV_shader_noperspective_interpolation",
-    "OES_draw_buffers_indexed",
-    "OES_sample_variables",
-    "OES_shader_multisample_interpolation",
-    "OES_texture_float_linear",
-    "OVR_multiview2",
-    "WEBGL_blend_func_extended",
-    "WEBGL_clip_cull_distance",
-    "WEBGL_compressed_texture_astc",
-    "WEBGL_compressed_texture_etc",
-    "WEBGL_compressed_texture_etc1",
-    "WEBGL_compressed_texture_pvrtc",
-    "WEBGL_compressed_texture_s3tc",
-    "WEBGL_compressed_texture_s3tc_srgb",
-    "WEBGL_debug_renderer_info",
-    "WEBGL_debug_shaders",
-    "WEBGL_lose_context",
-    "WEBGL_multi_draw",
-    "WEBGL_polygon_mode",
-    "WEBGL_provoking_vertex",
-    "WEBGL_render_shared_exponent",
-    "WEBGL_stencil_texturing",
+///
+/// Every field carries its own interface object, the way 1.0's union does: this
+/// used to be three fields, of which one anonymous empty struct stood in for 34
+/// extensions, so 34 of 36 branded as [object Object] and inherited
+/// Object.prototype's members. See webgl_extensions.zig.
+const Extension = union(enum) {
+    EXT_clip_control: *extensions.EXT_clip_control,
+    EXT_color_buffer_float: *extensions.EXT_color_buffer_float,
+    EXT_color_buffer_half_float: *extensions.EXT_color_buffer_half_float,
+    EXT_conservative_depth: *extensions.EXT_conservative_depth,
+    EXT_depth_clamp: *extensions.EXT_depth_clamp,
+    EXT_disjoint_timer_query_webgl2: *extensions.EXT_disjoint_timer_query_webgl2,
+    EXT_float_blend: *extensions.EXT_float_blend,
+    EXT_polygon_offset_clamp: *extensions.EXT_polygon_offset_clamp,
+    EXT_render_snorm: *extensions.EXT_render_snorm,
+    EXT_texture_compression_bptc: *extensions.EXT_texture_compression_bptc,
+    EXT_texture_compression_rgtc: *extensions.EXT_texture_compression_rgtc,
+    EXT_texture_filter_anisotropic: *extensions.EXT_texture_filter_anisotropic,
+    EXT_texture_mirror_clamp_to_edge: *extensions.EXT_texture_mirror_clamp_to_edge,
+    EXT_texture_norm16: *extensions.EXT_texture_norm16,
+    KHR_parallel_shader_compile: *extensions.KHR_parallel_shader_compile,
+    NV_shader_noperspective_interpolation: *extensions.NV_shader_noperspective_interpolation,
+    OES_draw_buffers_indexed: *extensions.OES_draw_buffers_indexed,
+    OES_sample_variables: *extensions.OES_sample_variables,
+    OES_shader_multisample_interpolation: *extensions.OES_shader_multisample_interpolation,
+    OES_texture_float_linear: *extensions.OES_texture_float_linear,
+    OVR_multiview2: *extensions.OVR_multiview2,
+    WEBGL_blend_func_extended: *extensions.WEBGL_blend_func_extended,
+    WEBGL_clip_cull_distance: *extensions.WEBGL_clip_cull_distance,
+    WEBGL_compressed_texture_astc: *extensions.WEBGL_compressed_texture_astc,
+    WEBGL_compressed_texture_etc: *extensions.WEBGL_compressed_texture_etc,
+    WEBGL_compressed_texture_etc1: *extensions.WEBGL_compressed_texture_etc1,
+    WEBGL_compressed_texture_pvrtc: *extensions.WEBGL_compressed_texture_pvrtc,
+    WEBGL_compressed_texture_s3tc: *extensions.WEBGL_compressed_texture_s3tc,
+    WEBGL_compressed_texture_s3tc_srgb: *extensions.WEBGL_compressed_texture_s3tc_srgb,
+    WEBGL_debug_renderer_info: *extensions.WEBGL_debug_renderer_info,
+    WEBGL_debug_shaders: *extensions.WEBGL_debug_shaders,
+    WEBGL_lose_context: *extensions.WEBGL_lose_context,
+    WEBGL_multi_draw: *extensions.WEBGL_multi_draw,
+    WEBGL_polygon_mode: *extensions.WEBGL_polygon_mode,
+    WEBGL_provoking_vertex: *extensions.WEBGL_provoking_vertex,
+    WEBGL_render_shared_exponent: *extensions.WEBGL_render_shared_exponent,
+    WEBGL_stencil_texturing: *extensions.WEBGL_stencil_texturing,
+
+    const Kind = extensions.Kind(Extension);
 };
 
-/// The two extensions that hand an object back; the rest answer with an empty
-/// object, which is what a script gets from Chrome for a supported extension
-/// that exposes no members of its own.
-const Extension = union(enum) {
-    debug_renderer_info: *WebGL1.Extension.Type.WEBGL_debug_renderer_info,
-    lose_context: *WebGL1.Extension.Type.WEBGL_lose_context,
-    supported: struct {},
-};
+/// Every extension either reference driver advertises here, in Chrome's order.
+const all_extension_names: []const []const u8 = std.meta.fieldNames(Extension.Kind);
 
 /// The subset the claimed platform's driver has: eight of the names above are
 /// Apple-GPU only, and OVR_multiview2 is SwiftShader-only.
-const advertised_extension_names = gpu_table.advertised(&extension_names, gpu.webgl2_unsupported);
+const advertised_extension_names = gpu_table.advertised(all_extension_names, gpu.webgl2_unsupported);
 
 pub fn getSupportedExtensions(_: *const WebGL2RenderingContext) []const []const u8 {
     return advertised_extension_names;
 }
 
 pub fn getExtension(self: *WebGL2RenderingContext, name: []const u8, exec: *Execution) !?Extension {
+    // The advertised list is checked before the union is consulted, so a name
+    // this driver does not have is refused even though there is a field for it.
+    // Without this the engine would hand out an extension it had just left off
+    // getSupportedExtensions.
     var supported = false;
     for (advertised_extension_names) |candidate| {
         if (std.ascii.eqlIgnoreCase(candidate, name)) {
@@ -703,15 +709,20 @@ pub fn getExtension(self: *WebGL2RenderingContext, name: []const u8, exec: *Exec
         return null;
     }
 
-    if (std.ascii.eqlIgnoreCase(name, "WEBGL_debug_renderer_info")) {
-        // Opens the getParameter gate, and only for this context.
+    const tag = extensions.find(Extension, name) orelse return null;
+
+    // Opens the getParameter gate, and only for this context.
+    if (tag == .WEBGL_debug_renderer_info) {
         self._debug_renderer_info = true;
-        return .{ .debug_renderer_info = try exec._factory.create(WebGL1.Extension.Type.WEBGL_debug_renderer_info{}) };
     }
-    if (std.ascii.eqlIgnoreCase(name, "WEBGL_lose_context")) {
-        return .{ .lose_context = try exec._factory.create(WebGL1.Extension.Type.WEBGL_lose_context{}) };
+
+    switch (tag) {
+        inline else => |comptime_enum| {
+            const T = @field(extensions, @tagName(comptime_enum));
+            const object = try exec._factory.create(T{});
+            return @unionInit(Extension, @tagName(comptime_enum), object);
+        },
     }
-    return .{ .supported = .{} };
 }
 
 pub fn getCanvas(self: *const WebGL2RenderingContext) Surface {
@@ -917,8 +928,8 @@ pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Exec
         // Gated on this context having asked for WEBGL_debug_renderer_info;
         // see WebGLRenderingContext.getParameter for what Chrome answers when
         // it has not.
-        WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => if (self._debug_renderer_info) .{ .string = gpu.unmasked_vendor } else null,
-        WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => if (self._debug_renderer_info) .{ .string = gpu.unmasked_renderer } else null,
+        extensions.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => if (self._debug_renderer_info) .{ .string = gpu.unmasked_vendor } else null,
+        extensions.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => if (self._debug_renderer_info) .{ .string = gpu.unmasked_renderer } else null,
         else => null,
     };
 

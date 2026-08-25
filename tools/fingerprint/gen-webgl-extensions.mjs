@@ -14,6 +14,29 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const measured = JSON.parse(readFileSync('tools/fingerprint/results/webgl-extension-brands.json', 'utf8'));
 const chrome = measured.chrome;
 
+// One extension is only reachable on a SwiftShader driver, so its reading was
+// taken from a second run with the GPU forced. It joins the WebGL 2 set here
+// because the union has to have a field for it: the linux GPU table advertises
+// the name, and a name advertised and then refused is the contradiction this
+// whole file exists to remove. See the note in the results JSON.
+const swiftshader = measured.chrome_swiftshader ?? {};
+const gpuForced = new Set();
+for (const key of Object.keys(swiftshader)) {
+    const m = /^webgl2 (.+)$/.exec(key);
+    if (!m) continue;
+    if (chrome[key]) continue;
+    chrome[key] = swiftshader[key];
+    // Placed where the forced run had it rather than re-sorted: Chrome's order
+    // is not a plain sort (EXT_sRGB comes after EXT_texture_*), so the only
+    // safe insertion point is behind the nearest name both runs listed.
+    const forcedList = swiftshader['webgl2.supported'];
+    const before = forcedList.slice(0, forcedList.indexOf(m[1])).reverse()
+        .find((n) => chrome['webgl2.supported'].includes(n));
+    const at = before ? chrome['webgl2.supported'].indexOf(before) + 1 : 0;
+    chrome['webgl2.supported'].splice(at, 0, m[1]);
+    gpuForced.add(m[1]);
+}
+
 // One entry per extension name, in the order Chrome advertises it. An extension
 // both contexts advertise carries identical members in each (asserted below),
 // so a single Zig type serves both.
@@ -75,7 +98,44 @@ w('// value in Chrome -- getSupportedProfiles, getTranslatedShaderSource,');
 w('// isVertexArrayOES -- answers undefined here. The arity is right, so');
 w('// `fn.length` matches; the return value does not.');
 w();
+w('const std = @import("std");');
+w();
 w('const js = @import("../../js/js.zig");');
+w();
+// Not derived from the JSON -- fixed text, but it lives here because both
+// context files need it and this is the module that owns extension interfaces.
+w('/// The enum of an extension union\'s field names. Both rendering contexts');
+w('/// carry a union of the extensions they advertise; the name a script passes to');
+w('/// getExtension has to be turned into one of its tags, and neither context');
+w('/// should own a second copy of that.');
+w('pub fn Kind(comptime U: type) type {');
+w('    const fields = @typeInfo(U).@"union".fields;');
+w('    const Tag = std.math.IntFittingRange(0, if (fields.len == 0) 0 else fields.len - 1);');
+w('    var names: [fields.len][:0]const u8 = undefined;');
+w('    for (fields, 0..) |field, i| {');
+w('        names[i] = field.name;');
+w('    }');
+w('    return @Enum(Tag, .exhaustive, &names, &std.simd.iota(Tag, fields.len));');
+w('}');
+w();
+w('/// The tag of `U` a getExtension name asks for, or null for a name it has no');
+w('/// field for. Just to make you really sad, this lookup has to be');
+w('/// case-insensitive: `getExtension(\'webgl_lose_context\')` answers in Chrome.');
+w('/// So this is `std.meta.stringToEnum` with the comparison swapped.');
+w('pub fn find(comptime U: type, name: []const u8) ?Kind(U) {');
+w('    const T = Kind(U);');
+w('    const kvs = comptime build_kvs: {');
+w('        const EnumKV = struct { []const u8, T };');
+w('        var kvs_array: [@typeInfo(T).@"enum".fields.len]EnumKV = undefined;');
+w('        for (@typeInfo(T).@"enum".fields, 0..) |enumField, i| {');
+w('            kvs_array[i] = .{ enumField.name, @field(T, enumField.name) };');
+w('        }');
+w('        break :build_kvs kvs_array[0..];');
+w('    };');
+w('    const Map = std.StaticStringMapWithEql(T, std.static_string_map.eqlAsciiIgnoreCase);');
+w('    const map = Map.initComptime(kvs);');
+w('    return map.get(name);');
+w('}');
 w();
 
 const zigTypes = [];
@@ -92,6 +152,11 @@ for (const ext of byName.values()) {
 
     zigTypes.push(ext.name);
     w(`/// ${ext.brand}, advertised by ${ext.contexts.join(' and ')}.`);
+    if (gpuForced.has(ext.name)) {
+        w('/// Measured off a Chrome forced onto SwiftShader -- the Metal driver the');
+        w('/// macOS table claims never advertises this one, so no reading of it can');
+        w('/// come from the same run as the rest.');
+    }
     w(`pub const ${ext.name} = struct {`);
     w('    _: u8 = 0,');
     if (consts.length) {

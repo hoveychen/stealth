@@ -143,39 +143,17 @@ pub const Extension = union(enum) {
     WEBGL_multi_draw: *extensions.WEBGL_multi_draw,
     WEBGL_polygon_mode: *extensions.WEBGL_polygon_mode,
 
-    /// Reified enum type from the fields of this union.
-    const Kind = blk: {
-        const info = @typeInfo(Extension).@"union";
-        const fields = info.fields;
-        const Tag = std.math.IntFittingRange(0, if (fields.len == 0) 0 else fields.len - 1);
-        var names: [fields.len][:0]const u8 = undefined;
-        for (fields, 0..) |field, i| {
-            names[i] = field.name;
-        }
+    /// Reified enum type from the fields of this union. WebGL 2 has its own
+    /// union and the same need, so the reification lives in webgl_extensions.zig
+    /// rather than once per context.
+    const Kind = extensions.Kind(Extension);
 
-        break :blk @Enum(Tag, .exhaustive, &names, &std.simd.iota(Tag, fields.len));
-    };
-
-    /// Returns the `Extension.Kind` by its name.
+    /// Returns the `Extension.Kind` by its name, case-insensitively.
     fn find(name: []const u8) ?Kind {
-        // Just to make you really sad, this function has to be case-insensitive.
-        // So here we copy what's being done in `std.meta.stringToEnum` but replace
-        // the comparison function.
-        const kvs = comptime build_kvs: {
-            const T = Extension.Kind;
-            const EnumKV = struct { []const u8, T };
-            var kvs_array: [@typeInfo(T).@"enum".fields.len]EnumKV = undefined;
-            for (@typeInfo(T).@"enum".fields, 0..) |enumField, i| {
-                kvs_array[i] = .{ enumField.name, @field(T, enumField.name) };
-            }
-            break :build_kvs kvs_array[0..];
-        };
-        const Map = std.StaticStringMapWithEql(Extension.Kind, std.static_string_map.eqlAsciiIgnoreCase);
-        const map = Map.initComptime(kvs);
-        return map.get(name);
+        return extensions.find(Extension, name);
     }
 
-    /// Extension types, all 52 of them generated from a measurement of
+    /// Extension types, all 53 of them generated from a measurement of
     /// the reference Chrome. See webgl_extensions.zig.
     pub const Type = extensions;
 };

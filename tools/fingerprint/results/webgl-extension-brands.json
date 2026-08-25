@@ -1850,6 +1850,68 @@
       }
     }
   },
+  "chrome_swiftshader": {
+    "note": "The same Chrome forced onto SwiftShader (--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader), which is the only way to reach OVR_multiview2: the Metal driver above never advertises it, so its interface is the one name in the WebGL 2 union with no reading in the `chrome` section. Only that one row is recorded here -- the rest of a SwiftShader run belongs to a different GPU table. Renderer string this was taken from: ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver). Its webgl2 list was 30 names against the 29 the linux table in gpu.zig claims; the extra is EXT_disjoint_timer_query_webgl2, which a macOS host's SwiftShader has and the reference Linux one did not. That is a host difference, not a correction to the table.",
+    "webgl2.supported": [
+      "EXT_clip_control",
+      "EXT_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_conservative_depth",
+      "EXT_depth_clamp",
+      "EXT_disjoint_timer_query_webgl2",
+      "EXT_float_blend",
+      "EXT_polygon_offset_clamp",
+      "EXT_texture_compression_bptc",
+      "EXT_texture_compression_rgtc",
+      "EXT_texture_filter_anisotropic",
+      "EXT_texture_mirror_clamp_to_edge",
+      "NV_shader_noperspective_interpolation",
+      "OES_draw_buffers_indexed",
+      "OES_sample_variables",
+      "OES_shader_multisample_interpolation",
+      "OES_texture_float_linear",
+      "OVR_multiview2",
+      "WEBGL_clip_cull_distance",
+      "WEBGL_compressed_texture_astc",
+      "WEBGL_compressed_texture_etc",
+      "WEBGL_compressed_texture_etc1",
+      "WEBGL_compressed_texture_s3tc",
+      "WEBGL_compressed_texture_s3tc_srgb",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_debug_shaders",
+      "WEBGL_lose_context",
+      "WEBGL_multi_draw",
+      "WEBGL_polygon_mode",
+      "WEBGL_stencil_texturing"
+    ],
+    "webgl2 OVR_multiview2": {
+      "brand": "[object OVRMultiview2]",
+      "ctor": "Object",
+      "global": "undefined",
+      "members": [
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR",
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR",
+        "FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR",
+        "MAX_VIEWS_OVR",
+        "framebufferTextureMultiviewOVR"
+      ],
+      "own": [],
+      "protoNames": [
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR",
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR",
+        "FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR",
+        "MAX_VIEWS_OVR",
+        "framebufferTextureMultiviewOVR"
+      ],
+      "values": {
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR": 38448,
+        "FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR": 38450,
+        "MAX_VIEWS_OVR": 38449,
+        "FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR": 38451,
+        "framebufferTextureMultiviewOVR": "fn/6"
+      }
+    }
+  },
   "lightpanda": {
     "webgl.supported": [
       "ANGLE_instanced_arrays",

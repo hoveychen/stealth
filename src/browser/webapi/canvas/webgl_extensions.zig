@@ -33,7 +33,42 @@
 // isVertexArrayOES -- answers undefined here. The arity is right, so
 // `fn.length` matches; the return value does not.
 
+const std = @import("std");
+
 const js = @import("../../js/js.zig");
+
+/// The enum of an extension union's field names. Both rendering contexts
+/// carry a union of the extensions they advertise; the name a script passes to
+/// getExtension has to be turned into one of its tags, and neither context
+/// should own a second copy of that.
+pub fn Kind(comptime U: type) type {
+    const fields = @typeInfo(U).@"union".fields;
+    const Tag = std.math.IntFittingRange(0, if (fields.len == 0) 0 else fields.len - 1);
+    var names: [fields.len][:0]const u8 = undefined;
+    for (fields, 0..) |field, i| {
+        names[i] = field.name;
+    }
+    return @Enum(Tag, .exhaustive, &names, &std.simd.iota(Tag, fields.len));
+}
+
+/// The tag of `U` a getExtension name asks for, or null for a name it has no
+/// field for. Just to make you really sad, this lookup has to be
+/// case-insensitive: `getExtension('webgl_lose_context')` answers in Chrome.
+/// So this is `std.meta.stringToEnum` with the comparison swapped.
+pub fn find(comptime U: type, name: []const u8) ?Kind(U) {
+    const T = Kind(U);
+    const kvs = comptime build_kvs: {
+        const EnumKV = struct { []const u8, T };
+        var kvs_array: [@typeInfo(T).@"enum".fields.len]EnumKV = undefined;
+        for (@typeInfo(T).@"enum".fields, 0..) |enumField, i| {
+            kvs_array[i] = .{ enumField.name, @field(T, enumField.name) };
+        }
+        break :build_kvs kvs_array[0..];
+    };
+    const Map = std.StaticStringMapWithEql(T, std.static_string_map.eqlAsciiIgnoreCase);
+    const map = Map.initComptime(kvs);
+    return map.get(name);
+}
 
 /// ANGLEInstancedArrays, advertised by webgl.
 pub const ANGLE_instanced_arrays = struct {
@@ -1513,6 +1548,44 @@ pub const OES_shader_multisample_interpolation = struct {
     };
 };
 
+/// OVRMultiview2, advertised by webgl2.
+/// Measured off a Chrome forced onto SwiftShader -- the Metal driver the
+/// macOS table claims never advertises this one, so no reading of it can
+/// come from the same run as the rest.
+pub const OVR_multiview2 = struct {
+    _: u8 = 0,
+
+    pub const FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR: u32 = 38448;
+    pub const FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR: u32 = 38450;
+    pub const MAX_VIEWS_OVR: u32 = 38449;
+    pub const FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR: u32 = 38451;
+
+    pub fn framebufferTextureMultiviewOVR(_: *const OVR_multiview2) void {}
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(OVR_multiview2);
+
+        pub const Meta = struct {
+            pub const name = "OVR_multiview2";
+
+            // No global for an extension, and no `constructor` on its
+            // prototype; the brand is the only thing that identifies it.
+            pub const no_interface_object = true;
+            pub const to_string_tag = "OVRMultiview2";
+
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR = bridge.property(OVR_multiview2.FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR, .{ .template = false, .readonly = true });
+        pub const FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR = bridge.property(OVR_multiview2.FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR, .{ .template = false, .readonly = true });
+        pub const MAX_VIEWS_OVR = bridge.property(OVR_multiview2.MAX_VIEWS_OVR, .{ .template = false, .readonly = true });
+        pub const FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR = bridge.property(OVR_multiview2.FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR, .{ .template = false, .readonly = true });
+
+        pub const framebufferTextureMultiviewOVR = bridge.function(OVR_multiview2.framebufferTextureMultiviewOVR, .{ .noop = true, .arity = 6 });
+    };
+};
+
 /// WebGLClipCullDistance, advertised by webgl2.
 pub const WEBGL_clip_cull_distance = struct {
     _: u8 = 0,
@@ -1689,6 +1762,7 @@ pub const all = [_]type{
     OES_draw_buffers_indexed,
     OES_sample_variables,
     OES_shader_multisample_interpolation,
+    OVR_multiview2,
     WEBGL_clip_cull_distance,
     WEBGL_provoking_vertex,
     WEBGL_render_shared_exponent,
