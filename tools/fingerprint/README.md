@@ -13126,3 +13126,27 @@ Two asymmetries did show, neither explained:
 * Chrome found `TAB_ID` already in storage; we found null and set it. That one is
   probably an artifact of the driver reusing a Chrome profile directory per
   port, not a finding — noted so nobody re-reads it as one.
+
+### The cookie asymmetry was mine, not the engine's — align arms by *cycle* (2026-08-24, same round)
+
+The note above reported our first `document.cookie` reads coming back empty
+where Chrome's carried 31 bytes. That is wrong, and the way it was wrong is
+worth more than the observation was.
+
+The cookie is `PIM-SESSION-ID=<16 chars>`, and the page sets it itself. Read at
+the same wall-clock settle, the two arms are not at the same point in the
+challenge: **Chrome's interstitial cycle is ~800ms and this engine's is ~2.5s**,
+so a 1300ms settle catches Chrome on its *second* document — where the cookie
+from cycle one is already in the jar — and catches us on our first. Re-read
+inside cycle one (settles of 400ms, 600ms, 750ms), Chrome's first reads are
+`cookie.get[]`, empty, exactly like ours. A fresh profile per launch was already
+being used, so that was not it either.
+
+**So: when comparing page-side probe totals on this replay, align by cycle, not
+by settle.** The counter comparisons in the sections above are unaffected —
+those come from the POST bodies in the server log, where each cycle's payload is
+its own line — but any probe *total* read out of `window.__probe` at a fixed
+settle may be comparing our first pass against Chrome's second, and the
+`charCodeAt` counts (635673 against 650797) are exactly that shape. They agreed,
+which is why nothing downstream turned on them, but they should be re-taken
+per-cycle before anything is built on them.

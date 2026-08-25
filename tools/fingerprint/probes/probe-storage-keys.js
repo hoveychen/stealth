@@ -36,8 +36,8 @@
     if (d && d.get) {
         Object.defineProperty(document, 'cookie', {
             configurable: true,
-            get: function () { var v = d.get.call(document); log.push(['cookie.get=' + v.length, Math.round(now())]); return v; },
-            set: function (v) { log.push(['cookie.set:' + String(v).split('=')[0] + '=' + String(v).length, Math.round(now())]); d.set.call(document, v); },
+            get: function () { var v = d.get.call(document); log.push(['cookie.get[' + v.slice(0, 60) + ']', Math.round(now())]); return v; },
+            set: function (v) { log.push(['cookie.set[' + String(v).slice(0, 60) + ']', Math.round(now())]); d.set.call(document, v); },
         });
     }
 })()
