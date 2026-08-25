@@ -13501,3 +13501,113 @@ Chrome needs the element's position, and layout here puts a 3000 px spacer at
 25 px, so there is nothing to threshold against. It is a server-visible extra
 request on any page with lazy images, and it needs a decision rather than a
 patch.
+
+## Every prototype, name for name and position for position (B47, 2026-08-25)
+
+The previous section left two bridge-wide shapes measured and unmatched. One of
+them -- where `constructor` sits -- is fixed here, and measuring it properly
+turned up a bigger one next to it.
+
+`probes/expr-constructor-slot.js` walks every interface object the realm
+carries and records the whole of `Object.getOwnPropertyNames(X.prototype)`
+rather than an index, so one reading answers three questions at once: which
+interfaces exist, which members they own, and in what order. Run it through
+`run-expr.mjs` against both arms on the *same* https page (`--url
+https://example.com/`; `about:blank` is not a secure context and the two arms
+gate different surfaces there, see the 2026-08-24 note above).
+
+Of the 923 interface prototypes the two engines share, **734 were byte-identical
+at the start of this session** and 189 were not. Three separate causes, and the
+first two are cheap:
+
+| cause | interfaces | fixed |
+|---|---|---|
+| `constructor` in the wrong slot, members otherwise identical | 26 | yes |
+| member set identical, declaration order different | 63 | yes |
+| members missing or extra | 100 | no -- see the table below |
+
+### Where Chrome puts `constructor`
+
+V8 appends `constructor` to a template's prototype object once the template's
+own members are in, so a template-built prototype reports it last. Blink's does
+not: Chrome installs a second batch of members per context -- the runtime-flag
+and secure-context gated ones -- and that batch lands after V8's append. So
+Chrome's `constructor` sits at the boundary between the two, and the tail behind
+it reads like a list of Chrome flags: `Document`'s is `fragmentDirective,
+onpointerrawupdate, browsingTopics, hasPrivateToken, …`, `USB`'s is
+`requestDevice`, `Performance`'s is `timing, navigation, memory, eventCounts,
+interactionCount`.
+
+`Navigator.zig` carried a comment saying a binding cannot choose the slot. Half
+true: the members go on a Template and V8 decides where its own entry goes. But
+string keys enumerate in insertion order, so deleting the members that belong
+after `constructor` and defining them again with the descriptor they already
+have moves them behind it and touches nothing else -- same getter, same setter,
+same arity, same attributes. `Snapshot.moveConstructorSlots` does that once
+while the snapshot is built, driven by `Meta.constructor_after` (the member
+Chrome's `constructor` follows -- a name, not an index, because an index moves
+whenever anything else on the interface changes). 30 interfaces carry one.
+
+### Declaration order is enumeration order
+
+The bigger half. 63 interfaces owned exactly Chrome's members and listed them in
+a different order, which is one `getOwnPropertyNames` away from readable and
+costs nothing to fix: `XMLHttpRequest` is the worst of them, and it is the
+prototype the Akamai interstitial proxies `send` on.
+
+    Chrome  onreadystatechange readyState timeout withCredentials upload
+            responseURL status statusText responseType response responseText
+            UNSENT OPENED HEADERS_RECEIVED LOADING DONE
+            abort getAllResponseHeaders getResponseHeader open overrideMimeType
+            send setRequestHeader constructor responseXML
+            setAttributionReporting setPrivateToken
+    was     UNSENT OPENED HEADERS_RECEIVED LOADING DONE onreadystatechange
+            upload timeout withCredentials open send responseType status
+            statusText readyState response responseText responseXML responseURL
+            setRequestHeader overrideMimeType getResponseHeader
+            getAllResponseHeaders abort constructor
+
+`Node` differed in 47 of 48 positions, `CanvasRenderingContext2D` in 68 of 74,
+`WebGLRenderingContext` in 438 of 443. The sweep is mechanical -- reorder the
+`pub const` declarations, move a member's comment with it, leave a slot's
+comment where it is -- and changes no behaviour at all.
+
+**Both arms after: 824 of 923 byte-identical, and not one interface whose member
+set already matched Chrome's is left disagreeing about order or about where
+`constructor` sits.**
+
+### What is left: 100 interfaces with the wrong members
+
+The same reading gives the list, which is the natural next thing to work
+through. 450 members Chrome has and this engine does not, 23 the other way. The
+cheapest end of it, one or two names each:
+
+    XMLHttpRequest      setAttributionReporting setPrivateToken   (done here)
+    Element             ariaActionsElements
+    ElementInternals    ariaActionsElements
+    SubtleCrypto        wrapKey unwrapKey
+    StorageManager      persisted persist
+    Attr                prefix specified
+    File                lastModifiedDate webkitRelativePath
+    DOMMatrixReadOnly   toJSON transformPoint
+    Headers             getSetCookie
+    IDBFactory          databases
+    Range               expand
+    TextEncoder         encodeInto
+    Response/Blob       textStream
+    PerformanceEntry    navigationId   (we park it on PerformanceResourceTiming)
+    Worker              +onmessageerror        (ours, Chrome has none)
+    DocumentFragment    +innerHTML
+    DOMException        +toString
+
+and the expensive end is `SVGElement`, which owns 110 event handlers in Chrome
+and none here, plus `SVGSVGElement` (20), `Request` (11), `HTMLIFrameElement`
+(11) and `ShadowRoot` (10).
+
+Two entries on the "extra" side are this branch being behind main rather than
+gaps: `navigator.modelContext` (main made the WebMCP surface opt-in behind
+`--webmcp`) and `PerformanceObserver.supportedEntryTypes` being two short.
+
+Not measured: the worker realm. B46 read `WorkerNavigator.prototype`'s
+`constructor` between `connection` and `hid`, and this session's table is the
+window realm only, so a worker-side pass over the same probe is still owed.
