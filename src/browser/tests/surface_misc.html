@@ -233,10 +233,15 @@ probe-s7-misc.chrome.json).
     // on every read (measured: two reads are not the same array).
     testing.expectEqual(1, viewport.segments.length);
     testing.expectFalse(viewport.segments === viewport.segments);
-    // Chrome's array is a FrozenArray and reads back frozen; this engine hands
-    // back an ordinary array, which is the engine-wide FrozenArray gap rather
-    // than anything about Viewport.
-    testing.expectEqual(false, Object.isFrozen(viewport.segments));
+    // Chrome's array is a FrozenArray, so it reads back frozen: not extensible,
+    // and every index non-writable and non-configurable.
+    testing.expectEqual(true, Object.isFrozen(viewport.segments));
+    testing.expectEqual(false, Object.isExtensible(viewport.segments));
+    {
+      const d = Object.getOwnPropertyDescriptor(viewport.segments, '0');
+      testing.expectEqual(false, d.writable);
+      testing.expectEqual(false, d.configurable);
+    }
     const segment = viewport.segments[0];
     testing.expectEqual('[object DOMRect]', Object.prototype.toString.call(segment));
     testing.expectEqual(0, segment.x);

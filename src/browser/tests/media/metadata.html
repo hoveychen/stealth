@@ -82,6 +82,23 @@
   testing.expectTrue(m.artwork !== m.artwork);
   testing.expectTrue(m.chapterInfo !== m.chapterInfo);
 
+  // artwork is a FrozenArray, so it reads back frozen -- and so does the empty
+  // one, which is the case an ordinary empty array would pass by accident if
+  // the freeze were not really happening. Measured on Chrome 151, along with
+  // the length descriptor, which Object.freeze pins the same way.
+  testing.expectEqual(true, Object.isFrozen(m.artwork));
+  testing.expectEqual(false, Object.isExtensible(m.artwork));
+  testing.expectEqual(true, Object.isFrozen(new MediaMetadata({}).artwork));
+  {
+    const d = Object.getOwnPropertyDescriptor(m.artwork, '0');
+    testing.expectEqual(false, d.writable);
+    testing.expectEqual(true, d.enumerable);
+    testing.expectEqual(false, d.configurable);
+    const len = Object.getOwnPropertyDescriptor(m.artwork, 'length');
+    testing.expectEqual(false, len.writable);
+    testing.expectEqual(false, len.configurable);
+  }
+
   // `src` is required, and its refusal names the whole dictionary chain.
   testing.expectError(
     "Failed to construct 'MediaMetadata': Failed to read the 'artwork' property from " +
