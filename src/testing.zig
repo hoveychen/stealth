@@ -345,7 +345,18 @@ const HtmlRunnerOpts = struct {
     // Shortens the engine-wide request timeout (normally 5s) for the duration
     // of the run, so a test can reach it without stalling the suite.
     http_timeout_ms: ?u31 = null,
+    // Asks for the WebMCP surface, as `lightpanda mcp` and `--webmcp` do. The
+    // test config is a `serve` one, so the default here is the gated state.
+    webmcp: bool = false,
 };
+
+// Turns the WebMCP surface on for the tests that drive it -- the CDP `WebMCP`
+// domain ones, which build their pages through `testing.context()` rather than
+// through htmlRunner (which has its own opt). Pair every call with a `defer` of
+// the false case: the config is process-wide.
+pub fn setWebMcp(enabled: bool) void {
+    test_config.mode.serve.webmcp = enabled;
+}
 
 // Create a fresh page on `test_session` and return its root frame — for tests
 // that just need a frame to build a DOM in. The page lives on the session;
@@ -378,6 +389,9 @@ pub fn htmlRunner(comptime path: []const u8, opts: HtmlRunnerOpts) !void {
         test_config.mode.serve.http_timeout = http_timeout_ms;
     }
     defer test_config.mode.serve.http_timeout = previous_http_timeout;
+
+    test_config.mode.serve.webmcp = opts.webmcp;
+    defer test_config.mode.serve.webmcp = false;
 
     const root = try std.fs.path.joinZ(arena_allocator, &.{ WEB_API_TEST_ROOT, path });
     const stat = std.Io.Dir.cwd().statFile(io, root, .{}) catch |err| {

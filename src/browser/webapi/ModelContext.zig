@@ -238,5 +238,12 @@ pub const JsApi = struct {
 
 const testing = @import("../../testing.zig");
 test "WebApi: ModelContext" {
-    try testing.htmlRunner("webmcp/model_context.html", .{});
+    try testing.htmlRunner("webmcp/model_context.html", .{ .webmcp = true });
+}
+
+// The other half of the same gate: with WebMCP not asked for, none of the three
+// names exist. Default `.webmcp`, deliberately -- a run that has to look like
+// Chrome is the common case, so it is the one the default expresses.
+test "WebApi: ModelContext gated off" {
+    try testing.htmlRunner("webmcp/gated.html", .{});
 }

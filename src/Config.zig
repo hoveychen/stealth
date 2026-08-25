@@ -241,6 +241,7 @@ const CommonOptions = .{
     .{ .name = "cookie_jar", .type = ?[]const u8 },
     .{ .name = "disable_subframes", .type = bool },
     .{ .name = "disable_workers", .type = bool },
+    .{ .name = "webmcp", .type = bool },
     .{ .name = "disable_external_stylesheets", .type = bool },
     .{ .name = "v8_flags_unsafe", .type = ?[]const u8 },
     .{ .name = "v8_max_heap_mb", .type = ?u32 },
@@ -502,6 +503,26 @@ pub fn disableSubframes(self: *const Config) bool {
 pub fn disableWorkers(self: *const Config) bool {
     return switch (self.mode) {
         inline .serve, .fetch, .mcp, .agent => |opts| opts.disable_workers,
+        else => unreachable,
+    };
+}
+
+// Whether a document gets this fork's WebMCP surface: `navigator.modelContext`
+// plus the `ModelContext` / `ModelContextClient` interface objects.
+//
+// Chrome has none of those three names, so carrying them is a one-expression
+// identification -- and not a theoretical one: Kasada was measured reading
+// `navigator.modelContext` twice on x-hyatt (see the prop_read log in
+// tools/fingerprint/results/prop-reads-hyatt.json). So the surface is opt-in.
+//
+// `mcp` is the run mode whose entire purpose is WebMCP, so it always carries
+// it. The modes that only speak CDP have to ask with `--webmcp`, which is what
+// keeps the CDP `WebMCP` domain usable from `serve` -- a page cannot register a
+// tool through a surface it cannot see.
+pub fn enableWebMcp(self: *const Config) bool {
+    return switch (self.mode) {
+        .mcp => true,
+        inline .serve, .fetch, .agent => |opts| opts.webmcp,
         else => unreachable,
     };
 }
