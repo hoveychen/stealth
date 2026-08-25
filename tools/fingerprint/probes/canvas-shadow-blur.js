@@ -55,7 +55,33 @@
     return lo > hi ? 'empty' : lo + ':' + alpha.slice(lo, hi + 1).join(',');
   };
 
-  const out = { unscaled: {}, scaled: {}, bar: {} };
+  // A bar *one* pixel wide, so the row is the kernel's taps themselves rather
+  // than the kernel convolved with anything -- no deconvolution needed to read
+  // the shape off. Below sigma 2 Skia leaves the box triple for a discrete
+  // Gaussian, and this is what says so.
+  const taps = (blur) => {
+    const ctx = new OffscreenCanvas(W, H).getContext('2d', { willReadFrequently: true });
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur = blur;
+    ctx.shadowOffsetX = 48;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(4, -32, 1, H + 64);
+    const d = ctx.getImageData(0, 16, W, 1).data;
+    const a = [];
+    for (let x = 40; x < 70; x++) a.push(d[x * 4 + 3]);
+    let lo = 0;
+    while (lo < a.length && a[lo] === 0) lo++;
+    let hi = a.length - 1;
+    while (hi >= 0 && a[hi] === 0) hi--;
+    return lo > hi ? 'empty' : a.slice(lo, hi + 1).join(',');
+  };
+
+  const out = { unscaled: {}, scaled: {}, bar: {}, taps: {} };
+  // Both sides of the sigma-2 line, and both sides of the one below which
+  // Skia does not blur at all.
+  for (const blur of [0.1, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.5, 2, 2.5, 3, 3.5, 3.9, 4, 5, 8, 11, 14, 16]) {
+    out.taps[String(blur)] = taps(blur);
+  }
   for (const blur of [1, 2, 3, 4, 5, 6, 8, 11, 14, 16, 20, 32]) {
     out.bar[String(blur)] = bar(blur);
   }

@@ -12583,3 +12583,34 @@ radii (3) is under it. That branch is still unnamed.
 This engine answers 39 of the probe's 40 readings differently: it draws no
 shadow at all, and the one it matches is the transparent `shadowColor` that
 draws nothing in either.
+
+### The sigma < 2 branch is a discrete Gaussian (2026-08-24)
+
+The box triple above stops being exact below sigma 2, which is where Skia
+changes kernel. A bar *one* pixel wide reads the taps straight off — no
+deconvolution — and `SkGaussFilter.cpp` names them: `gauss(n) = I_n(var) /
+e^var` with `var = sigma^2`, the modified Bessel form of the discrete Gaussian
+from "Scale-Space for Discrete Signals". Taps are expanded outward by the
+recurrence `b[n+1] = b[n-1] - (2n/var)·b[n]` until one falls below 1/100, then
+normalised to sum to one.
+
+That model reproduces every tap Chrome answers, to the byte, first try:
+
+| blur | sigma | Chrome's taps |
+|---|---|---|
+| 0.7 | 0.35 | `14,227,14` |
+| 1 | 0.5 | `25,204,25` |
+| 1.5 | 0.75 | `6,43,158,43,6` |
+| 2 | 1 | `13,54,121,54,13` |
+| 2.5 | 1.25 | `5,20,56,92,56,20,5` |
+| 3 | 1.5 | `9,26,55,75,55,26,9` |
+| 3.5 | 1.75 | `4,13,29,51,62,51,29,13,4` |
+| 3.9 | 1.95 | `6,15,31,48,56,48,31,15,6` |
+
+It is a *discrete* Gaussian rather than a sampled one, and the difference is
+visible in the tails: an erf-integrated Gaussian fitted freely still misses
+`13,54,121` by 23 across the row, and every box model misses by more.
+
+Below the kernel there is one more line: `3·sigma <= 1`, Skia's `hasNoBlur`.
+Sigma 0.3 draws the silhouette unblurred and 0.35 blurs, which brackets it
+exactly. Fourteen kernels measured across all three regimes, none unexplained.
