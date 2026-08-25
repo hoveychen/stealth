@@ -28,9 +28,11 @@
 
 <script id="rejects_element_with_children">
     {
+        let ran = 0;
         class AddsChild extends HTMLElement {
             constructor() {
                 super();
+                ran++;
                 this.appendChild(document.createElement('span'));
             }
         }
@@ -39,6 +41,11 @@
         const el = document.createElement('ce-adds-child');
         testing.expectEqual(true, el instanceof HTMLUnknownElement);
         testing.expectEqual('ce-adds-child', el.localName);
+        // The fallback is reached by *running* the constructor and rejecting
+        // its result, not by declining to construct: the author's side effects
+        // happen either way, and a rejection that skipped the constructor
+        // would be invisible to the assertions above.
+        testing.expectEqual(1, ran);
     }
 </script>
 

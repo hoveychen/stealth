@@ -10,12 +10,16 @@
      fingerprint of which engine is running. -->
 <my-widget id="undefined_ce">ce</my-widget>
 <notdefined id="unknown_tag">plain</notdefined>
+<upgrade-later id="upgrade_later">later</upgrade-later>
 
 <script id="unregistered_custom_element_is_htmlelement">
   const el = $('#undefined_ce')
   // Not just a same-named class: Chrome hands out HTMLElement itself.
   testing.expectEqual(true, el.constructor === HTMLElement)
   testing.expectEqual('HTMLElement', el.constructor.name)
+  // And no interposed prototype: Chrome hands out HTMLElement.prototype
+  // itself, so a page walking the chain sees no extra level to name.
+  testing.expectEqual(true, Object.getPrototypeOf(el) === HTMLElement.prototype)
   testing.expectEqual(true, el instanceof HTMLElement)
   testing.expectEqual('MY-WIDGET', el.tagName)
   testing.expectEqual('[object HTMLElement]', Object.prototype.toString.call(el))
@@ -27,6 +31,31 @@
 <script id="unknown_non_hyphenated_tag_is_htmlunknownelement">
   // The contrast that shows the name above is not just a blanket default.
   testing.expectEqual('HTMLUnknownElement', $('#unknown_tag').constructor.name)
+</script>
+
+<script id="upgrade_keeps_the_same_wrapper">
+  // The interface an undefined element shows is a property of its *wrapper*,
+  // and an element has exactly one of those for its whole life. A page can hold
+  // a reference across the `define` that upgrades it -- that is the ordinary
+  // shape of a lazily-registered component -- and the object it kept has to be
+  // the object the document hands back afterwards, now carrying the author's
+  // prototype. Handing out a second wrapper instead leaves the page holding a
+  // stale twin: still HTMLElement, none of the author's methods, and `===`
+  // against a fresh lookup reads false where every browser reads true.
+  {
+    const held = $('#upgrade_later')
+    testing.expectEqual(true, Object.getPrototypeOf(held) === HTMLElement.prototype)
+
+    class UpgradeLater extends HTMLElement {
+      later() { return 'author' }
+    }
+    customElements.define('upgrade-later', UpgradeLater)
+
+    const looked_up = $('#upgrade_later')
+    testing.expectEqual(true, looked_up === held)
+    testing.expectEqual(true, Object.getPrototypeOf(held) === UpgradeLater.prototype)
+    testing.expectEqual('author', held.later())
+  }
 </script>
 
 <script id="defined_custom_element_reports_its_own_class">

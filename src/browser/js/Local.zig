@@ -1338,7 +1338,19 @@ pub fn resolveValue(value: anytype) Resolved {
                     // as it gets.
                     return resolveT(T, value);
                 }
-                return resolveValue(value.subtype(S));
+                var resolved = resolveValue(value.subtype(S));
+                if (comptime borrowsProtoClass(S)) {
+                    // Runtime, not comptime: the same Zig type covers both the
+                    // element that has a class to show (an upgraded custom
+                    // element wears its author's) and the one that has none.
+                    // Only the class changes -- the pointer this resolves to,
+                    // and therefore the wrapper's identity, stays put across
+                    // the upgrade that flips the answer.
+                    if (value.subtype(S).ownsWrapperClass() == false) {
+                        resolved.class_id = T.JsApi.Meta.class_id;
+                    }
+                }
+                return resolved;
             },
         }
     }
@@ -1364,6 +1376,19 @@ pub fn resolveValue(value: anytype) Resolved {
         }
     }
     unreachable;
+}
+
+// A subtype that sometimes has no class of its own to show, and builds its JS
+// object out of its prototype's class instead. Only the template the object is
+// created from moves; the resolved pointer, the prototype chain the TaggedOpaque
+// carries and the finalizer all stay this subtype's, so JS->Zig still lands on
+// it and -- the part that matters -- the identity map still keys on the one
+// pointer that is the element for its whole life.
+fn borrowsProtoClass(comptime S: type) bool {
+    if (!@hasDecl(S, "JsApi")) {
+        return false;
+    }
+    return @hasDecl(S.JsApi.Meta, "wrapper_class_from_proto");
 }
 
 fn resolveT(comptime T: type, value: *T) Resolved {

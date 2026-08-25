@@ -336,6 +336,22 @@ fn invokeCallback(self: *Custom, comptime callback_name: [:0]const u8, args: any
     js_element.callMethod(void, callback_name, args) catch return;
 }
 
+// Whether this element has a class of its own for its JS object to be built
+// from. A definition brings one: the author's, installed by the upgrade as the
+// object's prototype. Without one the element is just an HTMLElement, and
+// Chrome gives it HTMLElement.prototype with no level in between -- so it has
+// to borrow that class rather than show a level of its own.
+//
+// This flips when a definition arrives, and the object it describes has already
+// been built by then. That is fine, and it is the whole reason this answer
+// controls only the class and not the resolved pointer: the upgrade runs the
+// author's constructor, and `Caller._constructor` re-points the existing
+// wrapper's prototype at the class `new.target` named. The page keeps the same
+// object; only its prototype moves.
+pub fn ownsWrapperClass(self: *const Custom) bool {
+    return self._definition != null;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Custom);
 
@@ -359,10 +375,15 @@ pub const JsApi = struct {
         // own-property is deleted off this prototype, so the lookup walks up to
         // HTMLElement's and both the identity and the name come out Chrome's.
         //
-        // Not fixed by this: the extra prototype level is still there, so
-        // `Object.getPrototypeOf(el) === HTMLElement.prototype` stays false
-        // where Chrome says true. Removing the level means giving this type no
-        // JS class at all, which the bridge has no way to express today.
         pub const no_interface_object = true;
+
+        // ...and, while it stays undefined, no class of its own either. Building
+        // its object out of this type's template would interpose a prototype
+        // level between the element and HTMLElement.prototype, and Chrome has
+        // none: `Object.getPrototypeOf(el) === HTMLElement.prototype` reads true
+        // there. So an undefined element borrows HTMLElement's class -- see
+        // `ownsWrapperClass` for when it stops, and `Local.borrowsProtoClass`
+        // for how little that moves.
+        pub const wrapper_class_from_proto = true;
     };
 };
