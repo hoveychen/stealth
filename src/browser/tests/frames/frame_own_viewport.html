@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+A child frame's window reports the frame's own viewport, not the top-level
+document's.
+
+Measured on headless Chrome 151 through tools/fingerprint/run-expr.mjs against
+a local page holding a 300x65 same-origin iframe and a 120x40 srcdoc one: the
+child's innerWidth/innerHeight are the iframe element's box (300/65, 120/40),
+its visualViewport reports the same pair, and a `(max-width: 400px)` media query
+matches inside it. Its outerWidth/outerHeight stay the *browser window's*
+(1920/1080) -- outer is the window, and a frame does not have one of its own.
+
+This engine answered the top document's 1920x1080 for all three, and the
+Cloudflare Turnstile widget reads exactly this: it lives in a 300x65 iframe and
+was measured reading innerWidth and innerHeight there, where headed Chrome
+answered 300/65 and this engine answered 1920/1080. A 300x65 box reporting a
+1920x1080 viewport is a shape no browser produces.
+
+The box itself was already right -- documentElement.clientWidth reads it through
+Element.dimensions' owner.iframe branch (see frames/iframe_root_box.html) -- so
+what these assertions pin is that the window-level readings take the same box.
+-->
+
+<iframe id="widget" style="width:300px;height:65px"></iframe>
+<iframe id="small" srcdoc="<p>sd</p>" style="width:120px;height:40px"></iframe>
+
+<script id="child_frame_inner_size_is_its_own_box">
+{
+    const w = document.getElementById('widget').contentWindow;
+
+    testing.expectEqual(300, w.innerWidth);
+    testing.expectEqual(65, w.innerHeight);
+
+    // The same box clientWidth already reported, so a script comparing the two
+    // does not see two different documents.
+    testing.expectEqual(w.document.documentElement.clientWidth, w.innerWidth);
+    testing.expectEqual(w.document.documentElement.clientHeight, w.innerHeight);
+
+    // outer is the browser window, which a child frame shares with the top.
+    testing.expectEqual(window.outerWidth, w.outerWidth);
+    testing.expectEqual(window.outerHeight, w.outerHeight);
+
+    const s = document.getElementById('small').contentWindow;
+    testing.expectEqual(120, s.innerWidth);
+    testing.expectEqual(40, s.innerHeight);
+}
+</script>
+
+<script id="child_frame_visual_viewport_is_its_own_box">
+{
+    const w = document.getElementById('widget').contentWindow;
+
+    testing.expectEqual(300, w.visualViewport.width);
+    testing.expectEqual(65, w.visualViewport.height);
+
+    const s = document.getElementById('small').contentWindow;
+    testing.expectEqual(120, s.visualViewport.width);
+    testing.expectEqual(40, s.visualViewport.height);
+}
+</script>
+
+<script id="child_frame_media_queries_use_its_own_box">
+{
+    const w = document.getElementById('widget').contentWindow;
+
+    testing.expectEqual(true, w.matchMedia('(max-width: 400px)').matches);
+    testing.expectEqual(false, w.matchMedia('(min-width: 400px)').matches);
+    testing.expectEqual(true, w.matchMedia('(max-height: 100px)').matches);
+
+    // The top-level document is 1920x1080 here, so the same two queries answer
+    // the other way round outside the frame -- which is the whole point.
+    testing.expectEqual(false, window.matchMedia('(max-width: 400px)').matches);
+    testing.expectEqual(true, window.matchMedia('(min-width: 400px)').matches);
+
+    const s = document.getElementById('small').contentWindow;
+    testing.expectEqual(true, s.matchMedia('(max-width: 150px)').matches);
+    testing.expectEqual(false, s.matchMedia('(min-width: 150px)').matches);
+}
+</script>
+
+<script id="child_frame_css_media_rule_uses_its_own_box">
+{
+    // A stylesheet inside the child resolves its @media against the same box,
+    // so a rule guarded on the frame's width applies there and the same rule
+    // guarded the same way does not apply at the top level.
+    //
+    // `display` rather than `color` on purpose: the cascade here delivers
+    // display and visibility from an author rule but not color, background-
+    // color, font-size, width or opacity (measured, scratch/
+    // expr-cascade-property-subset.js) -- a separate gap, and asserting it here
+    // would make this file fail for a reason that has nothing to do with
+    // viewports.
+    const mediaProbe = (doc, id) => {
+        const style = doc.createElement('style');
+        style.textContent = '@media (max-width: 400px) { #' + id + ' { display: none } }';
+        doc.head.appendChild(style);
+        const probe = doc.createElement('p');
+        probe.id = id;
+        doc.body.appendChild(probe);
+        return doc.defaultView.getComputedStyle(probe).display;
+    };
+
+    testing.expectEqual('none', mediaProbe(document.getElementById('widget').contentDocument, 'p1'));
+    testing.expectEqual('block', mediaProbe(document, 'p2'));
+}
+</script>
+
+<script id="top_level_window_still_reports_the_page_viewport">
+{
+    // The top document has no iframe element to take a box from, so nothing
+    // about it moves.
+    testing.expectEqual(1920, window.innerWidth);
+    testing.expectEqual(1080, window.innerHeight);
+    testing.expectEqual(1920, window.visualViewport.width);
+    testing.expectEqual(1080, window.visualViewport.height);
+}
+</script>
+</body>

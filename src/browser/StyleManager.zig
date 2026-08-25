@@ -162,7 +162,7 @@ fn applyMediaAtRule(self: *StyleManager, build_arena: Allocator, text: []const u
     const block = atRuleBlock(text, "@media") orelse return;
     const query = std.mem.trim(u8, block.prelude, &std.ascii.whitespace);
 
-    if (MediaQuery.matches(query, self.frame._page.getViewport()) == false) {
+    if (MediaQuery.matches(query, self.frame.viewport()) == false) {
         return;
     }
 

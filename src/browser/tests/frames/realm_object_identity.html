@@ -85,18 +85,30 @@
     const w = f.contentWindow;
 
     // Chrome gives every realm its own Screen, VisualViewport and
-    // ScreenOrientation. They read the same numbers because the numbers belong
-    // to the page, not to the realm.
+    // ScreenOrientation.
     testing.expectTrue(w.screen !== screen);
     testing.expectTrue(w.visualViewport !== visualViewport);
     testing.expectTrue(w.screen.orientation !== screen.orientation);
 
+    // Screen reads the same numbers in both: a display belongs to the machine,
+    // not to the realm.
     testing.expectEqual(screen.width, w.screen.width);
     testing.expectEqual(screen.height, w.screen.height);
     testing.expectEqual(screen.availWidth, w.screen.availWidth);
     testing.expectEqual(screen.orientation.type, w.screen.orientation.type);
-    testing.expectEqual(visualViewport.width, w.visualViewport.width);
-    testing.expectEqual(visualViewport.height, w.visualViewport.height);
+
+    // The visual viewport does not: it is the frame's own box, and an iframe
+    // that declares no size is the UA stylesheet's 300x150. Measured on Chrome
+    // 151 for exactly this iframe -- created by script, appended, no width,
+    // height or style -- child visualViewport 300x150 against a top-level
+    // 1920x993 (scratch/expr-default-iframe-viewport.js). This block used to
+    // assert the two were equal, which held only while every frame answered
+    // with the page's viewport.
+    testing.expectEqual(300, w.visualViewport.width);
+    testing.expectEqual(150, w.visualViewport.height);
+    testing.expectEqual(300, w.innerWidth);
+    testing.expectEqual(150, w.innerHeight);
+    testing.expectTrue(visualViewport.width !== w.visualViewport.width);
     testing.expectEqual(visualViewport.scale, w.visualViewport.scale);
 
     f.remove();

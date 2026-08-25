@@ -22,6 +22,7 @@ const lp = @import("lightpanda");
 const JS = @import("js/js.zig");
 const Mime = @import("Mime.zig");
 const Page = @import("Page.zig");
+const Viewport = @import("Viewport.zig");
 const Factory = @import("Factory.zig");
 const Session = @import("Session.zig");
 const EventManager = @import("EventManager.zig");
@@ -2576,6 +2577,32 @@ pub fn getElementByIdFromNode(self: *Frame, node: *Node, id: []const u8) ?*Eleme
 
 pub fn performance(self: *Frame) *Performance {
     return &self.window._performance;
+}
+
+/// The viewport this frame is laid out in. The top-level frame takes the page's;
+/// a child frame takes the box its `<iframe>` element renders with, which is
+/// what a browser answers there for `innerWidth`, the visual viewport and every
+/// media query -- measured on Chrome 151 (scratch/expr-child-frame-self.js): a
+/// 300x65 iframe's window reports 300x65 and `(max-width: 400px)` matches
+/// inside it, while `outerWidth`/`outerHeight` stay the browser window's.
+///
+/// The box is the one `document.documentElement.clientWidth` already reads
+/// through `Element.dimensions`' `owner.iframe` branch, so a script comparing
+/// the two does not see two different documents. Reading `self._page` for a
+/// child would hand it the top document's 1920x1080 -- the shape the Turnstile
+/// widget was measured collecting from its own 300x65 frame.
+pub fn viewport(self: *Frame) Viewport {
+    const iframe = self.iframe orelse return self._page.getViewport();
+    // The element lives in the *parent's* document, and measuring it reaches
+    // for that frame's inline-style map. Handing it this frame instead resolves
+    // to an empty map, and the iframe then measures as the UA stylesheet's
+    // undeclared 300x150 -- which is why the height came back 150 for a
+    // `style="height:65px"` frame the first time this was wired up.
+    const box = iframe.asElement().getElementDimensions(self.parent orelse self);
+    return .{
+        .width = @intFromFloat(@max(0, box.width)),
+        .height = @intFromFloat(@max(0, box.height)),
+    };
 }
 
 // Files a finished subresource load as a `resource` PerformanceEntry, for the
