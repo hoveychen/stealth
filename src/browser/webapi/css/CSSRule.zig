@@ -29,6 +29,7 @@ pub const Type = union(enum) {
     layer_statement: *rules.CSSLayerStatementRule,
     property: *rules.CSSPropertyRule,
     font_palette_values: *rules.CSSFontPaletteValuesRule,
+    view_transition: *rules.CSSViewTransitionRule,
     unknown: void,
 };
 
@@ -68,8 +69,8 @@ pub fn initAtRule(rule_type: Type, text: []const u8, frame: *Frame) !*CSSRule {
 }
 
 /// The legacy numeric type constants. Rules that postdate them (`@layer`,
-/// `@container`, `@property`, `@font-palette-values`) answer 0, and so does
-/// an at-rule we do not model.
+/// `@container`, `@property`, `@font-palette-values`, `@view-transition`)
+/// answer 0, and so does an at-rule we do not model.
 pub fn getType(self: *const CSSRule) u16 {
     return switch (self._type) {
         .style => 1,
@@ -82,7 +83,14 @@ pub fn getType(self: *const CSSRule) u16 {
         .namespace => 10,
         .counter_style => 11,
         .supports => 12,
-        .container, .layer_block, .layer_statement, .property, .font_palette_values, .unknown => 0,
+        .container,
+        .layer_block,
+        .layer_statement,
+        .property,
+        .font_palette_values,
+        .view_transition,
+        .unknown,
+        => 0,
     };
 }
 
@@ -110,6 +118,7 @@ pub fn getCssText(self: *CSSRule, frame: *Frame) SerializeError![]const u8 {
         .layer_statement => |r| try r.writeCssText(writer),
         .property => |r| try r.writeCssText(writer),
         .font_palette_values => |r| try r.writeCssText(writer),
+        .view_transition => |r| try r.writeCssText(writer),
         .unknown => return self._text,
     }
     return buf.written();
