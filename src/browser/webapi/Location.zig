@@ -24,11 +24,16 @@ const Page = @import("../Page.zig");
 const URL = @import("URL.zig");
 const U = @import("../URL.zig");
 const Frame = @import("../Frame.zig");
+const DOMStringList = @import("collections.zig").DOMStringList;
 
 const Location = @This();
 
 _url: *URL,
 _rc: lp.RC = .{},
+/// Built once and handed back by identity: Chrome answers the same
+/// DOMStringList on every read, and a document's ancestors cannot change
+/// under it -- a fragment navigation replaces the whole Location anyway.
+_ancestor_origins: ?*DOMStringList = null,
 
 pub fn init(raw_url: []const u8, frame: *Frame) !*Location {
     const url = try URL.init(raw_url, null, &frame.js.execution);
@@ -42,6 +47,9 @@ pub fn init(raw_url: []const u8, frame: *Frame) !*Location {
 
 pub fn deinit(self: *const Location, page: *Page) void {
     self._url.releaseRef(page);
+    if (self._ancestor_origins) |list| {
+        list.releaseRef(page);
+    }
 }
 
 pub fn acquireRef(self: *Location) void {
@@ -74,6 +82,42 @@ pub fn getPort(self: *const Location) []const u8 {
 
 pub fn getOrigin(self: *const Location, exec: *const js.Execution) ![]const u8 {
     return self._url.getOrigin(exec);
+}
+
+/// The origins of the frames above this one, immediate parent first and the
+/// top frame last. A frame that is not framed gets an empty list.
+///
+/// This is the one place a frame is told about ancestors it may not otherwise
+/// touch: a cross-origin ancestor is listed all the same. An ancestor whose
+/// origin is opaque serialises as the string "null", the way it does
+/// everywhere else an origin is written down.
+pub fn getAncestorOrigins(self: *Location, frame: *Frame) !*DOMStringList {
+    if (self._ancestor_origins) |list| {
+        return list;
+    }
+
+    var count: usize = 0;
+    var ancestor = frame.parent;
+    while (ancestor) |f| : (ancestor = f.parent) {
+        count += 1;
+    }
+
+    const arena = try frame.js.execution.getArena(.small, "Location.ancestorOrigins");
+    errdefer arena.release();
+
+    const items = try arena.allocator().alloc([]const u8, count);
+    var i: usize = 0;
+    ancestor = frame.parent;
+    while (ancestor) |f| : (ancestor = f.parent) {
+        items[i] = try arena.dupe(u8, f.origin orelse "null");
+        i += 1;
+    }
+
+    const list = try arena.create(DOMStringList);
+    list.* = .{ ._items = items, ._arena = arena };
+    list.acquireRef();
+    self._ancestor_origins = list;
+    return list;
 }
 
 pub fn getSearch(self: *const Location, exec: *const js.Execution) ![]const u8 {
@@ -170,6 +214,7 @@ pub const JsApi = struct {
     pub const host = bridge.accessor(Location.getHost, null, .{});
     pub const port = bridge.accessor(Location.getPort, null, .{});
     pub const origin = bridge.accessor(Location.getOrigin, null, .{});
+    pub const ancestorOrigins = bridge.accessor(Location.getAncestorOrigins, null, .{});
     pub const protocol = bridge.accessor(Location.getProtocol, null, .{});
     pub const assign = bridge.function(Location.assign, .{});
     pub const replace = bridge.function(Location.replace, .{});

@@ -25,6 +25,7 @@ const Frame = @import("../Frame.zig");
 const Node = @import("Node.zig");
 const Element = @import("Element.zig");
 const DocumentFragment = @import("DocumentFragment.zig");
+const StyleSheetList = @import("css/StyleSheetList.zig");
 
 const ShadowRoot = @This();
 
@@ -60,6 +61,10 @@ _declarative: bool,
 _elements_by_id: std.StringHashMapUnmanaged(*Element) = .{},
 _removed_ids: std.StringHashMapUnmanaged(void) = .{},
 _adopted_style_sheets: ?js.Object.Global = null,
+/// The other half of DocumentOrShadowRoot. A <style> in a shadow tree belongs
+/// to this list and not to the document's -- that separation is the point of
+/// the tree, and a script can see it from either side.
+_style_sheets: ?*StyleSheetList = null,
 
 pub fn init(host: *Element, opts: AttachOptions, frame: *Frame) !*ShadowRoot {
     return frame._factory.documentFragment(ShadowRoot{
@@ -187,6 +192,15 @@ pub fn setAdoptedStyleSheets(self: *ShadowRoot, sheets: js.Object) !void {
     self._adopted_style_sheets = try sheets.persist();
 }
 
+pub fn getStyleSheets(self: *ShadowRoot, frame: *Frame) !*StyleSheetList {
+    if (self._style_sheets) |sheets| {
+        return sheets;
+    }
+    const sheets = try StyleSheetList.init(frame);
+    self._style_sheets = sheets;
+    return sheets;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(ShadowRoot);
 
@@ -215,6 +229,7 @@ pub const JsApi = struct {
         return self.getElementById(try value.toZig([]const u8), frame);
     }
     pub const adoptedStyleSheets = bridge.accessor(ShadowRoot.getAdoptedStyleSheets, ShadowRoot.setAdoptedStyleSheets, .{});
+    pub const styleSheets = bridge.accessor(ShadowRoot.getStyleSheets, null, .{});
     pub const setHTMLUnsafe = bridge.function(ShadowRoot.setHTMLUnsafe, .{ .ce_reactions = true });
     pub const getHTML = bridge.function(_getHTML, .{});
     const GetHTMLOpts = struct {

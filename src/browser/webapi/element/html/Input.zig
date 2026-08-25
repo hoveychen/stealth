@@ -35,6 +35,7 @@ const ValidityState = @import("ValidityState.zig");
 const popover = @import("../popover.zig");
 const File = @import("../../File.zig");
 const FileList = @import("../../FileList.zig");
+const filesystem = @import("../../filesystem.zig");
 const handler_property = @import("../../handler_property.zig");
 const reflection = @import("../reflection.zig");
 
@@ -1441,6 +1442,19 @@ pub fn getStep(self: *const Input) []const u8 {
     return self.asConstElement().getAttributeSafe(comptime .wrap("step")) orelse "";
 }
 
+/// The entries a directory drop left on the input. Nothing can drop one here,
+/// so the list is always empty -- but Chrome answers an empty array rather
+/// than nothing at all, whatever the input's type is, and the difference
+/// between an empty array and `undefined` is what a guard reads.
+///
+/// A fresh array on every read, which is Chrome's behaviour (measured: two
+/// reads compare unequal). It is not frozen: that is the engine-wide
+/// FrozenArray gap, with no SetIntegrityLevel binding to close it -- see
+/// Viewport.zig and MediaMetadata.zig.
+pub fn getWebkitEntries(_: *const Input) []const *filesystem.Entry {
+    return &.{};
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Input);
 
@@ -1497,6 +1511,8 @@ pub const JsApi = struct {
     pub const max = reflect.string("max");
     pub const step = reflect.string("step");
     pub const multiple = reflect.boolean("multiple");
+    pub const webkitdirectory = reflect.boolean("webkitdirectory");
+    pub const webkitEntries = bridge.accessor(Input.getWebkitEntries, null, .{});
     pub const autocomplete = reflect.string("autocomplete");
     pub const willValidate = bridge.accessor(Input.getWillValidate, null, .{});
     pub const validity = bridge.accessor(Input.getValidity, null, .{});

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!--
+Loaded cross-origin by frames/ancestor_origins.html. Reports its own
+`location.ancestorOrigins`, and the list its own about:blank child sees -- that
+second one is the only place the *order* is observable, because there the two
+ancestors have different origins.
+-->
+<script>
+  var out = { own: null, child: null, err: null };
+  function read(list) {
+    var items = [];
+    for (var i = 0; i < list.length; i++) items.push(list.item(i));
+    return { length: list.length, items: items };
+  }
+  try {
+    out.own = read(location.ancestorOrigins);
+    out.ownOrigin = location.origin;
+
+    var nested = document.createElement('iframe');
+    document.documentElement.appendChild(nested);
+    out.child = read(nested.contentWindow.location.ancestorOrigins);
+  } catch (e) {
+    out.err = (e && e.name ? e.name : 'Error') + ': ' + (e && e.message ? e.message : String(e));
+  }
+  parent.postMessage(out, '*');
+</script>

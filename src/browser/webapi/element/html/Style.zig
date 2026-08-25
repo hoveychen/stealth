@@ -25,12 +25,18 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
+const StyleSheetList = @import("../../css/StyleSheetList.zig");
 
 const Style = @This();
 
 pub const Proto = HtmlElement;
 _proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 _sheet: ?*CSSStyleSheet = null,
+/// The list `_sheet` was registered in. Kept because deregistration happens
+/// after the element has already left the tree, so by then the walk that chose
+/// this list -- document's, or a shadow root's -- no longer reaches the same
+/// answer.
+_sheet_list: ?*StyleSheetList = null,
 
 pub fn asElement(self: *Style) *Element {
     return Factory.protoOf(self).asElement();
@@ -66,6 +72,19 @@ pub fn getSheet(self: *Style, frame: *Frame) !?*CSSStyleSheet {
     const owner = self.asNode().ownerDocument(frame) orelse frame.document;
     const sheets = try owner.getStyleSheets(frame);
     try sheets.add(sheet, frame);
+
+    // A sheet in a shadow tree is also that root's, which is where Chrome
+    // keeps it -- and *only* there. Here it stays in the document's list as
+    // well, because the cascade is built from that one list
+    // (StyleManager.rebuild); dropping it would leave shadow content
+    // unstyled. So `document.styleSheets` still over-reports a shadow sheet.
+    // Teaching the cascade to walk shadow roots is what would close that, and
+    // it wants the scoping work to go with it.
+    if (self.asNode().containingShadowRoot()) |root| {
+        const shadow_sheets = try root.getStyleSheets(frame);
+        try shadow_sheets.add(sheet, frame);
+        self._sheet_list = shadow_sheets;
+    }
 
     return sheet;
 }
