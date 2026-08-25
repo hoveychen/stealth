@@ -1016,14 +1016,101 @@ test "MediaQuery: unimplemented units fail closed" {
     try testing.expect(!matches("(min-width: 50vw)", v));
 }
 
-test "MediaQuery: range syntax is unsupported (fails closed)" {
-    const v = Viewport.default;
-    // MQ4 range form is not implemented — should evaluate false rather than
-    // accidentally matching via the `width` boolean form.
-    try testing.expect(!matches("(width >= 600px)", v));
+// MQ4's range form, which Kasada uses on x-hyatt alongside the legacy one.
+// Every structural expectation here was measured on a headed Chrome through
+// tools/fingerprint/probes/media-feature-forms.js — including which shapes are
+// malformed, which is the half a "does it evaluate at all" probe cannot see.
+test "MediaQuery: range syntax, one-sided" {
+    const v = Viewport.default; // 1920x1080
+    try testing.expect(matches("(width >= 600px)", v));
+    try testing.expect(matches("(width >= 1920px)", v));
+    try testing.expect(matches("(width <= 1920px)", v));
+    try testing.expect(matches("(width = 1920px)", v));
+    try testing.expect(matches("(width > 100px)", v));
+    try testing.expect(matches("(width < 5000px)", v));
+    try testing.expect(!matches("(width > 1920px)", v));
     try testing.expect(!matches("(width <= 600px)", v));
     try testing.expect(!matches("(width < 100px)", v));
+
+    // The operator needs no surrounding whitespace; Chrome normalizes it back
+    // in with a space either side.
+    try testing.expect(matches("(width>100px)", v));
+    try testing.expect(matches("(width>=1920px)", v));
+    try testing.expect(!matches("(width>1920px)", v));
+
+    try testing.expect(matches("(height > 100px)", v));
+    try testing.expect(matches("(height >= 1080px)", v));
+    try testing.expect(matches("(device-width > 100px)", v));
+}
+
+// `(100px < width)` is the same query as `(width > 100px)`: the value may sit
+// on either side, and which side it is on flips the comparison.
+test "MediaQuery: range syntax, feature on the right" {
+    const v = Viewport.default;
+    try testing.expect(matches("(100px < width)", v));
+    try testing.expect(matches("(1920px = width)", v));
+    try testing.expect(matches("(1920px <= width)", v));
+    try testing.expect(!matches("(100px > width)", v));
+    try testing.expect(!matches("(5000px < width)", v));
+}
+
+test "MediaQuery: range syntax, two-sided" {
+    const v = Viewport.default;
+    try testing.expect(matches("(600px <= width <= 5000px)", v));
+    try testing.expect(matches("(600px < width < 5000px)", v));
+    try testing.expect(matches("(5000px >= width >= 600px)", v));
     try testing.expect(!matches("(600px <= width <= 1200px)", v));
+
+    // Both operators have to point the same way, and neither may be `=`.
+    try testing.expect(!matches("(600px < width > 1200px)", v));
+    try testing.expect(!matches("(600px <= width = 1200px)", v));
+    try testing.expect(!matches("(600px = width = 1200px)", v));
+}
+
+test "MediaQuery: range syntax on the numeric descriptors" {
+    const v = Viewport.default;
+    try testing.expect(matches("(resolution = 1dppx)", v));
+    try testing.expect(matches("(resolution >= 1dppx)", v));
+    try testing.expect(matches("(resolution <= 1dppx)", v));
+    try testing.expect(matches("(resolution > 50dpi)", v));
+    try testing.expect(!matches("(resolution < 50dpi)", v));
+    try testing.expect(!matches("(resolution > 2dppx)", v));
+
+    try testing.expect(matches("(color = 8)", v));
+    try testing.expect(matches("(color > 4)", v));
+    try testing.expect(matches("(color <= 8)", v));
+    try testing.expect(!matches("(color > 8)", v));
+    try testing.expect(matches("(color-index = 0)", v));
+    try testing.expect(matches("(color-index >= 0)", v));
+    try testing.expect(matches("(monochrome = 0)", v));
+    try testing.expect(!matches("(monochrome > 0)", v));
+
+    // A ratio still compares as a fraction: 16/9 and 1920/1080 are one value.
+    try testing.expect(matches("(aspect-ratio = 16/9)", v));
+    try testing.expect(matches("(aspect-ratio = 1920/1080)", v));
+    try testing.expect(matches("(device-aspect-ratio = 16/9)", v));
+    try testing.expect(matches("(aspect-ratio > 1.5)", v));
+    try testing.expect(!matches("(aspect-ratio = 1.7)", v));
+}
+
+// Only range-type features take the range form. A discrete feature does not,
+// and neither does an already-prefixed one — all measured false in Chrome, so
+// evaluating them here would be the anomaly.
+test "MediaQuery: range syntax is rejected where Chrome rejects it" {
+    const v = Viewport.default;
+    try testing.expect(!matches("(orientation = landscape)", v));
+    try testing.expect(!matches("(hover = hover)", v));
+    try testing.expect(!matches("(grid = 0)", v));
+    try testing.expect(!matches("(device-posture = continuous)", v));
+    try testing.expect(!matches("(min-width >= 600px)", v));
+    try testing.expect(!matches("(max-width <= 5000px)", v));
+
+    // Still fails closed on a malformed bound or a missing side.
+    try testing.expect(!matches("(width >= 600)", v));
+    try testing.expect(!matches("(width >= foo)", v));
+    try testing.expect(!matches("(width >=)", v));
+    try testing.expect(!matches("(>= 600px)", v));
+    try testing.expect(!matches("(nonsense > 4)", v));
 }
 
 test "MediaQuery: decimal lengths are rejected" {
