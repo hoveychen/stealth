@@ -620,12 +620,20 @@ fn matchRangeOp(s: []const u8, i: usize) ?OpMatch {
     };
 }
 
-/// MQ4 range form: `(width > 600px)`, the reversed `(600px < width)`, or the
-/// two-sided `(600px <= width <= 1200px)`. Returns null — not false — when
-/// `text` holds no operator, so `evalFeature` can fall through to the legacy
-/// `name: value` form; anything with an operator is answered here, malformed
-/// or not.
-fn evalRange(text: []const u8, viewport: Viewport) ?bool {
+/// A range-form feature split into its operands and operators. `too_many_ops`
+/// carries the malformed-but-still-a-range case, which answers false rather
+/// than falling through to the legacy `name: value` form.
+const RangeSplit = struct {
+    parts: [3][]const u8,
+    ops: [2]RangeOp,
+    n_ops: usize,
+    too_many_ops: bool,
+};
+
+/// Scan `text` for the MQ4 range operators. Returns null when there is no
+/// operator at all — or when a comment in it is unterminated, which is not a
+/// range query either.
+fn splitRange(text: []const u8) ?RangeSplit {
     var parts: [3][]const u8 = undefined;
     var ops: [2]RangeOp = undefined;
     var n_ops: usize = 0;
@@ -639,9 +647,9 @@ fn evalRange(text: []const u8, viewport: Viewport) ?bool {
             continue;
         }
         if (matchRangeOp(text, i)) |m| {
-            // A third operator is malformed, but it is still a range query, so
-            // it answers false rather than falling through to `name: value`.
-            if (n_ops == 2) return false;
+            if (n_ops == 2) {
+                return .{ .parts = parts, .ops = ops, .n_ops = n_ops, .too_many_ops = true };
+            }
             parts[n_ops] = text[start..i];
             ops[n_ops] = m.op;
             n_ops += 1;
@@ -653,6 +661,20 @@ fn evalRange(text: []const u8, viewport: Viewport) ?bool {
     }
     if (n_ops == 0) return null;
     parts[n_ops] = text[start..];
+    return .{ .parts = parts, .ops = ops, .n_ops = n_ops, .too_many_ops = false };
+}
+
+/// MQ4 range form: `(width > 600px)`, the reversed `(600px < width)`, or the
+/// two-sided `(600px <= width <= 1200px)`. Returns null — not false — when
+/// `text` holds no operator, so `evalFeature` can fall through to the legacy
+/// `name: value` form; anything with an operator is answered here, malformed
+/// or not.
+fn evalRange(text: []const u8, viewport: Viewport) ?bool {
+    const split = splitRange(text) orelse return null;
+    if (split.too_many_ops) return false;
+    const parts = split.parts;
+    const ops = split.ops;
+    const n_ops = split.n_ops;
 
     if (n_ops == 1) {
         const lhs = trimWsAndComments(parts[0]);
@@ -829,6 +851,495 @@ fn parseLengthPx(value: []const u8) ?u32 {
     if (std.ascii.eqlIgnoreCase(unit, "em")) return std.math.mul(u32, num, 16) catch null;
     if (std.ascii.eqlIgnoreCase(unit, "rem")) return std.math.mul(u32, num, 16) catch null;
     return null;
+}
+
+// ---------------------------------------------------------------------------
+// Serialisation
+//
+// `MediaQueryList.media` is not the text handed to `matchMedia`: Chrome parses
+// the query and writes the parse back out, so `(min-width:100px)` answers
+// `(min-width: 100px)` and `(max-aspect-ratio: 2.125)` answers
+// `(max-aspect-ratio: 2.125 / 1)`. Every deviation from the input is therefore
+// a rule, all of them measured on a headed Chrome 150 and recorded in
+// tools/fingerprint/results/media-query-serialization.json.
+//
+// The rule that organises the rest: what parses is rewritten in canonical
+// form, and what does not parse is echoed back byte for byte —
+// `(  min-bogus  :  1px  )` keeps its spacing. That makes the parser the
+// authority on serialisation too, so a form this engine cannot read is quoted
+// rather than guessed at.
+// ---------------------------------------------------------------------------
+
+const Allocator = std.mem.Allocator;
+
+/// How a query component failed to parse, and so how it is written instead.
+/// `EchoRaw` quotes the component's own text; `NotAll` is the whole-query
+/// refusal Chrome writes when there is no valid reading at all.
+const Unwritable = error{ EchoRaw, NotAll };
+
+/// The three ways a write can end: the component was unwritable, the writer
+/// failed, or its allocator did. Spelled out rather than inferred because the
+/// condition writers recurse through each other for nested conditions.
+const WriteError = Unwritable || error{ WriteFailed, OutOfMemory };
+
+/// The canonical text of `query`, in the arena. Comma-separated queries are
+/// serialised independently and joined with `, `.
+pub fn serialize(arena: Allocator, query: []const u8) ![]const u8 {
+    const trimmed = trimWsAndComments(query);
+    // An all-whitespace query is the empty one, and its serialisation is empty
+    // too — `matchMedia('')` answers `''`, not `not all`.
+    if (trimmed.len == 0) return "";
+
+    var out = std.Io.Writer.Allocating.init(arena);
+    var rest = trimmed;
+    var first = true;
+    while (true) {
+        const cut = nextTopLevelComma(rest);
+        if (!first) try out.writer.writeAll(", ");
+        first = false;
+        try writeSingle(arena, &out.writer, rest[0..cut]);
+        if (cut == rest.len) break;
+        rest = rest[cut + 1 ..];
+    }
+    return out.written();
+}
+
+/// One comma-separated query, written whole or replaced by its fallback. The
+/// canonical form goes to a scratch buffer first so a component that fails
+/// half way through cannot leave a partial query behind.
+fn writeSingle(arena: Allocator, w: *std.Io.Writer, segment: []const u8) !void {
+    const trimmed = trimWsAndComments(segment);
+    // An empty branch of a comma list is a query with nothing in it, which
+    // Chrome writes as `not all` — the one case where empty is not empty.
+    if (trimmed.len == 0) return w.writeAll("not all");
+
+    var scratch = std.Io.Writer.Allocating.init(arena);
+    writeQuery(arena, &scratch.writer, trimmed) catch |err| switch (err) {
+        error.NotAll => return w.writeAll("not all"),
+        error.EchoRaw => return w.writeAll(trimmed),
+        else => |e| return e,
+    };
+    return w.writeAll(scratch.written());
+}
+
+const Token = struct {
+    /// A parenthesised condition, in which case `text` is what is inside the
+    /// parens. Otherwise an identifier: a media type or a logical keyword.
+    block: bool,
+    text: []const u8,
+};
+
+/// Enough for `screen and (a) and (b) and …` far past any real query; one past
+/// it is echoed rather than mangled.
+const max_tokens = 32;
+
+const Tokens = struct {
+    items: [max_tokens]Token,
+    len: usize,
+
+    fn slice(self: *const Tokens) []const Token {
+        return self.items[0..self.len];
+    }
+};
+
+fn tokenize(text: []const u8) Unwritable!Tokens {
+    var tokens: Tokens = .{ .items = undefined, .len = 0 };
+    var i: usize = 0;
+    while (i < text.len) {
+        i = skipWsAndComments(text, i);
+        if (i >= text.len) break;
+        if (tokens.len == max_tokens) return error.EchoRaw;
+
+        if (text[i] == '(') {
+            // An unterminated block is quoted, not refused: Chrome answers `(`
+            // to `(`, where a stray `)` gets `not all`.
+            const end = findClosingParen(text, i) orelse return error.EchoRaw;
+            tokens.items[tokens.len] = .{ .block = true, .text = text[i + 1 .. end] };
+            tokens.len += 1;
+            i = end + 1;
+            continue;
+        }
+
+        if (!isIdentChar(text[i])) return error.NotAll;
+        const start = i;
+        while (i < text.len and isIdentChar(text[i])) i += 1;
+        tokens.items[tokens.len] = .{ .block = false, .text = text[start..i] };
+        tokens.len += 1;
+    }
+    if (tokens.len == 0) return error.NotAll;
+    return tokens;
+}
+
+const Qualifier = enum { none, not, only };
+const Joiner = enum { @"and", @"or" };
+
+fn writeQuery(arena: Allocator, w: *std.Io.Writer, text: []const u8) WriteError!void {
+    const tokens = try tokenize(text);
+    const items = tokens.slice();
+
+    var i: usize = 0;
+    var qualifier: Qualifier = .none;
+    if (!items[0].block) {
+        if (std.ascii.eqlIgnoreCase(items[0].text, "not")) {
+            qualifier = .not;
+            i = 1;
+        } else if (std.ascii.eqlIgnoreCase(items[0].text, "only")) {
+            qualifier = .only;
+            i = 1;
+        }
+    }
+    // A bare `not` or `only` names no media type, so there is nothing to write.
+    if (i == items.len) return error.NotAll;
+
+    if (items[i].block) {
+        // A condition where a media type would go: `not (a)`, `(a) and (b)`.
+        // `only` may not qualify a condition — it exists to hide a query from
+        // parsers that predate media features.
+        switch (qualifier) {
+            .none => {},
+            .not => try w.writeAll("not "),
+            .only => return error.NotAll,
+        }
+        return writeConditionChain(arena, w, items[i..]);
+    }
+
+    var name_buf: [max_feature_name]u8 = undefined;
+    const media_type = lowerBounded(&name_buf, items[i].text) orelse return error.EchoRaw;
+    // A logical keyword in the media-type slot: `and (a)`, `or (a)`.
+    if (isJoiner(media_type)) return error.NotAll;
+    i += 1;
+
+    // Everything after the media type has to be `and <condition>`.
+    const conditions = i;
+    while (i < items.len) {
+        if (items[i].block or !std.ascii.eqlIgnoreCase(items[i].text, "and")) return error.NotAll;
+        i += 1;
+        if (i == items.len or !items[i].block) return error.NotAll;
+        i += 1;
+    }
+
+    // `all and (min-width: 1px)` serialises without the `all`: an unqualified
+    // `all` adds nothing to a condition. A qualified one changes the answer, so
+    // `not all and (…)` keeps it.
+    const drop_type = qualifier == .none and
+        std.mem.eql(u8, media_type, "all") and
+        conditions < items.len;
+    if (!drop_type) {
+        switch (qualifier) {
+            .none => {},
+            .not => try w.writeAll("not "),
+            .only => try w.writeAll("only "),
+        }
+        try w.writeAll(media_type);
+    }
+
+    var j = conditions + 1;
+    var wrote_something = !drop_type;
+    while (j < items.len) : (j += 2) {
+        if (wrote_something) try w.writeAll(" and ");
+        wrote_something = true;
+        try writeCondition(arena, w, items[j].text);
+    }
+}
+
+/// Conditions joined by one repeated keyword. Mixing `and` with `or` at the
+/// same level is malformed in MQ4 — the parens are what disambiguate — so it
+/// answers `not all` rather than picking a precedence.
+fn writeConditionChain(arena: Allocator, w: *std.Io.Writer, items: []const Token) WriteError!void {
+    var joiner: ?Joiner = null;
+    var i: usize = 0;
+    while (true) {
+        if (!items[i].block) return error.NotAll;
+        try writeCondition(arena, w, items[i].text);
+        i += 1;
+        if (i == items.len) return;
+
+        if (items[i].block) return error.NotAll;
+        const next: Joiner = if (std.ascii.eqlIgnoreCase(items[i].text, "and"))
+            .@"and"
+        else if (std.ascii.eqlIgnoreCase(items[i].text, "or"))
+            .@"or"
+        else
+            return error.NotAll;
+        if (joiner) |set| {
+            if (set != next) return error.NotAll;
+        } else {
+            joiner = next;
+        }
+        try w.print(" {s} ", .{@tagName(next)});
+        i += 1;
+        // A trailing `and` with nothing after it.
+        if (i == items.len) return error.NotAll;
+    }
+}
+
+/// One parenthesised condition. A condition this engine cannot read keeps its
+/// own text — the surrounding query is still canonicalised, which is what
+/// Chrome does with `screen and (min-width:1px) and (bogus)`.
+fn writeCondition(arena: Allocator, w: *std.Io.Writer, inner: []const u8) WriteError!void {
+    var scratch = std.Io.Writer.Allocating.init(arena);
+    writeConditionInner(arena, &scratch.writer, trimWsAndComments(inner)) catch |err| switch (err) {
+        error.EchoRaw, error.NotAll => {
+            try w.writeByte('(');
+            try w.writeAll(inner);
+            return w.writeByte(')');
+        },
+        else => |e| return e,
+    };
+    try w.writeByte('(');
+    try w.writeAll(scratch.written());
+    return w.writeByte(')');
+}
+
+fn writeConditionInner(arena: Allocator, w: *std.Io.Writer, text: []const u8) WriteError!void {
+    if (text.len == 0) return error.EchoRaw;
+
+    // A nested condition: `((min-width: 1px))`, `((a) and (b))`.
+    if (text[0] == '(') {
+        const tokens = try tokenize(text);
+        return writeConditionChain(arena, w, tokens.slice());
+    }
+
+    // The range form is recognised by its operator, the same way `evalFeature`
+    // tells the two forms apart.
+    if (splitRange(text)) |split| return writeRange(w, split);
+
+    if (indexOfScalarSkippingComments(text, ':')) |colon| {
+        const name = trimWsAndComments(text[0..colon]);
+        const value = trimWsAndComments(text[colon + 1 ..]);
+        return writeNameValue(w, name, value);
+    }
+
+    // The boolean form. Only an unprefixed feature has one: `(min-width)`
+    // names a bound without giving it.
+    var buf: [max_feature_name]u8 = undefined;
+    const lname = lowerBounded(&buf, text) orelse return error.EchoRaw;
+    const found = findFeature(lname) orelse return error.EchoRaw;
+    if (found.prefixed) return error.EchoRaw;
+    return w.writeAll(lname);
+}
+
+fn writeNameValue(w: *std.Io.Writer, name: []const u8, value: []const u8) !void {
+    var buf: [max_feature_name]u8 = undefined;
+    const lname = lowerBounded(&buf, name) orelse return error.EchoRaw;
+    const found = findFeature(lname) orelse return error.EchoRaw;
+
+    // The value is written before the name so a value this engine cannot read
+    // aborts the whole condition rather than half-writing it — `writeCondition`
+    // catches the error and quotes the original.
+    var scratch: [max_value_text]u8 = undefined;
+    var value_out = std.Io.Writer.fixed(&scratch);
+    writeValue(&value_out, found.feature, value) catch return error.EchoRaw;
+
+    try w.writeAll(lname);
+    try w.writeAll(": ");
+    return w.writeAll(value_out.buffered());
+}
+
+fn writeValue(w: *std.Io.Writer, feature: Feature, value: []const u8) !void {
+    return switch (feature.kind) {
+        .length => writeDimension(w, value, &length_units, true),
+        .resolution => writeDimension(w, value, &resolution_units, false),
+        .integer => writeInteger(w, value, null),
+        // `grid` is 0 or 1 and nothing else: Chrome quotes `(grid: 2)` back.
+        .grid => writeInteger(w, value, 1),
+        .ratio => writeRatio(w, value),
+        .keyword => writeKeyword(w, value, feature.keywords),
+    };
+}
+
+const length_units = [_][]const u8{ "px", "em", "rem" };
+const resolution_units = [_][]const u8{ "dppx", "x", "dpi", "dpcm" };
+
+/// A `<dimension>`: the number in CSS canonical form, the unit lowercased.
+/// `bare_zero_ok` covers `<length>`, where a unitless 0 is legal.
+fn writeDimension(w: *std.Io.Writer, value: []const u8, units: []const []const u8, bare_zero_ok: bool) !void {
+    const split = splitNumber(value) orelse return error.EchoRaw;
+    const unit = std.mem.trim(u8, split.rest, &std.ascii.whitespace);
+    if (unit.len == 0) {
+        if (!bare_zero_ok or split.value != 0) return error.EchoRaw;
+        return w.writeAll("0");
+    }
+    var buf: [8]u8 = undefined;
+    const lunit = lowerBounded(&buf, unit) orelse return error.EchoRaw;
+    for (units) |known| {
+        if (std.mem.eql(u8, known, lunit)) return w.print("{d}{s}", .{ split.value, lunit });
+    }
+    return error.EchoRaw;
+}
+
+fn writeInteger(w: *std.Io.Writer, value: []const u8, max: ?u32) !void {
+    const n = parseInteger(value) orelse return error.EchoRaw;
+    if (max) |limit| {
+        if (n > limit) return error.EchoRaw;
+    }
+    return w.print("{d}", .{n});
+}
+
+/// `<ratio>` is always written as two numbers around ` / `, so a bare number
+/// grows the `/ 1` the spec says it means. A zero denominator is malformed but
+/// still writeable — Chrome answers `(aspect-ratio: 1 / 0)` and false.
+fn writeRatio(w: *std.Io.Writer, value: []const u8) !void {
+    if (std.mem.indexOfScalar(u8, value, '/')) |slash| {
+        const num = parseNumber(value[0..slash]) orelse return error.EchoRaw;
+        const den = parseNumber(value[slash + 1 ..]) orelse return error.EchoRaw;
+        return w.print("{d} / {d}", .{ num, den });
+    }
+    const num = parseNumber(value) orelse return error.EchoRaw;
+    return w.print("{d} / 1", .{num});
+}
+
+/// A discrete feature's value has to be one of that feature's own keywords:
+/// `(pointer: coarse)` is canonicalised while `(orientation: bogus)` is quoted,
+/// even though both answer false.
+fn writeKeyword(w: *std.Io.Writer, value: []const u8, keywords: []const []const u8) !void {
+    var buf: [max_value_text]u8 = undefined;
+    const lvalue = lowerBounded(&buf, value) orelse return error.EchoRaw;
+    for (keywords) |known| {
+        if (std.mem.eql(u8, known, lvalue)) return w.writeAll(lvalue);
+    }
+    return error.EchoRaw;
+}
+
+fn writeRange(w: *std.Io.Writer, split: RangeSplit) !void {
+    if (split.too_many_ops) return error.EchoRaw;
+
+    if (split.n_ops == 1) {
+        const lhs = trimWsAndComments(split.parts[0]);
+        const rhs = trimWsAndComments(split.parts[1]);
+        if (parseRangeFeature(lhs)) |feature| {
+            try writeLowered(w, lhs);
+            try w.print(" {s} ", .{opText(split.ops[0])});
+            return writeBound(w, feature, rhs);
+        }
+        if (parseRangeFeature(rhs)) |feature| {
+            try writeBound(w, feature, lhs);
+            try w.print(" {s} ", .{opText(split.ops[0])});
+            return writeLowered(w, rhs);
+        }
+        return error.EchoRaw;
+    }
+
+    const middle = trimWsAndComments(split.parts[1]);
+    const feature = parseRangeFeature(middle) orelse return error.EchoRaw;
+    if (!sameDirection(split.ops[0], split.ops[1])) return error.EchoRaw;
+    try writeBound(w, feature, trimWsAndComments(split.parts[0]));
+    try w.print(" {s} ", .{opText(split.ops[0])});
+    try writeLowered(w, middle);
+    try w.print(" {s} ", .{opText(split.ops[1])});
+    return writeBound(w, feature, trimWsAndComments(split.parts[2]));
+}
+
+/// The bound in the value space its feature reads in — the serialisation
+/// counterpart of `parseRangeBound`.
+fn writeBound(w: *std.Io.Writer, feature: RangeFeature, text: []const u8) !void {
+    return switch (feature) {
+        .width, .height => writeDimension(w, text, &length_units, true),
+        .resolution => writeDimension(w, text, &resolution_units, false),
+        .color, .color_index, .monochrome => writeInteger(w, text, null),
+        .aspect_ratio => writeRatio(w, text),
+    };
+}
+
+fn opText(op: RangeOp) []const u8 {
+    return switch (op) {
+        .lt => "<",
+        .le => "<=",
+        .gt => ">",
+        .ge => ">=",
+        .eq => "=",
+    };
+}
+
+const ValueKind = enum { length, resolution, integer, grid, ratio, keyword };
+
+const Feature = struct {
+    kind: ValueKind,
+    /// The values a discrete feature accepts. A value outside the list is
+    /// quoted rather than canonicalised, which is how Chrome distinguishes
+    /// "false" from "not a value of this feature".
+    keywords: []const []const u8 = &.{},
+    /// Whether `min-` and `max-` spellings of this feature exist. Only the
+    /// ordered features have them: `(max-orientation: landscape)` is not a
+    /// query, and neither is `(max-grid: 0)`.
+    ranged: bool = false,
+};
+
+/// The features this engine can read, with the shape of each one's value. The
+/// names mirror `evalNameValue` and `evalBoolean` above: a name here that the
+/// evaluator does not know would serialise canonically and then answer false,
+/// and a name the evaluator knows that is missing here is quoted instead of
+/// canonicalised. Both are visible in a two-arm run, which is how the two
+/// lists stay together.
+const features = std.StaticStringMap(Feature).initComptime(.{
+    .{ "width", Feature{ .kind = .length, .ranged = true } },
+    .{ "height", Feature{ .kind = .length, .ranged = true } },
+    .{ "device-width", Feature{ .kind = .length, .ranged = true } },
+    .{ "device-height", Feature{ .kind = .length, .ranged = true } },
+    .{ "resolution", Feature{ .kind = .resolution, .ranged = true } },
+    .{ "aspect-ratio", Feature{ .kind = .ratio, .ranged = true } },
+    .{ "device-aspect-ratio", Feature{ .kind = .ratio, .ranged = true } },
+    .{ "color", Feature{ .kind = .integer, .ranged = true } },
+    .{ "color-index", Feature{ .kind = .integer, .ranged = true } },
+    .{ "monochrome", Feature{ .kind = .integer, .ranged = true } },
+    .{ "grid", Feature{ .kind = .grid } },
+    .{ "orientation", Feature{ .kind = .keyword, .keywords = &.{ "portrait", "landscape" } } },
+    .{ "hover", Feature{ .kind = .keyword, .keywords = &.{ "none", "hover" } } },
+    .{ "any-hover", Feature{ .kind = .keyword, .keywords = &.{ "none", "hover" } } },
+    .{ "pointer", Feature{ .kind = .keyword, .keywords = &.{ "none", "coarse", "fine" } } },
+    .{ "any-pointer", Feature{ .kind = .keyword, .keywords = &.{ "none", "coarse", "fine" } } },
+    .{ "scan", Feature{ .kind = .keyword, .keywords = &.{ "interlace", "progressive" } } },
+    .{ "update", Feature{ .kind = .keyword, .keywords = &.{ "none", "slow", "fast" } } },
+    .{ "scripting", Feature{ .kind = .keyword, .keywords = &.{ "none", "initial-only", "enabled" } } },
+    .{ "overflow-block", Feature{ .kind = .keyword, .keywords = &.{ "none", "scroll", "paged", "optional-paged" } } },
+    .{ "overflow-inline", Feature{ .kind = .keyword, .keywords = &.{ "none", "scroll" } } },
+    .{ "display-mode", Feature{ .kind = .keyword, .keywords = &.{
+        "fullscreen",
+        "standalone",
+        "minimal-ui",
+        "browser",
+        "window-controls-overlay",
+        "picture-in-picture",
+    } } },
+    .{ "device-posture", Feature{ .kind = .keyword, .keywords = &.{ "continuous", "folded" } } },
+    .{ "color-gamut", Feature{ .kind = .keyword, .keywords = &.{ "srgb", "p3", "rec2020" } } },
+    .{ "dynamic-range", Feature{ .kind = .keyword, .keywords = &.{ "standard", "high" } } },
+    .{ "forced-colors", Feature{ .kind = .keyword, .keywords = &.{ "none", "active" } } },
+    .{ "prefers-color-scheme", Feature{ .kind = .keyword, .keywords = &.{ "light", "dark" } } },
+    .{ "prefers-reduced-motion", Feature{ .kind = .keyword, .keywords = &.{ "no-preference", "reduce" } } },
+    .{ "prefers-reduced-transparency", Feature{ .kind = .keyword, .keywords = &.{ "no-preference", "reduce" } } },
+    .{ "prefers-contrast", Feature{ .kind = .keyword, .keywords = &.{ "no-preference", "more", "less", "custom" } } },
+});
+
+const FoundFeature = struct { feature: Feature, prefixed: bool };
+
+/// `min-` and `max-` are part of the name, not modifiers on the value, so a
+/// prefixed spelling resolves to the same value shape as the bare one.
+fn findFeature(lname: []const u8) ?FoundFeature {
+    if (std.mem.startsWith(u8, lname, "min-") or std.mem.startsWith(u8, lname, "max-")) {
+        const base = features.get(lname[4..]) orelse return null;
+        if (!base.ranged) return null;
+        return .{ .feature = base, .prefixed = true };
+    }
+    return .{ .feature = features.get(lname) orelse return null, .prefixed = false };
+}
+
+/// Long enough for `prefers-reduced-transparency` and `window-controls-overlay`
+/// with room to spare; a longer name is not a feature this engine knows.
+const max_feature_name = 48;
+const max_value_text = 64;
+
+fn lowerBounded(buf: []u8, s: []const u8) ?[]const u8 {
+    if (s.len > buf.len) return null;
+    return std.ascii.lowerString(buf, s);
+}
+
+fn writeLowered(w: *std.Io.Writer, s: []const u8) !void {
+    for (s) |c| try w.writeByte(std.ascii.toLower(c));
+}
+
+fn isJoiner(lname: []const u8) bool {
+    return std.mem.eql(u8, lname, "and") or std.mem.eql(u8, lname, "or");
 }
 
 const testing = std.testing;

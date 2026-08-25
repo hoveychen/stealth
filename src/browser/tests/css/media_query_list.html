@@ -196,3 +196,96 @@
   testing.expectEqual('function', typeof mql.dispatchEvent);
 }
 </script>
+
+<script id=matchMedia_serializes_the_query>
+{
+  // `media` is a re-serialisation of the parsed query, not the text handed in:
+  // Chrome 150 answers `(min-width: 100px)` to `(min-width:100px)`. Every row
+  // below was measured on a headed Chrome 150
+  // (results/media-query-serialization.json).
+  const rows = [
+    // one space after the colon, none inside the parens
+    ['(min-width:100px)', '(min-width: 100px)'],
+    ['(min-width : 100px)', '(min-width: 100px)'],
+    ['(  min-width  :  100px  )', '(min-width: 100px)'],
+    ['screen and (min-width:100px)', 'screen and (min-width: 100px)'],
+    ['screen,print', 'screen, print'],
+    // names, units and keywords lowercased
+    ['(MIN-WIDTH: 100PX)', '(min-width: 100px)'],
+    ['SCREEN AND (MIN-WIDTH: 100px)', 'screen and (min-width: 100px)'],
+    ['(min-resolution: 1DPPX)', '(min-resolution: 1dppx)'],
+    ['(orientation: LANDSCAPE)', '(orientation: landscape)'],
+    // CSS number serialisation
+    ['(min-resolution: .625dppx)', '(min-resolution: 0.625dppx)'],
+    ['(min-resolution: 0.6250dppx)', '(min-resolution: 0.625dppx)'],
+    ['(min-width: 0100px)', '(min-width: 100px)'],
+    ['(min-width: +100px)', '(min-width: 100px)'],
+    ['(color: 08)', '(color: 8)'],
+    // a ratio is two numbers around ' / ', and a bare number is ' / 1'
+    ['(min-aspect-ratio: 1/2)', '(min-aspect-ratio: 1 / 2)'],
+    ['(min-aspect-ratio: 1  /  2)', '(min-aspect-ratio: 1 / 2)'],
+    ['(max-aspect-ratio: 2.125)', '(max-aspect-ratio: 2.125 / 1)'],
+    ['(aspect-ratio: 16/9)', '(aspect-ratio: 16 / 9)'],
+    ['(device-aspect-ratio: 16/9)', '(device-aspect-ratio: 16 / 9)'],
+    ['(aspect-ratio > 1.5)', '(aspect-ratio > 1.5 / 1)'],
+    // the range form spaces its operator
+    ['(width>100px)', '(width > 100px)'],
+    ['(width>= 100px)', '(width >= 100px)'],
+    ['(100px<width)', '(100px < width)'],
+    ['(100px<=width<=200px)', '(100px <= width <= 200px)'],
+    ['(width=100px)', '(width = 100px)'],
+    // comments and outer whitespace are gone
+    ['/*c*/(min-width:100px)', '(min-width: 100px)'],
+    ['(min-width:/*c*/100px)', '(min-width: 100px)'],
+    ['  (min-width:100px)  ', '(min-width: 100px)'],
+    // an `all` with a condition after it drops out; a negated one stays
+    ['all and (min-width:100px)', '(min-width: 100px)'],
+    ['not all and (min-width:100px)', 'not all and (min-width: 100px)'],
+    // what does not parse is echoed back exactly as it came in
+    ['(  min-bogus  :  1px  )', '(  min-bogus  :  1px  )'],
+    ['(min-width: bogus)', '(min-width: bogus)'],
+    ['(min-width:)', '(min-width:)'],
+    ['(min-width: 100)', '(min-width: 100)'],
+    ['(orientation:bogus)', '(orientation:bogus)'],
+    ['(color: 8.0)', '(color: 8.0)'],
+    ['(grid:2)', '(grid:2)'],
+    ['bogus', 'bogus'],
+    ['only bogus', 'only bogus'],
+    ['bogus and (min-width:100px)', 'bogus and (min-width: 100px)'],
+    // and a query with no valid reading at all is `not all`
+    ['screen and bogus', 'not all'],
+    ['(min-width:100px) and bogus', 'not all'],
+    ['not', 'not all'],
+    ['only', 'not all'],
+    ['and', 'not all'],
+    [')', 'not all'],
+    ['(min-width:100px),,(max-width:200px)', '(min-width: 100px), not all, (max-width: 200px)'],
+    // the empty query stays empty
+    ['', ''],
+    ['   ', ''],
+    // nesting and the logical keywords
+    ['((min-width:100px))', '((min-width: 100px))'],
+    ['not (min-width:100px)', 'not (min-width: 100px)'],
+    ['(min-width:100px) AND (max-width:200px)', '(min-width: 100px) and (max-width: 200px)'],
+    ['(min-width:100px) OR (max-width:200px)', '(min-width: 100px) or (max-width: 200px)'],
+    ['(min-width:100px), (max-width:200px)', '(min-width: 100px), (max-width: 200px)'],
+  ];
+  for (const [input, expected] of rows) {
+    testing.expectEqual(expected, window.matchMedia(input).media);
+  }
+}
+</script>
+
+<script id=matchMedia_serialization_leaves_matches_alone>
+{
+  // The serialisation must not move the answer: same viewport, same verdicts as
+  // the blocks above, read through the canonicalised spellings.
+  testing.expectEqual(true, window.matchMedia('(min-width:100px)').matches);
+  testing.expectEqual(true, window.matchMedia('(width>100px)').matches);
+  testing.expectEqual(true, window.matchMedia('all and (min-width:100px)').matches);
+  testing.expectEqual(false, window.matchMedia('(min-width:3000px)').matches);
+  testing.expectEqual(false, window.matchMedia('(orientation:bogus)').matches);
+  testing.expectEqual(false, window.matchMedia('screen and bogus').matches);
+  testing.expectEqual(true, window.matchMedia('(min-aspect-ratio: 1/2)').matches);
+}
+</script>

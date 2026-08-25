@@ -13382,3 +13382,66 @@ The probe's 38 rows are now down to four differences, none of them this:
 `toDataURL` for `image/jpeg` and `image/webp` still fall back to png (its own
 plan), and `innerHeight` / `screen` differ because the two harnesses use
 different viewports.
+
+## `media` was the text we were handed, not the query we parsed (2026-08-25)
+
+`matchMedia(q).media` is not an echo of `q`. Chrome parses the query and writes
+the parse back out, so the property is a normal form and any deviation from it is
+a spelling no browser produces. The engine echoed, and `probes/media-feature-forms.js`
+put 22 of its 97 rows on the wrong side of that:
+
+| input | Chrome 150 | engine, before |
+|---|---|---|
+| `(min-width:100px)` | `(min-width: 100px)` | `(min-width:100px)` |
+| `(min-resolution: .625dppx)` | `(min-resolution: 0.625dppx)` | `(min-resolution: .625dppx)` |
+| `(min-aspect-ratio: 1/2)` | `(min-aspect-ratio: 1 / 2)` | `(min-aspect-ratio: 1/2)` |
+| `(max-aspect-ratio: 2.125)` | `(max-aspect-ratio: 2.125 / 1)` | `(max-aspect-ratio: 2.125)` |
+| `(width>100px)` | `(width > 100px)` | `(width>100px)` |
+
+The last two are the ones that cannot be reached by patching whitespace. A
+`<ratio>` is always two numbers around ` / `, so a bare `2.125` grows the `/ 1`
+the spec says it already means; and `1e2px` becomes `100px` because the number is
+re-emitted from its value rather than copied. Kasada asked 227 media queries on
+x-hyatt, which is 227 chances to read a normal form that is not one.
+
+`probes/media-query-serialization.js` is the wider probe written to pin the rules
+down before implementing them — 119 forms, all measured on a headed Chrome 150.
+What it found:
+
+- **Names, units and keywords lowercase; the colon takes one space; the parens
+  take none.** `(  MIN-WIDTH  :  100PX  )` is `(min-width: 100px)`.
+- **Numbers are CSS-serialised**: `0100` → `100`, `+100` → `100`, `.625` →
+  `0.625`, `0.6250` → `0.625`, `100.50` → `100.5`, `1e-2` → `0.01`.
+- **What does not parse is quoted byte for byte.** `(  min-bogus  :  1px  )`
+  keeps every space. So does `(min-width: 100)`, `(orientation:bogus)`,
+  `(color: 8.0)` and `(grid:2)` — and that last group is the useful one: a value
+  outside a feature's own set is echoed rather than canonicalised, which is how
+  Chrome distinguishes "false" from "not a value of this feature". `(pointer:
+  coarse)` normalises and answers false; `(orientation:bogus)` does neither.
+- **`all` disappears in front of a condition.** `all and (min-width:100px)` is
+  `(min-width: 100px)`, while `not all and (min-width:100px)` keeps its type,
+  because the negation needs something to negate.
+- **A query with no valid reading at all is `not all`** — `screen and bogus`,
+  `(min-width:100px) and bogus`, a bare `not`, a stray `)`, and an empty branch
+  of a comma list. But an empty *query* is empty, not `not all`, and an
+  unterminated `(` is quoted like any other unreadable text.
+
+That last pair of rules is why the serialiser is organised the way it is: what
+parses is rewritten, what does not is quoted, and the parser is therefore the
+authority on both. A form this engine cannot read comes back verbatim instead of
+guessed at — which is also what keeps the 22 rows above from becoming 22 new
+wrong answers somewhere else.
+
+Two of the 119 rows still differ, and both are the same gap seen twice:
+
+| input | Chrome | ours |
+|---|---|---|
+| `(min-width: 1e2px)` | `true | (min-width: 100px)` | `false | (min-width: 1e2px)` |
+| `(min-width: -0px)` | `true | (min-width: 0px)` | `false | (min-width: -0px)` |
+
+Neither is a serialisation gap: the number scanner takes no exponent and rejects
+a signed zero, so the length never parses and the condition is quoted. The wider
+probe turned up eleven more rows where `matches` differs for the same kind of
+reason — a fractional `em`, a nested `((…))`, an `or`, an empty query, a negated
+unknown media type — all of them evaluator gaps this plan deliberately did not
+touch, and all of them named in `results/media-query-serialization.json`.
