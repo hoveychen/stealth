@@ -2863,6 +2863,7 @@ pub const Transfer = struct {
         // accumulate duplicates.
         conn.clearHeaders();
         const arena = self.arena.allocator();
+        try self.seedCookie();
         try self.emitHeaders(conn, arena);
         if (req.body != null) {
             // Browsers never send Expect: 100-continue; libcurl generates it
@@ -2876,11 +2877,6 @@ pub const Transfer = struct {
         }
         try conn.secretHeaders(&client.network.config.http_headers);
         try conn.commitHeaders();
-
-        // Add cookies from cookie jar.
-        if (try self.req.getCookieString(self.arena.allocator())) |cookies| {
-            try conn.setCookies(@ptrCast(cookies.ptr));
-        }
 
         conn.transport = .{ .http = self };
 
@@ -3234,7 +3230,9 @@ pub const Transfer = struct {
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
-        // Last on the wire, which is where Chrome puts it.
+        // The last two, in this order: Chrome writes cookie behind every real
+        // field and priority behind that (measured over h2, all four shapes).
+        "Cookie",
         "priority",
     };
 
@@ -3264,6 +3262,7 @@ pub const Transfer = struct {
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
+        "Cookie",
         "priority",
     };
 
@@ -3294,6 +3293,7 @@ pub const Transfer = struct {
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
+        "Cookie",
         "priority",
     };
 
@@ -3331,6 +3331,7 @@ pub const Transfer = struct {
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
+        "Cookie",
         "priority",
     };
 
@@ -3572,6 +3573,34 @@ pub const Transfer = struct {
     // Re-run after a redirect changes the request: a 301/302/303 turns it into
     // a GET and drops the body, and a length header left behind announces bytes
     // that will never be sent.
+    // The jar's cookies, written by us rather than handed to curl. Same reason
+    // as Content-Length above: CURLOPT_COOKIE comes out of curl's own slot,
+    // immediately behind the pseudo headers, where Chrome has the field second
+    // to last with only `priority` behind it (measured over h2 on a
+    // navigation, a subresource, an XHR POST and a fetch POST -- every other
+    // name already matched). A header we own is a header emitHeaders can
+    // place, and curl skips its own once ours is in the list.
+    //
+    // Re-run on every attempt, because a redirect can cross an origin: the
+    // cookies for the new URL are a different set, and a stale header would
+    // hand them to a host the jar never meant to.
+    // Enters at `.user_agent`, the engine's own layer, so an author's or a
+    // driver's Cookie header outranks it and the jar stays out of the way --
+    // which is what happened before too, curl skipping CURLOPT_COOKIE whenever
+    // a Cookie header was already in the list (Curl_checkheaders).
+    fn seedCookie(self: *Transfer) !void {
+        const cookies = try self.req.getCookieString(self.arena.allocator()) orelse {
+            // Drop only our own: a header from a higher layer was never ours
+            // to withdraw.
+            for (self.req_headers.items) |hdr| {
+                if (std.ascii.eqlIgnoreCase(hdr.name, "Cookie") and hdr.source != .user_agent) return;
+            }
+            self.removeHeader("Cookie");
+            return;
+        };
+        try self.setHeader("Cookie", cookies, .{});
+    }
+
     fn seedContentLength(self: *Transfer) !void {
         const body = self.req.body orelse {
             self.removeHeader("Content-Length");
@@ -4288,6 +4317,7 @@ test "HttpClient: a POST's three extra headers sit where Chrome puts them" {
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
+        "Cookie",
         "priority",
     }, &Transfer.chrome_subresource_order);
 
@@ -4316,6 +4346,7 @@ test "HttpClient: a POST's three extra headers sit where Chrome puts them" {
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
+        "Cookie",
         "priority",
     }, &Transfer.chrome_subresource_hinted_order);
 }
@@ -4484,9 +4515,34 @@ test "HttpClient: the priority hint goes out last, after Accept-Language" {
     const nav = Transfer.chrome_navigation_order;
     const sub = Transfer.chrome_subresource_order;
     try testing.expectString("priority", nav[nav.len - 1]);
-    try testing.expectString("Accept-Language", nav[nav.len - 2]);
+    try testing.expectString("Cookie", nav[nav.len - 2]);
+    try testing.expectString("Accept-Language", nav[nav.len - 3]);
     try testing.expectString("priority", sub[sub.len - 1]);
-    try testing.expectString("Accept-Language", sub[sub.len - 2]);
+    try testing.expectString("Cookie", sub[sub.len - 2]);
+    try testing.expectString("Accept-Language", sub[sub.len - 3]);
+}
+
+test "HttpClient: Cookie goes out second to last, between Accept-Language and priority" {
+    // Measured over h2 against a headless Chrome 151 on all four shapes --
+    // navigation, subresource, XHR POST and fetch POST: `cookie` is the last
+    // real field, with only `priority` behind it. Every other name matched
+    // already, so this one position was the whole difference, and it shows on
+    // every cookie-bearing request rather than on some corner.
+    //
+    // It went unnoticed because the header comparison ran against a page set
+    // that never set a cookie, and because the field was not ours to place: it
+    // came out of curl's own CURLOPT_COOKIE slot, right behind the pseudo
+    // headers. Same story as Content-Length, same fix -- a header we own is a
+    // header emitHeaders can place.
+    inline for (.{
+        Transfer.chrome_navigation_order,
+        Transfer.chrome_subresource_order,
+        Transfer.chrome_restarted_navigation_order,
+        Transfer.chrome_subresource_hinted_order,
+    }) |table| {
+        try testing.expectString("priority", table[table.len - 1]);
+        try testing.expectString("Cookie", table[table.len - 2]);
+    }
 }
 
 test "HttpClient: the negotiated hints sit where Chrome puts them" {
