@@ -38,6 +38,37 @@
 }
 </script>
 
+<script id="OffscreenCanvasRenderingContext2D#drawFocusIfNeeded is element-only">
+{
+  // `drawFocusIfNeeded` draws a focus ring around the element the current path
+  // stands in for, so it only means anything on a context that has an element.
+  // Chrome puts it on the element context and leaves it off the offscreen one;
+  // we used to register it on both, which showed up as a 74th own member on a
+  // prototype a widget enumerates.
+  testing.expectEqual(true,
+    Object.getOwnPropertyNames(CanvasRenderingContext2D.prototype).includes('drawFocusIfNeeded'));
+  testing.expectEqual(false,
+    Object.getOwnPropertyNames(OffscreenCanvasRenderingContext2D.prototype).includes('drawFocusIfNeeded'));
+  testing.expectEqual(undefined, OffscreenCanvasRenderingContext2D.prototype.drawFocusIfNeeded);
+
+  // The whole member list, in Chrome's own `getOwnPropertyNames` sorted order.
+  testing.expectEqual([
+    'arc', 'arcTo', 'beginPath', 'bezierCurveTo', 'canvas', 'clearRect', 'clip', 'closePath',
+    'constructor', 'createConicGradient', 'createImageData', 'createLinearGradient',
+    'createPattern', 'createRadialGradient', 'direction', 'drawImage', 'ellipse', 'fill',
+    'fillRect', 'fillStyle', 'fillText', 'filter', 'font', 'fontKerning', 'fontStretch',
+    'fontVariantCaps', 'getContextAttributes', 'getImageData', 'getLineDash', 'getTransform',
+    'globalAlpha', 'globalCompositeOperation', 'imageSmoothingEnabled', 'imageSmoothingQuality',
+    'isContextLost', 'isPointInPath', 'isPointInStroke', 'lang', 'letterSpacing', 'lineCap',
+    'lineDashOffset', 'lineJoin', 'lineTo', 'lineWidth', 'measureText', 'miterLimit', 'moveTo',
+    'putImageData', 'quadraticCurveTo', 'rect', 'reset', 'resetTransform', 'restore', 'rotate',
+    'roundRect', 'save', 'scale', 'setLineDash', 'setTransform', 'shadowBlur', 'shadowColor',
+    'shadowOffsetX', 'shadowOffsetY', 'stroke', 'strokeRect', 'strokeStyle', 'strokeText',
+    'textAlign', 'textBaseline', 'textRendering', 'transform', 'translate', 'wordSpacing',
+  ], Object.getOwnPropertyNames(OffscreenCanvasRenderingContext2D.prototype).sort());
+}
+</script>
+
 <script id=OffscreenCanvas#convertToBlob>
 {
   const canvas = new OffscreenCanvas(64, 64);
