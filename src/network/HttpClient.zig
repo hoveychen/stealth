@@ -2244,6 +2244,19 @@ pub const Transfer = struct {
     _tries: u8 = 0,
     _redirect_count: u8 = 0,
 
+    // What Navigation Timing needs to say about the redirect chain. The clock is
+    // the boot-relative one `Performance.now()` counts from, so the last hop's
+    // stamp is directly convertible to the document's timeline.
+    //
+    // `_redirects_same_origin` is Navigation Timing's timing allow check: a
+    // chain is only reportable when every hop stayed on one origin. Chrome
+    // reports redirectCount 1 and non-zero redirectStart/End for a same-origin
+    // 302 and 0 for all three when one hop crossed origins, while fetchStart
+    // moves past the hop either way (measured; see the two
+    // `/redirect_nav_timing*` routes in testing.zig).
+    _last_redirect_micros: u64 = 0,
+    _redirects_same_origin: bool = true,
+
     // Fetch.continueRequest header overrides apply to a single network hop. We
     // need to restore (and hence capture) the original headers.
     _intercept_original_headers: ?[]const RequestHeader = null,
@@ -3025,6 +3038,13 @@ pub const Transfer = struct {
             }
             break :blk resolved;
         };
+
+        // Recorded before the URL moves, so `base` is still the origin that
+        // answered and `url` the one the answer points at.
+        transfer._last_redirect_micros = lp.datetime.microTimestamp(.boot);
+        if (transfer._redirects_same_origin and url.len > 0) {
+            transfer._redirects_same_origin = URL.isSameOrigin(url, base);
+        }
 
         try transfer.updateURL(url);
         // 301, 302, 303 → change to GET, drop body.
@@ -3901,6 +3921,14 @@ pub const Transfer = struct {
     pub fn redirectCount(self: *const Transfer) ?u32 {
         const rh = self.res.header orelse return null;
         return rh.redirect_count;
+    }
+
+    pub fn redirectTiming(self: *const Transfer) http.RedirectTiming {
+        return .{
+            .count = self._redirect_count,
+            .same_origin = self._redirects_same_origin,
+            .end_micros = self._last_redirect_micros,
+        };
     }
 
     pub fn responseHeaderIterator(self: *Transfer) HeaderIterator {

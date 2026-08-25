@@ -278,6 +278,24 @@ pub const ResponseTimes = struct {
     start_transfer: u64 = 0,
 };
 
+/// What the redirect chain a transfer walked looks like to Navigation Timing.
+/// `count` is 0 for a document that arrived first try, in which case the rest is
+/// meaningless.
+///
+/// Navigation Timing exposes a chain only when every hop passed the timing allow
+/// check, which for a plain document means every hop stayed on one origin --
+/// hence `same_origin`. Chrome 151 reports redirectCount 1 with non-zero
+/// redirectStart/End for a same-origin 302 and 0 for all three when a hop
+/// crossed origins, while fetchStart moves past the chain either way (measured;
+/// see the two `/redirect_nav_timing*` routes in testing.zig).
+pub const RedirectTiming = struct {
+    count: u32 = 0,
+    same_origin: bool = true,
+    /// When the last redirect response landed, on the boot-relative clock
+    /// `Performance.now()` counts from.
+    end_micros: u64 = 0,
+};
+
 pub const ResponseLabels = struct {
     pub const MAX_CONTENT_TYPE_LEN = 96;
     pub const MAX_CONTENT_ENCODING_LEN = 48;

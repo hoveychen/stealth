@@ -1634,6 +1634,10 @@ fn frameHeaderDoneCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.
         // would be different than self.url in the case of a redirect
         self.url = try self.arena.dupeZ(u8, response_url);
         self.origin = try URL.getOrigin(self.arena, self.url);
+        // Chrome names the navigation entry after the document that actually
+        // loaded, not the URL the navigation asked for. `navigationStarted`
+        // only knew the latter.
+        self.performance().navigationUrl(self.url);
     }
     // After the redirect chain, so a http -> https hop lands on the final
     // scheme rather than the one the navigation started with.
@@ -1917,6 +1921,7 @@ fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
             try self.arena.dupe(u8, labels.contentEncoding()),
             transfer.nextHopProtocol(),
             transfer.responseTimes(),
+            transfer.redirectTiming(),
         );
     }
     perf.navigationBodyChunk(data.len, transfer.encodedBodySize());
