@@ -17,9 +17,17 @@
 //     until the settle is over. The reads we want are the ones the guard made
 //     while it still believed nobody was watching.
 //
+// `--args` adds the second half of the same question. Without it an operation
+// is logged by name, so a guard that called matchMedia 431 times reads as one
+// line saying 431 -- the members it asked about are the whole point and none of
+// them are in there. With it the key carries the call's first argument, which
+// for matchMedia / getParameter / canPlayType / isTypeSupported is the entire
+// question. Off by default: the key set stops being bounded by our surface and
+// starts being bounded by whatever the page passes.
+//
 // usage:
 //   prop-reads.mjs <url> [--out results/x.json] [--settle 25000]
-//                        [--proxy socks5h://host:port] [--port 9700]
+//                        [--proxy socks5h://host:port] [--port 9700] [--args]
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -42,6 +50,7 @@ const outPath = path.resolve(repo, arg('--out', 'tools/fingerprint/results/prop-
 const settleMs = Number(arg('--settle', '25000'));
 const proxy = arg('--proxy', null);
 const PORT = Number(arg('--port', '9700'));
+const withArgs = process.argv.includes('--args');
 
 let out = '';
 const proc = spawn(process.env.LP_BIN ?? path.join(repo, 'zig-out/bin/lightpanda'), [
@@ -49,6 +58,7 @@ const proc = spawn(process.env.LP_BIN ?? path.join(repo, 'zig-out/bin/lightpanda
     // logfmt rather than the debug default: one line per member, parseable.
     '--log-level', 'debug', '--log-format', 'logfmt',
     '--log-filter-scopes', '-all', '--log-filter-scopes', '+prop_read',
+    ...(withArgs ? ['--log-filter-scopes', '+prop_arg'] : []),
     ...(proxy ? ['--http-proxy', proxy] : []),
 ], { stdio: ['ignore', 'pipe', 'pipe'] });
 const keep = (b) => { out += b.toString(); };
@@ -114,13 +124,29 @@ for (const line of out.split('\n')) {
     // `scope=` is the log's own field (it says prop_read); the realm's url is
     // ours.
     const realm = /realm=("(?:[^"\\]|\\.)*"|\S+)/.exec(line)?.[1] ?? '';
+    const [member, argument] = splitArgument(name);
     reads.push({
         context: Number(/context=(\d+)/.exec(line)?.[1] ?? -1),
         realm: realm.startsWith('"') ? realm.slice(1, -1) : realm,
         seq: Number(/seq=(\d+)/.exec(line)?.[1] ?? -1),
         property: name,
+        member,
+        ...(argument === null ? {} : { argument }),
         occurrences: Number(/occurrences=(\d+)/.exec(line)?.[1] ?? 0),
     });
+}
+
+// `Window.matchMedia("(min-width: 100px)")` -> ['Window.matchMedia', '(min-width: 100px)'].
+//
+// The trailing group is anchored to the two shapes the engine emits -- a quoted
+// string or a number -- rather than to "the last parenthesis", which an
+// interface with no Meta.name would trip over: its Zig type name carries
+// parens of its own, and a media query carries parens inside the argument.
+function splitArgument(name) {
+    const m = /^(.*)\(("[\s\S]*"|-?[\d.][\deE+.-]*)\)$/.exec(name);
+    if (!m) return [name, null];
+    const raw = m[2];
+    return [m[1], raw.startsWith('"') ? raw.slice(1, -1) : raw];
 }
 // Grouped by context, then by the order within it. Every context counts from
 // zero, so a flat sort on `seq` would braid the page's walk together with its
@@ -135,8 +161,32 @@ row.contexts = [...new Set(reads.map((r) => r.context))]
     }));
 row.interfaces = [...new Set(reads.map((r) => r.property.split('.')[0]))].sort();
 
+// With --args a member appears once per distinct argument, so the read count
+// stops being the member count. Both are worth having: the first says how wide
+// the questioning was, the second how much of our surface it touched.
+row.args = withArgs;
+row.members = [...new Set(reads.map((r) => r.member))].length;
+if (withArgs) {
+    // Deduped by value, not by row: every realm keeps its own map, so a page
+    // that makes three iframes asks `createElement("div")` in four of them and
+    // four rows come back for one question.
+    row.arguments = [...new Set(reads.filter((r) => r.argument !== undefined).map((r) => r.member))]
+        .sort()
+        .map((member) => {
+            const rows = reads.filter((r) => r.member === member && r.argument !== undefined);
+            return {
+                member,
+                distinct: new Set(rows.map((r) => r.argument)).size,
+                calls: rows.reduce((n, r) => n + r.occurrences, 0),
+                values: [...new Set(rows.map((r) => r.argument))],
+            };
+        })
+        .sort((a, b) => b.distinct - a.distinct);
+}
+
 await fs.mkdir(path.dirname(outPath), { recursive: true });
 await fs.writeFile(outPath, JSON.stringify(row, null, 2));
-console.log(`${reads.length} members read across ${row.interfaces.length} interfaces in ${row.contexts.length} contexts -> ${path.relative(repo, outPath)}`);
+console.log(`${reads.length} keys / ${row.members} members read across ${row.interfaces.length} interfaces in ${row.contexts.length} contexts -> ${path.relative(repo, outPath)}`);
+for (const a of (row.arguments ?? []).slice(0, 10)) console.log(`  ${a.member}  ${a.distinct} distinct / ${a.calls} calls`);
 if (row.reading) console.log(`  ${row.reading.nodes} nodes  ${row.reading.href}`);
 if (row.error) console.log(`  error: ${row.error}`);

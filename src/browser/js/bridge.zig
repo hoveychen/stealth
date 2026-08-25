@@ -880,10 +880,64 @@ pub fn logReads(comptime JsApi: type, comptime member: []const u8, comptime valu
             const getter = value.getter orelse return value;
             wrapped.getter = recordingCallback(key, getter);
         },
-        Function => wrapped.func = recordingCallback(key, value.func),
+        Function => wrapped.func = recordingOperationCallback(key, value.func),
         else => @compileError("logReads: " ++ @typeName(@TypeOf(value))),
     }
     return wrapped;
+}
+
+// The shapes of first argument worth keying a read on. A media query and a
+// WebGL enum are both "the question the page asked"; an object argument is a
+// value we would have to serialize before it said anything, and none of the
+// calls this was built to read take one.
+const ReadArgument = union(enum) {
+    string: []const u8,
+    number: f64,
+};
+
+// How much of a string argument survives into the key. Long enough for the
+// media queries and MIME types this exists to read, short enough that one
+// stylesheet passed to `CSS.supports` doesn't own the line.
+const max_argument_len = 96;
+
+// Renders `Interface.member(arg)` into `buf`, or hands back the bare member
+// when there is no argument of a shape we key on.
+//
+// Bytes outside printable ASCII become '.': the result goes into a logfmt
+// value, and log.writeString sends any value holding one control byte through
+// its base64 branch, which would cost the reader the whole line rather than
+// the one argument.
+fn formatArgumentKey(buf: []u8, key: []const u8, arg: ?ReadArgument) []const u8 {
+    const a = arg orelse return key;
+
+    var w = std.Io.Writer.fixed(buf);
+    w.writeAll(key) catch return key;
+    switch (a) {
+        .string => |s| {
+            const text = s[0..@min(s.len, max_argument_len)];
+            w.writeAll("(\"") catch return key;
+            for (text) |b| {
+                w.writeByte(switch (b) {
+                    0x20...0x7e => b,
+                    else => '.',
+                }) catch return key;
+            }
+            if (text.len != s.len) {
+                w.writeAll("...") catch return key;
+            }
+            w.writeAll("\")") catch return key;
+        },
+        .number => |n| {
+            // A WebGL enum reads as 37446, not 3.7446e4, and `getParameter`
+            // asked 152 times is a list of enums or it is nothing.
+            if (@floor(n) == n and @abs(n) < 1e15) {
+                w.print("({d})", .{@as(i64, @intFromFloat(n))}) catch return key;
+            } else {
+                w.print("({d})", .{n}) catch return key;
+            }
+        },
+    }
+    return w.buffered();
 }
 
 fn recordingCallback(
@@ -904,6 +958,78 @@ fn recordingCallback(
             inner(handle);
         }
     }.wrap;
+}
+
+// The operation half of the same idea. An accessor is the whole question --
+// `navigator.webdriver` has nothing else to say -- but an operation's question
+// lives in its arguments, and the plain log answers "matchMedia, 431 times"
+// when what a diff needs is which 431 queries. Behind its own scope because
+// the key is now built per call rather than being a comptime string.
+fn recordingOperationCallback(
+    comptime key: []const u8,
+    comptime inner: *const fn (?*const v8.FunctionCallbackInfo) callconv(.c) void,
+) *const fn (?*const v8.FunctionCallbackInfo) callconv(.c) void {
+    return struct {
+        fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
+            if (log.enabled(.prop_read, .debug)) {
+                const isolate = v8.v8__FunctionCallbackInfo__GetIsolate(handle).?;
+                if (Context.fromIsolate(.{ .handle = isolate })) |found| {
+                    const ctx, const v8_context = found;
+                    if (log.enabled(.prop_arg, .debug)) {
+                        recordWithArgument(ctx, v8_context, key, handle.?);
+                    } else {
+                        ctx.recordPropertyRead(key);
+                    }
+                }
+            }
+            inner(handle);
+        }
+    }.wrap;
+}
+
+// Keys the read on the call's first argument. Only the first: `matchMedia`,
+// `getParameter` and `canPlayType` each ask their whole question there, and a
+// key that grew with the argument list would stop being the one thing two arms
+// can be lined up on.
+fn recordWithArgument(
+    ctx: *Context,
+    v8_context: *const v8.Context,
+    comptime key: []const u8,
+    handle: *const v8.FunctionCallbackInfo,
+) void {
+    const info: Caller.FunctionCallbackInfo = .{ .handle = handle };
+    if (info.length() == 0) {
+        return ctx.recordPropertyRead(key);
+    }
+
+    var hs: js.HandleScope = undefined;
+    hs.init(ctx.isolate);
+    defer hs.deinit();
+
+    const local: js.Local = .{
+        .ctx = ctx,
+        .handle = v8_context,
+        .isolate = ctx.isolate,
+        .call_arena = ctx.call_arena,
+    };
+    const value = info.getArg(0, &local);
+
+    // Room for more than the cap so a source string longer than the cap comes
+    // back longer than the cap: WriteUtf8 stops on a whole character, and a
+    // buffer sized exactly to the cap would report a truncated argument as one
+    // that happened to end there.
+    var text: [max_argument_len + 8]u8 = undefined;
+    const arg: ReadArgument = if (value.isString()) |str|
+        .{ .string = str.toSliceWithBuf(&text) }
+    else if (value.isNumber())
+        .{ .number = value.toF64() catch return ctx.recordPropertyRead(key) }
+    else
+        // An object, a callback, a boolean: nothing a key could carry without
+        // serializing it, and none of the reads this was built for pass one.
+        return ctx.recordPropertyRead(key);
+
+    var buf: [key.len + max_argument_len + 8]u8 = undefined;
+    ctx.recordPropertyReadDynamic(formatArgumentKey(&buf, key, arg), key);
 }
 
 // Given a Type, returns the length of the prototype chain, including self
@@ -1810,4 +1936,55 @@ const testing = @import("../../testing.zig");
 // `Object.getOwnPropertyDescriptor(P, k).get.call(o)`.
 test "WebApi: descriptor kind" {
     try testing.htmlRunner("descriptor_kind.html", .{});
+}
+
+// The read log's answer to "431 calls to matchMedia asking what?". Only the
+// key-building half is testable without a page; that a call reaches it at all
+// is what the prop_arg scope on a real run shows.
+test "bridge: property read argument key" {
+    var buf: [256]u8 = undefined;
+
+    // No argument, or one we don't key on: the member alone, byte-identical to
+    // what the plain read log emits, so the two runs stay comparable.
+    try testing.expectEqual("Window.matchMedia", formatArgumentKey(&buf, "Window.matchMedia", null));
+
+    try testing.expectEqual(
+        "Window.matchMedia(\"(min-width: 100px)\")",
+        formatArgumentKey(&buf, "Window.matchMedia", .{ .string = "(min-width: 100px)" }),
+    );
+    try testing.expectEqual(
+        "HTMLMediaElement.canPlayType(\"video/mp4; codecs=\"avc1.42E01E\"\")",
+        formatArgumentKey(&buf, "HTMLMediaElement.canPlayType", .{ .string = "video/mp4; codecs=\"avc1.42E01E\"" }),
+    );
+
+    // A WebGL enum has to read as the integer the page passed; 3.7446e4 would
+    // not match anything in the registry.
+    try testing.expectEqual(
+        "WebGLRenderingContext.getParameter(37446)",
+        formatArgumentKey(&buf, "WebGLRenderingContext.getParameter", .{ .number = 37446 }),
+    );
+    try testing.expectEqual(
+        "CanvasRenderingContext2D.rotate(-0.5)",
+        formatArgumentKey(&buf, "CanvasRenderingContext2D.rotate", .{ .number = -0.5 }),
+    );
+
+    // A control byte in the value would send the whole logfmt line through
+    // base64, taking every other field on it with the argument.
+    try testing.expectEqual(
+        "Element.setAttribute(\"a.b\")",
+        formatArgumentKey(&buf, "Element.setAttribute", .{ .string = "a\nb" }),
+    );
+
+    // Truncated, and saying so: an argument that ends at the cap has to be
+    // distinguishable from one that ends.
+    const long = "x" ** 200;
+    try testing.expectEqual(
+        "CSS.supports(\"" ++ ("x" ** 96) ++ "...\")",
+        formatArgumentKey(&buf, "CSS.supports", .{ .string = long }),
+    );
+
+    // The buffer is the last word: a key that doesn't fit falls back to the
+    // member rather than emitting a half-written argument.
+    var small: [8]u8 = undefined;
+    try testing.expectEqual("CSS.supports", formatArgumentKey(&small, "CSS.supports", .{ .string = "flex" }));
 }

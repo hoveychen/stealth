@@ -12997,3 +12997,88 @@ whether or not any single station was spending it.
 CDP limits `Connection.init` asks the config for answered for `serve` only, so
 the first client to connect reached `unreachable`. Fixed alongside, since it is
 the only way to read the mcp arm end to end.
+
+---
+
+## The log knew how often, never what about
+
+The read log answers "which of our members did the page reach, in what order".
+For an accessor that is the whole question — `navigator.webdriver` has nothing
+else to say — but for an operation it is barely half of one. x-hyatt's log said
+Kasada called `matchMedia` 431 times. Which 431 queries, the part a two-arm diff
+could act on, was nowhere in it. Same for 152 `getParameter` enums, 36
+`canPlayType` MIMEs, 17 `MediaRecorder.isTypeSupported` ones.
+
+So the operation wrapper now keys its read on the call's first argument when
+that argument is a string or a number, behind its own log scope (`prop_arg`,
+`prop-reads.mjs --args`). Only the first: `matchMedia`, `getParameter` and
+`canPlayType` each ask their whole question there, and a key that grew with the
+argument list would stop being the one thing two arms can be lined up on. The
+scope is separate from `prop_read` because the key set stops being bounded by
+our surface and starts being bounded by whatever the page passes — past 8192
+distinct keys a context falls back to the bare member.
+
+One settle of `https://www.hyatt.com/`: 1023 keys over 508 members in 4 realms,
+and the three counts come apart.
+
+| member | calls | distinct arguments |
+|---|---|---|
+| `Window.matchMedia` | 431 | 227 |
+| `HTMLCanvasElement.toDataURL` | 80 | 80 |
+| `HTMLMediaElement.canPlayType` | 36 | 36 |
+| `MediaRecorder.isTypeSupported` | 17 | 17 |
+| `WebGLRenderingContext.getParameter` | 138 | **1** |
+| `WebGL2RenderingContext.getParameter` | 13 | 10 |
+
+The one `getParameter` enum asked 138 times is `37446`,
+`UNMASKED_RENDERER_WEBGL`. The 80 `toDataURL` types are the IANA image
+registry read end to end, `image/aces` to `image/wmf`. And 64 of the 227 media
+queries are a **binary search for `devicePixelRatio`** — `(min-resolution:Ndppx)`
+halved twenty-four times, then the same walk again in `dpi` and again in
+`dpcm` — with the remaining 163 covering every media feature in the spec, one
+query per keyword.
+
+### Putting all 390 back to both arms
+
+`probes/kasada-argument-answers.js` is generated from that log: every recorded
+argument whose call has an answer worth comparing, asked of both arms on the
+same page. **101 of 390 differ.** The wide probe uses Kasada's exact strings,
+which turned out to matter — `probes/media-feature-forms.js` and
+`probes/kasada-argument-followup.js` re-ask the differences under conditions
+that separate the feature from the way it was written.
+
+What survived that second pass, all confirmed on both arms at
+`https://example.com/`:
+
+| reading | Chrome | this engine |
+|---|---|---|
+| `matchMedia('(min-width:100px)').media` | `(min-width: 100px)` | `(min-width:100px)` |
+| `matchMedia('(min-aspect-ratio: 1/2)').media` | `(min-aspect-ratio: 1 / 2)` | `(min-aspect-ratio: 1/2)` |
+| `matchMedia('(max-aspect-ratio: 2.125)').media` | `(max-aspect-ratio: 2.125 / 1)` | `(max-aspect-ratio: 2.125)` |
+| `(min-resolution: 0.625dppx)` | `true` | `false` |
+| `(min-resolution: 50dpi)`, `(max-resolution: 256dpi)` | `true` | `false` |
+| `(width > 100px)`, `(color = 8)`, `(resolution > 50dpi)` | `true` | `false` |
+| `(max-color-index: 4)`, `(max-aspect-ratio: 2.125)` | `true` | `false` |
+| `(device-posture: continuous)` | `true` | `false` |
+| `gl.getParameter(37446)` before `getExtension('WEBGL_debug_renderer_info')` | `null` | the renderer string |
+| `canvas.toDataURL('image/jpeg' \| 'image/webp')` | that type | `data:image/png` |
+| `MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.64003E,mp4a.40.2')` | `true` | `false` |
+| `document.createEvent('TouchEvent')` | throws `NotSupportedError` | `[object TouchEvent]` |
+
+The serialization row is the widest of these by a distance: it is not a feature
+we are missing, it is every query the page makes coming back in the form it was
+written rather than the form the spec says to print. Kasada asked 227 of them.
+
+`(min-resolution: 1dppx)` and `(min-resolution: 2dppx)` both answer correctly,
+which is why the plain read log never showed anything here — the gap is in the
+value grammar (fractional `dppx`, the `dpi` and `dpcm` units, a bare number
+where a ratio is expected) and in the range forms (`<`, `>`, `=`), not in the
+features themselves.
+
+Left out of the probe on purpose: `TextEncoder.encode`, `btoa` and
+`SubtleCrypto.digest` are arithmetic, `rotate` and `translate` return nothing,
+and `Storage` and `Performance.getEntriesByType` answer about the page rather
+than about the browser. Not counted as differences either: `screen` (800x600 on
+headless Chrome), `innerHeight`, and `prefers-color-scheme` (headless Chrome
+defaults to dark) — those are readings of the harness, and the chapter above
+already has them.
