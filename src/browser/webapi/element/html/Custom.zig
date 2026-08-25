@@ -342,5 +342,27 @@ pub const JsApi = struct {
     pub const Meta = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+
+        // An *undefined* custom element -- a hyphenated tag with no definition
+        // -- gets the plain HTMLElement interface. Chrome hands it
+        // HTMLElement itself: `el.constructor === HTMLElement` and
+        // `Object.getPrototypeOf(el) === HTMLElement.prototype` both read true
+        // there (measured against a headed Chrome 151).
+        //
+        // This type exists to carry the tag name and the upgrade machinery, so
+        // it needs its own Zig type, and a Zig type ordinarily brings its own
+        // JS class along with it. Without a Meta.name that class was falling
+        // back to `@typeName` -- so `document.querySelector('my-widget')
+        // .constructor.name` answered "browser.webapi.element.html.Custom
+        // .JsApi", which names the engine, the language and the source layout
+        // in one property read. No interface object means the `constructor`
+        // own-property is deleted off this prototype, so the lookup walks up to
+        // HTMLElement's and both the identity and the name come out Chrome's.
+        //
+        // Not fixed by this: the extra prototype level is still there, so
+        // `Object.getPrototypeOf(el) === HTMLElement.prototype` stays false
+        // where Chrome says true. Removing the level means giving this type no
+        // JS class at all, which the bridge has no way to express today.
+        pub const no_interface_object = true;
     };
 };

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!-- A hyphenated element with no definition is an *undefined custom element*,
+     and the spec gives it the plain HTMLElement interface -- not
+     HTMLUnknownElement, which is reserved for non-hyphenated unknown tags. Its
+     wrapper class is therefore named HTMLElement, and a page that reads
+     `constructor.name` must not be able to see anything else there: an
+     engine-internal type name leaking out of that getter is a one-line
+     fingerprint of which engine is running. -->
+<my-widget id="undefined_ce">ce</my-widget>
+<notdefined id="unknown_tag">plain</notdefined>
+
+<script id="unregistered_custom_element_is_htmlelement">
+  const el = $('#undefined_ce')
+  // Not just a same-named class: Chrome hands out HTMLElement itself.
+  testing.expectEqual(true, el.constructor === HTMLElement)
+  testing.expectEqual('HTMLElement', el.constructor.name)
+  testing.expectEqual(true, el instanceof HTMLElement)
+  testing.expectEqual('MY-WIDGET', el.tagName)
+  testing.expectEqual('[object HTMLElement]', Object.prototype.toString.call(el))
+
+  // createElement takes the same path.
+  testing.expectEqual('HTMLElement', document.createElement('other-widget').constructor.name)
+</script>
+
+<script id="unknown_non_hyphenated_tag_is_htmlunknownelement">
+  // The contrast that shows the name above is not just a blanket default.
+  testing.expectEqual('HTMLUnknownElement', $('#unknown_tag').constructor.name)
+</script>
+
+<script id="defined_custom_element_reports_its_own_class">
+  class DefinedWidget extends HTMLElement {}
+  customElements.define('defined-widget', DefinedWidget)
+  const defined = document.createElement('defined-widget')
+  testing.expectEqual('DefinedWidget', defined.constructor.name)
+  testing.expectEqual(true, defined instanceof HTMLElement)
+</script>
