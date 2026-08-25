@@ -1,0 +1,329 @@
+{
+  "probe": "tools/fingerprint/probes/kasada-argument-answers.js",
+  "url": "https://example.com/",
+  "note": "The toDataURL slice of the Kasada argument sweep: the whole IANA image registry put through a 20x20 canvas. All 80 rows agree -- image/jpeg and image/webp come back as themselves and the other 78 fall back to PNG, which is what Chrome answers.",
+  "rows": 80,
+  "equal": 80,
+  "toDataURL": {
+    "toDataURL image/png": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jpeg": {
+      "chrome": "data:image/jpeg",
+      "lightpanda": "data:image/jpeg"
+    },
+    "toDataURL image/jpg": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/webp": {
+      "chrome": "data:image/webp",
+      "lightpanda": "data:image/webp"
+    },
+    "toDataURL image/bmp": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/x-png": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/gif": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/aces": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/apng": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/avci": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/avcs": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/avif": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/cgm": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/dicom-rle": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/dpx": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/emf": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/example": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/fits": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/g3fax": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/heic": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/heic-sequence": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/heif": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/heif-sequence": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/hej2k": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/hsj2": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/j2c": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jls": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jp2": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jph": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jphc": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jpm": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jpx": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jxr": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jxrA": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jxrS": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jxs": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jxsc": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jxsi": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/jxss": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/ktx": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/ktx2": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/naplps": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/prs.btif": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/prs.pti": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/pwg-raster": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/svg+xml": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/t38": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/tiff": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/tiff-fx": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.adobe.photoshop": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.airzip.accelerator.azv": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.cns.inf2": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.dece.graphic": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.djvu": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.dwg": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.dxf": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.dvb.subtitle": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.fastbidsheet": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.fpx": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.fst": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.fujixerox.edmics-mmr": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.fujixerox.edmics-rlc": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.globalgraphics.pgb": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.microsoft.icon": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.mix": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.ms-modi": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.mozilla.apng": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.net-fpx": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.pco.b16": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.radiance": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.sealed.png": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.sealedmedia.softseal.gif": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.sealedmedia.softseal.jpg": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.svf": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.tencent.tap": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.valve.source.texture": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.wap.wbmp": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.xiff": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/vnd.zbrush.pcx": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    "toDataURL image/wmf": {
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    }
+  }
+}

@@ -1,0 +1,329 @@
+{
+  "probe": "tools/fingerprint/probes/canvas-encode-types.js",
+  "url": "https://example.com/",
+  "note": "Chrome encodes image/png, image/jpeg and image/webp and falls back to PNG for the rest of the IANA image registry. The bytes and roundtrip rows are read, not compared -- see the probe header.",
+  "compared_rows": 58,
+  "compared_equal": 58,
+  "rows": [
+    {
+      "key": "mime \"image/png\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/jpeg\"",
+      "chrome": "data:image/jpeg",
+      "lightpanda": "data:image/jpeg"
+    },
+    {
+      "key": "mime \"image/webp\"",
+      "chrome": "data:image/webp",
+      "lightpanda": "data:image/webp"
+    },
+    {
+      "key": "mime \"image/jpg\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/x-png\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/gif\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/bmp\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/apng\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/avif\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/svg+xml\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/tiff\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/jxr\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/vnd.mozilla.apng\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/vnd.sealedmedia.softseal.jpg\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"IMAGE/JPEG\"",
+      "chrome": "data:image/jpeg",
+      "lightpanda": "data:image/jpeg"
+    },
+    {
+      "key": "mime \"Image/WebP\"",
+      "chrome": "data:image/webp",
+      "lightpanda": "data:image/webp"
+    },
+    {
+      "key": "mime \" image/jpeg\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/jpeg \"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/jpeg;\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/jpeg;q=1\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/webp;\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"jpeg\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime \"image/bogus\"",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime undefined",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "mime null",
+      "chrome": "data:image/png",
+      "lightpanda": "data:image/png"
+    },
+    {
+      "key": "jpeg quality 0 differs from default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg quality 0.1 differs from default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg quality 0.5 differs from default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg quality 0.92 differs from default",
+      "chrome": false,
+      "lightpanda": false
+    },
+    {
+      "key": "jpeg quality 1 differs from default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg quality undefined is the default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg quality -1 is the default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg quality 2 is the default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg quality NaN is the default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg quality x is the default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg quality null is the default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg quality true is the default",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "png ignores quality",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "jpeg 0 is smaller than 1",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "roundtrip image/png",
+      "chrome": "20x20 64,128,240,256 256,0,0,128 0,0,0,0",
+      "lightpanda": "0x0 0,0,0,0 0,0,0,0 0,0,0,0"
+    },
+    {
+      "key": "roundtrip image/jpeg",
+      "chrome": "20x20 64,144,240,256 112,0,0,256 0,16,0,256",
+      "lightpanda": "0x0 0,0,0,0 0,0,0,0 0,0,0,0"
+    },
+    {
+      "key": "roundtrip image/webp",
+      "chrome": "20x20 64,128,240,256 240,0,16,128 0,0,0,0",
+      "lightpanda": "0x0 0,0,0,0 0,0,0,0 0,0,0,0"
+    },
+    {
+      "key": "toBlob undefined",
+      "chrome": "image/png",
+      "lightpanda": "image/png"
+    },
+    {
+      "key": "toBlob image/png",
+      "chrome": "image/png",
+      "lightpanda": "image/png"
+    },
+    {
+      "key": "toBlob image/jpeg",
+      "chrome": "image/jpeg",
+      "lightpanda": "image/jpeg"
+    },
+    {
+      "key": "toBlob image/webp",
+      "chrome": "image/webp",
+      "lightpanda": "image/webp"
+    },
+    {
+      "key": "toBlob IMAGE/JPEG",
+      "chrome": "image/jpeg",
+      "lightpanda": "image/jpeg"
+    },
+    {
+      "key": "toBlob image/jpg",
+      "chrome": "image/png",
+      "lightpanda": "image/png"
+    },
+    {
+      "key": "toBlob image/bogus",
+      "chrome": "image/png",
+      "lightpanda": "image/png"
+    },
+    {
+      "key": "convertToBlob null",
+      "chrome": "image/png",
+      "lightpanda": "image/png"
+    },
+    {
+      "key": "convertToBlob {}",
+      "chrome": "image/png",
+      "lightpanda": "image/png"
+    },
+    {
+      "key": "convertToBlob {\"type\":\"image/jpeg\"}",
+      "chrome": "image/jpeg",
+      "lightpanda": "image/jpeg"
+    },
+    {
+      "key": "convertToBlob {\"type\":\"image/webp\"}",
+      "chrome": "image/webp",
+      "lightpanda": "image/webp"
+    },
+    {
+      "key": "convertToBlob {\"type\":\"IMAGE/JPEG\"}",
+      "chrome": "image/jpeg",
+      "lightpanda": "image/jpeg"
+    },
+    {
+      "key": "convertToBlob {\"type\":\"image/jpg\"}",
+      "chrome": "image/png",
+      "lightpanda": "image/png"
+    },
+    {
+      "key": "convertToBlob {\"type\":\"image/bogus\"}",
+      "chrome": "image/png",
+      "lightpanda": "image/png"
+    },
+    {
+      "key": "convertToBlob quality is read",
+      "chrome": true,
+      "lightpanda": true
+    },
+    {
+      "key": "zero area undefined",
+      "chrome": "data:,",
+      "lightpanda": "data:,"
+    },
+    {
+      "key": "zero area image/jpeg",
+      "chrome": "data:,",
+      "lightpanda": "data:,"
+    },
+    {
+      "key": "zero area image/webp",
+      "chrome": "data:,",
+      "lightpanda": "data:,"
+    },
+    {
+      "key": "bytes image/png",
+      "chrome": 178,
+      "lightpanda": 108
+    },
+    {
+      "key": "bytes image/jpeg",
+      "chrome": 1112,
+      "lightpanda": 994
+    },
+    {
+      "key": "bytes image/webp",
+      "chrome": 728,
+      "lightpanda": 328
+    }
+  ]
+}

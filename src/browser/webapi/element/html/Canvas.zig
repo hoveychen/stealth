@@ -27,7 +27,7 @@ const HtmlElement = @import("../Html.zig");
 
 const Blob = @import("../../Blob.zig");
 const attributes = @import("../../canvas/context_attributes.zig");
-const png = @import("../../canvas/png.zig");
+const encode = @import("../../canvas/encode.zig");
 const Surface = @import("../../canvas/raster.zig");
 const CanvasRenderingContext2D = @import("../../canvas/CanvasRenderingContext2D.zig");
 const WebGLRenderingContext = @import("../../canvas/WebGLRenderingContext.zig");
@@ -208,36 +208,50 @@ pub fn straightPixels(self: *const Canvas, arena: Allocator) !?[]u8 {
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toDataURL
 ///
-/// The requested type is ignored: we only encode PNG, and the spec says an
-/// unsupported type falls back to it. Chrome does support JPEG and WebP, so
-/// asking for one of those and getting a `data:image/png` URL back is a
-/// difference a fingerprinter can see — writing those encoders is a much
-/// bigger job than the PNG one, and it would not close the gap while text
-/// still does not rasterise.
-pub fn toDataURL(self: *Canvas, _: ?[]const u8, _: ?f64, frame: *Frame) ![]const u8 {
+/// The type picks the encoder, and anything outside the handful we write falls
+/// back to PNG — which is both what the spec says an unsupported type does and
+/// what Chrome answers for the rest of the IANA image registry. See
+/// canvas/encode.zig for how the match is made.
+pub fn toDataURL(self: *Canvas, mime: ?[]const u8, quality: ?js.Value, frame: *Frame) ![]const u8 {
     const width = self.getWidth();
     const height = self.getHeight();
     if (width == 0 or height == 0) {
-        // What Chrome answers for a canvas with no area.
+        // What Chrome answers for a canvas with no area, whatever type was
+        // asked for (measured).
         return "data:,";
     }
-    return png.dataUrl(frame.local_arena, width, height, try self.straightPixels(frame.local_arena));
+    return encode.dataUrl(
+        frame.local_arena,
+        .fromType(mime),
+        width,
+        height,
+        try self.straightPixels(frame.local_arena),
+        encode.quality(quality),
+    );
 }
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob
 ///
-/// Always a PNG blob, for the same reason as `toDataURL`. The callback is
+/// The type and quality read exactly as `toDataURL`'s do. The callback is
 /// invoked from a task, not synchronously, which is what the spec requires
 /// and what pages that chain off it expect.
-pub fn toBlob(self: *Canvas, callback: js.Function.Global, _: ?[]const u8, _: ?f64, exec: *Execution) !void {
+pub fn toBlob(self: *Canvas, callback: js.Function.Global, mime: ?[]const u8, quality: ?js.Value, exec: *Execution) !void {
     const width = self.getWidth();
     const height = self.getHeight();
 
     const blob: ?*Blob = if (width == 0 or height == 0) null else blk: {
-        const bytes = try png.encode(exec.call_arena, width, height, try self.straightPixels(exec.call_arena));
+        const format: encode.Format = .fromType(mime);
+        const bytes = try encode.encode(
+            exec.call_arena,
+            format,
+            width,
+            height,
+            try self.straightPixels(exec.call_arena),
+            encode.quality(quality),
+        );
         // Upstream's Blob.initFromBytes now takes the Execution (it pins its
         // own arena), not the Page.
-        break :blk try Blob.initFromBytes(bytes, "image/png", exec);
+        break :blk try Blob.initFromBytes(bytes, format.mimeType(), exec);
     };
 
     const argument = try exec.js.local.?.zigValueToJs(blob, .{});
