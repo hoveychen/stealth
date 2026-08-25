@@ -57,6 +57,129 @@
 }
 </script>
 
+<!--
+  FontFaceSet is setlike: `for (const f of document.fonts)` is how a page walks
+  the faces it added, and every value below was measured on Chrome 151 through
+  `tools/fingerprint/probes/expr-fontfaceset.js` on a local http page.
+
+  Before this, `add()` kept nothing and the whole setlike half was missing --
+  iterating threw `TypeError: fs is not iterable`. The Akamai collector
+  macys.com serves asks for `FontFaceSet[Symbol.iterator]` (measured with the
+  engine's own unknown_prop log), so the throw happened inside the guard.
+
+  Two measured differences are deliberately not pinned: Chrome's
+  `fonts[Symbol.iterator] === fonts.values` (one function object under two
+  names, where the bridge builds two), and its iterator brands itself
+  `[object FontFaceSet Iterator]`. Both are bridge-wide shapes, not this
+  interface's.
+-->
+<script id="document_fonts_is_setlike">
+{
+    const fonts = document.fonts;
+    testing.expectEqual(0, fonts.size);
+    testing.expectEqual(0, [...fonts].length);
+
+    const a = new FontFace('Aa', 'local(Arial)');
+    testing.expectTrue(fonts.add(a) === fonts);
+    testing.expectEqual(1, fonts.size);
+    // A second add of the same face is not a second entry.
+    fonts.add(a);
+    testing.expectEqual(1, fonts.size);
+    testing.expectTrue(fonts.has(a));
+    testing.expectEqual('loaded', fonts.status);
+
+    const seen = [];
+    for (const f of fonts) seen.push(f.family);
+    testing.expectEqual('Aa', seen.join(','));
+    testing.expectTrue([...fonts][0] === a);
+    testing.expectEqual(1, [...fonts.values()].length);
+    testing.expectEqual(1, [...fonts.keys()].length);
+    // A set's entries are [value, value] pairs.
+    const pairs = [...fonts.entries()];
+    testing.expectTrue(Array.isArray(pairs[0]));
+    testing.expectTrue(pairs[0][0] === a && pairs[0][1] === a);
+
+    // forEach hands the value twice and the set third, like Set.prototype.
+    let record = '';
+    fonts.forEach((v, k, s) => { record = `${v.family}|${k.family}|${s === fonts}`; });
+    testing.expectEqual('Aa|Aa|true', record);
+    testing.expectEqual(1, fonts.forEach.length);
+
+    const b = new FontFace('Bb', 'local(Arial)');
+    testing.expectFalse(fonts.has(b));
+    testing.expectFalse(fonts.delete(b));
+    testing.expectTrue(fonts.delete(a));
+    testing.expectFalse(fonts.delete(a));
+    testing.expectEqual(0, fonts.size);
+
+    fonts.add(a);
+    fonts.add(b);
+    testing.expectEqual(2, fonts.size);
+    testing.expectEqual(undefined, fonts.clear());
+    testing.expectEqual(0, fonts.size);
+    testing.expectEqual(0, [...fonts].length);
+}
+</script>
+
+<script id="document_fonts_setlike_refusals">
+{
+    const fonts = document.fonts;
+    // Chrome's own wording, verbatim.
+    testing.expectError(
+      "TypeError: Failed to execute 'add' on 'FontFaceSet': parameter 1 is not of type 'FontFace'.",
+      () => fonts.add({}));
+    testing.expectError(
+      "TypeError: Failed to execute 'delete' on 'FontFaceSet': parameter 1 is not of type 'FontFace'.",
+      () => fonts.delete(7));
+    testing.expectError(
+      "TypeError: Failed to execute 'has' on 'FontFaceSet': parameter 1 is not of type 'FontFace'.",
+      () => fonts.has(null));
+    testing.expectEqual(1, fonts.add.length);
+    testing.expectEqual(1, fonts.delete.length);
+    testing.expectEqual(1, fonts.has.length);
+    testing.expectEqual(0, fonts.entries.length);
+}
+</script>
+
+<script id="document_fonts_prototype_order">
+{
+    // Chrome's own order, `constructor` filtered out: the bridge installs it
+    // last where Chrome installs it in interface order.
+    testing.expectEqual(
+      'onloading,onloadingdone,onloadingerror,ready,status,size,check,load,add,clear,' +
+      'delete,entries,forEach,has,keys,values',
+      Object.getOwnPropertyNames(FontFaceSet.prototype)
+        .filter((n) => n !== 'constructor').join(','));
+
+    // The three handlers are accessors, enumerable and configurable, like
+    // every other on* property.
+    for (const name of ['onloading', 'onloadingdone', 'onloadingerror']) {
+        const d = Object.getOwnPropertyDescriptor(FontFaceSet.prototype, name);
+        testing.expectTrue(typeof d.get === 'function');
+        testing.expectTrue(typeof d.set === 'function');
+        testing.expectEqual(true, d.enumerable);
+        testing.expectEqual(true, d.configurable);
+    }
+}
+</script>
+
+<script id="document_fonts_onloading_handler">
+{
+    let fired = '';
+    document.fonts.onloading = () => { fired += 'loading'; };
+    document.fonts.onloadingdone = () => { fired += ':done'; };
+    testing.expectTrue(typeof document.fonts.onloading === 'function');
+    // load() dispatches both events while it runs, so the reading is here
+    // rather than in an onload: another block in this file calls load() too,
+    // and a handler left installed would count that one as well.
+    document.fonts.load('12px Whatever');
+    testing.expectEqual('loading:done', fired);
+    document.fonts.onloading = null;
+    document.fonts.onloadingdone = null;
+    testing.expectEqual(null, document.fonts.onloading);
+}
+</script>
+
 <script id="document_fonts_addEventListener">
 {
     let loading = false;

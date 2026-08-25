@@ -185,6 +185,10 @@ pub const Handler = enum(u16) {
     onloadeddata,
     onloadedmetadata,
     onloadend,
+    // FontFaceSet's three, the only interface that has them.
+    onloading,
+    onloadingdone,
+    onloadingerror,
     onloadstart,
     onlocation,
     onlostpointercapture,

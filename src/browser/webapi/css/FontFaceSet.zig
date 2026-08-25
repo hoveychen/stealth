@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../../js/js.zig");
@@ -31,11 +32,21 @@ const FontFace = @import("FontFace.zig");
 
 const FontFaceSet = @This();
 
+const log = lp.log;
+
+pub fn registerTypes() []const type {
+    return &.{ FontFaceSet, ValueIterator, EntryIterator };
+}
+
 pub const Proto = EventTarget;
 
 _rc: lp.RC = .{},
 _proto: *EventTarget,
 _arena: *lp.Arena,
+// The faces `add()` was given. Nothing here loads a font -- `status` stays
+// "loaded" and `check` stays true -- but the set has to remember what it was
+// handed, because a page walks it back out: `for (const f of document.fonts)`.
+_faces: std.ArrayList(*FontFace) = .empty,
 
 pub fn init(exec: *const Execution) !*FontFaceSet {
     const arena = try exec.getArena(.tiny, "FontFaceSet");
@@ -47,7 +58,13 @@ pub fn init(exec: *const Execution) !*FontFaceSet {
     });
 }
 
-pub fn deinit(self: *FontFaceSet, _: *Page) void {
+pub fn deinit(self: *FontFaceSet, page: *Page) void {
+    // The set holds a reference to every face it was handed, so it has to give
+    // them back: a FontFace owns an arena, and an extra reference outliving the
+    // page is a leaked arena (the test runner panics on those).
+    for (self._faces.items) |face| {
+        face.releaseRef(page);
+    }
     self._arena.release();
 }
 
@@ -63,12 +80,10 @@ pub fn asEventTarget(self: *FontFaceSet) *EventTarget {
     return self._proto;
 }
 
-// Both readonly, and both the values that were already here as data properties:
-// nothing is tracked, so the set is empty and never loading. Chrome answers them
-// from getters, and the kind is what a bot check reads (see
-// src/browser/tests/descriptor_kind.html).
-pub fn getSize(_: *const FontFaceSet) u32 {
-    return 0;
+// Readonly, and answered from a getter because the kind is what a bot check
+// reads (see src/browser/tests/descriptor_kind.html).
+pub fn getSize(self: *const FontFaceSet) u32 {
+    return @intCast(self._faces.items.len);
 }
 
 pub fn getStatus(_: *const FontFaceSet) []const u8 {
@@ -124,10 +139,89 @@ fn dispatch(exec: *const Execution, target: *EventTarget, comptime typ: []const 
     }
 }
 
-// add(fontFace) - no-op; headless browser does not track loaded fonts.
-pub fn add(self: *FontFaceSet, _: *FontFace) *FontFaceSet {
+// The setlike half. Chrome's semantics, measured
+// (tools/fingerprint/probes/expr-fontfaceset.js): `add` is idempotent per face
+// and answers the set, `delete` answers whether it removed anything, `clear`
+// answers undefined, and all three refuse anything that is not a FontFace.
+pub fn add(self: *FontFaceSet, face: *FontFace) !*FontFaceSet {
+    if (self.indexOf(face) != null) {
+        return self;
+    }
+    face.acquireRef();
+    try self._faces.append(self._arena.allocator(), face);
     return self;
 }
+
+pub fn delete(self: *FontFaceSet, face: *FontFace, exec: *const Execution) bool {
+    const index = self.indexOf(face) orelse return false;
+    // orderedRemove, not swapRemove: iteration order is insertion order, and a
+    // page that adds three faces and deletes the first still walks the other
+    // two in the order it added them.
+    _ = self._faces.orderedRemove(index);
+    face.releaseRef(exec.page);
+    return true;
+}
+
+pub fn clear(self: *FontFaceSet, exec: *const Execution) void {
+    for (self._faces.items) |face| {
+        face.releaseRef(exec.page);
+    }
+    self._faces.clearRetainingCapacity();
+}
+
+pub fn has(self: *const FontFaceSet, face: *FontFace) bool {
+    return self.indexOf(face) != null;
+}
+
+fn indexOf(self: *const FontFaceSet, face: *FontFace) ?usize {
+    for (self._faces.items, 0..) |candidate, i| {
+        if (candidate == face) {
+            return i;
+        }
+    }
+    return null;
+}
+
+pub fn values(self: *FontFaceSet, exec: *const Execution) !*ValueIterator {
+    return .init(.{ .set = self }, exec);
+}
+
+pub fn entries(self: *FontFaceSet, exec: *const Execution) !*EntryIterator {
+    return .init(.{ .set = self }, exec);
+}
+
+// A set's callback is handed the value twice and the set third, same as
+// Set.prototype.forEach.
+pub fn forEach(self: *FontFaceSet, cb_: js.Function, js_this_: ?js.Object) !void {
+    const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
+    for (self._faces.items) |face| {
+        var caught: js.TryCatch.Caught = .{};
+        cb.tryCall(void, .{ face, face, self }, &caught) catch {
+            log.debug(.js, "forEach callback", .{ .caught = caught, .source = "FontFaceSet" });
+        };
+    }
+}
+
+pub const Iterator = struct {
+    index: usize = 0,
+    set: *FontFaceSet,
+
+    pub const Entry = struct { *FontFace, *FontFace };
+
+    pub fn next(self: *Iterator, _: *const Execution) ?Entry {
+        const index = self.index;
+        if (index >= self.set._faces.items.len) {
+            return null;
+        }
+        self.index = index + 1;
+        const face = self.set._faces.items[index];
+        return .{ face, face };
+    }
+};
+
+const GenericIterator = @import("../collections/iterator.zig").Entry;
+pub const ValueIterator = GenericIterator(Iterator, "1");
+pub const EntryIterator = GenericIterator(Iterator, null);
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(FontFaceSet);
@@ -138,15 +232,39 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const size = bridge.accessor(FontFaceSet.getSize, null, .{});
-    pub const status = bridge.accessor(FontFaceSet.getStatus, null, .{});
+    // Chrome 151's own `Object.getOwnPropertyNames(FontFaceSet.prototype)`
+    // order, measured; `constructor` is the bridge's and lands last.
+    pub const onloading = bridge.accessor(handlerProperty(FontFaceSet, .onloading).get, handlerProperty(FontFaceSet, .onloading).set, .{});
+    pub const onloadingdone = bridge.accessor(handlerProperty(FontFaceSet, .onloadingdone).get, handlerProperty(FontFaceSet, .onloadingdone).set, .{});
+    pub const onloadingerror = bridge.accessor(handlerProperty(FontFaceSet, .onloadingerror).get, handlerProperty(FontFaceSet, .onloadingerror).set, .{});
     pub const ready = bridge.accessor(FontFaceSet.getReady, null, .{});
+    pub const status = bridge.accessor(FontFaceSet.getStatus, null, .{});
+    pub const size = bridge.accessor(FontFaceSet.getSize, null, .{});
     pub const check = bridge.function(FontFaceSet.check, .{});
     pub const load = bridge.function(FontFaceSet.load, .{});
     pub const add = bridge.function(FontFaceSet.add, .{});
+    pub const clear = bridge.function(FontFaceSet.clear, .{});
+    pub const delete = bridge.function(FontFaceSet.delete, .{});
+    pub const entries = bridge.function(FontFaceSet.entries, .{});
+    pub const forEach = bridge.function(FontFaceSet.forEach, .{ .arity = 1 });
+    pub const has = bridge.function(FontFaceSet.has, .{});
+    // Chrome hands out one function object under both names; the bridge builds
+    // two, which is the same shape every other collection here has.
+    pub const keys = bridge.function(FontFaceSet.values, .{});
+    pub const values = bridge.function(FontFaceSet.values, .{});
+    pub const symbol_iterator = bridge.iterator(FontFaceSet.values, .{ .js_name = "values" });
 };
 
 const testing = @import("../../../testing.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties; per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
+
 test "WebApi: FontFaceSet" {
     try testing.htmlRunner("css/font_face_set.html", .{});
 }
