@@ -350,8 +350,19 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
             } else {
                 self.base.scriptList(pre).append(&pre.node);
             }
-            if (pre.complete) {
+            if (pre.complete and !(from_parser and mode == .async)) {
                 // ...and no doneCallback will trigger evaluation.
+                //
+                // Except for a parser-inserted async script: its execution is a
+                // task, and evaluating here runs it inside the parser, ahead of
+                // a parser-blocking script whose tag has not been reached yet.
+                // Akamai's interstitial is built out of that difference -- the
+                // loader is async and sits ahead of the blocking sensor -- so
+                // running it early hands the sensor a page whose hidden frames
+                // and patched globals already exist. Leaving it on
+                // ready_scripts costs nothing: the next blocking script's
+                // evaluation window drains it, and failing that, so does the
+                // end of the parse.
                 self.base.evaluate();
             }
             return;
