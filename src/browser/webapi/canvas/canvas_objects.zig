@@ -138,12 +138,36 @@ pub const PaintStyle = struct {
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasGradient
 pub const CanvasGradient = struct {
+    /// The coordinates the factory was handed, kept in the *user* space they
+    /// were written in rather than resolved against a transform here.
+    ///
+    /// Which transform applies is measured, not assumed: the one in effect when
+    /// the gradient is *painted with*, not the one when it was made. Three rows
+    /// of probes/canvas-gradient-paint.js say it together and are byte-identical
+    /// — a 0→32 axis at the identity, a 0→16 axis created under `scale(2, 1)`,
+    /// and a 0→16 axis created at the identity and then filled under
+    /// `scale(2, 1)`. So there is nothing to resolve until the fill, and this
+    /// keeps what it was given.
+    geometry: Geometry,
     /// The stops, kept sorted by offset with ties in insertion order, the way
-    /// the spec orders them. Nothing reads them yet — a script cannot see them
-    /// either (`Object.keys` on a gradient is empty in Chrome too) — but the
-    /// rasteriser will need them to paint a gradient rather than a flat
-    /// colour, which is the `cfsc-gradient-paint-source` plan.
+    /// the spec orders them. A script cannot see them (`Object.keys` on a
+    /// gradient is empty in Chrome too); the rasteriser reads them through
+    /// `raster.Source`.
     stops: std.ArrayList(Stop) = .empty,
+
+    /// The three shapes, one per factory. Every coordinate is user space.
+    pub const Geometry = union(enum) {
+        /// `createLinearGradient(x0, y0, x1, y1)`: the ramp runs along the axis
+        /// and is constant across it.
+        linear: struct { x0: f64, y0: f64, x1: f64, y1: f64 },
+        /// `createRadialGradient(x0, y0, r0, x1, y1, r1)`: the ramp runs from
+        /// the start circle to the end one, which need share neither centre nor
+        /// radius.
+        radial: struct { x0: f64, y0: f64, r0: f64, x1: f64, y1: f64, r1: f64 },
+        /// `createConicGradient(angle, x, y)`: the ramp sweeps once around the
+        /// centre, starting `angle` from wherever zero points.
+        conic: struct { angle: f64, x: f64, y: f64 },
+    };
 
     pub const Stop = struct {
         offset: f64,

@@ -165,6 +165,45 @@ pub const Filter = struct {
     }
 };
 
+/// What a draw op paints with, asked for its colour once per device pixel.
+///
+/// Every op below used to take one `Paint` for the whole shape, and that was
+/// not merely a simplification: it is the reason a gradient fill landed as a
+/// flat colour, because a shape whose paint is one value has nowhere to put the
+/// coordinates `createLinearGradient` was given. Sampling per pixel is the
+/// shape the ops need before any of the three gradients can be evaluated.
+///
+/// It also decides the shadows for free. A shadow's mask is the shape drawn a
+/// second time through this same source (see `castShadow`), so a source whose
+/// alpha varies across the shape casts a shadow that varies with it — which is
+/// what Chrome does, measured on a ramp from opaque to transparent
+/// (probes/canvas-gradient-paint.js, `shadow of a ramp`).
+pub const Source = union(enum) {
+    /// One colour everywhere: a `fillStyle` that is a colour string, and — until
+    /// the arms below exist — a gradient or a pattern too.
+    flat: Paint,
+
+    /// The colour at a point in *device* space, which the ops ask for at each
+    /// pixel's centre.
+    pub fn at(self: Source, x: f64, y: f64) Paint {
+        _ = x;
+        _ = y;
+        return switch (self) {
+            .flat => |paint| paint,
+        };
+    }
+
+    /// True when no point this source could be asked for lands any ink. This is
+    /// the early exit a fully transparent paint takes before the op walks a
+    /// single pixel; anything that only *sometimes* paints has to answer false
+    /// and be tested per pixel.
+    pub fn blank(self: Source) bool {
+        return switch (self) {
+            .flat => |paint| paint.a <= 0,
+        };
+    }
+};
+
 /// Frame-lifetime arena. The buffer is only reclaimed with the frame.
 arena: Allocator,
 /// Dimensions the current buffer was allocated for. Meaningless when the
@@ -427,13 +466,13 @@ fn opacity(global_alpha: f64) f64 {
     return @round(std.math.clamp(global_alpha, 0, 1) * 255) / 255;
 }
 
-/// Composites `paint` over the rectangle, `global_alpha` scaling its opacity.
-pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64, paint: Paint, global_alpha: f64, op: Composite) void {
+/// Composites `source` over the rectangle, `global_alpha` scaling its opacity.
+pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64, source: Source, global_alpha: f64, op: Composite) void {
     const bounds = Bounds.clip(x, y, w, h, canvas_width, canvas_height) orelse return;
     if (!self.ensure(canvas_width, canvas_height)) return;
 
-    const alpha = opacity(global_alpha) * paint.a;
-    if (alpha <= 0) {
+    const global = opacity(global_alpha);
+    if (global <= 0 or source.blank()) {
         return;
     }
 
@@ -441,6 +480,9 @@ pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y
     while (row < bounds.y1) : (row += 1) {
         var col = bounds.x0;
         while (col < bounds.x1) : (col += 1) {
+            const paint = source.at(@as(f64, @floatFromInt(col)) + 0.5, @as(f64, @floatFromInt(row)) + 0.5);
+            const alpha = global * paint.a;
+            if (alpha <= 0) continue;
             const at = row * canvas_width + col;
             self.store(at, blended(self.load(at), paint, alpha, op));
         }
@@ -462,7 +504,7 @@ pub fn clearRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, 
 /// Strokes the rectangle's outline as four bands centred on its edges, which
 /// is what a real stroke of an axis-aligned rectangle degenerates to once
 /// joins and caps have nothing to round off.
-pub fn strokeRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64, line_width: f64, paint: Paint, global_alpha: f64, op: Composite) void {
+pub fn strokeRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64, line_width: f64, source: Source, global_alpha: f64, op: Composite) void {
     if (!std.math.isFinite(line_width) or line_width <= 0) {
         return;
     }
@@ -476,12 +518,12 @@ pub fn strokeRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64,
 
     // Top and bottom bands span the full outer width so the corners are
     // covered once; the side bands then only need the span between them.
-    self.fillRect(canvas_width, canvas_height, left - half, top - half, outer_w, line_width, paint, global_alpha, op);
-    self.fillRect(canvas_width, canvas_height, left - half, bottom - half, outer_w, line_width, paint, global_alpha, op);
+    self.fillRect(canvas_width, canvas_height, left - half, top - half, outer_w, line_width, source, global_alpha, op);
+    self.fillRect(canvas_width, canvas_height, left - half, bottom - half, outer_w, line_width, source, global_alpha, op);
     const inner_h = (bottom - top) - line_width;
     if (inner_h > 0) {
-        self.fillRect(canvas_width, canvas_height, left - half, top + half, line_width, inner_h, paint, global_alpha, op);
-        self.fillRect(canvas_width, canvas_height, right - half, top + half, line_width, inner_h, paint, global_alpha, op);
+        self.fillRect(canvas_width, canvas_height, left - half, top + half, line_width, inner_h, source, global_alpha, op);
+        self.fillRect(canvas_width, canvas_height, right - half, top + half, line_width, inner_h, source, global_alpha, op);
     }
 }
 
@@ -567,14 +609,14 @@ fn edgeBounds(edges: []const Edge, width: u32, height: u32) ?Bounds {
     return Bounds.clip(@floor(min_x), @floor(min_y), @ceil(max_x) - @floor(min_x) + 1, @ceil(max_y) - @floor(min_y) + 1, width, height);
 }
 
-/// Fills `p` — already flattened and already in device space — with `paint`.
+/// Fills `p` — already flattened and already in device space — with `source`.
 /// `scratch` is only used for the edge list and may be a call-lifetime arena.
-pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path, rule: FillRule, paint: Paint, global_alpha: f64, op: Composite) void {
+pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path, rule: FillRule, source: Source, global_alpha: f64, op: Composite) void {
     const edges = edgesOf(scratch, p) orelse return;
     const bounds = edgeBounds(edges, canvas_width, canvas_height) orelse return;
 
-    const alpha = opacity(global_alpha) * paint.a;
-    if (alpha <= 0) {
+    const global = opacity(global_alpha);
+    if (global <= 0 or source.blank()) {
         return;
     }
     if (!self.ensure(canvas_width, canvas_height)) return;
@@ -597,6 +639,9 @@ pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_he
                 }
             }
             if (hits == 0) continue;
+            const paint = source.at(@as(f64, @floatFromInt(col)) + 0.5, @as(f64, @floatFromInt(row)) + 0.5);
+            const alpha = global * paint.a;
+            if (alpha <= 0) continue;
             const coverage = @as(f64, @floatFromInt(hits)) / (samples * samples);
             const at = row * canvas_width + col;
             self.store(at, blended(self.load(at), paint, alpha * coverage, op));
@@ -609,7 +654,7 @@ pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_he
 /// not what `lineJoin` says, but it is the shape a miter and a bevel both
 /// approach as the segments get short — and a flattened curve's segments are
 /// short by construction.
-pub fn strokePath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path, line_width: f64, paint: Paint, global_alpha: f64, op: Composite) void {
+pub fn strokePath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path, line_width: f64, source: Source, global_alpha: f64, op: Composite) void {
     if (!std.math.isFinite(line_width) or line_width <= 0) {
         return;
     }
@@ -653,7 +698,7 @@ pub fn strokePath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_
         }
     }
 
-    self.fillPath(scratch, canvas_width, canvas_height, &outline, .nonzero, paint, global_alpha, op);
+    self.fillPath(scratch, canvas_width, canvas_height, &outline, .nonzero, source, global_alpha, op);
 }
 
 /// The source rectangle and the destination rectangle `drawImage` was given,
@@ -1365,14 +1410,14 @@ test "raster: fillRect composites and clips" {
     defer surface.reset();
 
     // A 4x4 canvas, opaque red over the top-left 2x2, spilling out of bounds.
-    surface.fillRect(4, 4, -1, -1, 3, 3, .fromRGBA(RGBA.Named.red), 1, .source_over);
+    surface.fillRect(4, 4, -1, -1, 3, 3, .{ .flat = .fromRGBA(RGBA.Named.red) }, 1, .source_over);
     try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255 }, surface.pixels[0..4]);
     try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255 }, surface.pixels[4..8]);
     // Third column of the first row is untouched.
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, surface.pixels[8..12]);
 
     // Half-opaque white on top of the red.
-    surface.fillRect(4, 4, 0, 0, 1, 1, .fromRGBA(.{ .r = 255, .g = 255, .b = 255, .a = 128 }), 1, .source_over);
+    surface.fillRect(4, 4, 0, 0, 1, 1, .{ .flat = .fromRGBA(.{ .r = 255, .g = 255, .b = 255, .a = 128 }) }, 1, .source_over);
     try testing.expectEqualSlices(u8, &.{ 255, 128, 128, 255 }, surface.pixels[0..4]);
 
     surface.clearRect(4, 4, 0, 0, 2, 2);
@@ -1413,7 +1458,7 @@ test "raster: a translucent fill reads back Chrome's bytes" {
 
     for (cases, 0..) |case, i| {
         surface.reset();
-        surface.fillRect(1, 1, 0, 0, 1, 1, .fromRGBA(case.paint), case.global_alpha, .source_over);
+        surface.fillRect(1, 1, 0, 0, 1, 1, .{ .flat = .fromRGBA(case.paint) }, case.global_alpha, .source_over);
 
         var out = [_]u8{0} ** 4;
         surface.readPixels(1, 1, 0, 0, 1, 1, &out);
@@ -1431,7 +1476,7 @@ test "raster: readPixels windows out of bounds" {
     var surface = Surface{ .arena = fba.allocator() };
     defer surface.reset();
 
-    surface.fillRect(2, 2, 0, 0, 2, 2, .fromRGBA(RGBA.Named.lime), 1, .source_over);
+    surface.fillRect(2, 2, 0, 0, 2, 2, .{ .flat = .fromRGBA(RGBA.Named.lime) }, 1, .source_over);
 
     var out = [_]u8{0} ** (2 * 2 * 4);
     surface.readPixels(2, 2, 1, 1, 2, 2, &out);
@@ -1455,7 +1500,7 @@ test "raster: a filled path is ink, and the winding rule decides the hole" {
     try p.arc(alloc, 8, 8, 7, 0, std.math.tau, false, ctm);
     try p.arc(alloc, 8, 8, 3, 0, std.math.tau, false, ctm);
 
-    surface.fillPath(alloc, 16, 16, &p, .evenodd, .fromRGBA(RGBA.Named.red), 1, .source_over);
+    surface.fillPath(alloc, 16, 16, &p, .evenodd, .{ .flat = .fromRGBA(RGBA.Named.red) }, 1, .source_over);
     // The middle is inside both, so even-odd leaves it alone.
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, surface.pixels[(8 * 16 + 8) * 4 ..][0..4]);
     // A point between the two radii is inside exactly one.
@@ -1463,7 +1508,7 @@ test "raster: a filled path is ink, and the winding rule decides the hole" {
 
     // The same path under the non-zero rule has no hole.
     surface.reset();
-    surface.fillPath(alloc, 16, 16, &p, .nonzero, .fromRGBA(RGBA.Named.red), 1, .source_over);
+    surface.fillPath(alloc, 16, 16, &p, .nonzero, .{ .flat = .fromRGBA(RGBA.Named.red) }, 1, .source_over);
     try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255 }, surface.pixels[(8 * 16 + 8) * 4 ..][0..4]);
 }
 
@@ -1481,7 +1526,7 @@ test "raster: a stroke lands on both sides of its path" {
     try p.lineTo(alloc, 8, 4, ctm);
 
     // Two wide, centred on y=4: rows 3 and 4 are covered whole, row 5 is not.
-    surface.strokePath(alloc, 8, 8, &p, 2, .fromRGBA(RGBA.Named.lime), 1, .source_over);
+    surface.strokePath(alloc, 8, 8, &p, 2, .{ .flat = .fromRGBA(RGBA.Named.lime) }, 1, .source_over);
     try testing.expectEqualSlices(u8, &.{ 0, 255, 0, 255 }, surface.pixels[(3 * 8 + 4) * 4 ..][0..4]);
     try testing.expectEqualSlices(u8, &.{ 0, 255, 0, 255 }, surface.pixels[(4 * 8 + 4) * 4 ..][0..4]);
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, surface.pixels[(6 * 8 + 4) * 4 ..][0..4]);
@@ -1546,9 +1591,9 @@ test "raster: the blend modes land on Chrome's bytes" {
     for (cases, 0..) |case, i| {
         surface.reset();
         if (case.back) |back| {
-            surface.fillRect(1, 1, 0, 0, 1, 1, .fromRGBA(back), 1, .source_over);
+            surface.fillRect(1, 1, 0, 0, 1, 1, .{ .flat = .fromRGBA(back) }, 1, .source_over);
         }
-        surface.fillRect(1, 1, 0, 0, 1, 1, .fromRGBA(case.src), case.global_alpha, case.op);
+        surface.fillRect(1, 1, 0, 0, 1, 1, .{ .flat = .fromRGBA(case.src) }, case.global_alpha, case.op);
 
         var out = [_]u8{0} ** 4;
         surface.readPixels(1, 1, 0, 0, 1, 1, &out);
@@ -1634,7 +1679,7 @@ test "context filter: grayscale lands on Chrome's bytes" {
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     var surface = Surface{ .arena = fba.allocator() };
     defer surface.reset();
-    surface.fillRect(1, 1, 0, 0, 1, 1, full.applyTo(.fromRGBA(translucent)), 1, .source_over);
+    surface.fillRect(1, 1, 0, 0, 1, 1, .{ .flat = full.applyTo(.fromRGBA(translucent)) }, 1, .source_over);
 
     var out = [_]u8{0} ** 4;
     surface.readPixels(1, 1, 0, 0, 1, 1, &out);
@@ -1651,9 +1696,9 @@ test "raster: a filter greys the source, not the backdrop" {
     // #ff8000, then #4080c0 greyed to 119 and differenced against it. Chrome
     // 151 reads {136, 9, 119, 255}: |255-119|, |128-119|, |0-119| — the filter
     // reached the source only.
-    surface.fillRect(1, 1, 0, 0, 1, 1, .fromRGBA(.{ .r = 255, .g = 128, .b = 0 }), 1, .source_over);
+    surface.fillRect(1, 1, 0, 0, 1, 1, .{ .flat = .fromRGBA(.{ .r = 255, .g = 128, .b = 0 }) }, 1, .source_over);
     const greyed = (Filter{ .grayscale = 1 }).applyTo(.fromRGBA(.{ .r = 64, .g = 128, .b = 192 }));
-    surface.fillRect(1, 1, 0, 0, 1, 1, greyed, 1, .difference);
+    surface.fillRect(1, 1, 0, 0, 1, 1, .{ .flat = greyed }, 1, .difference);
     try testing.expectEqualSlices(u8, &.{ 136, 9, 119, 255 }, surface.pixels[0..4]);
 }
 
@@ -1666,12 +1711,12 @@ test "raster: a blend mode reaches a path's partly covered edge" {
     defer surface.reset();
 
     // 8x1 of #ff8000, then #4080c0 differenced over the left four and a half.
-    surface.fillRect(8, 1, 0, 0, 8, 1, .fromRGBA(.{ .r = 255, .g = 128, .b = 0 }), 1, .source_over);
+    surface.fillRect(8, 1, 0, 0, 8, 1, .{ .flat = .fromRGBA(.{ .r = 255, .g = 128, .b = 0 }) }, 1, .source_over);
 
     var p: Path = .{};
     const ctm = path_mod.Transform.identity;
     try p.rect(alloc, 0, 0, 4.5, 1, ctm);
-    surface.fillPath(alloc, 8, 1, &p, .nonzero, .fromRGBA(.{ .r = 64, .g = 128, .b = 192 }), 1, .difference);
+    surface.fillPath(alloc, 8, 1, &p, .nonzero, .{ .flat = .fromRGBA(.{ .r = 64, .g = 128, .b = 192 }) }, 1, .difference);
 
     // Chrome 151 (probes/expr-composite-blend.js `pathEdge`): four whole
     // pixels of the difference, one at half coverage, three untouched.

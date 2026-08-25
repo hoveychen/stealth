@@ -114,18 +114,22 @@ pub fn Mixin(comptime T: type) type {
             return .parse(self._state.filter);
         }
 
-        /// A flat paint after `ctx.filter`. The filter applies to the source
-        /// graphic, and a fill's source graphic is one colour all over — so for
-        /// everything but `drawImage` the whole of it lands here rather than in
-        /// the rasteriser. Chrome runs the filter on fills too, not only on
-        /// images (measured, probes/expr-canvas-filter-grayscale.js).
-        fn paint(self: *const T, style: canvas_objects.PaintStyle) color.Paint {
+        /// What the rasteriser paints a fill or a stroke through: the style
+        /// resolved into the bitmap's colour space, filtered, in the form
+        /// `raster.Source` samples per pixel.
+        ///
+        /// The filter applies to the source graphic, and a fill's source graphic
+        /// is one colour all over — so for everything but `drawImage` the whole
+        /// of it lands here rather than in the rasteriser. Chrome runs the
+        /// filter on fills too, not only on images (measured,
+        /// probes/expr-canvas-filter-grayscale.js).
+        fn paintSource(self: *const T, style: canvas_objects.PaintStyle) Surface.Source {
             // Resolved into the bitmap's colour space first, then filtered. The
             // order is a guess where the space is not: nothing measured says
             // whether Chrome filters before or after the conversion, and on an
             // srgb canvas — every canvas until one asks for display-p3 — the
             // conversion is the identity and the question does not arise.
-            return filter(self).applyTo(style.paint(space(self), channels(self)));
+            return .{ .flat = filter(self).applyTo(style.paint(space(self), channels(self))) };
         }
 
         /// The shadow the current state casts, or null when there is none to
@@ -158,9 +162,9 @@ pub fn Mixin(comptime T: type) type {
             var mask: Surface = .{ .arena = arena(self) };
             defer mask.reset();
             if (line_width) |lw| {
-                mask.strokeRect(mw, mh, x + at + cast.dx, y + at + cast.dy, w, h, lw, paint(self, self._stroke_style), self._global_alpha, .source_over);
+                mask.strokeRect(mw, mh, x + at + cast.dx, y + at + cast.dy, w, h, lw, paintSource(self, self._stroke_style), self._global_alpha, .source_over);
             } else {
-                mask.fillRect(mw, mh, x + at + cast.dx, y + at + cast.dy, w, h, paint(self, self._fill_style), self._global_alpha, .source_over);
+                mask.fillRect(mw, mh, x + at + cast.dx, y + at + cast.dy, w, h, paintSource(self, self._fill_style), self._global_alpha, .source_over);
             }
             self._surface.castShadow(scratch, width(self), height(self), &mask, margin, cast, composite(self));
         }
@@ -176,9 +180,9 @@ pub fn Mixin(comptime T: type) type {
             var mask: Surface = .{ .arena = arena(self) };
             defer mask.reset();
             if (line_width) |lw| {
-                mask.strokePath(scratch, mw, mh, &moved, lw, paint(self, self._stroke_style), self._global_alpha, .source_over);
+                mask.strokePath(scratch, mw, mh, &moved, lw, paintSource(self, self._stroke_style), self._global_alpha, .source_over);
             } else {
-                mask.fillPath(scratch, mw, mh, &moved, rule, paint(self, self._fill_style), self._global_alpha, .source_over);
+                mask.fillPath(scratch, mw, mh, &moved, rule, paintSource(self, self._fill_style), self._global_alpha, .source_over);
             }
             self._surface.castShadow(scratch, width(self), height(self), &mask, margin, cast, composite(self));
         }
@@ -343,7 +347,7 @@ pub fn Mixin(comptime T: type) type {
                 height(self),
                 &self._path,
                 rule,
-                paint(self, self._fill_style),
+                paintSource(self, self._fill_style),
                 self._global_alpha,
                 composite(self),
             );
@@ -360,7 +364,7 @@ pub fn Mixin(comptime T: type) type {
                 height(self),
                 &self._path,
                 line_width,
-                paint(self, self._stroke_style),
+                paintSource(self, self._stroke_style),
                 self._global_alpha,
                 composite(self),
             );
@@ -368,7 +372,7 @@ pub fn Mixin(comptime T: type) type {
 
         // --- gradient and pattern factories -----------------------------------
 
-        // These carry no paint — see canvas_objects.zig — but they do refuse
+        // A pattern carries no paint — see canvas_objects.zig. All four refuse
         // the way Chrome refuses, and the sentence names the interface, which
         // is the reason they live here rather than twice over in the two
         // context files: `OffscreenCanvasRenderingContext2D` has to say its own
@@ -393,7 +397,9 @@ pub fn Mixin(comptime T: type) type {
 
         pub fn createLinearGradient(_: *T, x0: f64, y0: f64, x1: f64, y1: f64, exec: *Execution) !*canvas_objects.CanvasGradient {
             try finite("createLinearGradient", &.{ x0, y0, x1, y1 }, exec);
-            return exec._factory.create(canvas_objects.CanvasGradient{});
+            return exec._factory.create(canvas_objects.CanvasGradient{
+                .geometry = .{ .linear = .{ .x0 = x0, .y0 = y0, .x1 = x1, .y1 = y1 } },
+            });
         }
 
         /// Both radii have to be non-negative, and `r0` is checked first — so
@@ -412,13 +418,17 @@ pub fn Mixin(comptime T: type) type {
                     .{"createRadialGradient"},
                 ));
             }
-            return exec._factory.create(canvas_objects.CanvasGradient{});
+            return exec._factory.create(canvas_objects.CanvasGradient{
+                .geometry = .{ .radial = .{ .x0 = x0, .y0 = y0, .r0 = r0, .x1 = x1, .y1 = y1, .r1 = r1 } },
+            });
         }
 
         /// The angle is not wrapped or bounded: Chrome takes 1e6 turns.
         pub fn createConicGradient(_: *T, angle: f64, x: f64, y: f64, exec: *Execution) !*canvas_objects.CanvasGradient {
             try finite("createConicGradient", &.{ angle, x, y }, exec);
-            return exec._factory.create(canvas_objects.CanvasGradient{});
+            return exec._factory.create(canvas_objects.CanvasGradient{
+                .geometry = .{ .conic = .{ .angle = angle, .x = x, .y = y } },
+            });
         }
 
         /// The repetition is one of four keywords, and `null`/`undefined`/`''`
@@ -494,7 +504,7 @@ pub fn Mixin(comptime T: type) type {
                 if (cast) |sh| {
                     castRect(self, exec.call_arena, sh, at.x, at.y, w * ctm.a, h * ctm.d, null);
                 }
-                self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, paint(self, self._fill_style), self._global_alpha, composite(self));
+                self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, paintSource(self, self._fill_style), self._global_alpha, composite(self));
                 return;
             }
             var quad: path.Path = .{};
@@ -502,7 +512,7 @@ pub fn Mixin(comptime T: type) type {
             if (cast) |sh| {
                 castPath(self, exec.call_arena, sh, &quad, .nonzero, null);
             }
-            self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, paint(self, self._fill_style), self._global_alpha, composite(self));
+            self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, paintSource(self, self._fill_style), self._global_alpha, composite(self));
         }
 
         pub fn strokeRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {
@@ -514,7 +524,7 @@ pub fn Mixin(comptime T: type) type {
                 if (cast) |sh| {
                     castRect(self, exec.call_arena, sh, at.x, at.y, w * ctm.a, h * ctm.d, line_width);
                 }
-                self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, paint(self, self._stroke_style), self._global_alpha, composite(self));
+                self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, paintSource(self, self._stroke_style), self._global_alpha, composite(self));
                 return;
             }
             var quad: path.Path = .{};
@@ -522,7 +532,7 @@ pub fn Mixin(comptime T: type) type {
             if (cast) |sh| {
                 castPath(self, exec.call_arena, sh, &quad, .nonzero, line_width);
             }
-            self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, paint(self, self._stroke_style), self._global_alpha, composite(self));
+            self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, paintSource(self, self._stroke_style), self._global_alpha, composite(self));
         }
 
         pub fn clearRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {
@@ -601,7 +611,7 @@ pub fn Mixin(comptime T: type) type {
             );
         }
 
-        const Source = struct {
+        const ImageSource = struct {
             surface: *const Surface,
             width: u32,
             height: u32,
@@ -615,7 +625,7 @@ pub fn Mixin(comptime T: type) type {
         /// canvas types keep theirs on the 2D context they handed out, so a
         /// canvas that was never drawn into — or was only ever used for WebGL
         /// — has nothing to give. An `ImageBitmap` keeps a snapshot of its own.
-        fn sourceOf(value: js.Value, exec: *Execution) !?Source {
+        fn sourceOf(value: js.Value, exec: *Execution) !?ImageSource {
             if (value.toZig(*CanvasElement)) |canvas| {
                 const cached = canvas._cached orelse return null;
                 return switch (cached) {
