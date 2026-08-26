@@ -735,6 +735,10 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "Navigator";
+        // Everything from `deprecatedRunAdAuctionEnforcesKAnonymity` down is
+        // installed per context, after V8 appends the slot -- measured on
+        // Chrome 151, where `constructor` is index 31, right after `vibrate`.
+        pub const constructor_after = "vibrate";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
         // Deliberately not `empty_with_no_proto`: some of the service objects

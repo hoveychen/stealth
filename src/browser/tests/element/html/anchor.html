@@ -287,3 +287,32 @@
     document.head.removeChild(base);
   }
 </script>
+
+<!-- The three members Chrome installs after `constructor` plus the element
+     reference, against a headed Chrome 151. -->
+<script id="anchor_late_members">
+{
+  const a = document.createElement('a');
+  document.body.appendChild(a);
+
+  testing.expectEqual(null, a.interestForElement);
+  testing.expectEqual('', a.hrefTranslate);
+  testing.expectEqual('', a.attributionSrc);
+
+  a.setAttribute('hreftranslate', 'fr');
+  testing.expectEqual('fr', a.hrefTranslate);
+  a.hrefTranslate = 'de';
+  testing.expectEqual('de', a.getAttribute('hreftranslate'));
+
+  a.setAttribute('attributionsrc', '/s');
+  testing.expectEqual('/s', a.attributionSrc);
+
+  const target = document.createElement('div');
+  document.body.appendChild(target);
+  a.interestForElement = target;
+  testing.expectEqual(target, a.interestForElement);
+
+  a.remove();
+  target.remove();
+}
+</script>

@@ -20,6 +20,7 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../js/js.zig");
+const StaticRange = @import("StaticRange.zig");
 const Page = @import("../Page.zig");
 const Frame = @import("../Frame.zig");
 
@@ -115,6 +116,50 @@ pub fn getFocusOffset(self: *const Selection) u32 {
         .backward => range.asAbstractRange().getStartOffset(),
         .forward, .none => range.asAbstractRange().getEndOffset(),
     };
+}
+
+// The four legacy aliases Chrome still carries: base is the anchor, extent is
+// the focus. Same values, different names -- measured on Chrome 151, where a
+// selection with anchorOffset 1 and focusOffset 3 reads baseOffset 1 and
+// extentOffset 3.
+pub fn getBaseNode(self: *const Selection) ?*Node {
+    return self.getAnchorNode();
+}
+
+pub fn getBaseOffset(self: *const Selection) u32 {
+    return self.getAnchorOffset();
+}
+
+pub fn getExtentNode(self: *const Selection) ?*Node {
+    return self.getFocusNode();
+}
+
+pub fn getExtentOffset(self: *const Selection) u32 {
+    return self.getFocusOffset();
+}
+
+pub const ComposedRangesOptions = struct {
+    pub const js_idl_name = "GetComposedRangesOptions";
+    shadowRoots: ?[]const js.Value = null,
+};
+
+/// The selection's ranges as StaticRanges, which is what a page reads when it
+/// wants boundaries that survive a DOM mutation. Chrome answers an empty array
+/// for an empty selection and one range otherwise; the `shadowRoots` option
+/// re-scopes boundaries that land inside a shadow tree, and there are none to
+/// re-scope here.
+pub fn getComposedRanges(self: *Selection, _: ?ComposedRangesOptions, frame: *Frame) !js.Array {
+    var array = frame.js.local.?.newArray(0);
+    const range = self._range orelse return array;
+    const abstract = range.asAbstractRange();
+    const static_range = try StaticRange.init(.{
+        .startContainer = abstract.getStartContainer(),
+        .startOffset = abstract.getStartOffset(),
+        .endContainer = abstract.getEndContainer(),
+        .endOffset = abstract.getEndOffset(),
+    }, frame);
+    _ = try array.set(0, static_range, .{});
+    return array;
 }
 
 pub fn getIsCollapsed(self: *const Selection) bool {
@@ -741,14 +786,20 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's order: the modern attributes, then the four legacy aliases,
+    // then the operations alphabetically.
     pub const anchorNode = bridge.accessor(Selection.getAnchorNode, null, .{});
     pub const anchorOffset = bridge.accessor(Selection.getAnchorOffset, null, .{});
-    pub const direction = bridge.accessor(Selection.getDirection, null, .{});
     pub const focusNode = bridge.accessor(Selection.getFocusNode, null, .{});
     pub const focusOffset = bridge.accessor(Selection.getFocusOffset, null, .{});
     pub const isCollapsed = bridge.accessor(Selection.getIsCollapsed, null, .{});
     pub const rangeCount = bridge.accessor(Selection.getRangeCount, null, .{});
     pub const @"type" = bridge.accessor(Selection.getType, null, .{});
+    pub const direction = bridge.accessor(Selection.getDirection, null, .{});
+    pub const baseNode = bridge.accessor(Selection.getBaseNode, null, .{});
+    pub const baseOffset = bridge.accessor(Selection.getBaseOffset, null, .{});
+    pub const extentNode = bridge.accessor(Selection.getExtentNode, null, .{});
+    pub const extentOffset = bridge.accessor(Selection.getExtentOffset, null, .{});
 
     pub const addRange = bridge.function(Selection.addRange, .{});
     pub const collapse = bridge.function(Selection.collapse, .{ .arity = 1 });
@@ -758,7 +809,7 @@ pub const JsApi = struct {
     pub const deleteFromDocument = bridge.function(Selection.deleteFromDocument, .{ .ce_reactions = true });
     pub const empty = bridge.function(Selection.removeAllRanges, .{});
     pub const extend = bridge.function(Selection.extend, .{});
-    // unimplemented: getComposedRanges
+    pub const getComposedRanges = bridge.function(Selection.getComposedRanges, .{ .arity = 0 });
     pub const getRangeAt = bridge.function(Selection.getRangeAt, .{});
     pub const modify = bridge.function(Selection.modify, .{});
     pub const removeAllRanges = bridge.function(Selection.removeAllRanges, .{});

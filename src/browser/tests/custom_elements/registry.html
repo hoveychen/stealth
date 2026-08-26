@@ -149,3 +149,23 @@
     testing.expectEqual(1, constructorCalled);
 }
 </script>
+
+<!-- getName and initialize, against a headed Chrome 151. -->
+<script id="registry_get_name_and_initialize">
+{
+  class Probe extends HTMLElement {}
+  customElements.define('x-registry-probe', Probe);
+
+  testing.expectEqual('x-registry-probe', customElements.getName(Probe));
+  // `get` answers undefined for an unknown name; `getName` answers null for an
+  // unknown constructor. The two do not agree, and that is Chrome's answer.
+  testing.expectEqual(null, customElements.getName(class extends HTMLElement {}));
+  testing.expectEqual(undefined, customElements.get('x-never-defined'));
+  testing.expectEqual(1, CustomElementRegistry.prototype.getName.length);
+
+  // Scoped registries are what initialize is for and there are none here, so
+  // it is a no-op that answers undefined.
+  testing.expectEqual(undefined, customElements.initialize(document.createElement('div')));
+  testing.expectEqual(1, CustomElementRegistry.prototype.initialize.length);
+}
+</script>

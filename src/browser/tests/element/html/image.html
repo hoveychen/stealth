@@ -352,3 +352,49 @@
     testing.expectEqual(testing.BASE_URL + 'element/html/over%209000!?hello=world%20!', img.src);
   }
 </script>
+
+<!-- The eight members this batch added, against a headed Chrome 151
+     (tools/fingerprint/probes/expr-html-family-semantics.js). -->
+<script id="image_added_members">
+{
+  const img = document.createElement('img');
+  document.body.appendChild(img);
+
+  testing.expectEqual('', img.sizes);
+  img.setAttribute('sizes', '100vw');
+  testing.expectEqual('100vw', img.sizes);
+  img.sizes = '50vw';
+  testing.expectEqual('50vw', img.getAttribute('sizes'));
+
+  // Missing and invalid both fall back to "auto".
+  testing.expectEqual('auto', img.fetchPriority);
+  img.setAttribute('fetchpriority', 'high');
+  testing.expectEqual('high', img.fetchPriority);
+  img.setAttribute('fetchpriority', 'bogus');
+  testing.expectEqual('auto', img.fetchPriority);
+  img.fetchPriority = 'low';
+  testing.expectEqual('low', img.getAttribute('fetchpriority'));
+
+  // The only position this engine has, which is the one offsetLeft answers.
+  testing.expectEqual(img.offsetLeft, img.x);
+  testing.expectEqual(img.offsetTop, img.y);
+
+  testing.expectEqual(true, img.decode() instanceof Promise);
+  testing.expectEqual(0, HTMLImageElement.prototype.decode.length);
+
+  // Three boolean-ish reflections Blink installs per context, which is why
+  // they sit after `constructor` on the prototype.
+  testing.expectEqual(false, img.browsingTopics);
+  img.browsingTopics = true;
+  testing.expectEqual('', img.getAttribute('browsingtopics'));
+  testing.expectEqual(true, img.browsingTopics);
+  testing.expectEqual(false, img.sharedStorageWritable);
+  img.setAttribute('sharedstoragewritable', '');
+  testing.expectEqual(true, img.sharedStorageWritable);
+  testing.expectEqual('', img.attributionSrc);
+  img.setAttribute('attributionsrc', '/a');
+  testing.expectEqual('/a', img.attributionSrc);
+
+  img.remove();
+}
+</script>

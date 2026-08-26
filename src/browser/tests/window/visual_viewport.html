@@ -12,3 +12,22 @@
   testing.expectEqual(1080, vp.height);
   testing.expectEqual(1.0, vp.scale);
 </script>
+
+<!-- The three event-handler properties a viewport carries. Nothing resizes or
+     scrolls here, so they never run, but a page that installs one and reads it
+     back gets its function -- which is what the property is for. -->
+<script id="visual_viewport_handlers">
+{
+  testing.expectEqual(null, visualViewport.onresize);
+  testing.expectEqual(null, visualViewport.onscroll);
+  testing.expectEqual(null, visualViewport.onscrollend);
+
+  const handler = () => {};
+  visualViewport.onresize = handler;
+  testing.expectEqual(handler, visualViewport.onresize);
+  visualViewport.onscrollend = handler;
+  testing.expectEqual(handler, visualViewport.onscrollend);
+  visualViewport.onresize = null;
+  testing.expectEqual(null, visualViewport.onresize);
+}
+</script>

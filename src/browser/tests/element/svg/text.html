@@ -182,3 +182,84 @@
   testing.expectEqual('exact', textPath.getAttribute('spacing'));
 }
 </script>
+
+<!-- The four position calls and selectSubString. Chrome's own numbers for a
+     serif <text> at 20px, read off a headed Chrome 151. -->
+<script id=charPositions>
+{
+  const text = $('#text');
+  testing.expectEqual(0, text.getStartPositionOfChar(0).x);
+  testing.expectEqual(0, text.getStartPositionOfChar(0).y);
+  testing.expectEqual(true, text.getStartPositionOfChar(0) instanceof SVGPoint);
+  testing.expectEqual(14.443359375, text.getEndPositionOfChar(0).x);
+  testing.expectEqual(14.443359375, text.getStartPositionOfChar(1).x);
+  testing.expectEqual(0, text.getEndPositionOfChar(0).y);
+  testing.expectEqual(44.43359375, text.getStartPositionOfChar(5).x);
+
+  // Without a rotate attribute every character sits upright.
+  testing.expectEqual(0, text.getRotationOfChar(0));
+  testing.expectEqual(0, text.getRotationOfChar(6));
+
+  // Blink refuses past-the-end and at-the-end with two different sentences.
+  testing.expectError('IndexSizeError', () => text.getStartPositionOfChar(7));
+  testing.expectError('IndexSizeError', () => text.getEndPositionOfChar(99));
+  testing.expectError('IndexSizeError', () => text.getRotationOfChar(7));
+  testing.expectEqual(
+    "Failed to execute 'getStartPositionOfChar' on 'SVGTextContentElement': " +
+      'The charnum provided (7) is greater than or equal to the maximum bound (7).',
+    (() => { try { text.getStartPositionOfChar(7); } catch (e) { return e.message; } })(),
+  );
+  testing.expectEqual(
+    "Failed to execute 'getStartPositionOfChar' on 'SVGTextContentElement': " +
+      'The charnum provided (99) is greater than the maximum bound (7).',
+    (() => { try { text.getStartPositionOfChar(99); } catch (e) { return e.message; } })(),
+  );
+  // A negative index arrives as its unsigned wrap and is quoted back as one.
+  testing.expectEqual(
+    "Failed to execute 'getStartPositionOfChar' on 'SVGTextContentElement': " +
+      'The charnum provided (4294967295) is greater than the maximum bound (7).',
+    (() => { try { text.getStartPositionOfChar(-1); } catch (e) { return e.message; } })(),
+  );
+}
+</script>
+
+<script id=charNumAtPosition>
+{
+  const svg = document.querySelector('svg');
+  const at = (x, y) => {
+    const p = svg.createSVGPoint();
+    p.x = x; p.y = y;
+    return p;
+  };
+  const text = $('#text');
+
+  // The cell getExtentOfChar answers with, so the two agree by construction.
+  testing.expectEqual(0, SVGTextContentElement.prototype.getCharNumAtPosition.length);
+  testing.expectEqual(-1, text.getCharNumAtPosition());
+  testing.expectEqual(0, text.getCharNumAtPosition(at(1, 0)));
+  testing.expectEqual(4, text.getCharNumAtPosition(at(35, 0)));
+  // Past the last glyph, and above the ascent, are both outside.
+  testing.expectEqual(-1, text.getCharNumAtPosition(at(900, 0)));
+  testing.expectEqual(-1, text.getCharNumAtPosition(at(1, -900)));
+}
+</script>
+
+<script id=selectSubString>
+{
+  const plain = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  plain.textContent = 'Hello';
+  document.querySelector('svg').appendChild(plain);
+
+  testing.expectEqual(2, SVGTextContentElement.prototype.selectSubString.length);
+  testing.expectEqual(undefined, plain.selectSubString(0, 2));
+  testing.expectEqual('He', String(getSelection()));
+  // nchars is clamped to what is left rather than refused.
+  testing.expectEqual(undefined, plain.selectSubString(0, 99));
+  testing.expectEqual('Hello', String(getSelection()));
+  testing.expectError('IndexSizeError', () => plain.selectSubString(5, 1));
+  testing.expectError('TypeError', () => plain.selectSubString());
+
+  getSelection().removeAllRanges();
+  plain.remove();
+}
+</script>

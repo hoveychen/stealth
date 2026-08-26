@@ -260,3 +260,31 @@
       () => impl.createDocumentType('x', 'y'));
   }
 </script>
+
+<!-- The rest of ChildNode on a doctype: Chrome carries after, before and
+     replaceWith alongside the remove this already had, all reporting arity 0. -->
+<script id="doctype_child_node">
+{
+  testing.expectEqual(0, DocumentType.prototype.after.length);
+  testing.expectEqual(0, DocumentType.prototype.before.length);
+  testing.expectEqual(0, DocumentType.prototype.replaceWith.length);
+
+  const doc = document.implementation.createHTMLDocument('t');
+  const doctype = doc.doctype;
+  testing.expectEqual(true, doctype instanceof DocumentType);
+
+  const comment = doc.createComment('before');
+  doctype.before(comment);
+  testing.expectEqual(comment, doc.firstChild);
+  testing.expectEqual(doctype, doc.childNodes[1]);
+
+  const after = doc.createComment('after');
+  doctype.after(after);
+  testing.expectEqual(after, doc.childNodes[2]);
+
+  const replacement = doc.createComment('instead');
+  doctype.replaceWith(replacement);
+  testing.expectEqual(null, doc.doctype);
+  testing.expectEqual(replacement, doc.childNodes[1]);
+}
+</script>

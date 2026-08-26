@@ -34,6 +34,7 @@ const SvgPoint = @import("../../svg/Point.zig");
 const Graphics = @import("Graphics.zig");
 const AnimatedNumber = @import("../../svg/AnimatedNumber.zig");
 const AnimatedLength = @import("../../svg/AnimatedLength.zig");
+const SvgLength = @import("../../svg/Length.zig");
 const PathData = @import("../../svg/PathData.zig");
 pub const Rect = @import("Rect.zig");
 pub const Circle = @import("Circle.zig");
@@ -110,9 +111,12 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's order: the attribute, then the operations alphabetically.
     pub const pathLength = bridge.accessor(Geometry.getPathLength, null, .{});
-    pub const getTotalLength = bridge.function(Geometry.getTotalLength, .{});
     pub const getPointAtLength = bridge.function(Geometry.getPointAtLength, .{});
+    pub const getTotalLength = bridge.function(Geometry.getTotalLength, .{});
+    pub const isPointInFill = bridge.function(Geometry.isPointInFill, .{});
+    pub const isPointInStroke = bridge.function(Geometry.isPointInStroke, .{});
 };
 
 pub fn getPathLength(self: *Geometry, frame: *Frame) !*AnimatedNumber {
@@ -131,6 +135,59 @@ pub fn getPointAtLength(self: *Geometry, distance: f64, frame: *Frame) !*SvgPoin
     defer path.deinit(frame.local_arena);
     const point = try path.pointAtLength(distance, frame.local_arena);
     return SvgPoint.create(SvgPoint.narrow(point.x), SvgPoint.narrow(point.y), frame._page);
+}
+
+/// The point argument is optional in Chrome -- `isPointInFill.length` is 0 --
+/// and an omitted one is the origin, not a refusal: a path starting at (0,0)
+/// answers true to the bare call. Measured on Chrome 151,
+/// `probes/expr-svg-family-semantics.js`.
+pub fn isPointInFill(self: *Geometry, point_: ?*const SvgPoint, frame: *Frame) !bool {
+    var path = try self.buildPath(frame);
+    defer path.deinit(frame.local_arena);
+    return path.containsPoint(pointOf(point_), self.fillIsEvenOdd(frame), frame.local_arena);
+}
+
+pub fn isPointInStroke(self: *Geometry, point_: ?*const SvgPoint, frame: *Frame) !bool {
+    var path = try self.buildPath(frame);
+    defer path.deinit(frame.local_arena);
+    return path.strokeContainsPoint(pointOf(point_), self.strokeWidth(frame), frame.local_arena);
+}
+
+fn pointOf(point_: ?*const SvgPoint) PathData.Point {
+    const point = point_ orelse return .{ .x = 0, .y = 0 };
+    return .{ .x = point.getX(), .y = point.getY() };
+}
+
+fn fillIsEvenOdd(self: *Geometry, frame: *Frame) bool {
+    const raw = inheritedPresentation(self.asElement(), comptime .wrap("fill-rule"), frame) orelse return false;
+    return std.mem.eql(u8, std.mem.trim(u8, raw, " \t\r\n\x0c"), "evenodd");
+}
+
+/// `stroke-width` is an inherited presentation attribute whose initial value is
+/// 1. Only the attribute and the inline style are read: a stylesheet rule
+/// setting it does not reach here, because nothing resolves the SVG geometry
+/// properties through the cascade yet.
+fn strokeWidth(self: *Geometry, frame: *Frame) f64 {
+    const element = self.asElement();
+    const raw = inheritedPresentation(element, comptime .wrap("stroke-width"), frame) orelse return 1;
+    const parsed = SvgLength.parseValue(raw) catch return 1;
+    if (parsed.unit == .percentage) {
+        return SvgLength.viewportDimension(element, .unspecified, frame) * parsed.value / 100.0;
+    }
+    return parsed.value;
+}
+
+fn inheritedPresentation(element: *Element, name: lp.String, frame: *Frame) ?[]const u8 {
+    var current: ?*Element = element;
+    while (current) |el| : (current = el.parentElement()) {
+        if (frame._style_manager.inlineStyleValue(el, name)) |inline_value| {
+            return inline_value;
+        }
+        if (el.getAttributeSafe(name)) |attribute_value| {
+            return attribute_value;
+        }
+    }
+    return null;
 }
 
 pub fn buildPath(self: *Geometry, frame: *Frame) !PathData.Path {

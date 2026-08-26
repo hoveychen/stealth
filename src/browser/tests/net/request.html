@@ -497,3 +497,42 @@
   }
 }
 </script>
+
+<!-- The eleven members Chrome carries that this engine did not, against a
+     headed Chrome 151 (probes/expr-misc-family-semantics.js). -->
+<script id="request_added_members">
+{
+  const r = new Request('https://example.com/x');
+  testing.expectEqual('', r.destination);
+  // Not the empty string: that is what an explicit {referrer: ''} gives.
+  testing.expectEqual('about:client', r.referrer);
+  testing.expectEqual('', r.referrerPolicy);
+  testing.expectEqual('cors', r.mode);
+  testing.expectEqual('', r.integrity);
+  testing.expectEqual(false, r.keepalive);
+  testing.expectEqual('half', r.duplex);
+  testing.expectEqual(false, r.isHistoryNavigation);
+  testing.expectEqual('unknown', r.targetAddressSpace);
+  testing.expectEqual(false, r.isReloadNavigation);
+  testing.expectEqual('function', typeof r.textStream);
+
+  testing.expectEqual('no-cors', new Request('https://example.com/x', { mode: 'no-cors' }).mode);
+  testing.expectEqual('', new Request('https://example.com/x', { referrer: '' }).referrer);
+  testing.expectEqual(true, new Request('https://example.com/x', { keepalive: true }).keepalive);
+  testing.expectEqual('sha256-x', new Request('https://example.com/x', { integrity: 'sha256-x' }).integrity);
+  testing.expectEqual('no-referrer', new Request('https://example.com/x', { referrerPolicy: 'no-referrer' }).referrerPolicy);
+  // A streaming body does not change the duplex Chrome reports.
+  testing.expectEqual('half', new Request('https://example.com/x', { method: 'POST', body: 'b' }).duplex);
+
+  // A request built from another one carries its settings over.
+  const copied = new Request(new Request('https://example.com/x', { mode: 'no-cors', integrity: 'sha256-y' }));
+  testing.expectEqual('no-cors', copied.mode);
+  testing.expectEqual('sha256-y', copied.integrity);
+
+  // textStream consumes the body, exactly as Response's does.
+  const streamed = new Request('https://example.com/x', { method: 'POST', body: 'hi' });
+  testing.expectEqual(true, streamed.textStream() instanceof ReadableStream);
+  testing.expectEqual(true, streamed.bodyUsed);
+  testing.expectError('TypeError', () => streamed.textStream());
+}
+</script>

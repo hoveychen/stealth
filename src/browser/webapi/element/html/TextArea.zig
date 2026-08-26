@@ -92,6 +92,12 @@ pub fn setValue(self: *TextArea, value: []const u8, frame: *Frame) !void {
     self._value = owned;
 }
 
+/// The form-reset half: the API value goes away and the child text takes over
+/// again. https://html.spec.whatwg.org/multipage/form-elements.html#the-textarea-element:concept-form-reset-control
+pub fn reset(self: *TextArea) void {
+    self._value = null;
+}
+
 pub fn getDefaultValue(self: *const TextArea) []const u8 {
     const node = self.asConstNode();
     if (node.firstChild()) |child| {

@@ -27,11 +27,12 @@ const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 
 const Svg = @import("../Svg.zig");
+const ZoomAndPan = @import("zoom_and_pan.zig");
 
 const View = @This();
 
 pub const Proto = Svg;
-_pad: bool = false,
+_zoom_and_pan: ZoomAndPan.State = .{},
 _proto_canary: if (lp.IS_DEBUG) *Svg else void = undefined,
 
 pub fn asElement(self: *View) *Element {
@@ -48,6 +49,13 @@ fn getPreserveAspectRatio(self: *View, frame: *Frame) !*AnimatedPreserveAspectRa
     return AnimatedPreserveAspectRatio.getOrCreate(self.asElement(), frame);
 }
 
+fn getZoomAndPan(self: *View) u16 {
+    return self._zoom_and_pan.get(self.asElement());
+}
+fn setZoomAndPan(self: *View, value: u16) void {
+    self._zoom_and_pan.set(self.asElement(), value);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(View);
     pub const Meta = struct {
@@ -58,4 +66,10 @@ pub const JsApi = struct {
 
     pub const viewBox = bridge.accessor(View.getViewBox, null, .{});
     pub const preserveAspectRatio = bridge.accessor(View.getPreserveAspectRatio, null, .{});
+
+    // The SVGZoomAndPan mixin, which `<view>` includes alongside `<svg>`.
+    pub const zoomAndPan = bridge.accessor(View.getZoomAndPan, View.setZoomAndPan, .{});
+    pub const SVG_ZOOMANDPAN_UNKNOWN = bridge.property(ZoomAndPan.unknown, .{ .template = true });
+    pub const SVG_ZOOMANDPAN_DISABLE = bridge.property(ZoomAndPan.disable, .{ .template = true });
+    pub const SVG_ZOOMANDPAN_MAGNIFY = bridge.property(ZoomAndPan.magnify, .{ .template = true });
 };

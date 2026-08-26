@@ -139,3 +139,19 @@
       () => dt.items[0].getAsString());
   }
 </script>
+
+<!-- The two entry accessors. Nothing here comes from a real drop, so there is
+     no filesystem entry behind an item and the handle is a promise of null. -->
+<script id="data_transfer_item_entries">
+{
+  const transfer = new DataTransfer();
+  transfer.items.add('hello', 'text/plain');
+  const item = transfer.items[0];
+
+  testing.expectEqual(0, DataTransferItem.prototype.webkitGetAsEntry.length);
+  testing.expectEqual(null, item.webkitGetAsEntry());
+  const handle = item.getAsFileSystemHandle();
+  testing.expectEqual(true, handle instanceof Promise);
+  handle.then((v) => testing.expectEqual(null, v));
+}
+</script>

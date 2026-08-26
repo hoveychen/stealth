@@ -211,3 +211,46 @@
   testing.expectEqual(true, rootBox.height >= 100);
 }
 </script>
+
+<!-- isPointInFill / isPointInStroke, against a headed Chrome 151
+     (tools/fingerprint/probes/expr-svg-family-semantics.js). -->
+<script id=pointContainment>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const host = document.createElementNS(ns, 'svg');
+  host.innerHTML = '<path id=tri d="M0 0 L 40 0 L 40 40 Z" stroke-width="4"/>';
+  document.body.appendChild(host);
+  const tri = $('#tri');
+
+  const at = (x, y) => {
+    const p = host.createSVGPoint();
+    p.x = x; p.y = y;
+    return p;
+  };
+
+  testing.expectEqual(true, tri.isPointInFill(at(10, 5)));
+  testing.expectEqual(false, tri.isPointInStroke(at(10, 5)));
+  testing.expectEqual(false, tri.isPointInFill(at(500, 500)));
+  testing.expectEqual(false, tri.isPointInStroke(at(500, 500)));
+  // A point on the right edge is under a 4-wide stroke centred on it.
+  testing.expectEqual(true, tri.isPointInStroke(at(40, 20)));
+  testing.expectEqual(false, tri.isPointInStroke(at(43, 20)));
+
+  // The point is optional -- both report length 0 -- and an omitted one asks
+  // about the origin, which here is the path's own first vertex.
+  testing.expectEqual(0, SVGGeometryElement.prototype.isPointInFill.length);
+  testing.expectEqual(0, SVGGeometryElement.prototype.isPointInStroke.length);
+  testing.expectEqual(true, tri.isPointInFill());
+  testing.expectEqual(true, tri.isPointInStroke());
+
+  // The default stroke-width is 1, so the same edge point is only just under
+  // it and half a unit away is not.
+  const thin = document.createElementNS(ns, 'path');
+  thin.setAttribute('d', 'M0 0 L 40 0 L 40 40 Z');
+  host.appendChild(thin);
+  testing.expectEqual(true, thin.isPointInStroke(at(40, 20)));
+  testing.expectEqual(false, thin.isPointInStroke(at(41, 20)));
+
+  host.remove();
+}
+</script>

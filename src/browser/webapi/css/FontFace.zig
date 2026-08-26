@@ -42,8 +42,36 @@ _unicode_range: []const u8 = "U+0-10FFFF",
 _variant: []const u8 = "normal",
 _feature_settings: []const u8 = "normal",
 _display: []const u8 = "auto",
+// Five more of the same, added later to the IDL and so declared after `load`
+// on Chrome's prototype. Defaults measured off `new FontFace('D',
+// 'local(Arial)')`: every override is "normal" and the size adjustment is
+// "100%".
+_ascent_override: []const u8 = "normal",
+_descent_override: []const u8 = "normal",
+_line_gap_override: []const u8 = "normal",
+_size_adjust: []const u8 = "100%",
+_variation_settings: []const u8 = "normal",
 
-pub fn init(family: []const u8, source: []const u8, exec: *const Execution) !*FontFace {
+/// The descriptor dictionary the constructor takes, which Chrome applies to
+/// the face it builds: `new FontFace('F', src, {ascentOverride: '90%'})` reads
+/// back "90%" (measured on Chrome 151). Every field is optional and an absent
+/// one leaves the default alone.
+pub const Descriptors = struct {
+    style: ?[]const u8 = null,
+    weight: ?[]const u8 = null,
+    stretch: ?[]const u8 = null,
+    unicodeRange: ?[]const u8 = null,
+    variant: ?[]const u8 = null,
+    featureSettings: ?[]const u8 = null,
+    display: ?[]const u8 = null,
+    ascentOverride: ?[]const u8 = null,
+    descentOverride: ?[]const u8 = null,
+    lineGapOverride: ?[]const u8 = null,
+    sizeAdjust: ?[]const u8 = null,
+    variationSettings: ?[]const u8 = null,
+};
+
+pub fn init(family: []const u8, source: []const u8, descriptors_: ?Descriptors, exec: *const Execution) !*FontFace {
     _ = source;
 
     const arena = try exec.getArena(.tiny, "FontFace");
@@ -54,7 +82,59 @@ pub fn init(family: []const u8, source: []const u8, exec: *const Execution) !*Fo
         ._arena = arena,
         ._family = try arena.dupe(u8, family),
     };
+
+    if (descriptors_) |descriptors| {
+        inline for (.{
+            .{ "style", &self._style },
+            .{ "weight", &self._weight },
+            .{ "stretch", &self._stretch },
+            .{ "unicodeRange", &self._unicode_range },
+            .{ "variant", &self._variant },
+            .{ "featureSettings", &self._feature_settings },
+            .{ "display", &self._display },
+            .{ "ascentOverride", &self._ascent_override },
+            .{ "descentOverride", &self._descent_override },
+            .{ "lineGapOverride", &self._line_gap_override },
+            .{ "sizeAdjust", &self._size_adjust },
+            .{ "variationSettings", &self._variation_settings },
+        }) |pair| {
+            if (@field(descriptors, pair[0])) |value| {
+                pair[1].* = try arena.dupe(u8, value);
+            }
+        }
+    }
     return self;
+}
+
+pub fn getAscentOverride(self: *const FontFace) []const u8 {
+    return self._ascent_override;
+}
+pub fn setAscentOverride(self: *FontFace, value: []const u8) !void {
+    return self.setDescriptor(&self._ascent_override, value);
+}
+pub fn getDescentOverride(self: *const FontFace) []const u8 {
+    return self._descent_override;
+}
+pub fn setDescentOverride(self: *FontFace, value: []const u8) !void {
+    return self.setDescriptor(&self._descent_override, value);
+}
+pub fn getLineGapOverride(self: *const FontFace) []const u8 {
+    return self._line_gap_override;
+}
+pub fn setLineGapOverride(self: *FontFace, value: []const u8) !void {
+    return self.setDescriptor(&self._line_gap_override, value);
+}
+pub fn getSizeAdjust(self: *const FontFace) []const u8 {
+    return self._size_adjust;
+}
+pub fn setSizeAdjust(self: *FontFace, value: []const u8) !void {
+    return self.setDescriptor(&self._size_adjust, value);
+}
+pub fn getVariationSettings(self: *const FontFace) []const u8 {
+    return self._variation_settings;
+}
+pub fn setVariationSettings(self: *FontFace, value: []const u8) !void {
+    return self.setDescriptor(&self._variation_settings, value);
 }
 
 pub fn deinit(self: *FontFace, _: *Page) void {
@@ -175,8 +255,11 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(FontFace.init, .{});
+
+    // Chrome's order: the eight original descriptors, the four override ones,
+    // then status/loaded/load -- and `variationSettings` last, after `load`,
+    // because it joined the IDL through a later partial interface.
     pub const family = bridge.accessor(FontFace.getFamily, FontFace.setFamily, .{});
-    pub const status = bridge.accessor(FontFace.getStatus, null, .{});
     pub const style = bridge.accessor(FontFace.getStyle, FontFace.setStyle, .{});
     pub const weight = bridge.accessor(FontFace.getWeight, FontFace.setWeight, .{});
     pub const stretch = bridge.accessor(FontFace.getStretch, FontFace.setStretch, .{});
@@ -184,8 +267,14 @@ pub const JsApi = struct {
     pub const variant = bridge.accessor(FontFace.getVariant, FontFace.setVariant, .{});
     pub const featureSettings = bridge.accessor(FontFace.getFeatureSettings, FontFace.setFeatureSettings, .{});
     pub const display = bridge.accessor(FontFace.getDisplay, FontFace.setDisplay, .{});
+    pub const ascentOverride = bridge.accessor(FontFace.getAscentOverride, FontFace.setAscentOverride, .{});
+    pub const descentOverride = bridge.accessor(FontFace.getDescentOverride, FontFace.setDescentOverride, .{});
+    pub const lineGapOverride = bridge.accessor(FontFace.getLineGapOverride, FontFace.setLineGapOverride, .{});
+    pub const sizeAdjust = bridge.accessor(FontFace.getSizeAdjust, FontFace.setSizeAdjust, .{});
+    pub const status = bridge.accessor(FontFace.getStatus, null, .{});
     pub const loaded = bridge.accessor(FontFace.getLoaded, null, .{});
     pub const load = bridge.function(FontFace.load, .{});
+    pub const variationSettings = bridge.accessor(FontFace.getVariationSettings, FontFace.setVariationSettings, .{});
 };
 
 const testing = @import("../../../testing.zig");

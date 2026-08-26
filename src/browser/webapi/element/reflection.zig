@@ -296,15 +296,10 @@ pub fn Reflect(comptime T: type) type {
                     return parsed;
                 }
                 fn set(self: *T, value: f64, frame: *Frame) !void {
-                    if (!std.math.isFinite(value)) {
-                        return error.TypeError;
-                    }
-                    if (positive and value <= 0) {
+                    if (positive and std.math.isFinite(value) and value <= 0) {
                         return;
                     }
-                    // JS's Number-to-string is the "best representation"
-                    const str = try (try frame.js.local.?.newNumber(value)).toStringSlice();
-                    try element(self).setAttributeSafe(.wrap(attr), .wrap(str), frame);
+                    return setDouble(element(self), attr, interfaceName, value, frame);
                 }
             };
             return bridge.accessor(R.get, R.set, .{ .ce_reactions = true });
@@ -326,6 +321,26 @@ pub fn Reflect(comptime T: type) type {
             return .wrap(attr);
         }
     };
+}
+
+/// Writes a double-valued content attribute, refusing a non-finite one with
+/// Blink's wording. Shared with the reflections whose *getter* is written by
+/// hand because it clamps -- `<meter>`'s six numbers and `<progress>`'s value
+/// each depend on the others, so only the write is the same everywhere.
+pub fn setDouble(
+    el: *Element,
+    comptime attr: []const u8,
+    comptime interface: []const u8,
+    value: f64,
+    frame: *Frame,
+) !void {
+    if (!std.math.isFinite(value)) {
+        return frame.js.fail(error.TypeError, "Failed to set the '" ++ attr ++ "' property on '" ++
+            interface ++ "': The provided double value is non-finite.");
+    }
+    // JS's Number-to-string is the "best representation"
+    const str = try (try frame.js.local.?.newNumber(value)).toStringSlice();
+    try el.setAttributeSafe(comptime .wrap(attr), .wrap(str), frame);
 }
 
 // Enumerated attribute limited to only known values: the canonical keyword,
@@ -393,6 +408,10 @@ pub fn parseInteger(input: []const u8) ?i64 {
 // HTML "rules for parsing floating-point number values". The grammar isn't
 // the same as Zig's, so we need to validate by hand, but can let std do some
 // of the work
+pub fn parseDouble(input: []const u8) ?f64 {
+    return parseFloat(input);
+}
+
 fn parseFloat(input: []const u8) ?f64 {
     const s = std.mem.trimStart(u8, input, "\t\n\x0c\r ");
     var i: usize = 0;

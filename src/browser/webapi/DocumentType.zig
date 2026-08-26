@@ -82,6 +82,49 @@ pub fn remove(self: *DocumentType, frame: *Frame) !void {
     _ = try parent.removeChild(node, frame);
 }
 
+// The rest of ChildNode, which a doctype carries like any other child node.
+// Same three bodies CData has; there is no shared mixin here, and each of the
+// three interfaces that implements ChildNode spells them out.
+pub fn before(self: *DocumentType, nodes: []const Node.NodeOrText, frame: *Frame) !void {
+    const node = self.asNode();
+    const parent = node.parentNode() orelse return;
+
+    for (nodes) |node_or_text| {
+        const child = try node_or_text.toNode(frame);
+        _ = try parent.insertBefore(child, node, frame);
+    }
+}
+
+pub fn after(self: *DocumentType, nodes: []const Node.NodeOrText, frame: *Frame) !void {
+    const node = self.asNode();
+    const parent = node.parentNode() orelse return;
+    const viable_next = Node.NodeOrText.viableNextSibling(node, nodes);
+
+    for (nodes) |node_or_text| {
+        const child = try node_or_text.toNode(frame);
+        _ = try parent.insertBefore(child, viable_next, frame);
+    }
+}
+
+pub fn replaceWith(self: *DocumentType, nodes: []const Node.NodeOrText, frame: *Frame) !void {
+    const ref_node = self.asNode();
+    const parent = ref_node.parentNode() orelse return;
+
+    var rm_ref_node = true;
+    for (nodes) |node_or_text| {
+        const child = try node_or_text.toNode(frame);
+        if (child == ref_node) {
+            rm_ref_node = false;
+            continue;
+        }
+        _ = try parent.insertBefore(child, ref_node, frame);
+    }
+
+    if (rm_ref_node) {
+        _ = try parent.removeChild(ref_node, frame);
+    }
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(DocumentType);
 
@@ -94,5 +137,8 @@ pub const JsApi = struct {
     pub const name = bridge.accessor(DocumentType.getName, null, .{});
     pub const publicId = bridge.accessor(DocumentType.getPublicId, null, .{});
     pub const systemId = bridge.accessor(DocumentType.getSystemId, null, .{});
-    pub const remove = bridge.function(DocumentType.remove, .{});
+    pub const after = bridge.function(DocumentType.after, .{ .ce_reactions = true, .arity = 0 });
+    pub const before = bridge.function(DocumentType.before, .{ .ce_reactions = true, .arity = 0 });
+    pub const remove = bridge.function(DocumentType.remove, .{ .ce_reactions = true });
+    pub const replaceWith = bridge.function(DocumentType.replaceWith, .{ .ce_reactions = true, .arity = 0 });
 };

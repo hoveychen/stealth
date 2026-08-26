@@ -432,14 +432,14 @@ pub fn reload(self: *Navigation, _opts: ?ReloadOptions, frame: *Frame) !Navigati
     const entry = self.getCurrentEntry();
     if (opts.state) |state| {
         const previous = entry;
-        entry._state = .{ .source = .navigation, .value = state.toJson(arena) catch return error.DataClone };
+        entry._state = .{ .source = .navigation, .value = state.toJson(arena.allocator()) catch return error.DataClone };
 
-        const event = try NavigationCurrentEntryChangeEvent.initTrusted(
+        const event = (try NavigationCurrentEntryChangeEvent.initTrusted(
             .wrap("currententrychange"),
             .{ .from = previous, .navigationType = @tagName(.reload) },
             frame,
-        );
-        try self.dispatch(.{ .currententrychange = event }, frame);
+        )).asEvent();
+        try self.dispatch(event, frame);
     }
 
     return self.navigateInner(entry._url, .reload, frame);
@@ -499,19 +499,24 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's order: the attributes, then the four handlers, then the
+    // operations alphabetically.
+    pub const currentEntry = bridge.accessor(Navigation.getCurrentEntry, null, .{});
+    pub const transition = bridge.accessor(Navigation.getTransition, null, .{});
     pub const activation = bridge.accessor(Navigation.getActivation, null, .{});
     pub const canGoBack = bridge.accessor(Navigation.getCanGoBack, null, .{});
     pub const canGoForward = bridge.accessor(Navigation.getCanGoForward, null, .{});
-    pub const currentEntry = bridge.accessor(Navigation.getCurrentEntry, null, .{});
-    pub const transition = bridge.accessor(Navigation.getTransition, null, .{});
+    pub const onnavigate = bridge.accessor(handlerProperty(Navigation, .onnavigate).get, handlerProperty(Navigation, .onnavigate).set, .{});
+    pub const onnavigatesuccess = bridge.accessor(handlerProperty(Navigation, .onnavigatesuccess).get, handlerProperty(Navigation, .onnavigatesuccess).set, .{});
+    pub const onnavigateerror = bridge.accessor(handlerProperty(Navigation, .onnavigateerror).get, handlerProperty(Navigation, .onnavigateerror).set, .{});
+    pub const oncurrententrychange = bridge.accessor(handlerProperty(Navigation, .oncurrententrychange).get, handlerProperty(Navigation, .oncurrententrychange).set, .{});
     pub const back = bridge.function(Navigation.back, .{});
     pub const entries = bridge.function(Navigation.entries, .{});
     pub const forward = bridge.function(Navigation.forward, .{});
     pub const navigate = bridge.function(Navigation.navigate, .{});
+    pub const reload = bridge.function(Navigation.reload, .{});
     pub const traverseTo = bridge.function(Navigation.traverseTo, .{});
     pub const updateCurrentEntry = bridge.function(Navigation.updateCurrentEntry, .{});
-
-    pub const oncurrententrychange = bridge.accessor(handlerProperty(Navigation, .oncurrententrychange).get, handlerProperty(Navigation, .oncurrententrychange).set, .{});
 };
 
 const testing = @import("../../../testing.zig");

@@ -98,3 +98,34 @@
   testing.expectEqual("6", m.getAttribute("scrollamount"))
   }
 </script>
+
+<!-- loop, start and stop, against a headed Chrome 151. -->
+<script id="marquee_loop">
+{
+  const m = document.createElement('marquee');
+  testing.expectEqual(-1, m.loop);
+  m.setAttribute('loop', '3');
+  testing.expectEqual(3, m.loop);
+  m.loop = 5;
+  testing.expectEqual('5', m.getAttribute('loop'));
+
+  // -1 means "forever" and is the one non-positive value the setter takes.
+  m.loop = -1;
+  testing.expectEqual(-1, m.loop);
+  testing.expectEqual('-1', m.getAttribute('loop'));
+
+  testing.expectError('IndexSizeError', () => { m.loop = 0; });
+  testing.expectEqual(
+    "Failed to set the 'loop' property on 'HTMLMarqueeElement': The provided value (0) is neither positive nor -1.",
+    (() => { try { m.loop = 0; } catch (e) { return e.message; } })(),
+  );
+
+  // An unparseable attribute falls back to -1 like a missing one.
+  m.setAttribute('loop', 'x');
+  testing.expectEqual(-1, m.loop);
+
+  testing.expectEqual(undefined, m.start());
+  testing.expectEqual(undefined, m.stop());
+  testing.expectEqual(0, HTMLMarqueeElement.prototype.start.length);
+}
+</script>

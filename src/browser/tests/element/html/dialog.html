@@ -294,3 +294,60 @@
     testing.expectEqual('via-formmethod', dialog.returnValue)
   }
 </script>
+
+<!-- closedBy and requestClose, against a headed Chrome 151
+     (tools/fingerprint/probes/expr-html-family-semantics.js). -->
+<script id="dialog_closed_by">
+{
+  const dialog = document.createElement('dialog');
+  document.body.appendChild(dialog);
+
+  // The missing-value default is not one fixed string: everything but an open
+  // modal dialog reads "none".
+  testing.expectEqual('none', dialog.closedBy);
+  dialog.show();
+  testing.expectEqual('none', dialog.closedBy);
+  dialog.close();
+  dialog.showModal();
+  testing.expectEqual('closerequest', dialog.closedBy);
+  dialog.close();
+  testing.expectEqual('none', dialog.closedBy);
+
+  dialog.setAttribute('closedby', 'any');
+  testing.expectEqual('any', dialog.closedBy);
+  dialog.setAttribute('closedby', 'zz');
+  testing.expectEqual('none', dialog.closedBy);
+  dialog.closedBy = 'none';
+  testing.expectEqual('none', dialog.getAttribute('closedby'));
+
+  dialog.remove();
+}
+</script>
+
+<script id="dialog_request_close">
+{
+  const dialog = document.createElement('dialog');
+  document.body.appendChild(dialog);
+
+  dialog.show();
+  testing.expectEqual(undefined, dialog.requestClose('rv'));
+  testing.expectEqual(false, dialog.open);
+  testing.expectEqual('rv', dialog.returnValue);
+
+  // A closed dialog is a no-op.
+  testing.expectEqual(undefined, dialog.requestClose());
+  testing.expectEqual(0, HTMLDialogElement.prototype.requestClose.length);
+
+  // The cancel event goes first, and a listener that prevents it keeps the
+  // dialog open.
+  let seen = 0;
+  dialog.show();
+  dialog.addEventListener('cancel', (e) => { seen++; e.preventDefault(); });
+  dialog.requestClose('no');
+  testing.expectEqual(1, seen);
+  testing.expectEqual(true, dialog.open);
+  testing.expectEqual('rv', dialog.returnValue);
+
+  dialog.remove();
+}
+</script>

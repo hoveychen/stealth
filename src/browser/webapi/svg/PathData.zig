@@ -191,6 +191,63 @@ pub const Path = struct {
         return total;
     }
 
+    /// Whether `point` falls inside the area the path fills. Each subpath is
+    /// implicitly closed first, as a fill does, and a point sitting on the
+    /// outline counts as inside: Chrome answers `isPointInFill()` -- the
+    /// no-argument form, which asks about (0,0) -- with true for a path whose
+    /// first vertex is (0,0), and a bare winding test would say false there.
+    pub fn containsPoint(self: *const Path, point: Point, even_odd: bool, allocator: Allocator) !bool {
+        var points: std.ArrayList(Point) = .empty;
+        defer points.deinit(allocator);
+
+        var tally: Tally = .{};
+        var subpath_start: ?Point = null;
+        var previous: Point = .{ .x = 0, .y = 0 };
+
+        for (self.segments.items) |segment| {
+            if (subpath_start == null or !pointsEqual(previous, segment.start())) {
+                if (subpath_start) |first| {
+                    if (tally.edge(previous, first, point)) return true;
+                }
+                subpath_start = segment.start();
+            }
+            points.clearRetainingCapacity();
+            try flatten(segment, &points, allocator);
+            for (points.items[0 .. points.items.len - 1], points.items[1..]) |a, b| {
+                if (tally.edge(a, b, point)) return true;
+            }
+            previous = segment.end();
+        }
+        if (subpath_start) |first| {
+            if (tally.edge(previous, first, point)) return true;
+        }
+        return if (even_odd) @rem(tally.crossings, 2) == 1 else tally.winding != 0;
+    }
+
+    /// Whether `point` falls under a stroke of `width` centred on the path.
+    /// Only the centre-line distance: joins, caps and dash patterns would each
+    /// change the answer near an endpoint, and none of them are modelled.
+    pub fn strokeContainsPoint(self: *const Path, point: Point, width: f64, allocator: Allocator) !bool {
+        if (!std.math.isFinite(width) or width <= 0) {
+            return false;
+        }
+        const half = width / 2.0;
+
+        var points: std.ArrayList(Point) = .empty;
+        defer points.deinit(allocator);
+
+        for (self.segments.items) |segment| {
+            points.clearRetainingCapacity();
+            try flatten(segment, &points, allocator);
+            for (points.items[0 .. points.items.len - 1], points.items[1..]) |a, b| {
+                if (pointSegmentDistance(point, a, b) <= half) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     pub fn pointAtLength(self: *const Path, requested: f64, allocator: Allocator) !Point {
         if (self.segments.items.len == 0) {
             return self.first_point orelse .{ .x = 0, .y = 0 };
@@ -224,6 +281,34 @@ pub const Path = struct {
         unreachable;
     }
 };
+
+// Both fill rules off one walk: a ray cast along +x from the point, counting
+// how many edges it crosses and which way each one was going.
+const Tally = struct {
+    winding: i32 = 0,
+    crossings: u32 = 0,
+
+    // Returns true when the point sits on this edge, which ends the walk: the
+    // outline belongs to the fill.
+    fn edge(self: *Tally, a: Point, b: Point, point: Point) bool {
+        if (pointSegmentDistance(point, a, b) <= boundary_tolerance) {
+            return true;
+        }
+        // Half-open in y so a vertex shared by two edges is counted once.
+        if ((a.y <= point.y) != (b.y <= point.y)) {
+            const t = (point.y - a.y) / (b.y - a.y);
+            if (a.x + t * (b.x - a.x) > point.x) {
+                self.crossings += 1;
+                self.winding += if (b.y > a.y) 1 else -1;
+            }
+        }
+        return false;
+    }
+};
+
+// Tight enough that it only catches a point meant to be on the outline, loose
+// enough to survive the arithmetic that flattening a curve does to it.
+const boundary_tolerance = 1e-9;
 
 const Previous = enum { other, cubic, quadratic };
 

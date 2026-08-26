@@ -43,7 +43,10 @@ _arena: *lp.Arena,
 _callback: js.Function.Global,
 _observing: std.ArrayList(*Element) = .empty,
 _root: ?*Element = null,
-_root_margin: []const u8 = "0px",
+_root_margin: []const u8 = "0px 0px 0px 0px",
+_scroll_margin: []const u8 = "0px 0px 0px 0px",
+_delay: f64 = 0,
+_track_visibility: bool = false,
 _threshold: []const f64 = &.{0.0},
 _pending_entries: std.ArrayList(*IntersectionObserverEntry) = .empty,
 // tracked targets that aren't reported yet
@@ -58,7 +61,10 @@ pub const ObserverInit = struct {
 
     root: ?*Node = null,
     rootMargin: ?[]const u8 = null,
+    scrollMargin: ?[]const u8 = null,
     threshold: Threshold = .{ .scalar = 0.0 },
+    delay: ?f64 = null,
+    trackVisibility: ?bool = null,
 
     const Threshold = union(enum) {
         scalar: f64,
@@ -71,7 +77,8 @@ pub fn init(callback: js.Function.Global, options: ?ObserverInit, frame: *Frame)
     errdefer arena.release();
 
     const opts = options orelse ObserverInit{};
-    const root_margin = if (opts.rootMargin) |rm| try arena.dupe(u8, rm) else "0px";
+    const root_margin = try expandMargin(opts.rootMargin, arena);
+    const scroll_margin = try expandMargin(opts.scrollMargin, arena);
 
     const threshold = switch (opts.threshold) {
         .scalar => |s| blk: {
@@ -102,9 +109,61 @@ pub fn init(callback: js.Function.Global, options: ?ObserverInit, frame: *Frame)
         ._callback = callback,
         ._root = root,
         ._root_margin = root_margin,
+        ._scroll_margin = scroll_margin,
         ._threshold = threshold,
+        ._delay = opts.delay orelse 0,
+        ._track_visibility = opts.trackVisibility orelse false,
     };
     return self;
+}
+
+/// Chrome stores a margin as its four-sided form, so a `rootMargin` of "5px"
+/// reads back "5px 5px 5px 5px" and "10px 20px" reads back
+/// "10px 20px 10px 20px" (measured on Chrome 151). An absent one is
+/// "0px 0px 0px 0px", not the "0px" this used to keep.
+fn expandMargin(input_: ?[]const u8, arena: *lp.Arena) ![]const u8 {
+    const input = std.mem.trim(u8, input_ orelse "0px", " \t\r\n\x0c");
+    var parts: [4][]const u8 = .{ "0px", "0px", "0px", "0px" };
+    var count: usize = 0;
+    var it = std.mem.tokenizeAny(u8, input, " \t\r\n\x0c");
+    while (it.next()) |part| {
+        if (count == 4) break;
+        parts[count] = part;
+        count += 1;
+    }
+
+    const sides: [4][]const u8 = switch (count) {
+        0 => .{ "0px", "0px", "0px", "0px" },
+        1 => .{ parts[0], parts[0], parts[0], parts[0] },
+        2 => .{ parts[0], parts[1], parts[0], parts[1] },
+        3 => .{ parts[0], parts[1], parts[2], parts[1] },
+        else => .{ parts[0], parts[1], parts[2], parts[3] },
+    };
+    return std.mem.join(arena.allocator(), " ", &sides);
+}
+
+pub fn getRoot(self: *IntersectionObserver) ?*Element {
+    return self._root;
+}
+
+pub fn getRootMargin(self: *const IntersectionObserver) []const u8 {
+    return self._root_margin;
+}
+
+pub fn getScrollMargin(self: *const IntersectionObserver) []const u8 {
+    return self._scroll_margin;
+}
+
+pub fn getThresholds(self: *const IntersectionObserver) []const f64 {
+    return self._threshold;
+}
+
+pub fn getDelay(self: *const IntersectionObserver) f64 {
+    return self._delay;
+}
+
+pub fn getTrackVisibility(self: *const IntersectionObserver) bool {
+    return self._track_visibility;
 }
 
 pub fn deinit(self: *IntersectionObserver, page: *Page) void {
@@ -407,10 +466,17 @@ pub const JsApi = struct {
 
     pub const constructor = bridge.constructor(init, .{});
 
-    pub const observe = bridge.function(IntersectionObserver.observe, .{});
-    pub const unobserve = bridge.function(IntersectionObserver.unobserve, .{});
+    // Chrome's order: the six attributes, then the operations alphabetically.
+    pub const root = bridge.accessor(IntersectionObserver.getRoot, null, .{});
+    pub const rootMargin = bridge.accessor(IntersectionObserver.getRootMargin, null, .{});
+    pub const scrollMargin = bridge.accessor(IntersectionObserver.getScrollMargin, null, .{});
+    pub const thresholds = bridge.accessor(IntersectionObserver.getThresholds, null, .{});
+    pub const delay = bridge.accessor(IntersectionObserver.getDelay, null, .{});
+    pub const trackVisibility = bridge.accessor(IntersectionObserver.getTrackVisibility, null, .{});
     pub const disconnect = bridge.function(IntersectionObserver.disconnect, .{});
+    pub const observe = bridge.function(IntersectionObserver.observe, .{});
     pub const takeRecords = bridge.function(IntersectionObserver.takeRecords, .{});
+    pub const unobserve = bridge.function(IntersectionObserver.unobserve, .{});
 };
 
 const testing = @import("../../testing.zig");

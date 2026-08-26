@@ -1234,3 +1234,30 @@
 }
 </script>
 </body>
+
+<!-- IDBDatabase's three missing handlers and IDBVersionChangeEvent's two
+     legacy members, against a headed Chrome 151. -->
+<script id="idb_added_members">
+{
+  const event = new IDBVersionChangeEvent('versionchange');
+  // Nothing here ever loses data, and neither does a plainly constructed
+  // event in Chrome.
+  testing.expectEqual('none', event.dataLoss);
+  testing.expectEqual('', event.dataLossMessage);
+
+  const open = indexedDB.open('proto-completeness-db');
+  open.onsuccess = () => {
+    const db = open.result;
+    testing.expectEqual(null, db.onabort);
+    testing.expectEqual(null, db.onclose);
+    testing.expectEqual(null, db.onversionchange);
+
+    const handler = () => {};
+    db.onversionchange = handler;
+    testing.expectEqual(handler, db.onversionchange);
+    db.onversionchange = null;
+    testing.expectEqual(null, db.onversionchange);
+    db.close();
+  };
+}
+</script>

@@ -148,3 +148,127 @@
   div.remove();
 }
 </script>
+
+<!-- SVGAElement, SVGImageElement, SVGUseElement and SVGMaskElement's members,
+     against a headed Chrome 151 (probes/expr-svg-family-semantics.js and
+     -edges.js). -->
+<script id=anchorMembers>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const host = document.createElementNS(ns, 'svg');
+  host.innerHTML = '<a id=link href="#x" target="_top" download="d" ping="/p" rel="noopener"'
+    + ' hreflang="en" type="text/html" referrerpolicy="no-referrer"><circle r="2"/></a>';
+  document.body.appendChild(host);
+  const link = $('#link');
+
+  // target is an SVGAnimatedString and read-only: the assignment is silently
+  // dropped, which is what separates it from HTMLAnchorElement's plain string.
+  testing.expectEqual(true, link.target instanceof SVGAnimatedString);
+  testing.expectEqual(true, link.target === link.target);
+  testing.expectEqual('_top', link.target.baseVal);
+  link.target = '_blank';
+  testing.expectEqual('_top', link.getAttribute('target'));
+
+  testing.expectEqual('d', link.download);
+  testing.expectEqual('/p', link.ping);
+  testing.expectEqual('noopener', link.rel);
+  testing.expectEqual('en', link.hreflang);
+  testing.expectEqual('text/html', link.type);
+  // Not the limited-to-known-values reflection HTMLAnchorElement uses: an
+  // unrecognised policy reads straight back.
+  testing.expectEqual('no-referrer', link.referrerPolicy);
+  link.setAttribute('referrerpolicy', 'bogus');
+  testing.expectEqual('bogus', link.referrerPolicy);
+  testing.expectEqual(null, link.interestForElement);
+
+  link.download = 'z';
+  testing.expectEqual('z', link.getAttribute('download'));
+  link.rel = 'nofollow';
+  testing.expectEqual('nofollow', link.getAttribute('rel'));
+  testing.expectEqual('nofollow', link.relList.value);
+
+  // Every one of them reads the lowercase content attribute; SVG is
+  // case-sensitive, so the camelCase spelling is a different attribute.
+  const bare = document.createElementNS(ns, 'a');
+  testing.expectEqual('', bare.hreflang);
+  bare.setAttribute('hrefLang', 'C');
+  testing.expectEqual('', bare.hreflang);
+  bare.setAttribute('hreflang', 'L');
+  testing.expectEqual('L', bare.hreflang);
+
+  host.remove();
+}
+</script>
+
+<script id=imageAndUseMembers>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const host = document.createElementNS(ns, 'svg');
+  host.innerHTML = '<image id=pic href="#i" x="1" y="2" width="30" height="40"'
+    + ' preserveAspectRatio="xMidYMid slice" decoding="async" crossorigin="anonymous"/>'
+    + '<use id=copy href="#c" x="3" y="4" width="50" height="60"/>';
+  document.body.appendChild(host);
+
+  const pic = $('#pic');
+  testing.expectEqual(true, pic.x instanceof SVGAnimatedLength);
+  testing.expectEqual(1, pic.x.baseVal.value);
+  testing.expectEqual(2, pic.y.baseVal.value);
+  testing.expectEqual(30, pic.width.baseVal.value);
+  testing.expectEqual(40, pic.height.baseVal.value);
+  testing.expectEqual(true, pic.preserveAspectRatio instanceof SVGAnimatedPreserveAspectRatio);
+  testing.expectEqual(6, pic.preserveAspectRatio.baseVal.align);
+  testing.expectEqual('async', pic.decoding);
+  testing.expectEqual('anonymous', pic.crossOrigin);
+  testing.expectEqual(true, pic.decode() instanceof Promise);
+
+  // decoding's invalid and missing value default is "auto"; crossOrigin's
+  // missing default is null and its invalid one is "anonymous".
+  pic.setAttribute('decoding', 'bogus');
+  testing.expectEqual('auto', pic.decoding);
+  pic.setAttribute('crossorigin', 'bogus');
+  testing.expectEqual('anonymous', pic.crossOrigin);
+  pic.setAttribute('crossorigin', '');
+  testing.expectEqual('anonymous', pic.crossOrigin);
+  pic.crossOrigin = null;
+  testing.expectEqual(null, pic.crossOrigin);
+  testing.expectEqual(null, pic.getAttribute('crossorigin'));
+
+  const bareImage = document.createElementNS(ns, 'image');
+  testing.expectEqual('auto', bareImage.decoding);
+  testing.expectEqual(null, bareImage.crossOrigin);
+  testing.expectEqual(0, bareImage.width.baseVal.value);
+
+  const copy = $('#copy');
+  testing.expectEqual(3, copy.x.baseVal.value);
+  testing.expectEqual(4, copy.y.baseVal.value);
+  testing.expectEqual(50, copy.width.baseVal.value);
+  testing.expectEqual(60, copy.height.baseVal.value);
+
+  // A bare <use> takes plain numbers defaulting to 0, not the percentages a
+  // viewport-establishing element gets.
+  const bareUse = document.createElementNS(ns, 'use');
+  testing.expectEqual(0, bareUse.width.baseVal.value);
+  testing.expectEqual(SVGLength.SVG_LENGTHTYPE_NUMBER, bareUse.width.baseVal.unitType);
+
+  host.remove();
+}
+</script>
+
+<script id=maskTests>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const host = document.createElementNS(ns, 'svg');
+  host.innerHTML = '<mask id=cover requiredExtensions="urn:a" systemLanguage="en"/>';
+  document.body.appendChild(host);
+  const cover = $('#cover');
+
+  // SVGMaskElement includes SVGTests even though its prototype chain runs
+  // through SVGElement rather than SVGGraphicsElement.
+  testing.expectEqual(true, cover.requiredExtensions instanceof SVGStringList);
+  testing.expectEqual('urn:a', cover.requiredExtensions.getItem(0));
+  testing.expectEqual(true, cover.requiredExtensions === cover.requiredExtensions);
+  testing.expectEqual(1, cover.systemLanguage.numberOfItems);
+
+  host.remove();
+}
+</script>

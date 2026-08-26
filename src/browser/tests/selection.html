@@ -772,3 +772,41 @@
     }
   }
 </script>
+
+<!-- The four legacy aliases and getComposedRanges, against a headed Chrome
+     151. base is the anchor and extent is the focus. -->
+<script id="selection_legacy_and_composed">
+{
+  const host = document.createElement('p');
+  host.textContent = 'hello';
+  document.body.appendChild(host);
+  const selection = getSelection();
+  selection.setBaseAndExtent(host.firstChild, 1, host.firstChild, 3);
+
+  testing.expectEqual(host.firstChild, selection.baseNode);
+  testing.expectEqual(1, selection.baseOffset);
+  testing.expectEqual(host.firstChild, selection.extentNode);
+  testing.expectEqual(3, selection.extentOffset);
+  testing.expectEqual(selection.anchorNode, selection.baseNode);
+  testing.expectEqual(selection.focusOffset, selection.extentOffset);
+
+  const ranges = selection.getComposedRanges();
+  testing.expectEqual(true, Array.isArray(ranges));
+  testing.expectEqual(1, ranges.length);
+  testing.expectEqual(true, ranges[0] instanceof StaticRange);
+  testing.expectEqual(host.firstChild, ranges[0].startContainer);
+  testing.expectEqual(1, ranges[0].startOffset);
+  testing.expectEqual(3, ranges[0].endOffset);
+  // The options dictionary is optional and its shadowRoots list changes
+  // nothing when there are no shadow trees to re-scope through.
+  testing.expectEqual(1, selection.getComposedRanges({ shadowRoots: [] }).length);
+  testing.expectEqual(0, Selection.prototype.getComposedRanges.length);
+
+  selection.removeAllRanges();
+  testing.expectEqual(null, selection.baseNode);
+  testing.expectEqual(0, selection.baseOffset);
+  testing.expectEqual(0, selection.getComposedRanges().length);
+
+  host.remove();
+}
+</script>

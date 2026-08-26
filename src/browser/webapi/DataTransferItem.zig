@@ -87,6 +87,17 @@ pub fn getAsString(self: *const DataTransferItem, cb_: ?js.Function) !void {
     };
 }
 
+/// Both answer "nothing" for an item that did not come from a real drop, which
+/// is every item this engine can produce: there is no filesystem entry behind a
+/// string item, and `getAsFileSystemHandle` is a promise of null.
+pub fn webkitGetAsEntry(_: *DataTransferItem) ?js.Value {
+    return null;
+}
+
+pub fn getAsFileSystemHandle(_: *DataTransferItem, exec: *const js.Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(null);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(DataTransferItem);
 
@@ -100,4 +111,6 @@ pub const JsApi = struct {
     pub const @"type" = bridge.accessor(DataTransferItem.getType, null, .{});
     pub const getAsFile = bridge.function(DataTransferItem.getAsFile, .{});
     pub const getAsString = bridge.function(DataTransferItem.getAsString, .{ .arity = 1 });
+    pub const webkitGetAsEntry = bridge.function(DataTransferItem.webkitGetAsEntry, .{});
+    pub const getAsFileSystemHandle = bridge.function(DataTransferItem.getAsFileSystemHandle, .{});
 };

@@ -12,7 +12,9 @@
     const shapes = {
       WebTransport: ['incomingUnidirectionalStreams', 'incomingBidirectionalStreams', 'datagrams', 'ready', 'closed', 'close', 'createBidirectionalStream', 'createUnidirectionalStream', 'protocol', 'constructor'],
       WebTransportBidirectionalStream: ['readable', 'writable', 'constructor'],
-      WebTransportDatagramDuplexStream: ['readable', 'writable', 'maxDatagramSize', 'incomingMaxAge', 'outgoingMaxAge', 'incomingHighWaterMark', 'outgoingHighWaterMark', 'constructor'],
+      // The two buffered-datagram limits joined the list after win20-chrome.json
+      // was taken; re-read off a headed Chrome 151, both default to 1.
+      WebTransportDatagramDuplexStream: ['readable', 'writable', 'maxDatagramSize', 'incomingMaxAge', 'outgoingMaxAge', 'incomingMaxBufferedDatagrams', 'outgoingMaxBufferedDatagrams', 'incomingHighWaterMark', 'outgoingHighWaterMark', 'constructor'],
       WebTransportError: ['streamErrorCode', 'source', 'constructor'],
     };
     for (const [name, keys] of Object.entries(shapes)) {

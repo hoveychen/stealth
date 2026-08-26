@@ -85,3 +85,37 @@
     );
   }
 </script>
+
+<!-- The six attributes, against a headed Chrome 151
+     (tools/fingerprint/probes/expr-misc-family-semantics.js). -->
+<script id="observer_attributes">
+{
+  const bare = new IntersectionObserver(() => {});
+  testing.expectEqual(null, bare.root);
+  // A margin reads back in its four-sided form, whatever was passed in.
+  testing.expectEqual('0px 0px 0px 0px', bare.rootMargin);
+  testing.expectEqual('0px 0px 0px 0px', bare.scrollMargin);
+  testing.expectEqual('0', bare.thresholds.join(','));
+  testing.expectEqual(0, bare.delay);
+  testing.expectEqual(false, bare.trackVisibility);
+
+  const configured = new IntersectionObserver(() => {}, {
+    root: document.body,
+    rootMargin: '10px 20px',
+    scrollMargin: '5px',
+    threshold: [0.25, 0.75],
+    delay: 100,
+    trackVisibility: true,
+  });
+  testing.expectEqual(document.body, configured.root);
+  testing.expectEqual('10px 20px 10px 20px', configured.rootMargin);
+  testing.expectEqual('5px 5px 5px 5px', configured.scrollMargin);
+  testing.expectEqual('0.25,0.75', configured.thresholds.join(','));
+  testing.expectEqual(100, configured.delay);
+  testing.expectEqual(true, configured.trackVisibility);
+
+  testing.expectEqual('1px 2px 3px 2px', new IntersectionObserver(() => {}, { rootMargin: '1px 2px 3px' }).rootMargin);
+  // A document root means the viewport, which reads back as null.
+  testing.expectEqual(null, new IntersectionObserver(() => {}, { root: document }).root);
+}
+</script>

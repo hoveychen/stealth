@@ -15486,3 +15486,335 @@ own to see — and hand the substituted `2em` straight out.
 The cascade probe reads **56/60**, from 53 before this and 7 at the start of the
 month's computed-style work. The four left are the two refusals above and the
 `font` shorthand, which the table leaves unmodelled and this engine keeps whole.
+## The SVG family, filled in (B52, 2026-08-26)
+
+B51 re-measured the four prototype tables against the merged main and found the
+window realm at **887 of 923 byte-identical**, 158 names short over 36
+interfaces, 21 of which would still be mis-ordered after the names were added.
+This batch takes the eight SVG interfaces off that list -- 53 members, from
+`SVGSVGElement`'s twenty down to `SVGMaskElement`'s two -- and the table moves
+to **895 of 923, 105 missing over 28 interfaces, 16 mis-ordered**. The eight
+went from differing to byte-identical, order included; nothing else moved.
+
+| interface | was short by | also mis-ordered |
+|---|---|---|
+| `SVGSVGElement` | 20 | yes |
+| `SVGAElement` | 8 | yes |
+| `SVGImageElement` | 8 | no |
+| `SVGTextContentElement` | 5 | yes |
+| `SVGUseElement` | 4 | no |
+| `SVGViewElement` | 4 | no |
+| `SVGGeometryElement` | 2 | yes |
+| `SVGMaskElement` | 2 | yes |
+
+### Six answers the IDL would have got wrong
+
+Every member was measured on a headed Chrome 151 before it was written, through
+`probes/expr-svg-family-semantics.js` and `probes/expr-svg-family-edges.js`.
+Six of them do not do what the specification text suggests, and each would have
+been written the wrong way from the IDL alone:
+
+- **`currentTranslate` is a fresh object every read and still writes through.**
+  `svg.currentTranslate === svg.currentTranslate` is false, yet
+  `svg.currentTranslate.x = 5` is readable from the *next* point. It is a
+  tear-off; `SVGPoint`'s existing attachment hook -- the one a reflected point
+  list uses -- is what makes ours behave the same way.
+- **`zoomAndPan`'s setter does not write the attribute.** `svg.zoomAndPan = 1`
+  leaves `getAttribute('zoomAndPan')` empty and wins over an attribute that is
+  still there. The keywords are case-sensitive, an unrecognised one is
+  `UNKNOWN` rather than the initial `MAGNIFY`, and *removing* the attribute
+  leaves 0 rather than restoring 2 -- so a `<svg>` that never carried it reads
+  2 and one that carried and lost it reads 0. See `svg/zoom_and_pan.zig`.
+- **`SVGAElement.referrerPolicy` is not the limited-to-known-values reflection
+  `HTMLAnchorElement` uses.** `<a referrerpolicy="bogus">` reads back `bogus`
+  in SVG and `""` in HTML. All six of the anchor's string members read the
+  lowercase attribute, which in a case-sensitive namespace is worth stating.
+- **`SVGAElement.target` is read-only.** `a.target = '_blank'` silently does
+  nothing: the descriptor has a getter and no setter, because the IDL type is
+  `SVGAnimatedString`.
+- **`suspendRedraw` returns 1 every time**, not an incrementing handle.
+- **An empty query rect meets nothing.** `getIntersectionList(createSVGRect())`
+  is length 0 even on a document whose shapes sit at the origin, which is
+  Blink's `gfx::RectF::Intersects` refusing an empty rect. The *element's* box
+  is not held to that rule: a `<image>` with no width or height is listed.
+
+`isPointInFill()` and `isPointInStroke()` both report arity 0 and answer `true`
+for a path whose first vertex is the origin, so the omitted point is (0,0) and a
+point on the outline counts as inside -- a bare winding test would say false
+there. `PathData` grew `containsPoint` and `strokeContainsPoint` over the
+flattener it already had.
+
+The refusals are two sentences, not one: `charnum > numberOfChars` is "greater
+than the maximum bound", `charnum == numberOfChars` is "greater than or equal
+to", and a negative index arrives as its unsigned wrap and is quoted back as
+4294967295.
+
+### The two readings that still differ, and why they are not this batch's
+
+`getStartPositionOfChar` and `getEndPositionOfChar` disagree with Chrome by
+~0.4px on `https://example.com/`, whose stylesheet sets `system-ui, sans-serif`.
+The control says where that comes from: give the same `<text>` an explicit
+`font-family="serif"` and **every** advance reading matches Chrome to the last
+digit, the new ones included.
+
+```
+                                 chrome        this engine
+text  (system-ui)  getSubStringLength(0,1)   11.5625        11.1875
+serif (explicit)   getSubStringLength(0,1)   11.5546875     11.5546875
+```
+
+Two pre-existing gaps produce it, both older than this batch and shared with the
+already-shipped `getSubStringLength` and `getExtentOfChar`: `system-ui` is not
+in the font-metrics table, and an SVG presentation attribute (`font-family` on
+`<text>`) does not reach computed style at all -- our serif answer above is the
+fallback agreeing by luck, not the attribute being resolved. Neither is a
+prototype-completeness gap, so neither is fixed here.
+
+Across both probes, 226 of 230 readings are identical between the arms; those
+two are the whole remainder.
+
+## The HTML family, filled in (B52, 2026-08-26)
+
+The same treatment for the ten HTML interfaces the window table still listed:
+42 members, and the window realm goes from **895 of 923 byte-identical to 905,
+63 missing over 18 interfaces, 9 mis-ordered**. Six of the ten needed their
+whole declaration order rewritten, and two of them needed `constructor` moved
+off the end.
+
+| interface | was short by | also mis-ordered |
+|---|---|---|
+| `HTMLImageElement` | 8 | yes |
+| `HTMLVideoElement` | 8 | yes |
+| `HTMLMeterElement` | 6 | no |
+| `HTMLSelectElement` | 5 | yes |
+| `HTMLAnchorElement` | 3 | yes |
+| `HTMLFormElement` | 3 | yes |
+| `HTMLMarqueeElement` | 3 | no |
+| `HTMLDialogElement` | 2 | yes |
+| `HTMLProgressElement` | 2 | no |
+| `HTMLTrackElement` | 2 | yes |
+
+### `constructor` is not last on two of them
+
+B47 recorded that Blink installs a partial interface's members *after* V8
+appends `constructor`, so the slot lands mid-list. Two of this batch's
+prototypes are in that state, and `Meta.constructor_after` is how they say so:
+
+```
+HTMLImageElement   … x, y, decode, constructor, browsingTopics, attributionSrc,
+                     sharedStorageWritable
+HTMLAnchorElement  … interestForElement, toString, constructor, hrefTranslate,
+                     attributionSrc
+```
+
+Every one of the five late members is a privacy-sandbox or navigation
+attribute Blink gates on a runtime flag. Adding them at the end of the JsApi
+would have put them before `constructor` and left both prototypes wrong on a
+byte-comparison, having just been made complete on names.
+
+### Six more answers the IDL would have got wrong
+
+- **`<meter>`'s six numbers are one chain, not six reflections.** Each is
+  clamped by the ones before it: a bare `<meter>` reads 0/0/1/0/1/0.5 (low
+  falls back to min, high to max, optimum to the midpoint) and one written
+  `value=5 min=10 max=4 low=1 high=99 optimum=-2` reads **10 for all six**,
+  because `max` is floored by `min` and everything else clamps into the
+  collapsed range. `high` is the odd one: it is floored by `low`, not by `min`.
+- **`<progress>`'s `position` is -1 for a bar carrying no `value` attribute** --
+  not for one whose value is 0. `progress.max = 0` is dropped entirely,
+  attribute included, because `max` is limited to positive numbers.
+- **`select.remove()` is two methods.** With an index it drops that option;
+  with no argument it is `ChildNode.remove` and takes the select itself out of
+  the tree. Chrome reports arity 0 for both jobs.
+- **`dialog.closedBy`'s missing-value default is not a fixed string.** An open
+  *modal* dialog reads "closerequest"; every other state -- closed, or open
+  non-modal -- reads "none", and so does an unrecognised keyword. That needs a
+  modal flag on the element: it is not derivable from the `open` attribute.
+- **`marquee.loop` refuses exactly one value.** 0 is an `IndexSizeError`
+  ("The provided value (0) is neither positive nor -1."), -1 is accepted and
+  written, and a missing or unparseable attribute reads -1.
+- **`video.requestPictureInPicture()` rejects rather than throwing**, with an
+  `InvalidStateError` naming the missing metadata -- not the user-gesture
+  refusal the method is better known for. Measured directly rather than
+  recalled.
+
+`<track>` gained the `TextTrack` it owns, built from its own kind/label/srclang
+and starting `showing` when the element carries `default`. Reading it also
+registers the track with the owning media element, so a `<video>` with one
+`<track>` child now reports `textTracks.length` 1 the way Chrome does.
+`HTMLFormElement.reset()` is real: a cancelable `reset` event, then every
+`<input>`, `<textarea>` and `<select>` back to what its attributes say.
+
+### The two readings that still differ
+
+147 of 150 readings across the probe match. The three that do not are two
+findings, both wider than this batch:
+
+- **`img.x` / `img.y` are not `offsetLeft` / `offsetTop`.** On a headed Chrome
+  151 the image sat at `offsetLeft` 801 and `x` 1602 -- exactly twice -- so
+  Blink is reporting an absolute box in device pixels while `offsetLeft` is in
+  CSS pixels. This engine has one layout position and answers it for both,
+  which at least keeps the four members consistent with each other.
+- **`autocomplete` does not validate its token, on any of the three interfaces
+  that carry it.** Chrome reads `<select autocomplete="zz">` back as `""`; so
+  it does for `<input>` and `<textarea>`, and this engine answers `zz` for all
+  three. The new `select.autocomplete` is the existing `reflect.string`, which
+  keeps the three consistent; implementing the autofill field-name grammar is
+  one change for all of them and is not a prototype-completeness gap.
+
+## The last eighteen, and the two that are not worth faking (B52, 2026-08-26)
+
+The remaining 63 names had nothing in common but being short. 61 of them are
+in, over fifteen interfaces plus `Navigator`'s misplaced `constructor` slot,
+and the window realm now reads **921 of 923 byte-identical, 2 missing, 0
+mis-ordered, 0 order-only**.
+
+| interface | was short by | | interface | was short by |
+|---|---|---|---|---|
+| `Request` | 11 | | `NamedNodeMap` | 3 |
+| `ProcessingInstruction` | 8 | | `VisualViewport` | 3 |
+| `IntersectionObserver` | 6 | | `CustomElementRegistry` | 2 |
+| `FontFace` | 5 | | `DOMMatrixReadOnly` | 2 |
+| `Selection` | 5 | | `DataTransferItem` | 2 |
+| `Navigation` | 4 | | `IDBVersionChangeEvent` | 2 |
+| `DocumentType` | 3 | | `WebTransportDatagramDuplexStream` | 2 |
+| `IDBDatabase` | 3 | | `Navigator` | 0, order only |
+
+### The two left out, and why each is not one member
+
+- **`EventTarget.when`** returns an `Observable`, and `Observable` is 19
+  members with `Subscriber`'s 6 behind it -- two whole interfaces this engine
+  does not have. Adding a `when` that answers anything else would put a wrong
+  object on the most-walked prototype in the realm rather than a missing name.
+  It is worth its own plan; the member list is in `b51-ch-protos.json`.
+- **`Date.toTemporalInstant`** needs `Temporal`, and this V8 build has none:
+  `--harmony-temporal`, `--js-temporal`, `--js-staging` and `--harmony` all
+  leave `typeof Temporal` undefined. Installing the method alone would leave
+  the global missing underneath it, which reads worse than the missing method:
+  Chrome's `toTemporalInstant` is also the one non-enumerable member in this
+  whole batch (`enum=false`), so a script that finds it and then finds no
+  `Temporal` has learned more than one that finds neither.
+
+### Six more measured answers
+
+- **`Request`'s defaults are not all the empty string.** `referrer` is
+  `about:client` -- the empty string is what an explicit `{referrer: ''}`
+  produces -- while `destination` and `referrerPolicy` are empty,
+  `targetAddressSpace` is `unknown`, and `duplex` is `half` whether or not the
+  request carries a streaming body.
+- **A processing instruction's `data` is a pseudo-attribute list**, and Chrome
+  puts seven Element-shaped methods over it. Reading never rewrites it; the
+  first write re-serialises the whole run with double quotes and single
+  spaces. Its `toggleAttribute` answers **undefined**, unlike `Element`'s,
+  which answers whether the attribute is now there. One thing was deliberately
+  *not* copied: Chrome's member order is not source order (`href="…" type="…"`
+  reads back `type,href`) because Blink iterates a `WTF::HashMap`, and a
+  bucket order is not a rule.
+- **`IntersectionObserver` stores a margin in its four-sided form.** A
+  `rootMargin` of `5px` reads back `5px 5px 5px 5px` and `10px 20px` reads back
+  `10px 20px 10px 20px`. A `root` of `document` reads back null.
+- **`removeNamedItem` throws for a name that is not there** -- a `NotFoundError`
+  quoting the name -- where `getNamedItem` answers null. This engine answered
+  null from both, which is the one behaviour bug this batch fixed rather than
+  filled in (test-first: the assertion failed on the old binary before the
+  change). The namespaced form quotes `namespace::localName`, so an empty
+  namespace prints as `'::gone'`.
+- **`customElements.get` and `getName` disagree about the empty answer.** `get`
+  is undefined for an unknown name; `getName` is null for an unknown
+  constructor. Only one of the two carries the null-as-undefined flag.
+- **`WebTransportDatagramDuplexStream`'s two buffered-datagram limits both
+  default to 1**, read off `new WebTransport(...).datagrams` before the
+  connection settles. `web_transport.html`'s recorded shape predated them; it
+  is re-taken here.
+
+Four interfaces needed `Meta.constructor_after` in this batch and the last
+one: `Navigator` (after `vibrate` -- everything from
+`deprecatedRunAdAuctionEnforcesKAnonymity` down is installed per context),
+`HTMLImageElement` (after `decode`), `HTMLAnchorElement` (after `toString`) and
+`DOMMatrixReadOnly` (after `translate`, where the Window-only stringifier
+lands). All four are now asserted in `constructor_slot.html` alongside the
+twenty that were already there.
+
+163 of 170 readings across the probe match; the seven that do not are the two
+deferred members and the `Temporal` global behind one of them.
+
+### The worker realms came along for free
+
+Nothing in these three batches was aimed at a worker, and both worker realms
+moved anyway: the interfaces are the same objects, so filling a prototype fills
+it everywhere it is exposed. Re-read with the same probes P1 used:
+
+| realm | before (B51) | after |
+|---|---|---|
+| dedicated worker | 271 of 283 identical, 47 missing over 12, 5 mis-ordered | **277 of 283, 22 missing over 6, 1 mis-ordered** |
+| shared worker | 231 of 241 identical, 45 missing over 10, 5 mis-ordered | **237 of 241, 20 missing over 4, 1 mis-ordered** |
+
+What is left there is almost entirely *interfaces*, not members: 17 globals each
+realm does not have (`Observable`/`Subscriber`, `Temporal`, `WebSocketStream`/
+`WebSocketError`, `CSSSkewX`/`CSSSkewY`, `PressureObserver`/`PressureRecord`,
+`BarcodeDetector`, `FileSystemObserver`, `CreateMonitor`, `RestrictionTarget`,
+the webkit filesystem-sync pair), plus the same two names the window realm is
+short. Only two single-member prototypes remain in a worker and nowhere else:
+`FileSystemSyncAccessHandle.mode` and `MediaSource.handle`.
+
+## Acceptance: what 921 of 923 bought at the door (B52 P5, 2026-08-26)
+
+Six ReleaseFast antibot sweeps, alternating base and head across 70 minutes --
+`control` is this branch's base (`6b5b27398`), `treatment` is its head, both
+built ReleaseFast so a debug SIGABRT on x-sony cannot masquerade as a collapse,
+and every run on its own `--port`. 29 stations, 87 station-runs per arm.
+
+```
+control:   56/87 station-runs passed (64.4%)   per round: 21, 18, 17
+treatment: 54/87 station-runs passed (62.1%)   per round: 17, 20, 17
+```
+
+**25 of the 29 stations answered identically in all six runs.** The four that
+did not are two findings, and neither is "the batch cost a station":
+
+```
+station          c1          t1          c2          t2          c3          t3
+dd-datadome      pass        DD-chal     DD-chal     DD-chal     DD-chal     DD-chal
+dd-hermes        pass        DD-chal     DD-chal     DD-chal     DD-chal     DD-chal
+dd-leboncoin     pass        DD-chal     DD-chal     pass        DD-chal     DD-chal
+dd-etsy          pass        pass        pass        pass        DD-chal     DD-chal
+ks-canadagoose   error       error       error       pass        error       refused-400
+x-hyatt          error       error       error       refused-429 error       refused-429
+px-wayfair       pass        error       pass        pass        pass        pass
+```
+
+**The DataDome "difference" is a window, not an engine.** All four DataDome
+stations were open on the first run of the session and shut between `c1` and
+`t1` -- the very first arm switch -- and stayed shut for *both* arms after
+that. `dd-datadome` and `dd-hermes` therefore read "control 1/3, treatment 0/3"
+while the control's only pass at each is its first run, before the door closed.
+Reading that as a regression is exactly the mistake the interleaving exists to
+catch: `dd-leboncoin` and `dd-etsy` swung the same way with no rate difference
+at all, because their swings happened to straddle an arm boundary differently.
+
+**The one difference that does track the binary is an improvement.** The
+control times out on `Page.navigate` at `ks-canadagoose` and `x-hyatt` in
+*every* run -- c1, c2 and c3, with t1 and t2 interleaved between them -- while
+the treatment completes the navigation in rounds 2 and 3, passing canadagoose
+once and getting real 400/429 answers instead of no response at all. A clock
+cannot produce that shape: `c2` sits between the treatment's failing t1 and its
+succeeding t2 and still hung. All three of the treatment's timeouts, `px-wayfair`
+included, are in round 1 and none recur.
+
+### What this says about the lever
+
+**No station moved from challenge to pass because of these 156 members**, and
+none regressed. That is worth stating plainly rather than dressing up: the
+prototype-completeness hypothesis that B50 proved on ak-macys -- by twelve
+builds and 41 site runs -- is now essentially spent as a lever. The window realm
+is 921 of 923 byte-identical with 0 mis-ordered prototypes, and the two names
+left are two whole interfaces and a missing JS built-in, not a fidelity gap
+anyone can close by declaring members.
+
+The eight stations still closed to this engine are `cf-scrapingcourse`,
+`cf-nopecha`, `cf-zeroclover` (Cloudflare's managed challenge), `dd-allopneus`
+(CF edge, DataDome cookie), `dd-g2`, `dd-saks`, `dd-datadome`, `dd-hermes`
+(DataDome), and `x-hyatt`. ak-macys, ak-kohls, ak-homedepot, ak-expedia,
+x-sony, x-zillow, px-wayfair and every Cloudflare-fronted ordinary page pass
+3 of 3 on both arms. Whatever those eight read, it is not the shape of a
+prototype.

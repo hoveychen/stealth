@@ -491,3 +491,51 @@
     testing.expectEqual('d2', select.options[1].value)
   }
 </script>
+
+<!-- item / namedItem / remove / showPicker / autocomplete, against a headed
+     Chrome 151 (tools/fingerprint/probes/expr-html-family-semantics.js). -->
+<script id="select_item_and_remove">
+{
+  const select = document.createElement('select');
+  select.innerHTML = '<option id=o1 value="a">A</option><option id=o2 name=second value="b">B</option>';
+  document.body.appendChild(select);
+
+  testing.expectEqual($('#o1'), select.item(0));
+  testing.expectEqual(null, select.item(9));
+  testing.expectError('TypeError', () => select.item());
+  testing.expectEqual(1, HTMLSelectElement.prototype.item.length);
+
+  // id first, then name.
+  testing.expectEqual($('#o2'), select.namedItem('o2'));
+  testing.expectEqual($('#o2'), select.namedItem('second'));
+  testing.expectEqual(null, select.namedItem('zz'));
+
+  // remove(i) drops an option; remove() with no argument is ChildNode.remove
+  // and takes the select itself out. Chrome reports arity 0.
+  testing.expectEqual(0, HTMLSelectElement.prototype.remove.length);
+  select.remove(99);
+  testing.expectEqual(2, select.length);
+  select.remove(0);
+  testing.expectEqual(1, select.length);
+  testing.expectEqual(true, select.isConnected);
+  select.remove();
+  testing.expectEqual(false, select.isConnected);
+}
+</script>
+
+<script id="select_show_picker_and_autocomplete">
+{
+  const select = document.createElement('select');
+  testing.expectError('NotAllowedError', () => select.showPicker());
+  testing.expectEqual(
+    "Failed to execute 'showPicker' on 'HTMLSelectElement': showPicker() requires a user gesture.",
+    (() => { try { select.showPicker(); } catch (e) { return e.message; } })(),
+  );
+
+  testing.expectEqual('', select.autocomplete);
+  select.setAttribute('autocomplete', 'country');
+  testing.expectEqual('country', select.autocomplete);
+  select.autocomplete = 'name';
+  testing.expectEqual('name', select.getAttribute('autocomplete'));
+}
+</script>

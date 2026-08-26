@@ -316,6 +316,10 @@ pub const WebTransportDatagramDuplexStream = struct {
     _outgoing_max_age: ?f64 = null,
     _incoming_high_water_mark: f64 = 1,
     _outgoing_high_water_mark: f64 = 1,
+    // Both default to 1 in Chrome, measured off `new WebTransport(...).datagrams`
+    // before the connection settles.
+    _incoming_max_buffered_datagrams: f64 = 1,
+    _outgoing_max_buffered_datagrams: f64 = 1,
 
     pub fn init(exec: *const Execution) !*WebTransportDatagramDuplexStream {
         return exec._factory.create(WebTransportDatagramDuplexStream{
@@ -353,6 +357,22 @@ pub const WebTransportDatagramDuplexStream = struct {
         self._outgoing_max_age = value;
     }
 
+    pub fn getIncomingMaxBufferedDatagrams(self: *const WebTransportDatagramDuplexStream) f64 {
+        return self._incoming_max_buffered_datagrams;
+    }
+
+    pub fn setIncomingMaxBufferedDatagrams(self: *WebTransportDatagramDuplexStream, value: f64) void {
+        self._incoming_max_buffered_datagrams = value;
+    }
+
+    pub fn getOutgoingMaxBufferedDatagrams(self: *const WebTransportDatagramDuplexStream) f64 {
+        return self._outgoing_max_buffered_datagrams;
+    }
+
+    pub fn setOutgoingMaxBufferedDatagrams(self: *WebTransportDatagramDuplexStream, value: f64) void {
+        self._outgoing_max_buffered_datagrams = value;
+    }
+
     pub fn getIncomingHighWaterMark(self: *const WebTransportDatagramDuplexStream) f64 {
         return self._incoming_high_water_mark;
     }
@@ -385,6 +405,8 @@ pub const WebTransportDatagramDuplexStream = struct {
         pub const maxDatagramSize = bridge.accessor(T.getMaxDatagramSize, null, .{});
         pub const incomingMaxAge = bridge.accessor(T.getIncomingMaxAge, T.setIncomingMaxAge, .{});
         pub const outgoingMaxAge = bridge.accessor(T.getOutgoingMaxAge, T.setOutgoingMaxAge, .{});
+        pub const incomingMaxBufferedDatagrams = bridge.accessor(T.getIncomingMaxBufferedDatagrams, T.setIncomingMaxBufferedDatagrams, .{});
+        pub const outgoingMaxBufferedDatagrams = bridge.accessor(T.getOutgoingMaxBufferedDatagrams, T.setOutgoingMaxBufferedDatagrams, .{});
         pub const incomingHighWaterMark = bridge.accessor(T.getIncomingHighWaterMark, T.setIncomingHighWaterMark, .{});
         pub const outgoingHighWaterMark = bridge.accessor(T.getOutgoingHighWaterMark, T.setOutgoingHighWaterMark, .{});
     };

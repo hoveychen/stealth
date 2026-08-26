@@ -148,6 +148,24 @@ pub fn upgrade(self: *CustomElementRegistry, root: *Node, frame: *Frame) !void {
     try upgradeNode(self, root, frame);
 }
 
+/// The reverse of `get`: the name a constructor was defined under, or null for
+/// one that was never defined. Chrome answers null rather than throwing for an
+/// unregistered class (measured on Chrome 151).
+pub fn getName(self: *CustomElementRegistry, constructor_: js.Function) ?[]const u8 {
+    var it = self._definitions.iterator();
+    while (it.next()) |entry| {
+        if (entry.value_ptr.*.constructor.isEqual(constructor_)) {
+            return entry.key_ptr.*;
+        }
+    }
+    return null;
+}
+
+/// Associates a subtree with this registry, which for the single global
+/// registry every document here has is a no-op -- and returns undefined in
+/// Chrome too. Scoped registries are what it is for and there are none.
+pub fn initialize(_: *CustomElementRegistry, _: *Node) void {}
+
 pub fn whenDefined(self: *CustomElementRegistry, name: []const u8, frame: *Frame) !js.Promise {
     const local = frame.js.local.?;
     if (self._definitions.get(name)) |definition| {
@@ -324,10 +342,17 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
     };
 
+    // Chrome's order is alphabetical except for `initialize`, which joined the
+    // IDL through a later partial interface and so sits after `whenDefined`.
     pub const define = bridge.function(CustomElementRegistry.define, .{ .ce_reactions = true });
     pub const get = bridge.function(CustomElementRegistry.get, .{ .null_as_undefined = true });
+    // `get` answers undefined for an unknown name and `getName` answers null
+    // for an unknown constructor -- the two do not agree, so only one carries
+    // the flag (measured on Chrome 151).
+    pub const getName = bridge.function(CustomElementRegistry.getName, .{});
     pub const upgrade = bridge.function(CustomElementRegistry.upgrade, .{ .ce_reactions = true });
     pub const whenDefined = bridge.function(CustomElementRegistry.whenDefined, .{});
+    pub const initialize = bridge.function(CustomElementRegistry.initialize, .{});
 };
 
 const testing = @import("../../testing.zig");

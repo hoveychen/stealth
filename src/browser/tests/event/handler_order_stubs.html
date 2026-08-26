@@ -279,3 +279,22 @@
   }
 </script>
 </body>
+
+<!-- Navigation's three missing handlers and reload, against a headed Chrome
+     151. The three sit before oncurrententrychange on the prototype. -->
+<script id="navigation_handlers">
+{
+  testing.expectEqual(null, navigation.onnavigate);
+  testing.expectEqual(null, navigation.onnavigatesuccess);
+  testing.expectEqual(null, navigation.onnavigateerror);
+
+  const handler = () => {};
+  navigation.onnavigate = handler;
+  testing.expectEqual(handler, navigation.onnavigate);
+  navigation.onnavigate = null;
+  testing.expectEqual(null, navigation.onnavigate);
+
+  testing.expectEqual('function', typeof navigation.reload);
+  testing.expectEqual(0, Navigation.prototype.reload.length);
+}
+</script>
