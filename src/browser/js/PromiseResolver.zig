@@ -95,8 +95,13 @@ pub const RejectError = union(enum) {
     reference_error: []const u8,
     syntax_error: []const u8,
     type_error: []const u8,
-    /// DOM exceptions are unknown to V8, belongs to web standards.
-    dom_exception: struct { err: anyerror },
+    /// DOM exceptions are unknown to V8, belongs to web standards. A non-null
+    /// `message` overrides the code's stock text, the way `Context.fail` does
+    /// for a synchronous throw -- some of Blink's rejections carry a sentence
+    /// of their own ("screen.orientation.lock() is not available on this
+    /// device."). It has to outlive the call, so a literal or something on the
+    /// context arena.
+    dom_exception: struct { err: anyerror, message: ?[]const u8 = null },
 };
 
 /// Rejects the promise w/ an error object.
@@ -113,7 +118,9 @@ pub fn rejectError(
         .type_error => |msg| self.local.isolate.createTypeError(msg),
         // "Exceptional".
         .dom_exception => |exception| {
-            self._reject(DOMException.fromError(exception.err) orelse unreachable) catch |reject_err| {
+            var dom_exception = DOMException.fromError(exception.err) orelse unreachable;
+            dom_exception._custom_message = exception.message;
+            self._reject(dom_exception) catch |reject_err| {
                 log.err(.bug, "rejectDomException", .{ .source = source, .err = reject_err, .persistent = false });
             };
             return;

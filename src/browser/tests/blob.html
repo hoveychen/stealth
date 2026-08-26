@@ -303,3 +303,27 @@
     );
   }
 </script>
+
+<script id="text_stream" type=module>
+  {
+    // The same bytes as stream(), decoded: string chunks, and a default stream
+    // rather than a byte stream -- so a BYOB reader is refused here and
+    // allowed on stream() (measured on Chrome 151).
+    const b = new Blob(['hi']);
+    testing.expectEqual(0, b.textStream.length);
+    const s = b.textStream();
+    testing.expectEqual('ReadableStream', s.constructor.name);
+    testing.expectEqual(false, s.locked);
+
+    const state = await testing.async();
+    const reader = s.getReader();
+    reader.read().then((first) => reader.read().then((second) => state.resolve([first, second])));
+    await state.done(([first, second]) => {
+      testing.expectEqual('hi', first.value);
+      testing.expectEqual(false, first.done);
+      testing.expectEqual(true, second.done);
+    });
+
+    testing.expectEqual('ReadableStream', new Blob([]).textStream().constructor.name);
+  }
+</script>

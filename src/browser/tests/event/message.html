@@ -203,3 +203,39 @@
   });
 }
 </script>
+
+<script id="user_activation_and_legacy_init">
+  {
+    // A UserActivation snapshot rides along only on a message posted from a
+    // page with a transient activation; Chrome answers null for a constructed
+    // event too (measured).
+    const me = new MessageEvent('message', { data: 1 });
+    testing.expectEqual(null, me.userActivation);
+
+    // The legacy initialiser takes the eight members positionally, and its
+    // arity is 1 -- only `type` is required.
+    testing.expectEqual(1, MessageEvent.prototype.initMessageEvent.length);
+
+    const e = new MessageEvent('x');
+    e.initMessageEvent('m', true, true, 'D', 'ORIGIN', 'LEID', window, []);
+    testing.expectEqual('m', e.type);
+    testing.expectEqual(true, e.bubbles);
+    testing.expectEqual(true, e.cancelable);
+    testing.expectEqual('D', e.data);
+    testing.expectEqual('ORIGIN', e.origin);
+    testing.expectEqual('LEID', e.lastEventId);
+    testing.expectEqual(true, e.source === window);
+    testing.expectEqual(0, e.ports.length);
+
+    // Chrome's defaults for the omitted arguments.
+    const d = new MessageEvent('x');
+    d.initMessageEvent('m');
+    testing.expectEqual(false, d.bubbles);
+    testing.expectEqual(false, d.cancelable);
+    testing.expectEqual(null, d.data);
+    testing.expectEqual('', d.origin);
+    testing.expectEqual('', d.lastEventId);
+    testing.expectEqual(null, d.source);
+    testing.expectEqual(0, d.ports.length);
+  }
+</script>

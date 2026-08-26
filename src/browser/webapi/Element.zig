@@ -1225,7 +1225,7 @@ pub fn getRelList(self: *Element, frame: *Frame) !*collections.DOMTokenList {
 
 // The other DOMTokenList-reflected attributes (class and rel have dedicated
 // lookups above).
-pub const TokenListAttribute = enum { sizes, sandbox, @"for", part, focusgroup, blocking };
+pub const TokenListAttribute = enum { sizes, sandbox, @"for", part, focusgroup, blocking, controlslist };
 
 /// The content attributes whose IDL member is an element reference rather than
 /// a string: `interestfor` and `commandfor`. Setting the IDL member does not

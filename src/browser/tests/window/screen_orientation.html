@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+ScreenOrientation was three members short of Chrome's six. `lock` is the
+interesting one, and the plausible reading of it is wrong: a value outside
+OrientationLockType looks like it should be a synchronous TypeError, and it is
+not -- Chrome returns a Promise in every case and rejects it, including when
+the argument is missing entirely (measured; the first reading of this took
+`await` around both and could not tell a throw from a rejection).
+
+A value inside the set rejects too: a desktop Chrome cannot lock its screen
+either. All three sentences below are Blink's own, and the arity one comes
+from the bridge without being written down.
+-->
+
+<script id="orientation_shape">
+  {
+    const so = screen.orientation;
+    testing.expectEqual('angle,type,onchange,lock,unlock,constructor',
+      Object.getOwnPropertyNames(ScreenOrientation.prototype).join(','));
+    testing.expectEqual(null, so.onchange);
+    testing.expectEqual(1, so.lock.length);
+    testing.expectEqual(0, so.unlock.length);
+    // unlock returns undefined, not a promise.
+    testing.expectEqual(undefined, so.unlock());
+
+    const f = () => {};
+    so.onchange = f;
+    testing.expectEqual(true, so.onchange === f);
+    so.onchange = null;
+    testing.expectEqual(null, so.onchange);
+  }
+</script>
+
+<script id="orientation_lock_refuses" type=module>
+  {
+    const so = screen.orientation;
+    const state = await testing.async();
+    const reason = (p) => p.then(
+      (v) => 'resolved ' + String(v),
+      (e) => e.name + '|' + e.message,
+    );
+
+    // Every call returns a Promise; none of them throws.
+    const calls = [so.lock('portrait'), so.lock('any'), so.lock('nope'), so.lock()];
+    for (const p of calls) testing.expectEqual('Promise', p.constructor.name);
+
+    Promise.all(calls.map(reason)).then((r) => state.resolve(r));
+
+    await state.done((r) => {
+      const unsupported = 'NotSupportedError|screen.orientation.lock() is not available on this device.';
+      testing.expectEqual(unsupported, r[0]);
+      testing.expectEqual(unsupported, r[1]);
+      testing.expectEqual(
+        "TypeError|Failed to execute 'lock' on 'ScreenOrientation': The provided value 'nope' is not a valid enum value of type OrientationLockType.",
+        r[2]);
+      testing.expectEqual(
+        "TypeError|Failed to execute 'lock' on 'ScreenOrientation': 1 argument required, but only 0 present.",
+        r[3]);
+    });
+  }
+</script>

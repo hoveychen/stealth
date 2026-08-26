@@ -28,6 +28,7 @@ const Window = @import("../../Window.zig");
 const Element = @import("../../Element.zig");
 const Document = @import("../../Document.zig");
 const DOMTokenList = @import("../../collections.zig").DOMTokenList;
+const document_services = @import("../../document/services.zig");
 
 const HtmlElement = @import("../Html.zig");
 
@@ -37,6 +38,7 @@ const IFrame = @This();
 pub const Proto = HtmlElement;
 _proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 _src: []const u8 = "",
+_feature_policy: ?*document_services.FeaturePolicy = null,
 _executed: bool = false,
 _window: ?*Window = null,
 
@@ -106,33 +108,80 @@ pub fn setSandbox(self: *IFrame, value: String, frame: *Frame) !void {
     try list.setValue(value, frame);
 }
 
+/// Chrome hands back the same FeaturePolicy object every time (measured), so
+/// it is created once and cached on the element. It answers over this
+/// document's policy, which is the same object shape `document.featurePolicy`
+/// hands out.
+pub fn getFeaturePolicy(self: *IFrame, frame: *Frame) !*document_services.FeaturePolicy {
+    if (self._feature_policy) |existing| return existing;
+    const created = try frame._factory.create(document_services.FeaturePolicy{});
+    self._feature_policy = created;
+    return created;
+}
+
+/// An `<iframe>` whose document is not an SVG document answers null, which is
+/// every iframe this engine produces and also every one Chrome produces from a
+/// plain `document.createElement('iframe')`, attached or not (measured).
+pub fn getSVGDocument(_: *IFrame) ?*Document {
+    return null;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(IFrame);
 
     pub const Meta = struct {
         pub const name = "HTMLIFrameElement";
+        pub const constructor_after = "allowPaymentRequest";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's own-property order (measured). It is not the order this file
+    // used to carry, and the interstitial that led here reads `contentWindow`
+    // 18 times and `contentDocument` three times per round, so the walk that
+    // finds them is a walk over this list.
     const reflect = Element.Reflect(IFrame);
-    pub const referrerPolicy = reflect.referrerPolicy();
-    pub const longDesc = reflect.url("longdesc");
-    pub const allowFullscreen = reflect.boolean("allowfullscreen");
-    pub const width = reflect.string("width");
-    pub const scrolling = reflect.string("scrolling");
-    pub const marginWidth = reflect.stringNullToEmpty("marginwidth");
-    pub const marginHeight = reflect.stringNullToEmpty("marginheight");
-    pub const height = reflect.string("height");
-    pub const frameBorder = reflect.string("frameborder");
-    pub const @"align" = reflect.string("align");
-
     pub const src = bridge.accessor(IFrame.getSrc, IFrame.setSrc, .{ .ce_reactions = true });
     pub const srcdoc = bridge.accessor(IFrame.getSrcdoc, IFrame.setSrcdoc, .{ .ce_reactions = true });
     pub const name = reflect.string("name");
-    pub const contentWindow = bridge.accessor(IFrame.getContentWindow, null, .{});
-    pub const contentDocument = bridge.accessor(IFrame.getContentDocument, null, .{});
     pub const sandbox = bridge.accessor(IFrame.getSandbox, IFrame.setSandbox, .{ .null_as_undefined = true, .ce_reactions = true });
+    pub const allowFullscreen = reflect.boolean("allowfullscreen");
+    pub const width = reflect.string("width");
+    pub const height = reflect.string("height");
+    pub const contentDocument = bridge.accessor(IFrame.getContentDocument, null, .{});
+    pub const contentWindow = bridge.accessor(IFrame.getContentWindow, null, .{});
+    pub const referrerPolicy = reflect.referrerPolicy();
+    pub const csp = reflect.string("csp");
+    pub const allow = reflect.string("allow");
+    pub const featurePolicy = bridge.accessor(IFrame.getFeaturePolicy, null, .{});
+
+    /// The missing-value default is `auto`, not `eager` -- an iframe and an
+    /// image disagree about this, and `<video>`'s is `eager` again (measured;
+    /// see Media.zig). An unknown keyword reads back as `auto` while the
+    /// content attribute keeps whatever was written.
+    ///
+    /// Reflecting it does not make this engine lazy-load anything: an iframe
+    /// with `loading=lazy` is still fetched when it is inserted. That is a
+    /// deliberate difference, not an oversight -- a headless engine has no
+    /// viewport to be outside of -- and it was one before this member existed.
+    pub const loading = reflect.enumerated("loading", &.{ "lazy", "eager" }, .{ .missing = "auto", .invalid = "auto" });
+
+    pub const @"align" = reflect.string("align");
+    pub const scrolling = reflect.string("scrolling");
+    pub const frameBorder = reflect.string("frameborder");
+    pub const longDesc = reflect.url("longdesc");
+    pub const marginHeight = reflect.stringNullToEmpty("marginheight");
+    pub const marginWidth = reflect.stringNullToEmpty("marginwidth");
+    pub const getSVGDocument = bridge.function(IFrame.getSVGDocument, .{});
+    pub const credentialless = reflect.boolean("credentialless");
+    pub const allowPaymentRequest = reflect.boolean("allowpaymentrequest");
+
+    // Everything below `constructor` is installed per context in Blink, which
+    // is why Chrome's list has it here rather than at the end.
+    pub const privateToken = reflect.string("privatetoken");
+    pub const browsingTopics = reflect.boolean("browsingtopics");
+    pub const adAuctionHeaders = reflect.boolean("adauctionheaders");
+    pub const sharedStorageWritable = reflect.boolean("sharedstoragewritable");
 };
 
 pub const Build = struct {

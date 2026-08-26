@@ -37,6 +37,9 @@ const mime = @import("../../media/mime.zig");
 const eme = @import("../../media/eme.zig");
 const global_event_handlers = @import("../../global_event_handlers.zig");
 const playback = @import("../../media/playback.zig");
+const MediaStream = @import("../../media/streams.zig").MediaStream;
+const DOMTokenList = @import("../../collections.zig").DOMTokenList;
+const Execution = js.Execution;
 
 const Media = @This();
 
@@ -93,6 +96,13 @@ _current_time: f64 = 0,
 _volume: f64 = 1.0,
 _muted: bool = false,
 _playback_rate: f64 = 1.0,
+// Two slots, not attribute reflections: `preservespitch` is never written to
+// the markup and `defaultPlaybackRate` does not move `playbackRate`
+// (measured, probes/expr-read-path-members.js).
+_default_playback_rate: f64 = 1.0,
+_preserves_pitch: bool = true,
+_sink_id: []const u8 = "",
+_src_object: ?*MediaStream = null,
 _ready_state: ReadyState = .HAVE_NOTHING,
 
 // Set once a MediaElementAudioSourceNode has claimed this element. An element
@@ -378,6 +388,75 @@ pub fn setDisableRemotePlayback(self: *Media, value: bool, frame: *Frame) !void 
     }
 }
 
+pub fn getDefaultPlaybackRate(self: *const Media) f64 {
+    return self._default_playback_rate;
+}
+
+pub fn setDefaultPlaybackRate(self: *Media, value: f64) void {
+    self._default_playback_rate = value;
+}
+
+pub fn getPreservesPitch(self: *const Media) bool {
+    return self._preserves_pitch;
+}
+
+pub fn setPreservesPitch(self: *Media, value: bool) void {
+    self._preserves_pitch = value;
+}
+
+pub fn getSrcObject(self: *const Media) ?*MediaStream {
+    return self._src_object;
+}
+
+pub fn setSrcObject(self: *Media, value: ?*MediaStream) void {
+    self._src_object = value;
+}
+
+/// Chrome counts bytes the decoder has consumed. Nothing here decodes, so both
+/// are zero -- which is also what Chrome answers for an element that has never
+/// been given a source (measured).
+pub fn getWebkitAudioDecodedByteCount(_: *const Media) u32 {
+    return 0;
+}
+
+pub fn getWebkitVideoDecodedByteCount(_: *const Media) u32 {
+    return 0;
+}
+
+/// Chrome hands back a MediaStream even from an element with nothing playing;
+/// it simply has no tracks yet.
+pub fn captureStream(_: *Media, exec: *Execution) !*MediaStream {
+    return MediaStream.create(exec);
+}
+
+/// The empty string is the default audio device and always selectable, so it
+/// resolves; anything else is a device this engine does not have. Chrome
+/// answers the same two ways on a machine with no such device (measured), and
+/// the rejection carries Blink's own sentence.
+pub fn setSinkId(self: *Media, sink_id: []const u8, frame: *Frame) !js.Promise {
+    if (sink_id.len == 0) {
+        self._sink_id = "";
+        return frame.js.local.?.resolvePromise({});
+    }
+    return frame.js.local.?.rejectPromise(.{ .dom_exception = .{
+        .err = error.NotFound,
+        .message = "Requested device not found",
+    } });
+}
+
+pub fn getSinkId(self: *const Media) []const u8 {
+    return self._sink_id;
+}
+
+pub fn getControlsList(self: *Media, frame: *Frame) !*DOMTokenList {
+    return self.asElement().getTokenList(.controlslist, frame);
+}
+
+pub fn setControlsList(self: *Media, value: lp.String, frame: *Frame) !void {
+    const list = try self.getControlsList(frame);
+    try list.setValue(value, frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Media);
 
@@ -397,13 +476,47 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "HTMLMediaElement";
+        pub const constructor_after = "setSinkId";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's own-property order, measured. It is not IDL order and it is not
+    // the order this file used to carry: the numeric constants sit in the
+    // middle rather than at the top, and `constructor` lands after `setSinkId`
+    // because everything below it is installed per context.
     const reflect = Element.Reflect(Media);
+    pub const @"error" = bridge.accessor(Media.getError, null, .{});
+    pub const src = bridge.accessor(Media.getSrc, Media.setSrc, .{ .ce_reactions = true });
+    pub const currentSrc = bridge.accessor(Media.getSrc, null, .{});
     pub const crossOrigin = reflect.enumerated("crossorigin", &.{ "anonymous", "use-credentials" }, .{ .missing = null, .nullable = true, .invalid = "anonymous" });
+    pub const networkState = bridge.accessor(Media.getNetworkState, null, .{});
+    pub const preload = reflect.enumerated("preload", &.{ "none", "metadata", "auto" }, .{ .missing = "auto" });
+    pub const buffered = bridge.accessor(Media.getBuffered, null, .{});
+    pub const readyState = bridge.accessor(Media.getReadyState, null, .{});
+    pub const seeking = bridge.accessor(Media.getSeeking, null, .{});
+    pub const currentTime = bridge.accessor(Media.getCurrentTime, Media.setCurrentTime, .{});
+    pub const duration = bridge.accessor(Media.getDuration, null, .{});
+    pub const paused = bridge.accessor(Media.getPaused, null, .{});
+    pub const defaultPlaybackRate = bridge.accessor(Media.getDefaultPlaybackRate, Media.setDefaultPlaybackRate, .{});
+    pub const playbackRate = bridge.accessor(Media.getPlaybackRate, Media.setPlaybackRate, .{});
+    pub const played = bridge.accessor(Media.getPlayed, null, .{});
+    pub const seekable = bridge.accessor(Media.getSeekable, null, .{});
+    pub const ended = bridge.accessor(Media.getEnded, null, .{});
+    pub const autoplay = reflect.boolean("autoplay");
+    pub const loop = reflect.boolean("loop");
+    pub const preservesPitch = bridge.accessor(Media.getPreservesPitch, Media.setPreservesPitch, .{});
+    pub const controls = reflect.boolean("controls");
+    pub const controlsList = bridge.accessor(Media.getControlsList, Media.setControlsList, .{ .ce_reactions = true });
+    pub const volume = bridge.accessor(Media.getVolume, Media.setVolume, .{});
+    pub const muted = bridge.accessor(Media.getMuted, Media.setMuted, .{});
     pub const defaultMuted = reflect.boolean("muted");
+    pub const textTracks = bridge.accessor(Media.getTextTracks, null, .{});
+    pub const webkitAudioDecodedByteCount = bridge.accessor(Media.getWebkitAudioDecodedByteCount, null, .{});
+    pub const webkitVideoDecodedByteCount = bridge.accessor(Media.getWebkitVideoDecodedByteCount, null, .{});
+    pub const onencrypted = bridge.accessor(handlerAccessor(.onencrypted).get, handlerAccessor(.onencrypted).set, .{});
+    pub const onwaitingforkey = bridge.accessor(handlerAccessor(.onwaitingforkey).get, handlerAccessor(.onwaitingforkey).set, .{});
+    pub const srcObject = bridge.accessor(Media.getSrcObject, Media.setSrcObject, .{});
 
     pub const NETWORK_EMPTY = bridge.property(@intFromEnum(NetworkState.NETWORK_EMPTY), .{ .template = true });
     pub const NETWORK_IDLE = bridge.property(@intFromEnum(NetworkState.NETWORK_IDLE), .{ .template = true });
@@ -416,47 +529,26 @@ pub const JsApi = struct {
     pub const HAVE_FUTURE_DATA = bridge.property(@intFromEnum(ReadyState.HAVE_FUTURE_DATA), .{ .template = true });
     pub const HAVE_ENOUGH_DATA = bridge.property(@intFromEnum(ReadyState.HAVE_ENOUGH_DATA), .{ .template = true });
 
-    pub const src = bridge.accessor(Media.getSrc, Media.setSrc, .{ .ce_reactions = true });
-    pub const currentSrc = bridge.accessor(Media.getSrc, null, .{});
-    pub const autoplay = reflect.boolean("autoplay");
-    pub const controls = reflect.boolean("controls");
-    pub const loop = reflect.boolean("loop");
-    pub const muted = bridge.accessor(Media.getMuted, Media.setMuted, .{});
-    pub const preload = reflect.enumerated("preload", &.{ "none", "metadata", "auto" }, .{ .missing = "auto" });
-    pub const volume = bridge.accessor(Media.getVolume, Media.setVolume, .{});
-    pub const playbackRate = bridge.accessor(Media.getPlaybackRate, Media.setPlaybackRate, .{});
-    pub const currentTime = bridge.accessor(Media.getCurrentTime, Media.setCurrentTime, .{});
-    pub const duration = bridge.accessor(Media.getDuration, null, .{});
-    pub const paused = bridge.accessor(Media.getPaused, null, .{});
-    pub const ended = bridge.accessor(Media.getEnded, null, .{});
-    pub const seeking = bridge.accessor(Media.getSeeking, null, .{});
-    pub const readyState = bridge.accessor(Media.getReadyState, null, .{});
-    pub const buffered = bridge.accessor(Media.getBuffered, null, .{});
-    pub const played = bridge.accessor(Media.getPlayed, null, .{});
-    pub const seekable = bridge.accessor(Media.getSeekable, null, .{});
-    pub const networkState = bridge.accessor(Media.getNetworkState, null, .{});
-    pub const @"error" = bridge.accessor(Media.getError, null, .{});
-
-    pub const textTracks = bridge.accessor(Media.getTextTracks, null, .{});
-
-    // Chrome puts these two right after `textTracks` (measured; the rest of
-    // this prototype's ordering is a separate matter).
-    pub const onencrypted = bridge.accessor(handlerAccessor(.onencrypted).get, handlerAccessor(.onencrypted).set, .{});
-    pub const onwaitingforkey = bridge.accessor(handlerAccessor(.onwaitingforkey).get, handlerAccessor(.onwaitingforkey).set, .{});
-
     pub const addTextTrack = bridge.function(Media.addTextTrack, .{ .arity = 1 });
     pub const canPlayType = bridge.function(Media.canPlayType, .{});
+    pub const captureStream = bridge.function(Media.captureStream, .{});
     pub const load = bridge.function(Media.load, .{});
     pub const pause = bridge.function(Media.pause, .{});
     pub const play = bridge.function(Media.play, .{});
 
-    // Chrome lists these two after the three playback verbs (measured).
+    /// A media element's missing-value default is `eager`, where an iframe's
+    /// is `auto` (both measured). Same attribute name, different default --
+    /// which is why this is a reflection written out per element rather than a
+    /// shared helper.
+    pub const loading = reflect.enumerated("loading", &.{ "lazy", "eager" }, .{ .missing = "eager", .invalid = "eager" });
+
+    pub const sinkId = bridge.accessor(Media.getSinkId, null, .{});
     pub const remote = bridge.accessor(Media.getRemote, null, .{});
     pub const disableRemotePlayback = bridge.accessor(Media.getDisableRemotePlayback, Media.setDisableRemotePlayback, .{ .ce_reactions = true });
+    pub const setSinkId = bridge.function(Media.setSinkId, .{ .arity = 1 });
 
     // EME arrives on a partial interface, so Chrome lists these two *after*
-    // `constructor`. V8 can only put `constructor` last, so last-but-one is as
-    // close as this gets.
+    // `constructor`.
     pub const mediaKeys = bridge.accessor(Media.getMediaKeys, null, .{});
     pub const setMediaKeys = bridge.function(Media.setMediaKeys, .{ .arity = 1 });
 };

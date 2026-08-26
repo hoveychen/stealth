@@ -308,6 +308,13 @@ pub fn stream(self: *const Blob, exec: *Execution) !*ReadableStream {
     return ReadableStream.initWithData(self._slice, exec);
 }
 
+/// The same bytes as `stream()`, decoded: the chunks are strings rather than
+/// Uint8Arrays, and the stream is a default one rather than a byte stream, so
+/// a BYOB reader is refused where `stream()` allows one (measured).
+pub fn textStream(self: *const Blob, exec: *Execution) !*ReadableStream {
+    return ReadableStream.initWithText(self._slice, exec);
+}
+
 /// Returns a Promise that resolves with a string containing
 /// the contents of the blob, interpreted as UTF-8.
 pub fn text(self: *const Blob, exec: *Execution) !js.Promise {
@@ -372,14 +379,16 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's own-property order (measured).
     pub const constructor = bridge.constructor(Blob.init, .{});
-    pub const text = bridge.function(Blob.text, .{});
-    pub const bytes = bridge.function(Blob.bytes, .{});
-    pub const slice = bridge.function(Blob.slice, .{});
     pub const size = bridge.accessor(Blob.getSize, null, .{});
     pub const @"type" = bridge.accessor(Blob.getType, null, .{});
-    pub const stream = bridge.function(Blob.stream, .{});
     pub const arrayBuffer = bridge.function(Blob.arrayBuffer, .{});
+    pub const slice = bridge.function(Blob.slice, .{});
+    pub const stream = bridge.function(Blob.stream, .{});
+    pub const text = bridge.function(Blob.text, .{});
+    pub const bytes = bridge.function(Blob.bytes, .{});
+    pub const textStream = bridge.function(Blob.textStream, .{});
 };
 
 const testing = @import("../../testing.zig");
