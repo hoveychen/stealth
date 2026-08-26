@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Chrome's UA stylesheet gives every tag a `display`, and this engine answered one
+of three hand-written groups: inline for a short list of tags, block for a long
+one, inline-block for two. Measured tag by tag against Chrome 151 with
+tools/fingerprint/scratch/expr-default-display.js (readings in
+tools/fingerprint/scratch/b78-display-{ch,lp}.json): **46 of 128 tags
+disagreed**, among them <img>, <input>, <button>, <select>, <textarea>,
+<iframe>, <canvas>, <video>, <li> and every table tag.
+
+Worth a measured table rather than a longer switch because the live Cloudflare
+challenge reads `display` on nine elements of its own page
+(tools/fingerprint/scratch/b78-cfsc-named.json), and because the default feeds
+innerText, checkVisibility and the flex/grid blockification rule as well as the
+computed value itself.
+
+Every expected string below is Chrome's own answer, generated into
+chrome_default_display.zig by tools/fingerprint/dump-default-display.mjs.
+
+Not asserted, and not in the table either: <source> and <track> inside a
+<video>. Chrome answers the empty string for those -- it declines to give the
+element a computed style at all rather than giving it a display -- and an
+absence is not a value to record. Loose, both read `inline`, which is what the
+table has.
+-->
+
+<script id=default_display_per_tag>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const read = (tag) => {
+    const el = document.createElement(tag);
+    host.appendChild(el);
+    const v = String(getComputedStyle(el).display);
+    el.remove();
+    return v;
+  };
+
+  const CASES = [
+    // Replaced and form controls: inline or inline-block, never block.
+    ['img', 'inline'], ['iframe', 'inline'], ['canvas', 'inline'],
+    ['video', 'inline'], ['embed', 'inline'], ['object', 'inline'],
+    ['picture', 'inline'], ['map', 'inline'], ['area', 'inline'],
+    // <noscript> is deliberately NOT here. Chrome computes `inline` for it,
+    // but its own two answers disagree: expr-noscript-area-render.js measures
+    // `checkVisibility()` false and its content missing from innerText, so it
+    // has no box. This engine drives both answers off one UA-hidden list, and
+    // splitting them is a separate change; <area>, where Chrome's two answers
+    // agree, came off that list instead.
+    ['output', 'inline'], ['data', 'inline'],
+    ['input', 'inline-block'], ['button', 'inline-block'],
+    ['select', 'inline-block'], ['textarea', 'inline-block'],
+    ['meter', 'inline-block'], ['progress', 'inline-block'],
+    ['marquee', 'inline-block'],
+    // The whole table family, which was one `block` group before.
+    ['table', 'table'], ['caption', 'table-caption'],
+    ['thead', 'table-header-group'], ['tbody', 'table-row-group'],
+    ['tfoot', 'table-footer-group'], ['tr', 'table-row'],
+    ['td', 'table-cell'], ['th', 'table-cell'],
+    ['col', 'table-column'], ['colgroup', 'table-column-group'],
+    // Values this engine had no way to say at all.
+    ['li', 'list-item'], ['ruby', 'ruby'], ['slot', 'contents'],
+    // Hidden by the UA sheet until something turns them on.
+    ['audio', 'none'], ['dialog', 'none'], ['rp', 'none'],
+    // Legacy tags, and one no stylesheet mentions.
+    ['big', 'inline'], ['strike', 'inline'], ['tt', 'inline'],
+    ['nobr', 'inline'], ['acronym', 'inline'],
+    ['lp-unknown-element', 'inline'],
+    // Unchanged, so a table that got these wrong would be a regression.
+    ['div', 'block'], ['p', 'block'], ['span', 'inline'], ['a', 'inline'],
+    ['blockquote', 'block'], ['ul', 'block'], ['form', 'block'],
+    ['h1', 'block'], ['pre', 'block'], ['br', 'inline'], ['wbr', 'inline'],
+    ['style', 'none'], ['script', 'none'], ['title', 'none'],
+    ['meta', 'none'], ['link', 'none'], ['template', 'none'],
+  ];
+
+  const wrong = [];
+  for (const [tag, want] of CASES) {
+    const got = read(tag);
+    if (got !== want) wrong.push('<' + tag + '>: want ' + want + ', got ' + got);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+Two tags read differently once an attribute turns them on, and two read
+differently only inside a particular parent. Both kinds are measured, not
+inferred from the spec.
+-->
+
+<script id=default_display_conditional>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const readHtml = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const v = String(getComputedStyle(el).display);
+    wrap.remove();
+    return v;
+  };
+
+  const CASES = [
+    // Switched by an attribute.
+    ['<audio data-m></audio>', 'none'],
+    ['<audio data-m controls></audio>', 'inline'],
+    ['<dialog data-m></dialog>', 'none'],
+    ['<dialog data-m open></dialog>', 'block'],
+    // <video> takes `inline` with or without controls, so it is not one of them.
+    ['<video data-m></video>', 'inline'],
+    ['<video data-m controls></video>', 'inline'],
+    // Switched by the parent.
+    ['<details><summary data-m>s</summary></details>', 'list-item'],
+    ['<summary data-m>s</summary>', 'block'],
+    ['<ruby>a<rt data-m>b</rt></ruby>', 'ruby-text'],
+    ['<rt data-m>b</rt>', 'inline'],
+    // Same wherever it sits, so no rule for it.
+    ['<ul><li data-m>x</li></ul>', 'list-item'],
+    ['<li data-m>x</li>', 'list-item'],
+    ['<ruby>a<rp data-m>(</rp></ruby>', 'none'],
+    // An input the UA sheet hides, which this engine already answered.
+    ['<input data-m type=hidden>', 'none'],
+    ['<input data-m type=checkbox>', 'inline-block'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = readHtml(html);
+    if (got !== want) wrong.push(html + ': want ' + want + ', got ' + got);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+A declaration still outranks the UA default, and a flex or grid parent still
+blockifies its children -- the two things resolvedDisplay does that a stored
+string cannot, and the reason this table is consulted rather than merged into
+chrome_per_tag_values.
+-->
+
+<script id=default_display_still_cascades>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML =
+    '<img id=ddA style="display:block">' +
+    '<div style="display:flex"><img id=ddB></div>' +
+    '<div style="display:grid"><span id=ddC>x</span></div>' +
+    '<div style="display:flex"><li id=ddE>x</li></div>';
+
+  // A <td> cannot arrive through innerHTML on a div -- the parser drops it --
+  // so this one is built rather than parsed.
+  const td = document.createElement('td');
+  td.id = 'ddD';
+  td.setAttribute('style', 'display:none');
+  host.appendChild(td);
+
+  const d = (id) => String(getComputedStyle(host.querySelector('#' + id)).display);
+
+  const wrong = [];
+  const CASES = [
+    // The page said so.
+    ['ddA', 'block'],
+    // Blockified by a flex parent: an inline img becomes block.
+    ['ddB', 'block'],
+    ['ddC', 'block'],
+    // ...but blockification keeps list-item, it does not flatten to block.
+    ['ddE', 'list-item'],
+    // `display:none` wins over the table.
+    ['ddD', 'none'],
+  ];
+  for (const [id, want] of CASES) {
+    const got = d(id);
+    if (got !== want) wrong.push(id + ': want ' + want + ', got ' + got);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
