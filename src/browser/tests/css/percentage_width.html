@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A percentage width is a share of the containing block's width. This engine used
+to refuse the whole declaration -- there was no containing block to take a share
+of, so `width:50%` fell through to the layout branch and answered whatever an
+undeclared width would have. Now that a block-level box takes its width from its
+containing block, the number the percentage needs is the one already being
+computed.
+
+Measured on Chrome 151 with tools/fingerprint/scratch/expr-percentage-width.js;
+every expected string below is Chrome's own answer, on the 1920x1080 viewport
+this test server serves (a 1904px body).
+
+Not resolved here, and each refused for its own reason:
+
+  * `margin-*` and `padding-*` percentages, which the same probe shows resolve
+    against the same width -- `margin-left:10%` of 400px is 40px, and
+    `padding-top:10%` takes its share of the WIDTH, not the height. They stay
+    refused until they have a test of their own.
+  * a containing block sized with `box-sizing: border-box`. Chrome takes the
+    percentage of its *content* box, so a 400px parent with 50px of padding
+    gives a 50% child 175px; this engine has one number per box and answers
+    200px. That is the `element-box-parts` gap, not this one.
+-->
+
+<script id=percentage_width_resolves>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const out = {
+      css: String(getComputedStyle(el).width),
+      offset: el.offsetWidth,
+    };
+    wrap.remove();
+    return out;
+  };
+
+  const CASES = [
+    // Half of a declared 400px line.
+    ['<div style="width:400px"><div data-m style="width:50%">x</div></div>', '200px', 200],
+    // The parent's own padding is outside its content box, so 400 is still 400.
+    ['<div style="width:400px;padding:0 25px"><div data-m style="width:50%">x</div></div>', '200px', 200],
+    // A parent that declares nothing fills the 1904px body, and half of that
+    // is 952 -- the percentage rides on the containing-block width the box
+    // would have taken anyway.
+    ['<div><div data-m style="width:50%">x</div></div>', '952px', 952],
+    // Every share of the same line adds up.
+    ['<div style="width:400px"><div data-m style="width:25%">x</div></div>', '100px', 100],
+    ['<div style="width:400px"><div data-m style="width:100%">x</div></div>', '400px', 400],
+    ['<div style="width:400px"><div data-m style="width:0%">x</div></div>', '0px', 0],
+    // The logical spelling is the same property.
+    ['<div style="width:400px"><div data-m style="inline-size:50%">x</div></div>', '200px', 200],
+  ];
+
+  const wrong = [];
+  for (const [html, css, offset] of CASES) {
+    const got = measure(html);
+    if (got.css !== css) wrong.push(html + ' css: want ' + css + ', got ' + got.css);
+    if (got.offset !== offset) wrong.push(html + ' offsetWidth: want ' + offset + ', got ' + got.offset);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The refusals that stay refused, so a later change to them is a deliberate one
+rather than a side effect of this.
+-->
+
+<script id=percentage_still_refused>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const probe = (decl, prop) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="width:400px"><div data-m style="' + decl + '">x</div></div>';
+    host.appendChild(wrap);
+    const v = String(getComputedStyle(wrap.querySelector('[data-m]'))[prop]);
+    wrap.remove();
+    return v;
+  };
+
+  // Chrome answers 40px for both; this engine reports the initial value until
+  // they are done properly.
+  testing.expectEqual('0px', probe('margin-left:10%', 'marginLeft'));
+  testing.expectEqual('0px', probe('padding-left:10%', 'paddingLeft'));
+
+  host.remove();
+}
+</script>
