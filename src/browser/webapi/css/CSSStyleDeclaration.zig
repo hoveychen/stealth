@@ -197,6 +197,17 @@ pub fn getComputedValue(self: *const CSSStyleDeclaration, property_name: []const
 }
 
 fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame, surface: Surface) []const u8 {
+    return self.propertyValueAt(property_name, frame, surface, 0);
+}
+
+/// Bounds the two reads that reach back into this function: a longhand whose
+/// initial value is `currentcolor` asks for `color`, and a shorthand asks for
+/// each of its longhands. Neither chains -- `color` is a longhand and a
+/// longhand is not a shorthand -- so the limit is a backstop against a table
+/// entry that ever pointed a shorthand at itself, not a depth pages reach.
+const MAX_PROPERTY_DEPTH = 4;
+
+fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame, surface: Surface, depth: u8) []const u8 {
     // The name is normalised into a local buffer rather than `frame.buf`,
     // because it has to outlive every call below and that one does not. The
     // cascade's first read is the one that rebuilds the stylesheets, and the
@@ -283,13 +294,32 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
                     },
                 }
 
+                // A shorthand this engine expands is never stored under its own
+                // name, so the computed view answers it the way an inline
+                // declaration does: by putting the longhands back together.
+                // They go through propertyValue rather than findProperty,
+                // because a computed view stores none of them either -- each
+                // one is the cascade's answer or the recorded initial value.
+                //
+                // Only the shorthands the table models are joined, and only
+                // after the cascade above has had its say. One the table keeps
+                // whole -- `font`, `columns`, `border-image` -- is stored under
+                // its own name, so the cascade answered it already, and joining
+                // its longhands would report the initial value over the
+                // author's own text.
+                if (depth < MAX_PROPERTY_DEPTH and !declinesComputedJoin(normalized)) {
+                    if (shorthand.lookup(normalized)) |entry| {
+                        if (self.computedShorthandValue(entry, frame, surface, depth)) |value| return value;
+                    }
+                }
+
                 // Sixteen longhands have `currentcolor` as their initial value,
                 // so an element that declares none of them still answers its own
                 // colour for all sixteen. chrome_initial_values recorded one
                 // number for each, measured on an element whose text was black,
                 // which is right exactly while a page leaves it black.
                 if (chrome_current_color.followsColor(normalized)) {
-                    return self.propertyValue("color", frame, surface);
+                    return self.propertyValueAt("color", frame, surface, depth + 1);
                 }
 
                 // Computed width/height must agree with the synthetic layout
@@ -450,6 +480,59 @@ fn shorthandValue(self: *const CSSStyleDeclaration, name: []const u8, frame: *Fr
         value.* = prop._value.str();
     }
     return shorthand.join(frame.local_arena, entry, held) catch null;
+}
+
+/// Three shorthands Chrome serialises differently off a computed style than off
+/// a declared one, measured with tools/fingerprint/scratch/expr-computed-shorthands.js
+/// against Chrome 151: a computed `animation` reads `none` where the declared
+/// form spells all eight components; a computed `background` puts the layer's
+/// colour first and writes every slot; a computed `flex-flow` keeps `nowrap`
+/// where the declared form drops it. chrome_shorthands measured the declared
+/// serialisation -- that is what a page can write -- so joining these off a
+/// computed view answers the wrong shape. The recorded initial value stands
+/// instead, which is what they answered before the join existed: all three were
+/// already wrong on a declaring element, and this keeps them right on one that
+/// declares nothing.
+const COMPUTED_JOIN_DECLINED = [_][]const u8{
+    "animation",         "-webkit-animation",
+    "background",        "flex-flow",
+    "-webkit-flex-flow",
+};
+
+fn declinesComputedJoin(name: []const u8) bool {
+    for (COMPUTED_JOIN_DECLINED) |declined| {
+        if (std.mem.eql(u8, name, declined)) return true;
+    }
+    return false;
+}
+
+/// The same join off a computed view, where no longhand is stored: each one is
+/// read back through propertyValue, which answers the cascade's value or the
+/// recorded initial one.
+///
+/// Null means "this engine has no join to offer", and the recorded initial
+/// value stands. That covers two holes as well as an arena failure. A longhand
+/// reading back empty, or reading back the literal `initial`, is one this
+/// engine cannot compute -- a computed style reports neither -- so a join over
+/// it would be built on a value Chrome never prints. And a join that comes out
+/// empty is the declared serialisation saying "this cannot be written as one
+/// shorthand", which is an answer for `el.style` and not for a computed view:
+/// Chrome answers every one of these names off getComputedStyle.
+fn computedShorthandValue(
+    self: *const CSSStyleDeclaration,
+    entry: shorthand.Shorthand,
+    frame: *Frame,
+    surface: Surface,
+    depth: u8,
+) ?[]const u8 {
+    const held = frame.local_arena.alloc([]const u8, entry.longhands.len) catch return null;
+    for (entry.longhands, held) |longhand, *value| {
+        const computed = self.propertyValueAt(longhand, frame, surface, depth + 1);
+        if (computed.len == 0 or std.mem.eql(u8, computed, "initial")) return null;
+        value.* = computed;
+    }
+    const joined = shorthand.join(frame.local_arena, entry, held) catch return null;
+    return if (joined.len == 0) null else joined;
 }
 
 /// The `display` a computed view reports: the cascade first (a stylesheet rule
