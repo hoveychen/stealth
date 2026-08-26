@@ -15917,3 +15917,46 @@ and sixty more), `registerProperty`, `paintWorklet`, `x` — and it is a
 null-prototype object, where Chrome's inherits from `Object.prototype`. B52's
 921-of-923 counts *interface prototypes*; a namespace object is not one, which
 is exactly the kind of surface that survey could not reach.
+
+## The panel was a contradiction; fixing it opened nothing (2026-08-26)
+
+B53 found the only readings where this engine differs from the headed Chrome
+that clears `dd-saks` and `x-hyatt` are the media queries about the display. Two
+of the eleven `dd-saks` asks came back the other way — `color-gamut: p3` and
+`dynamic-range: high` — and the reason was a persona decision written down in
+`css/MediaQuery.zig`: `screen.colorDepth` 24, so eight bits a channel, so sRGB
+and SDR. Internally consistent, and contradicted by something this fork says
+elsewhere. Its WebGL renderer answers `ANGLE Metal Renderer: Apple M4`, and no
+Mac an M4 ships in has an 8-bit sRGB panel.
+
+So the four moved together — colorDepth and pixelDepth to 30, `color` to 10,
+`color-gamut` to match `p3` as well as `srgb`, `dynamic-range` to match `high`
+as well as `standard` — and one more thing came out of the same probe that is
+not about the panel at all: Chrome answers the **boolean** `(dynamic-range)`
+false on a display where `(dynamic-range: high)` matches, so it does not
+implement that feature in boolean context. This engine answered true. It
+answers false now. `(color-gamut)` in boolean context is true in both.
+
+### The A/B
+
+Control main, treatment the branch, both ReleaseFast, the same ten stations and
+the same interleaving, 08:32 to 08:59.
+
+```
+control   5/30 station-runs passed
+treatment 3/30
+```
+
+**Nine of the ten stations answered identically in all six runs, and the tenth
+pair is the artefact B52 named.** `dd-datadome` and `dd-hermes` passed on `c1`
+— the session's very first run — and were shut to both arms from the first arm
+switch onward. Both are stations B53 measured headed Chrome failing 0 of 3, so
+a pass there is the door's clock, not the binary's. `dd-saks` and `x-hyatt`, the
+two this change was aimed at, did not move: 0 of 3 either way.
+
+**The panel was not what those two are reading.** The change stays anyway — it
+removes a measured divergence in the boolean form, it removes a self-contradiction
+that needs no reference browser to see, and it costs nothing: thirty station-runs
+with no regression and 1508 of 1508 tests green. But it is not a lever, and the
+next one to try in the same family is the bigger one: `x-hyatt` binary-searches
+`devicePixelRatio` with 314 queries, and that number is still 1 against Chrome's 2.
