@@ -2966,8 +2966,24 @@ pub const Tag = enum {
     // obsolete and not represented in this enum, so they fall through to
     // `.unknown`/`.custom` and aren't matched here.
     pub fn isHiddenByUaStylesheet(self: Tag) bool {
+        // Three tags came off HTML Rendering 15.3.1's list because Chrome does
+        // not hide them: measured loose with tools/fingerprint/scratch/
+        // expr-area-loose.js, `area`, `source` and `track` each compute
+        // `display: inline` and answer `checkVisibility()` true. Both of
+        // Chrome's answers agree for all three, so they leave together rather
+        // than being special-cased for one of them.
+        //
+        // `noscript` stays, even though Chrome computes `inline` for it too:
+        // there the two answers disagree -- `checkVisibility()` is false and
+        // its content never reaches innerText (expr-noscript-area-render.js) --
+        // and this switch is what makes ours agree with each other. Splitting
+        // them is a change to that contract, not to this list.
+        //
+        // A <source> or <track> inside a <video> is the one case neither
+        // answer covers: there Chrome returns the empty string for `display`,
+        // declining to give the element a style at all. `inline` is what it
+        // says everywhere else, including inside a <picture>.
         return switch (self) {
-            .area,
             .base,
             .datalist,
             .head,
@@ -2976,11 +2992,9 @@ pub const Tag = enum {
             .noscript,
             .param,
             .script,
-            .source,
             .style,
             .template,
             .title,
-            .track,
             => true,
             else => false,
         };
