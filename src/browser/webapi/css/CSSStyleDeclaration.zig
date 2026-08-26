@@ -314,7 +314,7 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // author's own text.
                 if (depth < MAX_PROPERTY_DEPTH and !declinesComputedJoin(normalized)) {
                     if (shorthand.lookup(normalized)) |entry| {
-                        if (self.computedShorthandValue(entry, frame, surface, depth)) |value| return value;
+                        if (self.computedShorthandValue(normalized, entry, frame, surface, depth)) |value| return value;
                     }
                 }
 
@@ -668,6 +668,30 @@ fn declinesComputedJoin(name: []const u8) bool {
     return false;
 }
 
+/// The border family writes all three components off a computed view, where the
+/// declared serialisation drops one holding its initial value: a bare `border`
+/// computes to `0px none rgb(0, 0, 0)` while `el.style.border` on the same
+/// element reads `0px rgb(0, 0, 0)`. Measured across five declaration states
+/// with tools/fingerprint/scratch/expr-computed-border-join.js.
+///
+/// The per-corner spellings (`border-block-start` and its three siblings) are
+/// absent because they already agree: their omit lists hold the literal
+/// `initial`, which no computed longhand ever reads back as, so nothing is
+/// dropped there to begin with. `outline` agrees for the same reason.
+const COMPUTED_KEEPS_ALL = [_][]const u8{
+    "border",        "border-top",
+    "border-right",  "border-bottom",
+    "border-left",   "border-block",
+    "border-inline",
+};
+
+fn computedKeepsAll(name: []const u8) bool {
+    for (COMPUTED_KEEPS_ALL) |kept| {
+        if (std.mem.eql(u8, name, kept)) return true;
+    }
+    return false;
+}
+
 /// The same join off a computed view, where no longhand is stored: each one is
 /// read back through propertyValue, which answers the cascade's value or the
 /// recorded initial one.
@@ -682,6 +706,7 @@ fn declinesComputedJoin(name: []const u8) bool {
 /// Chrome answers every one of these names off getComputedStyle.
 fn computedShorthandValue(
     self: *const CSSStyleDeclaration,
+    name: []const u8,
     entry: shorthand.Shorthand,
     frame: *Frame,
     surface: Surface,
@@ -691,10 +716,42 @@ fn computedShorthandValue(
     for (entry.longhands, held) |longhand, *value| {
         const computed = self.propertyValueAt(longhand, frame, surface, depth + 1);
         if (computed.len == 0 or std.mem.eql(u8, computed, "initial")) return null;
-        value.* = computed;
+        value.* = if (self.leftAtCurrentColour(name, longhand, frame)) "currentcolor" else computed;
     }
-    const joined = shorthand.join(frame.local_arena, entry, held) catch return null;
+    const joined = shorthand.joinKeeping(frame.local_arena, entry, held, computedKeepsAll(name)) catch return null;
     return if (joined.len == 0) null else joined;
+}
+
+/// Whether `text-decoration`'s colour is one the page never touched, and so one
+/// Chrome writes nothing for.
+///
+/// The rule is not "the colour equals the element's colour":
+/// tools/fingerprint/scratch/expr-textdecoration-color-omit.js separates the two
+/// on an element whose colour is rgb(1, 2, 3), where declaring
+/// `text-decoration-color: rgb(1, 2, 3)` prints it and declaring `currentcolor`
+/// does not -- and both compute to the same rgb(1, 2, 3). What Chrome kept is
+/// the unresolved value, so that is what the join is handed: `currentcolor` is
+/// already in this slot's omit list, and the resolved colour is not.
+///
+/// Only `text-decoration`. The border family's colour slot lists `currentcolor`
+/// too, and Chrome prints it there whatever the page did.
+fn leftAtCurrentColour(
+    self: *const CSSStyleDeclaration,
+    name: []const u8,
+    longhand: []const u8,
+    frame: *Frame,
+) bool {
+    if (!std.mem.eql(u8, longhand, "text-decoration-color")) return false;
+    if (!std.mem.eql(u8, name, "text-decoration") and
+        !std.mem.eql(u8, name, "-webkit-text-decoration")) return false;
+
+    const element = self._element orelse return false;
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    return switch (cascadedValue(style_manager, element, longhand, .wrap(longhand))) {
+        .none => true,
+        .unreportable => false,
+        .value => |value| std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, &std.ascii.whitespace), "currentcolor"),
+    };
 }
 
 /// The `display` a computed view reports: the cascade first (a stylesheet rule

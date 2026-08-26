@@ -31,16 +31,6 @@ Not asserted here, because they are a different fault:
   * `animation`, `background` and `flex-flow`, which Chrome serialises
     differently off a computed style than off a declared one (see
     COMPUTED_JOIN_DECLINED);
-  * `border` and its per-side spellings on an element that declares no border.
-    Chrome splits the same way there, measured with expr-border-omit.js:
-    `el.style.border` for `border:0px none red` reads `0px rgb(255, 0, 0)` --
-    the `none` is dropped -- while the computed view of the same element reads
-    `0px none rgb(255, 0, 0)`. The join reproduces the declared serialisation,
-    which is what the shorthand table measured, so a bare `border` reads back
-    without its `none`. That is a different wrongness from the one before the
-    join, not a worse one: it used to answer black where the element's colour
-    is red. On an element that does declare a border there is nothing to drop
-    and the join is exact, which is the case asserted above;
   * the layout-dependent `-webkit-logical-*` pair.
 -->
 
@@ -157,5 +147,103 @@ style has to answer the rule's value and not the initial one.
 
   host.remove();
   style.remove();
+}
+</script>
+
+<!--
+The two shorthands whose computed serialisation is not the declared one, and the
+only ones of the eight the live Cloudflare challenge read that this engine
+answered differently from Chrome. Measured on Chrome 151 with
+tools/fingerprint/scratch/expr-computed-border-join.js across five declaration
+states (nothing, width only, style only, colour only, all three); readings in
+tools/fingerprint/scratch/b78-cbj-{ch,lp}.json.
+
+  * The border family prints all three components off a computed view, in every
+    one of the five states -- `0px none rgb(0, 0, 0)` with nothing declared. The
+    declared view drops the `none`, measured with expr-border-omit.js, so this
+    is a split between the two views and not a correction to the shorthand
+    table. `outline` already agreed, by accident: its omit list holds the
+    literal `initial`, which no computed longhand ever reads back as.
+
+  * `text-decoration` goes the other way and drops its colour -- but the test is
+    not "the colour equals the element's colour". expr-textdecoration-color-omit.js
+    separates them on an element whose colour is rgb(1, 2, 3): declaring
+    `text-decoration-color: rgb(1, 2, 3)` prints it while declaring
+    `currentcolor` does not, and both compute to the same rgb(1, 2, 3). What
+    Chrome keeps is whether the author left the colour alone.
+-->
+
+<script id=computed_border_keeps_none>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML = '<p>x</p>';
+  const cs = getComputedStyle(host.firstChild);
+
+  const CASES = [
+    ['border', '0px none rgb(0, 0, 0)'],
+    ['borderTop', '0px none rgb(0, 0, 0)'],
+    ['borderRight', '0px none rgb(0, 0, 0)'],
+    ['borderBottom', '0px none rgb(0, 0, 0)'],
+    ['borderLeft', '0px none rgb(0, 0, 0)'],
+    ['borderBlock', '0px none rgb(0, 0, 0)'],
+    ['borderInline', '0px none rgb(0, 0, 0)'],
+    ['textDecoration', 'none'],
+  ];
+  const wrong = [];
+  for (const [prop, want] of CASES) {
+    const got = String(cs[prop]);
+    if (got !== want) wrong.push(prop + ': want ' + want + ', got ' + got);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=computed_border_none_with_colour>
+{
+  // A declared colour still prints, and still prints beside the `none`: the
+  // border family keeps every component whatever the other two hold.
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML = '<p style="border-color:rgb(7,8,9)">x</p>';
+  const cs = getComputedStyle(host.firstChild);
+
+  testing.expectEqual('0px none rgb(7, 8, 9)', String(cs.border));
+  testing.expectEqual('0px none rgb(7, 8, 9)', String(cs.borderTop));
+
+  host.remove();
+}
+</script>
+
+<script id=computed_text_decoration_colour>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML =
+    '<p id=tdA style="color:rgb(1,2,3)">x</p>' +
+    '<p id=tdB style="color:rgb(1,2,3);text-decoration-color:rgb(1,2,3)">x</p>' +
+    '<p id=tdC style="color:rgb(1,2,3);text-decoration-color:currentcolor">x</p>' +
+    '<p id=tdD style="color:rgb(1,2,3);text-decoration-color:rgb(4,5,6)">x</p>';
+
+  const read = (id) => String(getComputedStyle(host.querySelector('#' + id)).textDecoration);
+
+  const wrong = [];
+  const CASES = [
+    // Nothing declared: the colour is the element's, and Chrome leaves it out.
+    ['tdA', 'none'],
+    // Declared to the very same colour: Chrome prints it.
+    ['tdB', 'rgb(1, 2, 3)'],
+    // Declared as currentcolor: computes to the same value, not printed.
+    ['tdC', 'none'],
+    // Declared and different: printed under any reading of the rule.
+    ['tdD', 'rgb(4, 5, 6)'],
+  ];
+  for (const [id, want] of CASES) {
+    const got = read(id);
+    if (got !== want) wrong.push(id + ': want ' + want + ', got ' + got);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
 }
 </script>
