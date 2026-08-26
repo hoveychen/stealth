@@ -15327,3 +15327,97 @@ That is the third session to be handed a plausible DataDome delta that turned
 out to be the clock. The rule stands: on `ak-macys`, `dd-*` and their kin, one
 sample proves nothing in either direction — alternate the arms, and alternate
 which one goes first.
+
+## `margin-block-start` and `margin-top` were two properties here, not two names (2026-08-26)
+
+The shorthand join left 62 disagreements on the declaring arm of
+`expr-computed-shorthands.js`, and **35 of them were one mechanism**: every
+`border-block-*`, `border-inline-*`, `inset-block`, `padding-inline`,
+`margin-block` and `-webkit-border-after/before/start/end` residual. A page
+writing `margin:1px 2px 3px 4px` fills `margin-top`…`margin-left`; Chrome has
+one storage slot per property and `margin-block-start` is the same slot under
+another name, while this engine stores what the page wrote and nothing else.
+So `marginBlock` read a `<p>`'s UA default of `16px` where Chrome reads
+`1px 3px`, and the shorthand join above it was joining the right longhands —
+which happened to be empty.
+
+Closing it took the correspondence, which `dump-css-logical.mjs` measures
+rather than reads off the spelling. **46 pairs, nothing ambiguous.** The test is
+mutual co-movement: set one longhand to a value that moves it, note every other
+longhand that took the same value, then set each of those to a *different* value
+and keep only the ones that dragged the first back. A one-way match is a side
+effect — a property that resizes the box drags a resolved value with it — and
+requiring the swap in both directions leaves only two names for one thing.
+
+The first run of that generator was wrong twice, and both holes closed by
+measuring more rather than by asserting:
+
+- **The four `border-*-style` families were missing.** The auxiliary declaration
+  that lets a border *width* move at all (a width is pinned to 0 while its style
+  is `none`) pinned every style to `solid`, so no candidate could move a style
+  off what was now its initial. A second candidate pair fixed it.
+- **`text-decoration` came out paired with `text-decoration-thickness`.** A
+  shorthand over a single longhand passes the mutual test — and Chrome's indexed
+  longhand list contains `text-decoration`. Which names are shorthands is now
+  measured too: set the name on an empty declaration and count the entries. Five
+  are excluded and the generated header names them.
+
+### The half this deliberately does not do
+
+The mapping is a fallback for a name the cascade says nothing about. When a page
+declares *both* spellings, each answers its own declaration here. Chrome does
+not — one slot, later declaration wins for both names, in all four orderings
+(`expr-logical-conflict.js`):
+
+| declaration | Chrome's `marginTop` / `marginBlockStart` |
+|---|---|
+| `margin-top:1px;margin-block-start:2px` | `2px` / `2px` |
+| `margin-block-start:3px;margin-top:4px` | `4px` / `4px` |
+| `margin:5px;margin-block-start:6px` | `6px` / `6px` |
+| `margin-block-start:7px;margin:8px` | `8px` / `8px` |
+
+Reproducing that means one slot at *storage* time, which changes what `el.style`
+hands back — the specified view, a different surface. `unreportable` is treated
+as a declaration for the same reason: the page did set the property and this
+engine merely cannot finish resolving the value, so letting the counterpart in
+there would answer the wrong declaration.
+
+### Where the computed view stands
+
+`expr-computed-shorthands.js`, declaring arm, over the two plans:
+
+| | agreeing of 261 |
+|---|---|
+| before the join | 162 |
+| after the join | 199 |
+| after the mapping | **241** |
+
+The bare arm is 249/261, unchanged by the mapping — nothing there declares
+anything for a counterpart to reach.
+
+The 20 that remain are four small things and no large one: ten are the
+shorthands `chrome_shorthands.zig` leaves `.unmodelled` and this engine keeps
+whole, so they answer the author's own text (`columns:2 30px` reads back in the
+author's order where Chrome writes `30px 2`, `font`'s `/1.5` stays a ratio where
+Chrome prints the resolved `/21px`); four are the computed-vs-declared
+serialisation split plus `timeline-trigger`; two are `background-position-x`/`-y`
+computing to the literal `initial`, a hole in the initial-value table; and four
+are layout (`-webkit-logical-width` and the two origins).
+
+### The sweep, and what not to read into it
+
+`results/b77-logical.json` reads **20/29** against `b77-patched.json`'s 17/29
+from earlier the same day — same optimiser, same host, the join-only build as
+the control. Four stations moved: `px-wayfair`, `ks-canadagoose` and
+`dd-leboncoin` came back, and `x-hyatt` went from a timeout to `refused-429`.
+
+**None of that is this change.** Three of the four were tail timeouts recovering
+and the fourth is a rate limit; no station moved from `pass` to a detection
+verdict, which is the only direction that would have mattered here. The +3 is
+the same window effect that made the previous section's DataDome runs look like
+a regression, running the other way — and twelve alternating runs against a
+same-mode control were what it took to establish that. A computed-style value
+fix that opens a station would show up as a challenge verdict turning into a
+pass and *staying* there across a control, which this is not.
+
+What the change is measured by is the probe: 199 → 241 of 261, zero regressions.
