@@ -701,9 +701,17 @@ pub fn getRobotsUrl(arena: Allocator, url: [:0]const u8) ![:0]const u8 {
     );
 }
 
+// Always returns memory the arena owns, even when there was nothing to decode.
+// Handing the input back for a `%`-free string saved a copy and cost a class of
+// bug instead: the answer is indistinguishable from an owned one, so a caller
+// that outlives its input -- runJavascriptUrl unescapes into a task arena and
+// then *schedules* the task -- keeps a slice that is only sometimes still
+// there. `javascript:;`, the URL an anti-bot script plants to get a second copy
+// of the intrinsics, has no `%` in it and was landing on freed memory a bit
+// under half the time.
 pub fn unescape(arena: Allocator, input: []const u8) ![]const u8 {
     if (std.mem.indexOfScalar(u8, input, '%') == null) {
-        return input;
+        return arena.dupe(u8, input);
     }
 
     var result = try std.ArrayList(u8).initCapacity(arena, input.len);
@@ -1426,8 +1434,30 @@ test "URL: getRobotsUrl" {
     }
 }
 
-test "URL: unescape" {
+test "URL: unescape owns what it returns" {
+    // A function that takes an allocator has to allocate, every time. This one
+    // used to hand the caller's own slice back whenever the input carried no
+    // `%`, which is a trap: the answer looks identical and its lifetime is not.
+    //
+    // runJavascriptUrl walked into it. It unescapes into a task arena and then
+    // *schedules* the task, so the source has to outlive the call -- and
+    // `javascript:;`, which is what an anti-bot script plants to ask for a
+    // second copy of the intrinsics, has no `%` in it. Same page, same engine,
+    // five navigations: three answered `javascript-url compile
+    // CompilationError` and two ran clean, because `;` compiles in every JS
+    // engine there is and what reached the compiler was whatever had since been
+    // written over that memory.
     const arena = testing.arena_allocator;
+
+    for ([_][]const u8{ "", ";", "hello world", "no-percent-here" }) |input| {
+        const result = try unescape(arena, input);
+        try testing.expectEqual(input, result);
+        // Empty slices may legitimately share a pointer; anything else must be
+        // a copy the caller can keep.
+        if (input.len > 0) {
+            try testing.expectEqual(false, result.ptr == input.ptr);
+        }
+    }
 
     {
         const result = try unescape(arena, "hello world");
