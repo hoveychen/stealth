@@ -3217,3 +3217,7 @@ test "WebApi: CSSStyleDeclaration display cascade" {
 test "WebApi: CSSStyleDeclaration important beats the style attribute" {
     try testing.htmlRunner("css/important_vs_inline.html", .{});
 }
+
+test "WebApi: CSSStyleDeclaration author longhands" {
+    try testing.htmlRunner("css/computed_author_longhands.html", .{});
+}

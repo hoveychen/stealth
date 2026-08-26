@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A computed style has to answer what the author stylesheet said, for any
+longhand, not just the two the visibility machinery already needed. Until this
+landed the computed view resolved exactly `display`, `visibility` and custom
+properties out of the cascade; every other property fell through to the inline
+`style=` attribute and then to the initial value, so a rule declaring
+`color:rgb(1,2,3)` read back as `rgb(0, 0, 0)`.
+
+Measured on Chrome 151 with tools/fingerprint/scratch/expr-cascade-scope.js and
+its inline control: of the 36 longhands below, 34 disagreed when declared in a
+rule and 3 disagreed when declared inline. That gap is the point -- the values
+themselves were already computed and serialised correctly, and only the cascade
+was not consulted. Kasada's page reads `getComputedStyle` 126 times on x-hyatt.
+
+The three the inline control also gets wrong (border-radius, transform,
+white-space) are not asserted here; they are their own plan.
+-->
+
+<script id=author_rule_longhands>
+{
+  // Each probe gets its own subtree and its own sheet, so no probe can see
+  // another's rule.
+  const probe = (decl, prop) => {
+    const style = document.createElement('style');
+    style.textContent = '.cx{' + decl + '}';
+    document.head.appendChild(style);
+    const host = document.createElement('div');
+    host.innerHTML = '<p class="cx">x</p>';
+    document.body.appendChild(host);
+    const got = String(getComputedStyle(host.firstChild)[prop]);
+    host.remove();
+    style.remove();
+    return got;
+  };
+
+  const CASES = [
+    ['rgb(1, 2, 3)', 'color:rgb(1,2,3)', 'color'],
+    ['rgb(1, 2, 3)', 'background-color:rgb(1,2,3)', 'backgroundColor'],
+    ['33px', 'font-size:33px', 'fontSize'],
+    ['Georgia', 'font-family:Georgia', 'fontFamily'],
+    ['700', 'font-weight:700', 'fontWeight'],
+    ['italic', 'font-style:italic', 'fontStyle'],
+    ['31px', 'line-height:31px', 'lineHeight'],
+    ['3px', 'letter-spacing:3px', 'letterSpacing'],
+    ['right', 'text-align:right', 'textAlign'],
+    ['uppercase', 'text-transform:uppercase', 'textTransform'],
+    ['underline', 'text-decoration-line:underline', 'textDecorationLine'],
+    ['77px', 'width:77px', 'width'],
+    ['44px', 'height:44px', 'height'],
+    ['11px', 'margin-top:11px', 'marginTop'],
+    ['13px', 'padding-left:13px', 'paddingLeft'],
+    ['5px', 'border-top-style:solid;border-top-width:5px', 'borderTopWidth'],
+    ['rgb(4, 5, 6)', 'border-top-style:solid;border-top-color:rgb(4,5,6)', 'borderTopColor'],
+    ['0.25', 'opacity:0.25', 'opacity'],
+    ['7', 'position:relative;z-index:7', 'zIndex'],
+    ['absolute', 'position:absolute', 'position'],
+    ['scroll', 'overflow-x:scroll', 'overflowX'],
+    ['pointer', 'cursor:pointer', 'cursor'],
+    ['none', 'pointer-events:none', 'pointerEvents'],
+    ['border-box', 'box-sizing:border-box', 'boxSizing'],
+    ['0.5s', 'transition-duration:0.5s', 'transitionDuration'],
+    ['spin', 'animation-name:spin', 'animationName'],
+    ['blur(2px)', 'filter:blur(2px)', 'filter'],
+    ['multiply', 'mix-blend-mode:multiply', 'mixBlendMode'],
+    ['middle', 'vertical-align:middle', 'verticalAlign'],
+    ['column', 'display:flex;flex-direction:column', 'flexDirection'],
+    ['column', 'display:grid;grid-auto-flow:column', 'gridAutoFlow'],
+    ['hidden', 'visibility:hidden', 'visibility'],
+    ['none', 'display:none', 'display'],
+  ];
+  for (const [want, decl, prop] of CASES) {
+    testing.expectEqual(prop + '=' + want, prop + '=' + probe(decl, prop));
+  }
+
+  // Longhands that only exist once the rule's shorthand has been expanded.
+  // `border`, `margin` and `background` already expand on this engine; `font`
+  // does not, and is left to its own plan.
+  testing.expectEqual('11px', probe('margin:11px 12px 13px 14px', 'marginTop'));
+  testing.expectEqual('rgb(4, 5, 6)', probe('border:5px solid rgb(4,5,6)', 'borderTopColor'));
+  testing.expectEqual('rgb(4, 5, 6)', probe('background:rgb(4,5,6)', 'backgroundColor'));
+}
+</script>
+
+<script id=author_rule_priority>
+{
+  // The cascade order the computed view has to honour. `computedFontSize`
+  // already spells it out for one property: an `!important` rule outranks the
+  // style attribute, and the style attribute outranks a normal rule.
+  const probe = (css, inline) => {
+    const style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+    const host = document.createElement('div');
+    host.innerHTML = '<p class="cx"' + (inline ? ' style="' + inline + '"' : '') + '>x</p>';
+    document.body.appendChild(host);
+    const got = String(getComputedStyle(host.firstChild).color);
+    host.remove();
+    style.remove();
+    return got;
+  };
+
+  testing.expectEqual('rgb(2, 2, 2)', probe('.cx{color:rgb(1,1,1)}.cx{color:rgb(2,2,2)}', ''));
+  testing.expectEqual('rgb(3, 3, 3)', probe('p.cx{color:rgb(3,3,3)}.cx{color:rgb(2,2,2)}', ''));
+  testing.expectEqual('rgb(4, 4, 4)', probe('.cx{color:rgb(4,4,4)!important}', 'color:rgb(9,9,9)'));
+  testing.expectEqual('rgb(9, 9, 9)', probe('.cx{color:rgb(4,4,4)}', 'color:rgb(9,9,9)'));
+  // An `!important` style attribute is above everything.
+  testing.expectEqual('rgb(9, 9, 9)', probe('.cx{color:rgb(4,4,4)!important}', 'color:rgb(9,9,9)!important'));
+}
+</script>
