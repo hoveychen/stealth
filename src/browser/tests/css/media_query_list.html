@@ -108,8 +108,9 @@
   testing.expectEqual(false, window.matchMedia('(device-width: 12345px)').matches);
 
   // Consistent with devicePixelRatio and screen.colorDepth.
-  testing.expectEqual(true, window.matchMedia('(resolution: 1dppx)').matches);
-  testing.expectEqual(1, window.devicePixelRatio);
+  testing.expectEqual(false, window.matchMedia('(resolution: 1dppx)').matches);
+  testing.expectEqual(true, window.matchMedia('(resolution: 2dppx)').matches);
+  testing.expectEqual(2, window.devicePixelRatio);
   testing.expectEqual(true, window.matchMedia('(color: 10)').matches);
   testing.expectEqual(false, window.matchMedia('(color: 8)').matches);
   testing.expectEqual(30, screen.colorDepth);
@@ -118,11 +119,39 @@
   // x-hyatt by halving a min-resolution bound and then repeating the ladder in
   // dpi and in dpcm, so a bound either side of 1 has to answer in all three.
   testing.expectEqual(true, window.matchMedia('(min-resolution: 0.625dppx)').matches);
-  testing.expectEqual(false, window.matchMedia('(min-resolution: 1.5dppx)').matches);
+  testing.expectEqual(true, window.matchMedia('(min-resolution: 1.5dppx)').matches);
+  testing.expectEqual(false, window.matchMedia('(min-resolution: 2.5dppx)').matches);
   testing.expectEqual(true, window.matchMedia('(min-resolution: 50dpi)').matches);
   testing.expectEqual(true, window.matchMedia('(max-resolution: 256dpi)').matches);
   testing.expectEqual(true, window.matchMedia('(min-resolution: 30dpcm)').matches);
   testing.expectEqual(false, window.matchMedia('(max-resolution: 30dpcm)').matches);
+
+  // The ladder has to answer the same way whichever unit it is written in.
+  // That, not any one rung, is what the 314 queries on x-hyatt are checking:
+  // Kasada halves a min-resolution bound and then repeats the whole descent in
+  // dpi and in dpcm.
+  //
+  // 96dpi is exactly 1dppx, so the dpi column can sit on the boundary. dpcm
+  // cannot -- 2dppx is 75.590551…dpcm and no finite decimal writes it -- so its
+  // rungs stay a comfortable distance either side. That is not a workaround:
+  // Chrome's own answers stop agreeing across units within about 0.005dppx of
+  // the ratio, so a tie nobody can spell is not a thing to pin down here.
+  const rungs = [
+    { min: true, dppx: '0.5dppx', dpi: '48dpi', dpcm: '15dpcm' },
+    { min: true, dppx: '1dppx', dpi: '96dpi', dpcm: '30dpcm' },
+    { min: true, dppx: '2dppx', dpi: '192dpi', dpcm: '70dpcm' },
+    { min: false, dppx: '3dppx', dpi: '288dpi', dpcm: '90dpcm' },
+    { min: false, dppx: '4dppx', dpi: '384dpi', dpcm: '150dpcm' },
+  ];
+  for (const rung of rungs) {
+    for (const unit of [rung.dppx, rung.dpi, rung.dpcm]) {
+      testing.expectEqual(rung.min, window.matchMedia(`(min-resolution: ${unit})`).matches);
+      // max- is the complement everywhere except the exact 2dppx rung, where
+      // both bounds match because the comparison is inclusive.
+      const exactly = unit === '2dppx' || unit === '192dpi';
+      testing.expectEqual(!rung.min || exactly, window.matchMedia(`(max-resolution: ${unit})`).matches);
+    }
+  }
 
   // 0 is the value that makes every max- bound match and only a 0 min- one.
   testing.expectEqual(true, window.matchMedia('(max-color-index: 4)').matches);
@@ -135,6 +164,67 @@
 
   testing.expectEqual('continuous', pick('device-posture', ['folded', 'continuous']));
   testing.expectEqual('continuous', navigator.devicePosture.type);
+}
+</script>
+
+<script id=matchMedia_kasada_resolution_ladder>
+{
+  // The (min|max)-resolution queries x-hyatt's Kasada script was measured
+  // asking -- 72 of the 314 it runs, the rest being width/height/aspect-ratio --
+  // read out of tools/fingerprint/results/b53-reads-x-hyatt.json and answered
+  // here the way the headed Chrome that clears the station answered them in the
+  // same sitting (tools/fingerprint/probes/expr-b53-guard-questions.js).
+  //
+  // The point is the ladder as a whole, not any one rung: Kasada halves the
+  // interval around devicePixelRatio and then repeats the descent in dppx, in
+  // dpi and in dpcm, so the last twenty rungs sit within a millionth of the
+  // ratio and a single disagreeing answer names a different browser.
+  //
+  // What is deliberately NOT asserted is monotonicity. Driving the same ladder
+  // against Chrome under --force-device-scale-factor produces non-monotone
+  // pairs there too -- its dpcm conversion is coarse enough that its tie region
+  // is about 0.005dppx wide -- so requiring monotonicity here would require
+  // something the reference does not do. What has to hold is the answers.
+  const matching = [
+    '(min-resolution:1.25dppx)', '(min-resolution:0.625dppx)', '(min-resolution:0.9375dppx)',
+    '(min-resolution:1.09375dppx)', '(min-resolution:1.015625dppx)',
+    '(min-resolution:0.9765625dppx)', '(min-resolution:0.99609375dppx)',
+    '(min-resolution:1.005859375dppx)', '(min-resolution:1.0009765625dppx)',
+    '(min-resolution:0.99853515625dppx)', '(min-resolution:0.999755859375dppx)',
+    '(min-resolution:1.0003662109375dppx)', '(min-resolution:1.00006103515625dppx)',
+    '(min-resolution:0.999908447265625dppx)', '(min-resolution:0.9999847412109375dppx)',
+    '(min-resolution:1.0000228881835938dppx)', '(min-resolution:1.0000038146972656dppx)',
+    '(min-resolution:1.0000133514404297dppx)', '(min-resolution:1.0000085830688477dppx)',
+    '(min-resolution:1.0000061988830566dppx)', '(min-resolution:1.0000050067901611dppx)',
+    '(min-resolution:1.0000044107437134dppx)', '(min-resolution:125dpi)',
+    '(min-resolution:62.5dpi)', '(min-resolution:93.75dpi)', '(min-resolution:109.375dpi)',
+    '(min-resolution:101.5625dpi)', '(min-resolution:97.65625dpi)',
+    '(min-resolution:95.703125dpi)', '(min-resolution:96.6796875dpi)',
+    '(min-resolution:96.19140625dpi)', '(min-resolution:95.947265625dpi)',
+    '(min-resolution:96.0693359375dpi)', '(min-resolution:96.00830078125dpi)',
+    '(min-resolution:95.977783203125dpi)', '(min-resolution:95.9930419921875dpi)',
+    '(min-resolution:96.00067138671875dpi)', '(min-resolution:95.99685668945312dpi)',
+    '(min-resolution:95.99876403808594dpi)', '(min-resolution:95.99971771240234dpi)',
+    '(min-resolution:50dpcm)', '(min-resolution:25dpcm)', '(min-resolution:37.5dpcm)',
+    '(min-resolution:43.75dpcm)', '(min-resolution:40.625dpcm)',
+    '(min-resolution:39.0625dpcm)', '(min-resolution:38.28125dpcm)',
+    '(min-resolution:37.890625dpcm)', '(min-resolution:37.6953125dpcm)',
+    '(min-resolution:37.79296875dpcm)', '(min-resolution:37.841796875dpcm)',
+    '(min-resolution:37.8173828125dpcm)', '(min-resolution:37.80517578125dpcm)',
+    '(min-resolution:37.799072265625dpcm)', '(min-resolution:37.7960205078125dpcm)',
+    '(min-resolution:37.79449462890625dpcm)', '(min-resolution:37.795257568359375dpcm)',
+    '(min-resolution:37.79487609863281dpcm)', '(max-resolution: 256dpi)',
+    '(min-resolution: 128dpi)', '(min-resolution: 64dpi)', '(min-resolution: 96dpi)',
+  ];
+  const notMatching = [
+    '(min-resolution:5dppx)', '(min-resolution:2.5dppx)', '(min-resolution:500dpi)',
+    '(min-resolution:250dpi)', '(min-resolution:200dpcm)', '(min-resolution:100dpcm)',
+    '(min-resolution: 256dpi)', '(max-resolution: 128dpi)', '(max-resolution: 64dpi)',
+    '(max-resolution: 96dpi)',
+  ];
+  for (const q of matching) testing.expectEqual(true, window.matchMedia(q).matches);
+  for (const q of notMatching) testing.expectEqual(false, window.matchMedia(q).matches);
+  testing.expectEqual(72, matching.length + notMatching.length);
 }
 </script>
 

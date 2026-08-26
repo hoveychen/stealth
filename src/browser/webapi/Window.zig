@@ -566,11 +566,24 @@ pub fn getOffscreenBuffering(_: *const Window) bool {
 
 // devicePixelRatio is a fixed part of the device profile the rest of the engine
 // is built around -- MediaQuery.zig resolves resolution queries against the
-// same 1920x1080-at-1 display, and screen.width/height agree with it. The
-// reference machine's Chrome reports 2 because its panel is Retina; the number
-// here describes the display we claim, not the one running the build.
+// same number, and screen.width/height agree with it.
+//
+// It is 2, and what that costs is nothing: `screen.*` is reported in CSS
+// pixels, so the physical panel is `screen.width * this`, and 1920x1200 at 2
+// names a 3840x2400 display -- a 16:10 4K monitor, which macOS drives at
+// exactly this 2x scale. Measured, not assumed: the same headless Chrome under
+// `--force-device-scale-factor=1` and `=2` moves eleven readings and no others
+// (tools/fingerprint/probes/expr-device-pixel-ratio-blast.js), and every one of
+// them is either this number, a resolution media query, `screen.*` -- which
+// halve there only because that Chrome's physical panel is fixed while ours is
+// a claim -- or `img.x`/`img.y`.
+//
+// Why 2 rather than 1: Kasada reads this eight times on one x-hyatt load and
+// then spends 314 media queries binary-searching it to twenty bits, which makes
+// it the widest single reading B53 found separating this engine from the headed
+// Chrome that clears the station.
 pub fn getDevicePixelRatio(_: *const Window) u32 {
-    return 1;
+    return 2;
 }
 
 // [Replaceable]: assigning to any of these shadows the accessor with a plain

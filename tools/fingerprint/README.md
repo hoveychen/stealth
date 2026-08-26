@@ -15879,12 +15879,26 @@ Mac reports that combination. Whether a guard acts on it is an A/B nobody has
 run; `display-capability-persona` and `device-pixel-ratio-persona` are that
 A/B, and their acceptance is `b53-arm.sh` over these same ten stations.
 
-**One of the differences needs no reference at all.** With `devicePixelRatio`
-1, `min-resolution` must be true at or below 1 and false above it. This engine
-answers *true* at `1.0000038146972656dppx` and `1.0000044107437134dppx`, and
-*false* at `37.795257568359375dpcm`, which is 0.99999995dppx. A monotone
-predicate answered non-monotonically is a defect on its own terms, whatever
-Chrome's display is: `resolution-query-monotonicity`.
+**The engine also disagrees with itself near the boundary — but so does Chrome.**
+With `devicePixelRatio` 1, this engine answers `min-resolution` *true* at
+`1.0000038146972656dppx` and `1.0000044107437134dppx`, and *false* at
+`37.795257568359375dpcm`, which is 0.99999995dppx. That was written up here as a
+monotone predicate answered non-monotonically, i.e. a defect needing no
+reference browser — **and that was wrong**. Driving the same halving ladder in
+all three units against Chrome under `--force-device-scale-factor` produces
+non-monotone pairs there too: Chrome's dpcm conversion is coarse enough that its
+tie region is about 0.005dppx wide, five hundred times wider than this engine's.
+
+What survives is smaller and has to be stated as a *difference*, not a defect.
+Asked the three thresholds above, Chrome at ratio 1 answers false, false, true;
+this engine answers true, true, false. All three. So the near-boundary answers
+diverge in both directions, which matters here only because Kasada's 314 queries
+are a binary search that spends its last twenty rungs inside exactly that
+region.
+
+The plan named for this is `resolution-query-monotonicity`; its premise is
+corrected to "match Chrome's near-boundary answers", and asserting monotonicity
+would now be asserting something the reference does not do.
 
 **The negative result is worth as much.** Forty-five `canPlayType` strings,
 nineteen `MediaSource.isTypeSupported`, seventeen
@@ -15960,3 +15974,56 @@ that needs no reference browser to see, and it costs nothing: thirty station-run
 with no regression and 1508 of 1508 tests green. But it is not a lever, and the
 next one to try in the same family is the bigger one: `x-hyatt` binary-searches
 `devicePixelRatio` with 314 queries, and that number is still 1 against Chrome's 2.
+
+## The ratio moved 41 answers and no doors (2026-08-26)
+
+The display-capability change closed two of the eleven media queries `dd-saks`
+asks and opened nothing. The bigger reading in the same family is the one
+`x-hyatt` spends 314 queries on, so it went next: `devicePixelRatio` 1 to 2.
+
+What that costs was measured rather than reasoned about. The same headless
+Chrome under `--force-device-scale-factor=1` and `=2`, same window, same page,
+moves **eleven readings out of forty-two and no others**
+(`probes/expr-device-pixel-ratio-blast.js`): the ratio itself, the resolution
+media queries, `screen.width`/`height`/`avail*` — which halve *there* only
+because that browser's physical panel is fixed while ours is a claim — and
+`img.x`/`img.y`, the one place a device pixel reaches a DOM reading.
+`innerWidth`, `outerWidth`, `getBoundingClientRect`, `offsetLeft`, computed
+width, the canvas backing store, `drawingBufferWidth` and `srcset` selection all
+stay put. `screen.*` is CSS pixels, so keeping 1920x1200 at ratio 2 names a
+3840x2400 panel: a 16:10 4K monitor, which macOS drives at exactly this scale.
+
+### The A/B
+
+Control the branch's base, treatment its head, both ReleaseFast, fifteen
+stations — the three real gaps plus twelve regression watches — three rounds,
+arm order flipped inside each. 09:43 to 10:23.
+
+```
+control   32/45 station-runs passed
+treatment 33/45
+thirteen of the fifteen stations answered identically in all six runs
+```
+
+`x-hyatt` was `refused-429` six times out of six. `dd-saks` and
+`cf-scrapingcourse` likewise never moved. Of the two stations that did,
+`px-wayfair` degraded on *both* arms as the session went on — our own repeated
+knocking — and `dd-leboncoin` came up 2/3 treatment against 0/3 control, which
+is the station B52 already named as the most window-prone on the list and is
+n=3. Neither is a result.
+
+**Two changes into this family, no door has moved, and that is the finding.**
+The panel and the pixel ratio are not what `dd-saks`, `x-hyatt` and
+`cf-scrapingcourse` are reading. Worth keeping anyway, and worth being precise
+about what "worth keeping" means: of the 314 media queries `x-hyatt` asks, the
+number this engine answers differently from the Chrome that clears it went from
+93 to 52, and the 72-rung resolution ladder went from 41 disagreements to none.
+Every one of the 52 left is a `width` / `height` / `aspect-ratio` query — the
+size of the display we claim, which a real Chrome on a 1920x1200 machine answers
+our way too. Twelve regression watches held, 1509 of 1509 tests green.
+
+One inconsistency this introduces, recorded rather than hidden: `img.x`/`img.y`
+should now double, and does not. It is read off a layout that does not place
+absolutely positioned boxes yet — `position:absolute; left:37px; top:53px`
+reports 100,100 here against Chrome's 37,53 — so there is no correct value to
+double. That belongs to the layout work, not here.
