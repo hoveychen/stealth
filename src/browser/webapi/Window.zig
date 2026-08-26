@@ -385,20 +385,16 @@ pub fn getCrypto(self: *Window) *Crypto {
     return &self._crypto;
 }
 
+// window.CSS. Not a bridge accessor: it is a WebIDL namespace object, and
+// WebIDL hangs one off the global as a plain data property that does not
+// enumerate. Env.zig installs it at realm setup with those attributes; this is
+// where the value comes from.
 pub fn getCSS(self: *Window) *CSS {
     return &self._css;
 }
 
 pub fn getPerformance(self: *Window) *Performance {
     return &self._performance;
-}
-
-// window.chrome. Assembled on first read and cached, so it keeps its identity
-// across reads the way Chrome's does. Chrome exposes it as a data property
-// rather than an accessor; the bridge has no way to install one whose value is
-// built at runtime, so the descriptor is the one visible difference.
-pub fn getChrome(_: *Window, exec: *const js.Execution) !js.Object {
-    return Chrome.build(exec);
 }
 
 pub fn setPerformance(self: *Window, value: js.Value) void {
@@ -1542,7 +1538,6 @@ pub const JsApi = struct {
     pub const screen = bridge.accessor(Window.getScreen, Window.setScreen, .{});
     pub const visualViewport = bridge.accessor(Window.getVisualViewport, Window.setVisualViewport, .{});
     pub const performance = bridge.accessor(Window.getPerformance, Window.setPerformance, .{});
-    pub const chrome = bridge.accessor(Window.getChrome, null, .{ .cache = .{ .internal = 2 } });
     pub const localStorage = bridge.accessor(Window.getLocalStorage, null, .{});
     pub const sessionStorage = bridge.accessor(Window.getSessionStorage, null, .{});
     pub const cookieStore = bridge.accessor(Window.getCookieStore, null, .{});
@@ -1552,7 +1547,6 @@ pub const JsApi = struct {
     pub const history = bridge.accessor(Window.getHistory, null, .{});
     pub const navigation = bridge.accessor(Window.getNavigation, Window.setNavigation, .{});
     pub const crypto = bridge.accessor(Window.getCrypto, null, .{});
-    pub const CSS = bridge.accessor(Window.getCSS, null, .{});
     pub const customElements = bridge.accessor(Window.getCustomElements, null, .{});
     // Every event handler [Global] Window declares, in the order a headed
     // Chrome 150 lists them under Object.getOwnPropertyNames(window). Blink
