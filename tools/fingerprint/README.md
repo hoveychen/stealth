@@ -13817,3 +13817,65 @@ What is left is three plans, one per remaining axis: `computed-style-inheritance
 `computed-style-value-gaps` (3 — `border-radius`, `transform`'s `matrix()`, and
 `white-space`, all three of which the *inline* control fails too, so they are
 value bugs and not cascade ones). `font:` still does not expand, on either path.
+
+## Which properties inherit, measured rather than remembered (2026-08-26)
+
+The cascade change above asked the author sheet about the element and nowhere
+above it, so a rule on a parent declaring `color:rgb(1,2,3)` still left the child
+on `rgb(0, 0, 0)`. Six of the ten readings in `expr-cascade-scope.js`'s inherited
+group disagreed with Chrome — and the four that agreed were the four that do not
+inherit, which is the shape a "no ancestor walk at all" bug has.
+
+Nothing in the DOM reports whether a property inherits. There is no
+`CSSPropertyRule` for standard properties, no flag on the computed declaration,
+and no trick with `inherit` / `initial` / `unset` that distinguishes the two
+classes without already knowing a non-initial value. So
+`dump-css-inherited.mjs` measures it:
+
+```
+initial  = the value on an element that declares nothing
+took     = the parent is given candidate values until one of them moves the
+           parent's *own* computed value off `initial`
+inherits = the child, which declares nothing, now reads the parent's value
+```
+
+`child === parent && parent !== initial` has no false positive: a child only
+leaves its initial value by inheriting. The "took" step is checked rather than
+assumed because most candidates are invalid for most properties and an invalid
+declaration is dropped silently — without that check, a property whose candidate
+never applied would be classified off a comparison of two initial values.
+
+**131 of Chrome 151's 475 computed longhands inherit, 339 do not, and 5 cannot be
+classified this way.** The candidate list took three passes to get there, and
+what each pass exposed is worth recording:
+
+- 79 unclassified after the generic keyword list. The gaps were shapes no
+  keyword reaches: a percentage (`font-stretch`), a string (`-webkit-locale`), a
+  url (`list-style-image`), an image (`background-image`), a shadow
+  (`text-shadow`), a font-feature tuple (`font-feature-settings`), an SVG path
+  (`d`), a dashed-ident (`scroll-timeline-name`).
+- 15 after adding those. Eight were the `border-*-width` family, and they are
+  the interesting failure: **a border width is pinned to 0 while the border
+  style is `none`**, so no value of `border-top-width` alone can move it off its
+  initial. The auxiliary `border-style:solid` that fixes it goes on the child as
+  well as the parent — otherwise the child could not have shown a width even if
+  the property did inherit, and the test would be constructing its answer
+  instead of measuring it.
+- 5 after that: `overlay` and `-webkit-text-decorations-in-effect` are UA-only
+  and an author cannot set them at all; `animation-trigger`, `rule-overlap` and
+  `text-fit` are new enough that no candidate matched their grammar. They are
+  left out of the table rather than guessed at, so a lookup answers "does not
+  inherit" — which is exactly what the engine did before the table existed.
+
+The walk itself stops at the first ancestor that declares the property, whether
+or not the value can be reported. An ancestor declaring `letter-spacing:2em` is
+the one that decides the answer even though this engine will not print `2em`, so
+a grandparent's `3px` must not show through it — which is why the per-element
+lookup answers `none` / `unreportable` / `value` and not an optional. No depth
+cap: the chain terminates at the root, and capping it would stop inheriting in a
+deep document, which is a wrong answer rather than a slow one.
+
+**inherited 4/10 to 10/10; the probe's total is 50/60.** What is left is three
+`direct` readings that the inline control fails too (`border-radius`,
+`transform`, `white-space` — value bugs, not cascade ones), five `relative` ones,
+and `font:`, which still does not expand on either path.
