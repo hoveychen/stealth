@@ -38,6 +38,7 @@ const FileList = @import("../../FileList.zig");
 const filesystem = @import("../../filesystem.zig");
 const handler_property = @import("../../handler_property.zig");
 const reflection = @import("../reflection.zig");
+const text_selection = @import("text_selection.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
 /// function is a listener like any other, so it lives in the event manager's
@@ -416,6 +417,100 @@ pub fn setFiles(self: *Input, files: []const *File, frame: *Frame) !void {
 
 /// JS-binding wrapper for the `value` getter: for type=file, return the spec
 /// "C:\\fakepath\\<name>" string; otherwise delegate to plain getValue().
+/// `height` and `width` reflect the content attributes only for
+/// `type=image`; every other type answers 0 whatever the attributes say
+/// (measured: an <input> with height="7" width="9" reports 0/0 as `text` and
+/// 7/9 as `image`).
+pub fn getDimension(self: *const Input, comptime attr: []const u8) u32 {
+    if (self._input_type != .image) {
+        return 0;
+    }
+    const raw = self.asConstElement().getAttributeSafe(comptime .wrap(attr)) orelse return 0;
+    return std.fmt.parseInt(u32, std.mem.trim(u8, raw, &std.ascii.whitespace), 10) catch 0;
+}
+
+/// The value as a number, NaN whenever the type has no numeric interpretation
+/// (measured: NaN on a fresh `type=text`, 42 on a `type=number` holding "42").
+pub fn getValueAsNumber(self: *const Input) f64 {
+    switch (self._input_type) {
+        .number, .range => {},
+        else => return std.math.nan(f64),
+    }
+    return std.fmt.parseFloat(f64, self.getValue()) catch std.math.nan(f64);
+}
+
+pub fn setValueAsNumber(self: *Input, value: f64, frame: *Frame) !void {
+    if (std.math.isNan(value) or std.math.isInf(value)) {
+        return frame.js.fail(error.TypeError, "Failed to set the 'valueAsNumber' property on 'HTMLInputElement': The value provided is infinite.");
+    }
+    var buf: [32]u8 = undefined;
+    return self.setValue(try std.fmt.bufPrint(&buf, "{d}", .{value}), frame);
+}
+
+/// Always null here: the date-shaped types would each need their own parse back
+/// to an epoch, and Chrome answers null for every non-date type anyway
+/// (measured on `type=text` and on `type=number`).
+pub fn getValueAsDate(_: *const Input) ?js.Value {
+    return null;
+}
+
+pub fn setValueAsDate(_: *Input, _: ?js.Value) void {}
+
+/// `stepUp`/`stepDown` move the value by n steps. Only the numeric types have
+/// one; the rest refuse (measured: `type=number` holding "42" steps to "43"
+/// and back).
+pub fn stepBy(self: *Input, n_: ?i32, direction: f64, frame: *Frame) !void {
+    switch (self._input_type) {
+        .number, .range => {},
+        else => return frame.js.fail(error.InvalidStateError, "Failed to execute 'stepUp' on 'HTMLInputElement': This form element is not steppable."),
+    }
+    const current = self.getValueAsNumber();
+    const base = if (std.math.isNan(current)) 0 else current;
+    const step = blk: {
+        const raw = self.asConstElement().getAttributeSafe(comptime .wrap("step")) orelse break :blk 1;
+        break :blk std.fmt.parseFloat(f64, std.mem.trim(u8, raw, &std.ascii.whitespace)) catch 1;
+    };
+    const n: f64 = @floatFromInt(n_ orelse 1);
+    return self.setValueAsNumber(base + direction * n * step, frame);
+}
+
+pub fn stepUp(self: *Input, n: ?i32, frame: *Frame) !void {
+    return self.stepBy(n, 1, frame);
+}
+
+pub fn stepDown(self: *Input, n: ?i32, frame: *Frame) !void {
+    return self.stepBy(n, -1, frame);
+}
+
+/// Chrome refuses this outside a user gesture, and nothing here ever has one
+/// (measured wording, on a plain `input.showPicker()` from a script).
+pub fn showPicker(_: *Input, frame: *Frame) !void {
+    return frame.js.fail(error.NotAllowedError, "Failed to execute 'showPicker' on 'HTMLInputElement': HTMLInputElement::showPicker() requires a user gesture.");
+}
+
+pub fn setRangeText(
+    self: *Input,
+    replacement: []const u8,
+    start_: ?u32,
+    end_: ?u32,
+    mode_: ?[]const u8,
+    frame: *Frame,
+) !void {
+    const result = try text_selection.setRangeText(.{
+        .value = self.getValue(),
+        .selection_start = self._selection_start,
+        .selection_end = self._selection_end,
+        .replacement = replacement,
+        .start = start_,
+        .end = end_,
+        .mode = mode_,
+    }, "HTMLInputElement", frame);
+
+    try self.setValue(result.value, frame);
+    self._selection_start = result.selection_start;
+    self._selection_end = result.selection_end;
+}
+
 pub fn getValueForJS(self: *const Input, frame: *Frame) ![]const u8 {
     if (self._input_type != .file) {
         return self.getValue();
@@ -1465,9 +1560,6 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(Input);
-    pub const useMap = reflect.string("usemap");
-    pub const dirName = reflect.string("dirname");
-    pub const @"align" = reflect.string("align");
 
     /// Handles [LegacyNullToEmptyString]: null → "" per HTML spec.
     fn setValueFromJS(self: *Input, js_value: js.Value, frame: *Frame) !void {
@@ -1477,55 +1569,86 @@ pub const JsApi = struct {
         return self.setValue(try js_value.toZig([]const u8), frame);
     }
 
-    pub const onselectionchange = bridge.accessor(handlerProperty(Input, .onselectionchange).get, handlerProperty(Input, .onselectionchange).set, .{});
-    pub const @"type" = bridge.accessor(Input.getType, Input.setType, .{ .ce_reactions = true });
-    pub const value = bridge.accessor(Input.getValueForJS, setValueFromJS, .{ .ce_reactions = true });
-    pub const files = bridge.accessor(Input.getFiles, Input.setFilesFromList, .{});
-    pub const defaultValue = bridge.accessor(Input.getDefaultValue, Input.setDefaultValue, .{ .ce_reactions = true });
-    pub const checked = bridge.accessor(Input.getChecked, Input.setChecked, .{});
-    pub const defaultChecked = bridge.accessor(Input.getDefaultChecked, Input.setDefaultChecked, .{ .ce_reactions = true });
-    pub const disabled = bridge.accessor(Input.getDisabled, Input.setDisabled, .{ .ce_reactions = true });
-    pub const name = reflect.string("name");
-    pub const required = reflect.boolean("required");
+    // Chrome's order. No `onselectionchange`: it belongs to
+    // GlobalEventHandlers, so Chrome carries it on HTMLElement.prototype and
+    // not here (measured).
     pub const accept = reflect.string("accept");
-    pub const readOnly = reflect.boolean("readonly");
     pub const alt = reflect.string("alt");
-    pub const maxLength = reflect.limitedLong("maxlength", "maxLength");
-    pub const minLength = reflect.limitedLong("minlength", "minLength");
-    pub const size = reflect.unsignedLong("size", .{ .default = 20, .positive = true });
-    pub const src = bridge.accessor(Input.getSrc, Input.setSrc, .{ .ce_reactions = true });
+    pub const autocomplete = reflect.string("autocomplete");
+    pub const defaultChecked = bridge.accessor(Input.getDefaultChecked, Input.setDefaultChecked, .{ .ce_reactions = true });
+    pub const checked = bridge.accessor(Input.getChecked, Input.setChecked, .{});
+    pub const dirName = reflect.string("dirname");
+    pub const disabled = bridge.accessor(Input.getDisabled, Input.setDisabled, .{ .ce_reactions = true });
     pub const form = bridge.accessor(Input.getForm, null, .{});
-    pub const list = bridge.accessor(Input.getList, null, .{});
+    pub const files = bridge.accessor(Input.getFiles, Input.setFilesFromList, .{});
     pub const formAction = bridge.accessor(Input.getFormAction, Input.setFormAction, .{});
     pub const formEnctype = bridge.accessor(Input.getFormEnctype, Input.setFormEnctype, .{});
     pub const formMethod = bridge.accessor(Input.getFormMethod, Input.setFormMethod, .{});
     pub const formNoValidate = bridge.accessor(Input.getFormNoValidate, Input.setFormNoValidate, .{});
     pub const formTarget = reflect.string("formtarget");
-    pub const labels = bridge.accessor(Input.getLabels, null, .{});
-    pub const popoverTargetElement = bridge.accessor(Input.getPopoverTargetElement, Input.setPopoverTargetElement, .{ .ce_reactions = true });
-    pub const popoverTargetAction = bridge.accessor(Input.getPopoverTargetAction, Input.setPopoverTargetAction, .{ .ce_reactions = true });
+
+    pub const height = bridge.accessor(_height, _setHeight, .{ .ce_reactions = true });
+    fn _height(self: *const Input) u32 {
+        return self.getDimension("height");
+    }
+    fn _setHeight(self: *Input, value_: u32, frame: *Frame) !void {
+        var buf: [16]u8 = undefined;
+        return self.asElement().setAttributeSafe(comptime .wrap("height"), .wrap(try std.fmt.bufPrint(&buf, "{d}", .{value_})), frame);
+    }
+
     pub const indeterminate = bridge.accessor(Input.getIndeterminate, Input.setIndeterminate, .{});
-    pub const placeholder = reflect.string("placeholder");
-    pub const pattern = reflect.string("pattern");
-    pub const min = reflect.string("min");
+    pub const list = bridge.accessor(Input.getList, null, .{});
     pub const max = reflect.string("max");
-    pub const step = reflect.string("step");
+    pub const maxLength = reflect.limitedLong("maxlength", "maxLength");
+    pub const min = reflect.string("min");
+    pub const minLength = reflect.limitedLong("minlength", "minLength");
     pub const multiple = reflect.boolean("multiple");
-    pub const webkitdirectory = reflect.boolean("webkitdirectory");
-    pub const webkitEntries = bridge.accessor(Input.getWebkitEntries, null, .{});
-    pub const autocomplete = reflect.string("autocomplete");
+    pub const name = reflect.string("name");
+    pub const pattern = reflect.string("pattern");
+    pub const placeholder = reflect.string("placeholder");
+    pub const readOnly = reflect.boolean("readonly");
+    pub const required = reflect.boolean("required");
+    pub const size = reflect.unsignedLong("size", .{ .default = 20, .positive = true });
+    pub const src = bridge.accessor(Input.getSrc, Input.setSrc, .{ .ce_reactions = true });
+    pub const step = reflect.string("step");
+    pub const @"type" = bridge.accessor(Input.getType, Input.setType, .{ .ce_reactions = true });
+    pub const defaultValue = bridge.accessor(Input.getDefaultValue, Input.setDefaultValue, .{ .ce_reactions = true });
+    pub const value = bridge.accessor(Input.getValueForJS, setValueFromJS, .{ .ce_reactions = true });
+    pub const valueAsDate = bridge.accessor(Input.getValueAsDate, Input.setValueAsDate, .{});
+    pub const valueAsNumber = bridge.accessor(Input.getValueAsNumber, Input.setValueAsNumber, .{});
+
+    pub const width = bridge.accessor(_width, _setWidth, .{ .ce_reactions = true });
+    fn _width(self: *const Input) u32 {
+        return self.getDimension("width");
+    }
+    fn _setWidth(self: *Input, value_: u32, frame: *Frame) !void {
+        var buf: [16]u8 = undefined;
+        return self.asElement().setAttributeSafe(comptime .wrap("width"), .wrap(try std.fmt.bufPrint(&buf, "{d}", .{value_})), frame);
+    }
+
     pub const willValidate = bridge.accessor(Input.getWillValidate, null, .{});
     pub const validity = bridge.accessor(Input.getValidity, null, .{});
     pub const validationMessage = bridge.accessor(Input.getValidationMessage, null, .{});
-    pub const checkValidity = bridge.function(Input.checkValidity, .{});
-    pub const reportValidity = bridge.function(Input.reportValidity, .{});
-    pub const setCustomValidity = bridge.function(Input.setCustomValidity, .{});
-    pub const select = bridge.function(Input.select, .{});
-
+    pub const labels = bridge.accessor(Input.getLabels, null, .{});
     pub const selectionStart = bridge.accessor(Input.getSelectionStart, Input.setSelectionStart, .{});
     pub const selectionEnd = bridge.accessor(Input.getSelectionEnd, Input.setSelectionEnd, .{});
     pub const selectionDirection = bridge.accessor(Input.getSelectionDirection, Input.setSelectionDirection, .{});
+    pub const @"align" = reflect.string("align");
+    pub const useMap = reflect.string("usemap");
+    pub const webkitdirectory = reflect.boolean("webkitdirectory");
+    pub const incremental = reflect.boolean("incremental");
+    pub const popoverTargetElement = bridge.accessor(Input.getPopoverTargetElement, Input.setPopoverTargetElement, .{ .ce_reactions = true });
+    pub const popoverTargetAction = bridge.accessor(Input.getPopoverTargetAction, Input.setPopoverTargetAction, .{ .ce_reactions = true });
+    pub const checkValidity = bridge.function(Input.checkValidity, .{});
+    pub const reportValidity = bridge.function(Input.reportValidity, .{});
+    pub const select = bridge.function(Input.select, .{});
+    pub const setCustomValidity = bridge.function(Input.setCustomValidity, .{});
+    pub const setRangeText = bridge.function(Input.setRangeText, .{ .arity = 1 });
     pub const setSelectionRange = bridge.function(Input.setSelectionRange, .{});
+    pub const showPicker = bridge.function(Input.showPicker, .{});
+    pub const stepDown = bridge.function(Input.stepDown, .{ .arity = 0 });
+    pub const stepUp = bridge.function(Input.stepUp, .{ .arity = 0 });
+    pub const webkitEntries = bridge.accessor(Input.getWebkitEntries, null, .{});
 };
 
 pub const Build = struct {

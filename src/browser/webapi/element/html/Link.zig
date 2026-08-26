@@ -167,22 +167,37 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(Link);
-    pub const nonce = reflect.string("nonce");
 
-    pub const as = reflect.enumerated("as", &.{ "fetch", "audio", "document", "embed", "font", "image", "manifest", "object", "report", "script", "sharedworker", "style", "track", "video", "worker", "xslt" }, .{});
-    pub const rel = bridge.accessor(Link.getRel, Link.setRel, .{ .ce_reactions = true });
-    pub const media = bridge.accessor(Link.getMedia, Link.setMedia, .{ .ce_reactions = true });
+    // Chrome's order. No `nonce`: that one is HTMLElement's, from the
+    // HTMLOrSVGElement mixin (measured).
+    pub const disabled = reflect.boolean("disabled");
     pub const href = bridge.accessor(Link.getHref, Link.setHref, .{ .ce_reactions = true });
     pub const crossOrigin = reflect.enumerated("crossorigin", &.{ "anonymous", "use-credentials" }, .{ .missing = null, .nullable = true, .invalid = "anonymous" });
-    pub const referrerPolicy = reflect.referrerPolicy();
-    pub const charset = reflect.string("charset");
+    pub const rel = bridge.accessor(Link.getRel, Link.setRel, .{ .ce_reactions = true });
+    pub const relList = bridge.accessor(Link.getRelList, Link.setRelList, .{ .null_as_undefined = true, .ce_reactions = true });
+    pub const media = bridge.accessor(Link.getMedia, Link.setMedia, .{ .ce_reactions = true });
     pub const hreflang = reflect.string("hreflang");
-    pub const integrity = reflect.string("integrity");
     pub const @"type" = reflect.string("type");
+    pub const as = reflect.enumerated("as", &.{ "fetch", "audio", "document", "embed", "font", "image", "manifest", "object", "report", "script", "sharedworker", "style", "track", "video", "worker", "xslt" }, .{});
+    pub const referrerPolicy = reflect.referrerPolicy();
+    pub const sizes = bridge.accessor(Link.getSizes, null, .{ .null_as_undefined = true });
+    pub const fetchPriority = reflect.enumerated("fetchpriority", &.{ "high", "low" }, .{ .missing = "auto" });
+    pub const imageSrcset = reflect.string("imagesrcset");
+    pub const imageSizes = reflect.string("imagesizes");
+    pub const charset = reflect.string("charset");
     pub const rev = reflect.string("rev");
     pub const target = reflect.string("target");
-    pub const relList = bridge.accessor(Link.getRelList, Link.setRelList, .{ .null_as_undefined = true, .ce_reactions = true });
-    pub const sizes = bridge.accessor(Link.getSizes, null, .{ .null_as_undefined = true });
+
+    // Nothing here builds a CSSStyleSheet for a <link>, and Chrome answers
+    // null for a link whose stylesheet has not loaded, which is the honest
+    // answer to give (measured on a fresh `document.createElement('link')`).
+    pub const sheet = bridge.accessor(_sheet, null, .{});
+    fn _sheet(_: *Link) ?*@import("../../css/CSSStyleSheet.zig") {
+        return null;
+    }
+
+    pub const integrity = reflect.string("integrity");
+    pub const blocking = reflect.tokenList(.blocking);
 };
 
 // Parser-created <link> elements are void (no closing tag) so they never

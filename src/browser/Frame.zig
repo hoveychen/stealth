@@ -160,6 +160,9 @@ _element_datasets: Element.DatasetLookup = .empty,
 _element_class_lists: Element.ClassListLookup = .empty,
 _element_rel_lists: Element.RelListLookup = .empty,
 _element_token_lists: Element.TokenListLookup = .empty,
+// interestFor / commandFor, whose IDL member is an element rather than a
+// string. See Element.ElementReferenceAttribute.
+_element_references: Element.ElementReferenceLookup = .empty,
 _element_shadow_roots: Element.ShadowRootLookup = .empty,
 // The EditContext attached to an element, if any. The reverse link lives on
 // the context itself, which is how a second element attaching the same one is

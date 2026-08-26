@@ -145,13 +145,14 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(Style);
-    pub const nonce = reflect.string("nonce");
 
-    pub const blocking = reflect.string("blocking");
+    // Chrome's order. No `nonce`: it belongs to the HTMLOrSVGElement mixin, so
+    // Chrome carries it on HTMLElement.prototype and nowhere below (measured).
+    pub const disabled = reflect.boolean("disabled");
     pub const media = reflect.string("media");
     pub const @"type" = reflect.string("type");
-    pub const disabled = reflect.boolean("disabled");
     pub const sheet = bridge.accessor(Style.getSheet, null, .{});
+    pub const blocking = reflect.tokenList(.blocking);
 };
 
 const testing = @import("../../../../testing.zig");

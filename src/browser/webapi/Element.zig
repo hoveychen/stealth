@@ -737,6 +737,13 @@ pub fn setOuterHTML(self: *Element, html: []const u8, frame: *Frame) !void {
 }
 
 pub fn getInnerHTML(self: *Element, writer: *std.Io.Writer, frame: *Frame) !void {
+    // A template's own childNodes are always empty; what it holds lives in its
+    // content fragment, and that is what `innerHTML` reads and writes. Chrome
+    // has no HTMLTemplateElement.prototype.innerHTML of its own (measured), so
+    // the redirect belongs here rather than on a second binding.
+    if (self.is(Html.Template)) |template| {
+        return dump.children(template._content.asNode(), .{ .shadow = .skip }, writer, frame);
+    }
     return dump.children(self.asNode(), .{ .shadow = .skip }, writer, frame);
 }
 
@@ -745,6 +752,10 @@ pub fn getHTML(self: *Element, opts: dump.Opts.Shadow.Declarative, writer: *std.
 }
 
 pub fn setInnerHTML(self: *Element, html: []const u8, frame: *Frame) !void {
+    // See getInnerHTML: a template parses into its content fragment.
+    if (self.is(Html.Template)) |template| {
+        return template.setInnerHTML(html, frame);
+    }
     const parent = self.asNode();
     return parent.setHTML(html, false, frame);
 }
@@ -1214,7 +1225,18 @@ pub fn getRelList(self: *Element, frame: *Frame) !*collections.DOMTokenList {
 
 // The other DOMTokenList-reflected attributes (class and rel have dedicated
 // lookups above).
-pub const TokenListAttribute = enum { sizes, sandbox, @"for", part, focusgroup };
+pub const TokenListAttribute = enum { sizes, sandbox, @"for", part, focusgroup, blocking };
+
+/// The content attributes whose IDL member is an element reference rather than
+/// a string: `interestfor` and `commandfor`. Setting the IDL member does not
+/// write an id -- Chrome writes the attribute as the empty string and keeps the
+/// element itself, so a target with no id still reads back (measured:
+/// `b.commandForElement = div` leaves `getAttribute('commandfor')` as `""` and
+/// `b.commandForElement` as the div). That explicit reference lives here rather
+/// than in a field on each element type, the way a token list does.
+pub const ElementReferenceAttribute = enum { interestfor, commandfor };
+pub const ElementReferenceKey = struct { element: *Element, attribute: ElementReferenceAttribute };
+pub const ElementReferenceLookup = std.AutoHashMapUnmanaged(ElementReferenceKey, *Element);
 pub const EditContextLookup = std.AutoHashMapUnmanaged(*Element, *@import("EditContext.zig"));
 pub const TokenListKey = struct { element: *Element, attribute: TokenListAttribute };
 pub const TokenListLookup = std.AutoHashMapUnmanaged(TokenListKey, *collections.DOMTokenList);
@@ -1228,6 +1250,28 @@ pub fn getTokenList(self: *Element, comptime attribute: TokenListAttribute, fram
         });
     }
     return gop.value_ptr.*;
+}
+
+pub fn getElementReference(self: *Element, comptime attribute: ElementReferenceAttribute, frame: *Frame) ?*Element {
+    if (frame._element_references.get(.{ .element = self, .attribute = attribute })) |explicit| {
+        // Same rule as popover's invoker target: the two have to share a root.
+        if (explicit.asNode().getRootNode(.{}) == self.asNode().getRootNode(.{})) {
+            return explicit;
+        }
+        return null;
+    }
+    const id = self.getAttributeSafe(comptime .wrap(@tagName(attribute))) orelse return null;
+    return frame.getElementByIdFromNode(self.asNode(), id);
+}
+
+pub fn setElementReference(self: *Element, comptime attribute: ElementReferenceAttribute, value: ?*Element, frame: *Frame) !void {
+    const name = comptime String.wrap(@tagName(attribute));
+    const target = value orelse {
+        _ = frame._element_references.remove(.{ .element = self, .attribute = attribute });
+        return self.removeAttribute(name, frame);
+    };
+    try frame._element_references.put(frame.arena, .{ .element = self, .attribute = attribute }, target);
+    return self.setAttributeSafe(name, .wrap(""), frame);
 }
 
 pub fn getDataset(self: *Element, frame: *Frame) !*DOMStringMap {
@@ -1363,7 +1407,7 @@ pub fn setHTML(self: *Element, html: []const u8, _: ?js.Object, frame: *Frame) !
     sanitizeTree(self.asNode(), frame);
 }
 
-fn sanitizeTree(root: *Node, frame: *Frame) void {
+pub fn sanitizeTree(root: *Node, frame: *Frame) void {
     var walker = @import("TreeWalker.zig").Full.init(root, .{});
     while (walker.next()) |node| {
         const element = node.is(Element) orelse continue;

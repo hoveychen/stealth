@@ -91,39 +91,16 @@
   }
 </script>
 
-<script id="required_initial">
-  testing.expectEqual(true, $('#required1').required)
-  testing.expectEqual(false, $('#required2').required)
-</script>
-
-<script id="required_set">
+<script id="required_is_not_a_button_idl_attribute">
   {
-    const button = document.createElement('button')
-    testing.expectEqual(false, button.required)
-
-    button.required = true
-    testing.expectEqual(true, button.required)
-    testing.expectEqual('', button.getAttribute('required'))
-
-    button.required = false
-    testing.expectEqual(false, button.required)
-    testing.expectEqual(null, button.getAttribute('required'))
-  }
-</script>
-
-<script id="required_reflects_to_attribute">
-  {
-    const button = document.createElement('button')
-    testing.expectEqual(null, button.getAttribute('required'))
-    testing.expectFalse(button.outerHTML.includes('required'))
-
-    button.required = true
-    testing.expectEqual('', button.getAttribute('required'))
-    testing.expectTrue(button.outerHTML.includes('required'))
-
-    button.required = false
-    testing.expectEqual(null, button.getAttribute('required'))
-    testing.expectFalse(button.outerHTML.includes('required'))
+    // A <button> has no `required` IDL attribute -- Chrome's
+    // HTMLButtonElement.prototype does not own the name (measured), so a
+    // `required` content attribute stays a content attribute and reading the
+    // IDL member gives undefined.
+    testing.expectEqual(undefined, $('#required1').required)
+    testing.expectEqual('', $('#required1').getAttribute('required'))
+    testing.expectEqual(undefined, $('#required2').required)
+    testing.expectEqual(false, 'required' in HTMLButtonElement.prototype)
   }
 </script>
 

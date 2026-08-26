@@ -919,19 +919,30 @@ pub const Entry = struct {
         entryType: []const u8,
         startTime: f64,
         duration: f64,
+        navigationId: u32,
     };
 
-    /// Chrome's PerformanceEntry.toJSON() is these four keys in this order, and
+    /// Chrome's PerformanceEntry.toJSON() is these five keys in this order, and
     /// the subclasses that add nothing of their own (PerformanceMark,
     /// PerformanceMeasure, VisibilityStateEntry) inherit it verbatim — a mark's
     /// `detail` is not in its JSON (measured).
-    pub fn toJSON(self: *const Entry) Entry.Json {
+    pub fn toJSON(self: *const Entry, exec: *const Execution) Entry.Json {
         return .{
             .name = self._name,
             .entryType = self.getEntryType(),
             .startTime = self._start_time,
             .duration = self._duration,
+            .navigationId = self.getNavigationId(exec),
         };
+    }
+
+    /// `navigationId` belongs to PerformanceEntry, not to
+    /// PerformanceResourceTiming: every entry of a navigation carries the same
+    /// tag, a mark filed right after a resource reads the same number
+    /// (measured). It sits behind `constructor` because Chrome installs it from
+    /// the per-context batch.
+    pub fn getNavigationId(_: *const Entry, exec: *const Execution) u32 {
+        return exec.performance()._navigation_id;
     }
 
     pub const JsApi = struct {
@@ -941,12 +952,14 @@ pub const Entry = struct {
             pub const name = "PerformanceEntry";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
+            pub const constructor_after = "toJSON";
         };
         pub const name = bridge.accessor(Entry.getName, null, .{});
         pub const entryType = bridge.accessor(Entry.getEntryType, null, .{});
         pub const startTime = bridge.accessor(Entry.getStartTime, null, .{});
         pub const duration = bridge.accessor(Entry.getDuration, null, .{});
         pub const toJSON = bridge.function(Entry.toJSON, .{});
+        pub const navigationId = bridge.accessor(Entry.getNavigationId, null, .{});
     };
 };
 

@@ -127,9 +127,10 @@ pub const JsApi = struct {
         return self.item(@intCast(index));
     }
 
-    pub const keys = bridge.function(DOMStringList.keys, .{});
-    pub const values = bridge.function(DOMStringList.values, .{});
-    pub const entries = bridge.function(DOMStringList.entries, .{});
+    // No `keys` / `values` / `entries`: DOMStringList is not a `iterable<>` in
+    // Chrome, whose prototype owns only length, contains, item and a
+    // Symbol.iterator (measured -- the symbol is there, the three names are
+    // not).
     pub const symbol_iterator = bridge.iterator(DOMStringList.values, .{});
     pub const @"[]" = bridge.indexed(DOMStringList.item, getIndexes, .{ .null_as_undefined = true });
 

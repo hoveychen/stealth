@@ -69,9 +69,16 @@ pub fn asEventTarget(self: *DocumentFragment) *@import("EventTarget.zig") {
     return self._proto.asEventTarget();
 }
 
-pub fn getElementById(self: *DocumentFragment, id: []const u8) ?*Element {
+pub fn getElementById(self: *DocumentFragment, id: []const u8, frame: *Frame) ?*Element {
     if (id.len == 0) {
         return null;
+    }
+
+    // A shadow root keeps an id map, and this is the only binding for it:
+    // Chrome's ShadowRoot.prototype has no getElementById of its own
+    // (measured), it inherits this one.
+    if (self.is(ShadowRoot)) |shadow_root| {
+        return shadow_root.getElementById(id, frame);
     }
 
     var tw = @import("TreeWalker.zig").Full.Elements.init(self.asNode(), .{});
@@ -200,39 +207,35 @@ pub const JsApi = struct {
 
     pub const constructor = bridge.constructor(DocumentFragment.init, .{});
 
-    pub const getElementById = bridge.function(_getElementById, .{ .arity = 1 });
-    fn _getElementById(self: *DocumentFragment, value_: ?js.Value) !?*Element {
-        const value = value_ orelse return null;
-        if (value.isNull()) {
-            return self.getElementById("null");
-        }
-        if (value.isUndefined()) {
-            return self.getElementById("undefined");
-        }
-        return self.getElementById(try value.toZig([]const u8));
-    }
-
-    pub const querySelector = bridge.function(DocumentFragment.querySelector, .{});
-    pub const querySelectorAll = bridge.function(DocumentFragment.querySelectorAll, .{});
+    // Chrome's order, which is the order a page reads back from
+    // getOwnPropertyNames.
     pub const children = bridge.accessor(DocumentFragment.getChildren, null, .{});
-    pub const childElementCount = bridge.accessor(DocumentFragment.getChildElementCount, null, .{});
     pub const firstElementChild = bridge.accessor(DocumentFragment.firstElementChild, null, .{});
     pub const lastElementChild = bridge.accessor(DocumentFragment.lastElementChild, null, .{});
+    pub const childElementCount = bridge.accessor(DocumentFragment.getChildElementCount, null, .{});
     pub const append = bridge.function(DocumentFragment.append, .{ .ce_reactions = true, .arity = 0 });
-    pub const prepend = bridge.function(DocumentFragment.prepend, .{ .ce_reactions = true, .arity = 0 });
+
+    pub const getElementById = bridge.function(_getElementById, .{ .arity = 1 });
+    fn _getElementById(self: *DocumentFragment, value_: ?js.Value, frame: *Frame) !?*Element {
+        const value = value_ orelse return null;
+        if (value.isNull()) {
+            return self.getElementById("null", frame);
+        }
+        if (value.isUndefined()) {
+            return self.getElementById("undefined", frame);
+        }
+        return self.getElementById(try value.toZig([]const u8), frame);
+    }
+
     pub const moveBefore = bridge.function(DocumentFragment.moveBefore, .{ .ce_reactions = true });
+    pub const prepend = bridge.function(DocumentFragment.prepend, .{ .ce_reactions = true, .arity = 0 });
+    pub const querySelector = bridge.function(DocumentFragment.querySelector, .{});
+    pub const querySelectorAll = bridge.function(DocumentFragment.querySelectorAll, .{});
     pub const replaceChildren = bridge.function(DocumentFragment.replaceChildren, .{ .ce_reactions = true, .arity = 0 });
 
-    pub const innerHTML = bridge.accessor(_getInnerHTML, _setInnerHTML, .{ .ce_reactions = true });
-    fn _getInnerHTML(self: *DocumentFragment, frame: *Frame) ![]const u8 {
-        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
-        try self.getInnerHTML(&buf.writer, frame);
-        return buf.written();
-    }
-    fn _setInnerHTML(self: *DocumentFragment, value: js.Value, frame: *Frame) !void {
-        // `[LegacyNullToEmptyString] DOMString`: a JS null becomes "", not "null".
-        return self.setInnerHTML(if (value.isNull()) "" else try value.toZig([]const u8), frame);
-    }
+    // No `innerHTML`: a bare DocumentFragment has none in Chrome (measured,
+    // `'innerHTML' in document.createDocumentFragment()` is false). The pair
+    // above is ShadowRoot's, and that is where the binding lives.
 };
 
 const testing = @import("../../testing.zig");

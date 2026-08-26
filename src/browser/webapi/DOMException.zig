@@ -174,26 +174,6 @@ pub fn getMessage(self: *const DOMException) []const u8 {
     };
 }
 
-pub fn toString(self: *const DOMException, exec: *js.Execution) ![]const u8 {
-    const msg = blk: {
-        if (self._custom_message) |msg| {
-            break :blk msg;
-        }
-        switch (self._code) {
-            .none => return "Error",
-            else => break :blk self.getMessage(),
-        }
-    };
-    // DOMException does not define its own toString — it inherits
-    // Error.prototype.toString, which drops the separator when the message is
-    // empty. Measured on Chrome 150: String(new RTCError({errorDetail: ...}))
-    // is "OperationError", not "OperationError: ".
-    if (msg.len == 0) {
-        return self.getName();
-    }
-    return std.fmt.bufPrint(exec.buf, "{s}: {s}", .{ self.getName(), msg }) catch return msg;
-}
-
 const Code = enum(u8) {
     none = 0,
     index_size_error = 1,
@@ -285,7 +265,11 @@ pub const JsApi = struct {
     pub const code = bridge.accessor(DOMException.getCode, null, .{});
     pub const name = bridge.accessor(DOMException.getName, null, .{});
     pub const message = bridge.accessor(DOMException.getMessage, null, .{});
-    pub const toString = bridge.function(DOMException.toString, .{});
+    // No `toString`: Chrome's DOMException.prototype does not own one
+    // (measured) -- it inherits Error.prototype's, and so does ours, whose
+    // [[Prototype]] is Error.prototype too. The inherited one reads `name` and
+    // `message` through the accessors above and drops the separator when the
+    // message is empty, which is the wording the removed binding hand-rolled.
 
     // Legacy error code constants (on both prototype and constructor)
     pub const INDEX_SIZE_ERR = bridge.property(1, .{ .template = true });

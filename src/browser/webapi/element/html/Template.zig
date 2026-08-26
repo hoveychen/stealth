@@ -96,21 +96,14 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    const reflect = Element.Reflect(Template);
+
     pub const content = bridge.accessor(Template.getContent, null, .{});
-    pub const innerHTML = bridge.accessor(_getInnerHTML, _setInnerHTML, .{ .ce_reactions = true });
 
-    fn _getInnerHTML(self: *Template, frame: *Frame) ![]const u8 {
-        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
-        try self._content.getInnerHTML(&buf.writer, frame);
-        return buf.written();
-    }
-    fn _setInnerHTML(self: *Template, value: js.Value, frame: *Frame) !void {
-        // `[LegacyNullToEmptyString] DOMString`: a JS null becomes "", not "null".
-        return self.setInnerHTML(if (value.isNull()) "" else try value.toZig([]const u8), frame);
-    }
-
-    // outerHTML is inherited: dump serializes a template's content fragment
-    // wherever the template appears, so the generic Element path is correct.
+    // innerHTML and outerHTML are both inherited. Chrome's
+    // HTMLTemplateElement.prototype owns neither (measured); Element's
+    // innerHTML redirects to the content fragment, and dump serializes that
+    // fragment wherever the template appears.
 
     pub const shadowRootMode = bridge.accessor(Template.getShadowRootMode, Template.setShadowRootMode, .{ .ce_reactions = true });
 
@@ -137,6 +130,13 @@ pub const JsApi = struct {
     fn _setShadowRootSerializable(self: *Template, value: bool, frame: *Frame) !void {
         try self.setBoolAttribute(.wrap("shadowrootserializable"), value, frame);
     }
+
+    // Both are plain string reflections in Chrome, not the token list or the
+    // registry object their names suggest: setting `htmlFor` writes the `for`
+    // content attribute back verbatim and reading it returns a String
+    // (measured).
+    pub const shadowRootCustomElementRegistry = reflect.string("shadowrootcustomelementregistry");
+    pub const htmlFor = reflect.string("for");
 };
 
 pub const Build = struct {

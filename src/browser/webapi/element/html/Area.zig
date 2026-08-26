@@ -227,34 +227,39 @@ pub const JsApi = struct {
         pub const name = "HTMLAreaElement";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // `attributionSrc` is runtime-flag gated, so Chrome installs it from
+        // the per-context batch, behind `constructor` (measured).
+        pub const constructor_after = "toString";
     };
 
     const reflect = Element.Reflect(Area);
-    pub const noHref = reflect.boolean("nohref");
-    pub const @"type" = reflect.string("type");
-    pub const ping = reflect.string("ping");
-    pub const hreflang = reflect.string("hreflang");
 
-    pub const href = bridge.accessor(Area.getHref, Area.setHref, .{ .ce_reactions = true });
+    // Chrome's order. No `type` and no `hreflang`: HTML dropped both from
+    // HTMLAreaElement, and Chrome's prototype has neither (measured).
+    pub const alt = reflect.string("alt");
+    pub const coords = reflect.string("coords");
+    pub const download = reflect.string("download");
+    pub const shape = reflect.string("shape");
+    pub const ping = reflect.string("ping");
+    pub const rel = reflect.string("rel");
+    pub const relList = bridge.accessor(Area.getRelList, Area.setRelList, .{ .null_as_undefined = true, .ce_reactions = true });
+    pub const referrerPolicy = reflect.referrerPolicy();
     pub const origin = bridge.accessor(Area.getOrigin, null, .{});
     pub const protocol = bridge.accessor(Area.getProtocol, Area.setProtocol, .{ .ce_reactions = true });
-    pub const host = bridge.accessor(Area.getHost, Area.setHost, .{ .ce_reactions = true });
-    pub const hostname = bridge.accessor(Area.getHostname, Area.setHostname, .{ .ce_reactions = true });
     pub const username = bridge.accessor(Area.getUsername, Area.setUsername, .{ .ce_reactions = true });
     pub const password = bridge.accessor(Area.getPassword, Area.setPassword, .{ .ce_reactions = true });
+    pub const host = bridge.accessor(Area.getHost, Area.setHost, .{ .ce_reactions = true });
+    pub const hostname = bridge.accessor(Area.getHostname, Area.setHostname, .{ .ce_reactions = true });
     pub const port = bridge.accessor(Area.getPort, Area.setPort, .{ .ce_reactions = true });
     pub const pathname = bridge.accessor(Area.getPathname, Area.setPathname, .{ .ce_reactions = true });
     pub const search = bridge.accessor(Area.getSearch, Area.setSearch, .{ .ce_reactions = true });
     pub const hash = bridge.accessor(Area.getHash, Area.setHash, .{ .ce_reactions = true });
-    pub const alt = reflect.string("alt");
-    pub const coords = reflect.string("coords");
-    pub const shape = reflect.string("shape");
+    pub const noHref = reflect.boolean("nohref");
     pub const target = reflect.string("target");
-    pub const download = reflect.string("download");
-    pub const rel = reflect.string("rel");
-    pub const referrerPolicy = reflect.referrerPolicy();
+    pub const href = bridge.accessor(Area.getHref, Area.setHref, .{ .ce_reactions = true });
+    pub const interestForElement = reflect.elementReference(.interestfor);
     pub const toString = bridge.function(Area.getHref, .{});
-    pub const relList = bridge.accessor(Area.getRelList, Area.setRelList, .{ .null_as_undefined = true, .ce_reactions = true });
+    pub const attributionSrc = reflect.string("attributionsrc");
 };
 
 const testing = @import("../../../../testing.zig");

@@ -271,6 +271,7 @@ pub const Handler = enum(u16) {
     onselectstart,
     onshippingaddresschange,
     onshippingoptionchange,
+    onshow,
     onsignalingstatechange,
     onsinkchange,
     onslotchange,
