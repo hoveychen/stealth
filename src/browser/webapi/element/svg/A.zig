@@ -64,10 +64,34 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    const reflect = Element.Reflect(A);
+
+    // Chrome's order. `target` is an SVGAnimatedString and read-only, so an
+    // `a.target = '_blank'` silently does nothing -- the descriptor has a
+    // getter and no setter, which is what separates it from the HTML anchor's
+    // plain string. Measured on Chrome 151.
+    pub const target = bridge.accessor(_target, null, .{});
+
+    // Six plain string reflections over lowercase content attributes. Note
+    // `referrerPolicy` is *not* the limited-to-known-values reflection
+    // HTMLAnchorElement uses: an SVG `<a referrerpolicy="bogus">` reads back
+    // "bogus" in Chrome, where the HTML one reads "".
+    pub const download = reflect.string("download");
+    pub const ping = reflect.string("ping");
+    pub const rel = reflect.string("rel");
+    pub const relList = bridge.accessor(A.getRelList, A.setRelList, .{ .ce_reactions = true });
+    pub const hreflang = reflect.string("hreflang");
+    pub const @"type" = reflect.string("type");
+    pub const referrerPolicy = reflect.string("referrerpolicy");
+
     pub const href = bridge.accessor(_href, null, .{});
+    pub const interestForElement = reflect.elementReference(.interestfor);
+
+    fn _target(self: *A, frame: *Frame) !*AnimatedString {
+        return AnimatedString.getOrCreate(self.asElement(), .target, frame);
+    }
+
     fn _href(self: *A, frame: *Frame) !*AnimatedString {
         return AnimatedString.getOrCreate(self.asElement(), .href, frame);
     }
-
-    pub const relList = bridge.accessor(A.getRelList, A.setRelList, .{ .ce_reactions = true });
 };

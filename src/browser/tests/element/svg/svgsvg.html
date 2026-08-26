@@ -323,3 +323,161 @@
   testing.expectEqual(null, $('#foreign-svg').ownerSVGElement);
 }
 </script>
+
+<!-- The SVGSVGElement members that are not attribute reflections: the user
+     agent's zoom and pan, the SMIL clock, the redraw-suspension trio and the
+     geometry queries. Every number here is a headed Chrome 151 reading
+     (tools/fingerprint/probes/expr-svg-family-semantics.js and -edges.js). -->
+<script id=currentScaleAndTranslate>
+{
+  const first = $('#first');
+  testing.expectEqual(1, first.currentScale);
+  first.currentScale = 2;
+  testing.expectEqual(2, first.currentScale);
+  // Chrome takes any finite number, 0 and negatives included.
+  first.currentScale = 0;
+  testing.expectEqual(0, first.currentScale);
+  first.currentScale = -3;
+  testing.expectEqual(-3, first.currentScale);
+  first.currentScale = 1;
+
+  // A nested <svg> reads 1 and ignores the write.
+  const nested = $('#nested');
+  testing.expectEqual(1, nested.currentScale);
+  nested.currentScale = 4;
+  testing.expectEqual(1, nested.currentScale);
+
+  // A fresh SVGPoint every read -- Chrome's tear-off -- that still writes
+  // through to the element.
+  testing.expectEqual(true, first.currentTranslate instanceof SVGPoint);
+  testing.expectEqual(false, first.currentTranslate === first.currentTranslate);
+  testing.expectEqual(0, first.currentTranslate.x);
+  first.currentTranslate.x = 5;
+  testing.expectEqual(5, first.currentTranslate.x);
+  testing.expectEqual(0, first.currentTranslate.y);
+}
+</script>
+
+<script id=zoomAndPan>
+{
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  testing.expectEqual(0, SVGSVGElement.prototype.SVG_ZOOMANDPAN_UNKNOWN);
+  testing.expectEqual(1, SVGSVGElement.prototype.SVG_ZOOMANDPAN_DISABLE);
+  testing.expectEqual(2, SVGSVGElement.prototype.SVG_ZOOMANDPAN_MAGNIFY);
+
+  // The initial value is magnify, and the IDL setter does not write the
+  // attribute back.
+  testing.expectEqual(2, svg.zoomAndPan);
+  svg.zoomAndPan = 1;
+  testing.expectEqual(1, svg.zoomAndPan);
+  testing.expectEqual(null, svg.getAttribute('zoomAndPan'));
+  svg.zoomAndPan = 0;
+  testing.expectEqual(0, svg.zoomAndPan);
+
+  // The keywords are case-sensitive and anything else is UNKNOWN -- not
+  // magnify, which is only the *initial* value.
+  svg.setAttribute('zoomAndPan', 'disable');
+  testing.expectEqual(1, svg.zoomAndPan);
+  svg.setAttribute('zoomAndPan', 'magnify');
+  testing.expectEqual(2, svg.zoomAndPan);
+  svg.setAttribute('zoomAndPan', 'DISABLE');
+  testing.expectEqual(0, svg.zoomAndPan);
+  svg.setAttribute('zoomAndPan', 'bogus');
+  testing.expectEqual(0, svg.zoomAndPan);
+
+  // Setting through the IDL wins over the attribute that is still there, and
+  // removing the attribute afterwards resets to UNKNOWN.
+  svg.setAttribute('zoomAndPan', 'disable');
+  svg.zoomAndPan = 2;
+  testing.expectEqual(2, svg.zoomAndPan);
+  testing.expectEqual('disable', svg.getAttribute('zoomAndPan'));
+  svg.removeAttribute('zoomAndPan');
+  testing.expectEqual(0, svg.zoomAndPan);
+  // Out of range is ignored rather than refused.
+  svg.zoomAndPan = 7;
+  testing.expectEqual(0, svg.zoomAndPan);
+
+  // <view> carries the same mixin.
+  const view = document.createElementNS('http://www.w3.org/2000/svg', 'view');
+  testing.expectEqual(2, view.zoomAndPan);
+  testing.expectEqual(1, SVGViewElement.prototype.SVG_ZOOMANDPAN_DISABLE);
+  view.setAttribute('zoomAndPan', 'disable');
+  testing.expectEqual(1, view.zoomAndPan);
+}
+</script>
+
+<script id=animationClock>
+{
+  const svg = $('#first');
+  testing.expectEqual(false, svg.animationsPaused());
+  testing.expectEqual(0, svg.getCurrentTime());
+  testing.expectEqual(undefined, svg.pauseAnimations());
+  testing.expectEqual(true, svg.animationsPaused());
+  testing.expectEqual(undefined, svg.unpauseAnimations());
+  testing.expectEqual(false, svg.animationsPaused());
+
+  testing.expectEqual(undefined, svg.setCurrentTime(3));
+  testing.expectEqual(3, svg.getCurrentTime());
+  testing.expectError('TypeError', () => svg.setCurrentTime());
+  svg.setCurrentTime(0);
+
+  // Chrome hands back 1 from every suspendRedraw, not an incrementing handle.
+  testing.expectEqual(1, svg.suspendRedraw(100));
+  testing.expectEqual(1, svg.suspendRedraw(100));
+  testing.expectEqual(undefined, svg.unsuspendRedraw(1));
+  testing.expectEqual(undefined, svg.unsuspendRedraw(9999));
+  testing.expectEqual(undefined, svg.unsuspendRedrawAll());
+  testing.expectEqual(undefined, svg.forceRedraw());
+  testing.expectEqual(undefined, svg.deselectAll());
+}
+</script>
+
+<script id=intersectionAndEnclosure>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const host = document.createElementNS(ns, 'svg');
+  host.setAttribute('width', '200');
+  host.setAttribute('height', '100');
+  host.innerHTML = '<a id=link><circle id=dot cx="10" cy="10" r="5"/></a>'
+    + '<rect id=box x="0" y="0" width="20" height="20"/>'
+    + '<image id=pic />'
+    + '<text id=label x="5" y="20">Hello</text>';
+  document.body.appendChild(host);
+
+  const mk = (x, y, w, h) => {
+    const r = host.createSVGRect();
+    r.x = x; r.y = y; r.width = w; r.height = h;
+    return r;
+  };
+  const ids = (list) => Array.from(list).map((e) => e.id).join(',');
+
+  testing.expectEqual(true, host.checkIntersection($('#box'), mk(0, 0, 200, 100)));
+  testing.expectEqual(true, host.checkIntersection($('#box'), mk(10, 10, 5, 5)));
+  testing.expectEqual(false, host.checkIntersection($('#box'), mk(100, 50, 10, 10)));
+  testing.expectEqual(true, host.checkEnclosure($('#box'), mk(0, 0, 200, 100)));
+  testing.expectEqual(false, host.checkEnclosure($('#box'), mk(0, 0, 10, 10)));
+  testing.expectError('TypeError', () => host.checkIntersection());
+
+  // Only the elements that draw: the <a> wrapping the circle never appears,
+  // and a size-less <image> does.
+  const all = host.getIntersectionList(mk(0, 0, 200, 100), null);
+  testing.expectEqual(true, all instanceof NodeList);
+  testing.expectEqual('dot,box,pic,label', ids(all));
+  testing.expectEqual('dot,box,pic,label', ids(host.getEnclosureList(mk(0, 0, 200, 100), null)));
+
+  // The reference element scopes the walk to its own subtree, itself excluded.
+  testing.expectEqual('dot', ids(host.getIntersectionList(mk(0, 0, 200, 100), $('#link'))));
+
+  // An empty query rect meets nothing, even at the origin where boxes sit.
+  testing.expectEqual(0, host.getIntersectionList(host.createSVGRect(), null).length);
+  testing.expectEqual(false, host.checkIntersection($('#dot'), host.createSVGRect()));
+  testing.expectEqual(0, host.getIntersectionList(mk(500, 500, 1, 1), null).length);
+
+  // Static, not live.
+  const list = host.getIntersectionList(mk(0, 0, 200, 100), null);
+  host.appendChild(document.createElementNS(ns, 'circle'));
+  testing.expectEqual(4, list.length);
+
+  host.remove();
+}
+</script>

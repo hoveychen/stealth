@@ -26,6 +26,7 @@ const Element = @import("../../Element.zig");
 
 const AnimatedEnumeration = @import("../../svg/AnimatedEnumeration.zig");
 const AnimatedLength = @import("../../svg/AnimatedLength.zig");
+const StringList = @import("../../svg/StringList.zig");
 
 const Svg = @import("../Svg.zig");
 
@@ -61,6 +62,16 @@ fn getMaskContentUnits(self: *Mask, frame: *Frame) !*AnimatedEnumeration {
     return AnimatedEnumeration.getOrCreate(self.asElement(), .mask_content_units, frame);
 }
 
+// SVGMaskElement includes SVGTests, and so does SVGGraphicsElement -- but this
+// interface's prototype chain runs through SVGElement rather than through the
+// graphics one, so the two members are declared here over the same StringList.
+fn getRequiredExtensions(self: *Mask, frame: *Frame) !*StringList {
+    return StringList.getOrCreate(self.asElement(), .required_extensions, frame);
+}
+fn getSystemLanguage(self: *Mask, frame: *Frame) !*StringList {
+    return StringList.getOrCreate(self.asElement(), .system_language, frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Mask);
     pub const Meta = struct {
@@ -68,10 +79,14 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
+    // Chrome's order: the mask's own attributes, then the placement, then the
+    // two SVGTests members the interface includes.
+    pub const maskUnits = bridge.accessor(Mask.getMaskUnits, null, .{});
+    pub const maskContentUnits = bridge.accessor(Mask.getMaskContentUnits, null, .{});
     pub const x = bridge.accessor(Mask.getX, null, .{});
     pub const y = bridge.accessor(Mask.getY, null, .{});
     pub const width = bridge.accessor(Mask.getWidth, null, .{});
     pub const height = bridge.accessor(Mask.getHeight, null, .{});
-    pub const maskUnits = bridge.accessor(Mask.getMaskUnits, null, .{});
-    pub const maskContentUnits = bridge.accessor(Mask.getMaskContentUnits, null, .{});
+    pub const requiredExtensions = bridge.accessor(Mask.getRequiredExtensions, null, .{});
+    pub const systemLanguage = bridge.accessor(Mask.getSystemLanguage, null, .{});
 };

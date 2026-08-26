@@ -24,6 +24,7 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const AnimatedString = @import("../../svg/AnimatedString.zig");
+const AnimatedLength = @import("../../svg/AnimatedLength.zig");
 
 const Graphics = @import("Graphics.zig");
 
@@ -49,7 +50,30 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's order puts the placement before the reference.
+    pub const x = bridge.accessor(_x, null, .{});
+    pub const y = bridge.accessor(_y, null, .{});
+    pub const width = bridge.accessor(_width, null, .{});
+    pub const height = bridge.accessor(_height, null, .{});
+
     pub const href = bridge.accessor(_href, null, .{});
+
+    // `<use>` takes x/y/width/height as plain lengths defaulting to 0, not to
+    // the percentages a viewport-establishing element gets: a bare `<use>` in
+    // Chrome answers 0 with unitType 1 (number) on all four.
+    fn _x(self: *Use, frame: *Frame) !*AnimatedLength {
+        return AnimatedLength.getOrCreate(self.asElement(), .x, frame);
+    }
+    fn _y(self: *Use, frame: *Frame) !*AnimatedLength {
+        return AnimatedLength.getOrCreate(self.asElement(), .y, frame);
+    }
+    fn _width(self: *Use, frame: *Frame) !*AnimatedLength {
+        return AnimatedLength.getOrCreate(self.asElement(), .width, frame);
+    }
+    fn _height(self: *Use, frame: *Frame) !*AnimatedLength {
+        return AnimatedLength.getOrCreate(self.asElement(), .height, frame);
+    }
+
     fn _href(self: *Use, frame: *Frame) !*AnimatedString {
         return AnimatedString.getOrCreate(self.asElement(), .href, frame);
     }

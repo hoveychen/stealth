@@ -321,32 +321,40 @@ fn transformValue(element: *Element) SvgMatrix.Value {
 // and Firefox's flags degenerate to the fill geometry, so both engines answer
 // every call with the fill box.
 pub fn getBBox(self: *Graphics, frame: *Frame) !*SvgRect {
-    var bounds: PathData.Bounds = .{};
-    switch (self._type) {
-        .geometry => {
-            var path = try self.subtype(Geometry).buildPath(frame);
-            defer path.deinit(frame.local_arena);
-            bounds = path.bounds(.{});
-        },
-        .foreign_object => bounds = try self.subtype(ForeignObject).getBounds(frame),
-        // Upstream leaves <text> boxless; we measure it, so the arm stays.
-        .text_content => bounds = try self.subtype(TextContent).getBounds(frame),
-        .g, .a, .svg => try accumulateChildren(self, .{}, &bounds, frame),
-        .defs, .symbol, .switch_element, .use, .image => {},
-    }
-    if (bounds.isEmpty()) {
+    const box = try self.bounds(frame);
+    if (box.isEmpty()) {
         return SvgRect.create(.{}, frame._factory);
     }
 
     return SvgRect.create(.{
-        .x = bounds.min_x,
-        .y = bounds.min_y,
-        .width = bounds.width(),
-        .height = bounds.height(),
+        .x = box.min_x,
+        .y = box.min_y,
+        .width = box.width(),
+        .height = box.height(),
     }, frame._factory);
 }
 
-fn accumulateChildren(parent: *Graphics, matrix: PathData.Matrix, bounds: *PathData.Bounds, frame: *Frame) !void {
+/// getBBox's answer before it is wrapped in an SVGRect, so the intersection and
+/// enclosure lists can ask a whole subtree for its boxes without allocating one
+/// per element.
+pub fn bounds(self: *Graphics, frame: *Frame) !PathData.Bounds {
+    var box: PathData.Bounds = .{};
+    switch (self._type) {
+        .geometry => {
+            var path = try self.subtype(Geometry).buildPath(frame);
+            defer path.deinit(frame.local_arena);
+            box = path.bounds(.{});
+        },
+        .foreign_object => box = try self.subtype(ForeignObject).getBounds(frame),
+        // Upstream leaves <text> boxless; we measure it, so the arm stays.
+        .text_content => box = try self.subtype(TextContent).getBounds(frame),
+        .g, .a, .svg => try accumulateChildren(self, .{}, &box, frame),
+        .defs, .symbol, .switch_element, .use, .image => {},
+    }
+    return box;
+}
+
+fn accumulateChildren(parent: *Graphics, matrix: PathData.Matrix, into: *PathData.Bounds, frame: *Frame) !void {
     const Cursor = struct {
         next: ?*Node,
         matrix: PathData.Matrix,
@@ -376,15 +384,15 @@ fn accumulateChildren(parent: *Graphics, matrix: PathData.Matrix, bounds: *PathD
             .geometry => {
                 var path = try graphics.subtype(Geometry).buildPath(frame);
                 defer path.deinit(frame.local_arena);
-                bounds.merge(path.bounds(child_matrix));
+                into.merge(path.bounds(child_matrix));
             },
             // Upstream inlines the four-corner walk here; mergeBox is the same
             // code and <text> needs it too, so both arms go through the helper.
             .foreign_object => {
-                try mergeBox(bounds, try graphics.subtype(ForeignObject).getBounds(frame), child_matrix, frame);
+                try mergeBox(into, try graphics.subtype(ForeignObject).getBounds(frame), child_matrix, frame);
             },
             .text_content => {
-                try mergeBox(bounds, try graphics.subtype(TextContent).getBounds(frame), child_matrix, frame);
+                try mergeBox(into, try graphics.subtype(TextContent).getBounds(frame), child_matrix, frame);
             },
             .g, .a => try cursors.append(frame.local_arena, .{
                 .next = graphics.asNode().firstChild(),
@@ -399,10 +407,10 @@ fn accumulateChildren(parent: *Graphics, matrix: PathData.Matrix, bounds: *PathD
     }
 }
 
-/// Folds an axis-aligned child box into `bounds` under `matrix`, which can
+/// Folds an axis-aligned child box into `into` under `matrix`, which can
 /// rotate or skew it, so the box goes through the path machinery as four
 /// corners rather than as a min/max pair.
-fn mergeBox(bounds: *PathData.Bounds, box: PathData.Bounds, matrix: PathData.Matrix, frame: *Frame) !void {
+fn mergeBox(into: *PathData.Bounds, box: PathData.Bounds, matrix: PathData.Matrix, frame: *Frame) !void {
     if (box.isEmpty()) {
         return;
     }
@@ -416,7 +424,7 @@ fn mergeBox(bounds: *PathData.Bounds, box: PathData.Bounds, matrix: PathData.Mat
     try path.appendLine(top_right, bottom_right, frame.local_arena);
     try path.appendLine(bottom_right, bottom_left, frame.local_arena);
     try path.appendLine(bottom_left, top_left, frame.local_arena);
-    bounds.merge(path.bounds(matrix));
+    into.merge(path.bounds(matrix));
 }
 
 fn transformMatrix(element: *Element) PathData.Matrix {

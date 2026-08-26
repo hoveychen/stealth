@@ -32,7 +32,7 @@ const AnimatedString = @This();
 _kind: Kind,
 _element: *Element,
 
-pub const Kind = enum { class, href, in1, in2, result };
+pub const Kind = enum { class, href, in1, in2, result, target };
 pub const Key = struct {
     element: *Element,
     kind: Kind,
@@ -108,6 +108,7 @@ fn attributeName(self: *const AnimatedString) String {
         .in1 => comptime .wrap("in"),
         .in2 => comptime .wrap("in2"),
         .result => comptime .wrap("result"),
+        .target => comptime .wrap("target"),
     };
 }
 

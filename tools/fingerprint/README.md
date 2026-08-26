@@ -15137,3 +15137,90 @@ named `HTMLIFrameElement` as something the challenge touches -- 18 reads of
 none of those three members was missing. What was missing was everything
 *around* them on the same prototype, which a read log cannot show, because a
 guard does not read a member it has already decided you do not have.
+
+## The SVG family, filled in (B52, 2026-08-26)
+
+B51 re-measured the four prototype tables against the merged main and found the
+window realm at **887 of 923 byte-identical**, 158 names short over 36
+interfaces, 21 of which would still be mis-ordered after the names were added.
+This batch takes the eight SVG interfaces off that list -- 53 members, from
+`SVGSVGElement`'s twenty down to `SVGMaskElement`'s two -- and the table moves
+to **895 of 923, 105 missing over 28 interfaces, 16 mis-ordered**. The eight
+went from differing to byte-identical, order included; nothing else moved.
+
+| interface | was short by | also mis-ordered |
+|---|---|---|
+| `SVGSVGElement` | 20 | yes |
+| `SVGAElement` | 8 | yes |
+| `SVGImageElement` | 8 | no |
+| `SVGTextContentElement` | 5 | yes |
+| `SVGUseElement` | 4 | no |
+| `SVGViewElement` | 4 | no |
+| `SVGGeometryElement` | 2 | yes |
+| `SVGMaskElement` | 2 | yes |
+
+### Six answers the IDL would have got wrong
+
+Every member was measured on a headed Chrome 151 before it was written, through
+`probes/expr-svg-family-semantics.js` and `probes/expr-svg-family-edges.js`.
+Six of them do not do what the specification text suggests, and each would have
+been written the wrong way from the IDL alone:
+
+- **`currentTranslate` is a fresh object every read and still writes through.**
+  `svg.currentTranslate === svg.currentTranslate` is false, yet
+  `svg.currentTranslate.x = 5` is readable from the *next* point. It is a
+  tear-off; `SVGPoint`'s existing attachment hook -- the one a reflected point
+  list uses -- is what makes ours behave the same way.
+- **`zoomAndPan`'s setter does not write the attribute.** `svg.zoomAndPan = 1`
+  leaves `getAttribute('zoomAndPan')` empty and wins over an attribute that is
+  still there. The keywords are case-sensitive, an unrecognised one is
+  `UNKNOWN` rather than the initial `MAGNIFY`, and *removing* the attribute
+  leaves 0 rather than restoring 2 -- so a `<svg>` that never carried it reads
+  2 and one that carried and lost it reads 0. See `svg/zoom_and_pan.zig`.
+- **`SVGAElement.referrerPolicy` is not the limited-to-known-values reflection
+  `HTMLAnchorElement` uses.** `<a referrerpolicy="bogus">` reads back `bogus`
+  in SVG and `""` in HTML. All six of the anchor's string members read the
+  lowercase attribute, which in a case-sensitive namespace is worth stating.
+- **`SVGAElement.target` is read-only.** `a.target = '_blank'` silently does
+  nothing: the descriptor has a getter and no setter, because the IDL type is
+  `SVGAnimatedString`.
+- **`suspendRedraw` returns 1 every time**, not an incrementing handle.
+- **An empty query rect meets nothing.** `getIntersectionList(createSVGRect())`
+  is length 0 even on a document whose shapes sit at the origin, which is
+  Blink's `gfx::RectF::Intersects` refusing an empty rect. The *element's* box
+  is not held to that rule: a `<image>` with no width or height is listed.
+
+`isPointInFill()` and `isPointInStroke()` both report arity 0 and answer `true`
+for a path whose first vertex is the origin, so the omitted point is (0,0) and a
+point on the outline counts as inside -- a bare winding test would say false
+there. `PathData` grew `containsPoint` and `strokeContainsPoint` over the
+flattener it already had.
+
+The refusals are two sentences, not one: `charnum > numberOfChars` is "greater
+than the maximum bound", `charnum == numberOfChars` is "greater than or equal
+to", and a negative index arrives as its unsigned wrap and is quoted back as
+4294967295.
+
+### The two readings that still differ, and why they are not this batch's
+
+`getStartPositionOfChar` and `getEndPositionOfChar` disagree with Chrome by
+~0.4px on `https://example.com/`, whose stylesheet sets `system-ui, sans-serif`.
+The control says where that comes from: give the same `<text>` an explicit
+`font-family="serif"` and **every** advance reading matches Chrome to the last
+digit, the new ones included.
+
+```
+                                 chrome        this engine
+text  (system-ui)  getSubStringLength(0,1)   11.5625        11.1875
+serif (explicit)   getSubStringLength(0,1)   11.5546875     11.5546875
+```
+
+Two pre-existing gaps produce it, both older than this batch and shared with the
+already-shipped `getSubStringLength` and `getExtentOfChar`: `system-ui` is not
+in the font-metrics table, and an SVG presentation attribute (`font-family` on
+`<text>`) does not reach computed style at all -- our serif answer above is the
+fallback agreeing by luck, not the attribute being resolved. Neither is a
+prototype-completeness gap, so neither is fixed here.
+
+Across both probes, 226 of 230 readings are identical between the arms; those
+two are the whole remainder.

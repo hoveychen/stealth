@@ -24,6 +24,8 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const AnimatedString = @import("../../svg/AnimatedString.zig");
+const AnimatedLength = @import("../../svg/AnimatedLength.zig");
+const AnimatedPreserveAspectRatio = @import("../../svg/AnimatedPreserveAspectRatio.zig");
 
 const Graphics = @import("Graphics.zig");
 
@@ -49,8 +51,48 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    const reflect = Element.Reflect(Image);
+
+    pub const x = bridge.accessor(_x, null, .{});
+    pub const y = bridge.accessor(_y, null, .{});
+    pub const width = bridge.accessor(_width, null, .{});
+    pub const height = bridge.accessor(_height, null, .{});
+    pub const preserveAspectRatio = bridge.accessor(_preserveAspectRatio, null, .{});
+
+    // The same two reflections HTMLImageElement carries, spelled the same way:
+    // a missing `crossorigin` is null and an unrecognised one is "anonymous",
+    // while a missing `decoding` is "auto" (measured on Chrome 151).
+    pub const decoding = reflect.enumerated("decoding", &.{ "async", "sync", "auto" }, .{ .missing = "auto" });
+    pub const crossOrigin = reflect.enumerated("crossorigin", &.{ "anonymous", "use-credentials" }, .{ .missing = null, .nullable = true, .invalid = "anonymous" });
+
     pub const href = bridge.accessor(_href, null, .{});
+
+    pub const decode = bridge.function(Image.decode, .{});
+
+    fn _x(self: *Image, frame: *Frame) !*AnimatedLength {
+        return AnimatedLength.getOrCreate(self.asElement(), .x, frame);
+    }
+    fn _y(self: *Image, frame: *Frame) !*AnimatedLength {
+        return AnimatedLength.getOrCreate(self.asElement(), .y, frame);
+    }
+    fn _width(self: *Image, frame: *Frame) !*AnimatedLength {
+        return AnimatedLength.getOrCreate(self.asElement(), .width, frame);
+    }
+    fn _height(self: *Image, frame: *Frame) !*AnimatedLength {
+        return AnimatedLength.getOrCreate(self.asElement(), .height, frame);
+    }
+    fn _preserveAspectRatio(self: *Image, frame: *Frame) !*AnimatedPreserveAspectRatio {
+        return AnimatedPreserveAspectRatio.getOrCreate(self.asElement(), frame);
+    }
+
     fn _href(self: *Image, frame: *Frame) !*AnimatedString {
         return AnimatedString.getOrCreate(self.asElement(), .href, frame);
     }
 };
+
+/// Nothing is decoded here -- no image bytes are held -- so the promise is one
+/// that is already resolved, which is what a page that awaits it before drawing
+/// needs. The same shape HTMLImageElement's `decode` would take.
+pub fn decode(_: *Image, frame: *Frame) !js.Promise {
+    return frame.js.local.?.resolvePromise(js.Undefined{});
+}

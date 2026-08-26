@@ -24,7 +24,9 @@ const text_measure = @import("../../../text_measure.zig");
 const font_metrics = @import("../../../font_metrics.zig");
 
 const Node = @import("../../Node.zig");
+const Text = @import("../../cdata/Text.zig");
 const SvgRect = @import("../../svg/Rect.zig");
+const SvgPoint = @import("../../svg/Point.zig");
 const Element = @import("../../Element.zig");
 const Factory = @import("../../../Factory.zig");
 
@@ -183,6 +185,110 @@ pub fn getExtentOfChar(self: *TextContent, charnum: u32, frame: *Frame) !*SvgRec
     }, frame._factory);
 }
 
+/// Blink refuses an out-of-range `charnum` with two different sentences, and
+/// which one you get says whether the index is past the end or exactly at it.
+/// Measured on Chrome 151 for all five callers (probes/expr-svg-family-edges.js):
+/// `getStartPositionOfChar(99)` on a 5-character text says "greater than the
+/// maximum bound (5)", `getStartPositionOfChar(5)` says "greater than or equal
+/// to". A negative index arrives as its unsigned wrap, so `-1` is quoted back
+/// as 4294967295.
+fn checkCharNum(self: *TextContent, charnum: u32, comptime method: []const u8, frame: *Frame) !void {
+    const bound = self.getNumberOfChars(frame);
+    if (charnum > bound) {
+        return frame.js.fail(error.IndexSizeError, try std.fmt.allocPrint(
+            frame.call_arena,
+            "Failed to execute '" ++ method ++ "' on 'SVGTextContentElement': " ++
+                "The charnum provided ({d}) is greater than the maximum bound ({d}).",
+            .{ charnum, bound },
+        ));
+    }
+    if (charnum == bound) {
+        return frame.js.fail(error.IndexSizeError, try std.fmt.allocPrint(
+            frame.call_arena,
+            "Failed to execute '" ++ method ++ "' on 'SVGTextContentElement': " ++
+                "The charnum provided ({d}) is greater than or equal to the maximum bound ({d}).",
+            .{ charnum, bound },
+        ));
+    }
+}
+
+/// Where the `charnum`-th character starts, in the element's user space: the
+/// text's own origin plus the advance of everything before it.
+pub fn getStartPositionOfChar(self: *TextContent, charnum: u32, frame: *Frame) !*SvgPoint {
+    try self.checkCharNum(charnum, "getStartPositionOfChar", frame);
+    return self.positionOfChar(charnum, 0, frame);
+}
+
+pub fn getEndPositionOfChar(self: *TextContent, charnum: u32, frame: *Frame) !*SvgPoint {
+    try self.checkCharNum(charnum, "getEndPositionOfChar", frame);
+    return self.positionOfChar(charnum, 1, frame);
+}
+
+fn positionOfChar(self: *TextContent, charnum: u32, past: u32, frame: *Frame) !*SvgPoint {
+    const at = try self.origin(frame);
+    if (charnum + past == 0) {
+        return SvgPoint.create(SvgPoint.narrow(at.x), SvgPoint.narrow(at.y), frame._page);
+    }
+    const advance = try text_measure.svgSubstringWidth(
+        self.fontFamily(frame),
+        self.text(frame),
+        0,
+        charnum + past,
+        self.fontSize(frame),
+    );
+    return SvgPoint.create(SvgPoint.narrow(at.x + advance), SvgPoint.narrow(at.y), frame._page);
+}
+
+/// Always 0: a rotation comes from the `rotate` attribute or from a
+/// `<textPath>`, and neither is laid out here. Chrome answers 0 for text
+/// without either.
+pub fn getRotationOfChar(self: *TextContent, charnum: u32, frame: *Frame) !f64 {
+    try self.checkCharNum(charnum, "getRotationOfChar", frame);
+    return 0;
+}
+
+/// Which character's cell contains `point`, or -1 for a point in none of them.
+/// The cell is the one `getExtentOfChar` answers with, so the two agree by
+/// construction. The argument is optional -- Chrome reports arity 0 -- and an
+/// omitted one asks about the origin, which for text placed anywhere else is
+/// -1.
+pub fn getCharNumAtPosition(self: *TextContent, point_: ?*const SvgPoint, frame: *Frame) !i32 {
+    const point = point_ orelse return -1;
+    const size = self.fontSize(frame);
+    const family = self.fontFamily(frame);
+    const text_content = self.text(frame);
+    const box = font_metrics.boundingBox(family, size);
+    const at = try self.origin(frame);
+
+    if (point.getY() < at.y - box.ascent or point.getY() > at.y + box.descent) {
+        return -1;
+    }
+
+    const count = text_measure.utf16Length(text_content);
+    var charnum: u32 = 0;
+    while (charnum < count) : (charnum += 1) {
+        const extent = try text_measure.svgCharExtent(family, text_content, charnum, size);
+        const start = at.x + extent.offset;
+        if (point.getX() >= start and point.getX() < start + extent.advance) {
+            return @intCast(charnum);
+        }
+    }
+    return -1;
+}
+
+/// Selects `nchars` characters starting at `charnum`, which for a `<text>` with
+/// a single text child is a selection over that child's code units. Chrome
+/// clamps `nchars` to what is left rather than refusing it.
+pub fn selectSubString(self: *TextContent, charnum: u32, nchars: u32, frame: *Frame) !void {
+    try self.checkCharNum(charnum, "selectSubString", frame);
+    const node = self.asNode().firstChild() orelse return;
+    _ = node.is(Text) orelse return;
+    const count = text_measure.utf16Length(self.text(frame));
+    const end = @min(charnum +| nchars, count);
+    const selection = frame.document.getSelection();
+    return selection.setBaseAndExtent(node, charnum, node, end, frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(TextContent);
     pub const Meta = struct {
@@ -191,14 +297,22 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's order: the attributes, then the constants, then the operations
+    // alphabetically.
+    pub const textLength = bridge.accessor(TextContent.getTextLength, null, .{});
+    pub const lengthAdjust = bridge.accessor(TextContent.getLengthAdjust, null, .{});
+
     pub const LENGTHADJUST_UNKNOWN = bridge.property(0, .{ .template = true });
     pub const LENGTHADJUST_SPACING = bridge.property(1, .{ .template = true });
     pub const LENGTHADJUST_SPACINGANDGLYPHS = bridge.property(2, .{ .template = true });
 
-    pub const textLength = bridge.accessor(TextContent.getTextLength, null, .{});
-    pub const lengthAdjust = bridge.accessor(TextContent.getLengthAdjust, null, .{});
-    pub const getNumberOfChars = bridge.function(TextContent.getNumberOfChars, .{});
+    pub const getCharNumAtPosition = bridge.function(TextContent.getCharNumAtPosition, .{});
     pub const getComputedTextLength = bridge.function(TextContent.getComputedTextLength, .{});
-    pub const getSubStringLength = bridge.function(TextContent.getSubStringLength, .{});
+    pub const getEndPositionOfChar = bridge.function(TextContent.getEndPositionOfChar, .{});
     pub const getExtentOfChar = bridge.function(TextContent.getExtentOfChar, .{});
+    pub const getNumberOfChars = bridge.function(TextContent.getNumberOfChars, .{});
+    pub const getRotationOfChar = bridge.function(TextContent.getRotationOfChar, .{});
+    pub const getStartPositionOfChar = bridge.function(TextContent.getStartPositionOfChar, .{});
+    pub const getSubStringLength = bridge.function(TextContent.getSubStringLength, .{});
+    pub const selectSubString = bridge.function(TextContent.selectSubString, .{});
 };
