@@ -111,3 +111,47 @@ white-space) are not asserted here; they are their own plan.
   testing.expectEqual('rgb(9, 9, 9)', probe('.cx{color:rgb(4,4,4)!important}', 'color:rgb(9,9,9)!important'));
 }
 </script>
+
+<!--
+The cascade's answer is only reported when it is already in the shape a computed
+style has: a browser never prints `2em`, `50%` or `calc(10px + 5px)` from
+getComputedStyle, because font-relative lengths resolve at computed-value time
+and percentages at used-value time. Answering the author's text would trade one
+wrong value for a wronger one -- `0px` is a value Chrome does print here and
+`2em` is a value it never prints -- so an unresolvable declaration falls through
+to the initial value, which is what was reported before the cascade was consulted
+at all.
+
+Chrome's answers, for the record, are 30px / 30px / 952px / 15px / 40px.
+Resolving them is computed-style-relative-units.
+-->
+
+<script id=unresolvable_values_fall_through>
+{
+  const probe = (decl, prop, wrap) => {
+    const style = document.createElement('style');
+    style.textContent = (wrap ? '.cxa{' + wrap + '}' : '') + '.cx{' + decl + '}';
+    document.head.appendChild(style);
+    const host = document.createElement('div');
+    host.innerHTML = '<div class="cxa"><p class="cx">x</p></div>';
+    document.body.appendChild(host);
+    const got = String(getComputedStyle(host.firstChild.firstChild)[prop]);
+    host.remove();
+    style.remove();
+    return got;
+  };
+
+  testing.expectEqual('16px', probe('font-size:1.5em', 'fontSize', 'font-size:20px'));
+  testing.expectEqual('normal', probe('font-size:20px;line-height:1.5', 'lineHeight'));
+  testing.expectEqual('0px', probe('margin-left:50%', 'marginLeft'));
+  testing.expectEqual('0px', probe('font-size:20px;padding-top:2em', 'paddingTop'));
+  // `width` has its own branch below the cascade -- the synthetic layout
+  // metrics -- so an unresolvable width lands there rather than on the initial
+  // value. Either way it is a px number and not the author's calc().
+  testing.expectEqual('8px', probe('width:calc(10px + 5px)', 'width'));
+
+  // The guard is about the shape of the value, not the property: an absolute
+  // length in the same declaration still comes through.
+  testing.expectEqual('40px', probe('padding-top:40px', 'paddingTop'));
+}
+</script>
