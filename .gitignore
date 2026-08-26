@@ -6,6 +6,10 @@
 /.lp-agent.zon
 zig-pkg/
 zig-out
+# The ReleaseFast prefix every sweep and station run is built into. Same
+# artefact as zig-out, different -p, and `git add -A` was one keystroke from
+# committing 93MB of it.
+zig-out-rel
 lightpanda.id
 /src/html5ever/target/
 src/snapshot.bin
