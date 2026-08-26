@@ -853,7 +853,8 @@ fn collectExternalReferences() [countExternalReferences()]isize {
                     idx += 1;
                 }
             } else if (T == bridge.NamedIndexed) {
-                references[idx] = @bitCast(@intFromPtr(value.getter));
+                // The recorder, for the same reason the accessor above uses it.
+                references[idx] = @bitCast(@intFromPtr(bridge.logReads(JsApi, d.name, value).getter));
                 idx += 1;
                 if (value.setter) |setter| {
                     references[idx] = @bitCast(@intFromPtr(setter));
@@ -1220,7 +1221,7 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
             },
             bridge.NamedIndexed => {
                 var configuration: v8.NamedPropertyHandlerConfiguration = .{
-                    .getter = value.getter,
+                    .getter = bridge.logReads(JsApi, name, value).getter,
                     .setter = value.setter,
                     .query = value.query,
                     .deleter = value.deleter,

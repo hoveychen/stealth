@@ -883,6 +883,18 @@ pub fn logReads(comptime JsApi: type, comptime member: []const u8, comptime valu
             wrapped.getter = recordingCallback(key, getter);
         },
         Function => wrapped.func = recordingOperationCallback(key, value.func),
+        NamedIndexed => {
+            // A named-property interceptor has no member name of its own: the
+            // declaration is `[str]` (or `[]`), and the question the page asked
+            // is the name it passed. So the key is the surface that answered --
+            // `CSSStyleDeclaration[str]` -- and the name rides along as the
+            // argument, the same way an operation's first argument does.
+            //
+            // This half is why "getComputedStyle, 126 times" could not be
+            // turned into a list of properties: the accessor that hands out the
+            // declaration is wrapped, every read off it was not.
+            wrapped.getter = recordingNamedCallback(interface ++ member, value.getter);
+        },
         else => @compileError("logReads: " ++ @typeName(@TypeOf(value))),
     }
     return wrapped;
@@ -1031,6 +1043,61 @@ fn recordWithArgument(
         return ctx.recordPropertyRead(key);
 
     var buf: [key.len + max_argument_len + 8]u8 = undefined;
+    ctx.recordPropertyReadDynamic(formatArgumentKey(&buf, key, arg), key);
+}
+
+// The named-property interceptor's version of the same recorder. It reads the
+// name straight off the callback rather than through `Caller`: the wrapper runs
+// before the real getter has entered a scope of its own, and `WriteUtf8` on an
+// already-live handle needs neither.
+//
+// Bare key without `prop_arg`, for the same reason operations take that
+// bargain: keyed by name the key set stops being bounded by our surface and
+// starts being bounded by whatever the page asks for.
+fn recordingNamedCallback(
+    comptime key: []const u8,
+    comptime inner: *const fn (?*const v8.Name, ?*const v8.PropertyCallbackInfo) callconv(.c) u32,
+) *const fn (?*const v8.Name, ?*const v8.PropertyCallbackInfo) callconv(.c) u32 {
+    return struct {
+        fn wrap(c_name: ?*const v8.Name, handle: ?*const v8.PropertyCallbackInfo) callconv(.c) u32 {
+            if (log.enabled(.prop_read, .debug)) {
+                const isolate = v8.v8__PropertyCallbackInfo__GetIsolate(handle).?;
+                if (Context.fromIsolate(.{ .handle = isolate })) |found| {
+                    recordNamedRead(found[0], isolate, key, c_name);
+                }
+            }
+            return inner(c_name, handle);
+        }
+    }.wrap;
+}
+
+fn recordNamedRead(
+    ctx: *Context,
+    isolate: *v8.Isolate,
+    comptime key: []const u8,
+    c_name: ?*const v8.Name,
+) void {
+    const name = c_name orelse return ctx.recordPropertyRead(key);
+    if (!log.enabled(.prop_arg, .debug)) {
+        return ctx.recordPropertyRead(key);
+    }
+
+    // The handler is installed with kOnlyInterceptStrings, so the name is a
+    // string every time it reaches here.
+    var text: [max_argument_len + 8]u8 = undefined;
+    const written = v8.v8__String__WriteUtf8(
+        @ptrCast(name),
+        isolate,
+        &text,
+        text.len,
+        v8.NO_NULL_TERMINATION | v8.REPLACE_INVALID_UTF8,
+    );
+    if (written < 0) {
+        return ctx.recordPropertyRead(key);
+    }
+
+    var buf: [key.len + max_argument_len + 8]u8 = undefined;
+    const arg: ReadArgument = .{ .string = text[0..@intCast(written)] };
     ctx.recordPropertyReadDynamic(formatArgumentKey(&buf, key, arg), key);
 }
 
