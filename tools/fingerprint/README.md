@@ -15421,3 +15421,68 @@ fix that opens a station would show up as a challenge verdict turning into a
 pass and *staying* there across a control, which this is not.
 
 What the change is measured by is the probe: 199 → 241 of 261, zero regressions.
+
+## A computed length is px, and this engine was printing `12pt` (2026-08-26)
+
+Two failures with opposite shapes, both in `declaredValue`'s one binary guard.
+`resolvesHere` decides whether a declaration is *already* in the shape a computed
+style has; anything it refuses falls back to the initial value. So:
+
+- **Font-relative lengths were refused**, and `padding-top:2em` on a 20px element
+  read `0px` where every browser reads `40px`.
+- **Absolute lengths were not refused at all.** `pt`, `cm`, `mm`, `in`, `pc` and
+  `Q` are not in RELATIVE_UNITS, so they went straight through and
+  `getComputedStyle(el).paddingTop` answered `12pt` — the one shape a computed
+  style can never carry, and a single expression that separates the engine from
+  every browser.
+
+A declaration is now resolved token by token before the guard is reached: `em`
+against the element's own computed font size (the parent's on `font-size`
+itself), `rem` against the root's, the absolute units by the 96px-per-inch
+factors, `vw`/`vh`/`vmin`/`vmax` against the viewport, and the two percentages
+with no containing block in them — `font-size` against the parent's size,
+`line-height` against the element's own — plus `line-height`'s bare multiplier.
+
+**Nothing new had to be written to print the result.** `units.writeNumber` was
+already `%g` at six significant digits with a two-digit exponent, and
+`expr-length-format.js` confirms that is exactly Chrome's rule, down to
+`1234567.89px → 1.23457e+06px` and `0.0000001px → 1e-07px`. `computedFontSize`
+already resolved a font size through `inherit` and relative units.
+
+### Where an inherited length resolves
+
+At the element that *declared* it, not the one inheriting it — a computed px is
+what crosses the inheritance boundary. `expr-inherited-em.js` measures it, and
+the case that separates the two readings is the one where the child changes its
+own font:
+
+| | Chrome's `letter-spacing` on the child |
+|---|---|
+| ancestor `font-size:20px;letter-spacing:2em`, child bare | `40px` |
+| …child `font-size:40px` | `40px` |
+| …child `font-size:2em` | `40px` |
+
+The ancestor walk hands each ancestor to `declaredValue` in turn, so this fell
+out rather than needing arranging — but it is asserted now, because the two
+readings only differ in a case no earlier test had.
+
+### Three refusals, each measured rather than skipped
+
+- **Percentages against a containing block.** `margin-left:50%` is `200px` of a
+  400px block for Chrome. Nothing here models a containing block.
+- **`ex` and `ch`.** `expr-ex-ch-ratio.js` over five families and three sizes:
+  the ratio to the font size is *exactly* constant per family and different for
+  every family — 0.44873 serif, 0.52295 sans-serif, 0.54688 monospace, 0.48145
+  Georgia, 0.51855 Arial. That is font metrics. One ratio would be a guess
+  wearing a measurement's clothes.
+- **`calc()`**, which needs an evaluator.
+
+### One leak closed on the way
+
+The guard now runs on the *substituted* text rather than the declaration's.
+`padding: var(--x)` where `--x` holds `2em` used to pass — it has no unit of its
+own to see — and hand the substituted `2em` straight out.
+
+The cascade probe reads **56/60**, from 53 before this and 7 at the start of the
+month's computed-style work. The four left are the two refusals above and the
+`font` shorthand, which the table leaves unmodelled and this engine keeps whole.

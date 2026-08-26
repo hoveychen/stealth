@@ -82,21 +82,32 @@ css/chrome_inherited.zig.
 }
 </script>
 
-<script id=inherited_values_are_still_shape_checked>
+<script id=inherited_lengths_resolve_at_the_declaring_element>
 {
-  // An inherited value goes through the same check a declared one does: a
-  // computed style never carries a font-relative length, so an ancestor's
-  // `letter-spacing:2em` leaves the child on the initial value rather than
-  // handing back `2em`. Chrome resolves it (to 40px against a 20px font); this
-  // engine declines to invent a number. See computed-style-relative-units.
+  // An inherited value goes through the same resolution a declared one does,
+  // and against the element that *declared* it rather than the one inheriting
+  // it: a computed px is what crosses the inheritance boundary, so an ancestor's
+  // `letter-spacing:2em` under a 20px font is 40px for the child whatever font
+  // size the child itself carries.
+  //
+  // Measured with tools/fingerprint/scratch/expr-inherited-em.js: Chrome answers
+  // 40px for all three of the cases below, including the one where the child's
+  // own font size is twice the ancestor's.
   const style = document.createElement('style');
   style.textContent = '.cxa{font-size:20px;letter-spacing:2em}';
   document.head.appendChild(style);
   const host = document.createElement('div');
-  host.innerHTML = '<div class="cxa"><p>x</p></div>';
+  host.innerHTML = '<div class="cxa"><p>x</p><p style="font-size:40px">y</p>' +
+    '<p style="font-size:2em">z</p></div>';
   document.body.appendChild(host);
 
-  testing.expectEqual('normal', getComputedStyle(host.firstChild.firstChild).letterSpacing);
+  const kids = host.firstChild.children;
+  testing.expectEqual('40px', getComputedStyle(kids[0]).letterSpacing);
+  testing.expectEqual('40px', getComputedStyle(kids[1]).letterSpacing);
+  testing.expectEqual('40px', getComputedStyle(kids[2]).letterSpacing);
+  // ...and the child's own font size is its own business.
+  testing.expectEqual('40px', getComputedStyle(kids[1]).fontSize);
+  testing.expectEqual('40px', getComputedStyle(kids[2]).fontSize);
 
   host.remove();
   style.remove();

@@ -113,20 +113,22 @@ white-space) are not asserted here; they are their own plan.
 </script>
 
 <!--
-The cascade's answer is only reported when it is already in the shape a computed
-style has: a browser never prints `2em`, `50%` or `calc(10px + 5px)` from
+The cascade's answer has to be in the shape a computed style has before it is
+reported: a browser never prints `2em`, `50%` or `calc(10px + 5px)` from
 getComputedStyle, because font-relative lengths resolve at computed-value time
-and percentages at used-value time. Answering the author's text would trade one
-wrong value for a wronger one -- `0px` is a value Chrome does print here and
-`2em` is a value it never prints -- so an unresolvable declaration falls through
-to the initial value, which is what was reported before the cascade was consulted
-at all.
+and percentages at used-value time.
 
-Chrome's answers, for the record, are 30px / 30px / 952px / 15px / 40px.
-Resolving them is computed-style-relative-units.
+The font-relative ones are resolved now (computed-style-relative-units), so they
+answer the same px Chrome does. The two that are not are the ones this engine has
+nothing to resolve *against*: a percentage needs a containing block and a
+`calc()` needs an evaluator. Those still fall through to the initial value, which
+is what was reported before the cascade was consulted at all -- `0px` is a value
+Chrome does print here and `50%` is one it never prints.
+
+Chrome's answers to the two that fall through are 952px and 15px.
 -->
 
-<script id=unresolvable_values_fall_through>
+<script id=relative_values_resolve_or_fall_through>
 {
   const probe = (decl, prop, wrap) => {
     const style = document.createElement('style');
@@ -141,10 +143,12 @@ Resolving them is computed-style-relative-units.
     return got;
   };
 
-  testing.expectEqual('16px', probe('font-size:1.5em', 'fontSize', 'font-size:20px'));
-  testing.expectEqual('normal', probe('font-size:20px;line-height:1.5', 'lineHeight'));
+  // Resolved, and to Chrome's own answers.
+  testing.expectEqual('30px', probe('font-size:1.5em', 'fontSize', 'font-size:20px'));
+  testing.expectEqual('30px', probe('font-size:20px;line-height:1.5', 'lineHeight'));
+  testing.expectEqual('40px', probe('font-size:20px;padding-top:2em', 'paddingTop'));
+  // Not resolved: no containing block to take a percentage of.
   testing.expectEqual('0px', probe('margin-left:50%', 'marginLeft'));
-  testing.expectEqual('0px', probe('font-size:20px;padding-top:2em', 'paddingTop'));
   // `width` has its own branch below the cascade -- the synthetic layout
   // metrics -- so an unresolvable width lands there rather than on the initial
   // value. Either way it is a px number and not the author's calc().

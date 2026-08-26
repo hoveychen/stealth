@@ -30,7 +30,9 @@ pub const Unit = enum {
     none, // bare number, no suffix
     percentage,
     em,
+    rem,
     ex,
+    ch,
     px,
     cm,
     mm,
@@ -39,6 +41,9 @@ pub const Unit = enum {
     pc,
     vh,
     vw,
+    vmin,
+    vmax,
+    q,
     deg,
     rad,
     grad,
@@ -52,15 +57,21 @@ pub const Parsed = struct {
 
 const WHITESPACE = " \t\r\n\x0c";
 
-// Longer suffixes first: "5grad" must not match the "rad" entry.
+// A suffix that ends with another one has to come first, or the shorter entry
+// swallows it: "5grad" must not match "rad", "2rem" must not match "em", and
+// "10vmin" must not match "in".
 const suffixes = [_]struct { []const u8, Unit }{
     .{ "turn", .turn },
     .{ "grad", .grad },
+    .{ "vmin", .vmin },
+    .{ "vmax", .vmax },
+    .{ "rem", .rem },
     .{ "deg", .deg },
     .{ "rad", .rad },
     .{ "%", .percentage },
     .{ "em", .em },
     .{ "ex", .ex },
+    .{ "ch", .ch },
     .{ "px", .px },
     .{ "cm", .cm },
     .{ "mm", .mm },
@@ -69,6 +80,7 @@ const suffixes = [_]struct { []const u8, Unit }{
     .{ "pc", .pc },
     .{ "vh", .vh },
     .{ "vw", .vw },
+    .{ "q", .q },
 };
 
 pub fn parse(input: []const u8) error{SyntaxError}!Parsed {
@@ -109,6 +121,9 @@ pub fn absoluteLengthFactor(unit: Unit) ?f64 {
         .in => 96,
         .pt => 96.0 / 72.0,
         .pc => 16,
+        // A quarter-millimetre. Chrome prints 0.944882px for 1Q, which is
+        // 96/2.54/40 -- measured, scratch/expr-abs-viewport-units.js.
+        .q => 96.0 / 2.54 / 40.0,
         else => null,
     };
 }

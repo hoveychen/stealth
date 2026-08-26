@@ -20,6 +20,7 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const CssParser = @import("../../css/Parser.zig");
+const units = @import("../../css/units.zig");
 
 const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
@@ -416,21 +417,6 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
 
     const declaration = winner orelse return .none;
 
-    // A specified value this engine cannot finish resolving is *not* reported. A
-    // computed style never carries `2em` or `calc(10px + 5px)` in a browser --
-    // font- and viewport-relative lengths resolve at computed-value time and
-    // percentages at used-value time -- so answering the author's text would
-    // trade one wrong answer for a wronger one: `0px` is a value Chrome does
-    // print, and `2em` is a value it never prints from here. Answering
-    // `unreportable` leaves the initial value that was reported before the
-    // cascade was consulted at all, which is never worse.
-    //
-    // Resolving them properly is its own plan (computed-style-relative-units);
-    // resolvesHere's list is what the two-arm probe surfaced, not a claim to
-    // have enumerated every unresolvable shape.
-    if (!resolvesHere(property_name, declaration.value)) {
-        return .unreportable;
-    }
     const substituted = style_manager.substituteVars(element, declaration.value) orelse "";
     const frame = element.ownerFrame(style_manager.frame);
 
@@ -445,7 +431,151 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
     if (computedColourText(frame.call_arena, property_name, substituted)) |folded| {
         return .{ .value = folded };
     }
+
+    // A length resolves at computed-value time, so the unit the author wrote is
+    // one a computed style never carries: `padding-top:2em` on a 20px element
+    // is `40px` in every browser, and so is `12pt`.
+    if (computedLengthText(style_manager, element, property_name, substituted)) |px| {
+        return .{ .value = px };
+    }
+
+    // What is left is either already in the shape a computed style has, or a
+    // length this engine cannot finish resolving -- a percentage against a
+    // containing block it does not model, an `ex` it has no font metrics for, a
+    // `calc()` it does not evaluate. Those are *not* reported: answering the
+    // author's text would trade one wrong answer for a wronger one, since `0px`
+    // is a value Chrome does print here and `2em` is one it never prints.
+    // `unreportable` leaves the initial value that was reported before the
+    // cascade was consulted at all, which is never worse.
+    //
+    // The guard runs on the substituted text rather than the declaration's, so a
+    // `var()` holding a relative length is caught too -- it used to pass, having
+    // no unit of its own to see, and leak the substituted `2em` straight out.
+    if (!resolvesHere(property_name, substituted)) {
+        return .unreportable;
+    }
     return .{ .value = substituted };
+}
+
+/// The px a computed style reports for a declaration written in some other
+/// length unit, or null when nothing here needed converting and the value can go
+/// through as it stands.
+///
+/// Null is also the answer for a length this engine cannot resolve, which leaves
+/// the caller's guard to refuse it. The two it refuses are measured refusals
+/// rather than gaps waiting to be filled: a percentage against a containing
+/// block, because nothing here models one, and `ex`/`ch`, because
+/// scratch/expr-ex-ch-ratio.js shows the ratio to the font size is exactly
+/// constant per family and different for every family tried -- font metrics, not
+/// a number. The two percentages that need no containing block are resolved:
+/// `font-size` against the parent's size and `line-height` against the element's
+/// own.
+fn computedLengthText(style_manager: *StyleManager, element: *Element, property_name: []const u8, value: []const u8) ?[]const u8 {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+
+    // Functions and comma lists are somebody else's: `rgb(1, 2, 3)` and
+    // `calc(10px + 5px)` both have digits in them and neither is a length this
+    // walk can take apart.
+    for (trimmed) |c| {
+        if (c == '(' or c == ')' or c == ',') return null;
+    }
+
+    const frame = element.ownerFrame(style_manager.frame);
+    var buf = std.Io.Writer.Allocating.init(frame.call_arena);
+    const writer = &buf.writer;
+    var converted = false;
+    var first = true;
+    var it = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
+    while (it.next()) |token| {
+        if (!first) writer.writeByte(' ') catch return null;
+        first = false;
+
+        // A token with no digit in it is a keyword -- `solid`, `Georgia`,
+        // `normal` -- and goes through untouched.
+        const numeric = for (token) |c| {
+            if (std.ascii.isDigit(c)) break true;
+        } else false;
+        if (!numeric) {
+            writer.writeAll(token) catch return null;
+            continue;
+        }
+
+        const parsed = units.parse(token) catch return null;
+        switch (lengthFactor(style_manager, element, property_name, parsed.unit)) {
+            .unresolvable => return null,
+            .verbatim => writer.writeAll(token) catch return null,
+            .pixels => |factor| {
+                units.writeNumber(writer, parsed.value * factor) catch return null;
+                writer.writeAll("px") catch return null;
+                converted = true;
+            },
+        }
+    }
+    if (!converted) return null;
+    return buf.written();
+}
+
+/// What one token of a declaration has to become.
+const LengthFactor = union(enum) {
+    /// Already what a computed style carries; the token goes through as it is.
+    verbatim,
+    /// CSS pixels per unit, to multiply the token's number by.
+    pixels: f64,
+    /// A unit this engine cannot resolve here, so the whole value is refused.
+    unresolvable,
+};
+
+fn lengthFactor(style_manager: *StyleManager, element: *Element, property_name: []const u8, unit: units.Unit) LengthFactor {
+    const on_font_size = std.mem.eql(u8, property_name, "font-size");
+    const on_line_height = std.mem.eql(u8, property_name, "line-height");
+
+    if (unit == .px) return .verbatim;
+
+    // A bare number is a length only for `line-height`, where it is a multiple
+    // of the element's font size. Everywhere else -- `opacity`, `z-index`,
+    // `flex-grow`, `order` -- the number *is* the computed value.
+    if (unit == .none) {
+        if (!on_line_height) return .verbatim;
+        return .{ .pixels = style_manager.computedFontSize(element) };
+    }
+
+    if (units.absoluteLengthFactor(unit)) |factor| {
+        return .{ .pixels = factor };
+    }
+
+    const viewport = element.ownerFrame(style_manager.frame)._page.getViewport();
+    const width: f64 = @floatFromInt(viewport.width);
+    const height: f64 = @floatFromInt(viewport.height);
+    return switch (unit) {
+        // `em` is the element's own computed font size, except on `font-size`
+        // itself, where it is the parent's -- measured, expr-relative-units.js:
+        // `font-size:1.5em` under a 20px parent computes to 30px.
+        .em => .{ .pixels = if (on_font_size)
+            style_manager.computedFontSize(element.parentElement())
+        else
+            style_manager.computedFontSize(element) },
+        .rem => .{ .pixels = style_manager.computedFontSize(rootElement(element)) },
+        // The only two percentages with no containing block in them.
+        .percentage => if (on_font_size)
+            .{ .pixels = style_manager.computedFontSize(element.parentElement()) / 100.0 }
+        else if (on_line_height)
+            .{ .pixels = style_manager.computedFontSize(element) / 100.0 }
+        else
+            .unresolvable,
+        .vw => .{ .pixels = width / 100.0 },
+        .vh => .{ .pixels = height / 100.0 },
+        .vmin => .{ .pixels = @min(width, height) / 100.0 },
+        .vmax => .{ .pixels = @max(width, height) / 100.0 },
+        else => .unresolvable,
+    };
+}
+
+/// The document element, whose font size `rem` is a multiple of.
+fn rootElement(element: *Element) ?*Element {
+    var current = element;
+    while (current.parentElement()) |parent| current = parent;
+    return current;
 }
 
 /// Whether a specified value is already in the shape a computed style reports,
@@ -1966,13 +2096,13 @@ fn parseChannel(text: []const u8) ?Channel {
     }
     // A hue takes any angle unit; the factors are the exact ones, since a
     // rounded pi would move the answer a byte.
-    const units = [_]struct { []const u8, f64 }{
+    const angle_units = [_]struct { []const u8, f64 }{
         .{ "deg", 1 },
         .{ "grad", 0.9 },
         .{ "rad", 180.0 / std.math.pi },
         .{ "turn", 360 },
     };
-    for (units) |unit| {
+    for (angle_units) |unit| {
         if (text.len > unit[0].len and std.ascii.endsWithIgnoreCase(text, unit[0])) {
             const n = std.fmt.parseFloat(f64, text[0 .. text.len - unit[0].len]) catch return null;
             return .{ .angle = n * unit[1] };
@@ -3560,4 +3690,8 @@ test "WebApi: CSSStyleDeclaration computed shorthand join" {
 
 test "WebApi: CSSStyleDeclaration computed logical properties" {
     try testing.htmlRunner("css/computed_logical_physical.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed relative units" {
+    try testing.htmlRunner("css/computed_relative_units.html", .{});
 }
