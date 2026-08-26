@@ -198,3 +198,45 @@ string are this machine's.
   testing.expectEqual('rgb(239, 239, 239)', probe('color:rgb(1,2,3);color:buttonface'));
 }
 </script>
+
+<!--
+A keyword is only folded to a colour on a property that takes a colour.
+
+The system colours brought in words that other properties take as their own
+keywords: `menu`, `caption`, `field`, `window`, `mark`, `background`,
+`highlight`, `scrollbar`. `font: menu` is the one Kasada actually writes -- six
+`font:` declarations in a burst at x-hyatt, one per system font keyword -- and
+folding its value made `getComputedStyle(el).font` answer `rgb(255, 255, 255)`,
+which is further from Chrome than the keyword it replaced.
+
+`currentcolor` is the discriminator, and an exact one: all sixty colour-valued
+properties in the measured keyword tables take it, and no other property does.
+`font` does not.
+
+(Chrome answers `16px Arial` for all six, expanding the keyword to a real font.
+That is a separate gap -- system-font-shorthand-readback -- and this block only
+pins the colour half so that fixing one cannot silently un-fix the other.)
+-->
+
+<script id=colour_fold_only_on_colour_properties>
+{
+  const computed = (decl, prop) => {
+    const host = document.createElement('div');
+    host.innerHTML = '<p style="' + decl + '">x</p>';
+    document.body.appendChild(host);
+    const got = String(getComputedStyle(host.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+
+  // Not a colour here, whatever it is elsewhere.
+  for (const kw of ['caption', 'icon', 'menu', 'message-box', 'small-caption', 'status-bar']) {
+    const got = computed('font:' + kw, 'font');
+    testing.expectEqual(kw + '=not-a-colour', kw + '=' + (got.startsWith('rgb') ? got : 'not-a-colour'));
+  }
+
+  // And still a colour where it is one.
+  testing.expectEqual('rgb(255, 255, 255)', computed('color:menu', 'color'));
+  testing.expectEqual('rgb(255, 255, 255)', computed('background-color:window', 'backgroundColor'));
+}
+</script>
