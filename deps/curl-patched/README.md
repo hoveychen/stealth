@@ -32,7 +32,23 @@ receives the negotiated version, and the skip sits beside upstream's own
 version-gated skip of `Transfer-Encoding`. It is the mirror of `Connection`,
 which `h2_permissible_field()` drops in the other direction.
 
-### `lib/http.c` — `Curl_http_req_to_h2()`
+### `lib/http.c` — `Curl_http_req_to_h2()`, cookie fields
+
+Splits the `Cookie` header into one `cookie` field per cookie, via
+`h2_add_cookie_fields()`. RFC 9113 §8.2.3 allows it so HPACK's dynamic table
+can hold an entry per cookie instead of an entry per combination, and Chrome
+always takes it — measured over h2 on a navigation, a subresource, an XHR POST
+and a fetch POST, every cookie in a field of its own. A receiver must
+concatenate them again, so no server sees a difference; only something reading
+the header block does.
+
+It is here rather than in `HttpClient.zig` because the split is legal on HTTP/2
+and is not on HTTP/1.1, where RFC 6265 §5.4 allows exactly one Cookie header
+and Chrome sends exactly one. One header list is reused across an h1 and an h2
+attempt, and the negotiated version is not known while it is built. Same
+division as the `priority` hint above.
+
+### `lib/http.c` — `Curl_http_req_to_h2()`, pseudo-header order
 
 Emits `:authority` before `:scheme`. Upstream orders the pseudo-headers
 `:method :scheme :authority :path`; Chrome orders them
@@ -78,6 +94,10 @@ reads as 15663105 the way Chrome's does.
 4. Re-measure: `node tools/fingerprint/collect-tls.mjs --engine lightpanda`.
    The Akamai fingerprint must come out
    `1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p`.
+5. Re-measure the header block too, since two of the hunks above shape it:
+   `node tools/fingerprint/h2-cookie-order.mjs <arm>` for each arm, then
+   `--diff`. The header *name* sequence must match Chrome on all shapes,
+   `cookie` included, once per cookie.
 
 ## Verification this is not just cosmetic
 
