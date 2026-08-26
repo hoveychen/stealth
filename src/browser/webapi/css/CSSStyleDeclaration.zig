@@ -32,6 +32,7 @@ const Allocator = std.mem.Allocator;
 
 const chrome_arity = @import("chrome_arity.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
+const chrome_current_color = @import("chrome_current_color.zig");
 const chrome_inherited = @import("chrome_inherited.zig");
 const chrome_initial_values = @import("chrome_initial_values.zig");
 const chrome_per_tag_values = @import("chrome_per_tag_values.zig");
@@ -267,18 +268,27 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
                 // is the one that decides the answer, so a grandparent's
                 // `3px` must not show through it.
                 switch (declaredValue(style_manager, element, normalized, wrapped)) {
-                    .value => |value| return value,
+                    .value => |value| return self.resolveCurrentColour(value, frame, surface),
                     .unreportable => {},
                     .none => if (chrome_inherited.inherits(normalized)) {
                         var ancestor = element.parentElement();
                         while (ancestor) |current| : (ancestor = current.parentElement()) {
                             switch (declaredValue(style_manager, current, normalized, wrapped)) {
-                                .value => |value| return value,
+                                .value => |value| return self.resolveCurrentColour(value, frame, surface),
                                 .unreportable => break,
                                 .none => {},
                             }
                         }
                     },
+                }
+
+                // Sixteen longhands have `currentcolor` as their initial value,
+                // so an element that declares none of them still answers its own
+                // colour for all sixteen. chrome_initial_values recorded one
+                // number for each, measured on an element whose text was black,
+                // which is right exactly while a page leaves it black.
+                if (chrome_current_color.followsColor(normalized)) {
+                    return self.propertyValue("color", frame, surface);
                 }
 
                 // Computed width/height must agree with the synthetic layout
@@ -1861,6 +1871,19 @@ fn alphaByte(channel: Channel) ?u8 {
         .angle => return null,
     };
     return colourByte(std.math.clamp(alpha, 0, 1) * 255.0);
+}
+
+/// `currentcolor` written out by an author means the element's own computed
+/// `color`, and a computed style reports that rather than the keyword. Any other
+/// value comes back untouched.
+///
+/// `color` is never itself one of these -- it is the source, not a follower --
+/// so the recursion is one level deep.
+fn resolveCurrentColour(self: *const CSSStyleDeclaration, value: []const u8, frame: *Frame, surface: Surface) []const u8 {
+    if (!std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, &std.ascii.whitespace), "currentcolor")) {
+        return value;
+    }
+    return self.propertyValue("color", frame, surface);
 }
 
 /// The `rgb()` a computed style reports for a value written as a colour
