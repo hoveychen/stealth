@@ -1950,32 +1950,15 @@ fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) 
 /// stops rather than recursing forever.
 const MAX_CONTAINING_BLOCK_DEPTH = 64;
 
-/// A declared `width: N%` resolved against the parent's width, or null when the
-/// declaration is not a percentage. Measured against Chrome with
-/// tools/fingerprint/scratch/expr-percentage-width.js.
-fn percentageOfParentWidth(self: *Element, declared: []const u8, frame: *Frame, depth: u8) ?f64 {
-    if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return null;
-    const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
-    if (!std.mem.endsWith(u8, trimmed, "%")) return null;
-    const share = std.fmt.parseFloat(f64, trimmed[0 .. trimmed.len - 1]) catch return null;
-    const parent = self.parentElement() orelse return null;
-    return @max(0, parent.dimensionsAt(frame, true, depth + 1).width * share / 100.0);
-}
-
 /// The horizontal margin that comes off the containing block before the box
-/// gets what is left.
-///
-/// Read from the style attribute only, the way the width beside it is. A margin
-/// a stylesheet rule declares is therefore missed, and the box comes out that
-/// much too wide -- the same limitation `dimensions` has always had for width,
-/// and the reason it is stated here rather than implied. Asking the cascade
-/// would put another lookup on a path `element_from_point.html` budgets, so it
-/// is a change to make deliberately and measure, not a line to slip in.
+/// gets what is left. From the cascade, so a stylesheet rule counts -- and it
+/// is only ever asked from inside the fill branch, which is already behind
+/// `measure_text_width`.
 fn horizontalMargin(self: *Element, frame: *Frame) f64 {
     var total: f64 = 0;
     inline for (.{ "margin-left", "margin-right" }) |name| {
-        if (self.getStyle(frame)) |style| {
-            if (CSS.parseDimensionViewport(style.getPropertyValue(name, frame), frame)) |px| {
+        if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
+            if (CSS.parseDimensionViewport(declared, frame)) |px| {
                 total += px;
             }
         }
@@ -1986,29 +1969,32 @@ fn horizontalMargin(self: *Element, frame: *Frame) f64 {
 fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8) Dimensions {
     var dims: Dimensions = .{ .width = 5.0, .height = 5.0 };
 
-    if (self.getStyle(frame)) |style| {
-        // `inline-size` and `width` are one property under two spellings, and
-        // this engine stores only the one the page wrote (chrome_logical.zig is
-        // the measured pairing). The computed path already falls back that way;
-        // without the same fallback here the box readings would disagree with
-        // it for a page that used the logical spelling.
-        const declared_width = blk: {
-            const physical = style.getPropertyValue("width", frame);
-            if (physical.len > 0) break :blk physical;
-            break :blk style.getPropertyValue("inline-size", frame);
-        };
-        if (CSS.parseDimensionViewport(declared_width, frame)) |w| {
-            dims.width = w;
-            dims.explicit_width = true;
-        } else if (percentageOfParentWidth(self, declared_width, frame, depth)) |w| {
-            // A percentage is a share of the containing block's width, and the
-            // containing block's width is the number the branch below already
-            // computes. The computed-style path resolves the same percentage in
-            // CSSStyleDeclaration; without this the box readings would disagree
-            // with it, which is a difference one expression finds.
-            dims.width = w;
-            dims.explicit_width = true;
+    // Width comes from the cascade, so a stylesheet rule reaches the box the
+    // way it already reached `getComputedStyle`. It is behind
+    // `measure_text_width` because asking costs a cascade and the caller that
+    // clears that flag -- `getElementHeight`, the y-only path
+    // document.elementFromPoint rejects thousands of elements on -- has no use
+    // for a width at all.
+    //
+    // `inline-size` and `width` are one property under two spellings
+    // (chrome_logical.zig is the measured pairing); cascadedComputedValue asks
+    // for the other one when the first has nothing, the same as the computed
+    // path does.
+    if (comptime measure_text_width) {
+        if (CSSStyleDeclaration.cascadedComputedValue(self, "width", frame)) |declared| {
+            if (CSS.parseDimensionViewport(declared, frame)) |w| {
+                dims.width = w;
+                dims.explicit_width = true;
+            }
         }
+    }
+
+    // Height still reads the style attribute alone. Putting it on the cascade
+    // would put one on `getElementHeight`, and gating it the way width is gated
+    // would leave `getElementHeight` and `getClientHeight` disagreeing about a
+    // stylesheet-sized element -- a new contradiction where today both simply
+    // miss the rule. That is its own change, with its own measurement.
+    if (self.getStyle(frame)) |style| {
         const declared_height = blk: {
             const physical = style.getPropertyValue("height", frame);
             if (physical.len > 0) break :blk physical;
