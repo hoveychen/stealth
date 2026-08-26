@@ -3438,3 +3438,7 @@ test "WebApi: CSSStyleDeclaration first computed read" {
 test "WebApi: CSSStyleDeclaration computed transform" {
     try testing.htmlRunner("css/computed_transform.html", .{});
 }
+
+test "WebApi: CSSStyleDeclaration computed shorthand join" {
+    try testing.htmlRunner("css/computed_shorthand_join.html", .{});
+}
