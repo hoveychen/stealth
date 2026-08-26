@@ -4913,6 +4913,47 @@ static bool h2_permissible_field(struct dynhds_entry *e)
   return TRUE;
 }
 
+/* LIGHTPANDA: one `cookie` field per cookie, instead of one field holding the
+   whole cookie-string. RFC 9113 8.2.3 allows the split precisely so HPACK's
+   dynamic table can hold an entry per cookie rather than an entry per
+   combination, and Chrome always takes it: measured over h2 on a navigation, a
+   subresource, an XHR POST and a fetch POST, every cookie arrives in a field of
+   its own while this engine sent one joined field. A receiver must concatenate
+   them again before handing them on, so no server sees a difference -- only
+   something reading the header block does, which is what a bot guard is.
+
+   Split here and not in HttpClient.zig because it is legal on HTTP/2 and is
+   not on HTTP/1.1, where RFC 6265 5.4 allows exactly one Cookie header and
+   Chrome sends exactly one. One header list is reused across an h1 and an h2
+   attempt and the negotiated version is not known while it is being built;
+   this function runs for h2 only. Same division of labour as the RFC 9218
+   `priority` hint, which Curl_add_custom_headers() drops below HTTP/2. */
+static CURLcode h2_add_cookie_fields(struct dynhds *h2_headers,
+                                     struct dynhds_entry *e)
+{
+  const char *p = e->value;
+  const char *end = e->value + e->valuelen;
+  CURLcode result = CURLE_OK;
+
+  while(!result && p < end) {
+    /* A cookie-value cannot contain ';' (RFC 6265 4.1.1), so the separator is
+       unambiguous and no quoting has to be understood here. */
+    const char *sep = memchr(p, ';', (size_t)(end - p));
+    const char *stop = sep ? sep : end;
+    while(p < stop && ISBLANK(*p))
+      p++;
+    while(stop > p && ISBLANK(*(stop - 1)))
+      stop--;
+    /* An empty pair -- a trailing "; " or a stray ";;" -- becomes no field
+       rather than an empty one, which would be malformed. */
+    if(p < stop)
+      result = Curl_dynhds_add(h2_headers, e->name, e->namelen,
+                               p, (size_t)(stop - p));
+    p = sep ? sep + 1 : end;
+  }
+  return result;
+}
+
 static bool http_TE_has_token(const char *fvalue, const char *token)
 {
   while(*fvalue) {
@@ -5005,6 +5046,10 @@ CURLcode Curl_http_req_to_h2(struct dynhds *h2_headers,
       if(http_TE_has_token(e->value, "trailers"))
         result = Curl_dynhds_add(h2_headers, e->name, e->namelen,
                                  "trailers", sizeof("trailers") - 1);
+    }
+    /* LIGHTPANDA: see h2_add_cookie_fields(). */
+    else if(e->namelen == 6 && curl_strequal("Cookie", e->name)) {
+      result = h2_add_cookie_fields(h2_headers, e);
     }
     else if(h2_permissible_field(e)) {
       result = Curl_dynhds_add(h2_headers, e->name, e->namelen,
