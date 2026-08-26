@@ -218,38 +218,49 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "HTMLAnchorElement";
+        // Chrome installs hrefTranslate and attributionSrc after V8 appends
+        // `constructor`, so it sits mid-list rather than last.
+        pub const constructor_after = "toString";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
 
     const reflect = Element.Reflect(Anchor);
-    pub const referrerPolicy = reflect.referrerPolicy();
-    pub const shape = reflect.string("shape");
-    pub const rev = reflect.string("rev");
-    pub const ping = reflect.string("ping");
-    pub const hreflang = reflect.string("hreflang");
+
+    // Chrome's own-property order, which is IDL order with the three
+    // runtime-flag-gated members installed after `constructor` -- see
+    // Meta.constructor_after above.
     pub const download = reflect.string("download");
+    pub const ping = reflect.string("ping");
+    pub const rel = reflect.string("rel");
+    pub const relList = bridge.accessor(_getRelList, _setRelList, .{ .null_as_undefined = true, .ce_reactions = true });
+    pub const referrerPolicy = reflect.referrerPolicy();
+    pub const text = bridge.accessor(Anchor.getText, Anchor.setText, .{ .ce_reactions = true });
     pub const coords = reflect.string("coords");
     pub const charset = reflect.string("charset");
-
-    pub const href = bridge.accessor(Anchor.getHref, Anchor.setHref, .{ .ce_reactions = true });
-    pub const target = reflect.string("target");
     pub const name = reflect.string("name");
+    pub const rev = reflect.string("rev");
+    pub const shape = reflect.string("shape");
+    pub const target = reflect.string("target");
+    pub const href = bridge.accessor(Anchor.getHref, Anchor.setHref, .{ .ce_reactions = true });
     pub const origin = bridge.accessor(Anchor.getOrigin, null, .{});
     pub const protocol = bridge.accessor(Anchor.getProtocol, Anchor.setProtocol, .{ .ce_reactions = true });
-    pub const host = bridge.accessor(Anchor.getHost, Anchor.setHost, .{ .ce_reactions = true });
-    pub const hostname = bridge.accessor(Anchor.getHostname, Anchor.setHostname, .{ .ce_reactions = true });
     pub const username = bridge.accessor(Anchor.getUsername, Anchor.setUsername, .{ .ce_reactions = true });
     pub const password = bridge.accessor(Anchor.getPassword, Anchor.setPassword, .{ .ce_reactions = true });
+    pub const host = bridge.accessor(Anchor.getHost, Anchor.setHost, .{ .ce_reactions = true });
+    pub const hostname = bridge.accessor(Anchor.getHostname, Anchor.setHostname, .{ .ce_reactions = true });
     pub const port = bridge.accessor(Anchor.getPort, Anchor.setPort, .{ .ce_reactions = true });
     pub const pathname = bridge.accessor(Anchor.getPathname, Anchor.setPathname, .{ .ce_reactions = true });
     pub const search = bridge.accessor(Anchor.getSearch, Anchor.setSearch, .{ .ce_reactions = true });
     pub const hash = bridge.accessor(Anchor.getHash, Anchor.setHash, .{ .ce_reactions = true });
-    pub const rel = reflect.string("rel");
+    pub const hreflang = reflect.string("hreflang");
     pub const @"type" = reflect.string("type");
-    pub const text = bridge.accessor(Anchor.getText, Anchor.setText, .{ .ce_reactions = true });
-    pub const relList = bridge.accessor(_getRelList, _setRelList, .{ .null_as_undefined = true, .ce_reactions = true });
+    pub const interestForElement = reflect.elementReference(.interestfor);
     pub const toString = bridge.function(Anchor.getHref, .{});
+
+    // After `constructor`: two attributes Blink installs per context.
+    pub const hrefTranslate = reflect.string("hreftranslate");
+    pub const attributionSrc = reflect.string("attributionsrc");
 
     fn _getRelList(self: *Anchor, frame: *Frame) !?*@import("../../collections.zig").DOMTokenList {
         const element = self.asElement();

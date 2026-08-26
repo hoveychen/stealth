@@ -26,6 +26,7 @@ const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
 const collections = @import("../../collections.zig");
+const Event = @import("../../Event.zig");
 
 pub const Input = @import("Input.zig");
 pub const Button = @import("Button.zig");
@@ -183,6 +184,30 @@ pub fn submit(self: *Form, frame: *Frame) !void {
     return frame.submitForm(null, self, .{ .fire_event = false });
 }
 
+/// https://html.spec.whatwg.org/multipage/forms.html#dom-form-reset
+/// A `reset` event first, which a listener can cancel; then every resettable
+/// control goes back to what its attributes say. Measured on Chrome 151: an
+/// `<input value="v">` typed into reads "v" again afterwards.
+pub fn reset(self: *Form, frame: *Frame) !void {
+    const event = try Event.init("reset", .{ .bubbles = true, .cancelable = true }, frame._page);
+    try frame._event_manager.dispatch(self.asElement().asEventTarget(), event);
+    if (event.getDefaultPrevented()) {
+        return;
+    }
+
+    var iter = self.walk(.form, frame);
+    while (iter.next()) |element| {
+        const html = element.as(HtmlElement);
+        if (html.is(Input)) |input| {
+            try input.reset(frame);
+        } else if (html.is(TextArea)) |text_area| {
+            text_area.reset();
+        } else if (html.is(Select)) |select| {
+            try select.reset(frame);
+        }
+    }
+}
+
 /// https://html.spec.whatwg.org/multipage/forms.html#dom-form-requestsubmit
 /// Like submit(), but fires the submit event and validates the form.
 pub fn requestSubmit(self: *Form, submitter: ?*Element, frame: *Frame) !void {
@@ -264,22 +289,37 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(Form);
-    pub const encoding = reflect.enumerated("enctype", &.{ "application/x-www-form-urlencoded", "multipart/form-data", "text/plain" }, .{ .missing = "application/x-www-form-urlencoded" });
-    pub const autocomplete = reflect.enumerated("autocomplete", &.{ "on", "off" }, .{ .missing = "on" });
-
-    pub const name = reflect.string("name");
-    pub const method = bridge.accessor(Form.getMethod, Form.setMethod, .{ .ce_reactions = true });
-    pub const action = bridge.accessor(Form.getAction, Form.setAction, .{ .ce_reactions = true });
-    pub const target = reflect.string("target");
+    // Chrome's own-property order: attributes in IDL order, then the
+    // operations alphabetically.
     pub const acceptCharset = bridge.accessor(Form.getAcceptCharset, Form.setAcceptCharset, .{ .ce_reactions = true });
+    pub const action = bridge.accessor(Form.getAction, Form.setAction, .{ .ce_reactions = true });
+    pub const autocomplete = reflect.enumerated("autocomplete", &.{ "on", "off" }, .{ .missing = "on" });
     pub const enctype = bridge.accessor(Form.getEnctype, Form.setEnctype, .{ .ce_reactions = true });
+    pub const encoding = reflect.enumerated("enctype", &.{ "application/x-www-form-urlencoded", "multipart/form-data", "text/plain" }, .{ .missing = "application/x-www-form-urlencoded" });
+    pub const method = bridge.accessor(Form.getMethod, Form.setMethod, .{ .ce_reactions = true });
+    pub const name = reflect.string("name");
     pub const noValidate = reflect.boolean("novalidate");
+    pub const target = reflect.string("target");
+    pub const rel = reflect.string("rel");
+    pub const relList = bridge.accessor(_getRelList, _setRelList, .{ .ce_reactions = true });
     pub const elements = bridge.accessor(Form.getElements, null, .{});
     pub const length = bridge.accessor(Form.getLength, null, .{});
-    pub const submit = bridge.function(Form.submit, .{});
-    pub const requestSubmit = bridge.function(Form.requestSubmit, .{});
     pub const checkValidity = bridge.function(Form.checkValidity, .{});
     pub const reportValidity = bridge.function(Form.reportValidity, .{});
+    pub const requestSubmit = bridge.function(Form.requestSubmit, .{});
+    pub const reset = bridge.function(Form.reset, .{});
+    pub const submit = bridge.function(Form.submit, .{});
+
+    fn _getRelList(self: *Form, frame: *Frame) !*collections.DOMTokenList {
+        return self.asElement().getRelList(frame);
+    }
+
+    // [PutForwards=value]: the assignment goes through the list's value, so
+    // the list object stays the same one and the descriptor keeps its setter.
+    fn _setRelList(self: *Form, value: lp.String, frame: *Frame) !void {
+        const list = try self.asElement().getRelList(frame);
+        try list.setValue(value, frame);
+    }
 };
 
 const testing = @import("../../../../testing.zig");

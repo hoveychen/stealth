@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<meter id=meter value="0.7" min="0" max="1" low="0.2" high="0.8" optimum="0.9"></meter>
+<meter id=bareMeter></meter>
+<meter id=oddMeter value="5" min="10" max="4" low="1" high="99" optimum="-2"></meter>
+<progress id=progress value="0.3" max="2"></progress>
+<progress id=bareProgress></progress>
+
+<!-- Chrome 151's own answers, read off a headed browser
+     (tools/fingerprint/probes/expr-html-family-semantics.js). The six numbers
+     a <meter> reports are not six independent reflections: each is clamped by
+     the ones before it. -->
+<script id=meterClamping>
+{
+  const meter = $('#meter');
+  testing.expectEqual(0.7, meter.value);
+  testing.expectEqual(0, meter.min);
+  testing.expectEqual(1, meter.max);
+  testing.expectEqual(0.2, meter.low);
+  testing.expectEqual(0.8, meter.high);
+  testing.expectEqual(0.9, meter.optimum);
+
+  // A bare <meter> is 0 / 0 / 1 / 0 / 1 / 0.5: low falls back to min, high to
+  // max, and optimum to the midpoint.
+  const bare = $('#bareMeter');
+  testing.expectEqual(0, bare.value);
+  testing.expectEqual(0, bare.min);
+  testing.expectEqual(1, bare.max);
+  testing.expectEqual(0, bare.low);
+  testing.expectEqual(1, bare.high);
+  testing.expectEqual(0.5, bare.optimum);
+
+  // min=10 max=4 collapses the whole range onto 10, and every one of the six
+  // clamps into it -- Chrome answers 10 for all of them.
+  const odd = $('#oddMeter');
+  for (const name of ['value', 'min', 'max', 'low', 'high', 'optimum']) {
+    testing.expectEqual(10, odd[name]);
+  }
+}
+</script>
+
+<script id=meterWrites>
+{
+  const meter = $('#meter');
+  // The setter writes the number it is given; only the getter clamps.
+  meter.value = 5;
+  testing.expectEqual(1, meter.value);
+  testing.expectEqual('5', meter.getAttribute('value'));
+  meter.value = -5;
+  testing.expectEqual(0, meter.value);
+  testing.expectEqual('-5', meter.getAttribute('value'));
+
+  // Moving max moves what value reads without touching the attribute.
+  meter.max = 0.5;
+  testing.expectEqual(0.5, meter.max);
+  testing.expectEqual(0, meter.value);
+
+  testing.expectError('TypeError', () => { meter.value = NaN; });
+  testing.expectEqual(
+    "Failed to set the 'value' property on 'HTMLMeterElement': The provided double value is non-finite.",
+    (() => { try { meter.value = Infinity; } catch (e) { return e.message; } })(),
+  );
+}
+</script>
+
+<script id=progressValue>
+{
+  const progress = $('#progress');
+  testing.expectEqual(0.3, progress.value);
+  testing.expectEqual(2, progress.max);
+  testing.expectEqual(0.15, progress.position);
+
+  // -1 is "indeterminate", which means carrying no value attribute at all --
+  // not a value that happens to be 0.
+  const bare = $('#bareProgress');
+  testing.expectEqual(0, bare.value);
+  testing.expectEqual(1, bare.max);
+  testing.expectEqual(-1, bare.position);
+
+  progress.value = 9;
+  testing.expectEqual(2, progress.value);
+  testing.expectEqual(1, progress.position);
+  progress.value = -1;
+  testing.expectEqual(0, progress.value);
+
+  // max is limited to positive numbers: the write is dropped, attribute and all.
+  progress.max = 0;
+  testing.expectEqual(2, progress.max);
+  testing.expectEqual('2', progress.getAttribute('max'));
+
+  testing.expectError('TypeError', () => { progress.value = NaN; });
+}
+</script>

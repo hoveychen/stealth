@@ -193,6 +193,16 @@ fn seedValue(self: *Input, frame: *Frame) !void {
     self._value = try self.sanitizeValue(false, self._default_value orelse "", frame);
 }
 
+/// The form-reset half: back to what the attributes say, both flags down.
+/// https://html.spec.whatwg.org/multipage/input.html#the-input-element:concept-form-reset-control
+pub fn reset(self: *Input, frame: *Frame) !void {
+    self._value_dirty = false;
+    self._checked_dirty = false;
+    self._checked = self._default_checked;
+    self._value = null;
+    try self.seedValue(frame);
+}
+
 /// Re-run the sanitizer after a bound moved. Only `range` cares: it is the one
 /// type whose sanitizer reads min/max/step, and it clamps rather than rejects,
 /// so `<input type=range>` materializing at 50 and then meeting `max=20` reads

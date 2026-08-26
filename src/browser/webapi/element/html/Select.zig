@@ -188,6 +188,68 @@ pub fn setSelectedIndex(self: *Select, index: i32) !void {
 // https://html.spec.whatwg.org/multipage/form-elements.html#dom-select-type
 // The `type` IDL attribute reflects the element's mode: "select-multiple" when
 // the `multiple` attribute is present, "select-one" otherwise.
+/// The form-reset half: every option's selectedness goes back to its
+/// `selected` attribute, and the select forgets that selectedIndex was ever
+/// assigned -- otherwise a reset select with nothing selected would keep
+/// answering -1 where Chrome answers 0.
+pub fn reset(self: *Select, _: *Frame) !void {
+    self._selected_index_set = false;
+    var it = OptionIterator.init(self);
+    while (it.next()) |option| {
+        option._selected = option._default_selected;
+    }
+}
+
+/// The option at `index`, or null past the end. Same list `options` walks.
+pub fn item(self: *Select, index: u32) ?*Option {
+    var current: u32 = 0;
+    var it = OptionIterator.init(self);
+    while (it.next()) |option| : (current += 1) {
+        if (current == index) {
+            return option;
+        }
+    }
+    return null;
+}
+
+/// The first option whose `id` -- or, failing that, whose `name` -- is `name_`.
+pub fn namedItem(self: *Select, name_: []const u8) ?*Option {
+    var it = OptionIterator.init(self);
+    while (it.next()) |option| {
+        const element = option.asElement();
+        if (element.getAttributeSafe(comptime .wrap("id"))) |id| {
+            if (std.mem.eql(u8, id, name_)) return option;
+        }
+    }
+    it = OptionIterator.init(self);
+    while (it.next()) |option| {
+        const element = option.asElement();
+        if (element.getAttributeSafe(comptime .wrap("name"))) |named| {
+            if (std.mem.eql(u8, named, name_)) return option;
+        }
+    }
+    return null;
+}
+
+/// `select.remove(i)` drops that option; `select.remove()` with no argument is
+/// ChildNode.remove and takes the select itself out of the tree. Chrome reports
+/// arity 0 and an out-of-range index is a no-op (measured on Chrome 151).
+pub fn remove(self: *Select, index_: ?i32, frame: *Frame) void {
+    const index = index_ orelse return self.asElement().remove(frame);
+    if (index < 0) {
+        return;
+    }
+    const option = self.item(@intCast(index)) orelse return;
+    option.asElement().remove(frame);
+}
+
+/// Chrome refuses without a user gesture, and its sentence for a select is not
+/// the one HTMLInputElement uses -- there is no `HTMLSelectElement::` prefix on
+/// the method name (measured on Chrome 151).
+pub fn showPicker(_: *Select, frame: *Frame) !void {
+    return frame.js.fail(error.NotAllowedError, "Failed to execute 'showPicker' on 'HTMLSelectElement': showPicker() requires a user gesture.");
+}
+
 pub fn getType(self: *const Select) []const u8 {
     return if (self.getMultiple()) "select-multiple" else "select-one";
 }
@@ -343,26 +405,33 @@ pub const JsApi = struct {
 
     const reflect = Element.Reflect(Select);
 
-    pub const value = bridge.accessor(Select.getValue, Select.setValue, .{});
-    pub const @"type" = bridge.accessor(Select.getType, null, .{});
-    pub const selectedIndex = bridge.accessor(Select.getSelectedIndex, Select.setSelectedIndex, .{});
-    pub const multiple = reflect.boolean("multiple");
+    // Chrome's own-property order: attributes in IDL order, then the
+    // operations alphabetically.
+    pub const autocomplete = reflect.string("autocomplete");
     pub const disabled = reflect.boolean("disabled");
+    pub const form = bridge.accessor(Select.getForm, null, .{});
+    pub const multiple = reflect.boolean("multiple");
     pub const name = reflect.string("name");
     pub const required = reflect.boolean("required");
-    pub const options = bridge.accessor(Select.getOptions, null, .{});
-    pub const selectedOptions = bridge.accessor(Select.getSelectedOptions, null, .{});
-    pub const form = bridge.accessor(Select.getForm, null, .{});
     pub const size = reflect.unsignedLong("size", .{});
+    pub const @"type" = bridge.accessor(Select.getType, null, .{});
+    pub const options = bridge.accessor(Select.getOptions, null, .{});
     pub const length = bridge.accessor(Select.getLength, null, .{});
-    pub const labels = bridge.accessor(Select.getLabels, null, .{});
+    pub const selectedOptions = bridge.accessor(Select.getSelectedOptions, null, .{});
+    pub const selectedIndex = bridge.accessor(Select.getSelectedIndex, Select.setSelectedIndex, .{});
+    pub const value = bridge.accessor(Select.getValue, Select.setValue, .{});
     pub const willValidate = bridge.accessor(Select.getWillValidate, null, .{});
     pub const validity = bridge.accessor(Select.getValidity, null, .{});
     pub const validationMessage = bridge.accessor(Select.getValidationMessage, null, .{});
+    pub const labels = bridge.accessor(Select.getLabels, null, .{});
     pub const add = bridge.function(Select.add, .{ .ce_reactions = true });
     pub const checkValidity = bridge.function(Select.checkValidity, .{});
+    pub const item = bridge.function(Select.item, .{});
+    pub const namedItem = bridge.function(Select.namedItem, .{});
+    pub const remove = bridge.function(Select.remove, .{ .ce_reactions = true, .arity = 0 });
     pub const reportValidity = bridge.function(Select.reportValidity, .{});
     pub const setCustomValidity = bridge.function(Select.setCustomValidity, .{});
+    pub const showPicker = bridge.function(Select.showPicker, .{});
 };
 
 pub const Build = struct {

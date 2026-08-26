@@ -661,3 +661,50 @@
   testing.expectEqual('InvalidStateError', caught);
 }
 </script>
+
+<!-- rel / relList / reset, against a headed Chrome 151. -->
+<script id="form_rel_and_reset">
+{
+  const form = document.createElement('form');
+  form.innerHTML = '<input id=text value="v"><input id=box type=checkbox checked>'
+    + '<textarea id=area>t</textarea>'
+    + '<select id=picker><option value=a>A</option><option value=b selected>B</option></select>';
+  document.body.appendChild(form);
+
+  testing.expectEqual('', form.rel);
+  form.setAttribute('rel', 'noopener');
+  testing.expectEqual('noopener', form.rel);
+  testing.expectEqual(true, form.relList instanceof DOMTokenList);
+  testing.expectEqual('noopener', form.relList.value);
+  testing.expectEqual(true, form.relList === form.relList);
+  form.rel = 'nofollow';
+  testing.expectEqual('nofollow', form.relList.value);
+  // [PutForwards=value]: the assignment goes through the list.
+  form.relList = 'x';
+  testing.expectEqual('x', form.getAttribute('rel'));
+
+  // reset() puts every control back to what its attributes say.
+  const text = form.querySelector('#text');
+  const box = form.querySelector('#box');
+  const area = form.querySelector('#area');
+  const picker = form.querySelector('#picker');
+  text.value = 'changed';
+  box.checked = false;
+  area.value = 'edited';
+  picker.value = 'a';
+
+  testing.expectEqual(undefined, form.reset());
+  testing.expectEqual('v', text.value);
+  testing.expectEqual(true, box.checked);
+  testing.expectEqual('t', area.value);
+  testing.expectEqual('b', picker.value);
+
+  // A listener that cancels the reset event keeps the edits.
+  text.value = 'again';
+  form.addEventListener('reset', (e) => e.preventDefault());
+  form.reset();
+  testing.expectEqual('again', text.value);
+
+  form.remove();
+}
+</script>

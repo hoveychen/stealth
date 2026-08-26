@@ -382,3 +382,46 @@
     });
   }
 </script>
+
+<!-- HTMLVideoElement's eight added members, against a headed Chrome 151. -->
+<script id="video_added_members">
+{
+  const video = document.createElement('video');
+  document.body.appendChild(video);
+
+  // Nothing decodes, so nothing is decoded or dropped.
+  testing.expectEqual(0, video.webkitDecodedFrameCount);
+  testing.expectEqual(0, video.webkitDroppedFrameCount);
+
+  testing.expectEqual(null, video.onenterpictureinpicture);
+  testing.expectEqual(null, video.onleavepictureinpicture);
+  video.onenterpictureinpicture = () => {};
+  testing.expectEqual('function', typeof video.onenterpictureinpicture);
+
+  testing.expectEqual(false, video.disablePictureInPicture);
+  video.disablePictureInPicture = true;
+  testing.expectEqual('', video.getAttribute('disablepictureinpicture'));
+
+  // Handles count up from 1 per element; nothing ever presents a frame, so
+  // the callback never runs -- which is what a <video> with no source does in
+  // Chrome too.
+  testing.expectEqual(1, video.requestVideoFrameCallback(() => {}));
+  testing.expectEqual(2, video.requestVideoFrameCallback(() => {}));
+  testing.expectEqual(undefined, video.cancelVideoFrameCallback(1));
+  testing.expectEqual(undefined, video.cancelVideoFrameCallback(9999));
+  testing.expectError('TypeError', () => video.requestVideoFrameCallback());
+
+  // Rejects rather than throws, and the reason is the missing metadata.
+  const pip = video.requestPictureInPicture();
+  testing.expectEqual(true, pip instanceof Promise);
+  pip.catch((e) => {
+    testing.expectEqual('InvalidStateError', e.name);
+    testing.expectEqual(
+      "Failed to execute 'requestPictureInPicture' on 'HTMLVideoElement': Metadata for the video element are not loaded yet.",
+      e.message,
+    );
+  });
+
+  video.remove();
+}
+</script>

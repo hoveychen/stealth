@@ -16,14 +16,19 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../../../js/js.zig");
 const Factory = @import("../../../Factory.zig");
+const Page = @import("../../../Page.zig");
 
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
+const Media = @import("Media.zig");
+const text_tracks = @import("../../media/text_tracks.zig");
+const reflection = @import("../reflection.zig");
 
 const String = lp.String;
 
@@ -34,6 +39,11 @@ pub const Proto = HtmlElement;
 _proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 _kind: String,
 _ready_state: ReadyState,
+// Built on the first read of `track` and kept: `t.track === t.track` is true
+// in Chrome, and the same object is what the owning media element lists in
+// `textTracks` (measured: a `<video>` with one `<track>` child reports
+// textTracks.length 1).
+_track: ?*text_tracks.TextTrack = null,
 
 const ReadyState = enum(u8) { none, loading, loaded, @"error" };
 
@@ -42,6 +52,48 @@ pub fn asElement(self: *Track) *Element {
 }
 pub fn asNode(self: *Track) *Node {
     return self.asElement().asNode();
+}
+
+/// NONE until something loads the cue file, which nothing here does. Chrome
+/// answers 0 for a `<track>` whose media has not been asked to load it either.
+pub fn getReadyState(self: *const Track) u16 {
+    return @intFromEnum(self._ready_state);
+}
+
+/// The `TextTrack` this element owns. Chrome builds it from the element's
+/// attributes -- kind, label and srclang -- and starts it "showing" when the
+/// element carries `default`, "disabled" otherwise. Creating it also puts it in
+/// the owning media element's `textTracks`, which is where a page looks for it.
+pub fn getTrack(self: *Track, page: *Page) !*text_tracks.TextTrack {
+    if (self._track) |track| {
+        return track;
+    }
+
+    const element = self.asElement();
+    const keywords = [_][]const u8{ "subtitles", "captions", "descriptions", "chapters", "metadata" };
+    const kind_name = reflection.enumeratedValue(
+        element.getAttributeSafe(comptime .wrap("kind")),
+        &keywords,
+        "subtitles",
+        "metadata",
+    ) orelse "subtitles";
+
+    const track = try text_tracks.TextTrack.create(
+        std.meta.stringToEnum(text_tracks.TextTrack.Kind, kind_name).?,
+        element.getAttributeSafe(comptime .wrap("label")) orelse "",
+        element.getAttributeSafe(comptime .wrap("srclang")) orelse "",
+        page,
+    );
+    track.setMode(if (element.hasAttributeSafe(comptime .wrap("default"))) "showing" else "disabled");
+    self._track = track;
+
+    if (self.asNode().parentElement()) |parent| {
+        if (parent.as(HtmlElement).is(Media)) |media| {
+            const list = try media.getTextTracks(page);
+            try list._items.append(page.frame_arena, track);
+        }
+    }
+    return track;
 }
 
 pub const JsApi = struct {
@@ -54,12 +106,17 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(Track);
+
+    // Chrome's order: the attributes in IDL order, then readyState and track,
+    // then the four constants.
+    pub const kind = reflect.enumerated("kind", &.{ "subtitles", "captions", "descriptions", "chapters", "metadata" }, .{ .missing = "subtitles", .invalid = "metadata" });
     pub const src = reflect.url("src");
-    pub const default = reflect.boolean("default");
     pub const srclang = reflect.string("srclang");
     pub const label = reflect.string("label");
+    pub const default = reflect.boolean("default");
 
-    pub const kind = reflect.enumerated("kind", &.{ "subtitles", "captions", "descriptions", "chapters", "metadata" }, .{ .missing = "subtitles", .invalid = "metadata" });
+    pub const readyState = bridge.accessor(Track.getReadyState, null, .{});
+    pub const track = bridge.accessor(Track.getTrack, null, .{});
 
     pub const NONE = bridge.property(@as(u16, @intFromEnum(ReadyState.none)), .{ .template = true });
     pub const LOADING = bridge.property(@as(u16, @intFromEnum(ReadyState.loading)), .{ .template = true });

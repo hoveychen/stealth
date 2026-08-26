@@ -117,30 +117,65 @@ pub fn imageAddedCallback(self: *Image, frame: *Frame) !void {
     try frame.loadImage(Factory.protoOf(self), src);
 }
 
+/// Where the image sits, which is the only position this engine has: the same
+/// number `offsetLeft` and `offsetTop` answer. Chrome's is a different
+/// quantity -- on a headed Chrome 151 its `x` came back at exactly twice its
+/// `offsetLeft` (1602 against 801), so Blink is reporting an absolute box in
+/// device pixels rather than the CSS-pixel offset. Answering the layout
+/// position keeps the two members consistent with each other, which is what a
+/// page reading all four compares.
+pub fn getX(self: *Image, frame: *Frame) i32 {
+    return @intFromFloat(self.asElement().getOffsetLeft(frame));
+}
+
+pub fn getY(self: *Image, frame: *Frame) i32 {
+    return @intFromFloat(self.asElement().getOffsetTop(frame));
+}
+
+/// Nothing is decoded here, so the promise is already resolved -- which is
+/// what a page awaiting it before drawing needs.
+pub fn decode(_: *Image, frame: *Frame) !js.Promise {
+    return frame.js.local.?.resolvePromise(js.Undefined{});
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Image);
 
     pub const Meta = struct {
         pub const name = "HTMLImageElement";
         pub const constructor_alias = "Image";
+        // browsingTopics, attributionSrc and sharedStorageWritable are
+        // installed per context, after V8 appends `constructor`.
+        pub const constructor_after = "decode";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(Image.constructor, .{});
-    pub const src = bridge.accessor(Image.getSrc, Image.setSrc, .{ .ce_reactions = true });
-    pub const currentSrc = bridge.accessor(Image.getSrc, null, .{});
-    pub const alt = reflect.string("alt");
-    pub const width = reflect.unsignedLong("width", .{ .undeclared = brokenImageIcon });
-    pub const height = reflect.unsignedLong("height", .{ .undeclared = brokenImageIcon });
-    pub const crossOrigin = reflect.enumerated("crossorigin", &.{ "anonymous", "use-credentials" }, .{ .missing = null, .nullable = true, .invalid = "anonymous" });
-    pub const loading = bridge.accessor(Image.getLoading, Image.setLoading, .{ .ce_reactions = true });
     const reflect = Element.Reflect(Image);
+
+    pub const constructor = bridge.constructor(Image.constructor, .{});
+
+    // Chrome's own-property order, which is IDL order with the last three --
+    // the privacy-sandbox members Blink installs per context -- landing after
+    // `constructor`; see Meta.constructor_after above.
+    pub const alt = reflect.string("alt");
+    pub const src = bridge.accessor(Image.getSrc, Image.setSrc, .{ .ce_reactions = true });
     pub const srcset = reflect.string("srcset");
+    pub const sizes = reflect.string("sizes");
+    pub const crossOrigin = reflect.enumerated("crossorigin", &.{ "anonymous", "use-credentials" }, .{ .missing = null, .nullable = true, .invalid = "anonymous" });
     pub const useMap = reflect.string("usemap");
     pub const isMap = reflect.boolean("ismap");
+    pub const width = reflect.unsignedLong("width", .{ .undeclared = brokenImageIcon });
+    pub const height = reflect.unsignedLong("height", .{ .undeclared = brokenImageIcon });
+    pub const naturalWidth = bridge.accessor(Image.getNaturalWidth, null, .{});
+    pub const naturalHeight = bridge.accessor(Image.getNaturalHeight, null, .{});
+    pub const complete = bridge.accessor(Image.getComplete, null, .{});
+    pub const currentSrc = bridge.accessor(Image.getSrc, null, .{});
     pub const referrerPolicy = reflect.referrerPolicy();
     pub const decoding = reflect.enumerated("decoding", &.{ "async", "sync", "auto" }, .{ .missing = "auto" });
+    pub const fetchPriority = reflect.enumerated("fetchpriority", &.{ "high", "low", "auto" }, .{ .missing = "auto" });
+    pub const loading = bridge.accessor(Image.getLoading, Image.setLoading, .{ .ce_reactions = true });
+
     // Obsolete
     pub const name = reflect.string("name");
     pub const lowsrc = reflect.url("lowsrc");
@@ -150,9 +185,14 @@ pub const JsApi = struct {
     pub const longDesc = reflect.url("longdesc");
     pub const border = reflect.stringNullToEmpty("border");
 
-    pub const naturalWidth = bridge.accessor(Image.getNaturalWidth, null, .{});
-    pub const naturalHeight = bridge.accessor(Image.getNaturalHeight, null, .{});
-    pub const complete = bridge.accessor(Image.getComplete, null, .{});
+    pub const x = bridge.accessor(Image.getX, null, .{});
+    pub const y = bridge.accessor(Image.getY, null, .{});
+    pub const decode = bridge.function(Image.decode, .{});
+
+    // After `constructor`.
+    pub const browsingTopics = reflect.boolean("browsingtopics");
+    pub const attributionSrc = reflect.string("attributionsrc");
+    pub const sharedStorageWritable = reflect.boolean("sharedstoragewritable");
 };
 
 pub const Build = struct {

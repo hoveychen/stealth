@@ -73,3 +73,40 @@
   testing.expectEqual(3, HTMLTrackElement.ERROR);
 }
 </script>
+
+<!-- readyState and the TextTrack the element owns, against a headed Chrome 151. -->
+<script id="track_ready_state_and_track">
+{
+  const video = document.createElement('video');
+  video.innerHTML = '<track id=cc src="/t.vtt" kind="captions" srclang="en" label="English" default>';
+  document.body.appendChild(video);
+  const cc = video.querySelector('#cc');
+
+  // Nothing loads the cue file, so it never leaves NONE -- which is also what
+  // Chrome answers for a <track> its media has not been asked to load.
+  testing.expectEqual(0, cc.readyState);
+  testing.expectEqual(HTMLTrackElement.NONE, cc.readyState);
+
+  testing.expectEqual(true, cc.track instanceof TextTrack);
+  testing.expectEqual(true, cc.track === cc.track);
+  testing.expectEqual('captions', cc.track.kind);
+  testing.expectEqual('English', cc.track.label);
+  testing.expectEqual('en', cc.track.language);
+  // `default` starts it showing; without it the track is disabled.
+  testing.expectEqual('showing', cc.track.mode);
+
+  // Reading the track registers it with the owning media element.
+  testing.expectEqual(1, video.textTracks.length);
+  testing.expectEqual(cc.track, video.textTracks[0]);
+
+  const plain = document.createElement('video');
+  plain.innerHTML = '<track id=plainTrack src="/t.vtt">';
+  document.body.appendChild(plain);
+  const plainTrack = plain.querySelector('#plainTrack');
+  testing.expectEqual('subtitles', plainTrack.track.kind);
+  testing.expectEqual('disabled', plainTrack.track.mode);
+
+  video.remove();
+  plain.remove();
+}
+</script>

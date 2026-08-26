@@ -25,12 +25,16 @@ const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const Media = @import("Media.zig");
 const playback = @import("../../media/playback.zig");
+const global_event_handlers = @import("../../global_event_handlers.zig");
 
 const Video = @This();
 
 pub const Proto = Media;
 
-_pad: bool = false,
+// Chrome's requestVideoFrameCallback hands out 1, then 2, ... per element.
+// Nothing ever presents a frame here, so nothing is stored against the handle:
+// a <video> with no source never runs the callback in Chrome either.
+_next_frame_callback: u32 = 0,
 _proto_canary: if (lp.IS_DEBUG) *Media else void = undefined,
 
 pub fn asMedia(self: *Video) *Media {
@@ -77,6 +81,34 @@ pub fn getVideoPlaybackQuality(_: *Video, exec: *js.Execution) !*playback.VideoP
     return playback.VideoPlaybackQuality.create(exec);
 }
 
+// Nothing decodes, so nothing is decoded or dropped. Chrome answers 0 for both
+// on a <video> that never got a source.
+pub fn getWebkitDecodedFrameCount(_: *const Video) u32 {
+    return 0;
+}
+
+pub fn getWebkitDroppedFrameCount(_: *const Video) u32 {
+    return 0;
+}
+
+pub fn requestVideoFrameCallback(self: *Video, _: js.Function) u32 {
+    self._next_frame_callback += 1;
+    return self._next_frame_callback;
+}
+
+pub fn cancelVideoFrameCallback(_: *Video, _: u32) void {}
+
+/// Chrome refuses this before the metadata is in, which for a <video> that
+/// never got a source is always. Measured on Chrome 151: an InvalidStateError,
+/// and a rejected promise rather than a throw.
+pub fn requestPictureInPicture(_: *Video, frame: *Frame) js.Promise {
+    return frame.js.local.?.rejectPromise(.{ .dom_exception = .{
+        .err = error.InvalidStateError,
+        .message = "Failed to execute 'requestPictureInPicture' on 'HTMLVideoElement': " ++
+            "Metadata for the video element are not loaded yet.",
+    } });
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Video);
 
@@ -87,14 +119,36 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(Video);
+
+    // Chrome's own-property order: attributes in IDL order, then the
+    // operations alphabetically.
     pub const width = reflect.unsignedLong("width", .{});
     pub const height = reflect.unsignedLong("height", .{});
-    pub const playsInline = reflect.boolean("playsinline");
-
-    pub const poster = bridge.accessor(Video.getPoster, Video.setPoster, .{ .ce_reactions = true });
     pub const videoWidth = bridge.accessor(Video.getVideoWidth, null, .{});
     pub const videoHeight = bridge.accessor(Video.getVideoHeight, null, .{});
+    pub const poster = bridge.accessor(Video.getPoster, Video.setPoster, .{ .ce_reactions = true });
+    pub const webkitDecodedFrameCount = bridge.accessor(Video.getWebkitDecodedFrameCount, null, .{});
+    pub const webkitDroppedFrameCount = bridge.accessor(Video.getWebkitDroppedFrameCount, null, .{});
+    pub const playsInline = reflect.boolean("playsinline");
+    pub const onenterpictureinpicture = bridge.accessor(handlerAccessor(.onenterpictureinpicture).get, handlerAccessor(.onenterpictureinpicture).set, .{});
+    pub const onleavepictureinpicture = bridge.accessor(handlerAccessor(.onleavepictureinpicture).get, handlerAccessor(.onleavepictureinpicture).set, .{});
+    pub const disablePictureInPicture = reflect.boolean("disablepictureinpicture");
+    pub const cancelVideoFrameCallback = bridge.function(Video.cancelVideoFrameCallback, .{});
     // This is on HTMLVideoElement, not on the media base class, so an <audio>
     // element does not have it (measured).
     pub const getVideoPlaybackQuality = bridge.function(Video.getVideoPlaybackQuality, .{});
+    pub const requestPictureInPicture = bridge.function(Video.requestPictureInPicture, .{});
+    pub const requestVideoFrameCallback = bridge.function(Video.requestVideoFrameCallback, .{});
+
+    fn handlerAccessor(comptime handler: global_event_handlers.Handler) type {
+        return struct {
+            pub fn get(self: *Video, frame: *Frame) !?js.Function.Global {
+                return self.asElement().getAttributeFunction(handler, frame);
+            }
+
+            pub fn set(self: *Video, callback: ?js.Function.Global, frame: *Frame) !void {
+                return self.asElement().setAttributeListener(handler, callback, frame);
+            }
+        };
+    }
 };

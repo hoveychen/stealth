@@ -15224,3 +15224,92 @@ prototype-completeness gap, so neither is fixed here.
 
 Across both probes, 226 of 230 readings are identical between the arms; those
 two are the whole remainder.
+
+## The HTML family, filled in (B52, 2026-08-26)
+
+The same treatment for the ten HTML interfaces the window table still listed:
+42 members, and the window realm goes from **895 of 923 byte-identical to 905,
+63 missing over 18 interfaces, 9 mis-ordered**. Six of the ten needed their
+whole declaration order rewritten, and two of them needed `constructor` moved
+off the end.
+
+| interface | was short by | also mis-ordered |
+|---|---|---|
+| `HTMLImageElement` | 8 | yes |
+| `HTMLVideoElement` | 8 | yes |
+| `HTMLMeterElement` | 6 | no |
+| `HTMLSelectElement` | 5 | yes |
+| `HTMLAnchorElement` | 3 | yes |
+| `HTMLFormElement` | 3 | yes |
+| `HTMLMarqueeElement` | 3 | no |
+| `HTMLDialogElement` | 2 | yes |
+| `HTMLProgressElement` | 2 | no |
+| `HTMLTrackElement` | 2 | yes |
+
+### `constructor` is not last on two of them
+
+B47 recorded that Blink installs a partial interface's members *after* V8
+appends `constructor`, so the slot lands mid-list. Two of this batch's
+prototypes are in that state, and `Meta.constructor_after` is how they say so:
+
+```
+HTMLImageElement   … x, y, decode, constructor, browsingTopics, attributionSrc,
+                     sharedStorageWritable
+HTMLAnchorElement  … interestForElement, toString, constructor, hrefTranslate,
+                     attributionSrc
+```
+
+Every one of the five late members is a privacy-sandbox or navigation
+attribute Blink gates on a runtime flag. Adding them at the end of the JsApi
+would have put them before `constructor` and left both prototypes wrong on a
+byte-comparison, having just been made complete on names.
+
+### Six more answers the IDL would have got wrong
+
+- **`<meter>`'s six numbers are one chain, not six reflections.** Each is
+  clamped by the ones before it: a bare `<meter>` reads 0/0/1/0/1/0.5 (low
+  falls back to min, high to max, optimum to the midpoint) and one written
+  `value=5 min=10 max=4 low=1 high=99 optimum=-2` reads **10 for all six**,
+  because `max` is floored by `min` and everything else clamps into the
+  collapsed range. `high` is the odd one: it is floored by `low`, not by `min`.
+- **`<progress>`'s `position` is -1 for a bar carrying no `value` attribute** --
+  not for one whose value is 0. `progress.max = 0` is dropped entirely,
+  attribute included, because `max` is limited to positive numbers.
+- **`select.remove()` is two methods.** With an index it drops that option;
+  with no argument it is `ChildNode.remove` and takes the select itself out of
+  the tree. Chrome reports arity 0 for both jobs.
+- **`dialog.closedBy`'s missing-value default is not a fixed string.** An open
+  *modal* dialog reads "closerequest"; every other state -- closed, or open
+  non-modal -- reads "none", and so does an unrecognised keyword. That needs a
+  modal flag on the element: it is not derivable from the `open` attribute.
+- **`marquee.loop` refuses exactly one value.** 0 is an `IndexSizeError`
+  ("The provided value (0) is neither positive nor -1."), -1 is accepted and
+  written, and a missing or unparseable attribute reads -1.
+- **`video.requestPictureInPicture()` rejects rather than throwing**, with an
+  `InvalidStateError` naming the missing metadata -- not the user-gesture
+  refusal the method is better known for. Measured directly rather than
+  recalled.
+
+`<track>` gained the `TextTrack` it owns, built from its own kind/label/srclang
+and starting `showing` when the element carries `default`. Reading it also
+registers the track with the owning media element, so a `<video>` with one
+`<track>` child now reports `textTracks.length` 1 the way Chrome does.
+`HTMLFormElement.reset()` is real: a cancelable `reset` event, then every
+`<input>`, `<textarea>` and `<select>` back to what its attributes say.
+
+### The two readings that still differ
+
+147 of 150 readings across the probe match. The three that do not are two
+findings, both wider than this batch:
+
+- **`img.x` / `img.y` are not `offsetLeft` / `offsetTop`.** On a headed Chrome
+  151 the image sat at `offsetLeft` 801 and `x` 1602 -- exactly twice -- so
+  Blink is reporting an absolute box in device pixels while `offsetLeft` is in
+  CSS pixels. This engine has one layout position and answers it for both,
+  which at least keeps the four members consistent with each other.
+- **`autocomplete` does not validate its token, on any of the three interfaces
+  that carry it.** Chrome reads `<select autocomplete="zz">` back as `""`; so
+  it does for `<input>` and `<textarea>`, and this engine answers `zz` for all
+  three. The new `select.autocomplete` is the existing `reflect.string`, which
+  keeps the three consistent; implementing the autofill field-name grammar is
+  one change for all of them and is not a prototype-completeness gap.
