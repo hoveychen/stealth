@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+An element that declares nothing takes an inherited property from its parent.
+Measured on Chrome 151 with tools/fingerprint/scratch/expr-cascade-scope.js: of
+ten properties declared on an *ancestor* and read off the child, six disagreed
+here -- and the four that agreed were the four that do not inherit, so the
+cascade was being asked only about the element itself.
+
+Which longhands inherit is measured rather than remembered:
+tools/fingerprint/dump-css-inherited.mjs gives the parent values until one moves
+its own computed value off the initial, then reads the child. 131 of Chrome's
+475 computed longhands inherit. The table it writes is
+css/chrome_inherited.zig.
+-->
+
+<script id=inherits_from_ancestor>
+{
+  // The rule goes on the grandparent's class, the read on the leaf, so nothing
+  // the leaf itself declares can account for the answer.
+  const probe = (decl, prop, depth) => {
+    const style = document.createElement('style');
+    style.textContent = '.cxa{' + decl + '}';
+    document.head.appendChild(style);
+    const host = document.createElement('div');
+    host.innerHTML = '<div class="cxa">' + '<div>'.repeat(depth) + '<p>x</p>' +
+      '</div>'.repeat(depth) + '</div>';
+    document.body.appendChild(host);
+    let el = host.firstChild;
+    for (let i = 0; i <= depth; i++) el = el.firstChild;
+    const got = String(getComputedStyle(el)[prop]);
+    host.remove();
+    style.remove();
+    return got;
+  };
+
+  // Inherited: the leaf reads the ancestor's value.
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3)', 'color', 0));
+  testing.expectEqual('Georgia', probe('font-family:Georgia', 'fontFamily', 0));
+  testing.expectEqual('italic', probe('font-style:italic', 'fontStyle', 0));
+  testing.expectEqual('3px', probe('letter-spacing:3px', 'letterSpacing', 0));
+  testing.expectEqual('right', probe('text-align:right', 'textAlign', 0));
+  testing.expectEqual('pointer', probe('cursor:pointer', 'cursor', 0));
+
+  // Not inherited: the leaf reads the initial value, not the ancestor's.
+  testing.expectEqual('rgba(0, 0, 0, 0)', probe('background-color:rgb(1,2,3)', 'backgroundColor', 0));
+  testing.expectEqual('1', probe('opacity:0.25', 'opacity', 0));
+  testing.expectEqual('0px',
+    probe('border-top-style:solid;border-top-width:5px', 'borderTopWidth', 0));
+
+  // Through several generations, and past elements that declare nothing.
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3)', 'color', 4));
+  testing.expectEqual('rgba(0, 0, 0, 0)', probe('background-color:rgb(1,2,3)', 'backgroundColor', 4));
+}
+</script>
+
+<script id=inheritance_stops_at_the_nearest_declaration>
+{
+  // The nearest ancestor that declares the property wins -- inheritance walks
+  // up to the first answer, not to the top.
+  const style = document.createElement('style');
+  style.textContent = '.outer{color:rgb(1,1,1)}.inner{color:rgb(2,2,2)}';
+  document.head.appendChild(style);
+  const host = document.createElement('div');
+  host.innerHTML = '<div class="outer"><div class="inner"><p id=leaf>x</p></div>' +
+    '<p id=sibling>y</p></div>';
+  document.body.appendChild(host);
+
+  testing.expectEqual('rgb(2, 2, 2)', getComputedStyle(host.querySelector('#leaf')).color);
+  testing.expectEqual('rgb(1, 1, 1)', getComputedStyle(host.querySelector('#sibling')).color);
+
+  // The element's own declaration still outranks anything it would inherit.
+  const own = document.createElement('p');
+  own.setAttribute('style', 'color:rgb(9,9,9)');
+  host.querySelector('.inner').appendChild(own);
+  testing.expectEqual('rgb(9, 9, 9)', getComputedStyle(own).color);
+
+  host.remove();
+  style.remove();
+}
+</script>
+
+<script id=inherited_values_are_still_shape_checked>
+{
+  // An inherited value goes through the same check a declared one does: a
+  // computed style never carries a font-relative length, so an ancestor's
+  // `letter-spacing:2em` leaves the child on the initial value rather than
+  // handing back `2em`. Chrome resolves it (to 40px against a 20px font); this
+  // engine declines to invent a number. See computed-style-relative-units.
+  const style = document.createElement('style');
+  style.textContent = '.cxa{font-size:20px;letter-spacing:2em}';
+  document.head.appendChild(style);
+  const host = document.createElement('div');
+  host.innerHTML = '<div class="cxa"><p>x</p></div>';
+  document.body.appendChild(host);
+
+  testing.expectEqual('normal', getComputedStyle(host.firstChild.firstChild).letterSpacing);
+
+  host.remove();
+  style.remove();
+}
+</script>

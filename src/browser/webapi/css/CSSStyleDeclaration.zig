@@ -32,6 +32,7 @@ const Allocator = std.mem.Allocator;
 
 const chrome_arity = @import("chrome_arity.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
+const chrome_inherited = @import("chrome_inherited.zig");
 const chrome_initial_values = @import("chrome_initial_values.zig");
 const chrome_per_tag_values = @import("chrome_per_tag_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
@@ -244,47 +245,28 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
         // Only return default values for computed styles
         if (self._is_computed) {
             if (self._element) |element| {
-                // The author cascade and the inline `style=` declaration, in the
-                // order CSS Cascade §6.2 puts them: an `!important` rule first,
-                // then the style attribute, then a normal rule. This is the
-                // order computedFontSize already spells out for its one
-                // property, generalised -- an inline declaration outranks a
-                // rule, and an important rule outranks the inline one.
-                //
-                // var() is substituted at computed-value time either way; the
-                // specified value `el.style` hands out keeps its var() text.
                 const style_manager = &element.ownerFrame(frame)._style_manager;
-                const rule = style_manager.cascadedLonghand(element, normalized);
-                const inline_declaration = style_manager.inlineStyleDeclaration(element, wrapped);
-                const rule_wins = if (rule) |declaration| declaration.important and
-                    !(inline_declaration != null and inline_declaration.?.important) else false;
 
-                const winner: ?StyleManager.Declaration = if (rule_wins)
-                    rule
-                else if (inline_declaration) |declaration|
-                    declaration
-                else
-                    rule;
-
-                if (winner) |declaration| {
-                    // A specified value this engine cannot finish resolving is
-                    // *not* reported. A computed style never carries `2em` or
-                    // `calc(10px + 5px)` in a browser -- font- and
-                    // viewport-relative lengths resolve at computed-value time
-                    // and percentages at used-value time -- so answering the
-                    // author's text would trade one wrong answer for a wronger
-                    // one: `0px` is a value Chrome does print, and `2em` is a
-                    // value it never prints from here. Falling through leaves
-                    // the initial value that was reported before the cascade
-                    // was consulted at all, which is never worse.
-                    //
-                    // Resolving them properly is its own plan
-                    // (computed-style-relative-units); the list below is what
-                    // the two-arm probe actually surfaced, not a claim to have
-                    // enumerated every unresolvable shape.
-                    if (resolvesHere(normalized, declaration.value)) {
-                        return style_manager.substituteVars(element, declaration.value) orelse "";
-                    }
+                // What the element itself was given, and then -- for a property
+                // a child takes from its parent -- what the nearest ancestor
+                // that declares one was given. The walk stops at the first
+                // ancestor with a declaration whether or not that declaration
+                // can be reported: an ancestor declaring `letter-spacing:2em`
+                // is the one that decides the answer, so a grandparent's
+                // `3px` must not show through it.
+                switch (declaredValue(style_manager, element, normalized, wrapped)) {
+                    .value => |value| return value,
+                    .unreportable => {},
+                    .none => if (chrome_inherited.inherits(normalized)) {
+                        var ancestor = element.parentElement();
+                        while (ancestor) |current| : (ancestor = current.parentElement()) {
+                            switch (declaredValue(style_manager, current, normalized, wrapped)) {
+                                .value => |value| return value,
+                                .unreportable => break,
+                                .none => {},
+                            }
+                        }
+                    },
                 }
 
                 // Computed width/height must agree with the synthetic layout
@@ -317,6 +299,54 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
         return "";
     };
     return prop._value.str();
+}
+
+/// What one element was declared for a property: nothing, something this engine
+/// cannot report, or the value to report.
+const Declared = union(enum) {
+    none,
+    unreportable,
+    value: []const u8,
+};
+
+/// The value `element` itself was declared for `property_name`, ranking the
+/// author cascade against the style attribute the way CSS Cascade §6.2 does: an
+/// `!important` rule first, then the style attribute, then a normal rule. That
+/// is the order computedFontSize spells out for its one property, generalised.
+///
+/// `var()` is substituted at computed-value time either way; the specified value
+/// `el.style` hands out keeps its var() text.
+fn declaredValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) Declared {
+    const rule = style_manager.cascadedLonghand(element, property_name);
+    const inline_declaration = style_manager.inlineStyleDeclaration(element, wrapped);
+    const rule_wins = if (rule) |declaration| declaration.important and
+        !(inline_declaration != null and inline_declaration.?.important) else false;
+
+    const winner: ?StyleManager.Declaration = if (rule_wins)
+        rule
+    else if (inline_declaration) |declaration|
+        declaration
+    else
+        rule;
+
+    const declaration = winner orelse return .none;
+
+    // A specified value this engine cannot finish resolving is *not* reported. A
+    // computed style never carries `2em` or `calc(10px + 5px)` in a browser --
+    // font- and viewport-relative lengths resolve at computed-value time and
+    // percentages at used-value time -- so answering the author's text would
+    // trade one wrong answer for a wronger one: `0px` is a value Chrome does
+    // print, and `2em` is a value it never prints from here. Answering
+    // `unreportable` leaves the initial value that was reported before the
+    // cascade was consulted at all, which is never worse.
+    //
+    // Resolving them properly is its own plan (computed-style-relative-units);
+    // resolvesHere's list is what the two-arm probe surfaced, not a claim to
+    // have enumerated every unresolvable shape.
+    if (!resolvesHere(property_name, declaration.value)) {
+        return .unreportable;
+    }
+    return .{ .value = style_manager.substituteVars(element, declaration.value) orelse "" };
 }
 
 /// Whether a specified value is already in the shape a computed style reports,
@@ -3311,4 +3341,8 @@ test "WebApi: CSSStyleDeclaration important beats the style attribute" {
 
 test "WebApi: CSSStyleDeclaration author longhands" {
     try testing.htmlRunner("css/computed_author_longhands.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration inheritance" {
+    try testing.htmlRunner("css/computed_inheritance.html", .{});
 }
