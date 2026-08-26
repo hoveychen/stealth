@@ -1,0 +1,589 @@
+{
+  "engine": "chrome",
+  "headed": true,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T22:30:24.707Z",
+  "egress": {
+    "fl": "465f237",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787783424.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Chrome/151.0.7922.174",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.23",
+    "WebKit-Version": "537.36 (@39c51c70dd5feca6b6aba5bb7997b595011c553d)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17001/devtools/browser/9c282e50-6746-4420-9296-c4fd145be584"
+  },
+  "stations": [
+    {
+      "name": "x-hyatt",
+      "vendor": "unattributed",
+      "url": "https://www.hyatt.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hyatt.com/",
+          "status": 429,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.hyatt.com/loyalty/en-US",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "id": "DD0945C515AB87C1DB41B5CE355D12D1",
+          "method": "GET",
+          "url": "https://www.hyatt.com/",
+          "type": "Document",
+          "ms": 3
+        },
+        {
+          "ev": "res",
+          "id": "DD0945C515AB87C1DB41B5CE355D12D1",
+          "status": 429,
+          "url": "https://www.hyatt.com/",
+          "type": "Document",
+          "ms": 228
+        },
+        {
+          "ev": "req",
+          "id": "59363.2",
+          "method": "GET",
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/ips.js?tkrm_alpekz_s1.3=03SwnMkuNHvxRO0fMmQikgbgi0cwaG23OKZToTiXyEL3VQTVptbIDUse6iTV1j5beQyACFTAGY4paVl9bgJVVBRmSklGXIXzNGXwSdPTN3GVU3f9ev4sg3Jm7hbVGi5vDyGyu3teHVAmqXkDrGjIm8vYjgSRk13czwuK13KWI67XtdM3jE&x-kpsdk-im=AALKzKr2t8lr29mvQrzUQp1ywNXlcTD3ubXBjt47u9NaSnp21WLMTsm3uU7w7k-xvVZGgaObydmDqaj0foQsStSWWnkyiYLTxDj6GM4yxuzO3OC-vEa5vrgGYUMudkTq5RSjs5fjGe16A8JtUdMg",
+          "type": "Script",
+          "ms": 232
+        },
+        {
+          "ev": "done",
+          "id": "DD0945C515AB87C1DB41B5CE355D12D1",
+          "len": 1485,
+          "ms": 232
+        },
+        {
+          "ev": "res",
+          "id": "59363.2",
+          "status": 200,
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/ips.js?tkrm_alpekz_s1.3=03SwnMkuNHvxRO0fMmQikgbgi0cwaG23OKZToTiXyEL3VQTVptbIDUse6iTV1j5beQyACFTAGY4paVl9bgJVVBRmSklGXIXzNGXwSdPTN3GVU3f9ev4sg3Jm7hbVGi5vDyGyu3teHVAmqXkDrGjIm8vYjgSRk13czwuK13KWI67XtdM3jE&x-kpsdk-im=AALKzKr2t8lr29mvQrzUQp1ywNXlcTD3ubXBjt47u9NaSnp21WLMTsm3uU7w7k-xvVZGgaObydmDqaj0foQsStSWWnkyiYLTxDj6GM4yxuzO3OC-vEa5vrgGYUMudkTq5RSjs5fjGe16A8JtUdMg",
+          "type": "Script",
+          "ms": 808
+        },
+        {
+          "ev": "done",
+          "id": "59363.2",
+          "len": 301065,
+          "ms": 809
+        },
+        {
+          "ev": "req",
+          "id": "02877046DCFFD46346BE446FDCC25B38",
+          "method": "GET",
+          "url": "blob:https://www.hyatt.com/73e3efd5-c733-4375-84bb-c3d9edd12312",
+          "type": "Script",
+          "ms": 1740
+        },
+        {
+          "ev": "req",
+          "id": "59363.4",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSJXaW5kb3dUZXh0IiBkPSJNMTEuOTkgMkM2LjQ3IDIgMiA2LjQ4IDIgMTJzNC40NyAxMCA5Ljk5IDEwQzE3LjUyIDIyIDIyIDE3LjUyIDIyIDEyUzE3LjUyIDIgMTEuOTkgMnpNMTIgMjBjLTQuNDIgMC04LTMuNTgtOC04czMuNTgtOCA4LTggOCAzLjU4IDggOC0zLjU4IDgtOCA4eiIvPjxwYXRoIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBmaWxsPSJXaW5kb3dUZXh0IiBkPSJNMTIuNSA3SDExdjZsNS4yNSAzLjE1Ljc1LTEuMjMtNC41LTIuNjd6Ii8+PC9zdmc+",
+          "type": "Image",
+          "ms": 1802
+        },
+        {
+          "ev": "res",
+          "id": "59363.4",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSJXaW5kb3dUZXh0IiBkPSJNMTEuOTkgMkM2LjQ3IDIgMiA2LjQ4IDIgMTJzNC40NyAxMCA5Ljk5IDEwQzE3LjUyIDIyIDIyIDE3LjUyIDIyIDEyUzE3LjUyIDIgMTEuOTkgMnpNMTIgMjBjLTQuNDIgMC04LTMuNTgtOC04czMuNTgtOCA4LTggOCAzLjU4IDggOC0zLjU4IDgtOCA4eiIvPjxwYXRoIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBmaWxsPSJXaW5kb3dUZXh0IiBkPSJNMTIuNSA3SDExdjZsNS4yNSAzLjE1Ljc1LTEuMjMtNC41LTIuNjd6Ii8+PC9zdmc+",
+          "type": "Image",
+          "ms": 1802
+        },
+        {
+          "ev": "done",
+          "id": "59363.4",
+          "len": 0,
+          "ms": 1803
+        },
+        {
+          "ev": "req",
+          "id": "DDF1181D546E9C3B4E506150DF3EA226",
+          "method": "OPTIONS",
+          "url": "https://reporting.cdndex.io/error",
+          "type": "Other",
+          "ms": 1888
+        },
+        {
+          "ev": "req",
+          "id": "59363.5",
+          "method": "POST",
+          "url": "https://reporting.cdndex.io/error",
+          "type": "XHR",
+          "postLen": 39863,
+          "post": "{\"data\":\"FE84DRoYSV9JMBgSHE1cSToHHw9FTk0vAQsJTUFFKx4XAEdRTQUTAB8DUUpEGBoQWgcJChEfQQ4IGU1cSToFGgVFTk0VWx4zKgE+PBg+GjVaBF0sJR8qOSQlKhBFWE0vDA8NTVdFRVhFXAYIDV1KTAoTX0hfDlpfWVZBUgZGX1hfRA5BXwFeWV0BVkNSCQwPTVdFQltBDwZfCU9LVgIFBxFJVVhLVjAGSV9JXk9LVjAvSV9JMBQSHEMvBxUJQzIJAQdcNAIBCUE4BQgbRzoBAQ9LKwQWAUk0HRU",
+          "ms": 1891
+        },
+        {
+          "ev": "req",
+          "id": "59363.6",
+          "method": "GET",
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Other",
+          "ms": 1892
+        },
+        {
+          "ev": "res",
+          "id": "59363.6",
+          "status": 200,
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Other",
+          "ms": 1913
+        },
+        {
+          "ev": "done",
+          "id": "59363.6",
+          "len": 391,
+          "ms": 1913
+        },
+        {
+          "ev": "req",
+          "id": "59363.8",
+          "method": "POST",
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/tl",
+          "type": "XHR",
+          "postLen": 19618,
+          "post": "\u0000\u0002Bz\u0004\u0003\"ç°\u00008Ó;·ºÐÄ?FÄíÆÔ¹\bøR9_!æ¡eWÐ°m\u0018(*{Hê_\"üØ½õ-à\u001aÅg:¢ ¥f\nò\t\u0006M18¦<:õ§\u0000\u0002¤W¯=ã\f¼\u0000S\u000e\u000br22HM¥Ü·5=àCæ\u001e5Ï\u000f0\u0013ÞÌÆåÍú5H§èóµeAka¶¥6Ì4ÏPóÜHêÿ{âx\u0000¯q{Ô±òg¼{£üîtÏR§ÿ\t\u001fñÐA\u0011<ÎIÊ¢)¡x\u0017xYÚ/=\t\u001a4íP1â¸.î>B3ê\n:\u0006õ6væÓy©&¥^Ñ}9Åì\f¸7FKA\u0018ÃÉZ£$2S#ëmt\u0004\f\u0000cþ¢@UWå\u0010\u000ezÉÆ5\n'0z\u0014\u001a¤\u0013HEVÀÂ\u0015-çÒ*Y°AÑQ",
+          "ms": 1945
+        },
+        {
+          "ev": "res",
+          "id": "DDF1181D546E9C3B4E506150DF3EA226",
+          "status": 200,
+          "url": "https://reporting.cdndex.io/error",
+          "type": "Preflight",
+          "ms": 1974
+        },
+        {
+          "ev": "done",
+          "id": "DDF1181D546E9C3B4E506150DF3EA226",
+          "len": 0,
+          "ms": 1974
+        },
+        {
+          "ev": "req",
+          "id": "E3969D26FA80845CA6DFA02574B2896D",
+          "method": "GET",
+          "url": "https://www.hyatt.com/",
+          "type": "Document",
+          "ms": 2109
+        },
+        {
+          "ev": "res",
+          "id": "59363.8",
+          "status": 200,
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/tl",
+          "type": "XHR",
+          "ms": 2109
+        },
+        {
+          "ev": "done",
+          "id": "59363.8",
+          "len": 1027,
+          "ms": 2109
+        },
+        {
+          "ev": "req",
+          "id": "E3969D26FA80845CA6DFA02574B2896D",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty",
+          "type": "Document",
+          "ms": 2264
+        },
+        {
+          "ev": "res",
+          "id": "59363.5",
+          "status": 200,
+          "url": "https://reporting.cdndex.io/error",
+          "type": "XHR",
+          "ms": 2424
+        },
+        {
+          "ev": "done",
+          "id": "59363.5",
+          "len": 384,
+          "ms": 2424
+        },
+        {
+          "ev": "req",
+          "id": "E3969D26FA80845CA6DFA02574B2896D",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/en-US",
+          "type": "Document",
+          "ms": 2429
+        },
+        {
+          "ev": "res",
+          "id": "E3969D26FA80845CA6DFA02574B2896D",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/en-US",
+          "type": "Document",
+          "ms": 2942
+        },
+        {
+          "ev": "req",
+          "id": "59363.10",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/5766cdf992a191ce.css",
+          "type": "Stylesheet",
+          "ms": 2949
+        },
+        {
+          "ev": "req",
+          "id": "59363.12",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/webpack-2d4a0da6b99edb88.js",
+          "type": "Script",
+          "ms": 2949
+        },
+        {
+          "ev": "req",
+          "id": "59363.13",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/4bd1b696-d327213a749c538a.js",
+          "type": "Script",
+          "ms": 2949
+        },
+        {
+          "ev": "req",
+          "id": "59363.14",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/3794-6ea8126567ef5e33.js",
+          "type": "Script",
+          "ms": 2950
+        },
+        {
+          "ev": "req",
+          "id": "59363.15",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/main-app-12615208b21c370c.js",
+          "type": "Script",
+          "ms": 2950
+        },
+        {
+          "ev": "req",
+          "id": "59363.16",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/app/global-error-ce38ce4598dbae2e.js",
+          "type": "Script",
+          "ms": 2950
+        },
+        {
+          "ev": "req",
+          "id": "59363.17",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/0d999d2970affaa2.css",
+          "type": "Stylesheet",
+          "ms": 2950
+        },
+        {
+          "ev": "req",
+          "id": "59363.18",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/19891f75a499724c.css",
+          "type": "Stylesheet",
+          "ms": 2950
+        },
+        {
+          "ev": "req",
+          "id": "59363.19",
+          "method": "GET",
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/cc.js",
+          "type": "Script",
+          "ms": 2950
+        },
+        {
+          "ev": "req",
+          "id": "59363.20",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/themes/0.35.0/world-2024.min.css",
+          "type": "Stylesheet",
+          "ms": 2950
+        },
+        {
+          "ev": "done",
+          "id": "E3969D26FA80845CA6DFA02574B2896D",
+          "len": 11233,
+          "ms": 2950
+        },
+        {
+          "ev": "res",
+          "id": "59363.18",
+          "status": 403,
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/19891f75a499724c.css",
+          "type": "Stylesheet",
+          "ms": 3002
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3002
+        },
+        {
+          "ev": "res",
+          "id": "59363.10",
+          "status": 403,
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/5766cdf992a191ce.css",
+          "type": "Stylesheet",
+          "ms": 3015
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3015
+        },
+        {
+          "ev": "res",
+          "id": "59363.19",
+          "status": 403,
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/cc.js",
+          "type": "Script",
+          "ms": 3027
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3028
+        },
+        {
+          "ev": "res",
+          "id": "59363.12",
+          "status": 403,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/webpack-2d4a0da6b99edb88.js",
+          "type": "Script",
+          "ms": 3028
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3028
+        },
+        {
+          "ev": "res",
+          "id": "59363.17",
+          "status": 403,
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/0d999d2970affaa2.css",
+          "type": "Stylesheet",
+          "ms": 3028
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3028
+        },
+        {
+          "ev": "res",
+          "id": "59363.20",
+          "status": 403,
+          "url": "https://www.hyatt.com/hds/static/themes/0.35.0/world-2024.min.css",
+          "type": "Stylesheet",
+          "ms": 3048
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3048
+        },
+        {
+          "ev": "res",
+          "id": "59363.13",
+          "status": 403,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/4bd1b696-d327213a749c538a.js",
+          "type": "Script",
+          "ms": 3050
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3050
+        },
+        {
+          "ev": "res",
+          "id": "59363.14",
+          "status": 403,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/3794-6ea8126567ef5e33.js",
+          "type": "Script",
+          "ms": 3069
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3069
+        },
+        {
+          "ev": "res",
+          "id": "59363.15",
+          "status": 403,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/main-app-12615208b21c370c.js",
+          "type": "Script",
+          "ms": 3069
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3069
+        },
+        {
+          "ev": "res",
+          "id": "59363.16",
+          "status": 403,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/app/global-error-ce38ce4598dbae2e.js",
+          "type": "Script",
+          "ms": 3069
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3069
+        },
+        {
+          "ev": "req",
+          "id": "59363.33",
+          "method": "GET",
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Other",
+          "ms": 3071
+        },
+        {
+          "ev": "res",
+          "id": "59363.33",
+          "status": 200,
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Other",
+          "ms": 3071
+        },
+        {
+          "ev": "done",
+          "id": "59363.33",
+          "len": 0,
+          "ms": 3071
+        }
+      ],
+      "verdict": "empty-document",
+      "first": 429,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Hotel Reservations | Book Hotel Rooms Online - Hyatt Hotels and Resorts",
+      "landedOn": "https://www.hyatt.com/loyalty/en-US",
+      "nodes": 30,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26895
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:17001/devtools/browser/9c282e50-6746-4420-9296-c4fd145be584",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[59352:3346021:0826/153025.160828:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[59352:3346021:0826/153025.161080:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[59352:3346053:0826/153028.281702:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT",
+    "Created TensorFlow Lite XNNPACK delegate for CPU.",
+    "[59541:3347502:0826/153043.875176:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake-all --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[59541:3347502:0826/153043.875966:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 54107, parent pid: 59352",
+    "[59541:3347502:0826/153043.877875:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 74089877504B (69.002GiB) / 994662584320B (926.352GiB)",
+    "[59541:3347502:0826/153043.877889:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 74089877504B (69.002GiB) / 994662584320B (926.352GiB)",
+    "[59541:3347502:0826/153043.878145:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[59543:3347506:0826/153043.885286:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[59543:3347506:0826/153043.885733:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 54107, parent pid: 1",
+    "[59543:3347506:0826/153043.887229:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 74089873408B (69.002GiB) / 994662584320B (926.352GiB)",
+    "[59543:3347506:0826/153043.887241:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 74089873408B (69.002GiB) / 994662584320B (926.352GiB)",
+    "[59543:3347506:0826/153043.887301:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[59541:3347502:0826/153043.887739:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[59541:3347502:0826/153043.888260:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[59541:3347502:0826/153043.888312:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[59541:3347502:0826/153043.888378:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[59541:3347502:0826/153043.888388:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[59541:3347502:0826/153043.888735:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+    "[59541:3347502:0826/153043.888744:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[59541:3347502:0826/153043.888754:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[59541:3347516:0826/153043.888971:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+    "[59541:3347516:0826/153043.889055:VERBOSE1:chrome/updater/app/app_wakeall.cc:64] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` process invalid: Undefined error: 0 (0)",
+    "[59541:3347516:0826/153043.889064:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+    "[59545:3347521:0826/153043.895213:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[59545:3347521:0826/153043.895640:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 54107, parent pid: 59541",
+    "[59545:3347521:0826/153043.897075:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 74089873408B (69.002GiB) / 994662584320B (926.352GiB)",
+    "[59545:3347521:0826/153043.897087:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 74089873408B (69.002GiB) / 994662584320B (926.352GiB)",
+    "[59545:3347521:0826/153043.897139:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[59547:3347525:0826/153043.903505:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[59547:3347525:0826/153043.903903:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 54107, parent pid: 1",
+    "[59547:3347525:0826/153043.905339:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 74089873408B (69.002GiB) / 994662584320B (926.352GiB)",
+    "[59547:3347525:0826/153043.905351:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 74089873408B (69.002GiB) / 994662584320B (926.352GiB)",
+    "[59547:3347525:0826/153043.905403:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[59545:3347521:0826/153043.905799:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[59545:3347521:0826/153043.906292:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[59545:3347521:0826/153043.906342:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[59545:3347521:0826/153043.906398:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[59545:3347521:0826/153043.906408:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[59545:3347521:0826/153043.906448:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+    "[59545:3347521:0826/153043.906456:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[59545:3347521:0826/153043.906466:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[59545:3347521:0826/153043.906610:VERBOSE1:chrome/updater/ipc/update_service_internal_proxy_mojo.cc:61] Run",
+    "[59545:3347521:0826/153049.925388:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0",
+    "[59545:3347521:0826/153049.925712:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[59545:3347521:0826/153049.925727:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake) returned 0.",
+    "[59547:3347525:0826/153049.926545:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[59547:3347525:0826/153049.926563:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--crash-handler) returned 0.",
+    "[59541:3347516:0826/153050.163715:VERBOSE1:chrome/updater/app/app_wakeall.cc:68] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` exited 0",
+    "[59541:3347502:0826/153050.163847:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0",
+    "[59541:3347502:0826/153050.164054:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[59541:3347502:0826/153050.164069:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake-all) returned 0.",
+    "[59543:3347506:0826/153050.165010:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[59543:3347506:0826/153050.165031:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--crash-handler) returned 0."
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

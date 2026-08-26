@@ -98,3 +98,145 @@ nothing but `color` still has to answer its colour for all of them.
   for (const prop of CURRENT) testing.expectEqual(prop + '=rgb(0, 0, 0)', prop + '=' + plain[prop]);
 }
 </script>
+
+<!--
+The CSS system colours, and the identifiers that are not colours at all.
+
+Kasada asks for exactly this at x-hyatt: the funnel capture has it setting
+`color` to about ninety keywords in turn and reading the computed value back
+with `getPropertyValue('color')` — ninety-three calls, one of the busiest things
+it does on the page (tools/fingerprint/results/b55-answers-{lp,chrome}.json).
+
+Chrome resolves the forty-two system colours to `rgb()` and refuses everything
+else, so its ninety answers collapse to twelve distinct colours. This engine
+answered with the keyword it was handed — `getComputedStyle(el).color ===
+'buttonface'` — and accepted the forty-four `-moz-` names that only Firefox has
+ever supported, and `FakeColor`, which Kasada plants as its control precisely
+because no browser resolves it. 53 of 53 readings differed
+(tools/fingerprint/probes/expr-b55-system-colors.js).
+
+The values are Chrome 151 on macOS in light appearance, measured through this
+same expression. They are a platform's palette, not a constant: a different
+appearance moves them, the same way the voice list and the WebGL renderer
+string are this machine's.
+-->
+
+<script id=system_colours_compute_to_rgb>
+{
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    host.innerHTML = '<p style="' + decl + '">x</p>';
+    document.body.appendChild(host);
+    const got = String(getComputedStyle(host.firstChild).color);
+    host.remove();
+    return got;
+  };
+
+  testing.expectEqual('rgb(0, 117, 255)', probe('color:accentcolor'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:accentcolortext'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:canvas'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:canvastext'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:field'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:fieldtext'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:buttonborder'));
+  testing.expectEqual('rgb(239, 239, 239)', probe('color:buttonface'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:buttontext'));
+  testing.expectEqual('rgb(179, 215, 255)', probe('color:selecteditem'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:selecteditemtext'));
+  testing.expectEqual('rgb(255, 255, 0)', probe('color:mark'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:marktext'));
+  testing.expectEqual('rgb(0, 0, 238)', probe('color:linktext'));
+  testing.expectEqual('rgb(85, 26, 139)', probe('color:visitedtext'));
+  testing.expectEqual('rgb(255, 0, 0)', probe('color:activetext'));
+  testing.expectEqual('rgb(128, 128, 128)', probe('color:graytext'));
+  testing.expectEqual('rgba(128, 188, 254, 0.6)', probe('color:highlight'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:highlighttext'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:activeborder'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:activecaption'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:appworkspace'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:background'));
+  testing.expectEqual('rgb(239, 239, 239)', probe('color:buttonhighlight'));
+  testing.expectEqual('rgb(239, 239, 239)', probe('color:buttonshadow'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:captiontext'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:inactiveborder'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:inactivecaption'));
+  testing.expectEqual('rgb(128, 128, 128)', probe('color:inactivecaptiontext'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:infobackground'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:infotext'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:menu'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:menutext'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:scrollbar'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:threeddarkshadow'));
+  testing.expectEqual('rgb(239, 239, 239)', probe('color:threedface'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:threedhighlight'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:threedlightshadow'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:threedshadow'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:window'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:windowframe'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:windowtext'));
+
+  // Case folds, the way every other colour keyword does.
+  testing.expectEqual('rgb(239, 239, 239)', probe('color:ButtonFace'));
+  testing.expectEqual('rgb(0, 0, 0)', probe('color:CanvasText'));
+
+  // Not colours. The declaration is dropped, so the one before it stands.
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:-moz-ButtonDefault'));
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:-moz-CellHighlight'));
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:-moz-Dialog'));
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:-moz-DialogText'));
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:-moz-Field'));
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:-moz-FieldText'));
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:-moz-mac-accentface'));
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:-moz-mac-focusring'));
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:-moz-hyperlinktext'));
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:-moz-default-color'));
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3);color:FakeColor'));
+
+  // And a system colour still wins over an earlier declaration, so the check
+  // above is testing refusal rather than a parser that drops every second
+  // declaration.
+  testing.expectEqual('rgb(239, 239, 239)', probe('color:rgb(1,2,3);color:buttonface'));
+}
+</script>
+
+<!--
+A keyword is only folded to a colour on a property that takes a colour.
+
+The system colours brought in words that other properties take as their own
+keywords: `menu`, `caption`, `field`, `window`, `mark`, `background`,
+`highlight`, `scrollbar`. `font: menu` is the one Kasada actually writes -- six
+`font:` declarations in a burst at x-hyatt, one per system font keyword -- and
+folding its value made `getComputedStyle(el).font` answer `rgb(255, 255, 255)`,
+which is further from Chrome than the keyword it replaced.
+
+`currentcolor` is the discriminator, and an exact one: all sixty colour-valued
+properties in the measured keyword tables take it, and no other property does.
+`font` does not.
+
+(Chrome answers `16px Arial` for all six, expanding the keyword to a real font.
+That is a separate gap -- system-font-shorthand-readback -- and this block only
+pins the colour half so that fixing one cannot silently un-fix the other.)
+-->
+
+<script id=colour_fold_only_on_colour_properties>
+{
+  const computed = (decl, prop) => {
+    const host = document.createElement('div');
+    host.innerHTML = '<p style="' + decl + '">x</p>';
+    document.body.appendChild(host);
+    const got = String(getComputedStyle(host.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+
+  // Not a colour here, whatever it is elsewhere.
+  for (const kw of ['caption', 'icon', 'menu', 'message-box', 'small-caption', 'status-bar']) {
+    const got = computed('font:' + kw, 'font');
+    testing.expectEqual(kw + '=not-a-colour', kw + '=' + (got.startsWith('rgb') ? got : 'not-a-colour'));
+  }
+
+  // And still a colour where it is one.
+  testing.expectEqual('rgb(255, 255, 255)', computed('color:menu', 'color'));
+  testing.expectEqual('rgb(255, 255, 255)', computed('background-color:window', 'backgroundColor'));
+}
+</script>

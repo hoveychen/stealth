@@ -1,0 +1,295 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T22:05:35.259Z",
+  "egress": {
+    "fl": "1232f89",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787781935.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1457+0f124e384",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17000/"
+  },
+  "stations": [
+    {
+      "name": "x-hyatt",
+      "vendor": "unattributed",
+      "url": "https://www.hyatt.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hyatt.com/",
+          "status": 429,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "id": "LID-0000000001",
+          "method": "GET",
+          "url": "https://www.hyatt.com/",
+          "type": "Document",
+          "ms": 0
+        },
+        {
+          "ev": "res",
+          "id": "LID-0000000001",
+          "status": 429,
+          "url": "https://www.hyatt.com/",
+          "type": "Document",
+          "ms": 230
+        },
+        {
+          "ev": "done",
+          "id": "LID-0000000001",
+          "len": 1883,
+          "ms": 230
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000002",
+          "method": "GET",
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/ips.js?tkrm_alpekz_s1.3=03PoIAKUDHOSHU8PzdGtyUGIMAzuZB75AgWSAW9kHhkOCbF0PC2Gn4CwCsBOPdejeCmYDdtWzFIDqU5mVuz82x1HqHXxzv0FnK99mjsSDV7quk9W34ijCNMjXCyC3JXN4CcXk9eaZ7PYKaZHHWvopuBA3o76qHF3QluusU71uaOg3wrtpr&x-kpsdk-im=AAK6ldzEIUBMZ3qIkqHH8paNXImDnx2ZxcDysB40nHhNY5ucN5uGfklfrunC9JBzwDRbxr6fLSJLF11tUtdU3vinqEQdG3q_NsMXZ9t988-CUxWi0FqeZgMK18JCAZ3jkz1waNrMuq0XAkxJAyZX",
+          "type": "Script",
+          "ms": 230
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000002",
+          "status": 200,
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/ips.js?tkrm_alpekz_s1.3=03PoIAKUDHOSHU8PzdGtyUGIMAzuZB75AgWSAW9kHhkOCbF0PC2Gn4CwCsBOPdejeCmYDdtWzFIDqU5mVuz82x1HqHXxzv0FnK99mjsSDV7quk9W34ijCNMjXCyC3JXN4CcXk9eaZ7PYKaZHHWvopuBA3o76qHF3QluusU71uaOg3wrtpr&x-kpsdk-im=AAK6ldzEIUBMZ3qIkqHH8paNXImDnx2ZxcDysB40nHhNY5ucN5uGfklfrunC9JBzwDRbxr6fLSJLF11tUtdU3vinqEQdG3q_NsMXZ9t988-CUxWi0FqeZgMK18JCAZ3jkz1waNrMuq0XAkxJAyZX",
+          "type": "Script",
+          "ms": 536
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000002",
+          "len": 308426,
+          "ms": 537
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000006",
+          "method": "POST",
+          "url": "https://reporting.cdndex.io/error",
+          "type": "XHR",
+          "postLen": 255,
+          "post": "{\"data\":\"FE8TDR8VSV9JDg9FWE0RCBECAANFTk0RBwkEGE9LVgAXSV9JBxkTBBxKREocGBpJHBYRHxFFDAIKVkNSGAwPTVdFEV8LMyAHNiUQOh4gWg5bJDwXLj0xUi8jGCdUEi4hIzQBKlAaVkNSCQofXl9VQU1KEEcZTVdFDzNSAgMbM09dRVlAX1ReWF9STUMsSQwHBDFFTl1IXVNYWVVfQ1kNSUlJG09dRUNSCUdRXhBLVhsZBgBJVV8a\"}",
+          "ms": 612
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000008",
+          "method": "GET",
+          "url": "blob:https://www.hyatt.com/1d8c59b5-1e77-449d-a6f2-e4a35a3e021c",
+          "type": "Script",
+          "ms": 617
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000009",
+          "method": "GET",
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Image",
+          "ms": 646
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000008",
+          "status": 200,
+          "url": "blob:https://www.hyatt.com/1d8c59b5-1e77-449d-a6f2-e4a35a3e021c",
+          "type": "Script",
+          "ms": 647
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000008",
+          "len": 316,
+          "ms": 647
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000010",
+          "method": "POST",
+          "url": "https://reporting.cdndex.io/error",
+          "type": "XHR",
+          "postLen": 39031,
+          "post": "{\"data\":\"FE84EwUdSV9JMAgNGU1cSToTAgVFTk0vAA8GTUFFKx0cDEdRTQUTAB8DUUpEGBoQWgcJChEfQQ4IGU1cSToSGQBFTk0VWx4zKgE+PBg+GjVaBF0sJR8qOSQlKhBFWE0vHR0BTVdFQl0UUlJfC1hKTFZHCkhfCg5SWVZHD11GWglXRApCW1FdDVVXVkNSCQwPTVdFQltBDwZfCU9LVgIFBxFJVVhLVjAGSV9JXk9LVjAvSV9JMAoNGUMvEwgDQzIeAgJcNBMTBUE4BgMXRzoABQBLKwMHE0k0BQY",
+          "ms": 710
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000011",
+          "method": "POST",
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/tl",
+          "type": "XHR",
+          "postLen": 19050,
+          "post": "\u0000\u0002Bz\u0004\u0001·1\u0000\u0000+÷øÖï\u000fôn³¦\"\u0016èÙ\u0006à7\t·¢½iÈÀ´÷ .p\u000eÝÊßbÓWg Iôbmä+dy\b5\u001c\u0005öýK$­o\u0001ðm[êÝý«ñ¸\u0011ÜìJòk,\u001a\u001dó\u000fZb\\ Ø¦+.ëÉ5ÜÖ8x\u0015ô+×¬¾K°\u0005?'ØMáEGChÖÚ÷ØgZÆ(jO\bZ¼b\u001d\r\u0005\u0017A\r\u0010­°÷úF\u001f0.ãü|\\-l_¢)`Ûyq\u0015¹=îq\u0019[Q\u0001Þ\u0016Â\u0013\u0013\u00129wfÔ½ï]±E\u001eÈðxptÓLþøÃ¨cæ\nèØúüÄíÇT\u0015\u0010\u001aÃâÒÇ!\r¸úõJQ\u001bsÒ:ªEK<#Nðå_0ulg§ÚL@R*ª\ffjÏ\u0016]¥\u0012ùs\u0018",
+          "ms": 739
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000009",
+          "status": 200,
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Image",
+          "ms": 740
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000009",
+          "len": 546,
+          "ms": 740
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000011",
+          "status": 200,
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/tl",
+          "type": "XHR",
+          "ms": 883
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000011",
+          "len": 1372,
+          "ms": 883
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000006",
+          "status": 200,
+          "url": "https://reporting.cdndex.io/error",
+          "type": "XHR",
+          "ms": 976
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000006",
+          "len": 508,
+          "ms": 976
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000010",
+          "status": 200,
+          "url": "https://reporting.cdndex.io/error",
+          "type": "XHR",
+          "ms": 1183
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000010",
+          "len": 508,
+          "ms": 1183
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000012",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55?p=todataurl&calls=80",
+          "type": "Image",
+          "ms": 5230
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000012",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55?p=todataurl&calls=80",
+          "type": "Image",
+          "ms": 5370
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000012",
+          "len": 1795,
+          "ms": 5370
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000013",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55?p=todataurl&calls=0",
+          "type": "Image",
+          "ms": 5556
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000013",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55?p=todataurl&calls=0",
+          "type": "Image",
+          "ms": 5734
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000013",
+          "len": 1871,
+          "ms": 5734
+        }
+      ],
+      "verdict": "refused-429",
+      "first": 429,
+      "last": 429,
+      "jsDetect": false,
+      "title": "",
+      "landedOn": "https://www.hyatt.com/",
+      "nodes": 6,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": true,
+        "script": true
+      },
+      "ms": 25233
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787781935454 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:17000"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

@@ -547,9 +547,23 @@ try {
         await cdp.send('Emulation.setDeviceMetricsOverride', {
             width: w, height: h, deviceScaleFactor: 1, mobile: false,
         }, sessionId);
-        for (const f of injects) {
-            await cdp.send('Page.addScriptToEvaluateOnNewDocument',
-                { source: await fs.readFile(path.resolve(repo, f), 'utf8') }, sessionId);
+        if (injects.length) {
+            // Chrome answers Page.addScriptToEvaluateOnNewDocument with an
+            // identifier whether or not the Page domain is on, and only *runs*
+            // the script if it is: without this line the registration is
+            // accepted and silently never fires, so an --inject run against the
+            // Chrome arm measures stock Chrome while reporting itself as
+            // patched. Verified both ways at scratch/b55-inject-check.mjs --
+            // window marker MISSING without the enable, present with it.
+            // Enabled for both engines even though lightpanda's registration
+            // takes without it, because the arms have to carry the same domains:
+            // a guard can see the inspector, and --inject runs are compared
+            // against each other.
+            await cdp.send('Page.enable', {}, sessionId).catch(() => { /* older engine */ });
+            for (const f of injects) {
+                await cdp.send('Page.addScriptToEvaluateOnNewDocument',
+                    { source: await fs.readFile(path.resolve(repo, f), 'utf8') }, sessionId);
+            }
         }
         return { cdp, sessionId };
     }
