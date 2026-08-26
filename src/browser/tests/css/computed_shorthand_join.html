@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A computed style has to answer a shorthand by putting its longhands back
+together. An inline declaration already does that -- `shorthandValue` joins the
+stored longhands -- but the computed view was excluded from that branch, so
+every shorthand fell through to the recorded initial value even when the page
+had declared one.
+
+Measured on Chrome 151 with tools/fingerprint/scratch/expr-computed-shorthands.js
+(readings in tools/fingerprint/scratch/b76-shorthands-{chrome,lp}.json): of the
+261 names a computed style answers that are not indexed longhands, 99 disagreed
+on an element that declares a few and 36 disagreed on one that declares only
+`color`. Every longhand under them already read back right, which is what says
+the bug is the join and not any one property.
+
+The declaration below is the probe's, verbatim, and every expected string is
+Chrome's own answer to it -- so the numbers are ground truth rather than a
+guess at what a shorthand should serialise to.
+
+Not asserted here, because they are a different fault:
+
+  * the shorthands the table leaves `.unmodelled` (`font`, `columns`,
+    `list-style`, `grid-area`), which this engine keeps whole and therefore
+    answers with the author's own text rather than Chrome's serialisation;
+  * the logical shorthands (`margin-block`, `padding-inline`), whose longhands
+    a physical `margin` declaration never reaches -- there is no logical-to-
+    physical mapping here, so the join is right and the values under it are not;
+  * `animation`, `background` and `flex-flow`, which Chrome serialises
+    differently off a computed style than off a declared one (see
+    COMPUTED_JOIN_DECLINED);
+  * `border` and its per-side spellings on an element that declares no border.
+    Chrome splits the same way there, measured with expr-border-omit.js:
+    `el.style.border` for `border:0px none red` reads `0px rgb(255, 0, 0)` --
+    the `none` is dropped -- while the computed view of the same element reads
+    `0px none rgb(255, 0, 0)`. The join reproduces the declared serialisation,
+    which is what the shorthand table measured, so a bare `border` reads back
+    without its `none`. That is a different wrongness from the one before the
+    join, not a worse one: it used to answer black where the element's colour
+    is red. On an element that does declare a border there is nothing to drop
+    and the join is exact, which is the case asserted above;
+  * the layout-dependent `-webkit-logical-*` pair.
+-->
+
+<script id=computed_shorthand_declared>
+{
+  const DECL = 'border-radius:9px;white-space:nowrap;margin:1px 2px 3px 4px;' +
+    'padding:5px;border:2px solid rgb(1,2,3);outline:1px dashed rgb(4,5,6);' +
+    'background:rgb(7,8,9);overflow:scroll;gap:6px;place-items:center;' +
+    'transition:color 1s linear;animation:spin 2s linear infinite;inset:7px';
+
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML = '<p style="' + DECL + '">x</p>';
+  const cs = getComputedStyle(host.firstChild);
+
+  const CASES = [
+    ['border', '2px solid rgb(1, 2, 3)'],
+    ['borderTop', '2px solid rgb(1, 2, 3)'],
+    ['borderBottom', '2px solid rgb(1, 2, 3)'],
+    ['borderColor', 'rgb(1, 2, 3)'],
+    ['borderStyle', 'solid'],
+    ['borderWidth', '2px'],
+    ['borderRadius', '9px'],
+    ['margin', '1px 2px 3px 4px'],
+    ['padding', '5px'],
+    ['outline', 'rgb(4, 5, 6) dashed 1px'],
+    ['overflow', 'scroll'],
+    ['gap', '6px'],
+    ['inset', '7px'],
+    ['whiteSpace', 'nowrap'],
+    ['textWrap', 'nowrap'],
+    ['placeItems', 'center'],
+    ['transition', 'color 1s linear'],
+  ];
+  // Every case is checked before anything is reported: expectEqual throws, so
+  // asserting inside the loop would hide each case after the first failure.
+  const wrong = [];
+  for (const [prop, want] of CASES) {
+    const got = String(cs[prop]);
+    if (got !== want) wrong.push(prop + ': want ' + want + ', got ' + got);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The other half of the join: an element that declares none of them still has to
+read back what it reads back today, and for the four that start from
+`currentcolor` that is the element's own colour rather than black. Joining from
+the computed longhands is what makes those four right -- the longhands already
+follow `color`, only the shorthand above them did not.
+-->
+
+<script id=computed_shorthand_bare>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML = '<p style="color:rgb(255,0,0)">x</p>';
+  const cs = getComputedStyle(host.firstChild);
+
+  const CASES = [
+    ['borderColor', 'rgb(255, 0, 0)'],
+    ['outline', 'rgb(255, 0, 0) none 3px'],
+    // Unchanged by the join: these already agreed with Chrome.
+    ['borderStyle', 'none'],
+    ['borderWidth', '0px'],
+    ['borderRadius', '0px'],
+    ['margin', '16px 0px'],
+    ['padding', '0px'],
+    ['overflow', 'visible'],
+    ['gap', 'normal'],
+    ['inset', 'auto'],
+    ['whiteSpace', 'normal'],
+    ['placeItems', 'normal'],
+    ['transition', 'all'],
+    // Declined by the join, so they must still read the recorded value.
+    ['animation', 'none'],
+    ['background', 'rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box'],
+    ['flexFlow', 'row nowrap'],
+    ['webkitColumnBreakAfter', 'auto'],
+  ];
+  // Every case is checked before anything is reported: expectEqual throws, so
+  // asserting inside the loop would hide each case after the first failure.
+  const wrong = [];
+  for (const [prop, want] of CASES) {
+    const got = String(cs[prop]);
+    if (got !== want) wrong.push(prop + ': want ' + want + ', got ' + got);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The cascade reaches the join too: a shorthand declared in a stylesheet rule is
+expanded into the same longhands, so reading the shorthand back off a computed
+style has to answer the rule's value and not the initial one.
+-->
+
+<script id=computed_shorthand_from_rule>
+{
+  const style = document.createElement('style');
+  style.textContent = '.cxj{margin:1px 2px 3px 4px;border:2px solid rgb(1,2,3);border-radius:9px}';
+  document.head.appendChild(style);
+  const host = document.createElement('div');
+  host.innerHTML = '<p class="cxj">x</p>';
+  document.body.appendChild(host);
+  const cs = getComputedStyle(host.firstChild);
+
+  testing.expectEqual('1px 2px 3px 4px', String(cs.margin));
+  testing.expectEqual('2px solid rgb(1, 2, 3)', String(cs.border));
+  testing.expectEqual('9px', String(cs.borderRadius));
+
+  host.remove();
+  style.remove();
+}
+</script>
