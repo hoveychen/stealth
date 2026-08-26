@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A computed `border-*-width` is a used value, not the length the page wrote. Two
+rules, both measured on Chrome 151 with
+tools/fingerprint/scratch/expr-border-width-used.js over six styles x eleven
+widths (readings in tools/fingerprint/scratch/b78-bw-{ch,lp}.json):
+
+  * `none` and `hidden` draw no border, so the width computes to `0px` whatever
+    was declared -- all 22 cells of those two rows, and the same through a
+    `border-top: 4px none rgb(1,2,3)` shorthand and through a stylesheet rule.
+  * With any other style the keywords resolve (`thin` 1px, `medium` 3px, `thick`
+    5px), nothing declared is `medium`, a length is truncated to whole pixels
+    (`4.6px` -> `4px`) but a declared length above zero never truncates away
+    (`0.4px` -> `1px`), and a declaration the parser rejects falls back to
+    `medium` (`50%` -> `3px`).
+
+This engine leaked the keywords verbatim -- `getComputedStyle(el).borderTopWidth`
+reading `thin` is a shape Chrome never prints -- and the live Cloudflare
+challenge reads every one of these names (tools/fingerprint/scratch/b78-cfsc-css-names.json,
+736 property names off one declaration).
+
+`calc(2px + 3px)` is not asserted: Chrome answers `5px` and this engine has no
+calc evaluator, so it takes the rejected-declaration path and answers `3px`.
+Wrong either way, and `3px` at least has a shape Chrome prints.
+-->
+
+<script id=computed_border_width_used>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const read = (decl) => {
+    const d = document.createElement('div');
+    d.setAttribute('style', 'font-size:10px;' + decl);
+    d.textContent = 'x';
+    host.appendChild(d);
+    const v = getComputedStyle(d).borderTopWidth;
+    d.remove();
+    return String(v);
+  };
+
+  const CASES = [
+    // Not drawn: zero, whatever was asked for.
+    ['border-top-style:none', '0px'],
+    ['border-top-style:none;border-top-width:4px', '0px'],
+    ['border-top-style:none;border-top-width:thick', '0px'],
+    ['border-top-style:hidden;border-top-width:4px', '0px'],
+    ['border-top-style:hidden;border-top-width:1em', '0px'],
+    ['border-top:4px none rgb(1,2,3)', '0px'],
+    // Drawn: the keywords resolve, and nothing declared is medium.
+    ['border-top-style:solid', '3px'],
+    ['border-top-style:solid;border-top-width:thin', '1px'],
+    ['border-top-style:solid;border-top-width:medium', '3px'],
+    ['border-top-style:solid;border-top-width:thick', '5px'],
+    ['border-top-style:dotted;border-top-width:thin', '1px'],
+    // Drawn: a length is truncated, but a non-zero one never to nothing.
+    ['border-top-style:solid;border-top-width:0px', '0px'],
+    ['border-top-style:solid;border-top-width:4px', '4px'],
+    ['border-top-style:solid;border-top-width:4.6px', '4px'],
+    ['border-top-style:solid;border-top-width:0.4px', '1px'],
+    ['border-top-style:solid;border-top-width:1em', '10px'],
+    // Drawn: a rejected declaration is medium, not zero.
+    ['border-top-style:solid;border-top-width:50%', '3px'],
+  ];
+
+  const wrong = [];
+  for (const [decl, want] of CASES) {
+    const got = read(decl);
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The style can arrive from a stylesheet rule rather than the style attribute, and
+the rule is about the computed style value either way.
+-->
+
+<script id=computed_border_width_from_rule>
+{
+  const sheet = document.createElement('style');
+  sheet.textContent = '.cbw{border-top-width:4px;border-top-style:none}' +
+    '.cbw2{border-top-width:thick;border-top-style:groove}';
+  document.head.appendChild(sheet);
+  const host = document.createElement('div');
+  host.innerHTML = '<p class="cbw">x</p><p class="cbw2">y</p>';
+  document.body.appendChild(host);
+
+  const a = getComputedStyle(host.firstChild);
+  const b = getComputedStyle(host.lastChild);
+
+  const wrong = [];
+  const CASES = [
+    ['cbw width', String(a.borderTopWidth), '0px'],
+    ['cbw shorthand', String(a.borderTop), '0px none rgb(0, 0, 0)'],
+    ['cbw2 width', String(b.borderTopWidth), '5px'],
+    ['cbw2 shorthand', String(b.borderTop), '5px groove rgb(0, 0, 0)'],
+  ];
+  for (const [what, got, want] of CASES) {
+    if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got);
+  }
+  host.remove();
+  sheet.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The declared view is untouched: `el.style.borderTopWidth` hands back the text
+the page wrote, keyword and all. Only the computed view resolves it.
+-->
+
+<script id=declared_border_width_untouched>
+{
+  const d = document.createElement('div');
+  d.setAttribute('style', 'border-top-style:none;border-top-width:thick');
+  document.body.appendChild(d);
+
+  testing.expectEqual('thick', String(d.style.borderTopWidth));
+  testing.expectEqual('0px', String(getComputedStyle(d).borderTopWidth));
+
+  d.remove();
+}
+</script>

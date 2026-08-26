@@ -1058,9 +1058,15 @@ function attach(el) {
     el.style.zIndex = '4';
     testing.expectEqual('CSSUnitValue|4', brand(el.computedStyleMap().get('z-index')));
     testing.expectEqual('4', getComputedStyle(el).zIndex);
+    // ...but the used surface still collapses it: this div declares no
+    // border-style, so the border is not drawn and its used width is zero
+    // however wide the page asked for. Measured with
+    // tools/fingerprint/scratch/expr-border-width-nostyle.js on this very
+    // sequence -- Chrome 151 answers 5px from computedStyleMap() and 0px from
+    // getComputedStyle() after the assignment.
     el.style.borderTopWidth = '5px';
     testing.expectEqual('CSSUnitValue|5px', brand(el.computedStyleMap().get('border-top-width')));
-    testing.expectEqual('5px', getComputedStyle(el).borderTopWidth);
+    testing.expectEqual('0px', getComputedStyle(el).borderTopWidth);
 }
 </script>
 
