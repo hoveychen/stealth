@@ -16621,3 +16621,38 @@ of eight passed there beforehand, which nearly closed the file on it.
 At x-hyatt the warnings go **2 → 0** and all five scripts now run
 (`results/b54-hyatt-jsurlfix.json`). **The station is still refused-429 and the
 body is still ~600 bytes short.** A real bug, not the key.
+
+### The body's length does depend on its content, at about 2.2x
+
+The three negatives above leave one possibility that would change the whole
+search: that `postLen` barely depends on what went in, because what goes in is
+hashed or packed to a fixed width. One value settles it, and it should be one
+that is certainly collected — `navigator.userAgent`, which the read log has
+Kasada taking here.
+
+Lengthen it by 200 characters (`probes/inject-b54-ua-padding.js`) and the body
+goes **18986 → 19426**, up 440 (`results/b54-hyatt-uapad.json` against
+`results/b54-hyatt-jsurlfix.json`). So the length *is* a function of the
+content, and the encoding inflates it by roughly 2.2×.
+
+**Which means the target is not six hundred bytes of answers; it is about two
+hundred and seventy.** The 600 was measured on the body, and the body is not
+where the answers are.
+
+The method generalises and is much cheaper than deobfuscating anything: to ask
+whether a value is in a guard's payload and how much of it there is, lengthen it
+by a known amount and read `postLen`.
+
+### A sweep whose tail is all timeouts is one crash, not twenty stations
+
+Two runs on one afternoon produced the same shape: normal verdicts for the first
+stretch of stations and then `timeout: Page.navigate` for every one after. The
+sweep drives 29 stations through a single `serve`, so a process that dies
+partway leaves the scanner talking to a corpse, and the printed pass count reads
+as a collapse in the guards' behaviour.
+
+**Re-run the affected stations individually before concluding anything.** Doing
+that here recovered four of five (`results/b54-solo-*.json`); the fifth,
+`ak-kohls`, times out on the control binary too (2/2,
+`results/b54-kohls-{ctrl,treat}-*.json`) and is the known intermittent hang that
+already has its own plan.
