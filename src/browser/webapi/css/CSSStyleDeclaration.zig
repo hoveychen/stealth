@@ -888,6 +888,32 @@ pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
     return StyleManager.blockify(specified);
 }
 
+/// The value the cascade gives `element` for one longhand -- a stylesheet rule,
+/// the style attribute, whichever won -- already in the shape a computed style
+/// reports. Null when nothing declares it, or when this engine cannot finish
+/// resolving what was declared.
+///
+/// Element.dimensions used to read the style attribute alone, so a `width` a
+/// stylesheet declared reached `getComputedStyle` and never reached the box:
+/// one element answered 300px and 1904 to two readings of the same edge.
+///
+/// The other spelling is asked for too, the way propertyValueAt asks: an
+/// element that declared `inline-size` has declared `width`, and only the
+/// computed path knew that before this.
+pub fn cascadedComputedValue(element: *Element, name: []const u8, frame: *Frame) ?[]const u8 {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    switch (cascadedValue(style_manager, element, name, .wrap(name))) {
+        .value => |value| return value,
+        .unreportable => return null,
+        .none => {},
+    }
+    const other = chrome_logical.counterpart(name) orelse return null;
+    return switch (cascadedValue(style_manager, element, other, .wrap(other))) {
+        .value => |value| value,
+        .unreportable, .none => null,
+    };
+}
+
 /// Whether this element's box takes its width from its containing block rather
 /// than from its own content.
 ///

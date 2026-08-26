@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+The box read the style attribute and nothing else, so a width a STYLESHEET
+declared never reached it. On a page laid out by a stylesheet -- which is every
+real page, the Cloudflare challenge included -- that meant every block reported
+its containing block's width rather than its own, and an element that declared
+its own width through a rule answered two different numbers:
+`getComputedStyle(el).width` said 300px (the cascade path had it) while
+`el.offsetWidth` said 1904 (the box path did not). One expression finds that.
+
+Measured in both arms with tools/fingerprint/scratch/expr-sheet-width.js against
+Chrome 151 on the 1920x1080 viewport this test server serves. `float`,
+`position` and `display` were already read from the cascade -- that is
+CSSStyleDeclaration.fillsContainingBlock's doing -- so the two shrink-to-fit
+rows below passed before this and have to keep passing.
+-->
+
+<script id=sheet_width_reaches_the_box>
+{
+  const sheet = document.createElement('style');
+  sheet.textContent =
+    '.sbw-p{width:300px}' +
+    '.sbw-m{margin:0 40px}' +
+    '.sbw-f{float:left}' +
+    '.sbw-i{display:inline-block}' +
+    '.sbw-h{height:70px}';
+  document.head.appendChild(sheet);
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const out = {
+      css: String(getComputedStyle(el).width),
+      offset: el.offsetWidth,
+      client: el.clientWidth,
+      offsetHeight: el.offsetHeight,
+    };
+    wrap.remove();
+    return out;
+  };
+
+  const CASES = [
+    // A rule on the parent narrows the child that fills it.
+    ['<div class="sbw-p"><div data-m>x</div></div>', '300px', 300],
+    // A rule on the element itself reaches both readings, not just the
+    // computed one.
+    ['<div data-m class="sbw-p">x</div>', '300px', 300],
+    // A rule's margin comes off the line the same way an attribute's does.
+    ['<div data-m class="sbw-m">x</div>', '1824px', 1824],
+    // A percentage inside a rule-sized parent is a share of the rule's width.
+    ['<div class="sbw-p"><div data-m style="width:50%">x</div></div>', '150px', 150],
+    // Still shrink-to-fit when the rule says so: these already worked, because
+    // float and display come from the cascade.
+    ['<div data-m class="sbw-f">x</div>', '8px', 8],
+    ['<div data-m class="sbw-i">x</div>', '8px', 8],
+  ];
+
+  const wrong = [];
+  for (const [html, css, offset] of CASES) {
+    const got = measure(html);
+    if (got.css !== css) wrong.push(html + ' css: want ' + css + ', got ' + got.css);
+    if (got.offset !== offset) wrong.push(html + ' offsetWidth: want ' + offset + ', got ' + got.offset);
+  }
+
+  // Height is deliberately NOT part of this: it still reads the style
+  // attribute alone. Chrome answers 70 for `.sbw-h{height:70px}` and this
+  // engine answers 18, the line box. Putting height on the cascade would put a
+  // cascade on `getElementHeight`, which is the y-only path elementFromPoint
+  // rejects thousands of elements on and which `element_from_point.html`
+  // budgets at 1500ms for 40 calls over 800 elements. Gating it the way width
+  // is gated would instead leave `getElementHeight` and `getClientHeight`
+  // disagreeing about a rule-sized element, where today both simply miss it.
+  const h = measure('<div data-m class="sbw-h">x</div>');
+  if (h.offsetHeight !== 18) wrong.push('sheet height (known gap): want 18, got ' + h.offsetHeight);
+
+  host.remove();
+  sheet.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The style attribute still outranks a rule, and an `!important` rule outranks the
+attribute -- the box has to agree with the cascade about which one won, not just
+about what the winner said.
+-->
+
+<script id=sheet_box_respects_priority>
+{
+  const sheet = document.createElement('style');
+  sheet.textContent = '.sbw-lo{width:300px}.sbw-hi{width:500px!important}';
+  document.head.appendChild(sheet);
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const out = { css: String(getComputedStyle(el).width), offset: el.offsetWidth };
+    wrap.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const CASES = [
+    // The attribute wins over a normal rule.
+    ['<div data-m class="sbw-lo" style="width:120px">x</div>', '120px', 120],
+    // An !important rule wins over the attribute.
+    ['<div data-m class="sbw-hi" style="width:120px">x</div>', '500px', 500],
+  ];
+  for (const [html, css, offset] of CASES) {
+    const got = measure(html);
+    if (got.css !== css) wrong.push(html + ' css: want ' + css + ', got ' + got.css);
+    if (got.offset !== offset) wrong.push(html + ' offsetWidth: want ' + offset + ', got ' + got.offset);
+  }
+  host.remove();
+  sheet.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
