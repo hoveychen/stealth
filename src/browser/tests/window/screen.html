@@ -4,8 +4,12 @@
 <script id=screen>
   let screen = window.screen;
   if (testing.IS_TEST_RUNNER) {
+    // The display is the viewport plus everything that is not the viewport:
+    // the 87px of browser above the page and the 33px menu bar above that.
+    // 1920x1200 is a display a Mac actually has; a display exactly as tall as
+    // the viewport is one that leaves no room for the window around it.
     testing.expectEqual(1920, screen.width);
-    testing.expectEqual(1080, screen.height);
+    testing.expectEqual(1200, screen.height);
   }
 
   let orientation = screen.orientation;
@@ -24,11 +28,17 @@
   // are on Chrome's Screen.prototype, and browserleaks.com/javascript prints
   // three of them by name — reading `undefined` back is the tell.
   testing.expectEqual(0, screen.availLeft);
-  testing.expectEqual(40, screen.availTop);
+  // 33, which is what a headed Chrome 151 on macOS answered -- the menu bar it
+  // measures is the one the window manager draws, not a round number.
+  testing.expectEqual(33, screen.availTop);
   testing.expectEqual(false, screen.isExtended);
   if (testing.IS_TEST_RUNNER) {
     // The menu bar is the whole difference between height and availHeight.
     testing.expectEqual(screen.height - screen.availHeight, screen.availTop);
+    testing.expectEqual(1167, screen.availHeight);
+    // The usable area is as wide as the display: the menu bar is the only
+    // thing taken off it, and that comes off the top.
+    testing.expectEqual(screen.width, screen.availWidth);
   }
 
   testing.expectEqual(null, screen.onchange);
