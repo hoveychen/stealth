@@ -16893,3 +16893,32 @@ other property does.
 Neither opens the station: x-hyatt was in a refusing window by the time both
 landed, with a clean headed Chrome control answering 429 as well
 (`results/b55-chrome-control.json`), so no verdict was measurable either way.
+
+### The six system font keywords, measured (P1 of system-font-shorthand-readback)
+
+Kasada writes all six in one burst at x-hyatt —
+`setAttribute('style', 'font: caption !important')` through `status-bar`,
+recorded on both arms in `results/b55-voices-{lp,chrome}.json` — and reads four
+numbers back.
+
+Chrome expands every one of them identically, and headed and headless agree
+exactly (`probes/expr-b55-system-fonts.js`,
+`results/b55-sysfont-chrome{,-headed}.json`):
+
+```
+font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%
+font-size=16px|line-height=normal|font-family=Arial
+getPropertyValue('font') -> "16px Arial"
+```
+
+This engine keeps `font-family: system-ui, sans-serif` and answers the keyword
+itself for `font` — `getComputedStyle(el).font === 'caption'`, which no browser
+produces. A thousand-character string measures 13328.125 there and 14227 here.
+
+**One thing this does *not* explain.** The station readback is
+`0px,0px,0px,0px` here against `100075px,155556px,165464px,305134px` in Chrome,
+and this engine measures a non-zero width for a system-font element locally.
+So the zeros on the station come from something else — the element Kasada
+measures is laid out with no width there, not merely with the wrong font.
+Whoever takes `system-font-shorthand-readback` P2 should fix the expansion on
+its own merits and expect the station's four zeros to survive it.

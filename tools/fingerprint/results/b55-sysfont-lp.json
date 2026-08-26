@@ -1,0 +1,20 @@
+{
+  "caption": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=system-ui, sans-serif",
+  "caption.font": "caption",
+  "caption.width": "14227",
+  "icon": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=system-ui, sans-serif",
+  "icon.font": "icon",
+  "icon.width": "14227",
+  "menu": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=system-ui, sans-serif",
+  "menu.font": "rgb(255, 255, 255)",
+  "menu.width": "14227",
+  "message-box": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=system-ui, sans-serif",
+  "message-box.font": "message-box",
+  "message-box.width": "14227",
+  "small-caption": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=system-ui, sans-serif",
+  "small-caption.font": "small-caption",
+  "small-caption.width": "14227",
+  "status-bar": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=system-ui, sans-serif",
+  "status-bar.font": "status-bar",
+  "status-bar.width": "14227"
+}
