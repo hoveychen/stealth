@@ -16372,3 +16372,70 @@ border box part, and none of them is new. `zig build` green, `zig fmt --check`
 reading and not evidence of a gain — `ks-canadagoose` went 429→200 in this one,
 and stations are known to open and shut in windows. Nothing here opened a door,
 and nothing here was expected to.
+
+## One element, three boxes (B79, 2026-08-26)
+
+`<div style="padding:10px">` on the 1904px line answered 1904 for computed
+width, clientWidth and offsetWidth alike. Chrome answers 1884, 1904 and 1904:
+one element has three boxes and this engine had one number behind all of them.
+
+Measured with `scratch/expr-box-parts.js` and `expr-box-parts-flex.js` against
+Chrome 151. Which reading takes which box:
+
+| reading | box |
+|---|---|
+| computed `width` | content — **but the border box under `box-sizing: border-box`** |
+| `clientWidth` | content + padding, border left out |
+| `offsetWidth`, `getBoundingClientRect().width` | content + padding + border |
+| `scrollWidth` | the content extent plus the padding |
+| `transform-origin` | the centre of the border box |
+
+Four things fall out of that, and each was a reading before it was a rule:
+
+* **An auto-width block fills its containing block with its BORDER box**, so
+  its own padding and border come out of its content: `padding:10px` is 1884 of
+  content, `padding:10px;border:5px solid` is 1874. What its children fill is
+  its content box — a `padding:20px;border:5px solid` parent leaves them 1854.
+* **A shrink-to-fit box grows outward instead.** A float, an inline-block and
+  an absolutely positioned box with `padding:10px;border:5px solid` are all
+  8 / 28 / 38: the content stays at the text and the parts are added on.
+* **`box-sizing: border-box` moves which box a declaration names.**
+  `width:400px` with 10px of padding and 5px of border per side is 370 of
+  content, 390 of clientWidth, 400 of offsetWidth — and its computed `width`
+  answers the 400. Declare a width too small to hold its own parts
+  (`width:20px` against 30px of them) and the content clamps to nothing while
+  the computed width reports `30px`.
+* **A percentage padding takes its share of the containing block's WIDTH on
+  both axes.** `width:400px;padding:25%` is 476px per side, top and bottom
+  included, so the box is 970 tall. This engine computed `0px` for it: every
+  percentage but a width was refused.
+
+In a flex row the two halves interlock. What the line hands out are **border
+boxes** — `flex:1;padding:0 25px` in a 400px row is 350 of content and 400 of
+offsetWidth — while **`flex-basis` stays in the box-sizing's own terms**:
+`flex-basis:200px;padding:0 25px` is 200 of content and 250 of offsetWidth, and
+the same with `box-sizing:border-box` is 150 and 200. So the free space is the
+line less every item's base plus its padding, border and margin, and each
+item's content is its base plus its share: two growers, one of them padded,
+come out 175/225 and 175/175.
+
+### The 1/64 grid is the one case left
+
+`scratch/expr-box-parts.js` goes from **4 of 21 cases and 137 of 223 field
+readings to 20 of 21 and 216 of 223**. The case that stays is `padding:10%` of
+1904, where Chrome answers `190.391px` and this engine `190.4px` — Chrome lays
+out on a 1/64px grid (190.390625, printed to six figures) and this does not.
+That belongs to `layout-unit-64th-grid`, and the test here uses 25% instead,
+which lands on the grid exactly.
+
+`expr-box-parts-flex.js` is 8/8. `expr-flex-item-width.js` holds 10/10 and
+`expr-flex-shorthand.js` holds 31/32. `expr-layout-box-shapes.js` goes from
+14/25 cases and 196/250 readings to **17/25 and 212/250**, and every width
+difference left in it belongs to `inline-box-has-no-width` or to a table cell.
+
+`zig build` green, `zig fmt --check` 0, **1509/1509**, and `WebApi: Document` —
+the `elementFromPoint` budget — at 1240ms of its 1500. The edges are read only
+on the width-measuring path, so `getElementHeight`, the y-only walk that budget
+is about, reads no more longhands than it did before.
+
+**A fidelity fix, not a key.** No station opened.
