@@ -207,6 +207,23 @@ fn latticeMsSince(self: *const Performance, clamped: i64) f64 {
     return elapsed + (latticeOffset(clamped) - latticeOffset(origin));
 }
 
+/// Puts a point on this document's timeline back on the clock the page was
+/// told it has.
+///
+/// A resource entry's connection walk arrives from libcurl in microseconds and
+/// is laid out as offsets from fetchStart, so carrying those offsets across
+/// unchanged reports milestones finer than the `now()` sitting beside them --
+/// `entry.requestStart * 10 % 1` is the whole expression. Chrome puts every
+/// one of them on the same grid as `now()`: 60 of 60 non-zero fields across a
+/// navigation entry and four resource entries came back whole multiples of
+/// 0.1ms, several of them collapsed onto one grid point
+/// (tools/fingerprint/scratch/expr-entry-grid.js).
+pub fn snapMs(self: *const Performance, ms: f64) f64 {
+    const origin: i64 = @intCast(self._time_origin);
+    const absolute = origin + @as(i64, @intFromFloat(@round(ms * 1000.0)));
+    return self.latticeMsSince(clamp(absolute, self._clock_resolution_micros));
+}
+
 /// Epoch milliseconds, fractional — not the boot-relative clock `now()` counts
 /// from. `timeOrigin + now()` is `Date.now()` in every browser, and a page that
 /// subtracts the two is asking whether this one is a browser at all.
@@ -342,7 +359,7 @@ pub fn navigationResponseStarted(
     // navigationStarted stamped were placeholders: it had nothing to measure
     // yet, and leaving them said the document resolved and connected in the
     // same instant the navigation began.
-    self._nav.setConnectionMilestones(times);
+    self._nav.setConnectionMilestones(times, self);
     self._nav.response_start = at;
     self._nav.final_response_headers_start = at;
     self._nav.response_status = status;

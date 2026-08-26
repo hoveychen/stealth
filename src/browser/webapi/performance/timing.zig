@@ -143,29 +143,36 @@ pub const Timing = struct {
     ///
     /// curl has no name-resolution *start*: it starts resolving as soon as the
     /// transfer does, so domainLookupStart is fetchStart.
-    pub fn setConnectionMilestones(self: *Timing, times: http.ResponseTimes) void {
+    ///
+    /// curl reports the walk in microseconds and the clock the page reads is
+    /// clamped coarser than that, so every milestone goes back onto that grid
+    /// on the way in -- the same grid `fetchStart` and `responseEnd` are
+    /// already on, since both come from `now()`. Two milestones inside one
+    /// grid step therefore land on the same number, which is what a browser
+    /// reports for them too.
+    pub fn setConnectionMilestones(self: *Timing, times: http.ResponseTimes, perf: *const Performance) void {
         const at = self.fetch_start;
         const ms = struct {
-            fn f(micros: u64) f64 {
-                return @as(f64, @floatFromInt(micros)) / 1000.0;
+            fn f(p: *const Performance, base: f64, micros: u64) f64 {
+                return p.snapMs(base + @as(f64, @floatFromInt(micros)) / 1000.0);
             }
         }.f;
 
         self.domain_lookup_start = at;
-        self.domain_lookup_end = at + ms(times.name_lookup);
+        self.domain_lookup_end = ms(perf, at, times.name_lookup);
         self.connect_start = self.domain_lookup_end;
 
         if (times.app_connect > 0) {
             // The TLS handshake begins once the socket is up, so the TCP
             // connect time is where the secure part starts.
-            self.secure_connection_start = at + ms(times.connect);
-            self.connect_end = at + ms(times.app_connect);
+            self.secure_connection_start = ms(perf, at, times.connect);
+            self.connect_end = ms(perf, at, times.app_connect);
         } else {
-            self.connect_end = at + ms(times.connect);
+            self.connect_end = ms(perf, at, times.connect);
         }
 
-        self.request_start = at + ms(times.pre_transfer);
-        self.response_start = at + ms(times.start_transfer);
+        self.request_start = ms(perf, at, times.pre_transfer);
+        self.response_start = ms(perf, at, times.start_transfer);
         self.final_response_headers_start = self.response_start;
     }
 };
