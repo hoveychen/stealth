@@ -142,8 +142,14 @@ containing block's WIDTH on both axes -- `padding:10%` in a 400px box is
 
 <!--
 A percentage padding resolves against the containing block's width, on both
-axes. Measured: `width:400px;padding:10%` in the 1904px line is 190.391px per
-side, so clientWidth is 781 (400 + 380.78, rounded) and clientHeight 399.
+axes -- `padding-top` takes its share of the WIDTH, which is why the box below
+is 970 tall. Measured: 25% of the 1904px line is 476px per side, so clientWidth
+is 400 + 952 and clientHeight 18 + 952.
+
+25% and not the 10% the probe used first: 10% of 1904 is 190.4, and Chrome
+answers `190.391px` because it lays out on a 1/64px grid (190.390625, printed
+to six figures). That quantisation is the `layout-unit-64th-grid` plan's, not
+this one's, so the assertion here uses a percentage that lands on the grid.
 -->
 
 <script id=box_parts_percentage>
@@ -151,17 +157,17 @@ side, so clientWidth is 781 (400 + 380.78, rounded) and clientHeight 399.
   const host = document.createElement('div');
   document.body.appendChild(host);
   const wrap = document.createElement('div');
-  wrap.innerHTML = '<div id=bppct style="width:400px;padding:10%">x</div>';
+  wrap.innerHTML = '<div id=bppct style="width:400px;padding:25%">x</div>';
   host.appendChild(wrap);
   const el = document.getElementById('bppct');
   const cs = getComputedStyle(el);
 
-  testing.expectEqual('190.391px', String(cs.paddingLeft));
-  testing.expectEqual('190.391px', String(cs.paddingTop));
+  testing.expectEqual('476px', String(cs.paddingLeft));
+  testing.expectEqual('476px', String(cs.paddingTop));
   testing.expectEqual('400px', String(cs.width));
-  testing.expectEqual(781, el.clientWidth);
-  testing.expectEqual(781, el.offsetWidth);
-  testing.expectEqual(399, el.clientHeight);
+  testing.expectEqual(1352, el.clientWidth);
+  testing.expectEqual(1352, el.offsetWidth);
+  testing.expectEqual(970, el.clientHeight);
 
   host.remove();
 }

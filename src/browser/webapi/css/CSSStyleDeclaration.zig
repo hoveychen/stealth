@@ -306,13 +306,24 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // sizes from a `0%` basis and the width never enters the
                 // sizing. Asked before the cascade for that reason; every other
                 // case falls through to the same resolvedDimension below.
-                if (wrapped.eql(comptime .wrap("width")) or
+                const on_width = wrapped.eql(comptime .wrap("width")) or
                     wrapped.eql(comptime .wrap("inline-size")) or
-                    wrapped.eqlSlice("-webkit-logical-width"))
-                {
-                    if (flexItemWidth(element, frame, 0, true) != null) {
-                        return resolvedDimension(element, .width, frame);
-                    }
+                    wrapped.eqlSlice("-webkit-logical-width");
+                const on_height = wrapped.eql(comptime .wrap("height")) or
+                    wrapped.eql(comptime .wrap("block-size")) or
+                    wrapped.eqlSlice("-webkit-logical-height");
+
+                if (on_width and flexItemWidth(element, frame, 0, true, boxEdges(element, frame)) != null) {
+                    return resolvedDimension(element, .width, frame);
+                }
+
+                // `box-sizing: border-box` moves which box a declaration names,
+                // so the declaration is not the computed answer either.
+                // Measured: `width:20px` with 10px of padding and 5px of border
+                // per side computes `30px` -- the border box, clamped up to
+                // what its own parts need, with nothing left for the content.
+                if ((on_width or on_height) and usesBorderBox(element, frame)) {
+                    return resolvedDimension(element, if (on_width) .width else .height, frame);
                 }
 
                 switch (cascadedValue(style_manager, element, normalized, wrapped)) {
@@ -715,17 +726,29 @@ fn lengthFactor(style_manager: *StyleManager, element: *Element, property_name: 
 
 /// The properties whose percentage is a share of the containing block's width.
 ///
-/// Only the two spellings of `width` so far. Measured with
+/// The two spellings of `width`, and all four paddings. Measured with
 /// tools/fingerprint/scratch/expr-percentage-width.js: `width:50%` in a 400px
 /// parent is 200px, in a parent that declares nothing it is half the 1904 that
 /// parent itself took, and in a shrink-to-fit parent it is half of what that
-/// parent's content came to. The same probe shows `margin-left:10%` and
-/// `padding-left:10%` resolve against the same width -- and so does
-/// `padding-top`, which takes its share of the WIDTH and not the height -- but
-/// those are refused until they have a test of their own.
+/// parent's content came to.
+///
+/// A padding takes its share of the same width on BOTH axes, which is the part
+/// worth writing down: expr-box-parts.js puts `width:400px; padding:10%` in the
+/// 1904px line at 190.391px per side, top and bottom included, so its
+/// clientHeight is 399 and not 18. `margin-left:10%` resolves against the same
+/// width and is still refused, having no test of its own.
 fn percentageOfContainingBlockWidth(property_name: []const u8) bool {
-    return std.mem.eql(u8, property_name, "width") or
-        std.mem.eql(u8, property_name, "inline-size");
+    const NAMES = [_][]const u8{
+        "width",                "inline-size",
+        "padding-left",         "padding-right",
+        "padding-top",          "padding-bottom",
+        "padding-inline-start", "padding-inline-end",
+        "padding-block-start",  "padding-block-end",
+    };
+    for (NAMES) |name| {
+        if (std.mem.eql(u8, property_name, name)) return true;
+    }
+    return false;
 }
 
 /// The document element, whose font size `rem` is a multiple of.
@@ -875,6 +898,19 @@ fn computedBorderWidth(
     depth: u8,
 ) []const u8 {
     const style = self.propertyValueAt(style_name, frame, surface, depth + 1);
+    return usedBorderWidth(element, name, wrapped, style, frame);
+}
+
+/// The numbers behind computedBorderWidth, given the border style already read.
+/// Split out so the box the layout builds can ask for the same used value
+/// without a computed view to ask through -- boxEdges reads all four.
+fn usedBorderWidth(
+    element: *Element,
+    name: []const u8,
+    wrapped: String,
+    style: []const u8,
+    frame: *Frame,
+) []const u8 {
     if (std.ascii.eqlIgnoreCase(style, "none") or std.ascii.eqlIgnoreCase(style, "hidden")) {
         return "0px";
     }
@@ -1114,6 +1150,74 @@ fn stretchesInGrid(element: *Element, parent: *Element, frame: *Frame) bool {
         std.ascii.eqlIgnoreCase(effective, "normal");
 }
 
+/// What sits between an element's content box and its border box, per axis.
+///
+/// One element has three boxes and each reading takes a different one --
+/// computed `width` the content box, `clientWidth` content + padding,
+/// `offsetWidth` and `getBoundingClientRect` content + padding + border.
+/// Measured with tools/fingerprint/scratch/expr-box-parts.js against Chrome
+/// 151: `<div style="padding:10px">` on the 1904px line answers 1884, 1904 and
+/// 1904, and `border:5px solid` answers 1894, 1894, 1904.
+///
+/// Both sides are read separately rather than doubled from one, which
+/// `padding-left:7px; padding-right:13px` with a 2px and a 4px border is the
+/// test for: 1878, 1898, 1904.
+pub const BoxEdges = struct {
+    padding_x: f64 = 0,
+    padding_y: f64 = 0,
+    border_x: f64 = 0,
+    border_y: f64 = 0,
+};
+
+pub fn boxEdges(element: *Element, frame: *Frame) BoxEdges {
+    return .{
+        .padding_x = computedPx(element, "padding-left", frame) + computedPx(element, "padding-right", frame),
+        .padding_y = computedPx(element, "padding-top", frame) + computedPx(element, "padding-bottom", frame),
+        // A border that draws nothing is 0 wide however the page wrote it, and
+        // `thin` is 1px -- both are already the used value the computed border
+        // width reports (computed-border-width-used-value), so nothing here has
+        // to know about `none`.
+        .border_x = borderPx(element, "border-left", frame) + borderPx(element, "border-right", frame),
+        .border_y = borderPx(element, "border-top", frame) + borderPx(element, "border-bottom", frame),
+    };
+}
+
+/// Whether a declared width and height name the border box rather than the
+/// content box. Measured: `width:400px; box-sizing:border-box; padding:10px;
+/// border:5px solid` is 370px of content, 390 of clientWidth and 400 of
+/// offsetWidth, and its computed `width` answers the 400 -- the border box,
+/// because that is the box `box-sizing` named.
+pub fn usesBorderBox(element: *Element, frame: *Frame) bool {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const declared = cascadedKeyword(style_manager, element, "box-sizing") orelse return false;
+    return std.ascii.eqlIgnoreCase(declared, "border-box");
+}
+
+/// One border's used width in px. `side` is the stem, so `border-left` reads
+/// `border-left-width` against `border-left-style`: a border that draws nothing
+/// is 0 however it was written, an undeclared width beside a style is `medium`
+/// (3px), and the keywords resolve to 1, 3 and 5.
+fn borderPx(element: *Element, comptime side: []const u8, frame: *Frame) f64 {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const style = cascadedKeyword(style_manager, element, side ++ "-style") orelse "none";
+    const width_name = side ++ "-width";
+    const used = usedBorderWidth(element, width_name, .wrap(width_name), style, frame);
+    const parsed = units.parse(used) catch return 0;
+    return @max(0, parsed.value);
+}
+
+/// One computed length in px, or 0 when the page declared none and when this
+/// engine cannot finish resolving what it did declare. Percentages are already
+/// px by here for the properties that resolve them.
+fn computedPx(element: *Element, name: []const u8, frame: *Frame) f64 {
+    const declared = cascadedComputedValue(element, name, frame) orelse return 0;
+    const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return 0;
+    return switch (parsed.unit) {
+        .px, .none => @max(0, parsed.value),
+        else => 0,
+    };
+}
+
 /// How wide a flex item comes out, or null when nothing about the flex layout
 /// decides its width and the box keeps the one it already had.
 ///
@@ -1150,7 +1254,7 @@ fn stretchesInGrid(element: *Element, parent: *Element, frame: *Frame) bool {
 /// here); a declared `min-width` / `max-width`; and the anonymous item Chrome
 /// makes of a text node between two elements, which is why one there divides a
 /// 400px line into 184s where this divides it into 200s.
-pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared: bool) ?f64 {
+pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared: bool, edges: BoxEdges) ?f64 {
     // The same backstop the containing-block walk has, for the same reason: a
     // tree that somehow made a cycle stops rather than recursing forever.
     if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
@@ -1162,10 +1266,13 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
 
     const style_manager = &element.ownerFrame(frame)._style_manager;
     const container = parent.dimensionsAt(frame, true, depth + 1, true).width;
+    const outside = edges.padding_x + edges.border_x;
 
     if (isColumnFlex(style_manager, parent)) {
         if (width_declared) return null;
-        return if (stretchesAcrossFlexLine(element, parent, frame)) container else null;
+        // A stretch fills the line with the BORDER box, the way an auto-width
+        // block fills its containing one.
+        return if (stretchesAcrossFlexLine(element, parent, frame)) @max(0, container - outside) else null;
     }
 
     // An item that does not grow takes no share, so it needs nothing from its
@@ -1173,7 +1280,7 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
     // one it has. Asked first because it is the common case, and because the
     // walk below measures every sibling -- a cost no ordinary flex item should
     // pay for a share it is not taking.
-    const own_basis = flexBasisLength(element, container, frame);
+    const own_basis = flexBase(element, container, frame, edges);
     const own_grow = flexFactor(element, "flex-grow", frame);
     if (own_grow <= 0) {
         return flooredAtMinContent(element, frame, own_basis orelse return null);
@@ -1186,11 +1293,18 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
     var child = parent.firstElementChild();
     while (child) |sibling| : (child = sibling.nextElementSibling()) {
         if (!isFlexItem(sibling, frame)) continue;
+        const sibling_edges = if (sibling == element) edges else boxEdges(sibling, frame);
         const base = if (sibling == element)
             own_basis orelse sibling.dimensionsAt(frame, true, depth + 1, false).width
         else
-            flexBaseSize(sibling, container, frame, depth);
-        taken += base + Element.horizontalMargin(sibling, frame);
+            flexBaseSize(sibling, container, frame, depth, sibling_edges);
+        // What the line gives out is BORDER boxes: an item's padding, border
+        // and margin all come off the free space before anything is shared.
+        // Measured -- `flex: 1; padding: 0 25px` in a 400px row is 350px of
+        // content and 400 of offsetWidth, and beside an unpadded `flex: 1` the
+        // two come out 175 of content each.
+        taken += base + sibling_edges.padding_x + sibling_edges.border_x +
+            Element.horizontalMargin(sibling, frame);
         total_grow += flexFactor(sibling, "flex-grow", frame);
         if (sibling == element) own_base = base;
     }
@@ -1224,9 +1338,20 @@ fn flooredAtMinContent(element: *Element, frame: *Frame, width: f64) f64 {
 /// That second measurement is taken with the distribution turned off, which is
 /// what keeps this from recursing: an item asking for a sibling's base would
 /// otherwise send the sibling back around the same walk, asking for this one's.
-fn flexBaseSize(element: *Element, container: f64, frame: *Frame, depth: u8) f64 {
-    if (flexBasisLength(element, container, frame)) |px| return px;
+fn flexBaseSize(element: *Element, container: f64, frame: *Frame, depth: u8, edges: BoxEdges) f64 {
+    if (flexBase(element, container, frame, edges)) |px| return px;
     return element.dimensionsAt(frame, true, depth + 1, false).width;
+}
+
+/// The declared flex base size as a CONTENT width. `flex-basis` is measured in
+/// the box-sizing's own terms, so a `border-box` item's basis has its padding
+/// and border taken back off: measured, `flex-basis: 200px; padding: 0 25px` is
+/// 200px of content and 250 of offsetWidth, and the same with `box-sizing:
+/// border-box` is 150 of content and 200 of offsetWidth.
+fn flexBase(element: *Element, container: f64, frame: *Frame, edges: BoxEdges) ?f64 {
+    const basis = flexBasisLength(element, container, frame) orelse return null;
+    if (!usesBorderBox(element, frame)) return basis;
+    return @max(0, basis - edges.padding_x - edges.border_x);
 }
 
 /// The `flex-basis` of one item in px, or null when it is `auto`, `content`, or
@@ -1317,10 +1442,23 @@ fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame
     if (!element.checkVisibilityCached(&visibility_cache, frame)) {
         return "auto";
     }
-    const value = switch (dimension) {
+    // clientWidth is content + padding, and a computed width is the box
+    // `box-sizing` names: the content box by default, the border box under
+    // `border-box`. Both are that same clientWidth with one edge moved, which
+    // is deliberate -- the padding box is where clientWidth's fallback to the
+    // content extent lives, and a computed width has to carry it too or a
+    // "widen until it fits" loop reads two contradictory sizes and never
+    // terminates.
+    const edges = boxEdges(element, frame);
+    const client = switch (dimension) {
         .width => element.getClientWidthWithCache(frame, &visibility_cache),
         .height => element.getClientHeightWithCache(frame, &visibility_cache),
     };
+    const padding, const border = switch (dimension) {
+        .width => .{ edges.padding_x, edges.border_x },
+        .height => .{ edges.padding_y, edges.border_y },
+    };
+    const value = if (usesBorderBox(element, frame)) client + border else @max(0, client - padding);
     return std.fmt.allocPrint(frame.local_arena, "{d}px", .{value}) catch "auto";
 }
 
@@ -1332,8 +1470,12 @@ fn boxCentre(element: *Element, frame: *Frame) []const u8 {
     if (!element.checkVisibilityCached(&visibility_cache, frame)) {
         return "0px 0px";
     }
-    const width = element.getClientWidthWithCache(frame, &visibility_cache);
-    const height = element.getClientHeightWithCache(frame, &visibility_cache);
+    // The BORDER box, so the border counts: measured, a `border:5px solid`
+    // block on the 1904px line has its origin at 952px, the centre of the 1904
+    // it occupies, and not at 947, the centre of the 1894 inside its border.
+    const edges = boxEdges(element, frame);
+    const width = element.getClientWidthWithCache(frame, &visibility_cache) + edges.border_x;
+    const height = element.getClientHeightWithCache(frame, &visibility_cache) + edges.border_y;
     return std.fmt.allocPrint(frame.local_arena, "{d}px {d}px", .{
         width / 2,
         height / 2,
