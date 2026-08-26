@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+An absolutely positioned box sits where its `left` and `top` say, relative to
+its containing block. This engine put every element at a synthetic point
+computed from how many nodes precede it (`calculateDocumentPosition`, 5px per
+node), so `left: 37px` and `top: 53px` came back as 130, 130 -- the declaration
+reached `getComputedStyle` and never reached the box.
+
+It is the cheapest possible check for a guard to make: declare a position, read
+`getBoundingClientRect()`, compare. Measured in both arms with
+tools/fingerprint/scratch/expr-absolute-position.js against Chrome 151.
+
+Only the out-of-flow half is claimed here. A `static` or `relative` box sits
+where the flow put it, and this engine has no flow -- a block's y is the sum of
+its preceding siblings' heights, and the heights are still content-derived
+guesses. Those two rows are asserted as *unchanged* below so a later flow
+change is a deliberate one.
+-->
+
+<script id=absolute_takes_its_declaration>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const r = el.getBoundingClientRect();
+    const out = {
+      offsetLeft: el.offsetLeft, offsetTop: el.offsetTop,
+      left: Math.round(r.left), top: Math.round(r.top),
+      right: Math.round(r.right), bottom: Math.round(r.bottom),
+    };
+    wrap.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // No positioned ancestor, so the containing block is the initial one and the
+  // viewport rect is the declaration itself.
+  const a = measure('<div style="position:absolute;left:37px;top:53px;width:64px;height:24px" data-m>a</div>');
+  eq('abs offsetLeft', a.offsetLeft, 37);
+  eq('abs offsetTop', a.offsetTop, 53);
+  eq('abs rect.left', a.left, 37);
+  eq('abs rect.top', a.top, 53);
+  eq('abs rect.right', a.right, 101);
+  eq('abs rect.bottom', a.bottom, 77);
+
+  // `fixed` is the same, against the viewport.
+  const f = measure('<div style="position:fixed;left:41px;top:59px;width:20px;height:10px" data-m>d</div>');
+  eq('fixed offsetLeft', f.offsetLeft, 41);
+  eq('fixed offsetTop', f.offsetTop, 59);
+  eq('fixed rect.left', f.left, 41);
+  eq('fixed rect.top', f.top, 59);
+
+  // `right` and `bottom` are the same declaration from the other edge: a 30px
+  // box with `right:10px` in a 200px containing block starts at 160.
+  const rb = measure('<div style="position:relative;width:200px;height:100px">' +
+    '<div style="position:absolute;right:10px;bottom:20px;width:30px;height:15px" data-m>c</div></div>');
+  eq('right/bottom offsetLeft', rb.offsetLeft, 160);
+  eq('right/bottom offsetTop', rb.offsetTop, 65);
+
+  // Inside a positioned ancestor, the offset is measured from that ancestor.
+  const ir = measure('<div style="position:relative;left:10px;top:20px;width:200px;height:100px">' +
+    '<div style="position:absolute;left:11px;top:13px;width:30px;height:15px" data-m>b</div></div>');
+  eq('nested offsetLeft', ir.offsetLeft, 11);
+  eq('nested offsetTop', ir.offsetTop, 13);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The rect and the offset have to agree with each other even where neither is
+Chrome's number. An absolute box inside a `relative` ancestor sits at the
+ancestor's own origin plus its declaration -- Chrome satisfies that too (its
+ancestor is at 18, its child's rect.left is 29, its offsetLeft is 11) -- and
+this engine can satisfy the relation while the ancestor's own position is still
+the synthetic one, because a script comparing the two readings is comparing the
+relation and not the absolute value.
+-->
+
+<script id=rect_and_offset_agree>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div id=ofp style="position:relative;left:10px;top:20px;width:200px;height:100px">' +
+    '<div id=ofc style="position:absolute;left:11px;top:13px;width:30px;height:15px">b</div></div>';
+  host.appendChild(wrap);
+
+  const parent = wrap.querySelector('#ofp');
+  const child = wrap.querySelector('#ofc');
+  const pr = parent.getBoundingClientRect();
+  const cr = child.getBoundingClientRect();
+
+  testing.expectEqual(pr.left + child.offsetLeft, cr.left);
+  testing.expectEqual(pr.top + child.offsetTop, cr.top);
+  testing.expectEqual(30, cr.right - cr.left);
+  testing.expectEqual(15, cr.bottom - cr.top);
+
+  host.remove();
+}
+</script>
+
+<!--
+In-flow boxes are untouched: their position is still the synthetic one, and this
+records that rather than pretending otherwise. Chrome puts the static box at
+8,29 and the relative one at 15,38.
+-->
+
+<script id=in_flow_position_unchanged>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div id=ofs style="width:50px;height:20px">f</div>' +
+    '<div id=ofr style="position:relative;left:7px;top:9px;width:50px;height:20px">e</div>';
+  host.appendChild(wrap);
+
+  const stat = wrap.querySelector('#ofs');
+  const rel = wrap.querySelector('#ofr');
+
+  // Not Chrome's 8,29 -- this engine has no flow. What is asserted is that the
+  // two remain whatever the synthetic walk says, so a flow change shows up here.
+  testing.expectTrue(stat.offsetLeft > 0 && stat.offsetTop > 0);
+  testing.expectEqual(stat.offsetLeft, stat.getBoundingClientRect().left);
+  testing.expectEqual(stat.offsetTop, stat.getBoundingClientRect().top);
+  // A `relative` box is in flow: its declaration does not place it either.
+  testing.expectEqual(rel.offsetLeft, rel.getBoundingClientRect().left);
+
+  host.remove();
+}
+</script>
