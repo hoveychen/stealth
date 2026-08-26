@@ -2192,8 +2192,19 @@ pub fn boundingClientRectValues(self: *Element, frame: *Frame) DOMRect.Data {
 
 // Some cases need the bounding rect but have already done the visibility check.
 pub fn boundingClientRectValuesForVisible(self: *Element, frame: *Frame) DOMRect.Data {
-    const y = calculateDocumentPosition(self.asNode());
+    return self.boundingClientRectValuesAt(frame, 0);
+}
+
+fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
     const dims = self.getElementDimensions(frame);
+
+    // An out-of-flow box is placed by its own declaration, which is the half of
+    // positioning this engine can compute exactly.
+    if (self.outOfFlowPosition(frame, depth)) |placed| {
+        return .{ .x = placed.x, .y = placed.y, .width = dims.width, .height = dims.height };
+    }
+
+    const y = calculateDocumentPosition(self.asNode());
 
     // Use sibling position for x coordinate to ensure siblings have different x values
     const x = calculateSiblingPosition(self.asNode());
@@ -2385,6 +2396,9 @@ pub fn getOffsetTop(self: *Element, frame: *Frame) f64 {
     if (!self.checkVisibilityCached(null, frame)) {
         return 0.0;
     }
+    if (self.outOfFlowPosition(frame, 0)) |placed| {
+        return placed.offset_y;
+    }
     return calculateDocumentPosition(self.asNode());
 }
 
@@ -2392,7 +2406,108 @@ pub fn getOffsetLeft(self: *Element, frame: *Frame) f64 {
     if (!self.checkVisibilityCached(null, frame)) {
         return 0.0;
     }
+    if (self.outOfFlowPosition(frame, 0)) |placed| {
+        return placed.offset_x;
+    }
     return calculateSiblingPosition(self.asNode());
+}
+
+/// Where the element's box sits when the flow does not decide it, or null when
+/// it does.
+///
+/// `absolute` and `fixed` are the two this engine can place exactly: the box
+/// goes at its containing block's origin plus its own `left`/`top`, or at the
+/// far edge less `right`/`bottom` and its own width. Measured against Chrome
+/// with tools/fingerprint/scratch/expr-absolute-position.js -- `left:37px;
+/// top:53px` with no positioned ancestor is 37,53 in the viewport and 37,53
+/// from the offset parent both.
+///
+/// `static` and `relative` are not here. A box in flow sits after its preceding
+/// siblings, and that sum needs their heights, which are still content-derived
+/// guesses; the synthetic walk stands until there is a flow to replace it.
+///
+/// `offset_*` is what `offsetLeft`/`offsetTop` report and `x`/`y` is the
+/// viewport rect, and the two differ by the containing block's own origin --
+/// which may itself still be synthetic. That keeps the pair *consistent* even
+/// where neither is Chrome's number: a script comparing `getBoundingClientRect`
+/// against `offsetLeft` is comparing the relation between them.
+///
+/// A declaration this engine cannot resolve, and the `auto` case Chrome places
+/// at the static position, both come out 0 -- there is no static position to
+/// fall back to.
+fn outOfFlowPosition(self: *Element, frame: *Frame, depth: u8) ?struct {
+    x: f64,
+    y: f64,
+    offset_x: f64,
+    offset_y: f64,
+} {
+    if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return null;
+
+    const position = CSSStyleDeclaration.cascadedComputedValue(self, "position", frame) orelse return null;
+    const is_fixed = std.ascii.eqlIgnoreCase(position, "fixed");
+    if (!is_fixed and !std.ascii.eqlIgnoreCase(position, "absolute")) return null;
+
+    const dims = self.getElementDimensions(frame);
+
+    // A fixed box is placed against the viewport; an absolute one against the
+    // nearest positioned ancestor, or the initial containing block when it has
+    // none. Both of those origins are 0, 0.
+    const containing: ?*Element = if (is_fixed) null else self.nearestPositionedAncestor(frame);
+
+    const box: Dimensions = if (containing) |cb|
+        cb.getElementDimensions(frame)
+    else blk: {
+        const viewport = self.ownerFrame(frame)._page.getViewport();
+        break :blk .{
+            .width = @floatFromInt(viewport.width),
+            .height = @floatFromInt(viewport.height),
+        };
+    };
+
+    const offset_x = self.edgeOffset(frame, "left", "right", box.width, dims.width);
+    const offset_y = self.edgeOffset(frame, "top", "bottom", box.height, dims.height);
+
+    const origin: DOMRect.Data = if (containing) |cb|
+        cb.boundingClientRectValuesAt(frame, depth + 1)
+    else
+        .{};
+
+    return .{
+        .x = origin.x + offset_x,
+        .y = origin.y + offset_y,
+        .offset_x = offset_x,
+        .offset_y = offset_y,
+    };
+}
+
+/// One axis of an out-of-flow box's offset: the near edge if it is declared,
+/// otherwise the far edge subtracted from the containing block, otherwise zero.
+fn edgeOffset(
+    self: *Element,
+    frame: *Frame,
+    comptime near: []const u8,
+    comptime far: []const u8,
+    available: f64,
+    own: f64,
+) f64 {
+    if (CSSStyleDeclaration.cascadedComputedValue(self, near, frame)) |declared| {
+        if (CSS.parseDimensionViewport(declared, frame)) |px| return px;
+    }
+    if (CSSStyleDeclaration.cascadedComputedValue(self, far, frame)) |declared| {
+        if (CSS.parseDimensionViewport(declared, frame)) |px| return available - px - own;
+    }
+    return 0;
+}
+
+/// The ancestor an absolutely positioned box is placed against: the nearest one
+/// the page positioned, or null for the initial containing block.
+fn nearestPositionedAncestor(self: *Element, frame: *Frame) ?*Element {
+    var current = self.parentElement();
+    while (current) |element| : (current = element.parentElement()) {
+        const position = CSSStyleDeclaration.cascadedComputedValue(element, "position", frame) orelse continue;
+        if (!std.ascii.eqlIgnoreCase(position, "static")) return element;
+    }
+    return null;
 }
 
 pub fn getOffsetParent(self: *Element, frame: *Frame) ?*Element {
