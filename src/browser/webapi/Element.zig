@@ -1963,7 +1963,14 @@ fn percentageOfParentWidth(self: *Element, declared: []const u8, frame: *Frame, 
 }
 
 /// The horizontal margin that comes off the containing block before the box
-/// gets what is left. Read from the cascade, so a stylesheet rule counts.
+/// gets what is left.
+///
+/// Read from the style attribute only, the way the width beside it is. A margin
+/// a stylesheet rule declares is therefore missed, and the box comes out that
+/// much too wide -- the same limitation `dimensions` has always had for width,
+/// and the reason it is stated here rather than implied. Asking the cascade
+/// would put another lookup on a path `element_from_point.html` budgets, so it
+/// is a change to make deliberately and measure, not a line to slip in.
 fn horizontalMargin(self: *Element, frame: *Frame) f64 {
     var total: f64 = 0;
     inline for (.{ "margin-left", "margin-right" }) |name| {
