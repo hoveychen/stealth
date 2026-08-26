@@ -45,8 +45,12 @@
 //!
 //! The interaction features and the display descriptors answer for one fixed
 //! device persona, and it has to stay consistent with the rest of the fork:
-//! an Apple GPU driving a 1920x1080 display at devicePixelRatio 1 with
-//! `screen.colorDepth` 24, driven with a mouse. Every value below was measured
+//! an Apple GPU driving a 1920x1200 display at devicePixelRatio 1 with
+//! `screen.colorDepth` 24, driven with a mouse, showing a 1920x1080 page in a
+//! maximised window (Viewport derives the one from the other). Note that the
+//! `width`/`height` features read the page and the `device-*` ones read the
+//! display, so the two are no longer the same pair of numbers. Every value
+//! below was measured
 //! on a headed Chrome (tools/fingerprint, media-features probe) except the
 //! three that follow from *this* persona rather than from the reference
 //! laptop's built-in panel — see COLOR_BITS_PER_CHANNEL.
@@ -426,45 +430,57 @@ fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
         return false;
     }
 
-    // The window box matches the viewport in this fork (see the screen section
-    // of tools/fingerprint/README.md), so the device-* lengths are the same
-    // numbers as the viewport ones.
+    // The device-* lengths are the *display's*, not the page's — MQ4 §5 says
+    // so, and `screen.width`/`screen.height` report the same two numbers, which
+    // is a cross-check a script can make in one expression. They stopped being
+    // the viewport's when the window grew a browser around it (see Viewport).
+    const device_width = viewport.screenWidth();
+    const device_height = viewport.screenHeight();
     if (std.mem.eql(u8, lname, "min-device-width")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.width >= px;
+        return device_width >= px;
     }
     if (std.mem.eql(u8, lname, "max-device-width")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.width <= px;
+        return device_width <= px;
     }
     if (std.mem.eql(u8, lname, "device-width")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.width == px;
+        return device_width == px;
     }
     if (std.mem.eql(u8, lname, "min-device-height")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.height >= px;
+        return device_height >= px;
     }
     if (std.mem.eql(u8, lname, "max-device-height")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.height <= px;
+        return device_height <= px;
     }
     if (std.mem.eql(u8, lname, "device-height")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.height == px;
+        return device_height == px;
     }
 
     // `<ratio>` compares as a fraction, so it is done by cross-multiplication
     // rather than by dividing — 1920/1080 and 16/9 are the same ratio and have
     // to compare equal.
-    if (std.mem.eql(u8, lname, "aspect-ratio") or std.mem.eql(u8, lname, "device-aspect-ratio")) {
+    if (std.mem.eql(u8, lname, "aspect-ratio")) {
         return compareRatio(value, viewport.width, viewport.height, .eq);
     }
-    if (std.mem.eql(u8, lname, "min-aspect-ratio") or std.mem.eql(u8, lname, "min-device-aspect-ratio")) {
+    if (std.mem.eql(u8, lname, "min-aspect-ratio")) {
         return compareRatio(value, viewport.width, viewport.height, .ge);
     }
-    if (std.mem.eql(u8, lname, "max-aspect-ratio") or std.mem.eql(u8, lname, "max-device-aspect-ratio")) {
+    if (std.mem.eql(u8, lname, "max-aspect-ratio")) {
         return compareRatio(value, viewport.width, viewport.height, .le);
+    }
+    if (std.mem.eql(u8, lname, "device-aspect-ratio")) {
+        return compareRatio(value, device_width, device_height, .eq);
+    }
+    if (std.mem.eql(u8, lname, "min-device-aspect-ratio")) {
+        return compareRatio(value, device_width, device_height, .ge);
+    }
+    if (std.mem.eql(u8, lname, "max-device-aspect-ratio")) {
+        return compareRatio(value, device_width, device_height, .le);
     }
 
     if (std.mem.eql(u8, lname, "resolution")) {
@@ -598,22 +614,36 @@ const RangeOp = enum { lt, le, gt, ge, eq };
 /// to compare against, and a feature that already carries a `min-` / `max-`
 /// prefix may not take an operator as well. Chrome answers false to both
 /// (measured), so the whitelist is the point rather than an optimisation.
-const RangeFeature = enum { width, height, resolution, color, color_index, monochrome, aspect_ratio };
+const RangeFeature = enum {
+    width,
+    height,
+    device_width,
+    device_height,
+    resolution,
+    color,
+    color_index,
+    monochrome,
+    aspect_ratio,
+    device_aspect_ratio,
+};
 
 fn parseRangeFeature(name: []const u8) ?RangeFeature {
     if (name.len > 32) return null;
     var buf: [32]u8 = undefined;
     const lname = std.ascii.lowerString(&buf, name);
 
-    // The window box matches the viewport in this fork, so the device- lengths
-    // are the same numbers — the same equivalence evalNameValue relies on.
-    if (std.mem.eql(u8, lname, "width") or std.mem.eql(u8, lname, "device-width")) return .width;
-    if (std.mem.eql(u8, lname, "height") or std.mem.eql(u8, lname, "device-height")) return .height;
+    // The device- lengths read the display rather than the page — the same
+    // split evalNameValue makes.
+    if (std.mem.eql(u8, lname, "width")) return .width;
+    if (std.mem.eql(u8, lname, "height")) return .height;
+    if (std.mem.eql(u8, lname, "device-width")) return .device_width;
+    if (std.mem.eql(u8, lname, "device-height")) return .device_height;
     if (std.mem.eql(u8, lname, "resolution")) return .resolution;
     if (std.mem.eql(u8, lname, "color")) return .color;
     if (std.mem.eql(u8, lname, "color-index")) return .color_index;
     if (std.mem.eql(u8, lname, "monochrome")) return .monochrome;
-    if (std.mem.eql(u8, lname, "aspect-ratio") or std.mem.eql(u8, lname, "device-aspect-ratio")) return .aspect_ratio;
+    if (std.mem.eql(u8, lname, "aspect-ratio")) return .aspect_ratio;
+    if (std.mem.eql(u8, lname, "device-aspect-ratio")) return .device_aspect_ratio;
     return null;
 }
 
@@ -621,11 +651,14 @@ fn rangeFeatureValue(feature: RangeFeature, viewport: Viewport) f64 {
     return switch (feature) {
         .width => @floatFromInt(viewport.width),
         .height => @floatFromInt(viewport.height),
+        .device_width => @floatFromInt(viewport.screenWidth()),
+        .device_height => @floatFromInt(viewport.screenHeight()),
         .resolution => DEVICE_PIXEL_RATIO,
         .color => @floatFromInt(COLOR_BITS_PER_CHANNEL),
         .color_index => @floatFromInt(COLOR_INDEX),
         .monochrome => @floatFromInt(MONOCHROME_BITS),
         .aspect_ratio => @as(f64, @floatFromInt(viewport.width)) / @as(f64, @floatFromInt(viewport.height)),
+        .device_aspect_ratio => @as(f64, @floatFromInt(viewport.screenWidth())) / @as(f64, @floatFromInt(viewport.screenHeight())),
     };
 }
 
@@ -633,10 +666,10 @@ fn rangeFeatureValue(feature: RangeFeature, viewport: Viewport) f64 {
 /// comparison are the same scalar.
 fn parseRangeBound(feature: RangeFeature, text: []const u8) ?f64 {
     return switch (feature) {
-        .width, .height => parseLengthPx(text),
+        .width, .height, .device_width, .device_height => parseLengthPx(text),
         .resolution => parseResolutionDppx(text),
         .color, .color_index, .monochrome => @floatFromInt(parseInteger(text) orelse return null),
-        .aspect_ratio => parseRatio(text),
+        .aspect_ratio, .device_aspect_ratio => parseRatio(text),
     };
 }
 
@@ -1395,10 +1428,10 @@ fn writeRange(w: *std.Io.Writer, split: RangeSplit) !void {
 /// counterpart of `parseRangeBound`.
 fn writeBound(w: *std.Io.Writer, feature: RangeFeature, text: []const u8) !void {
     return switch (feature) {
-        .width, .height => writeDimension(w, text, .length),
+        .width, .height, .device_width, .device_height => writeDimension(w, text, .length),
         .resolution => writeDimension(w, text, .resolution),
         .color, .color_index, .monochrome => writeInteger(w, text, null),
-        .aspect_ratio => writeRatio(w, text),
+        .aspect_ratio, .device_aspect_ratio => writeRatio(w, text),
     };
 }
 
@@ -1659,7 +1692,12 @@ test "MediaQuery: the device persona, as measured on a headed Chrome" {
     try testing.expect(matches("(any-pointer: fine)", v));
     try testing.expect(matches("(pointer: fine)", v));
     try testing.expect(matches("(display-mode: browser)", v));
-    try testing.expect(matches("(device-width: 1920px) and (device-height: 1080px)", v));
+    // The device-* lengths read the display, which is taller than the page by
+    // the browser window around it plus the menu bar above that (see Viewport).
+    // `screen.width`/`screen.height` answer the same two numbers.
+    try testing.expect(matches("(device-width: 1920px) and (device-height: 1200px)", v));
+    try testing.expect(!matches("(device-height: 1080px)", v));
+    try testing.expect(matches("(width: 1920px) and (height: 1080px)", v));
 
     // These three follow from this fork's persona (colorDepth 24, dpr 1)
     // rather than from the reference laptop's HDR panel — see the header.
@@ -1684,10 +1722,14 @@ test "MediaQuery: the device persona, as measured on a headed Chrome" {
 }
 
 test "MediaQuery: ratio compares as a fraction, not a division" {
-    const v = Viewport.default; // 1920x1080
-    try testing.expect(matches("(device-aspect-ratio: 16/9)", v));
-    try testing.expect(matches("(device-aspect-ratio: 1920/1080)", v));
+    const v = Viewport.default; // 1920x1080 page on a 1920x1200 display
+    try testing.expect(matches("(device-aspect-ratio: 8/5)", v));
+    try testing.expect(matches("(device-aspect-ratio: 1920/1200)", v));
     try testing.expect(matches("(aspect-ratio: 16/9)", v));
+    try testing.expect(matches("(aspect-ratio: 1920/1080)", v));
+    // The page's ratio and the display's are no longer the same ratio: the
+    // browser around the page takes 87 pixels of the display's height.
+    try testing.expect(!matches("(device-aspect-ratio: 16/9)", v));
     try testing.expect(!matches("(device-aspect-ratio: 4/3)", v));
     try testing.expect(matches("(min-aspect-ratio: 4/3)", v));
     try testing.expect(matches("(max-aspect-ratio: 2/1)", v));
@@ -1954,7 +1996,7 @@ test "MediaQuery: range syntax on the numeric descriptors" {
     // A ratio still compares as a fraction: 16/9 and 1920/1080 are one value.
     try testing.expect(matches("(aspect-ratio = 16/9)", v));
     try testing.expect(matches("(aspect-ratio = 1920/1080)", v));
-    try testing.expect(matches("(device-aspect-ratio = 16/9)", v));
+    try testing.expect(matches("(device-aspect-ratio = 8/5)", v));
     try testing.expect(matches("(aspect-ratio > 1.5)", v));
     try testing.expect(!matches("(aspect-ratio = 1.7)", v));
 }

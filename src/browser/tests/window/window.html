@@ -17,18 +17,39 @@
   // absent one is a ReferenceError that takes the whole caller down rather than
   // producing a suspicious value — which is how CreepJS's screen panel died.
   testing.expectEqual(1920, window.outerWidth);
-  testing.expectEqual(1080, window.outerHeight);
+  testing.expectEqual(1167, window.outerHeight);
 
-  // The viewport fills the screen, so the window has no chrome around it and
-  // sits at the origin.
-  testing.expectEqual(innerWidth, outerWidth);
-  testing.expectEqual(innerHeight, outerHeight);
+  // A window has a browser around the viewport -- a tab strip, an omnibox, a
+  // bookmarks bar -- and `outerHeight - innerHeight` is how tall all of it is.
+  // 87 CSS pixels, measured on Chrome 151: headed on macOS, and --headless=new
+  // at four different --window-size values, which all answered the same 87. The
+  // width of the browser is zero, so outerWidth and innerWidth agree.
+  // Answering 0 to the height says the viewport is the whole window, which no
+  // browser reports and Kasada reads nine times on x-hyatt.
+  testing.expectEqual(0, outerWidth - innerWidth);
+  testing.expectEqual(87, outerHeight - innerHeight);
+
+  // Where the window sits: flush left, just below the menu bar. That is where
+  // headed Chrome 151 was measured sitting on macOS (0, 33), and a window at
+  // the very origin cannot exist on a platform that has a menu bar.
   testing.expectEqual(0, window.screenX);
-  testing.expectEqual(0, window.screenY);
+  testing.expectEqual(33, window.screenY);
 
   // screenLeft/screenTop are the older aliases of screenX/screenY.
   testing.expectEqual(window.screenX, window.screenLeft);
   testing.expectEqual(window.screenY, window.screenTop);
+
+  // The window is maximised on the display it claims to be on, which is the
+  // arrangement headed Chrome was measured in: it starts at the usable area's
+  // origin and fills it exactly. Every one of these is a cross-check a bot
+  // check can make between two readings it takes anyway -- x-hyatt's reads
+  // availHeight and availWidth alongside the four window numbers.
+  testing.expectEqual(screen.availLeft, window.screenX);
+  testing.expectEqual(screen.availTop, window.screenY);
+  testing.expectEqual(screen.availWidth, window.outerWidth);
+  testing.expectEqual(screen.availHeight, window.outerHeight);
+  testing.expectEqual(screen.height, window.screenY + window.outerHeight);
+  testing.expectEqual(screen.width, window.screenX + window.outerWidth);
 </script>
 
 <script id=load>
@@ -234,9 +255,9 @@
 
 <script id=screen>
   testing.expectEqual(1920, screen.width);
-  testing.expectEqual(1080, screen.height);
+  testing.expectEqual(1200, screen.height);
   testing.expectEqual(1920, screen.availWidth);
-  testing.expectEqual(1040, screen.availHeight);
+  testing.expectEqual(1167, screen.availHeight);
   testing.expectEqual(24, screen.colorDepth);
   testing.expectEqual(24, screen.pixelDepth);
   testing.expectEqual(screen, window.screen);

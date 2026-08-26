@@ -18,6 +18,7 @@
 
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
+const Viewport = @import("../Viewport.zig");
 const EventTarget = @import("EventTarget.zig");
 const handler_property = @import("handler_property.zig");
 
@@ -56,12 +57,20 @@ pub fn getOrientation(self: *Screen, frame: *Frame) !*Orientation {
     return orientation;
 }
 
+// The display, which is the viewport plus everything that is not the viewport:
+// the browser above the page and the menu bar above that. See Viewport, which
+// derives the whole arrangement -- window box, position, usable area -- from
+// one number so the readings agree with each other.
 pub fn getWidth(_: *const Screen, frame: *Frame) u32 {
-    return frame._page.getViewport().width;
+    return frame._page.getViewport().screenWidth();
 }
 
 pub fn getHeight(_: *const Screen, frame: *Frame) u32 {
-    return frame._page.getViewport().height;
+    return frame._page.getViewport().screenHeight();
+}
+
+pub fn getAvailWidth(_: *const Screen, frame: *Frame) u32 {
+    return frame._page.getViewport().availWidth();
 }
 
 // The six below were data properties, which is a difference no value probe can
@@ -73,10 +82,12 @@ pub fn getHeight(_: *const Screen, frame: *Frame) u32 {
 // exactly that line here (measured -- see the trace in tools/fingerprint's
 // Turnstile section). Every value below is the one that was there.
 
-// The usable height is the viewport less the menu bar, the 40px availTop
-// reports. Kept a constant because that is what it was; only the kind changes.
-pub fn getAvailHeight(_: *const Screen) u32 {
-    return 1040;
+// The usable height is the display less the menu bar. The window is maximised
+// into this area, so `availHeight` is also `window.outerHeight` -- a bot check
+// that reads both (Kasada reads availHeight four times and outerHeight nine on
+// one x-hyatt load) gets one story.
+pub fn getAvailHeight(_: *const Screen, frame: *Frame) u32 {
+    return frame._page.getViewport().availHeight();
 }
 
 // 24-bit colour, which is what every desktop Chrome reports.
@@ -85,12 +96,12 @@ pub fn getColorDepth(_: *const Screen) u32 {
 }
 
 pub fn getAvailLeft(_: *const Screen) u32 {
-    return 0;
+    return Viewport.availLeft;
 }
 
 // The usable area starts below the menu bar.
 pub fn getAvailTop(_: *const Screen) u32 {
-    return 40;
+    return Viewport.availTop;
 }
 
 // One display. A second one would be extra entropy, not less.
@@ -109,7 +120,7 @@ pub const JsApi = struct {
 
     // Declaration order is Object.getOwnPropertyNames(Screen.prototype) order,
     // and that list is itself fingerprinted — this is Chrome 150's own order.
-    pub const availWidth = bridge.accessor(Screen.getWidth, null, .{});
+    pub const availWidth = bridge.accessor(Screen.getAvailWidth, null, .{});
     pub const availHeight = bridge.accessor(Screen.getAvailHeight, null, .{});
     pub const width = bridge.accessor(Screen.getWidth, null, .{});
     pub const height = bridge.accessor(Screen.getHeight, null, .{});
