@@ -16949,3 +16949,60 @@ Which leaves a real trade-off rather than a defect, and it is the whole of
 Do not decide this from the desk. It wants a station measurement, and x-hyatt
 was refusing every client by the time this was found — so it waits for a window
 where a headed Chrome control passes.
+
+### The 665ms is a per-browser cost, not a per-document one
+
+The paragraph above says not to decide the voice race from the desk. It was
+half right: the *station* half still wants a window where a headed Chrome
+control passes, but the question it framed — shorten the latency, or leave it —
+turns out to be the wrong pair, and one local measurement settles which end
+moves. `voice-warmup-timeline.mjs` drives one browser through several
+navigations of a loopback page that touches nothing before its `--delay`
+elapses, and records when `getVoices()` stops answering empty.
+
+Headed Chrome 151, `--delay 200` so the first ask is separable from document
+start, three navigations in one process (`b56-voice-chrome-d200.json`):
+
+| navigation | first ask | length | list complete | after the ask |
+|---|---|---|---|---|
+| 1st (cold process) | 200ms | 0 | 902ms | **702ms** |
+| 2nd | 201ms | 0 | 226ms | **26ms** |
+| 3rd | 200ms | 0 | 227ms | **27ms** |
+
+Two `--delay 0` runs of three navigations each agree: 727/751ms on the first
+document, 26/27ms on every one after (`b56-voice-chrome-d0-run{1,2}.json`).
+
+So Chrome pays the ~700ms **once per browser process**, and every later
+document gets the list one task tick after it asks. Two things do *not* change
+with warmth:
+
+* The first synchronous call is always empty. At `--delay 3000`, on the second
+  navigation of a warm process, the ask at 3002ms still answers 0 and fills at
+  3028ms (`b56-voice-chrome-d3000.json`). The renderer never has the list ready
+  before the page asks for it, however old the document.
+* The ask is what starts the load. Same file, first navigation: a cold process
+  left alone for three seconds has loaded nothing, and the ask at 3001ms waits
+  the full 700ms. Nothing warms this at browser start.
+
+This engine pays it every time. Same page, `--delay 200`, three navigations
+(`b56-voice-lp-d200-baseline.json`): complete at 875 / 870 / 865ms — 665ms
+after the ask, every document, forever.
+
+That kills both options P1 was written around. Shortening the latency is wrong
+for the first document, which is exactly where Chrome is slowest. Moving the
+start to document creation is wrong too, and the `--delay 3000` cold arm is why:
+Chrome demonstrably has not started when the document is created, or at 3000ms
+either. The divergence is neither the length of the wait nor when its clock
+starts — it is that ours restarts for every document and Chrome's does not.
+
+Which makes the fix the third option: keep the measured 665ms for the first ask
+in the process, and hand every document after it the list on the next task tick
+(26ms, measured). That is Chrome, and it also happens to be what a sweep sees —
+`antibot-sweep.mjs` drives all 29 stations through one browser, so on any run
+where x-hyatt is not the first station, a real Chrome has been warm since
+whichever earlier station asked first, and hands Kasada the list ~26ms in while
+this engine hands it an empty array for the first 665ms of the page.
+
+It does not resolve the CreepJS trade-off by fiat, it relocates it: the row
+depends on whether anything warmed the browser earlier, in this engine exactly
+as much as in Chrome. P2 is where that gets checked rather than assumed.
