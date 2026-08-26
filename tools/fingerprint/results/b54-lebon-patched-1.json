@@ -1,0 +1,94 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T19:03:13.235Z",
+  "egress": {
+    "fl": "1231f80",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787770993.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1433+902348e84",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:15603/"
+  },
+  "stations": [
+    {
+      "name": "dd-leboncoin",
+      "vendor": "datadome",
+      "url": "https://www.leboncoin.fr/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.leboncoin.fr/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAZUzAS3nWw-kAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=V0r9waO9fdCaHZFAMSl_JSNKKajaLwSJ~1nnzAiyZBomUUSs0WBbM4YvYkstJsj8iH3xN8pKQciBoEEV8Nbu3Z_5cMD38Pd46MCfBhLRtpx1jtL5JRS6YML8ojao34wf&t=fe&referer=https%3A%2F%2Fwww.leboncoin.fr%2F&s=2089&e=a500029a769ab48f02a00db36e33b34ad09901251c023955aef8cc934dc0db3e44c40a20160ce95ee64fd5873c6c9237&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "leboncoin.fr",
+      "landedOn": "https://www.leboncoin.fr/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25571
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787770993424 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:15603"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

@@ -16219,3 +16219,47 @@ and it needs no anti-bot station to verify.
 protocol-layer comparison turned up: places where the two arms differ and this
 engine is the one that is wrong. A station that stays 429 after any one of them
 is fixed is the expected outcome, not a reason to call the fix worthless.
+
+## One cookie field per cookie (B53, 2026-08-26)
+
+The h2 half of the finding above, fixed. `Curl_http_req_to_h2()` in
+`deps/curl-patched/lib/http.c` now splits the `Cookie` header into one `cookie`
+field per cookie, which is what RFC 9113 §8.2.3 allows the split for and what
+Chrome always does. It sits there rather than in `HttpClient.zig` because the
+split is legal over h2 and is not over HTTP/1.1, where RFC 6265 §5.4 allows
+exactly one Cookie header and Chrome sends exactly one — and one header list is
+reused across an h1 and an h2 attempt, with the negotiated version unknown while
+it is built. Same division as the `priority` hint.
+
+Before, `h2-cookie-order.mjs --diff` reported on all six shapes:
+
+```
+cookie fields carrying 5/5 cookies: left 5, right 1
+```
+
+After, the header **name sequence matches Chrome on all six**
+(`results/b54-h2c-lp-after.json`). What the diff still reports is the order of
+the cookies inside the value, which is a separate defect with its own plan.
+
+`zig build` green, `zig fmt --check` 0, 1509/1509.
+
+**Regression sweep, control against treatment, back to back on one address**
+(`results/b54-sweep-{control,patched}.json`): **19 of 29 both arms.** Three
+stations moved and none of them is this change:
+
+| station | control (main, 1431) | patched (1433) |
+|---|---|---|
+| `dd-leboncoin` | pass | datadome-challenge |
+| `ks-canadagoose` | error (nav timeout) | pass |
+| `x-hyatt` | error (nav timeout) | refused-429 |
+
+`dd-leboncoin` is the only one that looks like a loss, and it is not: three
+alternating rounds on that station alone
+(`results/b54-lebon-{patched,control}-{1,2,3}.json`) put **both** arms at
+`datadome-challenge` 3/3, the unmodified binary included. The station shut
+between the two sweeps. The other two moved out of a navigation timeout, which
+is not a verdict.
+
+**This is a fidelity fix and not a key.** No station opened, and none was
+expected to — nothing here is evidence that any guard reads the cookie field
+count.
