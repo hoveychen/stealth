@@ -13879,3 +13879,28 @@ deep document, which is a wrong answer rather than a slow one.
 `direct` readings that the inline control fails too (`border-radius`,
 `transform`, `white-space` — value bugs, not cascade ones), five `relative` ones,
 and `font:`, which still does not expand on either path.
+
+### ak-macys passes in windows, and the window is not the binary (2026-08-26)
+
+The sweep that carried the inheritance change read `ak-macys` as **pass** —
+10 137 nodes and the real title — for the first time in many sessions of
+`empty-document`. It is not the change, and the way that was established is
+worth keeping, because the station is a trap for exactly this kind of reading.
+
+1. Seven `--fresh` runs on the patched binary: three passes, four
+   `empty-document`. So the station is non-deterministic, which by itself
+   already kills a one-sample A/B.
+2. Four interleaved pairs against the previous main (the cascade work, no
+   inheritance): the **control** passed twice. So it is not the inheritance
+   change.
+3. Five interleaved pairs against `99786a11b`, this session's starting commit,
+   rebuilt ReleaseFast — neither the cross-origin nor the computed-style work in
+   it. **Ten runs, ten `empty-document`, both arms.**
+
+So the station let both binaries through for something under an hour and then
+let neither through. Whatever decides it lives with the address, not with the
+engine. **Any A/B run inside a good window reads as a win for whichever arm you
+happened to run there**, and the only reading that means anything is interleaved
+pairs repeated across windows. The DataDome stations have behaved the same way
+all session (dd-datadome flipped challenge → pass → challenge → pass across four
+sweeps of three different binaries).
