@@ -13611,3 +13611,153 @@ gaps: `navigator.modelContext` (main made the WebMCP surface opt-in behind
 Not measured: the worker realm. B46 read `WorkerNavigator.prototype`'s
 `constructor` between `connection` and `hid`, and this session's table is the
 window realm only, so a worker-side pass over the same probe is still owed.
+
+## The members, not just their order (B48, 2026-08-25)
+
+B47 left 923 shared prototypes with 828 byte-identical and the whole remaining
+difference in one bucket: 100 interfaces whose *member set* disagreed, 450 names
+Chrome has and this engine did not, 23 the other way. Same reading as before
+(`probes/expr-constructor-slot.js` through `run-expr.mjs`, both arms on
+`--url https://example.com/`), re-run at the start of this session to confirm
+the number rather than inherit it.
+
+**Both arms after: 871 of 923 byte-identical, and one name left on the extra
+side.** 52 interfaces still differ, all of them missing members; the extras went
+from 23 to 1.
+
+### The extra side was one mistake, twelve times
+
+Every extra but two was a member redeclared on a subclass whose prototype
+already inherits it. The engine had the behaviour right and the *shape* wrong,
+and the shape is what a page reads.
+
+| name | belongs to | was also on |
+|---|---|---|
+| `nonce` | HTMLElement (HTMLOrSVGElement) | Style, Script, Link |
+| `onselectionchange` | HTMLElement (GlobalEventHandlers) | Input, TextArea |
+| `length` | HTMLCollection, NodeList | HTMLFormControlsCollection, RadioNodeList |
+| `item` | NodeList | RadioNodeList |
+| `getElementById` | DocumentFragment | ShadowRoot |
+| `innerHTML` | Element, ShadowRoot | DocumentFragment, HTMLTemplateElement |
+
+The last two are worth separating, because fixing them moves code rather than
+deleting it. A shadow root keeps an id map and the tree-walking
+`DocumentFragment.getElementById` does not, so the fragment's binding now
+dispatches into that map when its fragment is a shadow root -- the fast path
+survives, the name does not. `innerHTML` is the mirror image: Chrome has it on
+Element and on ShadowRoot and *nowhere else*, so a template's redirect into its
+content fragment moved into `Element.getInnerHTML`/`setInnerHTML`, and
+DocumentFragment lost the pair outright (`'innerHTML' in
+document.createDocumentFragment()` is false in Chrome, measured).
+
+The other extras are names Chrome does not carry anywhere:
+`Worker.onmessageerror`, `DOMException.toString`, `DOMStringList`'s
+keys/values/entries, `VTTCue.region`, `Notification.image`,
+`HTMLAreaElement.type` and `.hreflang`, `HTMLButtonElement.required`.
+`DOMException.toString` is the interesting one -- the binding hand-rolled the
+wording that `Error.prototype.toString` already produces, and this engine's
+DOMException.prototype already has Error.prototype behind it (measured on both
+arms), so deleting the binding changed no output.
+
+`navigator.modelContext` is the one name left on the extra side, and it is this
+branch being behind main rather than a gap: main put the WebMCP surface behind
+`--webmcp`.
+
+### navigationId was on the wrong interface
+
+`PerformanceResourceTiming.navigationId` should have been
+`PerformanceEntry.navigationId`. Chrome tags *every* entry of a navigation with
+the same number, so a mark filed straight after a resource entry reads the same
+value (measured: 4770 for both). It is also the fifth key of every entry's
+`toJSON`, in front of whatever the subclass adds -- which PerformanceEntry's own
+and PaintTiming's were both missing, and PerformanceResourceTiming's already
+had.
+
+### What was added, and what it answers
+
+23 names in the second pass, plus ShadowRoot's ten, HTMLInputElement's nine,
+HTMLTextAreaElement's four, HTMLScriptElement's five, HTMLLinkElement's six,
+Notification's eight and HTMLTemplateElement's two in the first. Most answer a
+constant, because the machinery behind them does not exist here *and Chrome
+answers the same constant anyway* on a fresh object -- `animation` is null on a
+synthesised AnimationEvent, `getTargetRanges()` is `[]` on a synthesised
+InputEvent, `isVisible` is false, `desiredSize` is 0, `databases()` resolves
+empty, `persisted()`/`persist()` resolve false. Being absent was the readable
+difference; the value never was.
+
+Three measurements changed what the code does rather than just adding a name:
+
+- **`blocking` is a `DOMTokenList`, not a string.** `script.blocking.constructor.name`
+  is DOMTokenList on `<style>`, `<link>` and `<script>` alike, and assigning a
+  string writes the attribute verbatim. `reflect.tokenList` is the helper.
+- **`commandForElement` / `interestForElement` do not write an id.** Assigning
+  an element leaves `getAttribute('commandfor')` as `""` and still reads the
+  element back, so the explicit reference lives in a frame-side map
+  (`Element.ElementReferenceAttribute`) the way a token list does.
+- **`setRangeText`'s "preserve" mode is not symmetric.** With the selection at
+  [1, 3) on "abcdef": replacing [1, 3) with "XY" leaves [1, 3), with "Z" leaves
+  [1, 2), replacing [4, 5) leaves it untouched, and replacing [0, 1) with "QQ"
+  gives [0, 4). The selection's *end* moves when it sits exactly on the replaced
+  range's end; its *start* collapses to the range's start there. Four
+  measurements, one shared algorithm for `<input>` and `<textarea>`.
+
+`HTMLInputElement.height`/`width` answer 0 unless `type=image` whatever the
+attributes say, `valueAsNumber` is NaN off the numeric types, and `showPicker()`
+always refuses with the user-gesture wording -- all measured, none guessed.
+
+### Three interfaces the tests said were impossible
+
+`css_events.html` carried a comment saying V8 can only put `constructor` last,
+so `pseudoTarget` could not sit behind it. B47 disproved that for 30 interfaces
+and this pass applies it to three more: UIEvent, AnimationEvent and
+TransitionEvent all carry `pseudoTarget` in the per-context batch, behind
+`constructor`. The comment is gone; the assertion now pins Chrome's real order.
+
+### What is left: 52 interfaces, 366 members
+
+Nothing is order-only any more -- every interface whose member set matches
+Chrome's also matches its order and its `constructor` slot. The rest is
+members, and it sorts into four piles.
+
+**Needs an interface this engine does not have (4).** `EventTarget.when` returns
+an Observable, and Observable/Subscriber are both on the chrome-only list.
+`Blob.textStream` and `Response.textStream` (and `Request.textStream`) return a
+ReadableStream of decoded text. `Date.toTemporalInstant` is V8's, not a binding.
+
+**Two names each (11):** CustomElementRegistry (getName, initialize),
+DOMMatrixReadOnly (toJSON, transformPoint -- `toJSON` is the a–f, m11–m44,
+is2D, isIdentity set, whose exact key order is not measured yet),
+DataTransferItem, HTMLDialogElement, HTMLProgressElement, HTMLTrackElement,
+IDBVersionChangeEvent, MessageEvent, OffscreenCanvas, SVGGeometryElement,
+SVGMaskElement, WebTransportDatagramDuplexStream.
+
+**Three to six each (17):** DocumentType's after/before/replaceWith (ChildNode,
+which Element and CharacterData already have), NamedNodeMap's three NS methods,
+ScreenOrientation, VisualViewport, IDBDatabase's three handlers, HTMLFormElement
+(rel, relList, reset), HTMLMarqueeElement, HTMLAnchorElement, PointerEvent,
+MouseEvent (movementX/Y, fromElement/toElement), Navigation, SVGUseElement,
+SVGViewElement, WheelEvent, FontFace, HTMLSelectElement, SVGTextContentElement,
+Selection, HTMLMeterElement, IntersectionObserver.
+
+**The expensive end (20):** `SVGElement` alone is 110 event handlers this side
+has none of -- HTMLElement's list, which HTMLElement already carries, so it is a
+question of pointing the same generator at the SVG side. Then SVGSVGElement
+(20), HTMLFrameSetElement (18, the windowed handler set), HTMLIFrameElement
+(11), Request (11), HTMLMediaElement / HTMLObjectElement / HTMLOutputElement /
+HTMLTableElement (10 each), HTMLFieldSetElement (9), and four eights.
+
+A useful pattern in that list: `form`, `willValidate`, `validity`,
+`validationMessage`, `checkValidity`, `reportValidity`, `setCustomValidity` show
+up together on HTMLFieldSetElement, HTMLObjectElement and HTMLOutputElement.
+That is the form-associated set Button/Input/Select/TextArea already have; three
+more elements need the same seven.
+
+**Still not measured: the worker realm.** B46 read `WorkerNavigator.prototype`'s
+`constructor` between `connection` and `hid`; every table since has been the
+window realm only.
+
+**Also unmeasured, found while doing this:** `autocomplete` filters its value in
+Chrome (`bogus` reads back as `""`, `shipping` too, `section-x cc-name` reads
+back verbatim) and both HTMLInputElement's and HTMLTextAreaElement's reflect it
+as a plain string here. That is a value difference, not a shape one, so it is
+outside this pass.
