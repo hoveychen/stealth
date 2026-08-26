@@ -80,6 +80,19 @@ pub fn getNamespaceURI(_: *const Attribute) ?[]const u8 {
     return null;
 }
 
+/// The namespace prefix, which an HTML attribute never has -- Chrome answers
+/// null for the `id` attribute of a <div> (measured). Nothing here parses a
+/// prefixed attribute name into two halves, so this is null throughout.
+pub fn getPrefix(_: *const Attribute) ?[]const u8 {
+    return null;
+}
+
+/// A legacy flag that has been true for every attribute since the DOM stopped
+/// tracking defaulted ones. Chrome answers true and has no setter (measured).
+pub fn getSpecified(_: *const Attribute) bool {
+    return true;
+}
+
 pub fn getOwnerElement(self: *const Attribute) ?*Element {
     return self._element;
 }
@@ -105,11 +118,14 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const name = bridge.accessor(Attribute.getName, null, .{});
-    pub const localName = bridge.accessor(Attribute.getName, null, .{});
-    pub const value = bridge.accessor(Attribute.getValue, Attribute.setValue, .{ .ce_reactions = true });
+    // Chrome's order.
     pub const namespaceURI = bridge.accessor(Attribute.getNamespaceURI, null, .{});
+    pub const prefix = bridge.accessor(Attribute.getPrefix, null, .{});
+    pub const localName = bridge.accessor(Attribute.getName, null, .{});
+    pub const name = bridge.accessor(Attribute.getName, null, .{});
+    pub const value = bridge.accessor(Attribute.getValue, Attribute.setValue, .{ .ce_reactions = true });
     pub const ownerElement = bridge.accessor(Attribute.getOwnerElement, null, .{});
+    pub const specified = bridge.accessor(Attribute.getSpecified, null, .{});
 };
 
 // This is what an Element references. It isn't exposed to JavaScript. In

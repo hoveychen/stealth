@@ -33,17 +33,23 @@ function errorName(fn) {
 <script id="css_event_shapes">
 {
     // Measured: Blink puts pseudoTarget AFTER constructor on both transition
-    // and animation events. V8 can only put constructor last, so the order
-    // here is Chrome's minus that one known limitation.
+    // and animation events, because it is runtime-flag gated and lands in the
+    // batch Chrome installs per context. Meta.constructor_after reproduces
+    // that -- the slot is not the limitation this comment used to claim.
     testing.expectEqual(1, TransitionEvent.length);
     testing.expectEqual('Event', chainOf(TransitionEvent));
-    testing.expectEqual('propertyName elapsedTime pseudoElement pseudoTarget constructor',
+    testing.expectEqual('propertyName elapsedTime pseudoElement animation constructor pseudoTarget',
         protoKeys(TransitionEvent));
 
     testing.expectEqual(1, AnimationEvent.length);
     testing.expectEqual('Event', chainOf(AnimationEvent));
-    testing.expectEqual('animationName elapsedTime pseudoElement pseudoTarget constructor',
+    testing.expectEqual('animationName elapsedTime pseudoElement animation constructor pseudoTarget',
         protoKeys(AnimationEvent));
+
+    // Always null: nothing here runs an animation timeline, and Chrome answers
+    // null for a synthesised event too (measured).
+    testing.expectEqual(null, new AnimationEvent('x').animation);
+    testing.expectEqual(null, new TransitionEvent('x').animation);
 
     testing.expectEqual(1, MediaQueryListEvent.length);
     testing.expectEqual('Event', chainOf(MediaQueryListEvent));

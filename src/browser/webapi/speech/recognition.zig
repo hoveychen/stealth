@@ -527,6 +527,7 @@ pub const SpeechRecognition = struct {
     _interim_results: bool = false,
     _max_alternatives: u32 = 1,
     _process_locally: bool = false,
+    _unspoken_punctuation: bool = false,
     _phrases: ?js.Value.Global = null,
 
     // A run counter rather than a bool: `stop()` has to be able to cancel a
@@ -628,6 +629,18 @@ pub const SpeechRecognition = struct {
     }
 
     pub fn setQuality(_: *SpeechRecognition, _: ?js.Value) void {}
+
+    /// Whether spoken punctuation is transcribed as marks rather than words.
+    /// Reads back what a page sets, like the rest of the recogniser's options;
+    /// nothing here transcribes anything. False by default, as in Chrome
+    /// (measured).
+    pub fn getUnspokenPunctuation(self: *const SpeechRecognition) bool {
+        return self._unspoken_punctuation;
+    }
+
+    pub fn setUnspokenPunctuation(self: *SpeechRecognition, value: bool) void {
+        self._unspoken_punctuation = value;
+    }
 
     pub fn getProcessLocally(self: *const SpeechRecognition) bool {
         return self._process_locally;
@@ -800,6 +813,7 @@ pub const SpeechRecognition = struct {
         pub const abort = bridge.function(SpeechRecognition.abort, .{});
         pub const start = bridge.function(SpeechRecognition.start, .{});
         pub const stop = bridge.function(SpeechRecognition.stop, .{});
+        pub const unspokenPunctuation = bridge.accessor(SpeechRecognition.getUnspokenPunctuation, SpeechRecognition.setUnspokenPunctuation, .{});
         pub const quality = bridge.accessor(SpeechRecognition.getQuality, SpeechRecognition.setQuality, .{});
         pub const processLocally = bridge.accessor(SpeechRecognition.getProcessLocally, SpeechRecognition.setProcessLocally, .{});
         pub const phrases = bridge.accessor(SpeechRecognition.getPhrases, SpeechRecognition.setPhrases, .{});

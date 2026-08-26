@@ -445,13 +445,20 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's order.
+    pub const source = bridge.accessor(IDBCursor.getSource, null, .{});
+    pub const direction = bridge.accessor(IDBCursor.getDirection, null, .{});
     pub const key = bridge.accessor(IDBCursor.getKey, null, .{ .null_as_undefined = true });
     pub const primaryKey = bridge.accessor(IDBCursor.getPrimaryKey, null, .{ .null_as_undefined = true });
-    pub const direction = bridge.accessor(IDBCursor.getDirection, null, .{});
-    pub const source = bridge.accessor(IDBCursor.getSource, null, .{});
+    /// The request the cursor came out of, which it already holds -- the
+    /// binding was the only thing missing.
+    pub const request = bridge.accessor(_request_, null, .{});
+    fn _request_(self: *IDBCursor) *IDBRequest {
+        return self._request;
+    }
+    pub const advance = bridge.function(IDBCursor.advance, .{});
     pub const @"continue" = bridge.function(IDBCursor.@"continue", .{});
     pub const continuePrimaryKey = bridge.function(IDBCursor.continuePrimaryKey, .{});
-    pub const advance = bridge.function(IDBCursor.advance, .{});
-    pub const update = bridge.function(IDBCursor.update, .{});
     pub const delete = bridge.function(IDBCursor.delete, .{});
+    pub const update = bridge.function(IDBCursor.update, .{});
 };

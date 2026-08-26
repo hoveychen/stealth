@@ -63,13 +63,22 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(Embed);
-    pub const @"align" = reflect.string("align");
-    pub const name = reflect.string("name");
 
-    pub const height = reflect.string("height");
+    // Chrome's order.
     pub const src = bridge.accessor(Embed.getSrc, Embed.setSrc, .{ .ce_reactions = true });
     pub const @"type" = reflect.string("type");
     pub const width = reflect.string("width");
+    pub const height = reflect.string("height");
+    pub const @"align" = reflect.string("align");
+    pub const name = reflect.string("name");
+
+    /// Null: an <embed> only has a document to hand back when it loaded an SVG
+    /// resource, and nothing here loads one. Chrome answers null for an embed
+    /// with no source too (measured).
+    pub const getSVGDocument = bridge.function(_getSVGDocument, .{});
+    fn _getSVGDocument(_: *Embed) ?*@import("../../Document.zig") {
+        return null;
+    }
 };
 
 const testing = @import("../../../../testing.zig");

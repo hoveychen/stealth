@@ -31,6 +31,27 @@ pub fn insertCell(self: *TableRow, index_: ?i32, frame: *Frame) !*Node {
     return table_insert.insertAt(self.asNode(), .cell, index_ orelse -1, frame);
 }
 
+/// Removes the cell at `index`, or the last one for -1. Out of range is an
+/// IndexSizeError, except that -1 on a cell-less row is a no-op -- the same
+/// shape HTMLTableElement.deleteRow already has.
+pub fn deleteCell(self: *TableRow, index: i32, frame: *Frame) !void {
+    if (index < -1) {
+        return error.IndexSizeError;
+    }
+    var cells = self.getCells(frame);
+    const len: i32 = @intCast(cells.length(frame));
+    const at = if (index == -1) len - 1 else index;
+    if (at < 0 or at >= len) {
+        if (index == -1) {
+            return;
+        }
+        return error.IndexSizeError;
+    }
+    const cell = cells.getAtIndex(@intCast(at), frame) orelse return error.IndexSizeError;
+    const node = cell.asNode();
+    _ = try node.parentNode().?.removeChild(node, frame);
+}
+
 // Position in the *table's* rows, which is the spec-ordered collection, not
 // the document order -- a tfoot row authored before the tbody still indexes
 // after it. -1 when the row has no table.
@@ -98,14 +119,16 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(TableRow);
-    pub const vAlign = reflect.string("valign");
-    pub const chOff = reflect.string("charoff");
-    pub const ch = reflect.string("char");
-    pub const bgColor = reflect.stringNullToEmpty("bgcolor");
-    pub const @"align" = reflect.string("align");
 
-    pub const cells = bridge.accessor(TableRow.getCells, null, .{});
+    // Chrome's order.
     pub const rowIndex = bridge.accessor(TableRow.getRowIndex, null, .{});
     pub const sectionRowIndex = bridge.accessor(TableRow.getSectionRowIndex, null, .{});
+    pub const cells = bridge.accessor(TableRow.getCells, null, .{});
+    pub const @"align" = reflect.string("align");
+    pub const ch = reflect.string("char");
+    pub const chOff = reflect.string("charoff");
+    pub const vAlign = reflect.string("valign");
+    pub const bgColor = reflect.stringNullToEmpty("bgcolor");
+    pub const deleteCell = bridge.function(TableRow.deleteCell, .{ .ce_reactions = true });
     pub const insertCell = bridge.function(TableRow.insertCell, .{ .ce_reactions = true });
 };

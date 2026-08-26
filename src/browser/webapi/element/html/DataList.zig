@@ -4,6 +4,8 @@ const js = @import("../../../js/js.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
+const collections = @import("../../collections.zig");
+const Frame = @import("../../../Frame.zig");
 
 const DataList = @This();
 
@@ -27,4 +29,11 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
+
+    /// The only member of its own Chrome has here: a live HTMLCollection of the
+    /// datalist's <option> descendants (measured, length 2 for two options).
+    pub const options = bridge.accessor(_options, null, .{});
+    fn _options(self: *DataList, frame: *Frame) !collections.NodeLive(.tag) {
+        return collections.NodeLive(.tag).init(self.asNode(), .option, frame);
+    }
 };

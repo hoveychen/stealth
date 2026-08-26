@@ -34,21 +34,48 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(TableCell);
-    pub const scope = reflect.enumerated("scope", &.{ "row", "col", "rowgroup", "colgroup" }, .{});
-    pub const noWrap = reflect.boolean("nowrap");
-    pub const width = reflect.string("width");
-    pub const vAlign = reflect.string("valign");
-    pub const height = reflect.string("height");
-    pub const headers = reflect.string("headers");
-    pub const chOff = reflect.string("charoff");
-    pub const ch = reflect.string("char");
-    pub const bgColor = reflect.stringNullToEmpty("bgcolor");
-    pub const axis = reflect.string("axis");
-    pub const @"align" = reflect.string("align");
-    pub const abbr = reflect.string("abbr");
 
+    // Chrome's order.
     pub const colSpan = reflect.unsignedLong("colspan", .{ .default = 1, .clamp = .{ .min = 1, .max = 1000 } });
     pub const rowSpan = reflect.unsignedLong("rowspan", .{ .default = 1, .clamp = .{ .min = 0, .max = 65534 } });
+    pub const headers = reflect.string("headers");
+
+    /// Position among the cells of the cell's own row, -1 for a cell with no
+    /// row (measured: the second <td> of a row answers 1, a detached one -1).
+    pub const cellIndex = bridge.accessor(_cellIndex, null, .{});
+    fn _cellIndex(self: *TableCell) i32 {
+        const node = self.asNode();
+        const parent = node._parent orelse return -1;
+        const element = parent.is(Element) orelse return -1;
+        if (element.is(HtmlElement.TableRow) == null) {
+            return -1;
+        }
+        var index: i32 = 0;
+        var child_it = parent.childrenIterator();
+        while (child_it.next()) |child| {
+            const child_element = child.is(Element) orelse continue;
+            if (child_element.is(TableCell) == null) {
+                continue;
+            }
+            if (child == node) {
+                return index;
+            }
+            index += 1;
+        }
+        return -1;
+    }
+
+    pub const @"align" = reflect.string("align");
+    pub const axis = reflect.string("axis");
+    pub const height = reflect.string("height");
+    pub const width = reflect.string("width");
+    pub const ch = reflect.string("char");
+    pub const chOff = reflect.string("charoff");
+    pub const noWrap = reflect.boolean("nowrap");
+    pub const vAlign = reflect.string("valign");
+    pub const bgColor = reflect.stringNullToEmpty("bgcolor");
+    pub const abbr = reflect.string("abbr");
+    pub const scope = reflect.enumerated("scope", &.{ "row", "col", "rowgroup", "colgroup" }, .{});
 };
 
 const testing = @import("../../../../testing.zig");

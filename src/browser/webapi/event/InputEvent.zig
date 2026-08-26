@@ -141,8 +141,18 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(InputEvent.init, .{});
+
+    // Chrome's order.
     pub const data = bridge.accessor(InputEvent.getData, null, .{});
-    pub const dataTransfer = bridge.accessor(InputEvent.getDataTransfer, null, .{});
-    pub const inputType = bridge.accessor(InputEvent.getInputType, null, .{});
     pub const isComposing = bridge.accessor(InputEvent.getIsComposing, null, .{});
+    pub const inputType = bridge.accessor(InputEvent.getInputType, null, .{});
+    pub const dataTransfer = bridge.accessor(InputEvent.getDataTransfer, null, .{});
+
+    /// The StaticRanges the edit would touch. Always empty: nothing here
+    /// produces a synthesised edit with ranges, and Chrome answers `[]` for a
+    /// `new InputEvent('x')` too (measured).
+    pub const getTargetRanges = bridge.function(_getTargetRanges, .{});
+    fn _getTargetRanges(_: *InputEvent) []const *@import("../StaticRange.zig") {
+        return &.{};
+    }
 };

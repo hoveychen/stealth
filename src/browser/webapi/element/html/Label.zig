@@ -7,6 +7,7 @@ const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
 const TreeWalker = @import("../../TreeWalker.zig");
+const Form = @import("Form.zig");
 
 const Label = @This();
 
@@ -136,6 +137,15 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(Label);
+
+    /// A label's form is its *control's* form, so a label with no control --
+    /// or one whose `for` names nothing -- answers null even inside a form
+    /// (measured).
+    pub const form = bridge.accessor(_form, null, .{});
+    fn _form(self: *Label, frame: *Frame) ?*Form {
+        const control_ = Label.getControl(self, frame) orelse return null;
+        return Form.ownerOf(control_, frame);
+    }
 
     pub const htmlFor = reflect.string("for");
     pub const control = bridge.accessor(Label.getControl, null, .{});

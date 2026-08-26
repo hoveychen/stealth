@@ -86,7 +86,8 @@
     ['grammars', 'lang', 'continuous', 'interimResults', 'maxAlternatives',
       'onaudiostart', 'onsoundstart', 'onspeechstart', 'onspeechend', 'onsoundend',
       'onaudioend', 'onresult', 'onnomatch', 'onerror', 'onstart', 'onend',
-      'abort', 'start', 'stop', 'quality', 'processLocally', 'phrases', 'constructor'],
+      'abort', 'start', 'stop', 'unspokenPunctuation', 'quality', 'processLocally',
+      'phrases', 'constructor'],
     Object.getOwnPropertyNames(SpeechRecognition.prototype),
   );
   testing.expectEqual(
@@ -122,7 +123,8 @@
     'accessor onspeechend[ec-],accessor onsoundend[ec-],accessor onaudioend[ec-],' +
     'accessor onresult[ec-],accessor onnomatch[ec-],accessor onerror[ec-],' +
     'accessor onstart[ec-],accessor onend[ec-],abort/0[ecw],start/0[ecw],stop/0[ecw],' +
-    'accessor quality[ec-],accessor processLocally[ec-],accessor phrases[ec-],' +
+    'accessor unspokenPunctuation[ec-],accessor quality[ec-],' +
+    'accessor processLocally[ec-],accessor phrases[ec-],' +
     '@@toStringTag=SpeechRecognition',
     shapeOf(SpeechRecognition.prototype),
   );
