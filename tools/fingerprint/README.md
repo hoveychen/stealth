@@ -6097,8 +6097,10 @@ This also corrects a reading in `probes/probe-internal-globals.js`: it recorded
 Chrome's cross-origin brand as `[object Window]`, measured **synchronously after
 appendChild**, when the frame is still on its same-origin `about:blank`. That is
 the same-origin answer. The correction is noted in that file's header, and the
-`to_string_tag = "Window"` it produced on `CrossOriginWindow` is a placeholder,
-not Chrome's value — `Window.zig` says so at the declaration.
+`to_string_tag = "Window"` it produced on `CrossOriginWindow` was a placeholder,
+not Chrome's value. It is gone: Chrome's answer is `[object Object]`, reached by
+an own `Symbol.toStringTag` holding `undefined` on a null-prototype object. See
+*The cross-origin WindowProxy has no prototype* at the end of this file.
 
 ### What is left, and why it is a short list
 
@@ -13629,3 +13631,108 @@ and 80, against Chrome's 892 and 643. Neither position was right, and the
 enumeration order of the global is a separate and much larger disagreement (1201
 names against 1237, in a different order throughout). Nothing here makes that
 worse or better.
+
+## The cross-origin WindowProxy has no prototype, and its refusals have sentences (2026-08-25)
+
+The section *The cross-origin proxy answered undefined where Chrome throws* above
+closed the throw. This closes the shape it left open, and corrects two readings
+it left behind.
+
+The fixture is `scratch/xo-server.mjs`: one process listening on 8872 and 8873,
+serving `scratch/frame-probe/`. `localhost` and `127.0.0.1` are different origins
+to a browser even when they are the same host, so `index.html` on the first port
+holds a real cross-origin frame on the second without touching the network. The
+reading is `scratch/expr-xo-proxy-detail.js` — 103 readings, name by name and
+symbol by symbol: does `[[Get]]` throw, does `[[HasProperty]]` throw, and exactly
+what does `[[GetOwnProperty]]` hand back.
+
+**Two arms, 103 readings: sixty-odd differences before, eighteen after.**
+
+### What Chrome's proxy is
+
+Not an instance of anything. `Object.getPrototypeOf(w)` is `null`, so
+`w instanceof Object` is false and there is no inherited `toString` to reach for.
+The brand is an own `Symbol.toStringTag` whose **value is undefined** — the symbol
+is there, the tag is not — which sends `Object.prototype.toString` past every
+branded answer and back to `[object Object]`.
+
+The own names are Blink's `CrossOriginProperties` table read top to bottom, nine
+attributes then four operations, with `CrossOriginOwnPropertyKeys` appending a
+tail:
+
+```
+window self location closed frames length top opener parent
+blur close focus postMessage then
+@@toStringTag @@hasInstance @@isConcatSpreadable
+```
+
+Every one is non-enumerable, so `Object.keys(w)` and a for-in are both empty
+while `getOwnPropertyNames` answers fourteen — a detector that walks one and then
+the other reads the *pair*, and neither alone. The nine attributes are accessor
+pairs (`location` is the only one with a setter, and the setter is real:
+assigning to another origin's `location` navigates that frame, which is how an
+opener sends its popup somewhere). The four operations are data properties with
+`writable: false`, not the writable ones an ordinary Web IDL operation gets,
+because they are minted by `CrossOriginGetOwnPropertyHelper` rather than by the
+member machinery. `then` and the two remaining symbols are data properties whose
+value is `undefined`; the own `then` is what makes `await w` resolve instead of
+reaching for a call on undefined.
+
+### The sentence, not just the throw
+
+A script that catches the `SecurityError` and reads `.message` gets one. Blink's
+names both the property and the origin that was refused, and the line it draws is
+**"is this a read of a named property"** — not "does it return a value":
+
+| operation | message |
+|---|---|
+| `w.document`, `getOwnPropertyDescriptor(w, 'document')` | `Failed to read a named property 'document' from 'Window': Blocked a frame with origin "<o>" from accessing a cross-origin frame.` |
+| `w.foo = 1` | `Failed to set a named property 'foo' on 'Window': Blocked …` |
+| `'document' in w`, `delete w.document` | bare `Blocked a frame with origin "<o>" …` |
+
+This engine answered DOMException's stock *"The operation is insecure"* for all
+of them — a sentence no browser prints here, naming neither. All four now match
+byte for byte, which needed the named handler's getter, setter, deleter, query
+and **descriptor** callbacks to be separate functions. Not a definer: V8 runs
+`Object.defineProperty` through the descriptor lookup first, so a definer
+callback never sees it. That was measured, not assumed — one was written, changed
+nothing, and is not in the tree.
+
+### The eighteen that are left, and the one mechanism behind five of them
+
+`JSON.stringify(w)` answers `"{}"` where Chrome throws — and that one has a
+consumer, not just a spec. Cloudflare's widget reads `window.parent` **44 times
+per interstitial** and gets `"{}"` every time.
+
+It is not reachable from an interceptor. V8's `JsonStringifier` looks `toJSON` up
+with `PROTOTYPE_CHAIN_SKIP_INTERCEPTOR`, deliberately, to avoid the garbage a
+full lookup would make. The evidence is decisive from the outside: `w.toJSON`,
+`Reflect.get(w, 'toJSON')`, `'toJSON' in w` and
+`getOwnPropertyDescriptor(w, 'toJSON')` all throw on this engine, and
+`JSON.stringify(w)` still answers `"{}"`. The stringifier never asks.
+
+Chrome's mechanism is not an interceptor at all. It is V8's **access check** —
+`ObjectTemplate::SetAccessCheckCallbackAndHandler` plus a failed-access-check
+callback — which runs *before* the own-property lookup and therefore catches
+every entry point at once. That is why Chrome's `'then' in w` throws even though
+`then` is in its own-key list, why `delete w.length` throws on an own property,
+and why `Object.setPrototypeOf(w, null)` throws. Five of the eighteen are that
+one mechanism. The zig-v8 fork's C binding exposes the handler-less
+`SetAccessCheckCallback`, which denies the safelist too and is therefore useless
+on its own; the way in is the same one `code_generation.cpp` already took for
+`SetModifyCodeGenerationFromStringsCallback` — a repo-owned shim that restates
+the declarations it needs. Plan: `cross-origin-access-check`.
+
+The other thirteen, for the record. Six are symbols: `w[Symbol.toPrimitive]` and
+`w[Symbol.iterator]` should throw and answer `undefined`, because the handler
+carries `kOnlyInterceptStrings` (hardcoded in `Snapshot.zig` for every
+`NamedIndexed`); a per-member opt would close it, and the three own symbols are
+shielded by `kNonMasking` either way. Four are the property name inside the
+sentence: `String(w)` gets Chrome's **nameless** *"Failed to read a named
+property from 'Window'"* while this engine names `'toString'`, since ToPrimitive
+walks @@toPrimitive → toString → valueOf and an interceptor knows which one it
+was asked for where an access check does not. Three of those four are the probe's
+own artefact — it calls `String(v)` on the returned proxy, so both arms throw and
+only the sentence differs. The last is `w.location`, which answers a
+`CrossOriginLocation` object in Chrome (own names `href replace then`) and
+`undefined` here; that object is still unbuilt.
