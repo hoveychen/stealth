@@ -16087,3 +16087,112 @@ out-of-process frame's traffic, with only `--same-process` changing the verdict.
 That is wrong. Back to back in one sitting, headed Chrome clears `x-hyatt` with
 plain `--trace` and is refused 429 with `--trace --attach-frames`. Kasada can
 see the attachment. Neither flag is free; the comment now says so.
+
+## A flex row divides its line (B79, 2026-08-26)
+
+Every flex item in this engine was shrink-to-fit. `<div style="display:flex">
+<div style="flex:1">x</div></div>` came out 8px where Chrome says 1904, and the
+ten-case probe `scratch/expr-flex-item-width.js` agreed with Chrome on 3 of 10.
+
+Two things were in the way, and the first is not a layout question at all.
+
+### `flex` reaches no longhand
+
+`flex` is `.unmodelled` in `chrome_shorthands.zig`. That is the generator being
+right: `flex: none` is `0 0 auto` while every other value fills the two numbers
+and then the basis, and no single distribution rule reproduces both. So the
+declaration is kept whole — and the three longhands had nothing declared at
+all, which is why `getComputedStyle(el).flexGrow` on `flex: 1` read the initial
+`0` here and reads `1` in Chrome. The layout asking "does this item grow" read
+that same `0`.
+
+Measured with `scratch/expr-flex-shorthand.js` against Chrome 151:
+
+| `flex:` | grow | shrink | basis |
+|---|---|---|---|
+| `1` | 1 | 1 | `0%` |
+| `0` | 0 | 1 | `0%` |
+| `none` | 0 | 0 | `auto` |
+| `auto`, `1 auto` | 1 | 1 | `auto` |
+| `2 3` | 2 | 3 | `0%` |
+| `200px`, `1 200px` | 1 | 1 | `200px` |
+| `2 3 40px` | 2 | 3 | `40px` |
+| `50%` | 1 | 1 | `50%` |
+| `content` | 1 | 1 | `content` |
+| anything that does not parse | 0 | 1 | `auto` |
+
+A computed read of one of the three now derives it from the shorthand. The
+declaration is still stored whole, so `style.length` answers 1 where Chrome
+says 3, and `el.style.flexGrow` still answers `""` — only the computed view
+changed. `flex-basis` also had to stop refusing a percentage: `50%` is what
+Chrome computes there, not a length it resolves.
+
+### The row
+
+Each item starts at its flex base size — `flex-basis` when that is a length or
+a percentage of the container, else whatever width the box would have had — and
+every item whose `flex-grow` is above zero takes a share of what is left, in
+proportion to its factor. Measured on the 1904px line:
+
+| row | Chrome |
+|---|---|
+| two `flex: 1` | 952, 952 |
+| `flex: 1` and `flex: 3` | 476, 1428 |
+| `flex: 1` beside `width:300px; flex:none` | 1604, 300 |
+| `flex: 1` beside a plain item | 1896, 8 |
+| `flex-grow:1;flex-basis:100px` beside `…:500px` | 752, 1152 |
+| `flex: 1; margin: 0 20px` in a 400px row | 360 |
+| `flex: 1; width: 60px` | 1904 |
+
+The last row is the one to keep: `flex: 1` sets the basis to `0%`, so the
+declared width never enters the sizing, and Chrome reports a **used** width —
+`getComputedStyle(el).width` is `1904px` there and not `60px`. A column
+container puts the width on the cross axis instead, where the item stretches
+unless `align-items` or its own `align-self` places it; that is the same shape
+`justify-items` has on a grid. An out-of-flow or `display: none` child is not
+an item and takes no share.
+
+### The correction: `flex-basis: 0` is not a dropped declaration
+
+The first reading of `flex-basis: 0` looked like an invalid value — Chrome laid
+the item out at its content width, which is what a dropped declaration would
+do, and CSS does require a unit on a `flex-basis` length. The control arm
+killed it: **both engines compute `0px` for it**, so the declaration parsed
+fine. What holds the item open is the automatic minimum size, and
+`scratch/expr-flex-min-content.js` pins down which one:
+
+| item | Chrome |
+|---|---|
+| twenty `x` (160px of one word), `flex-basis: 0` | 160 |
+| a sentence of four-letter words, `flex-basis: 0` | 32 |
+| the same sentence, plain | 363 |
+| twenty `x`, `flex-basis: 50px` | 160 |
+| the sentence, `flex-basis: 50px` | 50 |
+| two `flex: 1` items of that word in a **200px** row | 160, 160 |
+
+The floor is the longest **word**, not the whole run — min-content, not
+max-content — and the last row overflows the row rather than honouring the 100
+each item is entitled to. `min-width: 0` turns it off, which is the proof that
+this is `min-width: auto` and nothing else. So an item is never sized below
+`Element.minContentWidth`, and a declared `min-width` skips the floor entirely
+because this engine models no value for it.
+
+### Acceptance
+
+`scratch/expr-flex-item-width.js`, both arms on one URL: **3/10 → 10/10 rows
+identical**, every field of each row included. The 32-case
+`expr-flex-shorthand.js` goes to 31/32; the one that stays is `flex-shrink`,
+which is deliberately not modelled — two 300px items in a 200px row are 100
+each in Chrome and 300 here.
+
+`scratch/expr-layout-box-shapes.js` is unchanged at 14/25 shapes and 196/250
+field readings: every remaining difference there is a height, a padding or a
+border box part, and none of them is new. `zig build` green, `zig fmt --check`
+0, **1509/1509**, and `WebApi: Document` — the 40-calls-over-800-elements
+`elementFromPoint` budget — at 1191ms of its 1500.
+
+**Regression sweep** (`results/b79-layout.json`, ReleaseFast, one arm): **22 of
+29**, against 19–20 on the two previous sweeps. That is a no-regression
+reading and not evidence of a gain — `ks-canadagoose` went 429→200 in this one,
+and stations are known to open and shut in windows. Nothing here opened a door,
+and nothing here was expected to.
