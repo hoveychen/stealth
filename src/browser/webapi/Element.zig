@@ -1928,13 +1928,19 @@ pub fn minContentWidth(self: *Element, frame: *Frame) ?f64 {
 /// </span>` is 32 wide (its own text plus the child's), and a <span> holding a
 /// <div> is 1904 -- the block escapes the inline and fills the block container,
 /// which is what containingBlock walks up to find.
-fn inlineInk(self: *Element, frame: *Frame) struct { width: f64, height: f64 } {
+fn inlineInk(self: *Element, frame: *Frame, depth: u8) struct { width: f64, height: f64 } {
+    // The same backstop the containing-block walk has. A chain of inline
+    // elements is measured one level at a time, and this is what stops a page
+    // that nests them beyond anything real from walking forever.
+    if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return .{ .width = 0, .height = 0 };
+
     var width: f64 = 0;
     var height: f64 = 0;
     var text_width: f64 = 0;
     var has_text = false;
 
     const font = self.resolveFont(frame);
+    var visibility_cache: VisibilityCache = .{};
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(CData.Text)) |text| {
@@ -1945,8 +1951,16 @@ fn inlineInk(self: *Element, frame: *Frame) struct { width: f64, height: f64 } {
             continue;
         }
         if (node.is(Element)) |el| {
-            width += el.getOffsetWidth(frame);
-            height = @max(height, el.getOffsetHeight(frame));
+            if (!el.checkVisibilityCached(&visibility_cache, frame)) continue;
+            // ONE measurement per child, carrying the depth down. Asking
+            // getOffsetWidth and getOffsetHeight instead measured the child
+            // twice and started each measurement over at depth 0, so a chain
+            // of nested inlines cost 2^n: sixty <span>s around one character
+            // never came back, and a real page's did not either -- it took the
+            // engine out with a SIGBUS mid-sweep.
+            const box = el.dimensionsAt(frame, true, depth + 1, true);
+            width += box.width + box.padding_x + box.border_x;
+            height = @max(height, box.height + box.padding_y + box.border_y);
         }
     }
 
@@ -2109,7 +2123,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
         dims.padding_y = edges.padding_y;
         dims.border_x = edges.border_x;
         dims.border_y = edges.border_y;
-        const ink = self.inlineInk(frame);
+        const ink = self.inlineInk(frame, depth);
         dims.width = ink.width;
         dims.height = ink.height;
         dims.explicit_width = true;
