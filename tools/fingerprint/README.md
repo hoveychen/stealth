@@ -13741,3 +13741,79 @@ own artefact — it calls `String(v)` on the returned proxy, so both arms throw 
 only the sentence differs. The last is `w.location`, which answers a
 `CrossOriginLocation` object in Chrome (own names `href replace then`) and
 `undefined` here; that object is still unbuilt.
+
+## A computed style now answers what the stylesheet said (2026-08-26)
+
+`getComputedStyle` resolved exactly three things out of the author cascade:
+`display`, `visibility`, and custom properties. Everything else fell through to
+the element's inline `style=` attribute and then to the initial value, so a rule
+saying `color:rgb(1,2,3)` read back `rgb(0, 0, 0)`. `Element.zig` said so at the
+one place it mattered — *"the computed cascade resolves stylesheet rules for
+`display:none` and `visibility` alone"* — so this was scope, not a regression.
+Kasada's page reads `getComputedStyle` 126 times on x-hyatt
+(`results/prop-reads-hyatt-args.json`; that count is off the `prop_read` log,
+which records the call and not which property was then taken off the result).
+
+### Sizing it before doing it
+
+Two probes, four axes, because each axis is a different amount of work:
+`scratch/expr-cascade-scope.js` declares each property in an author rule, and
+`scratch/expr-cascade-inline-control.js` declares the same ones inline.
+
+| group | agreed before | what it costs to fix |
+|---|---|---|
+| direct (longhand on the element's own rule) | **2/36** | keep the declaration |
+| inherited (declared on an ancestor) | 4/10 | an inherited-property table + a parent walk |
+| relative (em, %, calc) | 0/5 | a base value — the parent's font, the containing block |
+| shorthand (longhand only exists once expanded) | 0/5 | run the expander on author rules |
+| priority (later rule, specificity, !important vs inline) | 1/4 | free, it was already implemented |
+
+**The inline control agreed on 33 of 36.** That is the number that decided the
+plan: the values were already being computed and serialised correctly, and only
+the cascade was not consulted. So the big slice was cheap, and the two expensive
+axes were separable rather than prerequisites.
+
+The machinery turned out to be built, too. `StyleManager.cascadedCustomDeclaration`
+already did the whole job for custom properties — id/class/tag bucket walk,
+packed specificity, importance ranked above specificity, last-declaration-wins
+within a rule. Its only non-generic part was reading one hardcoded list.
+`extractRuleProperties` hand-picked seven property names out of each rule and
+dropped the rest; that was the actual limit. Widening the storage and
+parameterising the walk over which list it reads is the whole change, and
+`computedFontSize` already spelled out the ordering to reuse: an `!important`
+rule, then the style attribute, then a normal rule, then the initial value.
+
+Two smaller things fell out of it. Shorthands expand on the CSSOM path (whose
+declarations went through the declaration parser) and did not on the raw path
+(which reads the sheet's text), and which of the two runs depends on whether
+anything has touched `.cssRules` — so `margin:11px` answered `margin-top` on one
+path and not the other. And the raw path's values are the author's spelling, so
+they had to go through `normalizePropertyValue` or a rule's `rgb(1,2,3)` read
+back differently from the identical inline declaration's `rgb(1, 2, 3)`.
+
+### The version of this that was worse than doing nothing
+
+Wiring the cascade in fixed 34 readings and broke five in a new way, and the new
+way was the more detectable one. `padding-top:2em` used to compute to `0px`; it
+computed to `2em`. **A browser never prints a font-relative length, a percentage
+or a `calc()` from `getComputedStyle`** — those resolve at computed-value time
+and used-value time respectively. `0px` is a value Chrome does print here. `2em`
+is a value it never prints, so a detector reading it learns strictly more.
+
+So the cascade's answer is only reported when it is already in the shape a
+computed value has; anything else falls through to what was reported before the
+cascade was consulted at all, which cannot be worse than the status quo. The
+shapes declined are what the two-arm probe surfaced — `calc()`, a percentage, a
+font- or viewport-relative length, a bare multiplier for `line-height` — and not
+a claim to have enumerated every unresolvable one.
+
+**7/60 to 44/60, with no reading moved to a worse answer.** 1494/1494, and the
+29-station sweep reads 19/29 both before and after, with all four station-level
+differences traced to DataDome's rate limiting of this address, a 429, or the
+tail-cascade effect (each re-checked with `--fresh`).
+
+What is left is three plans, one per remaining axis: `computed-style-inheritance`
+(6 readings), `computed-style-relative-units` (5), and
+`computed-style-value-gaps` (3 — `border-radius`, `transform`'s `matrix()`, and
+`white-space`, all three of which the *inline* control fails too, so they are
+value bugs and not cascade ones). `font:` still does not expand, on either path.
