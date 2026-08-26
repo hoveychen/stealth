@@ -99,11 +99,17 @@ const trace = process.argv.includes('--trace');
 // browser's process model, so a verdict taken with it wants a verdict without
 // it beside it.
 const sameProcess = process.argv.includes('--same-process');
-// The other way to see an out-of-process iframe's traffic, and the one to
-// prefer: attach to the iframe's own target instead of taking site isolation
-// away. --same-process answers the visibility question but changes the verdict
-// while doing it -- headed Chrome clears this Cloudflare challenge 5/5 without
-// it and 0/3 with it -- so it cannot be used to observe a run that passes.
+// The other way to see an out-of-process iframe's traffic: attach to the
+// iframe's own target instead of taking site isolation away. --same-process
+// answers the visibility question but changes the verdict while doing it --
+// headed Chrome clears this Cloudflare challenge 5/5 without it and 0/3 with it.
+//
+// This one used to be described here as the safe alternative, and it is not.
+// On x-hyatt a headed Chrome passes with plain --trace and is refused 429 with
+// --trace --attach-frames, measured back to back in one sitting. Kasada can see
+// the attachment. So neither flag is free: reach for --trace alone first, and
+// only add this when the traffic you need is genuinely inside an out-of-process
+// frame, knowing the verdict beside it is no longer the browser's own.
 const attachFrames = process.argv.includes('--attach-frames');
 // Extra Chrome switches, repeatable, so a single launch flag can be isolated
 // against the same station without editing this file. The reason it exists:

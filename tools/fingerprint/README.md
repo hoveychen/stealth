@@ -16027,3 +16027,63 @@ should now double, and does not. It is read off a layout that does not place
 absolutely positioned boxes yet — `position:absolute; left:37px; top:53px`
 reports 100,100 here against Chrome's 37,53 — so there is no correct value to
 double. That belongs to the layout work, not here.
+
+## x-hyatt: the missing reload is a symptom, not the cause (2026-08-26)
+
+Two changes to the display persona moved nothing at `x-hyatt`, so the next
+question was not about a JS surface at all: this engine is refused with a bare
+429 and never recovers, while headed Chrome takes a 429 and then a 200. Trace
+both (`--trace`, results/b53-hyatt-trace-{chrome,lp}.json) and the two runs are
+**identical for four steps**:
+
+```
+GET /                      -> 429
+GET .../ips.js             -> 200   (Kasada's challenge program, ~305KB)
+run the challenge
+POST .../tl                -> 200
+```
+
+and then diverge in one:
+
+```
+chrome   GET Document /    -> 200   <- same millisecond the /tl reply lands
+lightpanda   (nothing)             <- sits until the settle expires
+```
+
+Chrome goes on to load the whole site, 258 wire entries against this engine's 18.
+
+### Doing the missing step by hand
+
+`--inject`, a cookie to stop it looping, one `location.reload()` after six
+seconds. The trace confirms the navigation really went out at ms 6202 — and
+Kasada answered **429 again** at ms 6369.
+
+**So the reload is not the missing piece; it is the visible end of one.** Chrome
+reloads into a 200 because clearance was granted at `/tl`. This engine does not
+reload because the challenge program read its own `/tl` reply and concluded it
+had not been cleared — `Location.reload`, `assign` and `replace` appear nowhere
+in the `prop_read` log for this station, though `href`, `origin` and `pathname`
+are read repeatedly. The script is behaving correctly. The POST is what was
+declined.
+
+Two supporting readings, both consistent with a decision that lands before any
+of this: the `/tl` reply is 1372 bytes here and 1028 in Chrome, and the very
+first 429 interstitial is 1882 bytes here and 1483 there.
+
+**The target for whoever picks this up is "why is `/tl` declined", not "make the
+engine navigate".** Cheapest first: compare the two arms' `POST /tl` request
+head and h2 frames byte for byte with the tooling that already exists
+(`h2-arms.mjs`, `header-echo.mjs`) and rule the protocol layer out before going
+anywhere near the payload — B36 lost a stretch inside Akamai's `sensor_data`
+doing it the other way round. One protocol difference is already visible in the
+trace and is worth checking on its own: the `POST reporting.cdndex.io/error`
+that both arms make is preceded by an `OPTIONS` preflight in Chrome and by
+nothing here.
+
+### A tooling correction that came out of this
+
+`antibot-sweep.mjs` used to describe `--attach-frames` as the safe way to see an
+out-of-process frame's traffic, with only `--same-process` changing the verdict.
+That is wrong. Back to back in one sitting, headed Chrome clears `x-hyatt` with
+plain `--trace` and is refused 429 with `--trace --attach-frames`. Kasada can
+see the attachment. Neither flag is free; the comment now says so.
