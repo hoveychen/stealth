@@ -15219,3 +15219,111 @@ rule the cascade guard follows.
 **The cascade probe now reads 51/60, from 7/60 before this month's computed-style
 work.** 1502/1502, and the 29-station sweep is unchanged once the three tail
 timeouts are re-checked with `--fresh` (all pass).
+
+## A computed style never joined a shorthand back together (2026-08-26)
+
+`getComputedStyle(el).borderRadius` answered `0px` on an element declaring
+`border-radius:9px`, while all four corner longhands answered `9px`. That is
+not a `border-radius` bug and not a `white-space` bug — the two names the
+previous plan opened for it — it is one line: `propertyValue` gates the
+`shorthandValue` branch behind `if (!self._is_computed)`, so the join that an
+inline declaration gets was skipped for every computed read.
+
+`expr-computed-shorthands.js` sizes it. Of the 736 names a computed style
+answers, 475 are the indexed longhands and **261 are not**; on an element
+declaring a dozen properties, 99 of those 261 disagreed with Chrome 151, and on
+one declaring only `color`, 36 did. Opening the branch for the computed view —
+reading each longhand back through `propertyValue` rather than `findProperty`,
+because a computed view stores none of them either — takes it to **199/261
+declared and 249/261 bare, with nothing that agreed before disagreeing now.**
+
+### The declared serialisation is not the computed one, and the table only has the first
+
+Three shorthands got *worse* on the first pass, and the reason is the same for
+all three: `chrome_shorthands.zig` was generated from what `el.style.x` reads
+back, and Chrome does not serialise a computed shorthand the way it serialises
+a declared one.
+
+`expr-border-omit.js` pins it down without ambiguity. Set
+`border:0px none rgb(255,0,0)` on an element and ask Chrome twice:
+
+| read | answer |
+|---|---|
+| `el.style.border` | `0px rgb(255, 0, 0)` |
+| `getComputedStyle(el).border` | `0px none rgb(255, 0, 0)` |
+
+The declared side drops the `none` the author *wrote*; the computed side keeps
+it. So the `omit` column is a measurement of one side only, and applying it to
+computed values is wrong wherever a longhand can legitimately hold the value
+that column lists. It is not uniformly wrong either — a computed `transition`
+does drop its `0s` delay and `normal` behaviour, which is why "never omit" is
+as wrong as "always omit". Blink has a different serialiser per shorthand and
+only measurement separates them.
+
+Three are declined outright for the computed join (`animation`, `background`,
+`flex-flow`, plus `-webkit-` spellings), because there the declared
+serialisation is not merely differently trimmed but differently *ordered* —
+Chrome's computed `background` writes the layer colour first and every slot
+after it. Declining costs nothing: all three were already wrong on a declaring
+element, and declining keeps them right on one that declares nothing.
+
+Two structural guards do the rest of the work, and both are about not building
+an answer on a value this engine does not have. A longhand reading back empty,
+or reading back the literal `initial`, is one the initial-value tables have no
+entry for — a computed style prints neither — so the join over it is refused
+and the recorded shorthand value stands. And a join that comes out *empty* is
+the declared serialisation saying "this cannot be written as one shorthand",
+which is a real answer for `el.style` and not one for a computed view: Chrome
+answers every one of these 261 names. Those two guards alone recovered five of
+the eight regressions (`-webkit-column-break-*`, whose alias table maps every
+value to `""`, and `-webkit-background-clip`/`-origin`, whose longhand still
+reads the filler `initial`).
+
+### What the residual 62 is, and it is mostly one thing
+
+| count | cause |
+|---|---|
+| ~35 | **No logical-to-physical mapping.** `margin:1px 2px 3px 4px` fills `margin-top`…`margin-left` and never reaches `margin-block-start`. Every `border-block-*`, `border-inline-*`, `inset-block`, `padding-inline` and `-webkit-border-after/before/start/end` residual is this one mechanism. |
+| ~10 | **Shorthands the table leaves `.unmodelled`** (`font`, `columns`, `list-style`, `grid-row`, `grid-column`): kept whole, so the computed read answers the author's own text. `columns:2 30px` reads back in the author's order where Chrome writes `30px 2`, and `font`'s `/1.5` stays a ratio where Chrome prints the resolved `/21px`. |
+| 4 | The declined three, plus `timeline-trigger` (Chrome answers `""`, we answer `none`). |
+| 2 | `background-position-x`/`-y` compute to the literal `initial` — an initial-value table hole, and the same hole the guard above catches from the other side. |
+| 4 | Layout: `-webkit-logical-width`, `-webkit-perspective-origin` and their pair. |
+
+The first row is a single plan's worth of work and the largest block left in the
+computed view.
+
+### The 29-station sweep, and twelve alternating runs that say the drop is the window
+
+`results/b77-patched.json` reads **17/29**, inside the 17–20 band the four b76
+sweeps read. Against `b76-gaps-sweep.json` three DataDome stations went
+`pass → datadome-challenge` (`dd-datadome`, `dd-leboncoin`, `dd-hermes`) and
+three Akamai ones went the other way (`ak-macys`, `ak-kohls`, `ak-expedia`).
+
+A single-sample A/B on those would have read as a regression. It is not, and the
+control says so directly. A ReleaseFast binary built from main `afe421f72` —
+same optimiser, same everything but the patch — was alternated against the
+patched one, six runs of `--only dd-` with the control first:
+
+| run | DataDome passes |
+|---|---|
+| control-1 | datadome, hermes, etsy, seloger |
+| patched-1 | etsy, seloger |
+| control-2 | etsy, seloger |
+| patched-2 | etsy |
+| control-3 | leboncoin, etsy |
+| patched-3 | etsy |
+
+**control-2 reproduces patched-1's failure set exactly**, on the unpatched
+binary. The count also decays down the block on both arms, which is the shape
+of an address being shut down rather than of a code difference — and because the
+control ran first in every round it drew the fresher slot each time, so the
+ordering is confounded in the control's favour.
+
+Six more with the order reversed settle it: `patched-4`, `control-4`,
+`patched-5`, `control-5`, `patched-6`, `control-6` are **all `dd-etsy` and
+nothing else**, on both binaries. By then the window is shut for everyone.
+
+That is the third session to be handed a plausible DataDome delta that turned
+out to be the clock. The rule stands: on `ak-macys`, `dd-*` and their kin, one
+sample proves nothing in either direction — alternate the arms, and alternate
+which one goes first.
