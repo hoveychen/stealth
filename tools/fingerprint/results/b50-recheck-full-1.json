@@ -1,0 +1,164 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T08:48:55.132Z",
+  "egress": {
+    "fl": "464f111",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787734135.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1275+0b68c3073",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:12410/"
+  },
+  "stations": [
+    {
+      "name": "ak-macys",
+      "vendor": "akamai",
+      "url": "https://www.macys.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cdn.pbbl.co/i/pp.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://servedby.flashtalking.com/container/12518;131342;14478;iframe/?ns=https%3A%2F%2Fwww.macys.com%2F&ft_referrer=https%3A%2F%2Fwww.macys.com%2F&cachebuster=9344.703326116476",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=243d8345-f682-4dc3-8ef8-f38bef12bd39&u_scsid=5f0f730a-79a2-4a0b-b0db-8c38323e319d&u_sclid=2c1f376e-f49f-40f8-bf20-64c2b7d631ef",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?topUrl=www.macys.com&origin=onetag#{%22bundle%22:{%22identifierExtractor%22:{%22origin%22:0},%22value%22:null},%22cw%22:true,%22optout%22:{%22identifierExtractor%22:{%22origin%22:0},%22value%22:null},%22origin%22:%22onetag%22,%22tld%22:%22macys.com%22,%22topUrl%22:%22www.macys.com%22,%22version%22:%225_48_0%22,%22ifa%22:{%22identifierExtractor%22:{%22origin%22:0},%22value%22:null},%22lsw%22:true,%22pm%22:0,%22requestId%22:%22b74d6ab1-a00d-43c2-b578-f525823fa8f9%22}",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/p?rand=1787601594831&pnid=140&pcid=5cfc1759-0204-4995-8b41-8f273b0046b4",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://10289658.fls.doubleclick.net/activityi;dc_pre=CJD_5dL0vZYDFdm90QQdxY40HA;src=10289658;type=globmmn;cat=mmn_g0;rcb=2;ord=1787734137596;npa=0;auiddc=1453027819.1787734139;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68p0h2v9190905602za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938466~115938468~118897920~118897930~119367802~119367810~120213116~120385422;epver=2;dc_random=1787734139_8FOq4zibyMK2hjTSTIzcq7evEpRpF18Ryg;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CLuS59L0vZYDFSQrMQYdcZESxQ;src=3856256;type=global;cat=landing;rcb=15;npa=0;auiddc=1453027819.1787734139;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;user_data_mode=c;_tu=IAAB;gtm=45fe68p0h2v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938466~115938468~118012009~118897920~118897930~119367802~119367810~120385422~120476658;epver=2;em=tv.1~co0.US;dc_random=1787734139_LNwVSd95X9niXlSEDjQ_T2O-vpclYFmRzw;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=COTQ5tL0vZYDFRun0QQdBOwFeA;src=3856256;type=global;cat=landing;rcb=15;ord=1787734137596;npa=0;auiddc=1453027819.1787734139;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68p0h2v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938466~115938468~118012009~118897920~118897930~119367802~119367810~120385422~120476658;epver=2;dc_random=1787734139_fmsRccIQLz7aRXwAMrqBnaXgIzUDjP20YQ;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.google.com/recaptcha/api2/aframe",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ep2.adtrafficquality.google/sodar/sodar2/255/runner.html",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Macy's - Shop Fashion Clothing & Accessories - Official Site - Macys.com",
+      "landedOn": "https://www.macys.com/",
+      "nodes": 10149,
+      "textLength": 5192,
+      "snippet": "Skip to main content TODAY'S DEALS Today! Up to 60% off activewear Today! Up to 60% off luggage Up to 50% off Back to School Up to 60% off women's shoes See All Ask Macy's Sign In See more of what you",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25312
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787734135529 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:12410",
+    "$time=1787734138141 $scope=js $level=warn $msg=\"console.warn\" param.0=[TSV scrub] Removed unsafe characters from 1 field(s): param.1=[object Object]",
+    "$time=1787734138324 $scope=event $level=warn $msg=\"inline handler\" err=JsException caught.exception=\"Unexpected end of JSON input\" caught.stack=\"SyntaxError: Unexpected end of JSON input\\n    at JSON.parse (<anonymous>)\\n    at r.onload (https://cdn.cookielaw.org/scripttemplates/otSDKStub.js:1:13469)\" caught.line=1 caught.caught=true",
+    "$time=1787734138473 $scope=js $level=warn $msg=\"console.warn\" param.0=[TSV scrub] Removed unsafe characters from 1 field(s): param.1=[object Object]",
+    "$time=1787734138577 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught Error: MAI SDK has not been configured. Call conf() first.\" filename= line_number=0 column_number=0",
+    "$time=1787734138578 $scope=http $level=warn $msg=\"script fetch error\" err=CouldntResolveHost req=https://d1n00d49gkbray.cloudfront.net/js/macys.js extra=frame status=0",
+    "$time=1787734138619 $scope=event $level=warn $msg=\"inline handler\" err=JsException caught.exception=VW5leHBlY3RlZCB0b2tlbiAnRycsICJHSUY4OWEBAAEAIi4uLiBpcyBub3QgdmFsaWQgSlNPTg caught.stack=U3ludGF4RXJyb3I6IFVuZXhwZWN0ZWQgdG9rZW4gJ0cnLCAiR0lGODlhAQABACIuLi4gaXMgbm90IHZhbGlkIEpTT04KICAgIGF0IEpTT04ucGFyc2UgKDxhbm9ueW1vdXM+KQogICAgYXQgci5vbmxvYWQgKGh0dHBzOi8vY2RuLmNvb2tpZWxhdy5vcmcvc2NyaXB0dGVtcGxhdGVzL290U0RLU3R1Yi5qczoxOjEzNDY5KQ caught.line=1 caught.caught=true",
+    "$time=1787734138911 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] Slot.setTargeting is deprecated, use Slot.setConfig({targeting: ...}) instead.",
+    "https://goo.gle/gpt-message#171",
+    "$time=1787734138915 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] PubAdsService.enableLazyLoad is deprecated, use googletag.setConfig({lazyLoad: ...}) instead.",
+    "https://goo.gle/gpt-message#170",
+    "$time=1787734138946 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787734138975 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787734138981 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787734139001 $scope=frame $level=warn $msg=\"cookie parse failed\" raw= err=Empty",
+    "$time=1787734140792 $scope=js $level=warn $msg=\"console.warn\" param.0=KAMPYLE_UTILS will be deprecated! Please, use in future KAMPYLE_ONSITE_SDK instead!",
+    "$time=1787734140827 $scope=js $level=warn $msg=\"console.error\" param.0=Error fetching GECX token for session ID:  param.1=FetchError: [POST] \"/search/v1/conversation/get-token/public\": 403 Forbidden",
+    "$time=1787734141229 $scope=app $level=error $msg=\"dispatch error\" err=Invalid event=http_response_header_done source=notification listener=cdp.CDP.BrowserContext",
+    "$time=1787734141636 $scope=http $level=error $msg=\"process_messages\" err=TooManyRedirects req=GET https://partner.mediawallahscript.com/?account_id=2006&partner_id=2131&custom=&tag_format=img&tag_action=sync&puid=fc1a5ac0-a12a-11f1-8503-51ac93956529",
+    "$time=1787734148372 $scope=js $level=warn $msg=\"evaluate module\" stack= specifier=https://apps.rokt.com/wsdk/session-transfer/ message=\"TypeError: Failed to construct 'URL': Invalid URL\"",
+    "$time=1787734148372 $scope=js $level=warn $msg=\"eval script\" url=https://apps.rokt.com/wsdk/session-transfer/ caught.exception=Unknown caught.stack=na caught.line=null caught.caught=false"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}
