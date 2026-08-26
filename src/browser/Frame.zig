@@ -163,6 +163,8 @@ _element_token_lists: Element.TokenListLookup = .empty,
 // interestFor / commandFor, whose IDL member is an element rather than a
 // string. See Element.ElementReferenceAttribute.
 _element_references: Element.ElementReferenceLookup = .empty,
+// The `nonce` slot. See Element.getNonce.
+_element_nonces: Element.NonceLookup = .empty,
 _element_shadow_roots: Element.ShadowRootLookup = .empty,
 // The EditContext attached to an element, if any. The reverse link lives on
 // the context itself, which is how a second element attaching the same one is
@@ -3960,6 +3962,8 @@ pub fn attributeChange(self: *Frame, element: *Element, name: String, value: Str
         popover.attributeChanged(element, old, value.str(), self);
     } else if (name.eql(comptime .wrap("style"))) {
         self.styleAttributeChanged(element, value.str());
+    } else if (name.eql(comptime .wrap("nonce"))) {
+        element.nonceAttributeChanged(value.str(), self);
     }
 }
 
@@ -3985,6 +3989,8 @@ pub fn attributeRemove(self: *Frame, element: *Element, name: String, old_value:
         popover.attributeChanged(element, old_value.str(), null, self);
     } else if (name.eql(comptime .wrap("style"))) {
         self.styleAttributeChanged(element, null);
+    } else if (name.eql(comptime .wrap("nonce"))) {
+        element.nonceAttributeChanged("", self);
     }
 }
 

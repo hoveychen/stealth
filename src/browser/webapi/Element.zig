@@ -1252,6 +1252,40 @@ pub fn getTokenList(self: *Element, comptime attribute: TokenListAttribute, fram
     return gop.value_ptr.*;
 }
 
+pub const NonceLookup = std.AutoHashMapUnmanaged(*Element, []const u8);
+
+// `nonce` is a slot, not a reflection of the content attribute -- there is one
+// storage and two writers, and only one of them touches the markup. Measured
+// on Chrome 151, on HTMLElement, SVGElement and MathMLElement alike:
+//
+//   el.nonce = 'abc'                  -> nonce 'abc', getAttribute null
+//   setAttribute('nonce', 'zzz')      -> nonce 'zzz', getAttribute 'zzz'
+//   nonce='abc' then setAttribute     -> nonce 'zzz' (the later write wins)
+//   ...then removeAttribute           -> nonce '',    getAttribute null
+//   cloneNode                         -> nonce '' unless an attribute came too
+//
+// A read-time rule over (slot, attribute) cannot tell the third line's end
+// state from the first's, which is why the attribute's writers reach in here
+// rather than the getter preferring the attribute. The one attribute writer
+// that does not is the parser, which fills a node's initial attributes without
+// running change reactions -- so an *unset* slot still falls back, and that is
+// what a parsed `<script nonce=...>` reads.
+pub fn getNonce(self: *Element, frame: *Frame) []const u8 {
+    if (frame._element_nonces.get(self)) |slot| return slot;
+    return self.getAttributeSafe(comptime .wrap("nonce")) orelse "";
+}
+
+pub fn setNonce(self: *Element, value: []const u8, frame: *Frame) !void {
+    return frame._element_nonces.put(frame.arena, self, try frame.dupeString(value));
+}
+
+// Called by Frame.attributeChange / attributeRemove for the `nonce` attribute:
+// a removal empties the slot rather than deleting it, matching the empty
+// string a never-written element answers.
+pub fn nonceAttributeChanged(self: *Element, value: []const u8, frame: *Frame) void {
+    frame._element_nonces.put(frame.arena, self, frame.dupeString(value) catch return) catch {};
+}
+
 pub fn getElementReference(self: *Element, comptime attribute: ElementReferenceAttribute, frame: *Frame) ?*Element {
     if (frame._element_references.get(.{ .element = self, .attribute = attribute })) |explicit| {
         // Same rule as popover's invoker target: the two have to share a root.

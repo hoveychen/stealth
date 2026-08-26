@@ -125,12 +125,21 @@
     testing.expectEqual(undefined, div.focus());
     testing.expectEqual(undefined, div.blur());
 
-    // An element outside the HTML namespace reaches none of them, which is the
-    // whole point of the move.
+    // An element outside the HTML namespace reaches the layout half of them --
+    // that is the point of the move -- but not the HTMLOrSVGElement half, which
+    // Chrome declares separately on SVGElement and MathMLElement (measured:
+    // both prototypes own dataset, style, tabIndex, blur and focus; neither
+    // owns offsetTop, innerText or dir).
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    testing.expectEqual(undefined, svg.dataset);
-    testing.expectEqual(undefined, svg.offsetTop);
-    testing.expectEqual(undefined, svg.focus);
+    const math = document.createElementNS('http://www.w3.org/1998/Math/MathML', 'mi');
+    for (const el of [svg, math]) {
+      testing.expectEqual('object', typeof el.dataset);
+      testing.expectEqual('function', typeof el.focus);
+      testing.expectEqual('CSSStyleDeclaration', el.style.constructor.name);
+      testing.expectEqual(undefined, el.offsetTop);
+      testing.expectEqual(undefined, el.innerText);
+      testing.expectEqual(undefined, el.dir);
+    }
   }
 </script>
 

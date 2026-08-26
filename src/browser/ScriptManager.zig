@@ -274,7 +274,12 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
     // 'nonce-…' admits this load whatever its URL. Cloudflare's challenge
     // interstitial is exactly that shape -- no 'self', and the loader carries
     // the nonce -- so reading only the URL leaves us on the interstitial.
-    const nonce = element.getAttributeSafe(comptime .wrap("nonce"));
+    // The slot, not the attribute: `s.nonce = '…'` leaves the markup untouched
+    // in Chrome (measured -- see Element.getNonce), and the interstitial's
+    // loader is set exactly that way, so reading the attribute here would miss
+    // the very case this check exists for.
+    const nonce_value = element.getNonce(frame);
+    const nonce: ?[]const u8 = if (nonce_value.len == 0) null else nonce_value;
     if (frame.csp().allowsScript(remote_url, frame.url, nonce) == false) {
         log.info(.http, "script blocked by csp", .{ .url = remote_url, .ctx = ctx });
         // Queued rather than dispatched inline: this runs inside appendChild, so
