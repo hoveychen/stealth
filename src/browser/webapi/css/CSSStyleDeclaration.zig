@@ -867,6 +867,67 @@ pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
     return StyleManager.blockify(specified);
 }
 
+/// Whether this element's box takes its width from its containing block rather
+/// than from its own content.
+///
+/// A block-level box in normal flow with `width: auto` is as wide as its
+/// containing block, whatever it holds -- an empty <div> in a 1904px body is
+/// 1904px wide, not 0. Measured against Chrome 151 with
+/// tools/fingerprint/scratch/expr-layout-box-shapes.js, which also pins down
+/// the boxes that do NOT fill, and those are the reason this is a question
+/// rather than "is it display: block":
+///
+///   * a float, an `absolute` and a `fixed` box each shrink to fit;
+///   * a flex ITEM shrinks too -- `<div style="display:flex"><div>x</div></div>`
+///     puts the child at 8px in Chrome -- while a grid item stretches to 1904.
+///     Both children compute `display: block` after blockification, so the
+///     parent has to be asked, not the child;
+///   * an `inline-block` shrinks, which its own display already says.
+///
+/// This engine agreed with Chrome on every one of those before this existed,
+/// and the point of the list is that it still does.
+pub fn fillsContainingBlock(element: *Element, frame: *Frame) bool {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+
+    if (cascadedKeyword(style_manager, element, "float")) |float| {
+        if (!std.ascii.eqlIgnoreCase(float, "none")) return false;
+    }
+    if (cascadedKeyword(style_manager, element, "position")) |position| {
+        if (std.ascii.eqlIgnoreCase(position, "absolute") or
+            std.ascii.eqlIgnoreCase(position, "fixed")) return false;
+    }
+
+    if (!fillsAtDisplay(resolvedDisplay(element, frame))) return false;
+
+    // A flex item is sized by its content, not by the line it sits on. Grid
+    // items stretch, so only flex is asked about here.
+    if (element.parentElement()) |parent| {
+        const parent_display = resolvedDisplay(parent, frame);
+        if (std.mem.eql(u8, parent_display, "flex") or
+            std.mem.eql(u8, parent_display, "inline-flex")) return false;
+    }
+
+    return true;
+}
+
+fn fillsAtDisplay(display: []const u8) bool {
+    const FILLS = [_][]const u8{ "block", "flow-root", "list-item", "grid", "flex" };
+    for (FILLS) |name| {
+        if (std.mem.eql(u8, display, name)) return true;
+    }
+    return false;
+}
+
+/// The cascaded keyword for a property whose value is one, skipping everything
+/// a computed style does to a length or a colour. `position` and `float` are
+/// both keywords and neither inherits, so this is the declaration itself.
+fn cascadedKeyword(style_manager: *StyleManager, element: *Element, comptime name: []const u8) ?[]const u8 {
+    return switch (cascadedValue(style_manager, element, name, comptime .wrap(name))) {
+        .value => |value| value,
+        .unreportable, .none => null,
+    };
+}
+
 fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame: *Frame) []const u8 {
     var visibility_cache: Element.VisibilityCache = .{};
     if (!element.checkVisibilityCached(&visibility_cache, frame)) {

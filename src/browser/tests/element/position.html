@@ -44,26 +44,25 @@
   document.body.appendChild(empty);
   testing.expectEqual(empty.clientWidth, empty.scrollWidth);
 
-  // Each added child strictly increases scrollWidth, and enough of them push
-  // it past the element's own box.
+  // An unsized BLOCK does not shrink-wrap: it is as wide as its containing
+  // block, so adding children moves neither its clientWidth nor its
+  // scrollWidth. Measured in both arms with
+  // tools/fingerprint/scratch/expr-position-assertions.js -- Chrome and this
+  // engine both report 1904 for one child and for two, on a 1904px body.
+  // These assertions used to say the opposite, from the days when every
+  // unsized box measured its own text.
   const box = document.createElement('div');
   document.body.appendChild(box);
   box.appendChild(document.createElement('span'));
   const oneChild = box.scrollWidth;
-  testing.expectTrue(oneChild >= box.clientWidth);
+  testing.expectEqual(box.clientWidth, oneChild);
 
   box.appendChild(document.createElement('span'));
-  testing.expectTrue(box.scrollWidth > oneChild);
-  // An unsized box shrink-wraps: clientWidth tracks the same content sum.
+  testing.expectEqual(oneChild, box.scrollWidth);
   testing.expectEqual(box.scrollWidth, box.clientWidth);
 
-  // Text is measured, so a longer run is wider. The per-glyph advances come
-  // from the same tables canvas measureText reads, so this is a measurement
-  // rather than the per-character estimate that would have reported overflow
-  // for practically every element containing text.
-  //
-  // Neither overflows its own box: an element with no element children is
-  // exactly as wide as its text, so content and box agree.
+  // Text does not widen a block either, for the same reason: it wraps inside a
+  // box whose width was already decided. Both runs read the body's width.
   const short = document.createElement('div');
   const long = document.createElement('div');
   short.textContent = 'ab';
@@ -72,7 +71,20 @@
   document.body.appendChild(long);
   testing.expectEqual(short.clientWidth, short.scrollWidth);
   testing.expectEqual(long.clientWidth, long.scrollWidth);
-  testing.expectTrue(long.scrollWidth > short.scrollWidth);
+  testing.expectEqual(short.scrollWidth, long.scrollWidth);
+
+  // A box that DOES shrink to fit still measures its content, and that is the
+  // property the marquee idioms below rely on. Chrome grows 28 -> 142 over
+  // five items and this engine 28 -> 140, so the assertion is the growth.
+  const shrink = document.createElement('div');
+  shrink.style.display = 'inline-block';
+  document.body.appendChild(shrink);
+  const item = document.createElement('span');
+  item.textContent = 'item';
+  shrink.appendChild(item);
+  const shrinkOne = shrink.clientWidth;
+  for (let i = 0; i < 4; i++) shrink.appendChild(item.cloneNode(true));
+  testing.expectTrue(shrink.clientWidth > shrinkOne * 4);
 
   // Comments are not rendered, so they contribute nothing.
   const commented = document.createElement('div');
@@ -116,19 +128,29 @@
 
 <script id="scrollWidthMarqueeLoop">
 {
-  // Regression: the infinite-marquee idiom duplicates content until it is
-  // twice the width of its container. scrollWidth has to respond to the
-  // insertion or the loop never terminates.
+  // The infinite-marquee idiom duplicates content until it is twice the width
+  // of its container. Run against a real browser with
+  // tools/fingerprint/scratch/expr-marquee-loop.js, and this engine now
+  // answers what Chrome answers at every step:
+  //
+  //   a block lane is its container's width (1904) and stays there when its
+  //   markup is doubled once -- so `before * 2` is not what scrollWidth
+  //   becomes, in Chrome either;
+  //   but the lane's content is one unbreakable run of <span>s with no space
+  //   between them, so it overflows rather than wrapping, and scrollWidth does
+  //   climb: seven doublings take it past twice the track, in Chrome at 7280
+  //   and here at 7168. The loop terminates, and it terminates on the same
+  //   iteration.
   const track = document.createElement('div');
   const lane = document.createElement('div');
   lane.innerHTML = '<span>item</span>';
   track.appendChild(lane);
   document.body.appendChild(track);
 
-  // Doubling the markup doubles the measured content width.
   const before = lane.scrollWidth;
+  testing.expectEqual(lane.clientWidth, before);
   lane.innerHTML += lane.innerHTML;
-  testing.expectEqual(before * 2, lane.scrollWidth);
+  testing.expectEqual(before, lane.scrollWidth);
 
   let guard = 0;
   while (lane.scrollWidth < track.offsetWidth * 2 && guard < 50) {
@@ -136,31 +158,54 @@
     guard++;
   }
   testing.expectTrue(guard < 50);
+  testing.expectEqual(7, guard);
 }
 </script>
 
 <script id="clientWidthMarqueeLoop">
 {
   // The clientWidth variant of the marquee idiom (amivoice.com): clone items
-  // into an unsized wrap until it is twice the width of its container.
-  // clientWidth of the wrap has to respond to the insertion, while the
-  // container — whose direct child is the wrap, not the items — must not
-  // grow in lockstep or the loop still never terminates.
+  // into a wrap until it is twice the width of its container.
+  //
+  // With an unsized BLOCK wrap this loop does not terminate -- and it does not
+  // terminate in Chrome either. Run verbatim with
+  // tools/fingerprint/scratch/expr-clientwidth-marquee.js, all six variants
+  // (empty span or text span, block or inline-block wrap, clientWidth or
+  // getComputedStyle) hit the 50-iteration guard in Chrome exactly as they do
+  // here. A block wrap IS its container's width, so `wrap.clientWidth <
+  // container.clientWidth * 2` is true forever. The reduction as written can
+  // only end under the shrink-wrap model this engine used to have, which is
+  // why it is asserted the other way round now.
+  //
+  // What the sites actually rely on is the shrink-to-fit case below, where
+  // clientWidth does answer the content.
   const container = document.createElement('div');
   const wrap = document.createElement('div');
   const item = document.createElement('span');
+  item.textContent = 'item';
   wrap.appendChild(item);
   container.appendChild(wrap);
   document.body.appendChild(container);
 
   const containerBefore = container.clientWidth;
+  testing.expectEqual(containerBefore, wrap.clientWidth);
+  for (let i = 0; i < 4; i++) wrap.appendChild(item.cloneNode(true));
+  testing.expectEqual(containerBefore, wrap.clientWidth);
+  testing.expectEqual(containerBefore, container.clientWidth);
+
+  // The same loop over a wrap that shrinks to fit, which is the shape that
+  // terminates: five items are five times as wide as one.
+  const shrinkWrap = document.createElement('div');
+  shrinkWrap.style.display = 'inline-block';
+  shrinkWrap.appendChild(item.cloneNode(true));
+  container.appendChild(shrinkWrap);
+  const oneItem = shrinkWrap.clientWidth;
   let guard = 0;
-  while (wrap.clientWidth < container.clientWidth * 2 && guard < 50) {
-    wrap.appendChild(item.cloneNode(true));
+  while (shrinkWrap.clientWidth < oneItem * 4 && guard < 50) {
+    shrinkWrap.appendChild(item.cloneNode(true));
     guard++;
   }
   testing.expectTrue(guard < 50);
-  testing.expectEqual(containerBefore, container.clientWidth);
 
   // An explicit inline size pins the box regardless of content.
   const pinned = document.createElement('div');
@@ -176,21 +221,37 @@
 <script id="computedWidthMarqueeLoop">
 {
   // The getComputedStyle variant of the marquee idiom (inchurch.com.br's
-  // dynamic-marquee-widget via jQuery .width()): the computed value must
-  // carry the same content fallback as clientWidth or the loop never
-  // terminates.
+  // dynamic-marquee-widget via jQuery .width()): the computed value has to
+  // answer whatever clientWidth answers, or a page reading one and laying out
+  // by the other sees a contradiction.
   const container = document.createElement('div');
   const wrap = document.createElement('div');
   const item = document.createElement('span');
+  item.textContent = 'item';
   wrap.appendChild(item);
   container.appendChild(wrap);
   document.body.appendChild(container);
 
+  // Same story through getComputedStyle, and the same in Chrome: the computed
+  // width of a block wrap is its container's, so it never reaches twice it.
+  // What has to hold is that the computed value and clientWidth agree -- a
+  // guard reading both in one expression sees any disagreement.
   const width = (el) => parseFloat(getComputedStyle(el).width);
   const containerWidth = width(container);
+  testing.expectEqual(containerWidth, width(wrap));
+  testing.expectEqual(width(wrap), wrap.clientWidth);
+  for (let i = 0; i < 4; i++) wrap.appendChild(item.cloneNode(true));
+  testing.expectEqual(containerWidth, width(wrap));
+
+  // And the shrink-to-fit wrap grows through the computed value too.
+  const shrinkWrap = document.createElement('div');
+  shrinkWrap.style.display = 'inline-block';
+  shrinkWrap.appendChild(item.cloneNode(true));
+  container.appendChild(shrinkWrap);
+  const oneItem = width(shrinkWrap);
   let guard = 0;
-  while (width(wrap) < containerWidth * 2 && guard < 50) {
-    wrap.appendChild(item.cloneNode(true));
+  while (width(shrinkWrap) < oneItem * 4 && guard < 50) {
+    shrinkWrap.appendChild(item.cloneNode(true));
     guard++;
   }
   testing.expectTrue(guard < 50);
