@@ -1999,23 +1999,22 @@ const CrossOriginWindow = struct {
             // and settled.
             pub const no_interface_object = true;
 
-            // The brand is *not* settled, and "Window" here is a placeholder.
-            // An earlier reading recorded Chrome's answer as '[object Window]',
-            // but it was taken synchronously right after appendChild, when the
-            // frame is still on its same-origin about:blank -- so it measured a
-            // same-origin window. Re-measured after the navigation commits
-            // (probe-cross-origin-surface, headed Chrome 150), Chrome answers
-            // '[object Object]': the proxy is a null-prototype object carrying an
-            // own Symbol.toStringTag whose *value is undefined*, which sends
-            // Object.prototype.toString all the way back to "Object".
-            //
-            // Reaching that needs the null prototype, which this class does not
-            // have, so neither value is Chrome's. "Window" is kept over the
-            // default "CrossOriginWindow" only because it is a string a real
-            // browser does print somewhere, while the class name is one no
-            // browser ever prints. The real fix is the proxy shape -- see the
-            // cross-origin section in tools/fingerprint/README.md.
-            pub const to_string_tag = "Window";
+            // Everything a cross-origin caller may reach is an own property of
+            // the proxy itself, and the proxy has no prototype at all --
+            // measured on a headed Chrome 151 (expr-xo-proxy-detail):
+            // `Object.getPrototypeOf(w)` is null, `w instanceof Object` is
+            // false, and the fourteen names are all own.
+            pub const own_properties = true;
+            pub const null_prototype = true;
+
+            // The brand is an own Symbol.toStringTag whose *value is undefined*
+            // rather than a string, which sends Object.prototype.toString past
+            // every branded tag and back to the ordinary "Object" -- Chrome
+            // answers '[object Object]'. An earlier reading recorded '[object
+            // Window]', but it was taken synchronously right after appendChild,
+            // when the frame is still on its same-origin about:blank, so it
+            // measured a same-origin window.
+            pub const to_string_tag_undefined = true;
 
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;

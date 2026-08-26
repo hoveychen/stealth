@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+A cross-origin WindowProxy is not an instance of anything. Measured on a headed
+Chrome 151 against a two-origin fixture
+(tools/fingerprint/scratch/expr-xo-proxy-detail.js, served by
+tools/fingerprint/scratch/xo-server.mjs):
+
+  Object.getPrototypeOf(w)              -> null
+  w instanceof Object                   -> false
+  Object.prototype.toString.call(w)     -> '[object Object]'
+  Object.getOwnPropertySymbols(w)       -> [toStringTag, hasInstance, isConcatSpreadable]
+  Object.getOwnPropertyDescriptor(w, Symbol.toStringTag)
+    -> { value: undefined, writable: false, enumerable: false, configurable: true }
+
+The brand is the symbol *without* a tag: an own Symbol.toStringTag whose value is
+undefined, which sends Object.prototype.toString past every branded answer and
+back to the ordinary "Object". This engine used to hand back a class instance
+whose prototype was CrossOriginWindow.prototype, so all four readings above
+disagreed with a browser at once -- and `Object.getPrototypeOf(w)` is one call, on
+an object a detector already holds.
+
+localhost is cross-origin to the 127.0.0.1 test page, so the child below is a
+real cross-origin frame without needing the network.
+-->
+
+<script id=proxy_has_no_prototype type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+
+  const iframe = document.createElement('iframe');
+  iframe.src = ALT_BASE + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    const w = iframe.contentWindow;
+
+    // Compared as a boolean rather than by handing the prototype to
+    // expectEqual: formatting a failure walks the object it was given, and
+    // reading an accessor off an interface prototype object raises "Illegal
+    // invocation", which buries the assertion that actually failed.
+    testing.expectEqual(true, Object.getPrototypeOf(w) === null);
+    testing.expectEqual(false, w instanceof Object);
+    testing.expectEqual('[object Object]', Object.prototype.toString.call(w));
+    testing.expectEqual('object', typeof w);
+
+    const tag = Object.getOwnPropertyDescriptor(w, Symbol.toStringTag);
+    testing.expectEqual('value=undefined writable=false enumerable=false configurable=true',
+      tag === undefined ? 'absent' :
+        `value=${tag.value} writable=${tag.writable}` +
+        ` enumerable=${tag.enumerable} configurable=${tag.configurable}`);
+  });
+}
+</script>

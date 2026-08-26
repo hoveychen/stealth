@@ -331,6 +331,18 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
                 },
             };
 
+            // A cross-origin WindowProxy has no prototype at all: everything a
+            // caller is allowed to reach is an own property of the object
+            // itself, so `Object.getPrototypeOf(w)` is null and `w instanceof
+            // Object` is false. NewInstance always links the instance to its
+            // FunctionTemplate's prototype object, so the link is cut here,
+            // once, right after the object exists. See the same cut for
+            // namespace objects in Snapshot.createSnapshotContext.
+            if (comptime @hasDecl(JsApi.Meta, "null_prototype")) {
+                var maybe_proto: v8.MaybeBool = undefined;
+                v8.v8__Object__SetPrototype(js_obj.handle, self.handle, @ptrCast(isolate.initNull()), &maybe_proto);
+            }
+
             if (!@hasDecl(JsApi.Meta, "empty_with_no_proto")) {
                 // The TAO contains the pointer to our Zig instance as
                 // well as any meta data we'll need to use it later.

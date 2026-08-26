@@ -1053,10 +1053,17 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
     // regular pass, and Chrome's `window` owns no symbol of its own -- it
     // inherits '[object Window]' from Window.prototype.
     if (comptime !flatten and @hasDecl(JsApi.Meta, "name")) {
-        const tag = comptime if (@hasDecl(JsApi.Meta, "to_string_tag")) JsApi.Meta.to_string_tag else JsApi.Meta.name;
         const js_name = v8.v8__Symbol__GetToStringTag(isolate);
-        const js_value = v8.v8__String__NewFromUtf8(isolate, tag.ptr, v8.kNormal, @intCast(tag.len));
-        v8.v8__Template__Set(@ptrCast(if (own_properties) instance else prototype), js_name, js_value, v8.ReadOnly + v8.DontEnum);
+        // A cross-origin WindowProxy carries the symbol but not a tag: the
+        // value is `undefined`, so Object.prototype.toString finds nothing to
+        // brand with and answers '[object Object]'.
+        const js_value: *const v8.Value = if (comptime @hasDecl(JsApi.Meta, "to_string_tag_undefined"))
+            @ptrCast(v8.v8__Undefined(isolate))
+        else blk: {
+            const tag = comptime if (@hasDecl(JsApi.Meta, "to_string_tag")) JsApi.Meta.to_string_tag else JsApi.Meta.name;
+            break :blk @ptrCast(v8.v8__String__NewFromUtf8(isolate, tag.ptr, v8.kNormal, @intCast(tag.len)));
+        };
+        v8.v8__Template__Set(@ptrCast(if (own_properties) instance else prototype), js_name, @ptrCast(js_value), v8.ReadOnly + v8.DontEnum);
     }
 
     const declarations = @typeInfo(JsApi).@"struct".decls;
