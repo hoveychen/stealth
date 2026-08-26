@@ -13924,3 +13924,180 @@ a sweep station's verdict is a *sample*, not a measurement, and the only way to
 attribute a change to a commit is to run the commit before it in the same
 sitting. Building the control costs twelve minutes and is cheaper than a
 session spent chasing a site-side flip.
+
+## Asking the challenge what it reads, and finding the worker realm (B50, 2026-08-25)
+
+B49 left 875 of 923 shared window prototypes byte-identical and 245 members on
+the missing side, with the largest piles being `SVGSVGElement` (20),
+`HTMLFrameSetElement` (18) and `Request` (11). Working down that list in size
+order is what the last three sessions did.
+
+This session asked a different question first: **which of those members does the
+challenge actually read?** The answer, taken by pointing the engine's own
+`prop_read` log at the offline macys replay (`prop-reads.mjs` against
+`akamai-replay.mjs`, recorded in `results/b50-prop-reads-replay.json`), is
+**none of them**. 2659 member reads across 71 interfaces, and not one of the 245
+names on the missing pile appears. What does appear is a realm nobody had
+measured:
+
+```
+SharedWorker.port                    266 reads
+WorkerGlobalScope.performance        124
+SharedWorkerGlobalScope.close          1 per round
+WorkerNavigator.userAgentData, connection, deviceMemory,
+  hardwareConcurrency, language, languages, platform,
+  userAgent, appVersion                nine members, every round
+```
+
+The interstitial runs its sensor from a **SharedWorker**. Every prototype table
+in this file since B46 has been the window realm.
+
+### The reporting had two blind spots, and both hid real differences
+
+`expr-constructor-slot.js` records each prototype's *own property names*. Two
+things that a fingerprint script reads in one expression are invisible to it,
+and `proto-gap.mjs` and `probes/expr-proto-chains.js` are the columns that were
+missing:
+
+**Order, when the member set is also short.** Every report those sessions wrote
+listed missing names. 27 of the 43 differing window prototypes were *also*
+mis-ordered on the members they already shared, so "HTMLIFrameElement is missing
+11 members" reads like an eleven-name job when adding them in IDL order would
+have left the tell in place. `proto-gap.mjs` compares order over the shared
+names and marks those rows `[ALSO MIS-ORDERED]`.
+
+**Inheritance.** An interface that inherits from the wrong thing shows up as a
+small member gap and nothing else. Two did:
+
+| interface | member table said | what was actually true |
+|---|---|---|
+| `OffscreenCanvas` | missing `oncontextlost`, `oncontextrestored` | a prototype root; `oc instanceof EventTarget` false, `oc.addEventListener` undefined |
+| `Performance` | byte-identical | a prototype root; `performance instanceof EventTarget` false |
+
+`Performance.zig` had a note calling this out as "its own change, with its own
+measurement" -- it went unmeasured because no table looked at chains. With both
+fixed, **every chain in both realms matches Chrome**: 923 of 923 in the window
+realm, 281 of 281 in a worker.
+
+Moving `Performance` under `EventTarget` had a structural consequence worth
+recording: it could no longer live inline in `Window` and `WorkerGlobalScope`.
+The prototype chain is one allocation with the parent immediately before the
+child, because `Factory.protoOf` is pointer arithmetic rather than a stored
+pointer read. Both owners hold a pointer now.
+
+### The worker realms
+
+Two probes, `expr-worker-proto-table.js` and
+`expr-shared-worker-proto-table.js`, take the same interface table inside each
+worker kind. Against a headed Chrome 151:
+
+| realm | before | after |
+|---|---|---|
+| dedicated | 255 of 283 identical, 64 missing, 12 extra | 267 of 283, 53 missing, **0 extra** |
+| shared | 224 of 241 identical, 56 missing, 46 extra, **41 whole interface objects Chrome does not have** | 227 of 241, 51 missing, 0 extra, **0 extra interfaces** |
+
+Three separate faults, and the third is the one that mattered.
+
+**Order.** `constructor` sits mid-list on `WorkerGlobalScope` (after
+`importScripts`) and on `WorkerNavigator` (after `connection`), because the
+members below it are the ones Blink installs per context. `WorkerLocation`,
+`FileReaderSync` and `EventTarget` were simply declared in a different order
+than Chrome's -- `EventTarget` in *both* realms, on the most walked prototype
+either one has:
+
+| interface | Chrome | this engine, before |
+|---|---|---|
+| `EventTarget` | addEventListener, dispatchEvent, removeEventListener, when | dispatchEvent, addEventListener, removeEventListener |
+| `WorkerLocation` | origin, protocol, host, hostname, port, pathname, search, hash, href, toString | toString, href, origin, … |
+| `FileReaderSync` | …, readAsDataURL, readAsText | …, readAsText, readAsDataURL |
+
+**Absence and presence.** Seven members were answered in a worker that are
+`[Exposed=Window]` and are on neither of Chrome's worker prototypes --
+`XMLHttpRequest.responseXML` among them, which a worker has no document to parse
+into. Three that Chrome does carry (`caches`, `createImageBitmap`,
+`onlanguagechange`) were missing from `WorkerGlobalScope.prototype`.
+
+**The shared worker was being built from the dedicated worker's type list.**
+WebCodecs, MSE, the USB/HID/Serial families, the RTC worker surface and
+`IdleDetector` are `[Exposed=DedicatedWorker]`. That is 41 interface objects an
+`Object.getOwnPropertyNames(self)` in the SharedWorker realm could read off this
+engine and off no browser -- in the realm the sensor runs in. Telling the two
+kinds apart needed a third `Exposed` tier (`dedicated_worker`) and a `Realm`
+enum that distinguishes them, which also covers `navigator.hid`/`serial`/`usb`
+and `FileSystemFileHandle.createSyncAccessHandle`.
+
+### The window-realm members, and the four readings the IDL would have got wrong
+
+Two batches. The first took the five interfaces a shape walk reads whole --
+`HTMLFrameSetElement` (18, the windowed handler set, identical to
+`HTMLBodyElement`'s), `HTMLTableElement` (10), `HTMLFieldSetElement` (9),
+`HTMLOutputElement` (10) and `HTMLObjectElement` (10). The second took the ones
+the read log named: `HTMLIFrameElement` (11), `HTMLMediaElement` (10),
+`ScreenOrientation` (3), `MessageEvent` (2), `OffscreenCanvas` (2), `Blob` and
+`Response` (`textStream`).
+
+**875 → 887 of 923 byte-identical; 245 → 158 members missing; 27 → 21
+mis-ordered.**
+
+Readings that had to be measured (`probes/expr-form-associated-barred.js`,
+`expr-listed-elements.js`, `expr-read-path-members.js`):
+
+- **A barred element still reports a custom error.** `fieldset`, `output` and
+  `object` are barred from constraint validation, and the plausible reading is
+  that `setCustomValidity` does nothing observable. It does: `validity.customError`
+  goes true and `validity.valid` goes false. Only `willValidate`,
+  `validationMessage`, `checkValidity` and the `invalid` event are barred.
+- **`fieldset.elements` is a plain `HTMLCollection`**, not the
+  `HTMLFormControlsCollection` the IDL names.
+- **`form.elements` and the form-data set are different sets.** The listed
+  elements -- which include `fieldset`, `object` and `output` -- go in the
+  collection and exclude `input type=image`; the submittable ones are the four
+  controls and keep the image, because that is what contributes the x/y pair
+  when it is the submitter. One walk served both here, which made
+  `form.elements` three element kinds short and, when the image was excluded
+  from it, broke the form-data path until the two were split.
+- **`output.value` is the child text content, always**; writing it moves the
+  element out of default mode and the text it displaces becomes the default.
+- **`loading` has a different missing-value default on the two elements that
+  carry it** -- `auto` on an iframe, `eager` on a media element, same attribute
+  and same keyword set. Reflecting it changes no fetching: an iframe with
+  `loading=lazy` is still fetched on insert. That was already true and is a
+  deliberate difference for an engine with no viewport.
+- **`ScreenOrientation.lock` rejects, it does not throw.** A value outside
+  `OrientationLockType` looks like it should be a synchronous `TypeError` and is
+  not: Chrome returns a Promise for every call, including one with no argument
+  at all. The first reading of this had `await` around the call and could not
+  tell the two apart, the test was written against the plausible answer, and it
+  failed -- which is what the re-measurement is for.
+- **`Response.textStream` consumes the body** (a second call is a synchronous
+  `TypeError`) where `Blob.textStream` can be called forever. Both hand back
+  string chunks and a *default* stream; `stream()` gives a byte stream.
+
+### What is left
+
+**Window realm: 36 interfaces, 158 members**, of which 21 are also mis-ordered.
+The largest are `SVGSVGElement` (20), `Request` (11), `HTMLImageElement`,
+`HTMLVideoElement`, `ProcessingInstruction`, `SVGAElement` and `SVGImageElement`
+(8 each). Nothing on this list appears in the read log.
+
+**Dedicated worker: 53 members over 16 interfaces. Shared worker: 51 over 14.**
+Both include `Request` (11) and `FontFace` (5); the rest are ones and twos.
+Seventeen global *names* are missing in both, and fourteen of those are
+interfaces this engine does not implement anywhere (`Observable`, `Subscriber`,
+`Temporal`, `PressureObserver`, `WebSocketStream`, …). The other three --
+`Worker`, `CSSSkewX`, `CSSSkewY` -- exist in the window realm and were left out
+of the worker one for reasons recorded next to `worker_common_apis`.
+
+**Measured and not fixed: live-collection identity.** Chrome hands back the same
+object when the same live collection is read twice, and this engine builds a
+fresh wrapper each get. 17 of 23 cases differ, including
+`document.scripts === document.scripts`, `element.children`,
+`getElementsByTagName`, `table.rows` and `select.options`. Six already match --
+`classList`, `attributes`, `childNodes`, `styleSheets`, `plugins`, `mimeTypes`
+-- because those return a cached pointer rather than a by-value walker. The
+reading is in `probes/expr-collection-identity.js`. Fixing it means a per-frame
+cache keyed by (node, collection kind, name), the way `_element_token_lists`
+already works for `DOMTokenList`.
+
+**Still unmeasured:** the event dictionaries' member read order, carried over
+from B49. A Proxy passed as the dictionary sees it in one expression.
