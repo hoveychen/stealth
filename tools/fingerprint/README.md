@@ -13894,3 +13894,33 @@ passed as the dictionary sees that order, so it is readable in one expression
 **Still not measured: the worker realm.** B46 read `WorkerNavigator.prototype`'s
 `constructor` between `connection` and `hid`; every table since, this one
 included, has been the window realm only.
+
+### The regression check, and why "five regressions" was none
+
+The sweep re-run after both commits read 14 of 29 against the 19 before them,
+with five stations apparently going backwards. Four of the five were noise --
+`dd-leboncoin`, `ks-canadagoose` and `x-hyatt` all read the same as before when
+re-run alone, and `px-wayfair`'s `timeout: Runtime.enable` is the load-flake
+class B47 already documented. The other two, `dd-etsy` and `dd-seloger`, kept
+answering `datadome-challenge` on their own, which is exactly the shape a real
+regression has.
+
+They are not one. A **ReleaseFast build of the pre-change commit** (`b4970d1cb`,
+built in a throwaway worktree) was run against those stations interleaved with
+the current binary, one pair at a time:
+
+| station | before this session's commits | after |
+|---|---|---|
+| dd-etsy | datadome-challenge | datadome-challenge |
+| dd-seloger | datadome-challenge | datadome-challenge |
+| px-wayfair | pass | pass |
+
+Both DataDome stations refuse the pre-change binary too, so what moved is the
+address's standing with DataDome after three full sweeps in two hours, not the
+engine. **Nothing in this session regressed.**
+
+The general lesson is the one B47 and B48 kept paying for in different currency:
+a sweep station's verdict is a *sample*, not a measurement, and the only way to
+attribute a change to a commit is to run the commit before it in the same
+sitting. Building the control costs twelve minutes and is cheaper than a
+session spent chasing a site-side flip.
