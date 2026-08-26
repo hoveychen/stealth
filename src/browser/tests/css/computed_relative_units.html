@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A computed style never carries the unit the author wrote. `padding-top:2em` on a
+20px element computes to `40px` in every browser, because font-relative lengths
+resolve at computed-value time. This engine reported the *initial* value for all
+of them: `declaredValue`'s `resolvesHere` guard refuses anything it cannot
+finish resolving, which was never worse than answering `2em` — a string Chrome
+never prints — but was never right either.
+
+Absolute units were the other half, and they were worse than the guard: `pt`,
+`cm`, `mm`, `in` and `pc` are not in RELATIVE_UNITS, so they went straight
+through and `padding-top:12pt` read back as `12pt`. Chrome answers `16px`.
+
+Every expected value below is Chrome 151's own, measured with
+tools/fingerprint/scratch/expr-relative-units.js on a 400px-wide containing
+block.
+
+Deliberately not resolved here, each for a measured reason:
+
+  * **percentages against the containing block.** `margin-left:50%` is `200px`
+    of a 400px block for Chrome; nothing here models a containing block, and the
+    synthetic layout metrics are not it. The two percentages that need no block
+    — `font-size` against the parent's, `line-height` against the element's own
+    — are resolved and asserted below.
+  * **`ex` and `ch`.** Measured with expr-ex-ch-ratio.js across five families and
+    three sizes: the ratio to the font size is exactly constant per family and
+    different for each one — 0.44873 for serif, 0.52295 for sans-serif, 0.54688
+    for monospace, 0.48145 for Georgia, 0.51855 for Arial. That is font metrics,
+    which this engine does not have, so a single ratio would be a guess dressed
+    as a measurement.
+  * **`calc()`**, which needs an evaluator and is its own task.
+-->
+
+<script id=font_relative_lengths>
+{
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;font-size:20px"><p style="' + decl + '">x</p></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+
+  const CASES = [
+    // `em` is the element's own computed font size.
+    ['40px', 'font-size:20px;padding-top:2em', 'paddingTop'],
+    ['30px', 'font-size:20px;margin-left:1.5em', 'marginLeft'],
+    ['10px', 'font-size:20px;border-top-style:solid;border-top-width:0.5em', 'borderTopWidth'],
+    ['2px', 'font-size:20px;letter-spacing:0.1em', 'letterSpacing'],
+    ['40px', 'font-size:20px;text-indent:2em', 'textIndent'],
+    // ...including one it inherited rather than declared.
+    ['40px', 'padding-top:2em', 'paddingTop'],
+    // On `font-size` itself, `em` is the *parent's* size, not the element's.
+    ['30px', 'font-size:1.5em', 'fontSize'],
+    // `rem` is the root's, which nothing here changed: 16px.
+    ['32px', 'padding-top:2rem', 'paddingTop'],
+    ['24px', 'font-size:20px;padding-top:1.5rem', 'paddingTop'],
+  ];
+  const wrong = [];
+  for (const [want, decl, prop] of CASES) {
+    const got = probe(decl, prop);
+    if (got !== want) wrong.push(decl + ' -> ' + prop + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The absolute units, which need no context at all — 96px to the inch, CSS Values
+§6.2. These were reported verbatim before, which is the one shape a computed
+style can never have.
+-->
+
+<script id=absolute_lengths>
+{
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<p style="' + decl + '">x</p>';
+    const got = String(getComputedStyle(host.firstChild).paddingTop);
+    host.remove();
+    return got;
+  };
+
+  const CASES = [
+    ['16px', 'padding-top:12pt'],
+    ['37.7953px', 'padding-top:1cm'],
+    ['3.77953px', 'padding-top:1mm'],
+    ['96px', 'padding-top:1in'],
+    ['16px', 'padding-top:1pc'],
+    ['0.944882px', 'padding-top:1Q'],
+    ['9px', 'padding-top:9px'],
+  ];
+  const wrong = [];
+  for (const [want, decl] of CASES) {
+    const got = probe(decl);
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+Viewport units, asserted against the viewport this run happens to have rather
+than against a number, so the test says what the unit *means* instead of what
+one window size produced.
+-->
+
+<script id=viewport_lengths>
+{
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<p style="' + decl + '">x</p>';
+    const got = parseFloat(getComputedStyle(host.firstChild).paddingTop);
+    host.remove();
+    return got;
+  };
+
+  const near = (want, got) => Math.abs(want - got) < 0.01;
+  testing.expectEqual(true, near(innerWidth / 10, probe('padding-top:10vw')));
+  testing.expectEqual(true, near(innerHeight / 10, probe('padding-top:10vh')));
+  testing.expectEqual(true, near(Math.min(innerWidth, innerHeight) / 10, probe('padding-top:10vmin')));
+  testing.expectEqual(true, near(Math.max(innerWidth, innerHeight) / 10, probe('padding-top:10vmax')));
+}
+</script>
+
+<!--
+The two shapes that resolve against a font size rather than a box: a percentage
+on `font-size` is the parent's, a percentage or a bare number on `line-height`
+is the element's own. Neither needs a containing block, which is why they are
+here and the other percentages are not.
+-->
+
+<script id=font_relative_percentages>
+{
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;font-size:20px"><p style="' + decl + '">x</p></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+
+  const CASES = [
+    ['30px', 'font-size:150%', 'fontSize'],
+    ['30px', 'font-size:20px;line-height:150%', 'lineHeight'],
+    ['30px', 'font-size:20px;line-height:1.5', 'lineHeight'],
+    ['30px', 'line-height:1.5', 'lineHeight'],
+  ];
+  const wrong = [];
+  for (const [want, decl, prop] of CASES) {
+    const got = probe(decl, prop);
+    if (got !== want) wrong.push(decl + ' -> ' + prop + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+And the boundary: what stays on the initial value, because answering it would
+mean inventing a containing block or a font metric. `0px` is a value Chrome does
+print for these properties; `50%` and `2ex` are values it never prints from a
+computed style, so falling back is the whole point rather than a shortcoming to
+be papered over.
+
+Chrome's answers here, for the record, are 200px / 200px / 100px / 17.9492px /
+15px.
+-->
+
+<script id=unresolvable_still_falls_through>
+{
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;font-size:20px"><p style="' + decl + '">x</p></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+
+  testing.expectEqual('0px', probe('margin-left:50%', 'marginLeft'));
+  // A <p>'s own initial top margin, which is what falling through means here.
+  testing.expectEqual('16px', probe('margin-top:50%', 'marginTop'));
+  testing.expectEqual('0px', probe('padding-top:25%', 'paddingTop'));
+  testing.expectEqual('0px', probe('font-size:20px;padding-top:2ex', 'paddingTop'));
+  testing.expectEqual('0px', probe('padding-top:calc(10px + 5px)', 'paddingTop'));
+}
+</script>
