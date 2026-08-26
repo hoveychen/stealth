@@ -13592,3 +13592,40 @@ failures: the first patched run ended with `px-wayfair` timing out on
 this file's own header warns about — one engine process serves the whole sweep
 unless `--fresh` is passed, so a station that wedges the page takes every
 station after it with it. Read a run's *tail* failures with that in mind.
+
+## The last two window properties of the wrong kind
+
+Walking every own property of `window` and recording what *kind* it is —
+`scratch/expr-window-own-descriptor-kinds.js`, which prints
+`kind/writable/enumerable/configurable` per name — leaves **1201 names shared
+with Chrome 151 and exactly two disagreements**:
+
+| name | lightpanda | Chrome 151 |
+|---|---|---|
+| `chrome` | getter, enumerable, configurable | **data**, writable, enumerable, *not* configurable |
+| `CSS` | getter, enumerable, configurable | **data**, writable, *not* enumerable, configurable |
+
+Both are one expression from being read (`Object.getOwnPropertyDescriptor(window,
+'chrome').get` is a function here and `undefined` there), and `CSS`'s enumerable
+bit is readable with a bare `for...in`. `CSS` is a WebIDL *namespace* object, and
+WebIDL §3.2 hangs one off the global as a non-enumerable data property, which is
+where its shape comes from; `chrome` is not a WebIDL anything, and Chrome pins
+it down with DontDelete.
+
+The bridge only declares accessors, which is what the note in `Window.zig` said
+made this unfixable. It is the wrong reading of the constraint: the *realm
+setup* has installed data properties with runtime-built values all along —
+`Env.zig` does it for `console` and `Context.zig` for `SharedArrayBuffer`, both
+through `Object.defineOwnProperty` with explicit V8 attributes. Both properties
+moved there, `DontDelete` for `chrome` and `DontEnum` for `CSS`. Descriptor
+diffs across the 1201 shared names: **2 → 0**, attributes included.
+
+Identity comes free rather than from the accessor's per-instance cache slot: the
+value is built once, when the realm is, so there is only ever one of it.
+
+One thing did not improve. The names moved to the *end* of
+`Object.getOwnPropertyNames(window)` — index 1199 and 1200, where they were 70
+and 80, against Chrome's 892 and 643. Neither position was right, and the
+enumeration order of the global is a separate and much larger disagreement (1201
+names against 1237, in a different order throughout). Nothing here makes that
+worse or better.

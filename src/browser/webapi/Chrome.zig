@@ -43,20 +43,16 @@
 
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
-const Execution = js.Execution;
 
-// Assembles window.chrome. The caller caches the result, so this runs once per
-// context and the object keeps its identity.
+// Assembles window.chrome. Called once, when the realm is built (Env.zig), and
+// the result is installed as the window's own `chrome` data property — so the
+// object keeps its identity across reads because there is only ever one of it.
 //
-// Two things still differ from Chrome, neither of them reachable without
-// asking for it specifically: window.chrome is an accessor here rather than a
-// non-configurable data property (the bridge can't install a data property
-// whose value is built at runtime), and the chrome.app functions report
-// name === "" where Chrome names them — newCallback creates anonymous
-// functions. Chrome's own csi and loadTimes are anonymous too.
-pub fn build(exec: *const Execution) !js.Object {
-    const local = exec.js.local.?;
-
+// One thing still differs from Chrome, and it is not reachable without asking
+// for it specifically: the chrome.app functions report name === "" where Chrome
+// names them, because newCallback creates anonymous functions. Chrome's own csi
+// and loadTimes are anonymous too.
+pub fn build(local: *const js.Local) !js.Object {
     // Property order is Chrome's own: getOwnPropertyNames reports
     // loadTimes, csi, app.
     const chrome = local.newObject();

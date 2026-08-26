@@ -28,6 +28,7 @@ const Inspector = @import("Inspector.zig");
 
 const App = @import("../../App.zig");
 const Frame = @import("../Frame.zig");
+const Chrome = @import("../webapi/Chrome.zig");
 const Window = @import("../webapi/Window.zig");
 const trusted_types = @import("../webapi/trusted_types.zig");
 const WorkerGlobalScope = @import("../webapi/WorkerGlobalScope.zig");
@@ -416,6 +417,37 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
             _ = global_object.defineOwnProperty("console", value, v8.DontEnum);
         } else |err| {
             log.err(.js, "console own property", .{ .err = err });
+        }
+
+        // `chrome` and `CSS` are data properties of the window in Chrome, not
+        // accessors, and the bridge only declares accessors -- so they are
+        // installed here for the same reason `console` above is. Descriptors
+        // measured on Chrome 151 with
+        // tools/fingerprint/scratch/expr-chrome-css-descriptor.js; the kind is
+        // readable in one expression (`desc.get` is a function or it is not),
+        // and it is the kind a bot check reads a value through when it will not
+        // trust the instance to answer honestly.
+        //
+        // Both keep their identity across reads by construction: there is one
+        // of each, built once, per realm.
+        if (comptime is_frame) {
+            // {writable: true, enumerable: true, configurable: false}, so
+            // DontDelete and nothing else. Note it enumerates, unlike every
+            // other property installed here.
+            if (Chrome.build(&ls.local)) |chrome| {
+                _ = global_object.defineOwnProperty("chrome", chrome.toValue(), v8.DontDelete);
+            } else |err| {
+                log.err(.js, "chrome own property", .{ .err = err });
+            }
+
+            // A WebIDL namespace object, which WebIDL §3.2 hangs off the global
+            // as {writable: true, enumerable: false, configurable: true} --
+            // the same shape `console` gets.
+            if (ls.local.zigValueToJs(global.window.getCSS(), .{})) |value| {
+                _ = global_object.defineOwnProperty("CSS", value, v8.DontEnum);
+            } else |err| {
+                log.err(.js, "CSS own property", .{ .err = err });
+            }
         }
 
         // SharedArrayBuffer is behind cross-origin isolation. A real browser

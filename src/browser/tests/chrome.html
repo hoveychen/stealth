@@ -1,6 +1,32 @@
 <!DOCTYPE html>
 <script src="./testing.js"></script>
 
+<script id=chrome_window_property>
+  // How `chrome` is hung off the window, which is a separate question from what
+  // the object is. Measured on Chrome 151 with
+  // tools/fingerprint/scratch/expr-chrome-css-descriptor.js: an own **data**
+  // property, writable, enumerable, and *not* configurable. There is nothing
+  // named `chrome` on Window.prototype.
+  //
+  // An accessor here is readable in one expression — `desc.get` is a function
+  // instead of undefined — and the value-through-the-descriptor idiom a bot
+  // check uses on a property it will not trust the instance to answer
+  // (`desc.get.call(window)`) throws against the real browser and works here,
+  // which is the wrong way round.
+  const d = Object.getOwnPropertyDescriptor(window, 'chrome');
+  testing.expectEqual('object', typeof d.value);
+  testing.expectEqual(undefined, d.get);
+  testing.expectEqual(undefined, d.set);
+  testing.expectEqual(true, d.writable);
+  testing.expectEqual(true, d.enumerable);
+  testing.expectEqual(false, d.configurable);
+  testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(Window.prototype, 'chrome'));
+  // Non-configurable means it survives a delete, and writable means an
+  // assignment still replaces it.
+  testing.expectEqual(false, delete window.chrome);
+  testing.expectEqual('object', typeof window.chrome);
+</script>
+
 <script id=chrome_shape>
   // window.chrome is an ordinary object in Chrome, not a platform object. Every
   // assertion here was measured on Chrome 150 — see Chrome.zig.
