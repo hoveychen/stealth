@@ -251,4 +251,44 @@
       testing.expectEqual(true, all.every((e) => e.entryType === 'resource'));
     });
   </script>
+
+  <script id=entry_milestones_stay_on_the_clock_grid type=module>
+    const state = await testing.async();
+    await waitForResourceEntry('/src/browser/tests/performance_resource.png');
+    const all = performance.getEntriesByType('resource');
+    const nav = performance.getEntriesByType('navigation')[0];
+    state.resolve();
+    await state.done(() => {
+      // Every milestone an entry exposes is a reading of the same clock
+      // `performance.now()` reads, so every one of them lands on that clock's
+      // 100us grid. Chrome 151 over a local server: 60 of 60 non-zero fields
+      // across the navigation entry and four resource entries were whole
+      // multiples of 0.1ms (tools/fingerprint/scratch/expr-entry-grid.js). A
+      // milestone finer than that hands back the resolution the clamp exists
+      // to withhold -- and `entry.requestStart * 10 % 1` is one expression.
+      const FIELDS = ['startTime', 'fetchStart', 'domainLookupStart', 'domainLookupEnd',
+        'connectStart', 'connectEnd', 'secureConnectionStart', 'requestStart',
+        'responseStart', 'finalResponseHeadersStart', 'responseEnd', 'redirectStart',
+        'redirectEnd', 'workerStart', 'domInteractive', 'domContentLoadedEventStart',
+        'domContentLoadedEventEnd', 'domComplete', 'loadEventStart', 'loadEventEnd'];
+
+      const offGrid = [];
+      let checked = 0;
+      for (const entry of [nav, ...all]) {
+        if (!entry) continue;
+        for (const f of FIELDS) {
+          const v = entry[f];
+          if (typeof v !== 'number' || v === 0) continue;
+          checked++;
+          // The lattice the value is spelled on is a dozen digits below the
+          // grid, so a whole grid point survives this test comfortably.
+          if (Math.abs(v * 10 - Math.round(v * 10)) > 1e-6) offGrid.push(f + '=' + v);
+        }
+      }
+      testing.expectEqual(true, checked >= 20,
+        { desc: 'enough non-zero milestones to be worth checking, got ' + checked });
+      testing.expectEqual([], offGrid,
+        { desc: 'every milestone is a whole multiple of the 100us grid' });
+    });
+  </script>
 </body>

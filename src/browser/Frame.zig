@@ -2652,7 +2652,7 @@ pub fn recordResourceTiming(self: *Frame, r: ResourceTimingRecord) void {
         .encoded_body_size = if (r.encoded_body_len > 0) r.encoded_body_len else r.body_len,
         .decoded_body_size = r.body_len,
     };
-    t.setConnectionMilestones(r.times);
+    t.setConnectionMilestones(r.times, perf);
     _ = perf.resourceLoaded(r.url, t, &self.js.execution) catch |err| {
         log.warn(.http, "resource timing", .{ .err = err, .url = r.url, .initiator = r.initiator });
     };

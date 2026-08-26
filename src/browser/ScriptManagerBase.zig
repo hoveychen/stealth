@@ -860,7 +860,7 @@ pub const Script = struct {
             .encoded_body_size = if (self.perf_encoded_body_size > 0) self.perf_encoded_body_size else len,
             .decoded_body_size = len,
         };
-        t.setConnectionMilestones(self.perf_times);
+        t.setConnectionMilestones(self.perf_times, perf);
         self.perf_timing = perf.resourceLoaded(self.url, t, exec) catch |err| {
             log.warn(.http, "script resource timing", .{ .err = err, .req = self.url });
             return;
