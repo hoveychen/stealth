@@ -39,6 +39,7 @@ const chrome_per_tag_values = @import("chrome_per_tag_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
 const shorthand = @import("shorthand.zig");
+const transform = @import("transform.zig");
 const typed_om = @import("typed_om.zig");
 const color = @import("../../color.zig");
 
@@ -370,6 +371,15 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
     }
     const substituted = style_manager.substituteVars(element, declaration.value) orelse "";
     const frame = element.ownerFrame(style_manager.frame);
+
+    // `transform` computes to one matrix rather than to the list the author
+    // wrote. A function this engine does not model answers `unreportable`, so
+    // the initial `none` is reported instead of a spelling Chrome never prints.
+    if (std.mem.eql(u8, property_name, "transform")) {
+        const folded = transform.computedValue(frame.call_arena, substituted) catch null;
+        return if (folded) |matrix| .{ .value = matrix } else .unreportable;
+    }
+
     if (computedColourText(frame.call_arena, property_name, substituted)) |folded| {
         return .{ .value = folded };
     }
@@ -3423,4 +3433,8 @@ test "WebApi: CSSStyleDeclaration computed colours" {
 
 test "WebApi: CSSStyleDeclaration first computed read" {
     try testing.htmlRunner("css/computed_first_read.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed transform" {
+    try testing.htmlRunner("css/computed_transform.html", .{});
 }
