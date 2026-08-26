@@ -16500,3 +16500,58 @@ on the width-measuring path, so `getElementHeight`, the y-only walk that budget
 is about, reads no more longhands than it did before.
 
 **A fidelity fix, not a key.** No station opened.
+
+## An inline box has no box (B79, 2026-08-26)
+
+`width` and `height` do not apply to a non-replaced inline box. Chrome computes
+`auto` for both and answers **0** for clientWidth, clientHeight, scrollWidth and
+scrollHeight, while offsetWidth and `getBoundingClientRect` still report the ink
+its line boxes take. This engine gave every `<span>` an 8px box and let a
+declared width into it.
+
+Measured with `scratch/expr-inline-box.js` against Chrome 151:
+
+| case | computed w/h | client w/h | offset w/h | scroll w/h |
+|---|---|---|---|---|
+| `<span>x</span>` | auto / auto | 0 / 0 | 8 / 18 | 0 / 0 |
+| `<span></span>` | auto / auto | 0 / 0 | **0 / 0** | 0 / 0 |
+| `<span style="width:300px">x</span>` | **300px** / auto | 0 / 0 | **8** / 18 | 0 / 0 |
+| `<span style="padding:10px">x</span>` | auto / auto | 0 / 0 | 28 / 38 | 0 / 0 |
+| `<span>xx<b>yy</b></span>` | auto / auto | 0 / 0 | **32** / 18 | 0 / 0 |
+| `<span><div>x</div></span>` | auto / auto | 0 / 0 | **1904** / 18 | 0 / 0 |
+| `<img width=40 height=30>` | 40px / 30px | 40 / 30 | 40 / 30 | 40 / 30 |
+
+Three of those rows are the ones worth keeping:
+
+* a declared width is **reported by getComputedStyle and ignored by the box**.
+  Both halves matter — answering `auto` there would be as wrong as sizing to it.
+* the ink is the whole line, this element's own text **plus its children's**,
+  which is where the 32 comes from.
+* a `<span>` holding a `<div>` is 1904, because **an inline box is not a
+  containing block for a block-level child**. The block escapes to the block
+  container the span sits in — which is also what keeps the span's ink from
+  asking the div for a width the div would have asked back for.
+
+### The correction: going out of flow gives you a box
+
+An absolutely positioned `<span>` with a declared width kept dropping the width,
+because it was still an inline box. It is not: `scratch/expr-abs-inline-display.js`
+shows **`position:absolute`, `position:fixed` and `float:left` all compute
+`display: block`** on an inline element, while `relative` and `sticky` leave it
+`inline`. Blockifying those three is what makes the declared width apply again —
+and it is a fidelity fix in its own right, since a computed `display` read of an
+absolutely positioned span answered `inline` here and `block` in Chrome.
+
+### Acceptance
+
+`expr-inline-box.js` goes from **4 of 13 cases and 81 of 143 field readings to
+16 of 16 and 176 of 176**. `expr-abs-inline-display.js` is 9/9.
+`expr-layout-box-shapes.js` goes from 17/25 cases and 212/250 readings to
+**18/25 and 217/250** — the inline span's five differences are gone, and the
+only width difference left in that table is a table cell's. `expr-box-parts.js`
+holds 20/21 and `expr-flex-item-width.js` holds 10/10.
+
+`zig build` green, `zig fmt --check` 0, **1510/1510**, `WebApi: Document` at
+1197ms of its 1500ms budget.
+
+**A fidelity fix, not a key.** No station opened.
