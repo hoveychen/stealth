@@ -2943,6 +2943,7 @@ fn resolveCurrentColour(self: *const CSSStyleDeclaration, value: []const u8, fra
 /// spells a colour keyword means the colour.
 fn computedColourText(arena: Allocator, property_name: []const u8, value: []const u8) ?[]const u8 {
     if (chrome_keywords.any_identifier.has(property_name)) return null;
+    if (!takesColour(property_name)) return null;
 
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
     if (trimmed.len == 0 or trimmed.len > 32) return null;
@@ -2963,6 +2964,30 @@ fn computedColourText(arena: Allocator, property_name: []const u8, value: []cons
     var buf = std.Io.Writer.Allocating.init(arena);
     writeColour(&buf.writer, .{ .rgb = .{ rgba.r, rgba.g, rgba.b }, .alpha = rgba.a }) catch return null;
     return buf.written();
+}
+
+/// Whether the property takes a `<color>` at all, which is what makes folding a
+/// bare keyword to `rgb()` the right thing to do to it.
+///
+/// The `any_identifier` gate above is not enough on its own. It keeps
+/// `font-family: red` a family called red, but plenty of properties outside it
+/// take a keyword that happens to spell a colour -- the system colours are
+/// words like `menu`, `caption`, `field`, `window`, `mark` and `background`,
+/// and `font` takes six of them. Folding there made
+/// `getComputedStyle(el).font` answer `rgb(255, 255, 255)` for `font: menu`,
+/// which is further from Chrome's `16px Arial` than the keyword it replaced.
+/// Kasada writes all six at x-hyatt, one per system font keyword, so it is not
+/// a corner either.
+///
+/// `currentcolor` is the discriminator and an exact one: all sixty
+/// colour-valued properties in the measured keyword tables list it, and no
+/// other property does.
+fn takesColour(property_name: []const u8) bool {
+    const known = chrome_keywords.keywords.get(property_name) orelse return false;
+    for (known) |keyword| {
+        if (std.mem.eql(u8, keyword, "currentcolor")) return true;
+    }
+    return false;
 }
 
 fn writeColour(writer: *std.Io.Writer, colour: Colour) !void {
