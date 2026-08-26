@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<div id="host"></div>
+
+<script id="type_and_form">
+  {
+    const form = document.createElement('form');
+    const o = document.createElement('output');
+    form.appendChild(o);
+    document.getElementById("host").appendChild(form);
+
+    testing.expectEqual('output', o.type);
+    testing.expectEqual(true, o.form === form);
+    testing.expectEqual(null, document.createElement('output').form);
+
+    form.remove();
+  }
+</script>
+
+<script id="value_and_default_value">
+  {
+    // Measured on Chrome 151 (probes/expr-form-associated-barred.js). `value`
+    // is the child text content, always. Writing it moves the element out of
+    // default mode and the text it displaces becomes the default.
+    const o = document.createElement('output');
+    testing.expectEqual('', o.value);
+    testing.expectEqual('', o.defaultValue);
+
+    o.textContent = 'text';
+    testing.expectEqual('text', o.value);
+    testing.expectEqual('text', o.defaultValue);
+
+    o.defaultValue = 'dv';
+    testing.expectEqual('dv', o.value);
+    testing.expectEqual('dv', o.defaultValue);
+    testing.expectEqual('dv', o.textContent);
+
+    o.value = 'v';
+    testing.expectEqual('v', o.value);
+    testing.expectEqual('dv', o.defaultValue);
+    testing.expectEqual('v', o.textContent);
+
+    o.defaultValue = 'dv2';
+    testing.expectEqual('v', o.value);
+    testing.expectEqual('dv2', o.defaultValue);
+    testing.expectEqual('v', o.textContent);
+
+    o.textContent = 'text2';
+    testing.expectEqual('text2', o.value);
+    testing.expectEqual('dv2', o.defaultValue);
+  }
+</script>
+
+<script id="value_on_a_fresh_element">
+  {
+    // Writing `value` first saves the empty text content as the default.
+    const o = document.createElement('output');
+    o.value = 'v';
+    testing.expectEqual('', o.defaultValue);
+    testing.expectEqual('v', o.innerHTML);
+  }
+</script>
+
+<script id="barred_from_constraint_validation">
+  {
+    const o = document.createElement('output');
+    testing.expectEqual(false, o.willValidate);
+    testing.expectEqual(true, o.validity === o.validity);
+    testing.expectEqual('', o.validationMessage);
+    testing.expectEqual(true, o.checkValidity());
+    testing.expectEqual(true, o.reportValidity());
+
+    o.setCustomValidity('boom');
+    testing.expectEqual(true, o.validity.customError);
+    testing.expectEqual(false, o.validity.valid);
+    testing.expectEqual('', o.validationMessage);
+    testing.expectEqual(true, o.checkValidity());
+  }
+</script>
+
+<script id="html_for_and_labels">
+  {
+    const o = document.createElement('output');
+    testing.expectEqual('DOMTokenList', o.htmlFor.constructor.name);
+    o.htmlFor = 'a b';
+    testing.expectEqual('a b', o.getAttribute('for'));
+    testing.expectEqual(2, o.htmlFor.length);
+  }
+</script>

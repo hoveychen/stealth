@@ -46,6 +46,8 @@ const Mode = enum {
     links,
     anchors,
     form,
+    form_submittable,
+    fieldset,
 };
 
 pub const ClassNameFilter = struct {
@@ -89,6 +91,8 @@ const Filters = union(Mode) {
     links,
     anchors,
     form: struct { form: *Form, form_id: ?[]const u8 },
+    form_submittable: struct { form: *Form, form_id: ?[]const u8 },
+    fieldset,
 
     fn TypeOf(comptime mode: Mode) type {
         @setEvalBranchQuota(10_000);
@@ -118,7 +122,7 @@ const Filters = union(Mode) {
 pub fn NodeLive(comptime mode: Mode) type {
     const Filter = Filters.TypeOf(mode);
     const TW = switch (mode) {
-        .tag, .tag_name, .tag_name_ns, .class_name, .name, .all_elements, .links, .anchors, .form => TreeWalker.FullExcludeSelf,
+        .tag, .tag_name, .tag_name_ns, .class_name, .name, .all_elements, .links, .anchors, .form, .form_submittable, .fieldset => TreeWalker.FullExcludeSelf,
         .child_elements, .child_tag, .cells => TreeWalker.Children,
         // Not a tree-order walk: see TreeWalker.TableRows.
         .table_rows => TreeWalker.TableRows,
@@ -407,9 +411,13 @@ pub fn NodeLive(comptime mode: Mode) type {
                     if (el.is(Anchor) == null) return false;
                     return el.hasAttributeSafe(comptime .wrap("name"));
                 },
-                .form => {
+                .form, .form_submittable => {
                     const el = node.is(Element) orelse return false;
-                    if (!isFormControl(el)) {
+                    const ok = if (mode == .form)
+                        isListedElement(el, false)
+                    else
+                        isSubmittableElement(el);
+                    if (!ok) {
                         return false;
                     }
 
@@ -439,14 +447,45 @@ pub fn NodeLive(comptime mode: Mode) type {
                     // controls, this could be significantly faster.
                     return self._filter.form.asNode().contains(node);
                 },
+                // A fieldset's own listed descendants: no form-owner rules at
+                // all, so a control that names another form through `form=`
+                // still counts, and so does one inside a nested fieldset.
+                .fieldset => {
+                    const el = node.is(Element) orelse return false;
+                    return isListedElement(el, true);
+                },
             }
         }
 
-        fn isFormControl(el: *Element) bool {
+        // The *submittable* elements -- button, input, select, textarea --
+        // which is a different set from the listed ones and the one the
+        // form-data set is built out of. `input type=image` belongs here (it
+        // contributes the x/y pair when it is the submitter) and does not
+        // belong in `form.elements`; `fieldset`, `object` and `output` are the
+        // other way round.
+        fn isSubmittableElement(el: *Element) bool {
             if (el._type != .html) return false;
             const html = el.subtype(Element.Html);
             return switch (html._type) {
                 .input, .button, .select, .textarea => true,
+                else => false,
+            };
+        }
+
+        // HTML's "listed elements": button, fieldset, input, object, output,
+        // select, textarea. Measured against a headed Chrome 151
+        // (probes/expr-listed-elements.js): a form holding one of each hands
+        // back all seven through `form.elements`, and a fieldset holding the
+        // same hands back all seven through `fieldset.elements`. The only
+        // difference between the two collections is `input type=image`, which
+        // `form.elements` drops and `fieldset.elements` keeps -- hence the
+        // parameter rather than two predicates.
+        fn isListedElement(el: *Element, comptime keep_image_input: bool) bool {
+            if (el._type != .html) return false;
+            const html = el.subtype(Element.Html);
+            return switch (html._type) {
+                .input => keep_image_input or (el.is(Element.Html.Input).?._input_type != .image),
+                .button, .select, .textarea, .fieldset, .object, .output => true,
                 else => false,
             };
         }
@@ -491,6 +530,8 @@ pub fn NodeLive(comptime mode: Mode) type {
                 .links => .{ ._data = .{ .links = self } },
                 .anchors => .{ ._data = .{ .anchors = self } },
                 .form => .{ ._data = .{ .form = self } },
+                .form_submittable => @compileError("the submittable set is an internal walk, not a collection"),
+                .fieldset => .{ ._data = .{ .fieldset = self } },
             };
         }
     };

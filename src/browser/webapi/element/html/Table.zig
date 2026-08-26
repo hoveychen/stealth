@@ -5,6 +5,8 @@ const Node = @import("../../Node.zig");
 const Frame = @import("../../../Frame.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
+const TableCaption = @import("TableCaption.zig");
+const TableSection = @import("TableSection.zig");
 const collections = @import("../../collections.zig");
 
 const Table = @This();
@@ -30,6 +32,167 @@ pub fn getTBodies(self: *Table, frame: *Frame) collections.NodeLive(.child_tag) 
 // a plain tree walk.
 pub fn getRows(self: *Table, frame: *Frame) collections.NodeLive(.table_rows) {
     return collections.NodeLive(.table_rows).init(self.asNode(), {}, frame);
+}
+
+// The caption/thead/tfoot trio. Each is "the first child of that kind, in tree
+// order", and each has a create-or-return, a delete-if-present and a setter
+// that replaces. The three differ only in where a fresh one is put:
+//
+//   caption -> first child of the table
+//   thead   -> before the first child that is neither a caption nor a colgroup
+//   tfoot   -> last child of the table
+//
+// The setters are not [CEReactions]-free: replacing means removing the old
+// one, which is a mutation of its own.
+
+fn firstChildOfKind(self: *Table, comptime T: type) ?*T {
+    var it = self.asNode().childrenIterator();
+    while (it.next()) |child| {
+        const element = child.is(Element) orelse continue;
+        if (element.is(T)) |match| {
+            return match;
+        }
+    }
+    return null;
+}
+
+fn firstSectionOfTag(self: *Table, tag: Element.Tag) ?*TableSection {
+    var it = self.asNode().childrenIterator();
+    while (it.next()) |child| {
+        const element = child.is(Element) orelse continue;
+        if (element.getTag() != tag) continue;
+        if (element.is(TableSection)) |section| {
+            return section;
+        }
+    }
+    return null;
+}
+
+fn removeChildNode(self: *Table, node: *Node, frame: *Frame) !void {
+    _ = try self.asNode().removeChild(node, frame);
+}
+
+pub fn getCaption(self: *Table) ?*TableCaption {
+    return self.firstChildOfKind(TableCaption);
+}
+
+pub fn setCaption(self: *Table, value: ?*TableCaption, frame: *Frame) !void {
+    if (self.getCaption()) |old| {
+        try self.removeChildNode(old.asNode(), frame);
+    }
+    const caption = value orelse return;
+    const self_node = self.asNode();
+    _ = try self_node.insertBefore(caption.asNode(), self_node.firstChild(), frame);
+}
+
+pub fn createCaption(self: *Table, frame: *Frame) !*Node {
+    if (self.getCaption()) |existing| {
+        return existing.asNode();
+    }
+    const caption = try Frame.node_factory.createElementNS(frame, .html, "caption", null);
+    const self_node = self.asNode();
+    return self_node.insertBefore(caption, self_node.firstChild(), frame);
+}
+
+pub fn deleteCaption(self: *Table, frame: *Frame) !void {
+    const caption = self.getCaption() orelse return;
+    try self.removeChildNode(caption.asNode(), frame);
+}
+
+pub fn getTHead(self: *Table) ?*TableSection {
+    return self.firstSectionOfTag(.thead);
+}
+
+pub fn setTHead(self: *Table, value: ?*TableSection, frame: *Frame) !void {
+    if (value) |section| {
+        if (section.asElement().getTag() != .thead) {
+            // Chrome's own sentence, measured: a *section* of the wrong kind
+            // is a HierarchyRequestError with this text, while a non-section
+            // is the bridge's stock "Failed to convert value to
+            // 'HTMLTableSectionElement'" TypeError.
+            return frame.js.fail(error.HierarchyError, "Failed to set the 'tHead' property on 'HTMLTableElement': Not a thead element.");
+        }
+    }
+    if (self.getTHead()) |old| {
+        try self.removeChildNode(old.asNode(), frame);
+    }
+    const section = value orelse return;
+    _ = try self.asNode().insertBefore(section.asNode(), self.headInsertionPoint(), frame);
+}
+
+// "Immediately before the first element that is neither a caption nor a
+// colgroup", which for a table whose only children are those two is the end.
+fn headInsertionPoint(self: *Table) ?*Node {
+    var it = self.asNode().childrenIterator();
+    while (it.next()) |child| {
+        const element = child.is(Element) orelse return child;
+        switch (element.getTag()) {
+            .caption, .colgroup => {},
+            else => return child,
+        }
+    }
+    return null;
+}
+
+pub fn createTHead(self: *Table, frame: *Frame) !*Node {
+    if (self.getTHead()) |existing| {
+        return existing.asNode();
+    }
+    const thead = try Frame.node_factory.createElementNS(frame, .html, "thead", null);
+    return self.asNode().insertBefore(thead, self.headInsertionPoint(), frame);
+}
+
+pub fn deleteTHead(self: *Table, frame: *Frame) !void {
+    const thead = self.getTHead() orelse return;
+    try self.removeChildNode(thead.asNode(), frame);
+}
+
+pub fn getTFoot(self: *Table) ?*TableSection {
+    return self.firstSectionOfTag(.tfoot);
+}
+
+pub fn setTFoot(self: *Table, value: ?*TableSection, frame: *Frame) !void {
+    if (value) |section| {
+        if (section.asElement().getTag() != .tfoot) {
+            return frame.js.fail(error.HierarchyError, "Failed to set the 'tFoot' property on 'HTMLTableElement': Not a tfoot element.");
+        }
+    }
+    if (self.getTFoot()) |old| {
+        try self.removeChildNode(old.asNode(), frame);
+    }
+    const section = value orelse return;
+    _ = try self.asNode().appendChild(section.asNode(), frame);
+}
+
+pub fn createTFoot(self: *Table, frame: *Frame) !*Node {
+    if (self.getTFoot()) |existing| {
+        return existing.asNode();
+    }
+    const tfoot = try Frame.node_factory.createElementNS(frame, .html, "tfoot", null);
+    return self.asNode().appendChild(tfoot, frame);
+}
+
+pub fn deleteTFoot(self: *Table, frame: *Frame) !void {
+    const tfoot = self.getTFoot() orelse return;
+    try self.removeChildNode(tfoot.asNode(), frame);
+}
+
+// Unlike the other three there is no getter and no delete: a table may hold
+// any number of tbodies, so this only ever appends one, immediately after the
+// last one already there.
+pub fn createTBody(self: *Table, frame: *Frame) !*Node {
+    const tbody = try Frame.node_factory.createElementNS(frame, .html, "tbody", null);
+    const self_node = self.asNode();
+
+    var last: ?*Node = null;
+    var it = self_node.childrenIterator();
+    while (it.next()) |child| {
+        const element = child.is(Element) orelse continue;
+        if (element.getTag() == .tbody) {
+            last = child;
+        }
+    }
+    return self_node.insertBefore(tbody, if (last) |l| l.nextSibling() else null, frame);
 }
 
 pub fn deleteRow(self: *Table, index: i32, frame: *Frame) !void {
@@ -178,20 +341,32 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's own-property order (measured), which puts the three section
+    // accessors first and the presentational reflections in IDL order rather
+    // than the reverse order they were declared in here.
     const reflect = Element.Reflect(Table);
-    pub const width = reflect.string("width");
-    pub const summary = reflect.string("summary");
-    pub const rules = reflect.string("rules");
-    pub const frame = reflect.string("frame");
-    pub const cellSpacing = reflect.stringNullToEmpty("cellspacing");
-    pub const cellPadding = reflect.stringNullToEmpty("cellpadding");
-    pub const border = reflect.string("border");
-    pub const bgColor = reflect.stringNullToEmpty("bgcolor");
-    pub const @"align" = reflect.string("align");
-
-    pub const rows = bridge.accessor(Table.getRows, null, .{});
+    pub const caption = bridge.accessor(Table.getCaption, Table.setCaption, .{ .ce_reactions = true });
+    pub const tHead = bridge.accessor(Table.getTHead, Table.setTHead, .{ .ce_reactions = true });
+    pub const tFoot = bridge.accessor(Table.getTFoot, Table.setTFoot, .{ .ce_reactions = true });
     pub const tBodies = bridge.accessor(Table.getTBodies, null, .{});
+    pub const rows = bridge.accessor(Table.getRows, null, .{});
+    pub const @"align" = reflect.string("align");
+    pub const border = reflect.string("border");
+    pub const frame = reflect.string("frame");
+    pub const rules = reflect.string("rules");
+    pub const summary = reflect.string("summary");
+    pub const width = reflect.string("width");
+    pub const bgColor = reflect.stringNullToEmpty("bgcolor");
+    pub const cellPadding = reflect.stringNullToEmpty("cellpadding");
+    pub const cellSpacing = reflect.stringNullToEmpty("cellspacing");
+    pub const createCaption = bridge.function(Table.createCaption, .{ .ce_reactions = true });
+    pub const createTBody = bridge.function(Table.createTBody, .{ .ce_reactions = true });
+    pub const createTFoot = bridge.function(Table.createTFoot, .{ .ce_reactions = true });
+    pub const createTHead = bridge.function(Table.createTHead, .{ .ce_reactions = true });
+    pub const deleteCaption = bridge.function(Table.deleteCaption, .{ .ce_reactions = true });
     pub const deleteRow = bridge.function(Table.deleteRow, .{ .ce_reactions = true });
+    pub const deleteTFoot = bridge.function(Table.deleteTFoot, .{ .ce_reactions = true });
+    pub const deleteTHead = bridge.function(Table.deleteTHead, .{ .ce_reactions = true });
     pub const insertRow = bridge.function(Table.insertRow, .{ .ce_reactions = true });
 };
 

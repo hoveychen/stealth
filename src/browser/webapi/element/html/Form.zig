@@ -113,8 +113,12 @@ pub fn setMethod(self: *Form, method: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("method"), .wrap(method), frame);
 }
 
+/// `form.elements` is the *listed* elements -- which includes fieldset, object
+/// and output, and excludes `input type=image` (measured on Chrome 151,
+/// probes/expr-listed-elements.js). That is not the same set the form-data
+/// algorithm walks; see `iterator`.
 pub fn getElements(self: *Form, frame: *Frame) !*collections.HTMLFormControlsCollection {
-    const node_live = self.iterator(frame);
+    const node_live = self.walk(.form, frame);
     const elements = try frame._factory.chained(.{
         node_live.htmlCollectionValue(),
         collections.HTMLFormControlsCollection{ ._proto = undefined },
@@ -123,14 +127,21 @@ pub fn getElements(self: *Form, frame: *Frame) !*collections.HTMLFormControlsCol
     return elements;
 }
 
-pub fn iterator(self: *Form, frame: *Frame) collections.NodeLive(.form) {
+/// The *submittable* elements, which is what the form-data set and the
+/// validity sweep are built from: `input type=image` is in (it contributes the
+/// x/y pair when it is the submitter) and the three barred elements are out.
+pub fn iterator(self: *Form, frame: *Frame) collections.NodeLive(.form_submittable) {
+    return self.walk(.form_submittable, frame);
+}
+
+fn walk(self: *Form, comptime mode: anytype, frame: *Frame) collections.NodeLive(mode) {
     const form_id = self.asElement().getAttributeSafe(comptime .wrap("id"));
     const root = if (form_id != null)
         self.asNode().getRootNode(.{}) // Has ID: walk entire document to find form=ID controls
     else
         self.asNode(); // No ID: walk only form subtree (no external controls possible)
 
-    return collections.NodeLive(.form).init(root, .{ .form = self, .form_id = form_id }, frame);
+    return collections.NodeLive(mode).init(root, .{ .form = self, .form_id = form_id }, frame);
 }
 
 pub fn getAction(self: *Form, frame: *Frame) ![]const u8 {

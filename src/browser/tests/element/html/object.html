@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<div id="host"></div>
+
+<script id="form_and_documents">
+  {
+    const form = document.createElement('form');
+    const ob = document.createElement('object');
+    form.appendChild(ob);
+    document.getElementById("host").appendChild(form);
+
+    testing.expectEqual(true, ob.form === form);
+    // Chrome answers null for all three on an <object> with no `data`,
+    // attached or not (measured); this engine never gives an <object> a
+    // nested browsing context, so they are null throughout.
+    testing.expectEqual(null, ob.contentDocument);
+    testing.expectEqual(null, ob.contentWindow);
+    testing.expectEqual(null, ob.getSVGDocument());
+    testing.expectEqual(0, ob.getSVGDocument.length);
+
+    form.remove();
+  }
+</script>
+
+<script id="barred_from_constraint_validation">
+  {
+    const ob = document.createElement('object');
+    testing.expectEqual(false, ob.willValidate);
+    testing.expectEqual(true, ob.validity === ob.validity);
+    testing.expectEqual('', ob.validationMessage);
+    testing.expectEqual(true, ob.checkValidity());
+    testing.expectEqual(true, ob.reportValidity());
+
+    ob.setCustomValidity('boom');
+    testing.expectEqual(true, ob.validity.customError);
+    testing.expectEqual(false, ob.validity.valid);
+    testing.expectEqual('', ob.validationMessage);
+    testing.expectEqual(true, ob.checkValidity());
+  }
+</script>
+
+<script id="reflections">
+  {
+    const ob = document.createElement('object');
+    testing.expectEqual('', ob.type);
+    ob.type = 'application/pdf';
+    testing.expectEqual('application/pdf', ob.type);
+    ob.setAttribute('hspace', '7');
+    testing.expectEqual(7, ob.hspace);
+  }
+</script>

@@ -25,6 +25,9 @@ const Input = @import("Input.zig");
 const Select = @import("Select.zig");
 const TextArea = @import("TextArea.zig");
 const Button = @import("Button.zig");
+const FieldSet = @import("FieldSet.zig");
+const Output = @import("Output.zig");
+const Object = @import("Object.zig");
 const Frame = @import("../../../Frame.zig");
 
 const ValidityState = @This();
@@ -130,6 +133,12 @@ pub fn getCustomError(self: *const ValidityState) bool {
     if (self._owner.is(Select)) |select| return select.hasCustomValidity();
     if (self._owner.is(TextArea)) |textarea| return textarea.hasCustomValidity();
     if (self._owner.is(Button)) |button| return button.hasCustomValidity();
+    // The three barred-from-constraint-validation elements. `willValidate` is
+    // false on all three and `checkValidity` always true, but the custom
+    // message still shows up here -- measured, see barred_validation.zig.
+    if (self._owner.is(FieldSet)) |fieldset| return fieldset.hasCustomValidity();
+    if (self._owner.is(Output)) |output| return output.hasCustomValidity();
+    if (self._owner.is(Object)) |object| return object.hasCustomValidity();
     return false;
 }
 

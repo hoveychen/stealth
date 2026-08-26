@@ -43,6 +43,7 @@ const Mode = enum {
     links,
     anchors,
     form,
+    fieldset,
     empty,
 };
 
@@ -65,6 +66,7 @@ _data: union(Mode) {
     links: NodeLive(.links),
     anchors: NodeLive(.anchors),
     form: NodeLive(.form),
+    fieldset: NodeLive(.fieldset),
     empty: void,
 },
 _rc: lp.RC = .{},
@@ -137,6 +139,7 @@ pub fn iterator(self: *HTMLCollection, exec: *const Execution) !*Iterator {
             .links => |*impl| .{ .links = impl._tw.clone() },
             .anchors => |*impl| .{ .anchors = impl._tw.clone() },
             .form => |*impl| .{ .form = impl._tw.clone() },
+            .fieldset => |*impl| .{ .fieldset = impl._tw.clone() },
             .empty => .empty,
         },
     }, exec);
@@ -160,6 +163,7 @@ pub const Iterator = GenericIterator(struct {
         links: TreeWalker.FullExcludeSelf,
         anchors: TreeWalker.FullExcludeSelf,
         form: TreeWalker.FullExcludeSelf,
+        fieldset: TreeWalker.FullExcludeSelf,
         empty: void,
     },
 
@@ -187,6 +191,7 @@ pub const Iterator = GenericIterator(struct {
             .links => |*impl| impl.nextTw(&self.tw.links),
             .anchors => |*impl| impl.nextTw(&self.tw.anchors),
             .form => |*impl| impl.nextTw(&self.tw.form),
+            .fieldset => |*impl| impl.nextTw(&self.tw.fieldset),
             .empty => return null,
         };
     }

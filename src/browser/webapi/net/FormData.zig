@@ -738,8 +738,11 @@ fn collectForm(arena: Allocator, form_: ?*Form, submitter_: ?*Element, frame: *F
     var list: std.ArrayList(Entry) = .empty;
     const form = form_ orelse return list;
 
-    var elements = try form.getElements(frame);
-    var it = try elements.iterator();
+    // The form-data set is built from the *submittable* elements, not from
+    // `form.elements`: an `input type=image` contributes the x/y pair when it
+    // is the submitter and is absent from `form.elements`, while fieldset,
+    // object and output are in that collection and contribute nothing.
+    var it = form.iterator(frame);
     while (it.next()) |element| {
         if (element.isDisabled()) {
             continue;
