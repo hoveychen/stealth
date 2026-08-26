@@ -13508,3 +13508,61 @@ One row moved on its own between two runs of the *same* Chrome:
 afternoon. That is the host's appearance setting reaching into the browser, not a
 gap in either engine — worth naming because a probe that reads it will disagree
 with itself.
+
+## The page was the whole world
+
+`window.outerHeight - window.innerHeight` was **0** and `screenX`/`screenY` were
+both **0**. Together those two readings describe a viewport with nothing around
+it: no tab strip, no omnibox, no bookmarks bar, and no desktop for the window to
+sit on. No browser reports that, and Kasada reads all four numbers — nine
+`outerHeight`, nine `outerWidth`, six `screenX`, six `screenY`, five each of
+`screenLeft`/`screenTop`, eleven `innerHeight`, four `availHeight`, two
+`availWidth` — on a single x-hyatt load (`results/prop-reads-hyatt.json`).
+
+The browser's height is a **constant 87 CSS pixels**, measured with
+`scratch/expr-window-shell.js`:
+
+| Chrome 151 | inner | outer | dh | screenX, screenY | screen |
+|---|---|---|---|---|---|
+| headed, macOS | 1512x862 | 1512x949 | **87** | 0, 33 | 1512x982 |
+| `--headless=new`, `--window-size=1024,768` | 1024x681 | 1024x768 | **87** | 22, 22 | 800x600 |
+| `--headless=new`, `--window-size=1280,720` | 1280x633 | 1280x720 | **87** | 22, 22 | 800x600 |
+| `--headless=new`, `--window-size=1920,1080` | 1920x993 | 1920x1080 | **87** | 22, 22 | 800x600 |
+| `--headless=new`, `--window-size=1920,1200` | 1920x1113 | 1920x1200 | **87** | 22, 22 | 800x600 |
+
+87 in every row: it does not scale with the window, and it does not scale with
+the device pixel ratio either (the headed row is a retina panel at dpr 2). Note
+that `--window-size` sets the *outer* box and Chrome derives the page from it,
+the opposite of the direction CDP's `Emulation.setDeviceMetricsOverride` works
+in — that one sets the page, which is why the page stays the number a caller
+owns here.
+
+The headed row is the one worth copying, because every number in it agrees with
+every other: the window is maximised into the usable area, so it starts exactly
+at `(availLeft, availTop)` and is exactly `availWidth x availHeight`, and the
+menu bar is the whole difference between the display and the usable area. The
+headless row agrees with nothing — a 1920x1080 window at (22, 22) on an 800x600
+screen — which is its own tell and not one to reproduce.
+
+So `Viewport` now derives the arrangement from the page, in one place:
+
+```
+inner   = the viewport                          1920 x 1080   (unchanged)
+outer   = inner + 87 tall, same width           1920 x 1167
+window at (availLeft, availTop)                 (0, 33)
+avail   = outer                                 1920 x 1167
+screen  = avail + a 33px menu bar               1920 x 1200
+```
+
+1920x1200 is a display a Mac has, and the arrangement is the headed reading
+scaled up. It also retires an impossibility that was already there and unrelated
+to the window: `availHeight` was a hardcoded 1040 against an `innerHeight` of
+1080 — a page taller than the screen it was drawn on.
+
+One consequence worth naming: the `device-width` / `device-height` /
+`device-aspect-ratio` media features read the **display**, which MQ4 §5 says
+they are and which `screen.width`/`screen.height` now answer, so they stopped
+being the same numbers as `width`/`height`. `(aspect-ratio: 16/9)` is the page
+and still holds; `(device-aspect-ratio: 8/5)` is the display. CreepJS compares
+the two families against `screen.*` to catch an iframe-shrunk window, so they
+have to be told apart rather than aliased.
