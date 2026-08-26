@@ -258,6 +258,15 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     StyleManager.Visibility.visible;
                 return value.keyword();
             }
+            // The used surface only. The CSS Typed OM reports the computed
+            // width, which `border-style: none` does not collapse -- see
+            // `borderWidth`, and typedom_computed_initial_values, where the two
+            // surfaces answer 3px and 0px off the same undeclared border.
+            if (surface == .used) {
+                if (borderStyleFor(normalized)) |style_name| {
+                    return self.computedBorderWidth(element, normalized, wrapped, style_name, frame, surface, depth);
+                }
+            }
         }
     }
 
@@ -666,6 +675,94 @@ fn declinesComputedJoin(name: []const u8) bool {
         if (std.mem.eql(u8, name, declined)) return true;
     }
     return false;
+}
+
+/// The style longhand that decides whether a border-width longhand is drawn, or
+/// null for every other name. `border-image-width` is not one of these: it has
+/// no style beside it and answers a number, not a length.
+fn borderStyleFor(name: []const u8) ?[]const u8 {
+    const PAIRS = [_][2][]const u8{
+        .{ "border-top-width", "border-top-style" },
+        .{ "border-right-width", "border-right-style" },
+        .{ "border-bottom-width", "border-bottom-style" },
+        .{ "border-left-width", "border-left-style" },
+        .{ "border-block-start-width", "border-block-start-style" },
+        .{ "border-block-end-width", "border-block-end-style" },
+        .{ "border-inline-start-width", "border-inline-start-style" },
+        .{ "border-inline-end-width", "border-inline-end-style" },
+    };
+    for (PAIRS) |pair| {
+        if (std.mem.eql(u8, name, pair[0])) return pair[1];
+    }
+    return null;
+}
+
+/// A computed `border-*-width` is a used value: what the border is actually
+/// drawn at, not the length the page wrote. Measured on Chrome 151 over six
+/// styles x eleven widths with tools/fingerprint/scratch/expr-border-width-used.js.
+///
+///   * `none` and `hidden` draw nothing, so the width is `0px` however it was
+///     declared -- all 22 cells of those two rows.
+///   * Otherwise the keywords resolve (thin 1px, medium 3px, thick 5px), an
+///     undeclared width is `medium`, a length truncates to whole pixels
+///     (`4.6px` -> `4px`) and a declared length above zero never truncates away
+///     (`0.4px` -> `1px`), and a declaration the parser rejected is `medium`
+///     (`50%` -> `3px`), not the recorded initial.
+///
+/// This is the computed view only. `el.style.borderTopWidth` keeps the page's
+/// own text, keyword and all, which is what Chrome hands back there.
+///
+/// One known miss: `calc(2px + 3px)` computes to `5px` in Chrome and takes the
+/// rejected-declaration path here, so it answers `3px`. There is no calc
+/// evaluator to ask; `3px` is at least a shape Chrome prints.
+fn computedBorderWidth(
+    self: *const CSSStyleDeclaration,
+    element: *Element,
+    name: []const u8,
+    wrapped: String,
+    style_name: []const u8,
+    frame: *Frame,
+    surface: Surface,
+    depth: u8,
+) []const u8 {
+    const style = self.propertyValueAt(style_name, frame, surface, depth + 1);
+    if (std.ascii.eqlIgnoreCase(style, "none") or std.ascii.eqlIgnoreCase(style, "hidden")) {
+        return "0px";
+    }
+
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const declared = found: {
+        switch (cascadedValue(style_manager, element, name, wrapped)) {
+            .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
+            // Written, and this engine cannot report it: `medium`, the same as
+            // a declaration Chrome's own parser drops.
+            .unreportable => return "3px",
+            .none => {},
+        }
+        // The name's other spelling, the way the generic path falls back:
+        // `border-block-start-width` and `border-top-width` are one property
+        // under two names, and this engine stores only the one the page wrote.
+        if (chrome_logical.counterpart(name)) |other| {
+            switch (cascadedValue(style_manager, element, other, .wrap(other))) {
+                .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
+                .unreportable, .none => {},
+            }
+        }
+        // Nothing written under either spelling: `medium`.
+        return "3px";
+    };
+
+    if (std.ascii.eqlIgnoreCase(declared, "thin")) return "1px";
+    if (std.ascii.eqlIgnoreCase(declared, "medium")) return "3px";
+    if (std.ascii.eqlIgnoreCase(declared, "thick")) return "5px";
+
+    // Anything the length pass already resolved arrives here as px; anything
+    // else is a value Chrome's parser would have dropped.
+    if (!std.mem.endsWith(u8, declared, "px")) return "3px";
+    const number = std.fmt.parseFloat(f64, declared[0 .. declared.len - 2]) catch return "3px";
+    if (number <= 0) return "0px";
+    const whole: i64 = @intFromFloat(@floor(number));
+    return std.fmt.allocPrint(frame.local_arena, "{d}px", .{@max(whole, 1)}) catch "3px";
 }
 
 /// The border family writes all three components off a computed view, where the
@@ -3046,11 +3143,9 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surfa
 /// `computedStyleMap().get('border-top-width')` and `0px` from
 /// `getComputedStyle().borderTopWidth`.
 ///
-/// Only the undeclared case comes through here, so a declared width is reported
-/// as declared on both surfaces. An element that declares a border *style* but
-/// no width still reads 0px here where Chrome would say 3px: the used width then
-/// depends on the cascaded border-style, which this computed view does not
-/// resolve.
+/// Only the Typed OM still reaches this: the used surface resolves the whole
+/// question in `computedBorderWidth`, which reads the cascaded border-style and
+/// answers `medium` as 3px when a border is actually drawn.
 fn borderWidth(surface: Surface) []const u8 {
     return switch (surface) {
         .used => "0px",
@@ -3739,6 +3834,10 @@ test "WebApi: CSSStyleDeclaration first computed read" {
 
 test "WebApi: CSSStyleDeclaration computed transform" {
     try testing.htmlRunner("css/computed_transform.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed border width" {
+    try testing.htmlRunner("css/computed_border_width.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration computed shorthand join" {
