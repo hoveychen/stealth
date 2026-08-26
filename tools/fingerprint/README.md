@@ -15818,3 +15818,102 @@ The eight stations still closed to this engine are `cf-scrapingcourse`,
 x-sony, x-zillow, px-wayfair and every Cloudflare-fronted ordinary page pass
 3 of 3 on both arms. Whatever those eight read, it is not the shape of a
 prototype.
+
+## Six of the nine closed doors are shut to Chrome too (B53 P2/P3, 2026-08-26)
+
+B52 ended with nine stations this engine could not get into and no way to tell
+which of them anybody gets into. That distinction is the whole difference
+between a gap and a phantom, and B35 spent half a month on the wrong side of
+it, so the arms here are the two browsers rather than two builds: headed Chrome
+against main HEAD (`4c6bba162`, ReleaseFast), ten stations, three rounds, arm
+order flipped inside each round, every station its own `--only` and its own
+port, Chrome a fresh `--user-data-dir` every time. One sitting, one address,
+07:22 to 07:49. Driver `b53-arm.sh`, snapshots `results/b53-{chrome,
+lightpanda}-{1,2,3}.json`, rates via `sweep-rate.mjs`.
+
+```
+station            chrome    lightpanda
+cf-scrapingcourse  3/3       0/3        <- gap
+dd-saks            2/3       0/3        <- gap
+x-hyatt            3/3       0/3        <- gap
+ks-canadagoose     3/3       3/3
+cf-nopecha         0/3       0/3        Chrome gets "Just a moment..." too
+cf-zeroclover      0/3       0/3        Chrome gets 403 -> 502 Bad gateway
+dd-allopneus       0/3       0/3        both arms: CF 403 "Attention Required!"
+dd-g2              0/3       0/3
+dd-datadome        0/3       0/3
+dd-hermes          0/3       0/3
+---
+chrome: 11/30 (36.7%)   lightpanda: 3/30 (10.0%)
+```
+
+**Three of the nine are real; six are doors nobody walks through.** Reading the
+six as engine gaps would have been six plans against nothing. `cf-zeroclover`
+is not even guarding — it answers Chrome with its own origin's 502.
+
+`dd-saks` is the one that could have been a window, and the interleaving says
+it is not: in round 2 this engine went first and was challenged, Chrome
+followed four and a half minutes later and passed; in round 3 the order was
+reversed and the verdicts were not. Both directions, Chrome wins.
+
+### What the three that are real were measured asking
+
+The `prop_read` log (`prop-reads.mjs --args`, Debug build, target closed so the
+context tears down) against one station per vendor —
+`results/b53-reads-{x-hyatt,dd-saks,cf-scrapingcourse}.json`. Then every
+distinct argument in those logs asked back to both arms on one https page:
+`probes/expr-b53-guard-questions.js`, 469 readings, **343 identical, 126 not,
+and the 126 are all one subject**.
+
+**The media queries about the display, which both real gaps read.** `dd-saks`
+asks eleven and this engine answers two of them the other way: `color-gamut:
+p3` and `dynamic-range: high`. `x-hyatt` reads `devicePixelRatio` eight times,
+`screen.width`/`height` six, `colorDepth` five, and binary-searches the ratio
+to twenty bits with **314 `(min|max)-resolution` queries** — reading `.matches`
+every time and `.media` never. Chrome here: DPR 2, screen 1512×982, colorDepth
+30, P3, HDR. This engine: DPR 1, 1920×1200, colorDepth 24, sRGB only, SDR only.
+
+That is not Chrome being right — a real Chrome on an sRGB SDR monitor answers
+the way we do. It is that the user agent this engine sends says macOS, and no
+Mac reports that combination. Whether a guard acts on it is an A/B nobody has
+run; `display-capability-persona` and `device-pixel-ratio-persona` are that
+A/B, and their acceptance is `b53-arm.sh` over these same ten stations.
+
+**One of the differences needs no reference at all.** With `devicePixelRatio`
+1, `min-resolution` must be true at or below 1 and false above it. This engine
+answers *true* at `1.0000038146972656dppx` and `1.0000044107437134dppx`, and
+*false* at `37.795257568359375dpcm`, which is 0.99999995dppx. A monotone
+predicate answered non-monotonically is a defect on its own terms, whatever
+Chrome's display is: `resolution-query-monotonicity`.
+
+**The negative result is worth as much.** Forty-five `canPlayType` strings,
+nineteen `MediaSource.isTypeSupported`, seventeen
+`MediaRecorder.isTypeSupported` and the ten WebGL2 `getParameter` pnames Kasada
+pulled — **every one identical across the arms**. The media capability table is
+not a gap and does not need looking at again.
+
+### Two more differences the guard questions turned up in passing
+
+Neither is evidence about a door; both are fidelity, recorded so nobody has to
+find them twice.
+
+**CSS numbers round the other way.** Chrome serialises to six significant
+digits breaking ties **to even**; this engine breaks them **away from zero**.
+`1.015625` → `1.01562` against `1.01563`, `1078.125` → `1078.12` against
+`1078.13`, `1234565` → `1.23456e+06` against `1.23457e+06`. It is the same rule
+everywhere a number leaves CSS: the media-query serialiser, `style.width` /
+`opacity` / `rotate`, `cssText`, `getComputedStyle`, `CSSUnitValue.toString()`.
+`probes/expr-b53-number-serialisation.js` puts 188 half-way cases through all
+of them and 101 differ. `<ratio>` is worse than a tie-break: it is not rounded
+at all, so `(min-aspect-ratio: 1.421875)` serialises as `1.421875 / 1` against
+Chrome's `1.42188 / 1`.
+
+Two smaller things fell out of the same probe. Chrome clamps `opacity` in the
+*computed* value and not the specified one — `style.opacity` reads back
+`1.01562` and `getComputedStyle(el).opacity` reads `1`; this engine clamps in
+neither. And the `CSS` namespace object has three own properties here against
+Chrome's sixty-nine: the entire numeric factory (`CSS.px`, `CSS.em`, `CSS.deg`
+and sixty more), `registerProperty`, `paintWorklet`, `x` — and it is a
+null-prototype object, where Chrome's inherits from `Object.prototype`. B52's
+921-of-923 counts *interface prototypes*; a namespace object is not one, which
+is exactly the kind of surface that survey could not reach.
