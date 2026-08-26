@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A grid item stretches to its column by default, which is why
+CSSStyleDeclaration.fillsContainingBlock lets one fill -- but `justify-items`
+turns that off, and treating every grid item as filling made an item under
+`justify-items: start` come out 1904 where Chrome says 8.
+
+Measured in both arms with tools/fingerprint/scratch/expr-flex-item-width.js
+against Chrome 151 on the 1904px line this test server serves. A flex item is
+in the same probe and is asserted here as unchanged: the default one is
+shrink-to-fit in both engines already, and the `flex-grow` cases are a separate
+change that has to expand the `flex` shorthand first.
+-->
+
+<script id=grid_item_justify>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const out = { css: String(getComputedStyle(el).width), offset: el.offsetWidth };
+    wrap.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // The default: a grid item stretches across its column.
+  const stretch = measure('<div style="display:grid"><div data-m>x</div></div>');
+  eq('grid default css', stretch.css, '1904px');
+  eq('grid default offset', stretch.offset, 1904);
+
+  // `justify-items` on the container turns the stretch off, on all three of the
+  // values that place the item rather than stretching it.
+  for (const value of ['start', 'end', 'center']) {
+    const m = measure('<div style="display:grid;justify-items:' + value + '"><div data-m>x</div></div>');
+    eq('grid justify-items:' + value + ' css', m.css, '8px');
+    eq('grid justify-items:' + value + ' offset', m.offset, 8);
+  }
+
+  // ...and the item can override the container for itself.
+  const self = measure('<div style="display:grid"><div data-m style="justify-self:start">x</div></div>');
+  eq('grid justify-self:start css', self.css, '8px');
+  eq('grid justify-self:start offset', self.offset, 8);
+
+  // `stretch` and `normal` are the stretching values, spelled out.
+  for (const value of ['stretch', 'normal']) {
+    const m = measure('<div style="display:grid;justify-items:' + value + '"><div data-m>x</div></div>');
+    eq('grid justify-items:' + value + ' offset', m.offset, 1904);
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+Flex items are untouched by this. A default one shrinks to fit in both engines;
+the `flex-grow` and `flex-basis` cases are the `flex-grow-stretches` plan and
+need the `flex` shorthand expanded first -- `chrome_shorthands.zig` leaves it
+`.unmodelled`, so `flex:1` does not even reach `flexGrow`.
+-->
+
+<script id=flex_item_unchanged>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div style="display:flex"><div id=gfa>x</div></div>' +
+    '<div style="display:flex"><div id=gfb style="flex:1">x</div></div>';
+  host.appendChild(wrap);
+
+  // Agrees with Chrome.
+  testing.expectEqual(8, wrap.querySelector('#gfa').offsetWidth);
+  // Does not: Chrome says 1904. Recorded so the fix shows up here.
+  testing.expectEqual(8, wrap.querySelector('#gfb').offsetWidth);
+  testing.expectEqual('0', String(getComputedStyle(wrap.querySelector('#gfb')).flexGrow));
+
+  host.remove();
+}
+</script>
