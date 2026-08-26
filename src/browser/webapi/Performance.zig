@@ -156,10 +156,55 @@ pub fn getTiming(self: *Performance) *PerformanceTiming {
 }
 
 pub fn now(self: *const Performance) f64 {
-    const current = highResTimestamp(self._clock_resolution_micros);
-    const elapsed = current - self._time_origin;
-    // Return as milliseconds with microsecond precision
-    return @as(f64, @floatFromInt(elapsed)) / 1000.0;
+    return self.latticeMsSince(@intCast(highResTimestamp(self._clock_resolution_micros)));
+}
+
+/// The lattice a timestamp is spelled on, in milliseconds.
+///
+/// The clamp above decides which grid point a reading lands on; this decides
+/// how that grid point is written down, and the two are separate tells. The
+/// reference host does not hand out the double nearest the grid point: 133.8
+/// comes back as 133.79999999701977, because the value it hands out has been
+/// rounded onto a lattice of 2^-26 ms. Only one grid point in five is on that
+/// lattice, so four readings in five carry a dozen digits of dust -- and a
+/// clock that answers "133.8" every time is a clock no browser has.
+///
+/// Measured across 75M samples of Chrome 151 spanning 0.1ms to 32s: every
+/// reading is a grid point offset by one of {0, +/-1, +/-2} multiples of
+/// 2^-25/10 ms, fixed by the grid index mod 5, exactly as this lattice
+/// predicts (tools/fingerprint/scratch/expr-now-octave.js).
+const lattice_step_ms = 1.0 / 67108864.0;
+
+/// How far a stamp sits from the lattice.
+///
+/// The offset is set by the fractional part of `ms * 2^26`, and since
+/// `ms = micros / 1000` and `2^26 / 1000 = 2^23 / 125`, that fraction is
+/// `(micros * 2^23) mod 125` over 125. Integers, so the offset stays exact
+/// however far from zero the stamp is -- the reference's own arithmetic loses
+/// the lattice once the stamp needs more than 27 bits, and reproducing that
+/// would trade a shape a page can read for one it cannot.
+fn latticeOffset(micros: i64) f64 {
+    // 2^23 mod 125 == 108, folded in so the multiply cannot overflow.
+    const numerator: i64 = @mod(@mod(micros, 125) * 108, 125);
+    const fraction = @as(f64, @floatFromInt(numerator)) / 125.0;
+    // 125 is odd, so the fraction is never exactly one half and the rounding
+    // never has a tie to break.
+    const rounded = if (fraction * 2.0 < 1.0) -fraction else 1.0 - fraction;
+    return rounded * lattice_step_ms;
+}
+
+/// A clamped boot-relative stamp as milliseconds on this document's timeline.
+///
+/// The reference rounds the stamp and the document's origin onto the lattice
+/// and subtracts, so the origin's own offset rides along on every reading:
+/// the five offsets are the same five on every page, rotated by wherever that
+/// document's origin happened to fall. Measured over five loads, three of
+/// about:blank and two of a real page, each one deterministic and each one a
+/// rotation of the same table (tools/fingerprint/scratch/expr-now-residue.js).
+fn latticeMsSince(self: *const Performance, clamped: i64) f64 {
+    const origin: i64 = @intCast(self._time_origin);
+    const elapsed = @as(f64, @floatFromInt(clamped - origin)) / 1000.0;
+    return elapsed + (latticeOffset(clamped) - latticeOffset(origin));
 }
 
 /// Epoch milliseconds, fractional — not the boot-relative clock `now()` counts
@@ -339,9 +384,7 @@ fn navigationRedirected(self: *Performance, redirect: http.RedirectTiming) void 
 /// timeline, clamped the same way `now()` is -- a milestone finer than the
 /// clock beside it would hand back resolution the clamp exists to withhold.
 fn relativeMs(self: *const Performance, micros: u64) f64 {
-    const clamped = clamp(@intCast(micros), self._clock_resolution_micros);
-    const origin: i64 = @intCast(self._time_origin);
-    return @as(f64, @floatFromInt(clamped - origin)) / 1000.0;
+    return self.latticeMsSince(clamp(@intCast(micros), self._clock_resolution_micros));
 }
 
 /// The URL the document was finally served from, which is what Chrome names the
