@@ -47,9 +47,8 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(LI);
-    pub const @"type" = reflect.string("type");
-
     pub const value = reflect.long("value", 0);
+    pub const @"type" = reflect.string("type");
 };
 
 const testing = @import("../../../../testing.zig");

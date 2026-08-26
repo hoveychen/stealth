@@ -1,0 +1,183 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-25T23:58:50.055Z",
+  "egress": {
+    "fl": "1232f47",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787702330.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "010-tier1",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1260+cdfaa2299",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:11002/"
+  },
+  "stations": [
+    {
+      "name": "px-wayfair",
+      "vendor": "perimeterx",
+      "url": "https://www.wayfair.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.wayfair.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cei?advertiser_id=ntdeeww&cookie_sync=1&upv=3.0.0&upid=do2w6ls&ref=https%3a%2f%2fwww.wayfair.com&redirect=1",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cei?advertiser_id=5lz2t6m&cookie_sync=1&upv=3.0.0&upid=ivuckif&ref=https%3a%2f%2fwww.wayfair.com&redirect=1",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.facebook.com/tr/",
+          "status": 200,
+          "mime": "text/plain"
+        },
+        {
+          "url": "https://16553853.fls.doubleclick.net/activityi;dc_pre=CK2U2Zz-vJYDFTRSnQYdOKggfA;src=16553853;type=atlanta;cat=unive0;rcb=12;ord=2519983700086;npa=0;auiddc=1493041702.1787702350;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IFA;gtm=45fe68o1v9245887177za200xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~117776796~118131810~118897920~118897930~119367802~119367810~120385422;epver=2;dc_random=1787702350_09rt9gAQvs9R4pO-1ML-MGBQLUINE5ZP0g;_dc_test=1;~oref=https%3A%2F%2Fwww.wayfair.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cmf/rubicon?gdpr=0",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://insight.adsrvr.org/track/cei?advertiser_id=bfjsdu7&cookie_sync=1&upv=3.0.0&upid=tmdj7wo&ref=https%3A%2F%2Fwww.wayfair.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://x.bidswitch.net/syncd?dsp_id=93&user_group=1&user_id=a2e16a24-22bd-4445-83da-c949f3cfb358&expires=30&redir=https%3A%2F%2Fmatch.adsrvr.org%2Ftrack%2Fcmf%2Fgeneric%3Fttd_pid%3Dbidswitch",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cmf/generic?ttd_pid=bidswitch",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cmf/appnexus?ttd=1&anid=6859885865458337041&ttd_tdid=63aafb49-04b3-4781-956a-e5b88d9eb2e7",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cmf/rubicon?gdpr=0",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cmf/google?g_uuid=&gdpr=0&gdpr_consent=&ttd_tdid=a2e16a24-22bd-4445-83da-c949f3cfb358&google_error=15",
+          "status": 200,
+          "mime": "image/gif"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Wayfair.com - Online Home Store for Furniture, Decor, Outdoors & More",
+      "landedOn": "https://www.wayfair.com/",
+      "nodes": 4157,
+      "textLength": 19420,
+      "snippet": "Item 4 of 4 Item 35 of 35 Item 4 of 4 Item 4 of 4 Item 3 of 3 Item 10 of 10 Item 6 of 6 Item 4 of 4 Item 10 of 10 Item 9 of 9 Item 10 of 10 Skip to Main Content Rewards Financing Professional Fast & F",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": true,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26710
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787702330687 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:11002",
+    "$time=1787702340481 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702340703 $scope=telemetry $level=warn $msg=\"flush\" err=OperationTimedout size=0",
+    "$time=1787702340703 $scope=telemetry $level=warn $msg=\"postEvents\" err=OperationTimedout events=2 dropped=0",
+    "$time=1787702342571 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342571 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342571 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342571 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342571 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342571 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342572 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342572 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342572 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342572 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342574 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342574 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342574 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342575 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342575 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342575 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342575 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702342575 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702347455 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702347455 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702347455 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702347455 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702347455 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702347455 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702347455 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702347455 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702347469 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://s.wayfair.com/events/single",
+    "$time=1787702347940 $scope=browser $level=error $msg=\"worker fetch error\" url=chrome://juggler/content err=UnsupportedProtocol",
+    "$time=1787702350822 $scope=frame $level=warn $msg=\"cookie parse failed\" raw=\"sp=e76d4de2-1142-4395-941e-603d572656ec; Expires=Wed, 25 Aug 2027 23:59:10 GMT; Path=/; SameSite=None\" err=InsecureSameSite",
+    "$time=1787702351016 $scope=not_implemented $level=warn $msg=\"SubtleCrypto.exportKey\" format=spki",
+    "$time=1787702351016 $scope=not_implemented $level=warn $msg=\"SubtleCrypto.exportKey\" format=spki",
+    "$time=1787702351502 $scope=frame $level=warn $msg=\"cookie parse failed\" raw= err=Empty",
+    "$time=1787702352188 $scope=browser $level=error $msg=\"worker fetch error\" url=brave:// err=UrlMalformat",
+    "$time=1787702352188 $scope=browser $level=error $msg=\"worker fetch error\" url=edge:// err=UrlMalformat",
+    "$time=1787702352194 $scope=browser $level=error $msg=\"worker fetch error\" url=puffin:// err=UrlMalformat",
+    "$time=1787702353430 $scope=http $level=error $msg=\"process_messages\" err=TooManyRedirects req=GET https://b.applovin.com/v1/gcm/match?google_error=2"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}

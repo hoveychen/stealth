@@ -117,6 +117,9 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "Crypto";
+        // Chrome's `constructor` sits here rather than last; subtle, randomUUID below it
+        // is installed per context. See Snapshot.moveConstructorSlots.
+        pub const constructor_after = "getRandomValues";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
         // No `empty_with_no_proto`, on purpose. A type carrying that marker is
@@ -131,8 +134,8 @@ pub const JsApi = struct {
     };
 
     pub const getRandomValues = bridge.function(Crypto.getRandomValues, .{});
-    pub const randomUUID = bridge.function(Crypto.randomUUID, .{});
     pub const subtle = bridge.accessor(Crypto.getSubtle, null, .{});
+    pub const randomUUID = bridge.function(Crypto.randomUUID, .{});
 };
 
 const testing = @import("../../testing.zig");

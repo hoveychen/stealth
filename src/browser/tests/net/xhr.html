@@ -780,3 +780,105 @@
     });
   }
 </script>
+
+<script id=prototype_shape>
+  {
+    // Chrome's own Object.getOwnPropertyNames(XMLHttpRequest.prototype) order,
+    // measured on Chrome 151 over https (probes/expr-constructor-slot.js).
+    // The order is not the spec's and not alphabetical -- it is Blink's, and
+    // the interstitial this fork chases proxies XMLHttpRequest.prototype.send,
+    // so this is a prototype a bot check has already got its hands on.
+    testing.expectEqual(
+      'onreadystatechange,readyState,timeout,withCredentials,upload,responseURL,' +
+      'status,statusText,responseType,response,responseText,' +
+      'UNSENT,OPENED,HEADERS_RECEIVED,LOADING,DONE,' +
+      'abort,getAllResponseHeaders,getResponseHeader,open,overrideMimeType,send,' +
+      'setRequestHeader,constructor,responseXML,setAttributionReporting,setPrivateToken',
+      Object.getOwnPropertyNames(XMLHttpRequest.prototype).join(','),
+    );
+    for (const m of ['setAttributionReporting', 'setPrivateToken']) {
+      const d = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, m);
+      testing.expectEqual('function', typeof d.value, { desc: m + ' is a method' });
+      testing.expectEqual(1, d.value.length, { desc: m + ' arity' });
+      testing.expectEqual(m, d.value.name, { desc: m + ' name' });
+      testing.expectEqual(true, d.enumerable, { desc: m + ' enumerable' });
+      testing.expectEqual(true, d.configurable, { desc: m + ' configurable' });
+      testing.expectEqual(true, d.writable, { desc: m + ' writable' });
+    }
+  }
+</script>
+
+<script id=set_attribution_reporting>
+  {
+    // Every string below is Chrome 151's, measured. The order of the checks is
+    // measured too: argument count, then "is it an object", then the dictionary
+    // read (alphabetical, so eventSourceEligible before triggerEligible), and
+    // only then the readyState gate -- a valid dictionary on an UNSENT request
+    // still reaches the InvalidStateError.
+    const pre = "Failed to execute 'setAttributionReporting' on 'XMLHttpRequest': ";
+    const opened = () => { const x = new XMLHttpRequest(); x.open('GET', 'http://127.0.0.1:9582/xhr/headers_order'); return x; };
+    const call = (fn) => { try { return 'ok:' + String(fn()); } catch (e) { return e.name + ': ' + e.message; } };
+
+    testing.expectEqual('TypeError: ' + pre + '1 argument required, but only 0 present.',
+      call(() => opened().setAttributionReporting()));
+    for (const bad of [undefined, null, 5, 's']) {
+      testing.expectEqual(
+        'TypeError: ' + pre + "The provided value is not of type 'AttributionReportingRequestOptions'.",
+        call(() => opened().setAttributionReporting(bad)), { desc: 'not an object: ' + String(bad) });
+    }
+    const required = (member) => 'TypeError: ' + pre + "Failed to read the '" + member +
+      "' property from 'AttributionReportingRequestOptions': Required member is undefined.";
+    testing.expectEqual(required('eventSourceEligible'), call(() => opened().setAttributionReporting({})));
+    // An array is an object, so it gets as far as the dictionary read.
+    testing.expectEqual(required('eventSourceEligible'), call(() => opened().setAttributionReporting([])));
+    testing.expectEqual(required('eventSourceEligible'), call(() => opened().setAttributionReporting({ triggerEligible: true })));
+    testing.expectEqual(required('triggerEligible'), call(() => opened().setAttributionReporting({ eventSourceEligible: true })));
+    // Both members are booleans, so anything converts.
+    testing.expectEqual('ok:undefined',
+      call(() => opened().setAttributionReporting({ eventSourceEligible: 'x', triggerEligible: 0 })));
+
+    const state = 'InvalidStateError: ' + pre + "The object's state must be OPENED.";
+    testing.expectEqual(state,
+      call(() => new XMLHttpRequest().setAttributionReporting({ eventSourceEligible: true, triggerEligible: false })));
+    testing.expectEqual(state, call(() => {
+      const x = opened(); x.send();
+      return x.setAttributionReporting({ eventSourceEligible: true, triggerEligible: true });
+    }));
+    testing.expectError('Illegal invocation',
+      () => XMLHttpRequest.prototype.setAttributionReporting.call({}, {}));
+  }
+</script>
+
+<script id=set_private_token>
+  {
+    // Same shape, different dictionary: PrivateToken reads `operation` (an
+    // enum) before `version`, both required, both measured on Chrome 151.
+    const pre = "Failed to execute 'setPrivateToken' on 'XMLHttpRequest': ";
+    const opened = () => { const x = new XMLHttpRequest(); x.open('GET', 'http://127.0.0.1:9582/xhr/headers_order'); return x; };
+    const call = (fn) => { try { return 'ok:' + String(fn()); } catch (e) { return e.name + ': ' + e.message; } };
+
+    testing.expectEqual('TypeError: ' + pre + '1 argument required, but only 0 present.',
+      call(() => opened().setPrivateToken()));
+    for (const bad of [undefined, null, 5, 's']) {
+      testing.expectEqual('TypeError: ' + pre + "The provided value is not of type 'PrivateToken'.",
+        call(() => opened().setPrivateToken(bad)), { desc: 'not an object: ' + String(bad) });
+    }
+    const required = (member) => 'TypeError: ' + pre + "Failed to read the '" + member +
+      "' property from 'PrivateToken': Required member is undefined.";
+    testing.expectEqual(required('operation'), call(() => opened().setPrivateToken({})));
+    testing.expectEqual(required('operation'), call(() => opened().setPrivateToken([])));
+    testing.expectEqual(required('version'), call(() => opened().setPrivateToken({ operation: 'token-request' })));
+    testing.expectEqual(required('version'), call(() => opened().setPrivateToken({ operation: 'token-redemption' })));
+    testing.expectEqual(required('version'), call(() => opened().setPrivateToken({ operation: 'send-redemption-record' })));
+    testing.expectEqual(
+      'TypeError: ' + pre + "Failed to read the 'operation' property from 'PrivateToken': " +
+      "The provided value 'nope' is not a valid enum value of type OperationType.",
+      call(() => opened().setPrivateToken({ operation: 'nope' })));
+    testing.expectEqual('ok:undefined',
+      call(() => opened().setPrivateToken({ version: 1, operation: 'token-request' })));
+    testing.expectEqual('InvalidStateError: ' + pre + "The object's state must be OPENED.",
+      call(() => new XMLHttpRequest().setPrivateToken({ version: 1, operation: 'token-request' })));
+    testing.expectError('Illegal invocation',
+      () => XMLHttpRequest.prototype.setPrivateToken.call({}, {}));
+  }
+</script>

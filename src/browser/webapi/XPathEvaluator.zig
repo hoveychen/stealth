@@ -83,9 +83,9 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(XPathEvaluator.init, .{});
-    pub const evaluate = bridge.function(XPathEvaluator.evaluate, .{});
     pub const createExpression = bridge.function(XPathEvaluator.createExpression, .{});
     pub const createNSResolver = bridge.function(XPathEvaluator.createNSResolver, .{});
+    pub const evaluate = bridge.function(XPathEvaluator.evaluate, .{});
 };
 
 const testing = @import("../../testing.zig");

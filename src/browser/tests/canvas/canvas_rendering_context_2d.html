@@ -1199,6 +1199,36 @@
 }
 </script>
 
+<script id="CanvasRenderingContext2D#shadowColor">
+{
+  // shadowColor is a colour, not free text: Chrome parses it and reads back the
+  // serialisation, exactly as it does for fillStyle. Measured on Chrome 150 --
+  // and measured again where it matters, because Akamai's macys interstitial
+  // sets `shadowColor` twice and reads it back both times, so echoing the
+  // source notation is a value a guard sees.
+  const ctx = document.createElement('canvas').getContext('2d');
+  testing.expectEqual('rgba(0, 0, 0, 0)', ctx.shadowColor);
+  ctx.shadowColor = 'red';
+  testing.expectEqual('#ff0000', ctx.shadowColor);
+  ctx.shadowColor = 'rgb(43,22,233)';
+  testing.expectEqual('#2b16e9', ctx.shadowColor);
+  ctx.shadowColor = '#fc0';
+  testing.expectEqual('#ffcc00', ctx.shadowColor);
+  ctx.shadowColor = 'rgba(255, 0, 0, 0.5)';
+  testing.expectEqual('rgba(255, 0, 0, 0.5)', ctx.shadowColor);
+  ctx.shadowColor = 'transparent';
+  testing.expectEqual('rgba(0, 0, 0, 0)', ctx.shadowColor);
+  // Unparseable leaves the previous value in place, same rule as fillStyle.
+  ctx.shadowColor = '#123456';
+  ctx.shadowColor = 'not-a-colour';
+  testing.expectEqual('#123456', ctx.shadowColor);
+  // currentColor has no element colour to resolve against here, so it lands on
+  // that property's initial value.
+  ctx.shadowColor = 'currentColor';
+  testing.expectEqual('#000000', ctx.shadowColor);
+}
+</script>
+
 <script id="CanvasRenderingContext2D#drawing state accessors">
 {
   const proto = CanvasRenderingContext2D.prototype;

@@ -274,7 +274,12 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
     // 'nonce-…' admits this load whatever its URL. Cloudflare's challenge
     // interstitial is exactly that shape -- no 'self', and the loader carries
     // the nonce -- so reading only the URL leaves us on the interstitial.
-    const nonce = element.getAttributeSafe(comptime .wrap("nonce"));
+    // The slot, not the attribute: `s.nonce = '…'` leaves the markup untouched
+    // in Chrome (measured -- see Element.getNonce), and the interstitial's
+    // loader is set exactly that way, so reading the attribute here would miss
+    // the very case this check exists for.
+    const nonce_value = element.getNonce(frame);
+    const nonce: ?[]const u8 = if (nonce_value.len == 0) null else nonce_value;
     if (frame.csp().allowsScript(remote_url, frame.url, nonce) == false) {
         log.info(.http, "script blocked by csp", .{ .url = remote_url, .ctx = ctx });
         // Queued rather than dispatched inline: this runs inside appendChild, so
@@ -350,8 +355,19 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
             } else {
                 self.base.scriptList(pre).append(&pre.node);
             }
-            if (pre.complete) {
+            if (pre.complete and !(from_parser and mode == .async)) {
                 // ...and no doneCallback will trigger evaluation.
+                //
+                // Except for a parser-inserted async script: its execution is a
+                // task, and evaluating here runs it inside the parser, ahead of
+                // a parser-blocking script whose tag has not been reached yet.
+                // Akamai's interstitial is built out of that difference -- the
+                // loader is async and sits ahead of the blocking sensor -- so
+                // running it early hands the sensor a page whose hidden frames
+                // and patched globals already exist. Leaving it on
+                // ready_scripts costs nothing: the next blocking script's
+                // evaluation window drains it, and failing that, so does the
+                // end of the parse.
                 self.base.evaluate();
             }
             return;
@@ -659,6 +675,10 @@ const PreloadedScript = struct {
 };
 
 const testing = @import("../testing.zig");
+
+test "WebApi: script async order" {
+    try testing.htmlRunner("script_async_order.html", .{});
+}
 
 test "ScriptManager: PreloadedScript.shutdownCallback drops a .loading preload" {
     const page = try testing.pageTest("mcp_nav.html", .{});

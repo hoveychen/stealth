@@ -446,19 +446,23 @@ pub const JsApi = struct {
         pub const name = "Worker";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // `onerror` comes from the AbstractWorker mixin, which Chrome installs
+        // per context rather than on the template, so it lands behind
+        // `constructor` (measured).
+        pub const constructor_after = "terminate";
     };
-
-    pub const constructor = bridge.constructor(Worker.init, .{});
-
-    pub const terminate = bridge.function(Worker.terminate, .{});
-    pub const postMessage = bridge.function(Worker.postMessage, .{});
 
     fn handler(comptime which: @import("global_event_handlers.zig").Handler) type {
         return @import("handler_property.zig").accessors(Worker, which);
     }
 
+    pub const constructor = bridge.constructor(Worker.init, .{});
+
     pub const onmessage = bridge.accessor(handler(.onmessage).get, handler(.onmessage).set, .{});
-    pub const onmessageerror = bridge.accessor(handler(.onmessageerror).get, handler(.onmessageerror).set, .{});
+    pub const postMessage = bridge.function(Worker.postMessage, .{});
+    pub const terminate = bridge.function(Worker.terminate, .{});
+    // No `onmessageerror`: Chrome's Worker.prototype does not carry one
+    // (measured), even though the mixin it would come from does elsewhere.
     pub const onerror = bridge.accessor(handler(.onerror).get, handler(.onerror).set, .{});
 };
 

@@ -171,17 +171,27 @@ pub const JsApi = struct {
         pub const name = "UIEvent";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // `pseudoTarget` is runtime-flag gated, so Chrome installs it from the
+        // per-context batch, behind `constructor` (measured).
+        pub const constructor_after = "initUIEvent";
     };
 
     pub const constructor = bridge.constructor(UIEvent.init, .{});
     // Chrome's own prototype order is view, detail, sourceCapabilities, which,
-    // initUIEvent (measured on Chrome 150, probe-win36). Chrome 150 also has a
-    // `pseudoTarget` after initUIEvent, which is not measured yet.
+    // initUIEvent, then constructor and pseudoTarget (measured).
     pub const view = bridge.accessor(UIEvent.getView, null, .{});
     pub const detail = bridge.accessor(UIEvent.getDetail, null, .{});
     pub const sourceCapabilities = bridge.accessor(UIEvent.getSourceCapabilities, null, .{});
     pub const which = bridge.accessor(UIEvent.getWhich, null, .{});
     pub const initUIEvent = bridge.function(UIEvent.initUIEvent, .{});
+
+    /// The pseudo-element the event was dispatched at. Always null: nothing
+    /// here dispatches at one, and Chrome answers null for a synthesised
+    /// `new UIEvent('x')` too (measured).
+    pub const pseudoTarget = bridge.accessor(_pseudoTarget, null, .{});
+    fn _pseudoTarget(_: *UIEvent) ?*@import("../Element.zig") {
+        return null;
+    }
 };
 
 const testing = @import("../../../testing.zig");

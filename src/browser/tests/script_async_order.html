@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="./testing.js"></script>
+</head>
+<body>
+<!--
+  An `async` script's execution is a task, so it cannot run inside the parser.
+  Chrome 151, measured on a plain page against this exact shape: with the slow
+  blocking script present, `async` lands last; take it away and both scripts are
+  still in flight when the parser blocks, so the async one wins the race and
+  lands first; delay the async response instead and it lands last again. Only
+  the middle case -- fetch finished while a blocking script was still running --
+  separates a queued task from an inline call, and it is the shape Akamai's
+  interstitial ships: the loader is `async` and sits ahead of the parser-blocking
+  sensor, so running it early hands the sensor a page whose hidden frames and
+  patched globals already exist.
+-->
+<script>window.__order = [];</script>
+<script src="./support/order_slow.js"></script>
+<script src="./support/order_async.js" async></script>
+<script src="./support/order_blocking.js"></script>
+<script>window.__order.push('inline-after-blocking');</script>
+
+<script id=async_script_does_not_preempt_a_blocking_script>
+  (async () => {
+    const state = await testing.async();
+    if (document.readyState === 'complete') {
+      state.resolve(true);
+    } else {
+      window.addEventListener('load', () => state.resolve(true));
+    }
+    await state.done(() => {
+      testing.expectEqual('slow,blocking,inline-after-blocking,async', window.__order.join(','));
+    });
+  })();
+</script>
+</body>
+</html>

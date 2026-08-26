@@ -6,6 +6,7 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const Window = @import("../../Window.zig");
+const global_event_handlers = @import("../../global_event_handlers.zig");
 const HtmlElement = @import("../Html.zig");
 
 const String = lp.String;
@@ -24,9 +25,11 @@ pub fn asNode(self: *FrameSet) *Node {
     return self.asElement().asNode();
 }
 
-// Special-case: the "window-reflecting body element event handler set"
-// (blur, error, focus, load, resize, scroll) are aliases for the Window's
-// event handlers, on frameset elements just like on body elements.
+// Special-case: the "window-reflecting body element event handler set" are
+// aliases for the Window's event handlers, on frameset elements just like on
+// body elements. Chrome's HTMLFrameSetElement.prototype carries the same 26
+// handlers HTMLBodyElement.prototype does, in the same order (measured); the
+// two gamepad ones are element-local there too.
 
 // The aliased Window is the one of the element's node document's frame — not
 // the caller's frame, which differs when a same-origin script reaches into
@@ -35,46 +38,26 @@ fn reflectedWindow(self: *FrameSet, frame: *Frame) *Window {
     return self.asElement().ownerFrame(frame).window;
 }
 
-pub fn getOnBlur(self: *FrameSet, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame).getReflectedHandler(.onblur);
-}
-pub fn setOnBlur(self: *FrameSet, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    return self.reflectedWindow(frame).setReflectedHandler(.onblur, Window.getFunctionFromSetter(setter));
-}
-
-pub fn getOnError(self: *FrameSet, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame).getReflectedHandler(.onerror);
-}
-pub fn setOnError(self: *FrameSet, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    return self.reflectedWindow(frame).setReflectedHandler(.onerror, Window.getFunctionFromSetter(setter));
+fn reflected(comptime handler: global_event_handlers.Handler) type {
+    return struct {
+        fn get(self: *FrameSet, frame: *Frame) ?js.Function.Global {
+            return self.reflectedWindow(frame).getReflectedHandler(handler);
+        }
+        fn set(self: *FrameSet, setter: ?Window.FunctionSetter, frame: *Frame) !void {
+            return self.reflectedWindow(frame).setReflectedHandler(handler, Window.getFunctionFromSetter(setter));
+        }
+    };
 }
 
-pub fn getOnFocus(self: *FrameSet, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame).getReflectedHandler(.onfocus);
-}
-pub fn setOnFocus(self: *FrameSet, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    return self.reflectedWindow(frame).setReflectedHandler(.onfocus, Window.getFunctionFromSetter(setter));
-}
-
-pub fn getOnLoad(self: *FrameSet, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame).getReflectedHandler(.onload);
-}
-pub fn setOnLoad(self: *FrameSet, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    return self.reflectedWindow(frame).setReflectedHandler(.onload, Window.getFunctionFromSetter(setter));
-}
-
-pub fn getOnResize(self: *FrameSet, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame).getReflectedHandler(.onresize);
-}
-pub fn setOnResize(self: *FrameSet, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    return self.reflectedWindow(frame).setReflectedHandler(.onresize, Window.getFunctionFromSetter(setter));
-}
-
-pub fn getOnScroll(self: *FrameSet, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame).getReflectedHandler(.onscroll);
-}
-pub fn setOnScroll(self: *FrameSet, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    return self.reflectedWindow(frame).setReflectedHandler(.onscroll, Window.getFunctionFromSetter(setter));
+fn local(comptime handler: global_event_handlers.Handler) type {
+    return struct {
+        fn get(self: *FrameSet, frame: *Frame) !?js.Function.Global {
+            return self.asElement().getAttributeFunction(handler, frame);
+        }
+        fn set(self: *FrameSet, callback: ?js.Function.Global, frame: *Frame) !void {
+            return self.asElement().setAttributeListener(handler, callback, frame);
+        }
+    };
 }
 
 pub const JsApi = struct {
@@ -91,25 +74,42 @@ pub const JsApi = struct {
     pub const cols = reflect.string("cols");
     pub const rows = reflect.string("rows");
 
-    pub const onblur = bridge.accessor(getOnBlur, setOnBlur, .{ .null_as_undefined = false });
-    pub const onerror = bridge.accessor(getOnError, setOnError, .{ .null_as_undefined = false });
-    pub const onfocus = bridge.accessor(getOnFocus, setOnFocus, .{ .null_as_undefined = false });
-    pub const onload = bridge.accessor(getOnLoad, setOnLoad, .{ .null_as_undefined = false });
-    pub const onresize = bridge.accessor(getOnResize, setOnResize, .{ .null_as_undefined = false });
-    pub const onscroll = bridge.accessor(getOnScroll, setOnScroll, .{ .null_as_undefined = false });
+    pub const onblur = bridge.accessor(reflected(.onblur).get, reflected(.onblur).set, .{ .null_as_undefined = false });
+    pub const onerror = bridge.accessor(reflected(.onerror).get, reflected(.onerror).set, .{ .null_as_undefined = false });
+    pub const onfocus = bridge.accessor(reflected(.onfocus).get, reflected(.onfocus).set, .{ .null_as_undefined = false });
+    pub const onload = bridge.accessor(reflected(.onload).get, reflected(.onload).set, .{ .null_as_undefined = false });
+    pub const onresize = bridge.accessor(reflected(.onresize).get, reflected(.onresize).set, .{ .null_as_undefined = false });
+    pub const onscroll = bridge.accessor(reflected(.onscroll).get, reflected(.onscroll).set, .{ .null_as_undefined = false });
+    pub const onafterprint = bridge.accessor(reflected(.onafterprint).get, reflected(.onafterprint).set, .{ .null_as_undefined = false });
+    pub const onbeforeprint = bridge.accessor(reflected(.onbeforeprint).get, reflected(.onbeforeprint).set, .{ .null_as_undefined = false });
+    pub const onbeforeunload = bridge.accessor(reflected(.onbeforeunload).get, reflected(.onbeforeunload).set, .{ .null_as_undefined = false });
+    pub const onhashchange = bridge.accessor(reflected(.onhashchange).get, reflected(.onhashchange).set, .{ .null_as_undefined = false });
+    pub const onlanguagechange = bridge.accessor(reflected(.onlanguagechange).get, reflected(.onlanguagechange).set, .{ .null_as_undefined = false });
+    pub const onmessage = bridge.accessor(reflected(.onmessage).get, reflected(.onmessage).set, .{ .null_as_undefined = false });
+    pub const onmessageerror = bridge.accessor(reflected(.onmessageerror).get, reflected(.onmessageerror).set, .{ .null_as_undefined = false });
+    pub const onoffline = bridge.accessor(reflected(.onoffline).get, reflected(.onoffline).set, .{ .null_as_undefined = false });
+    pub const ononline = bridge.accessor(reflected(.ononline).get, reflected(.ononline).set, .{ .null_as_undefined = false });
+    pub const onpagehide = bridge.accessor(reflected(.onpagehide).get, reflected(.onpagehide).set, .{ .null_as_undefined = false });
+    pub const onpageshow = bridge.accessor(reflected(.onpageshow).get, reflected(.onpageshow).set, .{ .null_as_undefined = false });
+    pub const onpopstate = bridge.accessor(reflected(.onpopstate).get, reflected(.onpopstate).set, .{ .null_as_undefined = false });
+    pub const onrejectionhandled = bridge.accessor(reflected(.onrejectionhandled).get, reflected(.onrejectionhandled).set, .{ .null_as_undefined = false });
+    pub const onstorage = bridge.accessor(reflected(.onstorage).get, reflected(.onstorage).set, .{ .null_as_undefined = false });
+    pub const onunhandledrejection = bridge.accessor(reflected(.onunhandledrejection).get, reflected(.onunhandledrejection).set, .{ .null_as_undefined = false });
+    pub const onunload = bridge.accessor(reflected(.onunload).get, reflected(.onunload).set, .{ .null_as_undefined = false });
+    pub const ongamepadconnected = bridge.accessor(local(.ongamepadconnected).get, local(.ongamepadconnected).set, .{});
+    pub const ongamepaddisconnected = bridge.accessor(local(.ongamepaddisconnected).get, local(.ongamepaddisconnected).set, .{});
 };
 
 pub const Build = struct {
-    const window_reflecting_attributes = [_][]const u8{
-        "onblur", "onerror", "onfocus", "onload", "onresize", "onscroll",
-    };
-
     pub fn complete(node: *Node, frame: *Frame) !void {
         const el = node.as(Element);
         const owner = node.ownerFrame(frame);
-        inline for (window_reflecting_attributes) |attr| {
-            if (el.getAttributeSafe(comptime .wrap(attr))) |value| {
-                owner.window.setWindowReflectingHandlerFromAttribute(comptime .wrap(attr), value, owner);
+        inline for (Window.WINDOW_REFLECTING) |handler| {
+            // Several of these names are past the 12-byte comptime SSO limit,
+            // so the wrap runs at runtime over the tag name's static bytes.
+            const attr = String.wrap(@as([]const u8, @tagName(handler)));
+            if (el.getAttributeSafe(attr)) |value| {
+                owner.window.setWindowReflectingHandlerFromAttribute(attr, value, owner);
             }
         }
     }

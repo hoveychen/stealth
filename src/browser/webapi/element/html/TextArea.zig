@@ -32,6 +32,7 @@ const InputEvent = @import("../../event/InputEvent.zig");
 const ValidityState = @import("ValidityState.zig");
 const handler_property = @import("../../handler_property.zig");
 const reflection = @import("../reflection.zig");
+const text_selection = @import("text_selection.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
 /// function is a listener like any other, so it lives in the event manager's
@@ -204,6 +205,45 @@ pub fn setSelectionEnd(self: *TextArea, value: u32, frame: *Frame) !void {
     try self.dispatchSelectionChangeEvent(frame);
 }
 
+/// `textLength` is the value's length in code units. Chrome answers 5 for a
+/// textarea whose value is "hello" (measured).
+pub fn getTextLength(self: *const TextArea) u32 {
+    return @intCast(self.getValue().len);
+}
+
+/// The `type` IDL attribute is the constant "textarea" (measured).
+pub fn getType(_: *const TextArea) []const u8 {
+    return "textarea";
+}
+
+/// Replaces [start, end) with `replacement` and leaves the selection where the
+/// mode says. Chrome's arity is 1 -- the range and the mode are optional, and
+/// with only a replacement the *current* selection is what gets replaced
+/// (measured: value "abcdef" with the selection at [2, 4) and
+/// `setRangeText('ZZ')` gives "abZZef" with the selection still [2, 4)).
+pub fn setRangeText(
+    self: *TextArea,
+    replacement: []const u8,
+    start_: ?u32,
+    end_: ?u32,
+    mode_: ?[]const u8,
+    frame: *Frame,
+) !void {
+    const result = try text_selection.setRangeText(.{
+        .value = self.getValue(),
+        .selection_start = self._selection_start,
+        .selection_end = self._selection_end,
+        .replacement = replacement,
+        .start = start_,
+        .end = end_,
+        .mode = mode_,
+    }, "HTMLTextAreaElement", frame);
+
+    self._value = result.value;
+    self._selection_start = result.selection_start;
+    self._selection_end = result.selection_end;
+}
+
 pub fn setSelectionRange(
     self: *TextArea,
     selection_start: u32,
@@ -338,34 +378,39 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(TextArea);
-    pub const rows = reflect.unsignedLong("rows", .{ .default = 2, .positive = true, .fallback = true });
-    pub const cols = reflect.unsignedLong("cols", .{ .default = 20, .positive = true, .fallback = true });
-    pub const readOnly = reflect.boolean("readonly");
-    pub const wrap = reflect.string("wrap");
-    pub const placeholder = reflect.string("placeholder");
-    pub const dirName = reflect.string("dirname");
 
-    pub const labels = bridge.accessor(TextArea.getLabels, null, .{});
+    // Chrome's order. No `onselectionchange`: it belongs to
+    // GlobalEventHandlers, so Chrome carries it on HTMLElement.prototype and
+    // not here (measured).
+    pub const autocomplete = reflect.string("autocomplete");
+    pub const cols = reflect.unsignedLong("cols", .{ .default = 20, .positive = true, .fallback = true });
+    pub const dirName = reflect.string("dirname");
+    pub const disabled = reflect.boolean("disabled");
+    pub const form = bridge.accessor(TextArea.getForm, null, .{});
+    pub const maxLength = reflect.limitedLong("maxlength", "maxLength");
+    pub const minLength = reflect.limitedLong("minlength", "minLength");
+    pub const name = reflect.string("name");
+    pub const placeholder = reflect.string("placeholder");
+    pub const readOnly = reflect.boolean("readonly");
+    pub const required = reflect.boolean("required");
+    pub const rows = reflect.unsignedLong("rows", .{ .default = 2, .positive = true, .fallback = true });
+    pub const wrap = reflect.string("wrap");
+    pub const @"type" = bridge.accessor(TextArea.getType, null, .{});
+    pub const defaultValue = bridge.accessor(TextArea.getDefaultValue, TextArea.setDefaultValue, .{ .ce_reactions = true });
+    pub const value = bridge.accessor(TextArea.getValue, TextArea.setValue, .{});
+    pub const textLength = bridge.accessor(TextArea.getTextLength, null, .{});
     pub const willValidate = bridge.accessor(TextArea.getWillValidate, null, .{});
     pub const validity = bridge.accessor(TextArea.getValidity, null, .{});
     pub const validationMessage = bridge.accessor(TextArea.getValidationMessage, null, .{});
-    pub const checkValidity = bridge.function(TextArea.checkValidity, .{});
-    pub const reportValidity = bridge.function(TextArea.reportValidity, .{});
-    pub const setCustomValidity = bridge.function(TextArea.setCustomValidity, .{});
-    pub const onselectionchange = bridge.accessor(handlerProperty(TextArea, .onselectionchange).get, handlerProperty(TextArea, .onselectionchange).set, .{});
-    pub const value = bridge.accessor(TextArea.getValue, TextArea.setValue, .{});
-    pub const defaultValue = bridge.accessor(TextArea.getDefaultValue, TextArea.setDefaultValue, .{ .ce_reactions = true });
-    pub const disabled = reflect.boolean("disabled");
-    pub const name = reflect.string("name");
-    pub const required = reflect.boolean("required");
-    pub const maxLength = reflect.limitedLong("maxlength", "maxLength");
-    pub const minLength = reflect.limitedLong("minlength", "minLength");
-    pub const form = bridge.accessor(TextArea.getForm, null, .{});
-    pub const select = bridge.function(TextArea.select, .{});
-
+    pub const labels = bridge.accessor(TextArea.getLabels, null, .{});
     pub const selectionStart = bridge.accessor(TextArea.getSelectionStart, TextArea.setSelectionStart, .{});
     pub const selectionEnd = bridge.accessor(TextArea.getSelectionEnd, TextArea.setSelectionEnd, .{});
     pub const selectionDirection = bridge.accessor(TextArea.getSelectionDirection, null, .{});
+    pub const checkValidity = bridge.function(TextArea.checkValidity, .{});
+    pub const reportValidity = bridge.function(TextArea.reportValidity, .{});
+    pub const select = bridge.function(TextArea.select, .{});
+    pub const setCustomValidity = bridge.function(TextArea.setCustomValidity, .{});
+    pub const setRangeText = bridge.function(TextArea.setRangeText, .{ .arity = 1 });
     pub const setSelectionRange = bridge.function(TextArea.setSelectionRange, .{});
 };
 

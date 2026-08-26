@@ -468,9 +468,6 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(KeyboardEvent.init, .{});
-    pub const altKey = bridge.accessor(KeyboardEvent.getAltKey, null, .{});
-    pub const ctrlKey = bridge.accessor(KeyboardEvent.getCtrlKey, null, .{});
-    pub const isComposing = bridge.accessor(KeyboardEvent.getIsComposing, null, .{});
     pub const key = bridge.accessor(struct {
         fn keyAsString(self: *const KeyboardEvent) []const u8 {
             return self._key.asString();
@@ -478,18 +475,20 @@ pub const JsApi = struct {
     }.keyAsString, null, .{});
     pub const code = bridge.accessor(KeyboardEvent.getCode, null, .{});
     pub const location = bridge.accessor(KeyboardEvent.getLocation, null, .{});
+    pub const ctrlKey = bridge.accessor(KeyboardEvent.getCtrlKey, null, .{});
+    pub const shiftKey = bridge.accessor(KeyboardEvent.getShiftKey, null, .{});
+    pub const altKey = bridge.accessor(KeyboardEvent.getAltKey, null, .{});
     pub const metaKey = bridge.accessor(KeyboardEvent.getMetaKey, null, .{});
     pub const repeat = bridge.accessor(KeyboardEvent.getRepeat, null, .{});
-    pub const shiftKey = bridge.accessor(KeyboardEvent.getShiftKey, null, .{});
+    pub const isComposing = bridge.accessor(KeyboardEvent.getIsComposing, null, .{});
     pub const charCode = bridge.accessor(KeyboardEvent.getCharCode, null, .{});
     pub const keyCode = bridge.accessor(KeyboardEvent.getKeyCode, null, .{});
-    pub const getModifierState = bridge.function(KeyboardEvent.getModifierState, .{});
-    pub const initKeyboardEvent = bridge.function(KeyboardEvent.initKeyboardEvent, .{});
-
     pub const DOM_KEY_LOCATION_STANDARD = bridge.property(@intFromEnum(Location.DOM_KEY_LOCATION_STANDARD), .{ .template = true });
     pub const DOM_KEY_LOCATION_LEFT = bridge.property(@intFromEnum(Location.DOM_KEY_LOCATION_LEFT), .{ .template = true });
     pub const DOM_KEY_LOCATION_RIGHT = bridge.property(@intFromEnum(Location.DOM_KEY_LOCATION_RIGHT), .{ .template = true });
     pub const DOM_KEY_LOCATION_NUMPAD = bridge.property(@intFromEnum(Location.DOM_KEY_LOCATION_NUMPAD), .{ .template = true });
+    pub const getModifierState = bridge.function(KeyboardEvent.getModifierState, .{});
+    pub const initKeyboardEvent = bridge.function(KeyboardEvent.initKeyboardEvent, .{});
 };
 
 const testing = @import("../../../testing.zig");

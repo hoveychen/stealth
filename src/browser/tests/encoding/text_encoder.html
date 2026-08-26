@@ -11,3 +11,45 @@
   testing.expectEqual([226, 130, 172], Array.from(encoder.encode('€')));
   testing.expectEqual([111,118,101,114,32,57,48,48,48], encoder.encode("over 9000"));
 </script>
+
+<script id=encode_into>
+  {
+    // Chrome's own Object.getOwnPropertyNames(TextEncoder.prototype) order --
+    // `encoding` first, then the two operations -- and the operation this
+    // engine was missing. Every reading below is Chrome 151's, measured.
+    testing.expectEqual('encoding,encode,encodeInto,constructor',
+      Object.getOwnPropertyNames(TextEncoder.prototype).join(','));
+    const d = Object.getOwnPropertyDescriptor(TextEncoder.prototype, 'encodeInto');
+    testing.expectEqual(2, d.value.length);
+    testing.expectEqual('encodeInto', d.value.name);
+
+    const te = new TextEncoder();
+    // The result is a plain object, not an interface instance.
+    const buf = new Uint8Array(5);
+    const r = te.encodeInto('abcdefg', buf);
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(r));
+    testing.expectEqual(5, r.read);
+    testing.expectEqual(5, r.written);
+    testing.expectEqual('97,98,99,100,101', Array.from(buf).join(','));
+
+    // A code point is never split: 'é' takes two bytes, '€' takes three, and a
+    // three-byte destination stops after the first.
+    const small = new Uint8Array(3);
+    const q = te.encodeInto('é€', small);
+    testing.expectEqual(1, q.read);
+    testing.expectEqual(2, q.written);
+    testing.expectEqual('195,169,0', Array.from(small).join(','));
+
+    // An empty destination writes nothing rather than throwing.
+    const none = te.encodeInto('abc', new Uint8Array(0));
+    testing.expectEqual(0, none.read);
+    testing.expectEqual(0, none.written);
+
+    testing.expectError(
+      "Failed to execute 'encodeInto' on 'TextEncoder': 2 arguments required, but only 0 present.",
+      () => te.encodeInto());
+    testing.expectError(
+      "Failed to execute 'encodeInto' on 'TextEncoder': parameter 2 is not of type 'Uint8Array'.",
+      () => te.encodeInto('a', {}));
+  }
+</script>

@@ -4,6 +4,8 @@ const js = @import("../../../js/js.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
+const collections = @import("../../collections.zig");
+const Frame = @import("../../../Frame.zig");
 
 const Map = @This();
 
@@ -30,4 +32,11 @@ pub const JsApi = struct {
 
     const reflect = Element.Reflect(Map);
     pub const name = reflect.string("name");
+
+    /// A live HTMLCollection of the map's <area> descendants (measured: a map
+    /// with two areas answers an HTMLCollection of length 2).
+    pub const areas = bridge.accessor(_areas, null, .{});
+    fn _areas(self: *Map, frame: *Frame) !collections.NodeLive(.tag) {
+        return collections.NodeLive(.tag).init(self.asNode(), .area, frame);
+    }
 };

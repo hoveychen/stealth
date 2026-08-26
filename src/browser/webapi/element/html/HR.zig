@@ -46,9 +46,9 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(HR);
-    pub const noShade = reflect.boolean("noshade");
-    pub const width = reflect.string("width");
-    pub const size = reflect.string("size");
-    pub const color = reflect.string("color");
     pub const @"align" = reflect.string("align");
+    pub const color = reflect.string("color");
+    pub const noShade = reflect.boolean("noshade");
+    pub const size = reflect.string("size");
+    pub const width = reflect.string("width");
 };

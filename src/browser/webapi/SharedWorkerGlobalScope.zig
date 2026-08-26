@@ -416,4 +416,14 @@ pub const JsApi = struct {
     pub const name = bridge.accessor(SharedWorkerGlobalScope.getName, null, .{});
     pub const close = bridge.function(SharedWorkerGlobalScope.close, .{});
     pub const onconnect = bridge.accessor(handlerPropertyLenient(SharedWorkerGlobalScope, .onconnect).get, handlerPropertyLenient(SharedWorkerGlobalScope, .onconnect).set, .{});
+
+    // The same two deprecated quota constants DedicatedWorkerGlobalScope
+    // carries, for the same reason: [Global] moves operations and attributes
+    // onto the global object, constants stay on the interface prototype. So
+    // Chrome's getOwnPropertyNames(SharedWorkerGlobalScope.prototype) is
+    // exactly TEMPORARY, PERSISTENT, constructor (measured,
+    // probes/expr-shared-worker-proto-table.js) and this engine answered
+    // `constructor` alone.
+    pub const TEMPORARY = bridge.property(0, .{ .template = true });
+    pub const PERSISTENT = bridge.property(1, .{ .template = true });
 };

@@ -567,14 +567,17 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "CookieStore";
+        // Chrome's `constructor` sits here rather than last; onchange below it
+        // is installed per context. See Snapshot.moveConstructorSlots.
+        pub const constructor_after = "set";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const delete = bridge.function(CookieStore.delete, .{});
     pub const get = bridge.function(CookieStore.get, .{});
     pub const getAll = bridge.function(CookieStore.getAll, .{});
     pub const set = bridge.function(CookieStore.set, .{});
-    pub const delete = bridge.function(CookieStore.delete, .{});
     pub const onchange = bridge.accessor(handlerPropertyLenient(CookieStore, .onchange).get, handlerPropertyLenient(CookieStore, .onchange).set, .{});
 };
 

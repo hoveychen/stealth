@@ -504,8 +504,8 @@ pub const ViewTransition = struct {
         pub const ready = bridge.accessor(ViewTransition.getReady, null, .{});
         pub const updateCallbackDone = bridge.accessor(ViewTransition.getUpdateCallbackDone, null, .{});
         pub const types = bridge.accessor(ViewTransition.getTypes, null, .{});
-        pub const skipTransition = bridge.function(ViewTransition.skipTransition, .{});
         pub const transitionRoot = bridge.accessor(ViewTransition.getTransitionRoot, null, .{});
+        pub const skipTransition = bridge.function(ViewTransition.skipTransition, .{});
         pub const waitUntil = bridge.function(ViewTransition.waitUntil, .{});
     };
 };

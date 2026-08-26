@@ -24,6 +24,7 @@ const js = @import("../js/js.zig");
 const EventCounts = @import("EventCounts.zig");
 const PerformanceObserver = @import("PerformanceObserver.zig");
 const timing = @import("performance/timing.zig");
+const EventTarget = @import("EventTarget.zig");
 const http = @import("../../network/http.zig");
 
 const Execution = js.Execution;
@@ -35,6 +36,7 @@ pub fn registerTypes() []const type {
 
 const Performance = @This();
 
+_proto: *EventTarget,
 _time_origin: u64,
 
 // What `now()` rounds to. One of the two clock_resolution_* constants below,
@@ -77,10 +79,10 @@ _paint_entries: bool = false,
 // what a script sets.
 //
 // This is the one handler property still kept in a field. The rest went to the
-// event manager's handler store, which is keyed by EventTarget -- and Chrome's
-// Performance *is* an EventTarget while this one is not (measured: our
-// `performance.addEventListener` is undefined, Chrome's runs). Giving
-// Performance that prototype is its own change, with its own measurement.
+// event manager's handler store, which is keyed by EventTarget. Performance is
+// an EventTarget now (see Proto below), so this could join them; nothing fires
+// the event either way, so the move would be a change with no reading behind
+// it.
 _on_resource_timing_buffer_full: ?js.Function.Global = null,
 
 /// How far the current navigation has got. Level 2 can read an unreached
@@ -134,8 +136,22 @@ fn clamp(micros: i64, resolution_micros: u64) i64 {
     return @divTrunc(micros + half, resolution) * resolution;
 }
 
+// Chrome's Performance inherits EventTarget -- `performance instanceof
+// EventTarget` is true there and `performance.addEventListener` is a function.
+// This engine had it as a prototype root in both realms, which the member
+// table could not show: `Performance.prototype`'s own names were already
+// byte-identical, and only the *chain* differed
+// (probes/expr-proto-chains.js). It was the last chain difference in either
+// realm.
+pub const Proto = EventTarget;
+
+pub fn asEventTarget(self: *Performance) *EventTarget {
+    return self._proto;
+}
+
 pub fn init(resolution_micros: u64) Performance {
     return .{
+        ._proto = undefined,
         ._clock_resolution_micros = resolution_micros,
         ._time_origin = highResTimestamp(resolution_micros),
         // Clamped the same way `now()` is: the pair is what a page compares,
@@ -898,6 +914,10 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "Performance";
+        // Chrome's `constructor` sits here rather than last; the members
+        // below it are the ones Blink installs per context. See
+        // Snapshot.moveConstructorSlots.
+        pub const constructor_after = "now";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
@@ -1031,19 +1051,30 @@ pub const Entry = struct {
         entryType: []const u8,
         startTime: f64,
         duration: f64,
+        navigationId: u32,
     };
 
-    /// Chrome's PerformanceEntry.toJSON() is these four keys in this order, and
+    /// Chrome's PerformanceEntry.toJSON() is these five keys in this order, and
     /// the subclasses that add nothing of their own (PerformanceMark,
     /// PerformanceMeasure, VisibilityStateEntry) inherit it verbatim — a mark's
     /// `detail` is not in its JSON (measured).
-    pub fn toJSON(self: *const Entry) Entry.Json {
+    pub fn toJSON(self: *const Entry, exec: *const Execution) Entry.Json {
         return .{
             .name = self._name,
             .entryType = self.getEntryType(),
             .startTime = self._start_time,
             .duration = self._duration,
+            .navigationId = self.getNavigationId(exec),
         };
+    }
+
+    /// `navigationId` belongs to PerformanceEntry, not to
+    /// PerformanceResourceTiming: every entry of a navigation carries the same
+    /// tag, a mark filed right after a resource reads the same number
+    /// (measured). It sits behind `constructor` because Chrome installs it from
+    /// the per-context batch.
+    pub fn getNavigationId(_: *const Entry, exec: *const Execution) u32 {
+        return exec.performance()._navigation_id;
     }
 
     pub const JsApi = struct {
@@ -1053,12 +1084,14 @@ pub const Entry = struct {
             pub const name = "PerformanceEntry";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
+            pub const constructor_after = "toJSON";
         };
         pub const name = bridge.accessor(Entry.getName, null, .{});
         pub const entryType = bridge.accessor(Entry.getEntryType, null, .{});
         pub const startTime = bridge.accessor(Entry.getStartTime, null, .{});
         pub const duration = bridge.accessor(Entry.getDuration, null, .{});
         pub const toJSON = bridge.function(Entry.toJSON, .{});
+        pub const navigationId = bridge.accessor(Entry.getNavigationId, null, .{});
     };
 };
 

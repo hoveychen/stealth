@@ -272,6 +272,46 @@ pub fn compileWithCache(self: *const Local, src: []const u8, name: ?[]const u8, 
     };
 }
 
+// The realm a new wrapper is born into. Per Web IDL a platform object belongs to
+// its relevant realm, and for a node that is its node document's frame -- not
+// whoever happens to be asking. `Caller.errorLocal` already applies that rule to
+// exceptions; this applies it to the object itself, which is the one place it has
+// to hold, because `mapZigInstanceToJs` caches the wrapper in an `identity_map`
+// keyed by the Zig pointer with no realm in the key (see `Identity.zig`) and
+// shared by every frame of the Page. Without this, whichever realm asked first
+// owned the object for the life of the page: `iframe.contentWindow.document`
+// enters the child's context and came out right, while `iframe.contentDocument`
+// -- an accessor on the parent's `HTMLIFrameElement.prototype` -- built the
+// child's document in the *parent's* realm, and everything it created followed,
+// because `createElement` then resolved off the parent's `Document.prototype`.
+// Inside the frame, `Object.getPrototypeOf(document) === HTMLDocument.prototype`
+// read false. Measured on the Akamai loader macys.com serves, which reads
+// `contentDocument` on frames it did not create.
+fn creationContext(comptime T: type, local: *const Local, value: *T) *const v8.Context {
+    const Node = @import("../webapi/Node.zig");
+
+    const is_node_type = comptime blk: {
+        if (@typeInfo(T) != .@"struct" or !@hasDecl(T, "JsApi")) break :blk false;
+        break :blk bridge.inheritsOrIs(T.JsApi, Node.JsApi);
+    };
+    if (comptime !is_node_type) {
+        return local.handle;
+    }
+
+    const frame = switch (local.ctx.global) {
+        .frame => |f| f,
+        .worker => return local.handle,
+    };
+
+    const owner = Caller.protoNode(T, value).ownerFrame(frame);
+    if (owner == frame) {
+        return local.handle;
+    }
+
+    const ctx = owner.js;
+    return @ptrCast(v8.v8__Global__Get(&ctx.handle, ctx.isolate.handle) orelse return local.handle);
+}
+
 // == Zig -> JS ==
 
 // To turn a Zig instance into a v8 object, we need to do a number of things.
@@ -327,7 +367,7 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
                 .handle = js_obj_handle orelse blk: {
                     const function_template_handle = ctx.templates[resolved.class_id];
                     const object_template_handle = v8.v8__FunctionTemplate__InstanceTemplate(function_template_handle).?;
-                    break :blk v8.v8__ObjectTemplate__NewInstance(object_template_handle, self.handle).?;
+                    break :blk v8.v8__ObjectTemplate__NewInstance(object_template_handle, creationContext(ptr.child, self, value)).?;
                 },
             };
 

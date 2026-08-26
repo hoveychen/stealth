@@ -97,7 +97,7 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(CloseEvent.init, .{});
+    pub const wasClean = bridge.accessor(CloseEvent.getWasClean, null, .{});
     pub const code = bridge.accessor(CloseEvent.getCode, null, .{});
     pub const reason = bridge.accessor(CloseEvent.getReason, null, .{});
-    pub const wasClean = bridge.accessor(CloseEvent.getWasClean, null, .{});
 };

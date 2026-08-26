@@ -280,6 +280,9 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const @"type" = bridge.accessor(Transform.getType, null, .{});
+    pub const matrix = bridge.accessor(Transform.getMatrix, null, .{});
+    pub const angle = bridge.accessor(Transform.getAngle, null, .{});
     pub const SVG_TRANSFORM_UNKNOWN = bridge.property(0, .{ .template = true });
     pub const SVG_TRANSFORM_MATRIX = bridge.property(1, .{ .template = true });
     pub const SVG_TRANSFORM_TRANSLATE = bridge.property(2, .{ .template = true });
@@ -287,14 +290,10 @@ pub const JsApi = struct {
     pub const SVG_TRANSFORM_ROTATE = bridge.property(4, .{ .template = true });
     pub const SVG_TRANSFORM_SKEWX = bridge.property(5, .{ .template = true });
     pub const SVG_TRANSFORM_SKEWY = bridge.property(6, .{ .template = true });
-
-    pub const @"type" = bridge.accessor(Transform.getType, null, .{});
-    pub const matrix = bridge.accessor(Transform.getMatrix, null, .{});
-    pub const angle = bridge.accessor(Transform.getAngle, null, .{});
     pub const setMatrix = bridge.function(Transform.setMatrix, .{});
-    pub const setTranslate = bridge.function(Transform.setTranslate, .{});
-    pub const setScale = bridge.function(Transform.setScale, .{});
     pub const setRotate = bridge.function(Transform.setRotate, .{});
+    pub const setScale = bridge.function(Transform.setScale, .{});
     pub const setSkewX = bridge.function(Transform.setSkewX, .{});
     pub const setSkewY = bridge.function(Transform.setSkewY, .{});
+    pub const setTranslate = bridge.function(Transform.setTranslate, .{});
 };

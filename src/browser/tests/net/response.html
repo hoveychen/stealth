@@ -391,3 +391,28 @@
     testing.expectTrue(threw);
   }
 </script>
+
+<script id="text_stream">
+  {
+    // Unlike Blob.textStream, reading a Response's consumes the body: a second
+    // call is a synchronous TypeError, not a rejection (measured on Chrome
+    // 151, sentence included).
+    const r = new Response('hi');
+    testing.expectEqual(0, r.textStream.length);
+    testing.expectEqual('ReadableStream', r.textStream().constructor.name);
+    testing.expectEqual(true, r.bodyUsed);
+    testing.expectError("Failed to execute 'textStream' on 'Response': body stream already read",
+      () => r.textStream());
+
+    // A body already read by text() is read for this too.
+    const t = new Response('hi');
+    t.text();
+    testing.expectError("Failed to execute 'textStream' on 'Response': body stream already read",
+      () => t.textStream());
+
+    // An empty response still hands one back, and its body stays null.
+    const e = new Response();
+    testing.expectEqual('ReadableStream', e.textStream().constructor.name);
+    testing.expectEqual(null, e.body);
+  }
+</script>

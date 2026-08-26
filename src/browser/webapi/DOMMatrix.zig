@@ -247,6 +247,10 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "DOMMatrix";
+        // Chrome's `constructor` sits here rather than last; the members
+        // below it are the ones Blink installs per context. See
+        // Snapshot.moveConstructorSlots.
+        pub const constructor_after = "translateSelf";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
         // WebKitCSSMatrix is the same constructor object, not a copy (measured:

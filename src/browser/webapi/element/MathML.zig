@@ -41,6 +41,7 @@ const Frame = @import("../../Frame.zig");
 const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
 const DOMStringMap = @import("DOMStringMap.zig");
+const DOMTokenList = @import("../collections.zig").DOMTokenList;
 const CSSStyleDeclaration = @import("../css/CSSStyleDeclaration.zig");
 const StylePropertyMap = @import("../css/typed_om.zig").StylePropertyMap;
 const global_event_handlers = @import("../global_event_handlers.zig");
@@ -68,6 +69,10 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "MathMLElement";
+        // Chrome's `constructor` sits here rather than last; the members
+        // below it are the ones Blink installs per context. See
+        // Snapshot.moveConstructorSlots.
+        pub const constructor_after = "focusGroupStart";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
@@ -98,11 +103,12 @@ pub const JsApi = struct {
         const declaration = try self.asElement().getOrCreateStyle(frame);
         return declaration.getPropertyMap(frame);
     }
-    fn _nonce(self: *MathML) []const u8 {
-        return self.asElement().getAttributeSafe(comptime .wrap("nonce")) orelse "";
+    // A slot, not the content attribute -- see Element.getNonce.
+    fn _nonce(self: *MathML, frame: *Frame) []const u8 {
+        return self.asElement().getNonce(frame);
     }
     fn _setNonce(self: *MathML, value: []const u8, frame: *Frame) !void {
-        return self.asElement().setAttributeSafe(comptime .wrap("nonce"), .wrap(value), frame);
+        return self.asElement().setNonce(value, frame);
     }
     fn _autofocus(self: *MathML) bool {
         return self.asElement().getAttributeSafe(comptime .wrap("autofocus")) != null;
@@ -131,14 +137,15 @@ pub const JsApi = struct {
     fn _blur(self: *MathML, frame: *Frame) !void {
         return self.asElement().blur(frame);
     }
-    /// The focusgroup attribute's parsed form. Chrome answers an object with no
-    /// own properties for an element that has no focusgroup (measured:
-    /// `JSON.stringify(m.focusGroup)` is "{}"), and the setter is a no-op
-    /// there is nothing here to lay out.
-    fn _focusGroup(_: *MathML, exec: *const js.Execution) js.Object {
-        return exec.js.local.?.newObject();
+    // A DOMTokenList over the focusgroup attribute, exactly as HTMLElement
+    // has it -- measured: `rect.focusGroup.constructor.name` is DOMTokenList
+    // on all three element families, and the same object comes back twice.
+    fn _focusGroup(self: *MathML, frame: *Frame) !*DOMTokenList {
+        return self.asElement().getTokenList(.focusgroup, frame);
     }
-    fn _setFocusGroup(_: *MathML, _: ?js.Value) void {}
+    fn _setFocusGroup(self: *MathML, value: []const u8, frame: *Frame) !void {
+        return self.asElement().setAttributeSafe(comptime .wrap("focusgroup"), .wrap(value), frame);
+    }
     fn _focusGroupStart(_: *MathML) bool {
         return false;
     }

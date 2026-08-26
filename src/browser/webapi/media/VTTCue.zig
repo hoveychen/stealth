@@ -161,14 +161,16 @@ pub const JsApi = struct {
     pub const Prototype = TextTrackCue;
 
     pub const constructor = bridge.constructor(VTTCue.constructor, .{});
-    pub const text = bridge.accessor(VTTCue.getText, VTTCue.setText, .{});
-    pub const region = bridge.accessor(VTTCue.getRegion, VTTCue.setRegion, .{});
+
+    // Chrome's order. No `region`: VTTRegion is not shipped, so Chrome's
+    // VTTCue.prototype has no `region` either (measured).
     pub const vertical = bridge.accessor(VTTCue.getVertical, VTTCue.setVertical, .{});
     pub const snapToLines = bridge.accessor(VTTCue.getSnapToLines, VTTCue.setSnapToLines, .{});
     pub const line = bridge.accessor(VTTCue.getLine, VTTCue.setLine, .{});
     pub const position = bridge.accessor(VTTCue.getPosition, VTTCue.setPosition, .{});
     pub const size = bridge.accessor(VTTCue.getSize, VTTCue.setSize, .{});
     pub const @"align" = bridge.accessor(VTTCue.getAlign, VTTCue.setAlign, .{});
+    pub const text = bridge.accessor(VTTCue.getText, VTTCue.setText, .{});
     pub const getCueAsHTML = bridge.function(VTTCue.getCueAsHTML, .{});
 };
 

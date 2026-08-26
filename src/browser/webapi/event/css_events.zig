@@ -98,6 +98,9 @@ pub const TransitionEvent = struct {
 
         pub const Meta = struct {
             pub const name = "TransitionEvent";
+            // `pseudoTarget` is runtime-flag gated, so Chrome installs it from
+            // the per-context batch, behind `constructor` (measured).
+            pub const constructor_after = "animation";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -106,6 +109,15 @@ pub const TransitionEvent = struct {
         pub const propertyName = bridge.accessor(TransitionEvent.getPropertyName, null, .{});
         pub const elapsedTime = bridge.accessor(TransitionEvent.getElapsedTime, null, .{});
         pub const pseudoElement = bridge.accessor(TransitionEvent.getPseudoElement, null, .{});
+
+        /// The Animation this event came from. Always null: nothing here runs
+        /// an animation timeline, and Chrome answers null for a synthesised
+        /// `new TransitionEvent('x')` too (measured).
+        pub const animation = bridge.accessor(_animation, null, .{});
+        fn _animation(_: *TransitionEvent) ?*@import("../animation/Animation.zig") {
+            return null;
+        }
+
         pub const pseudoTarget = bridge.accessor(TransitionEvent.getPseudoTarget, null, .{});
     };
 };
@@ -176,6 +188,9 @@ pub const AnimationEvent = struct {
 
         pub const Meta = struct {
             pub const name = "AnimationEvent";
+            // `pseudoTarget` is runtime-flag gated, so Chrome installs it from
+            // the per-context batch, behind `constructor` (measured).
+            pub const constructor_after = "animation";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -184,6 +199,15 @@ pub const AnimationEvent = struct {
         pub const animationName = bridge.accessor(AnimationEvent.getAnimationName, null, .{});
         pub const elapsedTime = bridge.accessor(AnimationEvent.getElapsedTime, null, .{});
         pub const pseudoElement = bridge.accessor(AnimationEvent.getPseudoElement, null, .{});
+
+        /// The Animation this event came from. Always null: nothing here runs
+        /// an animation timeline, and Chrome answers null for a synthesised
+        /// `new AnimationEvent('x')` too (measured).
+        pub const animation = bridge.accessor(_animation, null, .{});
+        fn _animation(_: *AnimationEvent) ?*@import("../animation/Animation.zig") {
+            return null;
+        }
+
         pub const pseudoTarget = bridge.accessor(AnimationEvent.getPseudoTarget, null, .{});
     };
 };

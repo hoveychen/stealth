@@ -66,8 +66,18 @@ pub fn getDirectory(_: *const StorageManager, exec: *const Execution) !js.Promis
     return file_system_access.getDirectory(exec);
 }
 
-// persist()/persisted() are not here: this engine has never claimed either, and
-// nothing measured asks. getDirectory is the one that was asked for.
+/// Both resolve false: a page that has not been granted persistent storage is
+/// not persisted, and asking for it without a permission grant is refused.
+/// Chrome's own pair are two names on the prototype either side of
+/// `constructor` (measured), which is the reason they are here at all -- an
+/// engine missing them is one expression away from being spotted.
+pub fn persisted(_: *const StorageManager, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(false);
+}
+
+pub fn persist(_: *const StorageManager, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(false);
+}
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(StorageManager);
@@ -76,7 +86,13 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
         pub const empty_with_no_proto = true;
+        // Chrome's order is estimate, persisted, constructor, getDirectory,
+        // persist -- the last two are runtime-flag gated and land in the
+        // per-context batch (measured).
+        pub const constructor_after = "persisted";
     };
     pub const estimate = bridge.function(StorageManager.estimate, .{});
+    pub const persisted = bridge.function(StorageManager.persisted, .{});
     pub const getDirectory = bridge.function(StorageManager.getDirectory, .{});
+    pub const persist = bridge.function(StorageManager.persist, .{ .exposed = .window });
 };

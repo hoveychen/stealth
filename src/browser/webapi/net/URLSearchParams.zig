@@ -362,21 +362,20 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(URLSearchParams.init, .{});
-    pub const has = bridge.function(URLSearchParams.has, .{});
-    pub const get = bridge.function(URLSearchParams.get, .{});
-    pub const set = bridge.function(URLSearchParams.set, .{});
-    pub const append = bridge.function(URLSearchParams.append, .{});
-    pub const getAll = bridge.function(URLSearchParams.getAll, .{});
-    pub const delete = bridge.function(URLSearchParams.delete, .{});
     pub const size = bridge.accessor(URLSearchParams.getSize, null, .{});
-    pub const keys = bridge.function(URLSearchParams.keys, .{});
-    pub const values = bridge.function(URLSearchParams.values, .{});
+    pub const append = bridge.function(URLSearchParams.append, .{});
+    pub const delete = bridge.function(URLSearchParams.delete, .{});
+    pub const get = bridge.function(URLSearchParams.get, .{});
+    pub const getAll = bridge.function(URLSearchParams.getAll, .{});
+    pub const has = bridge.function(URLSearchParams.has, .{});
+    pub const set = bridge.function(URLSearchParams.set, .{});
+    pub const sort = bridge.function(URLSearchParams.sort, .{});
+    pub const toString = bridge.function(_toString, .{});
     pub const entries = bridge.function(URLSearchParams.entries, .{});
     pub const symbol_iterator = bridge.iterator(URLSearchParams.entries, .{});
     pub const forEach = bridge.function(URLSearchParams.forEach, .{});
-    pub const sort = bridge.function(URLSearchParams.sort, .{});
-
-    pub const toString = bridge.function(_toString, .{});
+    pub const keys = bridge.function(URLSearchParams.keys, .{});
+    pub const values = bridge.function(URLSearchParams.values, .{});
     fn _toString(self: *const URLSearchParams, exec: *const Execution) ![]const u8 {
         var buf = std.Io.Writer.Allocating.init(exec.local_arena);
         try self.toString(&buf.writer);

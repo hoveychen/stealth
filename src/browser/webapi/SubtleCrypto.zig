@@ -280,6 +280,35 @@ fn eqlIgnoreCase(a: []const u8, b: []const u8) bool {
 
 /// Exports a key: that is, it takes as input a CryptoKey object and gives you
 /// the key in an external, portable format.
+/// wrapKey exports a key and encrypts the result; unwrapKey is the reverse.
+/// Both refuse: nothing here composes the two halves, and a rejected promise
+/// is what a page sees for an unsupported algorithm anyway. Their arity is the
+/// tell -- 4 and 7, and Chrome's prototype carries both names (measured).
+pub fn wrapKey(
+    _: *const SubtleCrypto,
+    _: []const u8,
+    _: *CryptoKey,
+    _: *CryptoKey,
+    _: js.Value,
+    exec: *const Execution,
+) !js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupportedError } });
+}
+
+pub fn unwrapKey(
+    _: *const SubtleCrypto,
+    _: []const u8,
+    _: js.Value,
+    _: *CryptoKey,
+    _: js.Value,
+    _: js.Value,
+    _: bool,
+    _: []const []const u8,
+    exec: *const Execution,
+) !js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupportedError } });
+}
+
 pub fn exportKey(
     _: *const SubtleCrypto,
     format: []const u8,
@@ -620,14 +649,17 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
     };
 
-    pub const generateKey = bridge.function(SubtleCrypto.generateKey, .{});
-    pub const importKey = bridge.function(SubtleCrypto.importKey, .{});
-    pub const exportKey = bridge.function(SubtleCrypto.exportKey, .{});
-    pub const encrypt = bridge.function(SubtleCrypto.encrypt, .{});
+    // Chrome's order, which here is alphabetical.
     pub const decrypt = bridge.function(SubtleCrypto.decrypt, .{});
-    pub const sign = bridge.function(SubtleCrypto.sign, .{});
-    pub const verify = bridge.function(SubtleCrypto.verify, .{});
     pub const deriveBits = bridge.function(SubtleCrypto.deriveBits, .{});
     pub const deriveKey = bridge.function(SubtleCrypto.deriveKey, .{});
     pub const digest = bridge.function(SubtleCrypto.digest, .{});
+    pub const encrypt = bridge.function(SubtleCrypto.encrypt, .{});
+    pub const exportKey = bridge.function(SubtleCrypto.exportKey, .{});
+    pub const generateKey = bridge.function(SubtleCrypto.generateKey, .{});
+    pub const importKey = bridge.function(SubtleCrypto.importKey, .{});
+    pub const sign = bridge.function(SubtleCrypto.sign, .{});
+    pub const unwrapKey = bridge.function(SubtleCrypto.unwrapKey, .{ .arity = 7 });
+    pub const verify = bridge.function(SubtleCrypto.verify, .{});
+    pub const wrapKey = bridge.function(SubtleCrypto.wrapKey, .{ .arity = 4 });
 };

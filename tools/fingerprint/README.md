@@ -13904,3 +13904,1236 @@ happened to run there**, and the only reading that means anything is interleaved
 pairs repeated across windows. The DataDome stations have behaved the same way
 all session (dd-datadome flipped challenge → pass → challenge → pass across four
 sweeps of three different binaries).
+
+### The burn is a per-character hash in the *challenge* script, and it sits between the GET and the POST (2026-08-24, same round)
+
+`Profiler.takePreciseCoverage` resets its counters on every call, so the first
+snapshot after a navigation is exactly the window that ends when the main thread
+first yields — and on this page that is the end of the burn. Reading it instead
+of diffing it puts the work in the challenge script, not the sensor:
+
+| executions | function | offset |
+|---|---|---|
+| 5896530 | `MOm` (the `while` body) | 138027 |
+| 496241 | `kTh` (`return a.length`) | 137757 |
+| 496239 | `DTh`, `rOm`, `ENh`, `T4h`, `K8m` | 120754 … 495657 |
+
+496239 is the length of the challenge script's own source (the file is 496256
+bytes), and the code at offset 137986 is a hash over it driven by a state
+machine that reassigns its own step function every iteration:
+
+    function MOm(WLh, pDh) {
+        var hTh = { WLh: WLh, Phh: pDh, nzh: 0, Gdh: 0, czh: DTh };
+        while (!hTh.czh());
+        return hTh['Phh'] >>> 0;
+    }
+
+That shape is not what makes Chrome slow: `probes/expr-state-machine-hash.js`
+runs the same 5954867 steps over the same 496239 characters in **27ms in Chrome
+and 28ms here**. So Chrome's 650ms is that loop plus whatever the real step
+functions do per step, and the question is only whether we run it at all.
+
+`probes/probe-hash-timeline.js` stamps every 50000th `charCodeAt` and every XHR
+open/send, which lines the two arms up:
+
+| | Chrome | lightpanda |
+|---|---|---|
+| chars 50k → 550k | 49ms → 95ms | 76ms → 231ms |
+| `open GET …<sitekey>` | 104ms | 248ms |
+| `send` first sensor POST | **783ms** | **295ms** |
+| chars 600k | 796ms | 399ms |
+
+Chrome spends **680ms between the GET and the POST with no character reads at
+all**; we spend 46ms there. So the two arms do comparable `charCodeAt` work
+(635673 vs 650797 over a run) but only one of them pays for the hash inside the
+window the payload's counter covers — MOm reads its characters some other way
+(indexing, or `codePointAt`), which is also why wrapping `charCodeAt` never
+showed it.
+
+Ruled out along the way: it is not script execution order. A page whose first
+`<script src>` answers 400ms late and whose second answers immediately runs them
+`slow, fast` in *both* engines, so a parser-inserted script is not being run out
+of document order here.
+
+**The open question, stated precisely:** does this engine call `MOm` with the
+496239-character source at all, and if it does, why does that call not land
+between the GET at 248ms and the POST at 295ms? Counting it needs an instrument
+that survives the guard — the source cannot be rewritten (see the note in
+`akamai-replay.mjs`), and the reads it makes are not on any wrappable method.
+
+### And the input is the same string on both sides (2026-08-24, same round)
+
+`MOm`'s one call site is
+
+    function wNh() { return MOm(r9h(), 358859); }
+    function r9h() { return P9h() + kkh() + typeof hN[l()[VN(LQ)].name]; }
+    function kkh() { return fmh(`${l()[VN(LQ)]}`, Srm() + 1); }
+
+— a template literal over a function, i.e. `Function.prototype.toString`, sliced
+and hashed. Running `probes/probe-native-time.js` against *both* arms says they
+handle the same string with the same operations:
+
+| | Chrome | lightpanda |
+|---|---|---|
+| `str.substr` | 9 calls, longest 496251 | 9 calls, longest 496251 |
+| `str.indexOf` | 91 calls, longest 496251 | 99 calls, longest 496251 |
+| `str.slice` | 73 calls, longest 81102 | 75 calls, longest 81102 |
+| `atob` | 12 calls, longest 81072 | 12 calls, longest 81072 |
+
+So the guard reaches the same 496251-character source in both engines and hands
+the same work to the same hash. Which means the 47x is not *whether* we run it —
+it is what each step costs. The synthetic version of that state machine costs
+27ms in Chrome and 28ms here; the real one costs Chrome ~680ms, so its step
+functions are roughly 25x more expensive per iteration than plain arithmetic
+over a string. Those steps read their operands through the obfuscator's own
+indirection — `hN[...]` where `hN` is the global — and a named lookup on the
+global object is a Blink binding in Chrome and a plain V8 object here. 5.9M of
+those at ~110ns each is the missing 650ms.
+
+That is a hypothesis, not a measurement, and it is the one to test next: time
+5.9M global-object property lookups in both engines. If it holds, the counter
+Akamai reads is not measuring anything we are failing to do — it is measuring
+how much cheaper our bindings are than a real browser's, which is a very
+different kind of problem from every other gap on this station.
+
+### Refuted: our bindings are *slower*, not faster (2026-08-24, same round)
+
+The hypothesis above is wrong, and the measurement that would have decided it
+takes two minutes, so it should have been made before the hypothesis was
+written. 2M iterations, `run-expr.mjs`, both arms:
+
+| | Chrome | lightpanda |
+|---|---|---|
+| `self['Array']` | 3ms | 15ms |
+| `self.document` | 2ms | **170ms** |
+| `document.title` | 8ms | **341ms** |
+| the same shape on a plain object | 2ms | 2ms |
+
+Chrome's DOM accessors are inline-cached to near-free; ours cost 40-85x more.
+So if the guard's hash steps read through the DOM at all, we would be the slow
+arm, not the fast one.
+
+And `probes/probe-slice-results.js` -- which records the *result* length of every
+string-producing call rather than the receiver's -- says the two arms hand their
+hash the same bytes: `substr` 9 calls, longest 453466, **total 555557 on both**;
+`slice` longest 81072 on both; `fn.toString` longest 496251, total 5556509
+against 5556637.
+
+Same input, same step count, same shape, and a synthetic version of that state
+machine costs 27ms in Chrome and 28ms here. Chrome pays 680ms for the real one.
+The remaining explanation is that V8 tiers the two differently on this code --
+an interpreter-versus-optimised gap is the right order of magnitude -- and the
+way to check is Chrome with `--js-flags="--trace-opt --trace-deopt"` on the
+replay, watching the functions around offset 137986.
+
+If that is what it turns out to be, the finding is uncomfortable: the number
+Akamai reads is not work we are skipping, it is work we are doing too well, and
+closing it means deliberately being slower rather than being more correct.
+
+### Making this engine slower does not move the counter (2026-08-24, same round)
+
+Two experiments, both on the replay, both negative — and together they close the
+"we are simply faster" reading of the gap.
+
+**A busy-wait inside the window does nothing.** `probes/probe-slow-window.js`
+spins for 640ms of wall clock at the sensor's opening GET, which is where
+Chrome's 680ms sits. Confirmed spent (23.5M spins, `burned:640ms` in the marks).
+The counter came back **14** — unchanged. So it is not the elapsed time between
+the GET and the POST.
+
+**Nor is it how fast our JavaScript runs.** `--v8-flags-unsafe` takes flags
+straight to V8, so the engine can be slowed on purpose. On the synthetic state
+machine (5954867 steps) those flags bite:
+
+| flags | synthetic hash |
+|---|---|
+| (none) | 58ms |
+| `--no-opt` | 55ms |
+| `--jitless` | **496ms** |
+
+An 8.5x slower interpreter, and the counter in the payload stayed at 6-11 across
+`--jitless`, `--no-turbofan`, and `--no-maglev --no-turbofan`. If this engine
+were running that 5.9M-step hash at all, `--jitless` would have pushed the
+number into the hundreds.
+
+**So we are not doing the work more efficiently — we are not doing it in that
+window.** Which puts the question back where the evidence already pointed: both
+arms reach the same 496251-character source and slice it identically (total
+555557 bytes of `substr` results on both sides), Chrome hashes it before its
+first POST, and we do not. Chrome pays it once and reports 5 on its second pass,
+so its result is cached across reloads — the sensor reads storage 22 times — and
+that cache is a place worth looking at next: what does the challenge script store
+after hashing, and does its lookup answer differently here?
+
+### What the storage probe saw (2026-08-24, same round)
+
+`probes/probe-storage-keys.js` logs every `Storage` call and every
+`document.cookie` read with its key and value size, in order. Wrap
+`Storage.prototype`, not the instance — an own property on the instance is never
+reached when the caller goes through the prototype, and the instance version
+logged nothing in either arm.
+
+No cached hash turned up: the keys are `ak_a`, `ak_ax`, `bmint_j`, `TAB_ID`,
+`PIM-SESSION-ID`, `GA_RT2`/`GA_BU2`/`GA_RT3`, plus `dummy` set-and-removed as a
+storage-availability test. Both arms do the same set. So whatever makes Chrome's
+second pass cheap is not a value in Storage.
+
+Two asymmetries did show, neither explained:
+
+* **Our first three `document.cookie` reads return 0 bytes; Chrome's return 31.**
+  By 215ms ours is 31 too. Chrome reads it at 60ms, we read at 90ms, so this may
+  only be ordering — but "the guard reads the cookie jar and finds it empty" is
+  the kind of thing that changes a branch, and it is worth pinning down.
+* Chrome found `TAB_ID` already in storage; we found null and set it. That one is
+  probably an artifact of the driver reusing a Chrome profile directory per
+  port, not a finding — noted so nobody re-reads it as one.
+
+### The cookie asymmetry was mine, not the engine's — align arms by *cycle* (2026-08-24, same round)
+
+The note above reported our first `document.cookie` reads coming back empty
+where Chrome's carried 31 bytes. That is wrong, and the way it was wrong is
+worth more than the observation was.
+
+The cookie is `PIM-SESSION-ID=<16 chars>`, and the page sets it itself. Read at
+the same wall-clock settle, the two arms are not at the same point in the
+challenge: **Chrome's interstitial cycle is ~800ms and this engine's is ~2.5s**,
+so a 1300ms settle catches Chrome on its *second* document — where the cookie
+from cycle one is already in the jar — and catches us on our first. Re-read
+inside cycle one (settles of 400ms, 600ms, 750ms), Chrome's first reads are
+`cookie.get[]`, empty, exactly like ours. A fresh profile per launch was already
+being used, so that was not it either.
+
+**So: when comparing page-side probe totals on this replay, align by cycle, not
+by settle.** The counter comparisons in the sections above are unaffected —
+those come from the POST bodies in the server log, where each cycle's payload is
+its own line — but any probe *total* read out of `window.__probe` at a fixed
+settle may be comparing our first pass against Chrome's second, and the
+`charCodeAt` counts (635673 against 650797) are exactly that shape. They agreed,
+which is why nothing downstream turned on them, but they should be re-taken
+per-cycle before anything is built on them.
+
+### The counter is how long the first `navigator.plugins` read took — and it does not decide anything (2026-08-25)
+
+The `A` in `sensor_data`'s plaintext head, `3;0;1;2048;<n>;<sitekey>;A,B,C,D,E,F;<cipher>`,
+is the elapsed milliseconds of **the first `navigator.plugins` read**. It is not
+a hash, not a clock skew, and not something an engine can be made to look right
+at by being slower.
+
+How it was pinned down, in the order the instruments were built:
+
+* `probes/probe-clock-trace.js` — every `Date.now` / `performance.now` /
+  `getTime` / `valueOf` call with its **return value** and the top of its stack,
+  plus XHR open/send in the same log. Chrome's whole 608ms burn sat inside a
+  single bracket whose stack read `LF<g5Y`. Sensor script offset 129058 decodes
+  to `var t0=LF(); var v=H8Y()[…](new RegExp(p,f),arg); var t1=LF(); return {k:v, k2:t1-t0}`
+  — a value **and its own elapsed milliseconds**. Only 987 `charCodeAt` calls
+  fall inside that bracket, so it is not the self-source hash.
+* `probes/probe-regex-split.js` — nothing: no `split`/`replace`/`match` call in
+  either arm was over 1ms or over 4096 characters. The cost is in `H8Y()`.
+* `probes/probe-cycle1-cost.js` — methods **and getters and constructors**,
+  read at a cycle-one settle. `navigator.get plugins`: **632.5ms over 30 reads**
+  in Chrome, second place 0.7ms.
+* `probes/probe-plugins-read.js` — per read. Chrome's **first** costs 643.3ms
+  (stack `Navigator.get<cRK`) and its remaining forty-six cost 0ms. This engine
+  makes the same 140 reads, reports the same `length === 5`, and pays 0ms for
+  every one.
+
+Then it stopped mattering, twice over:
+
+* Chrome only pays it *there*. On a plain page Chrome's first
+  `navigator.plugins` costs 5.2–5.6ms, and reading it once at the top of the
+  interstitial (1.1ms) drops **Chrome's own A to 13** — this engine's range. The
+  640ms is what that read costs when the guard makes it, with the interstitial's
+  1ms poller already running; it is not a fixed initialisation cost.
+* Matching it changes no verdict. `probes/patch-plugins-latency.js` burns
+  610–700ms on the first read (burn, not sleep: the sensor measures a `Date.now`
+  delta), delivered to the live station through the new
+  `antibot-sweep.mjs --inject` (`Page.addScriptToEvaluateOnNewDocument`).
+  Live macys reported A = 642 / 697 / 630 / 684 — dead centre of Chrome's
+  627–786 — and served the interstitial anyway. The control settles it: the
+  Chrome run that **passed** the same afternoon reported **A=14**, which is this
+  engine's own unpatched figure.
+
+**So Akamai's plaintext timings are not the discriminator.** A single passing
+Chrome reports anything from 14 to 786 for the same field. Stop comparing
+durations on this station; compare *whether the call happened at all*.
+
+### Comparing call sequences instead: `probe-canvas-order.js` (2026-08-25)
+
+`probes/probe-canvas-order.js` logs the ordered canvas/text call sequence with
+arguments and return shapes — no timings on purpose. `replay-drive.mjs` drives
+either arm at a chosen settle and prints `window.__probe`. Aligned by cycle
+(Chrome 960ms, this engine 3300ms) the two sequences line up call for call, and
+what is left is small enough to read:
+
+* **`shadowColor` echoed the source text.** `ctx.shadowColor = 'red'` read back
+  `red` where Chrome reads `#ff0000`, and `rgb(43,22,233)` where Chrome reads
+  `#2b16e9`. The interstitial sets it twice and reads it back both times. Fixed
+  — it is the same grammar `fillStyle` already parses, and it was on the
+  `freeform` accessor which only stores.
+* **Still open: we make four `getContext` calls Chrome does not.** After
+  `toDataURL()`, Chrome goes straight to `getContext('webgl2')`; we call
+  `getContext('webgl')` twice first, and at the end we make a second
+  `offscreen.getContext('webgl')` / `('webgl2')` pair where Chrome makes one.
+  A call the other arm never makes is a branch, and a branch is a value we
+  answered differently just before it. The receiver is not logged yet — that is
+  the next thing to add.
+
+Two traps worth restating, both walked into again this round:
+
+* **`window.__probe` resets on the interstitial's reload.** A settle that
+  overshoots reads a *fresh* log from the next cycle, so a probe can look like
+  it recorded nothing (0 rows at a 6000ms settle) or like the guard skipped a
+  whole block. The "Chrome runs a nine-font `measureText` loop and we skip it"
+  scare was exactly this: at a 3300ms settle we run all sixty-two rows.
+* **`ENh(a,b){return a.charCodeAt(b);}`** — challenge script offset 492173 — is
+  what `MOm` reads characters with, 496,239 times. An earlier note claimed the
+  hash "does not use charCodeAt" and concluded this engine never runs it. It
+  does; both arms do; the counter simply never measured it.
+
+### The four extra `getContext` calls were one call and a wrapped realm (2026-08-25)
+
+`probe-canvas-order.js` now numbers every receiver (`canvas#2`, `2d#1`, `gl2#1`),
+logs the call site for `getContext` / `toDataURL`, keeps the whole stack for
+those rows in `__probe.gcStacks`, and wraps the WebGL contexts as well. The
+replay server grew `--stall-challenge <ms>`, which holds the `?t=` reply so the
+interstitial never reloads: one cycle then runs to completion in both arms and
+the two sequences can be diffed line for line instead of guessed at by settle.
+
+With receivers on, the "four extra calls" resolves into **one** extra call plus
+reordering. Grouped by call site, both arms make the same number of everything
+except the sensor's `SNK < TEY` site, where Chrome calls `getContext('webgl')`
+once and this engine twice. The stacks say which of the two:
+
+    Chrome:  SNK <- TEY <- OV(sensor:167101) <- whY
+    ours:    SNK <- TEY <- OV(sensor:167085) <- whY      <-- extra
+             SNK <- TEY <- OV(sensor:167101) <- whY
+
+`whY` (sensor offset 172621) creates a `display:none` iframe, appends it, sets
+`src="https://"`, and calls `OV(iframe)`, which runs the same collector on both
+windows: `TEY(iframe.contentWindow)` at 167085 and `TEY(window)` at 167101. The
+collector's last field (`case C5`, offset ~550700) is
+`win.document.createElement('canvas')` → `getContext('webgl')` →
+`WEBGL_debug_renderer_info` → the two `UNMASKED_*` strings. **The sensor is
+comparing the child frame's GPU strings against the top frame's.**
+
+So both arms make both calls. The probe only wraps the *top* frame's
+prototypes, so in Chrome the child frame's call is invisible — and in this
+engine it is not:
+
+    chain:  HTMLCanvasElement=TOP+ownGetContext -> HTMLElement=TOP -> Element=TOP
+            -> Node=TOP -> EventTarget=TOP -> Object=TOP
+    doc:    HTMLDocument=TOP -> Document=TOP -> Node=TOP -> ...
+    but:    iframe.contentWindow.HTMLCanvasElement !== HTMLCanvasElement
+
+The child window has its own realm and its own interface objects, while
+`contentWindow.document` — and everything that document creates — comes back
+wrapped in the **parent's** realm. A guard that compares the two windows is
+looking straight at that.
+
+What is established about the trigger, all on the offline replay, lightpanda
+against headed Chrome:
+
+* It is not the sensor's frame. A control iframe the probe creates itself
+  (`__probe.control`, sampled at inject / 100 / 300 / … / 5000 ms) leaks the
+  same way on that page. Chrome never does, at any sample.
+* It is not there at parse time: the `inject` sample is correct in both arms and
+  every later sample leaks.
+* It needs the loader. Dropping `public/…` — the 230 KB loader, and with it the
+  `e/*.js` modules whose URLs it derives — makes every sample correct again.
+  Dropping the challenge script, or the sensor script, changes nothing: both
+  still leak. Narrowed once more: `--drop /e/` empties the four modules while
+  leaving the loader itself in place, and that still leaks — so it is the
+  loader, not what it loads. (`akamai-replay.mjs --drop <substring>` answers matching URLs with
+  an empty body; the guard will not complete, so this is for "which script flips
+  X", not for readings.)
+* It does not reproduce from a plain page. Frame with and without a src, src
+  before or after append, src assigned after the frame is live, five frames,
+  parser-created frames, create/remove churn, and calls made from parse time, a
+  microtask, a timer and the load event: `expr-iframe-realm.js`,
+  `expr-iframe-realm-wrap.js` and a handful of scratch pages all say both arms
+  are correct. Whatever the loader does, that list does not contain it.
+
+Two more readings taken along the way, both real and neither explained:
+
+* **`document.domain = document.domain` costs this engine its own child
+  frames.** Assign the same value it already has, and a child frame created
+  afterwards throws `SecurityError: The operation is insecure` on
+  `contentWindow.document`, while one created before throws
+  `TypeError: no access`. Chrome keeps full access in both orders. Reproducible
+  from a plain page — this one has a minimal repro and does not need the replay.
+* After a failed navigation to `https://`, Chrome's frame reports
+  `about:blank#blocked` where ours stays on `about:blank`.
+
+And a probe artifact to not mistake for a finding: `getParameter` enum *names*
+come off the first context the probe sees, so an arm whose first context is
+WebGL1 prints raw numbers for the WebGL2-only enums. The values were identical.
+
+### It was `contentDocument`, and the realm rule was the bug
+
+The trigger turned out to be one accessor, and the list above missed it because
+every entry on it reads the child document through the *child's* own accessor.
+
+`iframe.contentWindow.document` goes through an accessor on the child's global,
+so it enters the child's v8 context and the wrapper is born in the child's realm.
+`iframe.contentDocument` is an accessor on the parent's
+`HTMLIFrameElement.prototype`, so reading it first built the child's document in
+the *parent's* realm — and, because `mapZigInstanceToJs` caches wrappers in an
+identity map keyed by the Zig pointer with no realm in the key, shared by every
+frame of the page, that answer was permanent. Everything the document created
+followed, since `createElement` was then resolved off the parent's
+`Document.prototype`, and calling it enters the parent's context. The child's own
+script saw it too: inside the frame,
+`Object.getPrototypeOf(document) === HTMLDocument.prototype` read false.
+
+`expr-content-document-realm.js` is the whole thing on a plain page: two frames,
+identical but for the order of the first read. Six fields disagreed with Chrome
+before the fix and none after. Fixed by applying the rule Web IDL already states
+and `Caller.errorLocal` already applies to exceptions — a platform object belongs
+to its relevant realm, and a node's is its node document's frame.
+
+Two things that came out of chasing it and are worth not re-deriving:
+
+* **The loader's tamper check is not a fork in the road.** At offset 50859 it
+  keeps a hidden iframe's `contentWindow` in `Ea`, snapshots
+  `Function.prototype.toString`, and then swaps `fetch`/`eval` for the child
+  frame's if either of the top frame's has been patched — `Gb` asks whether
+  `toString` still spells `[native code]`. Both arms answer yes to both and keep
+  the top frame's (`expr-loader-native-check.js`, identical field for field).
+* **The extra `getContext` is gone, and what is left is an ordering difference.**
+  With the realm defect fixed, both arms make the same eight `getContext` calls
+  on the same receivers with the same arguments, and the sensor's collectors
+  complete in a different order: the one that builds a hidden iframe to compare
+  its `WEBGL_debug_renderer_info` against the top frame's (`SNK`, from `TEY`)
+  lands 36th of 99 here and 87th in Chrome, and the two offscreen-canvas groups
+  swap with it. The sensor drives its collectors through a generator, so the
+  sequence records completion order. Not iframe readiness:
+  `expr-iframe-load-timing.js` has both arms firing `load` synchronously during
+  `appendChild`, with `readyState` already `complete`, at the same position
+  relative to a microtask/macrotask counter.
+
+Real macys is still `empty-document` after the fix, so the realm defect was not
+this station's gate.
+
+### The collector order was the build mode
+
+The ordering difference above is not an engine difference. `zig build` takes its
+optimize mode from `b.standardOptimizeOption(.{})`, which defaults to `Debug` —
+so the binary every tool in this directory picks up by default carries
+`DebugAllocator`, which DWARF-unwinds a stack on every allocation. `sample` on
+the page's process shows it directly (`debug.captureCurrentStackTrace`,
+`BucketHeader.captureStackTrace`). `make build` is the release path; a
+standalone one is `zig build -Doptimize=ReleaseFast -p zig-out-rel` (six
+minutes, 92 MB against Debug's 242 MB).
+
+With the same probe on the same replay, three readings:
+
+| arm | collector groups, in completion order |
+|---|---|
+| Chrome | `wTm` `s9m` `SIm` anon×2 `SNK<TEY` `FSY`×2 |
+| this engine, ReleaseFast | the same, group for group |
+| this engine, Debug | `wTm` **`SNK<TEY`** `s9m` `SIm` `FSY`×2 anon×2 |
+
+The mechanism is readable rather than inferred. `probe-async-origin.js` labels
+every scheduling primitive at registration and keeps that label on a stack while
+its callback runs, so a canvas call carries the task it ran inside. The group
+that moves is driven by a **fixed 1000 ms** `setTimeout` registered by `d1Y`, so
+how much of the queue an arm drains before that deadline decides where the group
+lands — and the Debug build spends 960 ms of the first second completely idle
+mid-chain, not firing even a `setInterval(…, 1)`. "Deterministic, not jitter" was
+right; being three times slower is itself deterministic.
+
+Which makes it a note about method, not about macys: **any reading in this
+directory that turns on timing or ordering has to say which build produced it.**
+Real macys is `empty-document` from either build.
+
+### A ready `async` script waited for the parser, once it stopped jumping it
+
+With both arms on release builds the replay's remaining difference was script
+*execution order*: challenge, then **loader**, then sensor here, against
+challenge, then **sensor**, then loader in Chrome — which is also the order the
+real site's wire capture recorded. The interstitial's shape is
+`<script src=challenge>`, `<script src=…/public/0c64cce… async>`, an inline XHR
+proxy, `<script src=sensor>`, so running the async loader early handed the sensor
+a page whose two hidden frames, patched globals and 1000 ms interval already
+existed.
+
+The minimal version needs no replay, and takes three variants to pin down —
+`Chrome 151`, plain http page, one blocking script that is slow to *run* before
+an `async` tag and a second blocking script after it:
+
+| the async script's fetch | Chrome | this engine, before |
+|---|---|---|
+| still in flight when the parser blocks | async first | async first |
+| response delayed 250 ms | async last | async last |
+| landed while the slow blocking script ran | async **last** | async **second** |
+
+Only the third case separates a queued task from an inline call. `ScriptManager`
+`addFromElement` was making the inline call: on adopting a prescan fetch that had
+already completed it queued the script on `ready_scripts` and then called
+`evaluate()` right there, inside the parser, before the tag of the blocking script
+after it had been tokenised. Not calling it for the parser-inserted async case is
+the whole fix — the next blocking script's evaluation window drains the queue,
+and the end of the parse drains it when there is no next one. All three variants
+now read the same in both arms, and the replay's script order flips to
+challenge, sensor, loader.
+
+Real macys is still `empty-document` (33 nodes rather than 32), so this was not
+the gate either.
+
+### What the collector reads, asked back one member at a time (B46)
+
+Two Debug-only logs on the Context answer the two halves of "what did the guard
+touch": `prop-reads.mjs` lists the members we answered, `unknown-props.mjs` lists
+the members we could not answer at all. Both dump when the context is torn down,
+so the driver has to close the target, and both keep `Runtime.enable` off until
+the settle is over. Pointed at the macys interstitial through
+`akamai-replay.mjs`, they say the collector reaches **311 members across 71
+interfaces in 7 realms** (two of them SharedWorkers) and asks for **77** we do
+not have.
+
+`prop-reads-diff.mjs` turns the first list into a probe both engines can answer
+and re-asks the 104 members reachable from a singleton: **94 identical**, and the
+ten that differ are screen geometry, `devicePixelRatio`, heap sizes and the
+harness's own user agent. That half of the surface is aligned; the interesting
+part was everything the singleton filter had to drop, which
+`probes/probe-collector-answers.js` covers by wrapping the eleven entry points
+the collector calls with arguments (`matchMedia`, `canPlayType`,
+`getComputedStyle`, `getItem`, `measureText`, `getVoices`, `enumerateDevices`,
+`permissions.query`, …) and letting the guard supply them. Call counts and
+answers matched in all but the readings below.
+
+Of the 77 it asked for and we lack, almost every one is a bot-detection sentinel
+that no browser has (`_phantom`, `cdc_adoQpoasnfa76pfcZLmcfl_Array`,
+`domAutomationController`, `watinExpressionResult`, `ApplePaySetup`, …) — absent
+is the right answer there. Three were members Chrome really has, measured on the
+same page in both arms:
+
+| asked for | Chrome | this engine, before |
+|---|---|---|
+| `FontFaceSet[Symbol.iterator]` | iterates | `TypeError: fs is not iterable` |
+| `WorkerNavigator.connection` | `[object NetworkInformation]` | `undefined` |
+| `RestrictionTarget` | a constructor | absent |
+
+The first two are fixed (below). `RestrictionTarget` is left out on purpose: it
+is one of the 19 missing globals whose whole list was already shown not to move
+the payload by a byte (plan note ⑩).
+
+**`window.length` counted frames that no longer existed.** The interstitial
+creates hidden iframes and removes them again, and on the replay it read 5 frames
+here against Chrome's 2. Removing an `<iframe>` from the document destroys the
+navigable inside it: `probes/expr-iframe-detach.js` pins the whole reading —
+`window.length` and `window[N]` fall, `contentWindow` and `contentDocument`
+answer null, a Window captured beforehand reports `closed` and `parent === null`,
+and re-inserting the same element builds a *new* navigable rather than reviving
+the old one. Nothing in the engine reacted to the removal at all; the fix hangs
+off the disconnect walk in `Frame.removeNode`. The replay now reads 2 in both
+arms.
+
+**A worker's navigator was missing six services.** Chrome's
+`WorkerNavigator.prototype` carries `connection`, `hid`, `mediaCapabilities`,
+`serial`, `usb` and `locks`; the comment here used to explain their absence as
+"resolve through a Frame, and a worker realm has none", which was true of the
+object factory only — and the Execution has one. The collector reads
+`connection` twice inside each of its two SharedWorkers.
+
+**`document.fonts` was not a set.** Chrome's FontFaceSet is setlike: `add` stores
+the face, `size` counts, and `entries`/`keys`/`values`/`forEach`/`has`/`delete`/
+`clear`/`Symbol.iterator` all exist, along with `onloading`, `onloadingdone` and
+`onloadingerror`. Here `add` was a no-op returning `this`, `size` was the
+constant 0, and the setlike half did not exist, so iterating threw inside the
+guard. `probes/expr-fontfaceset.js` has the measured semantics (add is
+idempotent, delete answers a bool, clear answers undefined, all three refuse a
+non-FontFace with Chrome's own wording).
+
+Two shapes measured and deliberately not matched, both bridge-wide rather than
+per-interface: Chrome hands out one function object under both `values` and
+`Symbol.iterator` where the bridge builds two, and Chrome installs `constructor`
+in interface order (`WorkerNavigator.prototype` has it between `connection` and
+`hid`, `Navigator.prototype` at index 31 of 83) where the bridge always installs
+it last. The second is worth a plan of its own: it is one comparison away from
+readable on every interface the engine defines.
+
+Real macys is still `empty-document`. `loading="lazy"` is a fourth measured
+difference and is *not* fixed: Chrome does not fetch a lazy image 3000 px below
+the fold (it does fetch one near the viewport), and this engine fetches every
+one — `Image.imageAddedCallback` reflects the attribute and ignores it. Matching
+Chrome needs the element's position, and layout here puts a 3000 px spacer at
+25 px, so there is nothing to threshold against. It is a server-visible extra
+request on any page with lazy images, and it needs a decision rather than a
+patch.
+
+## Every prototype, name for name and position for position (B47, 2026-08-25)
+
+The previous section left two bridge-wide shapes measured and unmatched. One of
+them -- where `constructor` sits -- is fixed here, and measuring it properly
+turned up a bigger one next to it.
+
+`probes/expr-constructor-slot.js` walks every interface object the realm
+carries and records the whole of `Object.getOwnPropertyNames(X.prototype)`
+rather than an index, so one reading answers three questions at once: which
+interfaces exist, which members they own, and in what order. Run it through
+`run-expr.mjs` against both arms on the *same* https page (`--url
+https://example.com/`; `about:blank` is not a secure context and the two arms
+gate different surfaces there, see the 2026-08-24 note above).
+
+Of the 923 interface prototypes the two engines share, **734 were byte-identical
+at the start of this session** and 189 were not. Three separate causes, and the
+first two are cheap:
+
+| cause | interfaces | fixed |
+|---|---|---|
+| `constructor` in the wrong slot, members otherwise identical | 26 | yes |
+| member set identical, declaration order different | 63 | yes |
+| members missing or extra | 100 | no -- see the table below |
+
+### Where Chrome puts `constructor`
+
+V8 appends `constructor` to a template's prototype object once the template's
+own members are in, so a template-built prototype reports it last. Blink's does
+not: Chrome installs a second batch of members per context -- the runtime-flag
+and secure-context gated ones -- and that batch lands after V8's append. So
+Chrome's `constructor` sits at the boundary between the two, and the tail behind
+it reads like a list of Chrome flags: `Document`'s is `fragmentDirective,
+onpointerrawupdate, browsingTopics, hasPrivateToken, …`, `USB`'s is
+`requestDevice`, `Performance`'s is `timing, navigation, memory, eventCounts,
+interactionCount`.
+
+`Navigator.zig` carried a comment saying a binding cannot choose the slot. Half
+true: the members go on a Template and V8 decides where its own entry goes. But
+string keys enumerate in insertion order, so deleting the members that belong
+after `constructor` and defining them again with the descriptor they already
+have moves them behind it and touches nothing else -- same getter, same setter,
+same arity, same attributes. `Snapshot.moveConstructorSlots` does that once
+while the snapshot is built, driven by `Meta.constructor_after` (the member
+Chrome's `constructor` follows -- a name, not an index, because an index moves
+whenever anything else on the interface changes). 30 interfaces carry one.
+
+### Declaration order is enumeration order
+
+The bigger half. 63 interfaces owned exactly Chrome's members and listed them in
+a different order, which is one `getOwnPropertyNames` away from readable and
+costs nothing to fix: `XMLHttpRequest` is the worst of them, and it is the
+prototype the Akamai interstitial proxies `send` on.
+
+    Chrome  onreadystatechange readyState timeout withCredentials upload
+            responseURL status statusText responseType response responseText
+            UNSENT OPENED HEADERS_RECEIVED LOADING DONE
+            abort getAllResponseHeaders getResponseHeader open overrideMimeType
+            send setRequestHeader constructor responseXML
+            setAttributionReporting setPrivateToken
+    was     UNSENT OPENED HEADERS_RECEIVED LOADING DONE onreadystatechange
+            upload timeout withCredentials open send responseType status
+            statusText readyState response responseText responseXML responseURL
+            setRequestHeader overrideMimeType getResponseHeader
+            getAllResponseHeaders abort constructor
+
+`Node` differed in 47 of 48 positions, `CanvasRenderingContext2D` in 68 of 74,
+`WebGLRenderingContext` in 438 of 443. The sweep is mechanical -- reorder the
+`pub const` declarations, move a member's comment with it, leave a slot's
+comment where it is -- and changes no behaviour at all.
+
+**Both arms after: 824 of 923 byte-identical, and not one interface whose member
+set already matched Chrome's is left disagreeing about order or about where
+`constructor` sits.**
+
+### What is left: 100 interfaces with the wrong members
+
+The same reading gives the list, which is the natural next thing to work
+through. 450 members Chrome has and this engine does not, 23 the other way. The
+cheapest end of it, one or two names each:
+
+    XMLHttpRequest      setAttributionReporting setPrivateToken   (done here)
+    Element             ariaActionsElements
+    ElementInternals    ariaActionsElements
+    SubtleCrypto        wrapKey unwrapKey
+    StorageManager      persisted persist
+    Attr                prefix specified
+    File                lastModifiedDate webkitRelativePath
+    DOMMatrixReadOnly   toJSON transformPoint
+    Headers             getSetCookie
+    IDBFactory          databases
+    Range               expand
+    TextEncoder         encodeInto
+    Response/Blob       textStream
+    PerformanceEntry    navigationId   (we park it on PerformanceResourceTiming)
+    Worker              +onmessageerror        (ours, Chrome has none)
+    DocumentFragment    +innerHTML
+    DOMException        +toString
+
+and the expensive end is `SVGElement`, which owns 110 event handlers in Chrome
+and none here, plus `SVGSVGElement` (20), `Request` (11), `HTMLIFrameElement`
+(11) and `ShadowRoot` (10).
+
+Two entries on the "extra" side are this branch being behind main rather than
+gaps: `navigator.modelContext` (main made the WebMCP surface opt-in behind
+`--webmcp`) and `PerformanceObserver.supportedEntryTypes` being two short.
+
+Not measured: the worker realm. B46 read `WorkerNavigator.prototype`'s
+`constructor` between `connection` and `hid`, and this session's table is the
+window realm only, so a worker-side pass over the same probe is still owed.
+
+## The members, not just their order (B48, 2026-08-25)
+
+B47 left 923 shared prototypes with 828 byte-identical and the whole remaining
+difference in one bucket: 100 interfaces whose *member set* disagreed, 450 names
+Chrome has and this engine did not, 23 the other way. Same reading as before
+(`probes/expr-constructor-slot.js` through `run-expr.mjs`, both arms on
+`--url https://example.com/`), re-run at the start of this session to confirm
+the number rather than inherit it.
+
+**Both arms after: 871 of 923 byte-identical, and one name left on the extra
+side.** 52 interfaces still differ, all of them missing members; the extras went
+from 23 to 1.
+
+### The extra side was one mistake, twelve times
+
+Every extra but two was a member redeclared on a subclass whose prototype
+already inherits it. The engine had the behaviour right and the *shape* wrong,
+and the shape is what a page reads.
+
+| name | belongs to | was also on |
+|---|---|---|
+| `nonce` | HTMLElement (HTMLOrSVGElement) | Style, Script, Link |
+| `onselectionchange` | HTMLElement (GlobalEventHandlers) | Input, TextArea |
+| `length` | HTMLCollection, NodeList | HTMLFormControlsCollection, RadioNodeList |
+| `item` | NodeList | RadioNodeList |
+| `getElementById` | DocumentFragment | ShadowRoot |
+| `innerHTML` | Element, ShadowRoot | DocumentFragment, HTMLTemplateElement |
+
+The last two are worth separating, because fixing them moves code rather than
+deleting it. A shadow root keeps an id map and the tree-walking
+`DocumentFragment.getElementById` does not, so the fragment's binding now
+dispatches into that map when its fragment is a shadow root -- the fast path
+survives, the name does not. `innerHTML` is the mirror image: Chrome has it on
+Element and on ShadowRoot and *nowhere else*, so a template's redirect into its
+content fragment moved into `Element.getInnerHTML`/`setInnerHTML`, and
+DocumentFragment lost the pair outright (`'innerHTML' in
+document.createDocumentFragment()` is false in Chrome, measured).
+
+The other extras are names Chrome does not carry anywhere:
+`Worker.onmessageerror`, `DOMException.toString`, `DOMStringList`'s
+keys/values/entries, `VTTCue.region`, `Notification.image`,
+`HTMLAreaElement.type` and `.hreflang`, `HTMLButtonElement.required`.
+`DOMException.toString` is the interesting one -- the binding hand-rolled the
+wording that `Error.prototype.toString` already produces, and this engine's
+DOMException.prototype already has Error.prototype behind it (measured on both
+arms), so deleting the binding changed no output.
+
+`navigator.modelContext` is the one name left on the extra side, and it is this
+branch being behind main rather than a gap: main put the WebMCP surface behind
+`--webmcp`.
+
+### navigationId was on the wrong interface
+
+`PerformanceResourceTiming.navigationId` should have been
+`PerformanceEntry.navigationId`. Chrome tags *every* entry of a navigation with
+the same number, so a mark filed straight after a resource entry reads the same
+value (measured: 4770 for both). It is also the fifth key of every entry's
+`toJSON`, in front of whatever the subclass adds -- which PerformanceEntry's own
+and PaintTiming's were both missing, and PerformanceResourceTiming's already
+had.
+
+### What was added, and what it answers
+
+23 names in the second pass, plus ShadowRoot's ten, HTMLInputElement's nine,
+HTMLTextAreaElement's four, HTMLScriptElement's five, HTMLLinkElement's six,
+Notification's eight and HTMLTemplateElement's two in the first. Most answer a
+constant, because the machinery behind them does not exist here *and Chrome
+answers the same constant anyway* on a fresh object -- `animation` is null on a
+synthesised AnimationEvent, `getTargetRanges()` is `[]` on a synthesised
+InputEvent, `isVisible` is false, `desiredSize` is 0, `databases()` resolves
+empty, `persisted()`/`persist()` resolve false. Being absent was the readable
+difference; the value never was.
+
+Three measurements changed what the code does rather than just adding a name:
+
+- **`blocking` is a `DOMTokenList`, not a string.** `script.blocking.constructor.name`
+  is DOMTokenList on `<style>`, `<link>` and `<script>` alike, and assigning a
+  string writes the attribute verbatim. `reflect.tokenList` is the helper.
+- **`commandForElement` / `interestForElement` do not write an id.** Assigning
+  an element leaves `getAttribute('commandfor')` as `""` and still reads the
+  element back, so the explicit reference lives in a frame-side map
+  (`Element.ElementReferenceAttribute`) the way a token list does.
+- **`setRangeText`'s "preserve" mode is not symmetric.** With the selection at
+  [1, 3) on "abcdef": replacing [1, 3) with "XY" leaves [1, 3), with "Z" leaves
+  [1, 2), replacing [4, 5) leaves it untouched, and replacing [0, 1) with "QQ"
+  gives [0, 4). The selection's *end* moves when it sits exactly on the replaced
+  range's end; its *start* collapses to the range's start there. Four
+  measurements, one shared algorithm for `<input>` and `<textarea>`.
+
+`HTMLInputElement.height`/`width` answer 0 unless `type=image` whatever the
+attributes say, `valueAsNumber` is NaN off the numeric types, and `showPicker()`
+always refuses with the user-gesture wording -- all measured, none guessed.
+
+### Three interfaces the tests said were impossible
+
+`css_events.html` carried a comment saying V8 can only put `constructor` last,
+so `pseudoTarget` could not sit behind it. B47 disproved that for 30 interfaces
+and this pass applies it to three more: UIEvent, AnimationEvent and
+TransitionEvent all carry `pseudoTarget` in the per-context batch, behind
+`constructor`. The comment is gone; the assertion now pins Chrome's real order.
+
+### What is left: 52 interfaces, 366 members
+
+Nothing is order-only any more -- every interface whose member set matches
+Chrome's also matches its order and its `constructor` slot. The rest is
+members, and it sorts into four piles.
+
+**Needs an interface this engine does not have (4).** `EventTarget.when` returns
+an Observable, and Observable/Subscriber are both on the chrome-only list.
+`Blob.textStream` and `Response.textStream` (and `Request.textStream`) return a
+ReadableStream of decoded text. `Date.toTemporalInstant` is V8's, not a binding.
+
+**Two names each (11):** CustomElementRegistry (getName, initialize),
+DOMMatrixReadOnly (toJSON, transformPoint -- `toJSON` is the a–f, m11–m44,
+is2D, isIdentity set, whose exact key order is not measured yet),
+DataTransferItem, HTMLDialogElement, HTMLProgressElement, HTMLTrackElement,
+IDBVersionChangeEvent, MessageEvent, OffscreenCanvas, SVGGeometryElement,
+SVGMaskElement, WebTransportDatagramDuplexStream.
+
+**Three to six each (17):** DocumentType's after/before/replaceWith (ChildNode,
+which Element and CharacterData already have), NamedNodeMap's three NS methods,
+ScreenOrientation, VisualViewport, IDBDatabase's three handlers, HTMLFormElement
+(rel, relList, reset), HTMLMarqueeElement, HTMLAnchorElement, PointerEvent,
+MouseEvent (movementX/Y, fromElement/toElement), Navigation, SVGUseElement,
+SVGViewElement, WheelEvent, FontFace, HTMLSelectElement, SVGTextContentElement,
+Selection, HTMLMeterElement, IntersectionObserver.
+
+**The expensive end (20):** `SVGElement` alone is 110 event handlers this side
+has none of -- HTMLElement's list, which HTMLElement already carries, so it is a
+question of pointing the same generator at the SVG side. Then SVGSVGElement
+(20), HTMLFrameSetElement (18, the windowed handler set), HTMLIFrameElement
+(11), Request (11), HTMLMediaElement / HTMLObjectElement / HTMLOutputElement /
+HTMLTableElement (10 each), HTMLFieldSetElement (9), and four eights.
+
+A useful pattern in that list: `form`, `willValidate`, `validity`,
+`validationMessage`, `checkValidity`, `reportValidity`, `setCustomValidity` show
+up together on HTMLFieldSetElement, HTMLObjectElement and HTMLOutputElement.
+That is the form-associated set Button/Input/Select/TextArea already have; three
+more elements need the same seven.
+
+**Still not measured: the worker realm.** B46 read `WorkerNavigator.prototype`'s
+`constructor` between `connection` and `hid`; every table since has been the
+window realm only.
+
+**Also unmeasured, found while doing this:** `autocomplete` filters its value in
+Chrome (`bogus` reads back as `""`, `shipping` too, `section-x cc-name` reads
+back verbatim) and both HTMLInputElement's and HTMLTextAreaElement's reflect it
+as a plain string here. That is a value difference, not a shape one, so it is
+outside this pass.
+
+## The three interfaces a sensor reads, and SVGElement's missing half (B49, 2026-08-25)
+
+B48 left 871 of 923 shared prototypes byte-identical and 366 members on the
+missing side, sorted into four piles. This session re-measured that table on a
+**ReleaseFast** build first -- B48's reading was Debug, and B45 was misled for a
+whole session by a Debug-only artefact -- and got the same numbers to the name,
+so the binding table really is build-mode independent. The one member left on
+the extra side, `navigator.modelContext`, is this branch trailing main rather
+than a gap: main put the WebMCP surface behind `--webmcp` in `7b00aeff9`, and
+the branch is 65 commits behind it.
+
+**Both arms after this session: 875 of 923 byte-identical, 245 members on the
+missing side.**
+
+### The sweep, and a reference column that was measured wrong
+
+The lightpanda arm, run alone rather than concurrently, is **19 of 29 passing
+against B47's 14, with no station going the other way**. Three of the five
+changes are B47's known concurrency false-reds -- `ak-kohls`, `ak-expedia` and
+`px-wayfair` all report `timeout: Page.navigate` under load and pass when run
+alone. The other two, `dd-leboncoin` and `x-zillow`, genuinely changed verdict,
+but one reading each is not enough to attribute them to the prototype work.
+
+The Chrome column of that sweep is **not** usable and is recorded here so the
+next session does not repeat the mistake: `antibot-sweep.mjs chrome` is
+*headless* unless `--headed` is passed, and headless Chrome scores 3 of 29 --
+worse than this engine, on stations it has no trouble with otherwise. Every
+prior reference reading in `results/` that means anything used `--headed`. The
+same error made a first pass at `ak-macys` read `refused-403` on the Chrome
+side and look like a burned IP; re-run headed in the same sitting, **Chrome
+passes macys with 8018 nodes while this engine still gets the 33-node
+interstitial**. The gap is real and still open.
+
+### MouseEvent, WheelEvent, PointerEvent
+
+These three were picked out of B48's remaining pile because Akamai's and
+Kasada's sensors read them directly. All three were short of members *and* in
+the wrong own-property order -- MouseEvent's was alphabetical, which no
+interface in Chrome is. All three are byte-identical now.
+
+Three values would have been written wrong from the IDL:
+
+- **`fromElement`/`toElement` are not symmetric aliases of `relatedTarget`.**
+  The type string alone picks the branch, and it is a literal match on two
+  names: for `mouseout` and `mouseleave`, `fromElement` is the target and
+  `toElement` the relatedTarget; for everything else -- including `pointerout`,
+  which reads like it should be on the other side -- it is the other way round.
+  Detached and attached elements read the same on both arms.
+- **`momentum` is a boolean**, not the enum string the name suggests, and it
+  goes through ToBoolean (`'x'` is true, `0` is false).
+- **`wheelDelta*` and `delta*` fill each other's gaps**, and only the legacy →
+  standard direction flips the sign:
+
+  | init | deltaY | wheelDeltaY |
+  |---|---|---|
+  | `{deltaY: 10}` | 10 | 10 |
+  | `{wheelDeltaY: 2}` | **-2** | 2 |
+  | `{deltaY: 10, wheelDeltaY: 2}` | **10** | 2 |
+
+  A given value is always kept; only a *missing* one is derived. Both members
+  had to become optional for "absent" to be distinguishable from "0".
+  `deltaMode` never scales either value on a synthesised event -- the
+  120-per-notch factor is a trusted-event thing. `wheelDelta` is not an init
+  key at all: it is Y unless Y is exactly zero, then X.
+
+The third row is worth dwelling on, because the first pass got it wrong *and
+the test agreed*: the same misreading was written into the code and into the
+assertion, so `make test` was green on a value both arms disagree about. What
+caught it was running the measurement probe against **both** engines and
+diffing, which is the check B48 recommended and which is now the reason this
+section can say what it says.
+
+### SVGElement, and the nonce slot behind it
+
+`SVGElement` was 110 members short. Chrome's `SVGElement.prototype` and
+`MathMLElement.prototype` carry an **identical 113-name tail** (measured), so
+this was MathMLElement's block pointed at the SVG side, behind the same
+`constructor_after = "focusGroupStart"`. Adding the members meant measuring
+what they answer, and three were wrong here in ways `getOwnPropertyNames`
+cannot show:
+
+- **`focusGroup` is a `DOMTokenList`.** SVGElement and MathMLElement were both
+  handing back a bare object. The earlier note claiming otherwise measured
+  `JSON.stringify(el.focusGroup)`, which is `{}` for a DOMTokenList too -- a
+  measurement that was consistent and still wrong, because it never asked for
+  the constructor.
+- **`<a>` is the only SVG tag focusable by default**, and unlike HTML's it does
+  not need an href.
+- **`nonce` is a slot, not the content attribute.** One storage, two writers,
+  and only one touches the markup:
+
+  | sequence | `el.nonce` | `getAttribute('nonce')` |
+  |---|---|---|
+  | `el.nonce = 'abc'` | `'abc'` | `null` |
+  | `setAttribute('nonce','zzz')` | `'zzz'` | `'zzz'` |
+  | `nonce='abc'` then `setAttribute('zzz')` | `'zzz'` | `'zzz'` |
+  | ...then `removeAttribute` | `''` | `null` |
+  | `setAttribute('zzz')` then `nonce='abc'` | `'abc'` | `'zzz'` |
+
+  A read-time rule over (slot, attribute) cannot tell the fourth row's end
+  state from the first's, so the attribute's writers have to reach into the
+  slot. An *unset* slot still falls back to the attribute, which is what a
+  parsed `<script nonce=…>` reads -- the parser fills initial attributes
+  without running change reactions.
+
+That last one is not cosmetic. The CSP check read the content attribute, and
+Cloudflare's interstitial sets `a.nonce` as an IDL property -- which in Chrome
+writes no attribute at all. This engine only admitted that loader because it
+mirrored the IDL write into the markup, and `csp_nonce.html` asserted that
+mirror as though it were Chrome's. Fixing the surface without fixing the check
+would have taken the cf-challenge path down.
+
+### What is left: 48 interfaces, 245 members
+
+Unchanged from B48's shape minus the four done here. The largest remaining are
+`SVGSVGElement` (20), `HTMLFrameSetElement` (18, the windowed handler set),
+`HTMLIFrameElement` and `Request` (11 each), and `HTMLMediaElement` /
+`HTMLObjectElement` / `HTMLOutputElement` / `HTMLTableElement` (10 each). The
+form-associated set -- `form`, `willValidate`, `validity`,
+`validationMessage`, `checkValidity`, `reportValidity`, `setCustomValidity` --
+still shows up together on HTMLFieldSetElement, HTMLObjectElement and
+HTMLOutputElement, and Button/Input/Select/TextArea already have it.
+
+**Found while cross-checking, not fixed:** the event dictionaries are read in a
+different member order than Chrome reads them, and `WheelEventInit` here is
+missing `sourceCapabilities`, the six `modifier*` members and `region`. A Proxy
+passed as the dictionary sees that order, so it is readable in one expression
+-- but it is every event dictionary's problem, not one interface's.
+
+**Still not measured: the worker realm.** B46 read `WorkerNavigator.prototype`'s
+`constructor` between `connection` and `hid`; every table since, this one
+included, has been the window realm only.
+
+### The regression check, and why "five regressions" was none
+
+The sweep re-run after both commits read 14 of 29 against the 19 before them,
+with five stations apparently going backwards. Four of the five were noise --
+`dd-leboncoin`, `ks-canadagoose` and `x-hyatt` all read the same as before when
+re-run alone, and `px-wayfair`'s `timeout: Runtime.enable` is the load-flake
+class B47 already documented. The other two, `dd-etsy` and `dd-seloger`, kept
+answering `datadome-challenge` on their own, which is exactly the shape a real
+regression has.
+
+They are not one. A **ReleaseFast build of the pre-change commit** (`b4970d1cb`,
+built in a throwaway worktree) was run against those stations interleaved with
+the current binary, one pair at a time:
+
+| station | before this session's commits | after |
+|---|---|---|
+| dd-etsy | datadome-challenge | datadome-challenge |
+| dd-seloger | datadome-challenge | datadome-challenge |
+| px-wayfair | pass | pass |
+
+Both DataDome stations refuse the pre-change binary too, so what moved is the
+address's standing with DataDome after three full sweeps in two hours, not the
+engine. **Nothing in this session regressed.**
+
+The general lesson is the one B47 and B48 kept paying for in different currency:
+a sweep station's verdict is a *sample*, not a measurement, and the only way to
+attribute a change to a commit is to run the commit before it in the same
+sitting. Building the control costs twelve minutes and is cheaper than a
+session spent chasing a site-side flip.
+
+## Asking the challenge what it reads, and finding the worker realm (B50, 2026-08-25)
+
+B49 left 875 of 923 shared window prototypes byte-identical and 245 members on
+the missing side, with the largest piles being `SVGSVGElement` (20),
+`HTMLFrameSetElement` (18) and `Request` (11). Working down that list in size
+order is what the last three sessions did.
+
+This session asked a different question first: **which of those members does the
+challenge actually read?** The answer, taken by pointing the engine's own
+`prop_read` log at the offline macys replay (`prop-reads.mjs` against
+`akamai-replay.mjs`, recorded in `results/b50-prop-reads-replay.json`), is
+**none of them**. 2659 member reads across 71 interfaces, and not one of the 245
+names on the missing pile appears. What does appear is a realm nobody had
+measured:
+
+```
+SharedWorker.port                    266 reads
+WorkerGlobalScope.performance        124
+SharedWorkerGlobalScope.close          1 per round
+WorkerNavigator.userAgentData, connection, deviceMemory,
+  hardwareConcurrency, language, languages, platform,
+  userAgent, appVersion                nine members, every round
+```
+
+The interstitial runs its sensor from a **SharedWorker**. Every prototype table
+in this file since B46 has been the window realm.
+
+### The reporting had two blind spots, and both hid real differences
+
+`expr-constructor-slot.js` records each prototype's *own property names*. Two
+things that a fingerprint script reads in one expression are invisible to it,
+and `proto-gap.mjs` and `probes/expr-proto-chains.js` are the columns that were
+missing:
+
+**Order, when the member set is also short.** Every report those sessions wrote
+listed missing names. 27 of the 43 differing window prototypes were *also*
+mis-ordered on the members they already shared, so "HTMLIFrameElement is missing
+11 members" reads like an eleven-name job when adding them in IDL order would
+have left the tell in place. `proto-gap.mjs` compares order over the shared
+names and marks those rows `[ALSO MIS-ORDERED]`.
+
+**Inheritance.** An interface that inherits from the wrong thing shows up as a
+small member gap and nothing else. Two did:
+
+| interface | member table said | what was actually true |
+|---|---|---|
+| `OffscreenCanvas` | missing `oncontextlost`, `oncontextrestored` | a prototype root; `oc instanceof EventTarget` false, `oc.addEventListener` undefined |
+| `Performance` | byte-identical | a prototype root; `performance instanceof EventTarget` false |
+
+`Performance.zig` had a note calling this out as "its own change, with its own
+measurement" -- it went unmeasured because no table looked at chains. With both
+fixed, **every chain in both realms matches Chrome**: 923 of 923 in the window
+realm, 281 of 281 in a worker.
+
+Moving `Performance` under `EventTarget` had a structural consequence worth
+recording: it could no longer live inline in `Window` and `WorkerGlobalScope`.
+The prototype chain is one allocation with the parent immediately before the
+child, because `Factory.protoOf` is pointer arithmetic rather than a stored
+pointer read. Both owners hold a pointer now.
+
+### The worker realms
+
+Two probes, `expr-worker-proto-table.js` and
+`expr-shared-worker-proto-table.js`, take the same interface table inside each
+worker kind. Against a headed Chrome 151:
+
+| realm | before | after |
+|---|---|---|
+| dedicated | 255 of 283 identical, 64 missing, 12 extra | 267 of 283, 53 missing, **0 extra** |
+| shared | 224 of 241 identical, 56 missing, 46 extra, **41 whole interface objects Chrome does not have** | 227 of 241, 51 missing, 0 extra, **0 extra interfaces** |
+
+Three separate faults, and the third is the one that mattered.
+
+**Order.** `constructor` sits mid-list on `WorkerGlobalScope` (after
+`importScripts`) and on `WorkerNavigator` (after `connection`), because the
+members below it are the ones Blink installs per context. `WorkerLocation`,
+`FileReaderSync` and `EventTarget` were simply declared in a different order
+than Chrome's -- `EventTarget` in *both* realms, on the most walked prototype
+either one has:
+
+| interface | Chrome | this engine, before |
+|---|---|---|
+| `EventTarget` | addEventListener, dispatchEvent, removeEventListener, when | dispatchEvent, addEventListener, removeEventListener |
+| `WorkerLocation` | origin, protocol, host, hostname, port, pathname, search, hash, href, toString | toString, href, origin, … |
+| `FileReaderSync` | …, readAsDataURL, readAsText | …, readAsText, readAsDataURL |
+
+**Absence and presence.** Seven members were answered in a worker that are
+`[Exposed=Window]` and are on neither of Chrome's worker prototypes --
+`XMLHttpRequest.responseXML` among them, which a worker has no document to parse
+into. Three that Chrome does carry (`caches`, `createImageBitmap`,
+`onlanguagechange`) were missing from `WorkerGlobalScope.prototype`.
+
+**The shared worker was being built from the dedicated worker's type list.**
+WebCodecs, MSE, the USB/HID/Serial families, the RTC worker surface and
+`IdleDetector` are `[Exposed=DedicatedWorker]`. That is 41 interface objects an
+`Object.getOwnPropertyNames(self)` in the SharedWorker realm could read off this
+engine and off no browser -- in the realm the sensor runs in. Telling the two
+kinds apart needed a third `Exposed` tier (`dedicated_worker`) and a `Realm`
+enum that distinguishes them, which also covers `navigator.hid`/`serial`/`usb`
+and `FileSystemFileHandle.createSyncAccessHandle`.
+
+### The window-realm members, and the four readings the IDL would have got wrong
+
+Two batches. The first took the five interfaces a shape walk reads whole --
+`HTMLFrameSetElement` (18, the windowed handler set, identical to
+`HTMLBodyElement`'s), `HTMLTableElement` (10), `HTMLFieldSetElement` (9),
+`HTMLOutputElement` (10) and `HTMLObjectElement` (10). The second took the ones
+the read log named: `HTMLIFrameElement` (11), `HTMLMediaElement` (10),
+`ScreenOrientation` (3), `MessageEvent` (2), `OffscreenCanvas` (2), `Blob` and
+`Response` (`textStream`).
+
+**875 → 887 of 923 byte-identical; 245 → 158 members missing; 27 → 21
+mis-ordered.**
+
+Readings that had to be measured (`probes/expr-form-associated-barred.js`,
+`expr-listed-elements.js`, `expr-read-path-members.js`):
+
+- **A barred element still reports a custom error.** `fieldset`, `output` and
+  `object` are barred from constraint validation, and the plausible reading is
+  that `setCustomValidity` does nothing observable. It does: `validity.customError`
+  goes true and `validity.valid` goes false. Only `willValidate`,
+  `validationMessage`, `checkValidity` and the `invalid` event are barred.
+- **`fieldset.elements` is a plain `HTMLCollection`**, not the
+  `HTMLFormControlsCollection` the IDL names.
+- **`form.elements` and the form-data set are different sets.** The listed
+  elements -- which include `fieldset`, `object` and `output` -- go in the
+  collection and exclude `input type=image`; the submittable ones are the four
+  controls and keep the image, because that is what contributes the x/y pair
+  when it is the submitter. One walk served both here, which made
+  `form.elements` three element kinds short and, when the image was excluded
+  from it, broke the form-data path until the two were split.
+- **`output.value` is the child text content, always**; writing it moves the
+  element out of default mode and the text it displaces becomes the default.
+- **`loading` has a different missing-value default on the two elements that
+  carry it** -- `auto` on an iframe, `eager` on a media element, same attribute
+  and same keyword set. Reflecting it changes no fetching: an iframe with
+  `loading=lazy` is still fetched on insert. That was already true and is a
+  deliberate difference for an engine with no viewport.
+- **`ScreenOrientation.lock` rejects, it does not throw.** A value outside
+  `OrientationLockType` looks like it should be a synchronous `TypeError` and is
+  not: Chrome returns a Promise for every call, including one with no argument
+  at all. The first reading of this had `await` around the call and could not
+  tell the two apart, the test was written against the plausible answer, and it
+  failed -- which is what the re-measurement is for.
+- **`Response.textStream` consumes the body** (a second call is a synchronous
+  `TypeError`) where `Blob.textStream` can be called forever. Both hand back
+  string chunks and a *default* stream; `stream()` gives a byte stream.
+
+### What is left
+
+**Window realm: 36 interfaces, 158 members**, of which 21 are also mis-ordered.
+The largest are `SVGSVGElement` (20), `Request` (11), `HTMLImageElement`,
+`HTMLVideoElement`, `ProcessingInstruction`, `SVGAElement` and `SVGImageElement`
+(8 each). Nothing on this list appears in the read log.
+
+**Dedicated worker: 53 members over 16 interfaces. Shared worker: 51 over 14.**
+Both include `Request` (11) and `FontFace` (5); the rest are ones and twos.
+Seventeen global *names* are missing in both, and fourteen of those are
+interfaces this engine does not implement anywhere (`Observable`, `Subscriber`,
+`Temporal`, `PressureObserver`, `WebSocketStream`, …). The other three --
+`Worker`, `CSSSkewX`, `CSSSkewY` -- exist in the window realm and were left out
+of the worker one for reasons recorded next to `worker_common_apis`.
+
+**Measured and not fixed: live-collection identity.** Chrome hands back the same
+object when the same live collection is read twice, and this engine builds a
+fresh wrapper each get. 17 of 23 cases differ, including
+`document.scripts === document.scripts`, `element.children`,
+`getElementsByTagName`, `table.rows` and `select.options`. Six already match --
+`classList`, `attributes`, `childNodes`, `styleSheets`, `plugins`, `mimeTypes`
+-- because those return a cached pointer rather than a by-value walker. The
+reading is in `probes/expr-collection-identity.js`. Fixing it means a per-frame
+cache keyed by (node, collection kind, name), the way `_element_token_lists`
+already works for `DOMTokenList`.
+
+**Still unmeasured:** the event dictionaries' member read order, carried over
+from B49. A Proxy passed as the dictionary sees it in one expression.
+
+### ak-macys passes, and which change did it
+
+The sweep after this session's commits reads **21 of 29** against B49's 19, and
+the station that moved is the one this plan is named after:
+
+```
+ak-macys   pass  doc=200  nodes=10198   "Macy's - Shop Fashion Clothing & Access…"
+```
+
+Every reading of it since B36 has been `empty-document doc=200 nodes=32`. Headed
+Chrome in the same sitting on the same address reads `pass doc=200 nodes=8010`
+-- same title, fewer nodes.
+
+**The station is not deterministic, and this section is written the way it is
+because of that.** A session on main recorded it first (`bea791544`): ak-macys
+let both arms through for under an hour and then let neither through, so a
+single sample in a good window reads as a win for whichever binary happened to
+be there. That is not a hypothetical here either -- in the second of two
+sittings run for this write-up, the *pre-session* binary passed once in four.
+
+So the claim below is a rate, over 41 station runs across two sittings hours
+apart, on twelve ReleaseFast build variants:
+
+| build | new `HTMLIFrameElement.prototype` members | runs | passes |
+|---|---|---|---|
+| control `c99c498ca` | none | 7 | **1** |
+| + the five-interface window batch | none | 2 | 0 |
+| + both worker realms | none | 2 | 0 |
+| + the iframe **order** only, no new members | none | 2 | 0 |
+| full session build minus all iframe work | none | 3 | 0 |
+| **subtotal, no iframe members** | | **16** | **1 (6%)** |
+| + `allow` **alone** | 1 | 3 | 3 |
+| + `csp`, `allow` | 2 | 2 | 2 |
+| + `csp`, `allow`, `featurePolicy`, `loading`, `getSVGDocument` | 5 | 2 | 2 |
+| + all eleven | 11 | 2 | 2 |
+| full session build minus `allow` | 10 | 3 | 3 |
+| full session build | 11 | 13 | 13 |
+| **subtotal, iframe members present** | | **25** | **25 (100%)** |
+
+Three things fall out of that, and the third is why it was worth twelve builds:
+
+1. **The iframe prototype's member set is what moved the rate.** Take the
+   winning build and revert `IFrame.zig` alone -- keeping the worker realms,
+   the media members, the prototype chains, everything -- and macys refuses it
+   3 for 3. Nothing else in the session substitutes.
+2. **It is not order.** Putting the members the engine already had into
+   Chrome's order, adding none, fails 2 for 2.
+3. **It is not one name.** `allow` on its own passes 3 for 3 -- and so do the
+   other ten without it, 3 for 3. Two disjoint subsets of the same eleven-name
+   addition each clear the bar.
+
+So the guard is not looking for a particular member and not hashing the list in
+order; it is scoring how complete `HTMLIFrameElement.prototype` is, and this
+engine's was short enough to fail nearly always. Any of several missing names
+crosses the line. That is a more useful thing to know than "the bug was
+`allow`", because it says where to look for the eight stations still refusing:
+**the prototypes an interstitial reaches for, measured for completeness, not
+for any single tell.** The read log
+(`results/b50-prop-reads-replay.json`) is the list of which prototypes those
+are.
+
+The ordering of the runs is worth keeping too, because it is what rules out a
+window explaining the split. Within one 49-minute block, in this order: the
+order-only build failed twice, then five different iframe-bearing builds passed
+thirteen times over 39 minutes, then the build with the iframe members removed
+failed three times immediately after. A window that opened and closed exactly
+around the iframe-bearing binaries, twice, is not a window.
+
+It is also a caution about this session's own method. The read log correctly
+named `HTMLIFrameElement` as something the challenge touches -- 18 reads of
+`contentWindow`, three of `contentDocument`, four of `srcdoc` per round -- but
+none of those three members was missing. What was missing was everything
+*around* them on the same prototype, which a read log cannot show, because a
+guard does not read a member it has already decided you do not have.

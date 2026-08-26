@@ -119,6 +119,10 @@ pub const ServiceWorker = struct {
 
         pub const Meta = struct {
             pub const name = "ServiceWorker";
+            // Chrome's `constructor` sits here rather than last; the members
+            // below it are the ones Blink installs per context. See
+            // Snapshot.moveConstructorSlots.
+            pub const constructor_after = "postMessage";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -197,6 +201,10 @@ pub const ServiceWorkerRegistration = struct {
 
         pub const Meta = struct {
             pub const name = "ServiceWorkerRegistration";
+            // Chrome's `constructor` sits here rather than last; the members
+            // below it are the ones Blink installs per context. See
+            // Snapshot.moveConstructorSlots.
+            pub const constructor_after = "paymentManager";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -218,7 +226,7 @@ pub const ServiceWorkerRegistration = struct {
         pub const backgroundFetch = bridge.accessor(R.backgroundFetch, null, .{});
         pub const periodicSync = bridge.accessor(R.periodicSync, null, .{});
         pub const sync = bridge.accessor(R.sync, null, .{});
-        pub const cookies = bridge.accessor(R.cookies, null, .{});
+        pub const cookies = bridge.accessor(R.cookies, null, .{ .exposed = .window });
         pub const pushManager = bridge.accessor(R.pushManager, null, .{});
         pub const getNotifications = bridge.function(R.refuse1, .{ .arity = 0 });
         pub const showNotification = bridge.function(R.refuse1, .{ .arity = 1 });

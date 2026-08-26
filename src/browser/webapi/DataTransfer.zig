@@ -274,12 +274,12 @@ pub const JsApi = struct {
     pub const constructor = bridge.constructor(DataTransfer.init, .{});
     pub const dropEffect = bridge.accessor(DataTransfer.getDropEffect, DataTransfer.setDropEffect, .{});
     pub const effectAllowed = bridge.accessor(DataTransfer.getEffectAllowed, DataTransfer.setEffectAllowed, .{});
-    pub const files = bridge.accessor(DataTransfer.getFiles, null, .{});
     pub const items = bridge.accessor(DataTransfer.getItems, null, .{});
     pub const types = bridge.accessor(DataTransfer.getTypes, null, .{});
+    pub const files = bridge.accessor(DataTransfer.getFiles, null, .{});
+    pub const clearData = bridge.function(DataTransfer.clearData, .{});
     pub const getData = bridge.function(DataTransfer.getData, .{});
     pub const setData = bridge.function(DataTransfer.setData, .{});
-    pub const clearData = bridge.function(DataTransfer.clearData, .{});
     pub const setDragImage = bridge.function(DataTransfer.setDragImage, .{});
 };
 

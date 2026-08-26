@@ -738,8 +738,11 @@ fn collectForm(arena: Allocator, form_: ?*Form, submitter_: ?*Element, frame: *F
     var list: std.ArrayList(Entry) = .empty;
     const form = form_ orelse return list;
 
-    var elements = try form.getElements(frame);
-    var it = try elements.iterator();
+    // The form-data set is built from the *submittable* elements, not from
+    // `form.elements`: an `input type=image` contributes the x/y pair when it
+    // is the submitter and is absent from `form.elements`, while fieldset,
+    // object and output are in that collection and contribute nothing.
+    var it = form.iterator(frame);
     while (it.next()) |element| {
         if (element.isDisabled()) {
             continue;
@@ -886,17 +889,17 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(FormData.init, .{});
-    pub const has = bridge.function(FormData.has, .{});
-    pub const get = bridge.function(FormData.get, .{});
-    pub const set = bridge.function(FormData.set, .{});
     pub const append = bridge.function(FormData.append, .{});
-    pub const getAll = bridge.function(FormData.getAll, .{});
     pub const delete = bridge.function(FormData.delete, .{});
-    pub const keys = bridge.function(FormData.keys, .{});
-    pub const values = bridge.function(FormData.values, .{});
+    pub const get = bridge.function(FormData.get, .{});
+    pub const getAll = bridge.function(FormData.getAll, .{});
+    pub const has = bridge.function(FormData.has, .{});
+    pub const set = bridge.function(FormData.set, .{});
     pub const entries = bridge.function(FormData.entries, .{});
-    pub const symbol_iterator = bridge.iterator(FormData.entries, .{});
     pub const forEach = bridge.function(FormData.forEach, .{});
+    pub const keys = bridge.function(FormData.keys, .{});
+    pub const symbol_iterator = bridge.iterator(FormData.entries, .{});
+    pub const values = bridge.function(FormData.values, .{});
 };
 
 const testing = @import("../../../testing.zig");

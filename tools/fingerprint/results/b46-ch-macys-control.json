@@ -1,0 +1,193 @@
+{
+  "engine": "chrome",
+  "headed": true,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+  "startedAt": "2026-08-25T22:09:38.276Z",
+  "egress": {
+    "fl": "465f256",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787695778.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "005-tier1",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Chrome/151.0.7922.174",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.23",
+    "WebKit-Version": "537.36 (@39c51c70dd5feca6b6aba5bb7997b595011c553d)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:10948/devtools/browser/c2b80df9-a96f-41bf-ade4-b506e81b76a4"
+  },
+  "stations": [
+    {
+      "name": "ak-macys",
+      "vendor": "akamai",
+      "url": "https://www.macys.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://servedby.flashtalking.com/container/12518;131342;14478;iframe/?ns=https%3A%2F%2Fwww.macys.com%2F&ft_referrer=https%3A%2F%2Fwww.macys.com%2F&cachebuster=161642.80143926202",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=243d8345-f682-4dc3-8ef8-f38bef12bd39&u_scsid=a8791ec2-fadd-41ce-8767-ced6420c5fe8&u_sclid=6fdf157f-f371-4833-b1b7-31be7fdd7122",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cdn.pbbl.co/i/pp.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?topUrl=www.macys.com&origin=onetag",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ad571131851b562557620aeb2fc7d689.safeframe.googlesyndication.com/safeframe/1-0-45/html/container.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ad571131851b562557620aeb2fc7d689.safeframe.googlesyndication.com/safeframe/1-0-45/html/container.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://10289658.fls.doubleclick.net/activityi;dc_pre=CILa9eLlvJYDFc0vigMdj9Ep9Q;src=10289658;type=globmmn;cat=mmn_g0;rcb=6;ord=1787695784497;npa=0;auiddc=1475129043.1787695787;gdid=dYmQxMT;uaa=;uab=;uafvl=;uamb=0;uam=;uap=macOS;uapv=;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68o1v9190905602za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616986~115938466~115938468~118897920~118897930~119367802~119367810~120213116~120385423;epver=2;dc_random=1787695787_sHBbUh_sI4f2XLwJPHqijlHQxrCrb_tG3w;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F?",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CLDE9eLlvJYDFaLmKAUdVPQiIQ;src=3856256;type=global;cat=landing;rcb=17;ord=1787695784497;npa=0;auiddc=1475129043.1787695787;gdid=dYmQxMT;uaa=;uab=;uafvl=;uamb=0;uam=;uap=macOS;uapv=;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68o1v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938466~115938469~118897920~118897930~119367802~119367810~120385422;epver=2;dc_random=1787695786_IuInfHfDoNgvwpoJMBMlfDagKz33cZoA4g;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F?",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CLzb9eLlvJYDFdQnigMdBQkdqQ;src=3856256;type=global;cat=landing;rcb=17;npa=0;auiddc=1475129043.1787695787;gdid=dYmQxMT;uaa=;uab=;uafvl=;uamb=0;uam=;uap=macOS;uapv=;uaw=0;pscdl=noapi;frm=0;user_data_mode=c;_tu=IAAB;gtm=45fe68o1v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938466~115938469~118897920~118897930~119367802~119367810~120385422;epver=2;em=tv.1~co0.US;dc_random=1787695786_qBaDXIkDSue61lBW3H1M9d77FTLRFdjF8A;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F?",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.google.com/recaptcha/api2/aframe",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Macy's - Shop Fashion Clothing & Accessories - Official Site - Macys.com",
+      "landedOn": "https://www.macys.com/",
+      "nodes": 8022,
+      "textLength": 5238,
+      "snippet": "Skip to main content TODAY'S DEALS Today! Up to 60% off activewear Today! Up to 60% off luggage Up to 50% off Back to School Up to 60% off women's shoes See All Ask Macy's Sign In See more of what you",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26668
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:10948/devtools/browser/c2b80df9-a96f-41bf-ade4-b506e81b76a4",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[20124:4163129:0825/150938.777012:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[20124:4163129:0825/150938.777600:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[20124:4163204:0825/150941.724241:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[20124:4163204:0825/150941.725531:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[20124:4163204:0825/150941.725632:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "Created TensorFlow Lite XNNPACK delegate for CPU.",
+    "[21613:4168713:0825/150957.584310:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake-all --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[21613:4168713:0825/150957.584964:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 61519, parent pid: 20124",
+    "[21613:4168713:0825/150957.587283:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 60929069056B (56.745GiB) / 994662584320B (926.352GiB)",
+    "[21613:4168713:0825/150957.587306:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 60929069056B (56.745GiB) / 994662584320B (926.352GiB)",
+    "[21613:4168713:0825/150957.587424:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[21616:4168720:0825/150957.595561:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[21616:4168720:0825/150957.596134:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 61519, parent pid: 1",
+    "[21616:4168720:0825/150957.598918:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 60929028096B (56.745GiB) / 994662584320B (926.352GiB)",
+    "[21616:4168720:0825/150957.598931:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 60929028096B (56.745GiB) / 994662584320B (926.352GiB)",
+    "[21616:4168720:0825/150957.599003:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[21613:4168713:0825/150957.599538:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[21613:4168713:0825/150957.600563:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[21613:4168713:0825/150957.600688:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[21613:4168713:0825/150957.600780:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[21613:4168713:0825/150957.600793:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[21613:4168713:0825/150957.600848:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+    "[21613:4168713:0825/150957.600857:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[21613:4168713:0825/150957.600869:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[21613:4168732:0825/150957.601206:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+    "[21613:4168732:0825/150957.601362:VERBOSE1:chrome/updater/app/app_wakeall.cc:64] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` process invalid: Undefined error: 0 (0)",
+    "[21613:4168732:0825/150957.601389:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+    "[21619:4168738:0825/150957.609276:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[21619:4168738:0825/150957.609873:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 61520, parent pid: 21613",
+    "[21619:4168738:0825/150957.611762:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 60928950272B (56.745GiB) / 994662584320B (926.352GiB)",
+    "[21619:4168738:0825/150957.611777:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 60928950272B (56.745GiB) / 994662584320B (926.352GiB)",
+    "[21619:4168738:0825/150957.611866:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[21622:4168744:0825/150957.620352:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[21622:4168744:0825/150957.621019:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 61520, parent pid: 1",
+    "[21622:4168744:0825/150957.623513:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 60928868352B (56.744GiB) / 994662584320B (926.352GiB)",
+    "[21622:4168744:0825/150957.623528:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 60928868352B (56.744GiB) / 994662584320B (926.352GiB)",
+    "[21622:4168744:0825/150957.623591:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[21619:4168738:0825/150957.624123:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[21619:4168738:0825/150957.625137:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[21619:4168738:0825/150957.625289:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[21619:4168738:0825/150957.625421:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[21619:4168738:0825/150957.625441:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[21619:4168738:0825/150957.625532:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+    "[21619:4168738:0825/150957.625549:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[21619:4168738:0825/150957.625571:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[21619:4168738:0825/150957.625771:VERBOSE1:chrome/updater/ipc/update_service_internal_proxy_mojo.cc:61] Run",
+    "[20124:4163204:0825/151003.349037:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}

@@ -71,6 +71,38 @@ pub fn Reflect(comptime T: type) type {
             return bridge.accessor(R.get, R.set, .{ .ce_reactions = true });
         }
 
+        /// A `DOMTokenList` reflection: the getter hands back the element's list
+        /// for the attribute, and the setter writes a whitespace-separated
+        /// string through it. `blocking` is one of these in Chrome, not a string
+        /// (measured: `script.blocking.constructor.name` is DOMTokenList and
+        /// `script.blocking = 'x'` writes the attribute verbatim).
+        pub fn tokenList(comptime attr: Element.TokenListAttribute) js.bridge.Accessor {
+            const R = struct {
+                fn get(self: *T, frame: *Frame) !*@import("../collections.zig").DOMTokenList {
+                    return element(self).getTokenList(attr, frame);
+                }
+                fn set(self: *T, value: String, frame: *Frame) !void {
+                    const list = try element(self).getTokenList(attr, frame);
+                    return list.setValue(value, frame);
+                }
+            };
+            return bridge.accessor(R.get, R.set, .{ .ce_reactions = true });
+        }
+
+        /// `interestForElement` / `commandForElement`. See
+        /// Element.ElementReferenceAttribute for what Chrome does on assignment.
+        pub fn elementReference(comptime attr: Element.ElementReferenceAttribute) js.bridge.Accessor {
+            const R = struct {
+                fn get(self: *T, frame: *Frame) ?*Element {
+                    return element(self).getElementReference(attr, frame);
+                }
+                fn set(self: *T, value: ?*Element, frame: *Frame) !void {
+                    return element(self).setElementReference(attr, value, frame);
+                }
+            };
+            return bridge.accessor(R.get, R.set, .{ .ce_reactions = true });
+        }
+
         pub fn stringNullToEmpty(comptime attr: []const u8) js.bridge.Accessor {
             const R = struct {
                 fn get(self: *const T) []const u8 {

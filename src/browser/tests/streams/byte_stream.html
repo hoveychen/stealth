@@ -4,9 +4,9 @@
 <!--
   Byte streams and the two constructible readers, measured on a headed
   Chrome 150 (win20-chrome.json for the shapes, win22 / win26 / win27 for the
-  behaviour). Member lists are Chrome's own getOwnPropertyNames order, except
-  that this bridge always puts `constructor` last -- Chrome puts it third on
-  both readers, between releaseLock and closed.
+  behaviour). Member lists are Chrome's own getOwnPropertyNames order,
+  `constructor` included: on both readers it sits third, between releaseLock
+  and closed, which Snapshot.moveConstructorSlots reproduces.
 -->
 
 <script id=shapes>
@@ -14,8 +14,8 @@
     const shapes = {
       ReadableByteStreamController: 'byobRequest,desiredSize,close,enqueue,error,constructor',
       ReadableStreamBYOBRequest: 'view,respond,respondWithNewView,constructor',
-      ReadableStreamBYOBReader: 'read,releaseLock,closed,cancel,constructor',
-      ReadableStreamDefaultReader: 'read,releaseLock,closed,cancel,constructor',
+      ReadableStreamBYOBReader: 'read,releaseLock,constructor,closed,cancel',
+      ReadableStreamDefaultReader: 'read,releaseLock,constructor,closed,cancel',
       WritableStreamDefaultWriter: 'closed,desiredSize,ready,abort,close,releaseLock,write,constructor',
       ReadableStream: 'locked,cancel,getReader,pipeThrough,pipeTo,tee,values,constructor',
       ReadableStreamDefaultController: 'desiredSize,close,enqueue,error,constructor',

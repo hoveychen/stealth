@@ -43,6 +43,7 @@ const DOMRectReadOnly = @import("../DOMRectReadOnly.zig");
 const Performance = @import("../Performance.zig");
 
 const Entry = Performance.Entry;
+const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
     return &.{
@@ -264,10 +265,6 @@ pub const ResourceTiming = struct {
         };
     }
 
-    fn navigationId(self: *const ResourceTiming) u32 {
-        return self._timing.navigation_id;
-    }
-
     fn initiatorType(self: *const ResourceTiming) []const u8 {
         return self._timing.initiator_type;
     }
@@ -387,7 +384,8 @@ pub const ResourceTiming = struct {
 
         const R = ResourceTiming;
 
-        pub const navigationId = bridge.accessor(R.navigationId, null, .{});
+        // No `navigationId`: it is PerformanceEntry's, inherited (measured --
+        // Chrome's PerformanceResourceTiming.prototype does not own one).
         pub const initiatorType = bridge.accessor(R.initiatorType, null, .{});
         pub const nextHopProtocol = bridge.accessor(R.nextHopProtocol, null, .{});
         pub const deliveryType = bridge.accessor(R.deliveryType, null, .{});
@@ -407,7 +405,10 @@ pub const ResourceTiming = struct {
         pub const encodedBodySize = bridge.accessor(R.encodedBodySize, null, .{});
         pub const decodedBodySize = bridge.accessor(R.decodedBodySize, null, .{});
         pub const serverTiming = bridge.accessor(R.serverTiming, null, .{});
+        pub const renderBlockingStatus = bridge.accessor(R.renderBlockingStatus, null, .{});
         pub const responseStatus = bridge.accessor(R.responseStatus, null, .{});
+        pub const contentType = bridge.accessor(R.contentType, null, .{});
+        pub const contentEncoding = bridge.accessor(R.contentEncoding, null, .{});
         pub const finalResponseHeadersStart = bridge.accessor(R.finalResponseHeadersStart, null, .{});
         pub const firstInterimResponseStart = bridge.accessor(R.firstInterimResponseStart, null, .{});
         pub const toJSON = bridge.function(R.json, .{});
@@ -415,9 +416,6 @@ pub const ResourceTiming = struct {
         pub const workerCacheLookupStart = bridge.accessor(R.workerZero, null, .{});
         pub const workerMatchedSourceType = bridge.accessor(R.workerEmpty, null, .{});
         pub const workerFinalSourceType = bridge.accessor(R.workerEmpty, null, .{});
-        pub const renderBlockingStatus = bridge.accessor(R.renderBlockingStatus, null, .{});
-        pub const contentType = bridge.accessor(R.contentType, null, .{});
-        pub const contentEncoding = bridge.accessor(R.contentEncoding, null, .{});
     };
 };
 
@@ -592,6 +590,10 @@ pub const NavigationTiming = struct {
 
         pub const Meta = struct {
             pub const name = "PerformanceNavigationTiming";
+            // Chrome's `constructor` sits here rather than last; the members
+            // below it are the ones Blink installs per context. See
+            // Snapshot.moveConstructorSlots.
+            pub const constructor_after = "confidence";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -711,16 +713,20 @@ pub const PaintTiming = struct {
         entryType: []const u8,
         startTime: f64,
         duration: f64,
+        // Fifth, as on every entry -- PerformanceEntry's own four plus this
+        // one, then whatever the subclass adds (measured).
+        navigationId: u32,
         paintTime: f64,
         presentationTime: f64,
     };
 
-    fn json(self: *const PaintTiming) Json {
+    fn json(self: *const PaintTiming, exec: *const Execution) Json {
         return .{
             .name = self._proto._name,
             .entryType = self._proto.getEntryType(),
             .startTime = self._proto._start_time,
             .duration = self._proto._duration,
+            .navigationId = self._proto.getNavigationId(exec),
             .paintTime = self._paint_time,
             .presentationTime = self._proto._start_time,
         };

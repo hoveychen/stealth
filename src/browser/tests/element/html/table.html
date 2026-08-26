@@ -266,3 +266,90 @@
   testing.expectEqual(-1, orphan.sectionRowIndex)
 }
 </script>
+
+<script id="caption_thead_tfoot">
+  {
+    const t = document.createElement('table');
+    testing.expectEqual(null, t.caption);
+    testing.expectEqual(null, t.tHead);
+    testing.expectEqual(null, t.tFoot);
+
+    const cap = t.createCaption();
+    testing.expectEqual('CAPTION', cap.tagName);
+    testing.expectEqual(true, t.caption === cap);
+    // A second call returns the same one rather than adding another.
+    testing.expectEqual(true, t.createCaption() === cap);
+    testing.expectEqual(true, t.firstChild === cap);
+
+    const head = t.createTHead();
+    testing.expectEqual('THEAD', head.tagName);
+    testing.expectEqual(true, t.tHead === head);
+    // The head goes after the caption, not before it.
+    testing.expectEqual('CAPTION,THEAD', Array.from(t.children, (e) => e.tagName).join(','));
+
+    const foot = t.createTFoot();
+    testing.expectEqual('CAPTION,THEAD,TFOOT', Array.from(t.children, (e) => e.tagName).join(','));
+
+    const body = t.createTBody();
+    testing.expectEqual('TBODY', body.tagName);
+    testing.expectEqual('CAPTION,THEAD,TFOOT,TBODY', Array.from(t.children, (e) => e.tagName).join(','));
+    // A second tbody lands immediately after the first.
+    const body2 = t.createTBody();
+    testing.expectEqual('CAPTION,THEAD,TFOOT,TBODY,TBODY', Array.from(t.children, (e) => e.tagName).join(','));
+    testing.expectEqual(true, body.nextSibling === body2);
+
+    t.deleteCaption();
+    testing.expectEqual(null, t.caption);
+    t.deleteTHead();
+    testing.expectEqual(null, t.tHead);
+    t.deleteTFoot();
+    testing.expectEqual(null, t.tFoot);
+    testing.expectEqual('TBODY,TBODY', Array.from(t.children, (e) => e.tagName).join(','));
+    // Deleting something that is not there is a no-op, not a throw.
+    t.deleteCaption();
+    t.deleteTHead();
+    t.deleteTFoot();
+  }
+</script>
+
+<script id="caption_thead_tfoot_setters">
+  {
+    const t = document.createElement('table');
+    t.innerHTML = '<colgroup></colgroup><tbody><tr><td></td></tr></tbody>';
+
+    const cap = document.createElement('caption');
+    t.caption = cap;
+    testing.expectEqual(true, t.firstChild === cap);
+
+    const cap2 = document.createElement('caption');
+    t.caption = cap2;
+    // The old one is replaced, not kept alongside.
+    testing.expectEqual(1, t.getElementsByTagName('caption').length);
+    testing.expectEqual(true, t.caption === cap2);
+
+    const head = document.createElement('thead');
+    t.tHead = head;
+    // After the caption and colgroup, before the tbody.
+    testing.expectEqual('CAPTION,COLGROUP,THEAD,TBODY', Array.from(t.children, (e) => e.tagName).join(','));
+
+    const foot = document.createElement('tfoot');
+    t.tFoot = foot;
+    testing.expectEqual('CAPTION,COLGROUP,THEAD,TBODY,TFOOT', Array.from(t.children, (e) => e.tagName).join(','));
+
+    t.caption = null;
+    t.tHead = null;
+    t.tFoot = null;
+    testing.expectEqual('COLGROUP,TBODY', Array.from(t.children, (e) => e.tagName).join(','));
+
+    // A section of the wrong kind is refused, with Chrome's own sentence.
+    testing.expectError("Failed to set the 'tHead' property on 'HTMLTableElement': Not a thead element.",
+      () => { t.tHead = document.createElement('tfoot'); });
+    testing.expectError("Failed to set the 'tFoot' property on 'HTMLTableElement': Not a tfoot element.",
+      () => { t.tFoot = document.createElement('thead'); });
+    // ...and a non-section is the bridge's conversion TypeError.
+    testing.expectError("Failed to convert value to 'HTMLTableSectionElement'",
+      () => { t.tHead = document.createElement('div'); });
+    testing.expectError("Failed to convert value to 'HTMLTableCaptionElement'",
+      () => { t.caption = document.createElement('div'); });
+  }
+</script>

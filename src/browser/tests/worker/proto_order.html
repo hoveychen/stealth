@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+The worker realm's prototype order, which is a separate reading from the window
+realm's and had never been taken until it was measured against a blob worker on
+Chrome 151 (tools/fingerprint/probes/expr-worker-proto-table.js). It is not an
+academic surface: the Akamai interstitial on macys.com runs its sensor from a
+SharedWorker and reads nine WorkerNavigator members there
+(tools/fingerprint/results/b50-prop-reads-replay.json).
+
+Three separate things are pinned here.
+
+  * Order. `constructor` sits mid-list on WorkerGlobalScope (after
+    importScripts) and on WorkerNavigator (after connection), because the
+    members below it are the ones Blink installs per context. WorkerLocation,
+    EventTarget and FileReaderSync were simply declared in a different order
+    than Chrome's.
+  * Absence. Seven members this engine used to answer in a worker are
+    `[Exposed=Window]` and are not on Chrome's worker prototypes at all --
+    including `XMLHttpRequest.responseXML`, which a worker has no document to
+    parse into.
+  * Presence. `caches`, `createImageBitmap` and `onlanguagechange` are on
+    Chrome's WorkerGlobalScope.prototype and were missing here.
+-->
+
+<script id=worker_prototype_order type=module>
+  {
+    const state = await testing.async();
+    const worker = new Worker('./proto-order-worker.js');
+    worker.onmessage = (e) => state.resolve(e.data);
+    setTimeout(() => worker.postMessage(0), 100);
+
+    await state.done((d) => {
+      testing.expectEqual(
+        'self,location,onerror,onlanguagechange,navigator,onrejectionhandled,onunhandledrejection,' +
+        'origin,performance,trustedTypes,crypto,indexedDB,fonts,createImageBitmap,fetch,importScripts,' +
+        'constructor,isSecureContext,crossOriginIsolated,scheduler,caches,atob,btoa,queueMicrotask,' +
+        'reportError,structuredClone,clearInterval,clearTimeout,setInterval,setTimeout',
+        d.WorkerGlobalScope);
+
+      testing.expectEqual(
+        'hardwareConcurrency,appCodeName,appName,appVersion,platform,product,userAgent,language,' +
+        'languages,onLine,connection,constructor,hid,mediaCapabilities,permissions,serial,usb,' +
+        'deviceMemory,userAgentData,locks,storage,gpu,storageBuckets',
+        d.WorkerNavigator);
+
+      testing.expectEqual(
+        'origin,protocol,host,hostname,port,pathname,search,hash,href,toString,constructor',
+        d.WorkerLocation);
+
+      testing.expectEqual('readAsArrayBuffer,readAsBinaryString,readAsDataURL,readAsText,constructor',
+        d.FileReaderSync);
+      testing.expectEqual('createWritable,getFile,move,constructor,createSyncAccessHandle',
+        d.FileSystemFileHandle);
+
+      // EventTarget is the same order in both realms; see events.html for the
+      // window-side assertion.
+      testing.expectEqual('addEventListener,dispatchEvent,removeEventListener,constructor',
+        d.EventTarget);
+
+      // [Exposed=Window] -- absent from a worker.
+      testing.expectEqual(false, d.XMLHttpRequest_has_responseXML);
+      testing.expectEqual(false, d.HID_has_requestDevice);
+      testing.expectEqual(false, d.Serial_has_requestPort);
+      testing.expectEqual(false, d.USB_has_requestDevice);
+      testing.expectEqual(false, d.StorageManager_has_persist);
+      testing.expectEqual(false, d.StorageBucket_has_persist);
+      testing.expectEqual(false, d.ServiceWorkerRegistration_has_cookies);
+
+      // ...and the three that were missing.
+      testing.expectEqual('CacheStorage', d.caches_ctor);
+      testing.expectEqual('function', d.createImageBitmap_is_function);
+      testing.expectEqual(null, d.onlanguagechange_initially);
+
+      // A variadic operation's arity is 0. The bridge counted the variadic
+      // slice as one required argument, so this answered 1 -- read from inside
+      // a worker, which is where the sensor reads it.
+      testing.expectEqual(0, d.importScripts_arity);
+    });
+  }
+</script>

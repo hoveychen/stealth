@@ -125,9 +125,9 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const length = bridge.accessor(RadioNodeList.getLength, null, .{});
+    // `value` is the only name of its own: Chrome inherits `length` and `item`
+    // from NodeList.prototype and does not redeclare them here (measured).
     pub const @"[]" = bridge.indexed(RadioNodeList.getAtIndex, getIndexes, .{ .null_as_undefined = true });
-    pub const item = bridge.function(RadioNodeList.getAtIndex, .{});
     pub const value = bridge.accessor(RadioNodeList.getValue, RadioNodeList.setValue, .{});
 
     /// Web IDL: an indexed property getter makes the indices own properties.

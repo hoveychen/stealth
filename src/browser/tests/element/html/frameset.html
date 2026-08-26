@@ -19,3 +19,31 @@
   testing.expectEqual(true, fs instanceof HTMLFrameSetElement)
   testing.expectEqual(true, fs instanceof HTMLElement)
 </script>
+
+<script id="windowed_handler_set">
+  {
+    // Chrome's HTMLFrameSetElement.prototype carries the same handler set
+    // HTMLBodyElement.prototype does (measured), and the window-reflecting
+    // ones are aliases for the Window's slots.
+    const fs = document.createElement('frameset');
+    const names = Object.getOwnPropertyNames(HTMLFrameSetElement.prototype);
+    const body = Object.getOwnPropertyNames(HTMLBodyElement.prototype).filter((n) => n.startsWith('on'));
+    testing.expectEqual(body.join(','), names.filter((n) => n.startsWith('on')).join(','));
+
+    const f = () => {};
+    fs.onunload = f;
+    testing.expectEqual(true, window.onunload === f);
+    fs.onunload = null;
+    testing.expectEqual(null, window.onunload);
+
+    fs.onhashchange = f;
+    testing.expectEqual(true, window.onhashchange === f);
+    fs.onhashchange = null;
+
+    // The two gamepad handlers are element-local, not window aliases.
+    fs.ongamepadconnected = f;
+    testing.expectEqual(true, fs.ongamepadconnected === f);
+    testing.expectEqual(null, window.ongamepadconnected);
+    fs.ongamepadconnected = null;
+  }
+</script>

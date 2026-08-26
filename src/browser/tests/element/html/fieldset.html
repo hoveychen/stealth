@@ -33,3 +33,69 @@
     testing.expectEqual('', fs2.name);
   }
 </script>
+
+<script id="type_and_form">
+  {
+    const form = document.createElement('form');
+    const fs = document.createElement('fieldset');
+    form.appendChild(fs);
+    document.body.appendChild(form);
+
+    testing.expectEqual('fieldset', fs.type);
+    testing.expectEqual(true, fs.form === form);
+    testing.expectEqual(null, document.createElement('fieldset').form);
+
+    form.remove();
+  }
+</script>
+
+<script id="barred_from_constraint_validation">
+  {
+    // A fieldset never validates, but setCustomValidity still shows through
+    // the ValidityState. Measured on Chrome 151: willValidate false,
+    // checkValidity true, validationMessage "" — and customError true.
+    const fs = document.createElement('fieldset');
+    testing.expectEqual(false, fs.willValidate);
+    testing.expectEqual('ValidityState', fs.validity.constructor.name);
+    testing.expectEqual(true, fs.validity === fs.validity);
+    testing.expectEqual(true, fs.validity.valid);
+    testing.expectEqual('', fs.validationMessage);
+    testing.expectEqual(true, fs.checkValidity());
+    testing.expectEqual(true, fs.reportValidity());
+
+    let fired = false;
+    fs.addEventListener('invalid', () => { fired = true; });
+    fs.setCustomValidity('boom');
+    testing.expectEqual(true, fs.validity.customError);
+    testing.expectEqual(false, fs.validity.valid);
+    testing.expectEqual('', fs.validationMessage);
+    testing.expectEqual(true, fs.checkValidity());
+    testing.expectEqual(false, fs.willValidate);
+    testing.expectEqual(false, fired);
+
+    fs.setCustomValidity('');
+    testing.expectEqual(false, fs.validity.customError);
+    testing.expectEqual(true, fs.validity.valid);
+  }
+</script>
+
+<script id="elements">
+  {
+    // The listed elements among the descendants. Unlike form.elements this
+    // keeps <input type=image> (measured on Chrome 151).
+    const fs = document.createElement('fieldset');
+    fs.innerHTML = '<input name=a><input type=image name=b><select name=c></select>' +
+      '<div><button name=d></button></div><output name=e></output><object name=f></object>' +
+      '<img name=g><a name=h></a>';
+    document.body.appendChild(fs);
+
+    testing.expectEqual('HTMLCollection', fs.elements.constructor.name);
+    testing.expectEqual(6, fs.elements.length);
+    testing.expectEqual('a,b,c,d,e,f', Array.from(fs.elements, (e) => e.name).join(','));
+
+    fs.appendChild(document.createElement('textarea'));
+    testing.expectEqual(7, fs.elements.length);
+
+    fs.remove();
+  }
+</script>

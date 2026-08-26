@@ -279,6 +279,32 @@ pub fn getBody(self: *Response, exec: *const Execution) !?*ReadableStream {
     };
 }
 
+/// Like `body`, but the chunks are text and reading it consumes the body:
+/// `bodyUsed` flips and a second call is a synchronous TypeError, not a
+/// rejection (measured on Chrome 151 -- `new Response('hi').textStream()`
+/// twice gives "body stream already read"). An empty response still hands back
+/// a stream, and its `body` is still null.
+pub fn textStream(self: *Response, exec: *const Execution) !*ReadableStream {
+    switch (self._body) {
+        .empty => return ReadableStream.initWithText("", exec),
+        else => {},
+    }
+    if (self._body_used) {
+        return exec.js.fail(
+            error.TypeError,
+            "Failed to execute 'textStream' on 'Response': body stream already read",
+        );
+    }
+    self._body_used = true;
+    return switch (self._body) {
+        .empty => unreachable,
+        // Already a stream, and this engine cannot re-chunk one that is being
+        // fed asynchronously; it is handed back as it is.
+        .stream => |stream| stream,
+        .bytes => |body| ReadableStream.initWithText(body, exec),
+    };
+}
+
 pub fn isOK(self: *const Response) bool {
     return self._status >= 200 and self._status <= 299;
 }
@@ -576,22 +602,25 @@ pub const JsApi = struct {
     // Response.json (staticc) conflicts with resposne.json, hence the `js_name` option
     pub const json_static = bridge.function(Response.createJson, .{ .static = true, .js_name = "json" });
 
-    pub const ok = bridge.accessor(Response.isOK, null, .{});
-    pub const status = bridge.accessor(Response.getStatus, null, .{});
-    pub const statusText = bridge.accessor(Response.getStatusText, null, .{});
+    // Chrome's own-property order (measured): the attributes in IDL order,
+    // then the body-reading operations alphabetically, then `textStream`.
     pub const @"type" = bridge.accessor(Response.getType, null, .{});
-    pub const text = bridge.function(Response.getText, .{});
-    pub const json = bridge.function(Response.getJson, .{});
+    pub const url = bridge.accessor(Response.getURL, null, .{});
+    pub const redirected = bridge.accessor(Response.isRedirected, null, .{});
+    pub const status = bridge.accessor(Response.getStatus, null, .{});
+    pub const ok = bridge.accessor(Response.isOK, null, .{});
+    pub const statusText = bridge.accessor(Response.getStatusText, null, .{});
     pub const headers = bridge.accessor(Response.getHeaders, null, .{});
     pub const body = bridge.accessor(Response.getBody, null, .{});
     pub const bodyUsed = bridge.accessor(Response.getBodyUsed, null, .{});
-    pub const url = bridge.accessor(Response.getURL, null, .{});
-    pub const redirected = bridge.accessor(Response.isRedirected, null, .{});
     pub const arrayBuffer = bridge.function(Response.arrayBuffer, .{});
     pub const blob = bridge.function(Response.blob, .{});
-    pub const bytes = bridge.function(Response.bytes, .{});
-    pub const formData = bridge.function(Response.formData, .{});
     pub const clone = bridge.function(Response.clone, .{});
+    pub const formData = bridge.function(Response.formData, .{});
+    pub const json = bridge.function(Response.getJson, .{});
+    pub const text = bridge.function(Response.getText, .{});
+    pub const bytes = bridge.function(Response.bytes, .{});
+    pub const textStream = bridge.function(Response.textStream, .{});
 };
 
 const testing = @import("../../../testing.zig");

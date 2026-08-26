@@ -204,23 +204,53 @@ pub const JsApi = struct {
 
     const reflect = Element.Reflect(Button);
 
+    // Chrome's order. No `required`: a button has never had one, and Chrome's
+    // prototype does not carry it (measured).
     pub const disabled = reflect.boolean("disabled");
-    pub const name = reflect.string("name");
-    pub const required = reflect.boolean("required");
     pub const form = bridge.accessor(Button.getForm, null, .{});
     pub const formAction = bridge.accessor(Button.getFormAction, Button.setFormAction, .{ .ce_reactions = true });
     pub const formEnctype = bridge.accessor(Button.getFormEnctype, Button.setFormEnctype, .{ .ce_reactions = true });
     pub const formMethod = bridge.accessor(Button.getFormMethod, Button.setFormMethod, .{ .ce_reactions = true });
     pub const formNoValidate = bridge.accessor(Button.getFormNoValidate, Button.setFormNoValidate, .{ .ce_reactions = true });
     pub const formTarget = reflect.string("formtarget");
-    pub const value = reflect.string("value");
+    pub const name = reflect.string("name");
     pub const @"type" = reflect.enumerated("type", &.{ "submit", "reset", "button" }, .{ .missing = "submit" });
-    pub const labels = bridge.accessor(Button.getLabels, null, .{});
-    pub const popoverTargetElement = bridge.accessor(Button.getPopoverTargetElement, Button.setPopoverTargetElement, .{ .ce_reactions = true });
-    pub const popoverTargetAction = bridge.accessor(Button.getPopoverTargetAction, Button.setPopoverTargetAction, .{ .ce_reactions = true });
+    pub const value = reflect.string("value");
     pub const willValidate = bridge.accessor(Button.getWillValidate, null, .{});
     pub const validity = bridge.accessor(Button.getValidity, null, .{});
     pub const validationMessage = bridge.accessor(Button.getValidationMessage, null, .{});
+    pub const labels = bridge.accessor(Button.getLabels, null, .{});
+    pub const popoverTargetElement = bridge.accessor(Button.getPopoverTargetElement, Button.setPopoverTargetElement, .{ .ce_reactions = true });
+    pub const popoverTargetAction = bridge.accessor(Button.getPopoverTargetAction, Button.setPopoverTargetAction, .{ .ce_reactions = true });
+    pub const commandForElement = reflect.elementReference(.commandfor);
+
+    /// An enumerated attribute with one extension: a value starting with `--`
+    /// is a custom command and reads back verbatim, anything else outside the
+    /// keyword set reads back as the empty string, and the keywords themselves
+    /// are ASCII case-insensitive (measured: `SHOW-POPOVER` reads
+    /// `show-popover`, `nope` reads ``, `--custom` reads `--custom`).
+    pub const command = bridge.accessor(_command, _setCommand, .{ .ce_reactions = true });
+    const command_keywords = [_][]const u8{
+        "toggle-popover", "show-popover", "hide-popover",
+        "close",          "show-modal",   "request-close",
+    };
+    fn _command(self: *const Button) []const u8 {
+        const value_ = self.asConstElement().getAttributeSafe(comptime .wrap("command")) orelse return "";
+        if (std.mem.startsWith(u8, value_, "--")) {
+            return value_;
+        }
+        for (command_keywords) |keyword| {
+            if (std.ascii.eqlIgnoreCase(value_, keyword)) {
+                return keyword;
+            }
+        }
+        return "";
+    }
+    fn _setCommand(self: *Button, value_: []const u8, frame: *Frame) !void {
+        return self.asElement().setAttributeSafe(comptime .wrap("command"), .wrap(value_), frame);
+    }
+
+    pub const interestForElement = reflect.elementReference(.interestfor);
     pub const checkValidity = bridge.function(Button.checkValidity, .{});
     pub const reportValidity = bridge.function(Button.reportValidity, .{});
     pub const setCustomValidity = bridge.function(Button.setCustomValidity, .{});

@@ -376,13 +376,23 @@ pub const IntersectionObserverEntry = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
-        pub const target = bridge.accessor(IntersectionObserverEntry.getTarget, null, .{});
+        // Chrome's order.
         pub const time = bridge.accessor(IntersectionObserverEntry.getTime, null, .{});
+        pub const rootBounds = bridge.accessor(IntersectionObserverEntry.getRootBounds, null, .{});
         pub const boundingClientRect = bridge.accessor(IntersectionObserverEntry.getBoundingClientRect, null, .{});
         pub const intersectionRect = bridge.accessor(IntersectionObserverEntry.getIntersectionRect, null, .{});
-        pub const rootBounds = bridge.accessor(IntersectionObserverEntry.getRootBounds, null, .{});
-        pub const intersectionRatio = bridge.accessor(IntersectionObserverEntry.getIntersectionRatio, null, .{});
         pub const isIntersecting = bridge.accessor(IntersectionObserverEntry.getIsIntersecting, null, .{});
+
+        /// The `trackVisibility` half of the observer, which needs occlusion
+        /// and transform checks nothing here performs. False, which is also
+        /// what Chrome reports for an observer that did not ask to track it.
+        pub const isVisible = bridge.accessor(_isVisible, null, .{});
+        fn _isVisible(_: *IntersectionObserverEntry) bool {
+            return false;
+        }
+
+        pub const intersectionRatio = bridge.accessor(IntersectionObserverEntry.getIntersectionRatio, null, .{});
+        pub const target = bridge.accessor(IntersectionObserverEntry.getTarget, null, .{});
     };
 };
 

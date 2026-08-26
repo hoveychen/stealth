@@ -408,16 +408,13 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(FileReader.init, .{});
-
-    // State constants
-    pub const EMPTY = bridge.property(@intFromEnum(FileReader.ReadyState.empty), .{ .template = true });
-    pub const LOADING = bridge.property(@intFromEnum(FileReader.ReadyState.loading), .{ .template = true });
-    pub const DONE = bridge.property(@intFromEnum(FileReader.ReadyState.done), .{ .template = true });
-
     // Properties
     pub const readyState = bridge.accessor(FileReader.getReadyState, null, .{});
     pub const result = bridge.accessor(FileReader.getResult, null, .{});
     pub const @"error" = bridge.accessor(FileReader.getError, null, .{});
+    pub const onloadstart = bridge.accessor(handler(.onloadstart).get, handler(.onloadstart).set, .{});
+    pub const onprogress = bridge.accessor(handler(.onprogress).get, handler(.onprogress).set, .{});
+    pub const onload = bridge.accessor(handler(.onload).get, handler(.onload).set, .{});
 
     // Event handlers
     fn handler(comptime which: @import("global_event_handlers.zig").Handler) type {
@@ -426,17 +423,17 @@ pub const JsApi = struct {
 
     pub const onabort = bridge.accessor(handler(.onabort).get, handler(.onabort).set, .{});
     pub const onerror = bridge.accessor(handler(.onerror).get, handler(.onerror).set, .{});
-    pub const onload = bridge.accessor(handler(.onload).get, handler(.onload).set, .{});
     pub const onloadend = bridge.accessor(handler(.onloadend).get, handler(.onloadend).set, .{});
-    pub const onloadstart = bridge.accessor(handler(.onloadstart).get, handler(.onloadstart).set, .{});
-    pub const onprogress = bridge.accessor(handler(.onprogress).get, handler(.onprogress).set, .{});
-
+    // State constants
+    pub const EMPTY = bridge.property(@intFromEnum(FileReader.ReadyState.empty), .{ .template = true });
+    pub const LOADING = bridge.property(@intFromEnum(FileReader.ReadyState.loading), .{ .template = true });
+    pub const DONE = bridge.property(@intFromEnum(FileReader.ReadyState.done), .{ .template = true });
+    pub const abort = bridge.function(FileReader.abort, .{});
     // Methods
     pub const readAsArrayBuffer = bridge.function(FileReader.readAsArrayBuffer, .{});
     pub const readAsBinaryString = bridge.function(FileReader.readAsBinaryString, .{});
-    pub const readAsText = bridge.function(FileReader.readAsText, .{});
     pub const readAsDataURL = bridge.function(FileReader.readAsDataURL, .{});
-    pub const abort = bridge.function(FileReader.abort, .{});
+    pub const readAsText = bridge.function(FileReader.readAsText, .{});
 };
 
 const testing = @import("../../testing.zig");

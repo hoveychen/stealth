@@ -591,7 +591,7 @@ fn errorLocal(comptime T: type, local: *const Local, info: anytype) Local {
 // Upcast a Node-descendant instance to *Node by walking the Proto chain.
 // Not every node type defines an asNode() helper (e.g. Comment, Text), but
 // inheritsOrIs guarantees Node is in the chain
-fn protoNode(comptime T: type, instance: *T) *@import("../webapi/Node.zig") {
+pub fn protoNode(comptime T: type, instance: *T) *@import("../webapi/Node.zig") {
     if (T == @import("../webapi/Node.zig")) {
         return instance;
     }
@@ -1128,7 +1128,14 @@ pub const Function = struct {
         // anonymous, with a zero-length setter.
         anonymous: bool = false,
 
-        pub const Exposed = enum { both, window, worker };
+        // `worker` means both worker kinds. `dedicated_worker` is the
+        // narrower [Exposed=DedicatedWorker]: a member a shared worker does
+        // not carry. Measured on Chrome 151 by running the same interface
+        // table in both worker kinds -- `navigator.hid`/`serial`/`usb` and
+        // `FileSystemFileHandle.createSyncAccessHandle` are on the dedicated
+        // side only (tools/fingerprint/probes/expr-shared-worker-proto-table
+        // .js).
+        pub const Exposed = enum { both, window, worker, dedicated_worker };
 
         // We support two ways to cache a value directly into a v8::Object. The
         // difference between the two is like the difference between a Map

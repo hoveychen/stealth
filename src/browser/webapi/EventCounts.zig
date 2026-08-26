@@ -141,13 +141,13 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const get = bridge.function(EventCounts.get, .{});
-    pub const has = bridge.function(EventCounts.has, .{});
     pub const size = bridge.accessor(EventCounts.getSize, null, .{});
-    pub const keys = bridge.function(EventCounts.keys, .{});
-    pub const values = bridge.function(EventCounts.values, .{});
     pub const entries = bridge.function(EventCounts.entries, .{});
     pub const forEach = bridge.function(EventCounts.forEach, .{});
+    pub const get = bridge.function(EventCounts.get, .{});
+    pub const has = bridge.function(EventCounts.has, .{});
+    pub const keys = bridge.function(EventCounts.keys, .{});
+    pub const values = bridge.function(EventCounts.values, .{});
     pub const symbol_iterator = bridge.iterator(EventCounts.entries, .{});
 };
 

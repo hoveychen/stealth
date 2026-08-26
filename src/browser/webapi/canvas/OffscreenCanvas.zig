@@ -20,6 +20,8 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 
 const Blob = @import("../Blob.zig");
+const EventTarget = @import("../EventTarget.zig");
+const handler_property = @import("../handler_property.zig");
 const DOMException = @import("../DOMException.zig");
 const ImageBitmap = @import("ImageBitmap.zig");
 const Surface = @import("raster.zig");
@@ -37,8 +39,14 @@ const Allocator = std.mem.Allocator;
 /// https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas
 const OffscreenCanvas = @This();
 
-pub const _prototype_root = true;
+// Chrome's OffscreenCanvas inherits EventTarget: `oc instanceof EventTarget`
+// is true there and `oc.addEventListener` is a function, which is the whole
+// reason `oncontextlost` and `oncontextrestored` can be handler properties at
+// all. This engine had it as a prototype root, so the chain was
+// OffscreenCanvas -> Object and both handlers were missing (measured).
+pub const Proto = EventTarget;
 
+_proto: *EventTarget,
 _width: u32,
 _height: u32,
 _cached: ?DrawingContext = null,
@@ -53,10 +61,15 @@ const DrawingContext = union(enum) {
 };
 
 pub fn constructor(width: u32, height: u32, exec: *Execution) !*OffscreenCanvas {
-    return exec._factory.create(OffscreenCanvas{
+    return exec._factory.eventTarget(OffscreenCanvas{
+        ._proto = undefined,
         ._width = width,
         ._height = height,
     });
+}
+
+pub fn asEventTarget(self: *OffscreenCanvas) *EventTarget {
+    return self._proto;
 }
 
 pub fn getWidth(self: *const OffscreenCanvas) u32 {
@@ -282,11 +295,20 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    fn handler(comptime which: handler_property.Handler) type {
+        return handler_property.accessors(OffscreenCanvas, which);
+    }
+
+    // Chrome's own-property order (measured): the two handlers between the
+    // dimensions and the three operations, and convertToBlob before
+    // getContext.
     pub const constructor = bridge.constructor(OffscreenCanvas.constructor, .{});
     pub const width = bridge.accessor(OffscreenCanvas.getWidth, OffscreenCanvas.setWidth, .{});
     pub const height = bridge.accessor(OffscreenCanvas.getHeight, OffscreenCanvas.setHeight, .{});
-    pub const getContext = bridge.function(OffscreenCanvas.getContext, .{});
+    pub const oncontextlost = bridge.accessor(handler(.oncontextlost).get, handler(.oncontextlost).set, .{});
+    pub const oncontextrestored = bridge.accessor(handler(.oncontextrestored).get, handler(.oncontextrestored).set, .{});
     pub const convertToBlob = bridge.function(OffscreenCanvas.convertToBlob, .{});
+    pub const getContext = bridge.function(OffscreenCanvas.getContext, .{});
     pub const transferToImageBitmap = bridge.function(OffscreenCanvas.transferToImageBitmap, .{});
 };
 

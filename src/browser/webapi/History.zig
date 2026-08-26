@@ -144,14 +144,14 @@ pub const JsApi = struct {
     pub const length = bridge.accessor(History.getLength, null, .{});
     pub const scrollRestoration = bridge.accessor(History.getScrollRestoration, History.setScrollRestoration, .{});
     pub const state = bridge.accessor(History.getState, null, .{});
+    pub const back = bridge.function(History.back, .{});
+    pub const forward = bridge.function(History.forward, .{});
+    pub const go = bridge.function(History.go, .{});
     // WebIDL makes both `data` and `unused` required, so these take two --
     // Chrome 151 reports length 2 and refuses a one-argument call. The Zig
     // signature has the unused title optional, which derived 1.
     pub const pushState = bridge.function(History.pushState, .{ .arity = 2 });
     pub const replaceState = bridge.function(History.replaceState, .{ .arity = 2 });
-    pub const back = bridge.function(History.back, .{});
-    pub const forward = bridge.function(History.forward, .{});
-    pub const go = bridge.function(History.go, .{});
 };
 
 const testing = @import("../../testing.zig");

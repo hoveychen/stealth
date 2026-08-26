@@ -161,6 +161,11 @@ _element_datasets: Element.DatasetLookup = .empty,
 _element_class_lists: Element.ClassListLookup = .empty,
 _element_rel_lists: Element.RelListLookup = .empty,
 _element_token_lists: Element.TokenListLookup = .empty,
+// interestFor / commandFor, whose IDL member is an element rather than a
+// string. See Element.ElementReferenceAttribute.
+_element_references: Element.ElementReferenceLookup = .empty,
+// The `nonce` slot. See Element.getNonce.
+_element_nonces: Element.NonceLookup = .empty,
 _element_shadow_roots: Element.ShadowRootLookup = .empty,
 // The EditContext attached to an element, if any. The reverse link lives on
 // the context itself, which is how a second element attaching the same one is
@@ -492,7 +497,11 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
         ._location = undefined,
         // Born not-isolated, as `cross_origin_isolated` is; the clamp follows
         // it once a document commits.
-        ._performance = .init(Performance.clock_resolution_micros),
+        // Heap-allocated rather than inline: Performance is an EventTarget
+        // now, and the prototype chain is one allocation with the parent
+        // immediately before the child (Factory.protoOf is pointer
+        // arithmetic).
+        ._performance = try factory.eventTarget(Performance.init(Performance.clock_resolution_micros)),
         ._screen = screen,
         ._visual_viewport = visual_viewport,
         // Its own object too, as in Chrome.
@@ -2595,7 +2604,7 @@ pub fn getElementByIdFromNode(self: *Frame, node: *Node, id: []const u8) ?*Eleme
 }
 
 pub fn performance(self: *Frame) *Performance {
-    return &self.window._performance;
+    return self.window._performance;
 }
 
 /// The viewport this frame is laid out in. The top-level frame takes the page's;
@@ -3580,8 +3589,59 @@ pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpt
                 link._sheet = null;
                 self._style_manager.sheetModified();
             }
+        } else if (el.is(IFrame)) |iframe| {
+            // An <iframe> out of the document takes its navigable with it.
+            discardIFrameNavigable(iframe);
         }
     }
+}
+
+/// The nested navigable an <iframe> element held is destroyed when the element
+/// leaves the document (HTML §iframe, "remove the nested navigable"). What a
+/// page can see of that: the frame stops counting in `window.length` and
+/// `window[N]`, the element's `contentWindow` and `contentDocument` answer null,
+/// and a Window reference captured before the removal reports `closed`. Putting
+/// the same element back builds a new navigable rather than reviving this one,
+/// which `_executed = false` arranges: the insertion path treats it as an iframe
+/// that has never run.
+///
+/// All of that is measured on Chrome 151 in
+/// `tools/fingerprint/probes/expr-iframe-detach.js`; the reading that sent us
+/// looking was the macys interstitial, which creates hidden iframes and removes
+/// them again -- Chrome counted 2 frames there where this engine counted 5.
+fn discardIFrameNavigable(iframe: *IFrame) void {
+    const window = iframe._window orelse return;
+    const frame = window._frame;
+    const parent = frame.parent orelse return;
+
+    for (parent.child_frames.items, 0..) |f, i| {
+        if (f == frame) {
+            parent.child_frames_sorted = false;
+            _ = parent.child_frames.swapRemove(i);
+            break;
+        }
+    }
+
+    // Same predicate Session.zig uses for a re-navigated frame: the parent is
+    // still counting this frame's load unless the frame already reported in.
+    if (frame._delays_parent_load and !frame._parent_notified) {
+        frame._parent_notified = true;
+        parent.pendingLoadCompleted();
+    }
+
+    window._closed = true;
+    iframe._window = null;
+    iframe._executed = false;
+
+    const page = frame._page;
+    page.session.idb.detachContext(frame.js);
+    frame.js.scheduler.reset();
+    frame.abortTransfers();
+
+    // Not torn down: a script can be holding this Window (the Akamai loader
+    // keeps one for the life of the page), so the Frame outlives its navigable
+    // and is freed with the page -- same trade-off as `Window.close`.
+    page.closed_frames.append(page.frame_arena, frame) catch @panic("OOM");
 }
 
 // The TreeWalker isn't shadow DOM aware, so this is correctly scoped to direct
@@ -3952,6 +4012,8 @@ pub fn attributeChange(self: *Frame, element: *Element, name: String, value: Str
         popover.attributeChanged(element, old, value.str(), self);
     } else if (name.eql(comptime .wrap("style"))) {
         self.styleAttributeChanged(element, value.str());
+    } else if (name.eql(comptime .wrap("nonce"))) {
+        element.nonceAttributeChanged(value.str(), self);
     }
 }
 
@@ -3977,6 +4039,8 @@ pub fn attributeRemove(self: *Frame, element: *Element, name: String, old_value:
         popover.attributeChanged(element, old_value.str(), null, self);
     } else if (name.eql(comptime .wrap("style"))) {
         self.styleAttributeChanged(element, null);
+    } else if (name.eql(comptime .wrap("nonce"))) {
+        element.nonceAttributeChanged("", self);
     }
 }
 

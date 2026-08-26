@@ -261,11 +261,10 @@ pub const JsApi = struct {
     pub const constructor = bridge.constructor(BroadcastChannel.init, .{});
 
     pub const name = bridge.accessor(BroadcastChannel.getName, null, .{});
-    pub const postMessage = bridge.function(BroadcastChannel.postMessage, .{});
-    pub const close = bridge.function(BroadcastChannel.close, .{});
-
     pub const onmessage = bridge.accessor(BroadcastChannel.getOnMessage, BroadcastChannel.setOnMessage, .{});
     pub const onmessageerror = bridge.accessor(BroadcastChannel.getOnMessageError, BroadcastChannel.setOnMessageError, .{});
+    pub const close = bridge.function(BroadcastChannel.close, .{});
+    pub const postMessage = bridge.function(BroadcastChannel.postMessage, .{});
 };
 
 const testing = @import("../../testing.zig");

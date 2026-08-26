@@ -84,6 +84,8 @@ pub const Type = enum(u8) {
     navigation_history_entry,
     screen,
     screen_orientation,
+    offscreen_canvas,
+    performance,
     visual_viewport,
     network_information,
     media_devices,
@@ -179,6 +181,8 @@ pub fn Subtype(comptime tag: Type) type {
         .navigation_history_entry => NavigationHistoryEntry,
         .screen => Screen,
         .screen_orientation => Screen.Orientation,
+        .offscreen_canvas => @import("canvas/OffscreenCanvas.zig"),
+        .performance => @import("Performance.zig"),
         .visual_viewport => VisualViewport,
         .network_information => @import("NetworkInformation.zig"),
         .media_devices => @import("media/MediaDevices.zig"),
@@ -453,6 +457,8 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .navigation => writer.writeAll("<Navigation>"),
         .screen => writer.writeAll("<Screen>"),
         .screen_orientation => writer.writeAll("<ScreenOrientation>"),
+        .offscreen_canvas => writer.writeAll("<OffscreenCanvas>"),
+        .performance => writer.writeAll("<Performance>"),
         .visual_viewport => writer.writeAll("<VisualViewport>"),
         .network_information => writer.writeAll("<NetworkInformation>"),
         .media_devices => writer.writeAll("<MediaDevices>"),
@@ -547,6 +553,8 @@ pub fn toString(self: *EventTarget) []const u8 {
         .navigation => return "[object Navigation]",
         .screen => return "[object Screen]",
         .screen_orientation => return "[object ScreenOrientation]",
+        .offscreen_canvas => return "[object OffscreenCanvas]",
+        .performance => return "[object Performance]",
         .visual_viewport => return "[object VisualViewport]",
         .network_information => return "[object NetworkInformation]",
         .media_devices => return "[object MediaDevices]",
@@ -633,9 +641,13 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's own-property order, in both the window realm and a worker's:
+    // addEventListener, dispatchEvent, removeEventListener. This is IDL order,
+    // not the declaration order the file used to carry, and it is on the most
+    // walked prototype in the realm.
     pub const constructor = bridge.constructor(EventTarget.init, .{});
-    pub const dispatchEvent = bridge.function(EventTarget.dispatchEvent, .{});
     pub const addEventListener = bridge.function(EventTarget.addEventListener, .{});
+    pub const dispatchEvent = bridge.function(EventTarget.dispatchEvent, .{});
     pub const removeEventListener = bridge.function(EventTarget.removeEventListener, .{});
 };
 

@@ -792,10 +792,13 @@
 
 <script id=entry_to_json>
   {
-    // PerformanceEntry.toJSON() is four keys, and the subclasses that add
+    // PerformanceEntry.toJSON() is five keys, and the subclasses that add
     // nothing of their own inherit it verbatim — a mark's detail is not in it.
     const mark = performance.mark('json-mark', { detail: { a: 1 } });
-    testing.expectEqual(['name', 'entryType', 'startTime', 'duration'], Object.keys(mark.toJSON()));
+    testing.expectEqual(
+      ['name', 'entryType', 'startTime', 'duration', 'navigationId'],
+      Object.keys(mark.toJSON()),
+    );
     testing.expectEqual(0, PerformanceEntry.prototype.toJSON.length);
     const parsed = JSON.parse(JSON.stringify(mark));
     testing.expectEqual('json-mark', parsed.name);
@@ -1010,10 +1013,13 @@
       testing.expectEqual(0, v[0].startTime);
       testing.expectEqual(0, v[0].duration);
       testing.expectEqual('VisibilityStateEntry', v[0].constructor.name);
+      // navigationId is drawn per navigation, so the value is not fixed; the
+      // key and its position are.
       testing.expectEqual(
-        '{"name":"visible","entryType":"visibility-state","startTime":0,"duration":0}',
-        JSON.stringify(v[0]),
+        ['name', 'entryType', 'startTime', 'duration', 'navigationId'],
+        Object.keys(JSON.parse(JSON.stringify(v[0]))),
       );
+      testing.expectEqual(performance.getEntries()[0].navigationId, v[0].navigationId);
 
       const paint = performance.getEntriesByType('paint');
       testing.expectEqual(2, paint.length);
@@ -1025,7 +1031,7 @@
         testing.expectEqual(true, p.paintTime <= p.presentationTime);
         testing.expectEqual(true, p.paintTime > 0);
         testing.expectEqual(
-          ['name', 'entryType', 'startTime', 'duration', 'paintTime', 'presentationTime'],
+          ['name', 'entryType', 'startTime', 'duration', 'navigationId', 'paintTime', 'presentationTime'],
           Object.keys(p.toJSON()),
         );
       }
@@ -1109,5 +1115,27 @@
       'interaction-contentful-paint']) {
       testing.expectEqual(0, performance.getEntriesByType(type).length, { desc: type + ' buffer' });
     }
+  }
+</script>
+
+<script id="performance_is_an_event_target">
+  {
+    // Chrome's Performance inherits EventTarget. This engine had it as a
+    // prototype root, which the member table could not show -- the prototype's
+    // own names were already byte-identical and only the chain differed
+    // (tools/fingerprint/probes/expr-proto-chains.js). It was the last chain
+    // difference in either realm.
+    testing.expectEqual(true, performance instanceof EventTarget);
+    testing.expectEqual(true, Object.getPrototypeOf(Performance.prototype) === EventTarget.prototype);
+    testing.expectEqual('[object Performance]', String(performance));
+
+    const seen = [];
+    const listener = (e) => seen.push(e.type);
+    performance.addEventListener('lp-test', listener);
+    performance.dispatchEvent(new Event('lp-test'));
+    testing.expectEqual('lp-test', seen.join(','));
+    performance.removeEventListener('lp-test', listener);
+    performance.dispatchEvent(new Event('lp-test'));
+    testing.expectEqual('lp-test', seen.join(','));
   }
 </script>

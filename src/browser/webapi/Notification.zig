@@ -35,7 +35,6 @@ _proto: *EventTarget,
 _title: []const u8,
 _body: []const u8 = "",
 _icon: []const u8 = "",
-_image: []const u8 = "",
 _badge: []const u8 = "",
 _tag: []const u8 = "",
 _lang: []const u8 = "",
@@ -43,11 +42,15 @@ _dir: []const u8 = "auto",
 _silent: bool = false,
 _require_interaction: bool = false,
 _renotify: bool = false,
+// Wall clock at construction: Chrome's `timestamp` is within milliseconds of
+// Date.now() for a notification made right now (measured).
+_timestamp: f64 = 0,
+_vibrate: []const u32 = &.{},
+_data: ?js.Value.Global = null,
 
 const Options = struct {
     body: ?[]const u8 = null,
     icon: ?[]const u8 = null,
-    image: ?[]const u8 = null,
     badge: ?[]const u8 = null,
     tag: ?[]const u8 = null,
     lang: ?[]const u8 = null,
@@ -55,7 +58,28 @@ const Options = struct {
     silent: ?bool = null,
     requireInteraction: ?bool = null,
     renotify: ?bool = null,
+    vibrate: ?VibratePattern = null,
+    data: ?js.Value = null,
+
+    // `unsigned long or sequence<unsigned long>` -- a bare number is a
+    // one-entry pattern.
+    const VibratePattern = union(enum) {
+        one: u32,
+        many: []const u32,
+    };
 };
+
+/// The Vibration API's "validate and normalize": a pattern of even length has
+/// its last entry dropped, which is why Chrome answers `[100]` to a
+/// `[100, 50]` (measured).
+fn normalizeVibrate(pattern: Options.VibratePattern, arena: *lp.Arena) ![]const u32 {
+    const entries = switch (pattern) {
+        .one => |value| return arena.dupe(u32, &.{value}),
+        .many => |values| values,
+    };
+    const len = if (entries.len % 2 == 0) entries.len -| 1 else entries.len;
+    return arena.dupe(u32, entries[0..len]);
+}
 
 pub fn init(title: []const u8, options_: ?Options, exec: *const Execution) !*Notification {
     const arena = try exec.getArena(.small, "Notification");
@@ -68,7 +92,6 @@ pub fn init(title: []const u8, options_: ?Options, exec: *const Execution) !*Not
         ._title = try arena.dupe(u8, title),
         ._body = if (options.body) |v| try arena.dupe(u8, v) else "",
         ._icon = if (options.icon) |v| try arena.dupe(u8, v) else "",
-        ._image = if (options.image) |v| try arena.dupe(u8, v) else "",
         ._badge = if (options.badge) |v| try arena.dupe(u8, v) else "",
         ._tag = if (options.tag) |v| try arena.dupe(u8, v) else "",
         ._lang = if (options.lang) |v| try arena.dupe(u8, v) else "",
@@ -76,6 +99,9 @@ pub fn init(title: []const u8, options_: ?Options, exec: *const Execution) !*Not
         ._silent = options.silent orelse false,
         ._require_interaction = options.requireInteraction orelse false,
         ._renotify = options.renotify orelse false,
+        ._timestamp = @floatFromInt(lp.datetime.DateTime.now().unix(.milliseconds)),
+        ._vibrate = if (options.vibrate) |v| try normalizeVibrate(v, arena) else &.{},
+        ._data = if (options.data) |v| try v.persist() else null,
     });
 }
 
@@ -89,6 +115,10 @@ pub fn releaseRef(self: *Notification, page: *Page) void {
 
 pub fn acquireRef(self: *Notification) void {
     self._rc.acquire();
+}
+
+pub fn asEventTarget(self: *Notification) *EventTarget {
+    return self._proto;
 }
 
 pub fn close(_: *Notification) void {}
@@ -114,9 +144,6 @@ fn getBody(self: *const Notification) []const u8 {
 fn getIcon(self: *const Notification) []const u8 {
     return self._icon;
 }
-fn getImage(self: *const Notification) []const u8 {
-    return self._image;
-}
 fn getBadge(self: *const Notification) []const u8 {
     return self._badge;
 }
@@ -138,6 +165,22 @@ fn getRequireInteraction(self: *const Notification) bool {
 fn getRenotify(self: *const Notification) bool {
     return self._renotify;
 }
+fn getTimestamp(self: *const Notification) f64 {
+    return self._timestamp;
+}
+fn getVibrate(self: *const Notification) []const u32 {
+    return self._vibrate;
+}
+fn getData(self: *const Notification) ?js.Value.Global {
+    return self._data;
+}
+/// Always empty: `actions` is only populated for a persistent notification,
+/// and Chrome refuses to construct a non-persistent one that asks for them
+/// (measured -- the constructor throws a TypeError naming
+/// ServiceWorkerRegistration.showNotification).
+fn getActions(_: *const Notification) []const u8 {
+    return &.{};
+}
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Notification);
@@ -154,19 +197,31 @@ pub const JsApi = struct {
     pub const maxActions = bridge.accessor(getMaxActions, null, .{ .static = true });
     pub const requestPermission = bridge.function(Notification.requestPermission, .{ .static = true });
 
-    pub const close = bridge.function(Notification.close, .{ .noop = true });
+    fn handler(comptime which: @import("global_event_handlers.zig").Handler) type {
+        return @import("handler_property.zig").accessors(Notification, which);
+    }
 
+    // Chrome's order. No `image`: the option was dropped, and Chrome's
+    // prototype has no such name (measured).
+    pub const onclick = bridge.accessor(handler(.onclick).get, handler(.onclick).set, .{});
+    pub const onshow = bridge.accessor(handler(.onshow).get, handler(.onshow).set, .{});
+    pub const onerror = bridge.accessor(handler(.onerror).get, handler(.onerror).set, .{});
+    pub const onclose = bridge.accessor(handler(.onclose).get, handler(.onclose).set, .{});
     pub const title = bridge.accessor(getTitle, null, .{});
-    pub const body = bridge.accessor(getBody, null, .{});
-    pub const icon = bridge.accessor(getIcon, null, .{});
-    pub const image = bridge.accessor(getImage, null, .{});
-    pub const badge = bridge.accessor(getBadge, null, .{});
-    pub const tag = bridge.accessor(getTag, null, .{});
-    pub const lang = bridge.accessor(getLang, null, .{});
     pub const dir = bridge.accessor(getDir, null, .{});
+    pub const lang = bridge.accessor(getLang, null, .{});
+    pub const body = bridge.accessor(getBody, null, .{});
+    pub const tag = bridge.accessor(getTag, null, .{});
+    pub const icon = bridge.accessor(getIcon, null, .{});
+    pub const badge = bridge.accessor(getBadge, null, .{});
+    pub const vibrate = bridge.accessor(getVibrate, null, .{});
+    pub const timestamp = bridge.accessor(getTimestamp, null, .{});
+    pub const renotify = bridge.accessor(getRenotify, null, .{});
     pub const silent = bridge.accessor(getSilent, null, .{});
     pub const requireInteraction = bridge.accessor(getRequireInteraction, null, .{});
-    pub const renotify = bridge.accessor(getRenotify, null, .{});
+    pub const data = bridge.accessor(getData, null, .{});
+    pub const actions = bridge.accessor(getActions, null, .{});
+    pub const close = bridge.function(Notification.close, .{ .noop = true });
 };
 
 const testing = @import("../../testing.zig");

@@ -146,13 +146,13 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const length = bridge.accessor(NodeList.length, null, .{});
+    pub const entries = bridge.function(NodeList.entries, .{});
     pub const @"[]" = bridge.indexed(NodeList.indexedGet, getIndexes, .{ .null_as_undefined = true });
-    pub const item = bridge.function(NodeList.getAtIndex, .{});
     pub const keys = bridge.function(NodeList.keys, .{});
     pub const values = bridge.function(NodeList.values, .{});
-    pub const entries = bridge.function(NodeList.entries, .{});
     pub const forEach = bridge.function(NodeList.forEach, .{});
+    pub const length = bridge.accessor(NodeList.length, null, .{});
+    pub const item = bridge.function(NodeList.getAtIndex, .{});
     pub const symbol_iterator = bridge.iterator(NodeList.values, .{});
 
     fn getIndexes(self: *NodeList, frame: *Frame) !js.Array {

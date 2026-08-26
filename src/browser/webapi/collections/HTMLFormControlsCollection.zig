@@ -159,7 +159,7 @@ pub const JsApi = struct {
         pub const manage = false;
     };
 
-    pub const length = bridge.accessor(HTMLFormControlsCollection.length, null, .{});
+    // No `length`: Chrome inherits HTMLCollection.prototype's (measured).
     pub const @"[int]" = bridge.indexed(HTMLFormControlsCollection.getAtIndex, getIndexes, .{ .null_as_undefined = true });
 
     /// The indices are own properties, as in RadioNodeList -- see the note

@@ -25,6 +25,7 @@ const Page = @import("../../Page.zig");
 const Event = @import("../Event.zig");
 const MessagePort = @import("../MessagePort.zig");
 const Window = @import("../Window.zig");
+const UserActivation = @import("../navigator/services.zig").UserActivation;
 
 const String = lp.String;
 
@@ -92,6 +93,50 @@ fn initWithTrusted(arena: *lp.Arena, typ: String, opts_: ?Options, trusted: bool
 
     Event.populatePrototypes(event, opts, trusted);
     return event;
+}
+
+/// The legacy initialiser, which predates the constructor and takes the eight
+/// members positionally. Arity is 1 -- only `type` is required -- and the
+/// defaults are Chrome's, measured (probes/expr-read-path-members.js):
+/// `initMessageEvent('m')` leaves bubbles and cancelable false, `data` null,
+/// `origin` and `lastEventId` the empty string, `source` null and `ports`
+/// empty. Like `initEvent`, it does nothing while the event is being
+/// dispatched.
+pub fn initMessageEvent(
+    self: *MessageEvent,
+    event_string: []const u8,
+    bubbles: ?bool,
+    cancelable: ?bool,
+    data_: ?Data,
+    origin_: ?[]const u8,
+    last_event_id_: ?[]const u8,
+    source_: ?Source,
+    ports_: ?[]const *MessagePort,
+) !void {
+    if (self._proto._event_phase != .none) {
+        return;
+    }
+
+    const arena = self._proto._arena.allocator();
+    self._proto._initialized = true;
+    self._proto._type_string = try String.init(arena, event_string, .{});
+    self._proto._bubbles = bubbles orelse false;
+    self._proto._cancelable = cancelable orelse false;
+
+    self._data = data_;
+    self._origin = if (origin_) |str| try arena.dupe(u8, str) else "";
+    self._last_event_id = if (last_event_id_) |str| try arena.dupe(u8, str) else "";
+    self._source = source_;
+    const ports = ports_ orelse &.{};
+    self._ports = if (ports.len == 0) &.{} else try arena.dupe(*MessagePort, ports);
+}
+
+/// Chrome answers null on any event this engine can produce: a UserActivation
+/// snapshot only rides along on a message posted from a page with a transient
+/// activation, and there is no user to activate here (measured -- a
+/// `new MessageEvent('message', {data: 1})` reads null in Chrome too).
+pub fn getUserActivation(_: *const MessageEvent) ?*UserActivation {
+    return null;
 }
 
 pub fn deinit(self: *MessageEvent, page: *Page) void {
@@ -170,6 +215,8 @@ pub const JsApi = struct {
     pub const lastEventId = bridge.accessor(MessageEvent.getLastEventId, null, .{});
     pub const source = bridge.accessor(MessageEvent.getSource, null, .{});
     pub const ports = bridge.accessor(MessageEvent.getPorts, null, .{});
+    pub const userActivation = bridge.accessor(MessageEvent.getUserActivation, null, .{});
+    pub const initMessageEvent = bridge.function(MessageEvent.initMessageEvent, .{ .arity = 1 });
 };
 
 const testing = @import("../../../testing.zig");

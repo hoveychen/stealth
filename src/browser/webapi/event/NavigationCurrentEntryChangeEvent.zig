@@ -107,6 +107,6 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(NavigationCurrentEntryChangeEvent.init, .{});
-    pub const from = bridge.accessor(NavigationCurrentEntryChangeEvent.getFrom, null, .{});
     pub const navigationType = bridge.accessor(NavigationCurrentEntryChangeEvent.getNavigationType, null, .{});
+    pub const from = bridge.accessor(NavigationCurrentEntryChangeEvent.getFrom, null, .{});
 };

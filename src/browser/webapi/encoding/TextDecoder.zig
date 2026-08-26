@@ -238,10 +238,10 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(TextDecoder.init, .{});
-    pub const decode = bridge.function(TextDecoder.decode, .{});
     pub const encoding = bridge.accessor(TextDecoder.getEncoding, null, .{});
     pub const fatal = bridge.accessor(TextDecoder.getFatal, null, .{});
     pub const ignoreBOM = bridge.accessor(TextDecoder.getIgnoreBOM, null, .{});
+    pub const decode = bridge.function(TextDecoder.decode, .{});
 };
 
 const testing = @import("../../../testing.zig");

@@ -240,16 +240,16 @@ pub const JsApi = struct {
     };
 
     pub const name = bridge.accessor(IDBIndex.getName, null, .{});
-    pub const keyPath = bridge.accessor(IDBIndex.getKeyPath, null, .{});
-    pub const unique = bridge.accessor(IDBIndex.getUnique, null, .{});
-    pub const multiEntry = bridge.accessor(IDBIndex.getMultiEntry, null, .{});
     pub const objectStore = bridge.accessor(IDBIndex.getObjectStore, null, .{});
+    pub const keyPath = bridge.accessor(IDBIndex.getKeyPath, null, .{});
+    pub const multiEntry = bridge.accessor(IDBIndex.getMultiEntry, null, .{});
+    pub const unique = bridge.accessor(IDBIndex.getUnique, null, .{});
+    pub const count = bridge.function(IDBIndex.count, .{});
     pub const get = bridge.function(IDBIndex.get, .{});
-    pub const getKey = bridge.function(IDBIndex.getKey, .{});
     pub const getAll = bridge.function(IDBIndex.getAll, .{});
     pub const getAllKeys = bridge.function(IDBIndex.getAllKeys, .{});
     pub const getAllRecords = bridge.function(IDBIndex.getAllRecords, .{});
-    pub const count = bridge.function(IDBIndex.count, .{});
+    pub const getKey = bridge.function(IDBIndex.getKey, .{});
     pub const openCursor = bridge.function(IDBIndex.openCursor, .{});
     pub const openKeyCursor = bridge.function(IDBIndex.openKeyCursor, .{});
 };

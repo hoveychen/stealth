@@ -68,6 +68,21 @@ pub const replaceItem = M.replaceItem;
 pub const removeItem = M.removeItem;
 pub const appendItem = M.appendItem;
 
+/// A standalone matrix transform, not attached to this list -- the list is
+/// only the factory. Same construction `consolidate` uses for the transform it
+/// collapses to.
+pub fn createSVGTransformFromMatrix(_: *TransformList, matrix: *const DOMMatrixReadOnly, frame: *Frame) !*Transform {
+    const m = matrix._m;
+    for (m) |value| if (!std.math.isFinite(value)) return error.TypeError;
+    return Transform.fromParsed(.{
+        .kind = .matrix,
+        .matrix = m,
+        .values = .{ m[0], m[1], m[4], m[5], m[12], m[13] } ++ [_]f64{0} ** 10,
+        .count = 6,
+        .is_2d = true,
+    }, frame);
+}
+
 pub fn consolidate(self: *TransformList, frame: *Frame) !?*Transform {
     try M.requireMutable(self);
     try M.sync(self, frame);
@@ -183,14 +198,16 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's order, which here is alphabetical after the two lengths.
     pub const length = bridge.accessor(TransformList.getLength, null, .{});
     pub const numberOfItems = bridge.accessor(TransformList.getNumberOfItems, null, .{});
-    pub const clear = bridge.function(TransformList.clear, .{});
-    pub const initialize = bridge.function(TransformList.initialize, .{});
-    pub const getItem = bridge.function(TransformList.getItem, .{});
-    pub const insertItemBefore = bridge.function(TransformList.insertItemBefore, .{});
-    pub const replaceItem = bridge.function(TransformList.replaceItem, .{});
-    pub const removeItem = bridge.function(TransformList.removeItem, .{});
     pub const appendItem = bridge.function(TransformList.appendItem, .{});
+    pub const clear = bridge.function(TransformList.clear, .{});
     pub const consolidate = bridge.function(TransformList.consolidate, .{});
+    pub const createSVGTransformFromMatrix = bridge.function(TransformList.createSVGTransformFromMatrix, .{});
+    pub const getItem = bridge.function(TransformList.getItem, .{});
+    pub const initialize = bridge.function(TransformList.initialize, .{});
+    pub const insertItemBefore = bridge.function(TransformList.insertItemBefore, .{});
+    pub const removeItem = bridge.function(TransformList.removeItem, .{});
+    pub const replaceItem = bridge.function(TransformList.replaceItem, .{});
 };

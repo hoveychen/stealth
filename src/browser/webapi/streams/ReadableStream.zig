@@ -147,6 +147,18 @@ pub fn initWithData(data: []const u8, exec: *const Execution) !*ReadableStream {
     return stream;
 }
 
+/// The text half of `initWithData`: the chunk is a string rather than a
+/// Uint8Array, which is what `Blob.textStream()` and `Response.textStream()`
+/// hand out. Measured on Chrome 151 -- a `new Blob(['hi']).textStream()` reads
+/// one chunk whose value is the string "hi", and asking it for a BYOB reader
+/// is a TypeError, where `stream()` gives one.
+pub fn initWithText(text: []const u8, exec: *const Execution) !*ReadableStream {
+    const stream = try init(null, null, exec);
+    try stream._controller.enqueue(.{ .string = text });
+    try stream._controller.close();
+    return stream;
+}
+
 const GetReaderOptions = struct {
     mode: ?[]const u8 = null,
 };

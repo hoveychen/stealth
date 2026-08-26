@@ -69,6 +69,18 @@ pub fn get(self: *const Headers, name: []const u8, exec: *const Execution) !?[]c
     return try std.mem.join(exec.local_arena, ", ", all_values);
 }
 
+// https://fetch.spec.whatwg.org/#dom-headers-getsetcookie
+//
+// `get` joins repeated values with ", ", which is lossy for Set-Cookie because
+// a cookie's Expires attribute contains a comma of its own. This hands back one
+// entry per header line instead, which is the whole reason the operation
+// exists. Measured on Chrome 151: two appended lines read back as two entries
+// while `get('set-cookie')` still answers the joined string, and the name is
+// matched case-insensitively like every other Headers lookup.
+pub fn getSetCookie(self: *const Headers, exec: *const Execution) ![]const []const u8 {
+    return self._list.getAll(exec.local_arena, "set-cookie");
+}
+
 pub fn has(self: *const Headers, name: []const u8, exec: *const Execution) bool {
     const normalized_name = normalizeHeaderName(name, exec.buf);
     return self._list.has(normalized_name);
@@ -143,16 +155,19 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Declaration order is own-property order, and this is Chrome 151's own
+    // Object.getOwnPropertyNames(Headers.prototype).
     pub const constructor = bridge.constructor(Headers.init, .{});
     pub const append = bridge.function(Headers.append, .{});
     pub const delete = bridge.function(Headers.delete, .{});
     pub const get = bridge.function(Headers.get, .{});
+    pub const getSetCookie = bridge.function(Headers.getSetCookie, .{});
     pub const has = bridge.function(Headers.has, .{});
     pub const set = bridge.function(Headers.set, .{});
-    pub const keys = bridge.function(Headers.keys, .{});
-    pub const values = bridge.function(Headers.values, .{});
     pub const entries = bridge.function(Headers.entries, .{});
     pub const forEach = bridge.function(Headers.forEach, .{});
+    pub const keys = bridge.function(Headers.keys, .{});
+    pub const values = bridge.function(Headers.values, .{});
 };
 
 const testing = @import("../../../testing.zig");

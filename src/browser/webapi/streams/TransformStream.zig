@@ -191,6 +191,14 @@ pub const TransformStreamDefaultController = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
+        /// How much more the readable side would like. Zero: nothing here
+        /// applies backpressure through a transform, and Chrome reports 0 for a
+        /// controller taken from a `new TransformStream({start})` (measured).
+        pub const desiredSize = bridge.accessor(_desiredSize, null, .{});
+        fn _desiredSize(_: *TransformStreamDefaultController) ?f64 {
+            return 0;
+        }
+
         // Both arguments are optional in the IDL, the same as on
         // ReadableStreamDefaultController: Chrome 151 reports length 0 for both.
         pub const enqueue = bridge.function(TransformStreamDefaultController.enqueueValue, .{ .arity = 0 });

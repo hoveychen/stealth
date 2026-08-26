@@ -737,6 +737,13 @@ pub fn setOuterHTML(self: *Element, html: []const u8, frame: *Frame) !void {
 }
 
 pub fn getInnerHTML(self: *Element, writer: *std.Io.Writer, frame: *Frame) !void {
+    // A template's own childNodes are always empty; what it holds lives in its
+    // content fragment, and that is what `innerHTML` reads and writes. Chrome
+    // has no HTMLTemplateElement.prototype.innerHTML of its own (measured), so
+    // the redirect belongs here rather than on a second binding.
+    if (self.is(Html.Template)) |template| {
+        return dump.children(template._content.asNode(), .{ .shadow = .skip }, writer, frame);
+    }
     return dump.children(self.asNode(), .{ .shadow = .skip }, writer, frame);
 }
 
@@ -745,6 +752,10 @@ pub fn getHTML(self: *Element, opts: dump.Opts.Shadow.Declarative, writer: *std.
 }
 
 pub fn setInnerHTML(self: *Element, html: []const u8, frame: *Frame) !void {
+    // See getInnerHTML: a template parses into its content fragment.
+    if (self.is(Html.Template)) |template| {
+        return template.setInnerHTML(html, frame);
+    }
     const parent = self.asNode();
     return parent.setHTML(html, false, frame);
 }
@@ -1235,7 +1246,18 @@ pub fn getRelList(self: *Element, frame: *Frame) !*collections.DOMTokenList {
 
 // The other DOMTokenList-reflected attributes (class and rel have dedicated
 // lookups above).
-pub const TokenListAttribute = enum { sizes, sandbox, @"for", part, focusgroup };
+pub const TokenListAttribute = enum { sizes, sandbox, @"for", part, focusgroup, blocking, controlslist };
+
+/// The content attributes whose IDL member is an element reference rather than
+/// a string: `interestfor` and `commandfor`. Setting the IDL member does not
+/// write an id -- Chrome writes the attribute as the empty string and keeps the
+/// element itself, so a target with no id still reads back (measured:
+/// `b.commandForElement = div` leaves `getAttribute('commandfor')` as `""` and
+/// `b.commandForElement` as the div). That explicit reference lives here rather
+/// than in a field on each element type, the way a token list does.
+pub const ElementReferenceAttribute = enum { interestfor, commandfor };
+pub const ElementReferenceKey = struct { element: *Element, attribute: ElementReferenceAttribute };
+pub const ElementReferenceLookup = std.AutoHashMapUnmanaged(ElementReferenceKey, *Element);
 pub const EditContextLookup = std.AutoHashMapUnmanaged(*Element, *@import("EditContext.zig"));
 pub const TokenListKey = struct { element: *Element, attribute: TokenListAttribute };
 pub const TokenListLookup = std.AutoHashMapUnmanaged(TokenListKey, *collections.DOMTokenList);
@@ -1249,6 +1271,62 @@ pub fn getTokenList(self: *Element, comptime attribute: TokenListAttribute, fram
         });
     }
     return gop.value_ptr.*;
+}
+
+pub const NonceLookup = std.AutoHashMapUnmanaged(*Element, []const u8);
+
+// `nonce` is a slot, not a reflection of the content attribute -- there is one
+// storage and two writers, and only one of them touches the markup. Measured
+// on Chrome 151, on HTMLElement, SVGElement and MathMLElement alike:
+//
+//   el.nonce = 'abc'                  -> nonce 'abc', getAttribute null
+//   setAttribute('nonce', 'zzz')      -> nonce 'zzz', getAttribute 'zzz'
+//   nonce='abc' then setAttribute     -> nonce 'zzz' (the later write wins)
+//   ...then removeAttribute           -> nonce '',    getAttribute null
+//   cloneNode                         -> nonce '' unless an attribute came too
+//
+// A read-time rule over (slot, attribute) cannot tell the third line's end
+// state from the first's, which is why the attribute's writers reach in here
+// rather than the getter preferring the attribute. The one attribute writer
+// that does not is the parser, which fills a node's initial attributes without
+// running change reactions -- so an *unset* slot still falls back, and that is
+// what a parsed `<script nonce=...>` reads.
+pub fn getNonce(self: *Element, frame: *Frame) []const u8 {
+    if (frame._element_nonces.get(self)) |slot| return slot;
+    return self.getAttributeSafe(comptime .wrap("nonce")) orelse "";
+}
+
+pub fn setNonce(self: *Element, value: []const u8, frame: *Frame) !void {
+    return frame._element_nonces.put(frame.arena, self, try frame.dupeString(value));
+}
+
+// Called by Frame.attributeChange / attributeRemove for the `nonce` attribute:
+// a removal empties the slot rather than deleting it, matching the empty
+// string a never-written element answers.
+pub fn nonceAttributeChanged(self: *Element, value: []const u8, frame: *Frame) void {
+    frame._element_nonces.put(frame.arena, self, frame.dupeString(value) catch return) catch {};
+}
+
+pub fn getElementReference(self: *Element, comptime attribute: ElementReferenceAttribute, frame: *Frame) ?*Element {
+    if (frame._element_references.get(.{ .element = self, .attribute = attribute })) |explicit| {
+        // Same rule as popover's invoker target: the two have to share a root.
+        if (explicit.asNode().getRootNode(.{}) == self.asNode().getRootNode(.{})) {
+            return explicit;
+        }
+        return null;
+    }
+    const id = self.getAttributeSafe(comptime .wrap(@tagName(attribute))) orelse return null;
+    return frame.getElementByIdFromNode(self.asNode(), id);
+}
+
+pub fn setElementReference(self: *Element, comptime attribute: ElementReferenceAttribute, value: ?*Element, frame: *Frame) !void {
+    const name = comptime String.wrap(@tagName(attribute));
+    const target = value orelse {
+        _ = frame._element_references.remove(.{ .element = self, .attribute = attribute });
+        return self.removeAttribute(name, frame);
+    };
+    try frame._element_references.put(frame.arena, .{ .element = self, .attribute = attribute }, target);
+    return self.setAttributeSafe(name, .wrap(""), frame);
 }
 
 pub fn getDataset(self: *Element, frame: *Frame) !*DOMStringMap {
@@ -1384,7 +1462,7 @@ pub fn setHTML(self: *Element, html: []const u8, _: ?js.Object, frame: *Frame) !
     sanitizeTree(self.asNode(), frame);
 }
 
-fn sanitizeTree(root: *Node, frame: *Frame) void {
+pub fn sanitizeTree(root: *Node, frame: *Frame) void {
     var walker = @import("TreeWalker.zig").Full.init(root, .{});
     while (walker.next()) |node| {
         const element = node.is(Element) orelse continue;
@@ -3087,6 +3165,7 @@ pub const JsApi = struct {
     pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
     pub const onwebkitfullscreenchange = bridge.accessor(handlerAccessor(.onwebkitfullscreenchange).get, handlerAccessor(.onwebkitfullscreenchange).set, .{});
     pub const onwebkitfullscreenerror = bridge.accessor(handlerAccessor(.onwebkitfullscreenerror).get, handlerAccessor(.onwebkitfullscreenerror).set, .{});
+    pub const activeViewTransition = bridge.accessor(Element.getActiveViewTransition, null, .{});
     pub const role = bridge.accessor(reflectedAttribute("role").get, reflectedAttribute("role").set, .{ .ce_reactions = true });
     pub const ariaAtomic = bridge.accessor(reflectedAttribute("aria-atomic").get, reflectedAttribute("aria-atomic").set, .{ .ce_reactions = true });
     pub const ariaAutoComplete = bridge.accessor(reflectedAttribute("aria-autocomplete").get, reflectedAttribute("aria-autocomplete").set, .{ .ce_reactions = true });
@@ -3187,15 +3266,16 @@ pub const JsApi = struct {
     pub const setAttributeNodeNS = bridge.function(Element.setAttributeNode, .{ .ce_reactions = true });
     pub const setHTMLUnsafe = bridge.function(Element.setHTMLUnsafe, .{ .ce_reactions = true });
     pub const setPointerCapture = bridge.function(Element.setPointerCapture, .{ .arity = 1 });
+    pub const startViewTransition = bridge.function(Element.startViewTransition, .{});
     pub const toggleAttribute = bridge.function(Element.toggleAttribute, .{ .ce_reactions = true });
     pub const webkitMatchesSelector = bridge.function(Element.matches, .{});
     pub const webkitRequestFullScreen = bridge.function(Element.webkitRequestFullscreen, .{});
     pub const webkitRequestFullscreen = bridge.function(Element.webkitRequestFullscreen, .{});
     pub const currentCSSZoom = bridge.accessor(Element.getCurrentCSSZoom, null, .{});
     pub const customElementRegistry = bridge.accessor(Element.getCustomElementRegistry, null, .{});
-    pub const activeViewTransition = bridge.accessor(Element.getActiveViewTransition, null, .{});
     pub const ariaColIndexText = bridge.accessor(reflectedAttribute("aria-colindextext").get, reflectedAttribute("aria-colindextext").set, .{ .ce_reactions = true });
     pub const ariaRowIndexText = bridge.accessor(reflectedAttribute("aria-rowindextext").get, reflectedAttribute("aria-rowindextext").set, .{ .ce_reactions = true });
+    pub const ariaActionsElements = bridge.accessor(reflectedElements("aria-actions").get, reflectedElements("aria-actions").set, .{ .ce_reactions = true });
     pub const ariaActiveDescendantElement = bridge.accessor(reflectedElements("aria-activedescendant").get, reflectedElements("aria-activedescendant").set, .{ .ce_reactions = true });
     pub const ariaControlsElements = bridge.accessor(reflectedElements("aria-controls").get, reflectedElements("aria-controls").set, .{ .ce_reactions = true });
     pub const ariaDescribedByElements = bridge.accessor(reflectedElements("aria-describedby").get, reflectedElements("aria-describedby").set, .{ .ce_reactions = true });
@@ -3206,7 +3286,6 @@ pub const JsApi = struct {
     pub const ariaNotify = bridge.function(Element.ariaNotify, .{});
     pub const pseudo = bridge.function(Element.pseudo, .{});
     pub const setHTML = bridge.function(Element.setHTML, .{ .ce_reactions = true });
-    pub const startViewTransition = bridge.function(Element.startViewTransition, .{});
 };
 
 pub const Build = struct {

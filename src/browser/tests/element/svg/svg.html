@@ -64,3 +64,123 @@
   testing.expectEqual('rect', upper.querySelector('rect').tagName);
   testing.expectEqual('text', upper.querySelector('text').tagName);
 </script>
+
+<script id=svg_element_prototype_members>
+  {
+    const own = Object.getOwnPropertyNames(SVGElement.prototype);
+    // Chrome's order: the three SVG members, then the whole HTMLOrSVGElement /
+    // GlobalEventHandlers pile MathMLElement carries -- the two interfaces have
+    // an identical 113-name tail, measured.
+    testing.expectEqual('className,ownerSVGElement,viewportElement,onabort', own.slice(0, 4).join(','));
+    testing.expectEqual(
+      'dataset,nonce,autofocus,tabIndex,style,attributeStyleMap,blur,focus,' +
+      'onscrollsnapchange,onscrollsnapchanging,focusGroup,focusGroupStart,' +
+      'constructor,onpointerrawupdate',
+      own.slice(own.indexOf('dataset')).join(','));
+    testing.expectEqual(116, own.length);
+    testing.expectEqual(
+      Object.getOwnPropertyNames(MathMLElement.prototype).join(','),
+      own.slice(own.indexOf('onabort')).join(','));
+
+    testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(SVGElement.prototype, 'dataset').set);
+    testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(SVGElement.prototype, 'style').set);
+    const blur = Object.getOwnPropertyDescriptor(SVGElement.prototype, 'blur');
+    testing.expectEqual(0, blur.value.length);
+    testing.expectTrue(blur.writable);
+  }
+</script>
+
+<script id=svg_element_handlers>
+  {
+    const ns = 'http://www.w3.org/2000/svg';
+    const rect = document.createElementNS(ns, 'rect');
+    let hits = 0;
+    rect.onclick = () => { hits++; };
+    testing.expectEqual('function', typeof rect.onclick);
+    rect.dispatchEvent(new MouseEvent('click'));
+    testing.expectEqual(1, hits);
+    rect.onclick = null;
+    testing.expectEqual(null, rect.onclick);
+    rect.dispatchEvent(new MouseEvent('click'));
+    testing.expectEqual(1, hits);
+
+    // focusGroup is a DOMTokenList on all three element families, not the
+    // plain object it used to be here (measured on Chrome 151).
+    testing.expectEqual('DOMTokenList', rect.focusGroup.constructor.name);
+    testing.expectEqual('DOMTokenList', document.createElement('div').focusGroup.constructor.name);
+    testing.expectEqual('DOMTokenList', document.createElementNS('http://www.w3.org/1998/Math/MathML', 'mi').focusGroup.constructor.name);
+    testing.expectEqual(0, rect.focusGroup.length);
+    testing.expectEqual(true, rect.focusGroup === rect.focusGroup);
+
+    // <a> is the only SVG tag focusable by default, and unlike HTML's it does
+    // not need an href to be.
+    for (const t of ['svg', 'rect', 'g', 'text', 'foreignObject', 'use', 'image']) {
+      testing.expectEqual(-1, document.createElementNS(ns, t).tabIndex);
+    }
+    testing.expectEqual(0, document.createElementNS(ns, 'a').tabIndex);
+    const withHref = document.createElementNS(ns, 'a');
+    withHref.setAttribute('href', '#x');
+    testing.expectEqual(0, withHref.tabIndex);
+    const tabbed = document.createElementNS(ns, 'a');
+    tabbed.setAttribute('tabindex', '3');
+    testing.expectEqual(3, tabbed.tabIndex);
+    tabbed.setAttribute('tabindex', 'bogus');
+    testing.expectEqual(0, tabbed.tabIndex);
+  }
+</script>
+
+<script id=nonce_is_a_slot>
+  {
+    // One storage, two writers, and only one of them touches the markup.
+    // Measured on Chrome 151 for HTMLElement, SVGElement and MathMLElement.
+    const make = {
+      html: () => document.createElement('div'),
+      svg: () => document.createElementNS('http://www.w3.org/2000/svg', 'rect'),
+      math: () => document.createElementNS('http://www.w3.org/1998/Math/MathML', 'mi'),
+    };
+    for (const [family, create] of Object.entries(make)) {
+      let el = create();
+      testing.expectEqual('', el.nonce);
+      testing.expectEqual(null, el.getAttribute('nonce'), family);
+
+      el = create();
+      el.nonce = 'abc';
+      testing.expectEqual('abc', el.nonce, family);
+      testing.expectEqual(null, el.getAttribute('nonce'), family);
+      // ...so a clone, which copies attributes only, carries nothing.
+      testing.expectEqual('', el.cloneNode(false).nonce, family);
+
+      // The attribute feeds the same slot.
+      el = create();
+      el.setAttribute('nonce', 'zzz');
+      testing.expectEqual('zzz', el.nonce, family);
+
+      // Whichever wrote last wins.
+      el = create();
+      el.setAttribute('nonce', 'zzz');
+      el.nonce = 'abc';
+      testing.expectEqual('abc', el.nonce, family);
+      testing.expectEqual('zzz', el.getAttribute('nonce'), family);
+
+      el = create();
+      el.nonce = 'abc';
+      el.setAttribute('nonce', 'zzz');
+      testing.expectEqual('zzz', el.nonce, family);
+
+      // Removing the attribute empties the slot, whatever the IDL had put there.
+      el = create();
+      el.nonce = 'abc';
+      el.setAttribute('nonce', 'zzz');
+      el.removeAttribute('nonce');
+      testing.expectEqual('', el.nonce, family);
+      testing.expectEqual(null, el.getAttribute('nonce'), family);
+    }
+
+    // DOMString, not [LegacyNullToEmptyString].
+    const d = document.createElement('div');
+    d.nonce = 42;
+    testing.expectEqual('42', d.nonce);
+    d.nonce = null;
+    testing.expectEqual('null', d.nonce);
+  }
+</script>

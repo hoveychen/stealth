@@ -113,9 +113,9 @@ pub const JsApi = struct {
     // The init dictionary carries a required `promise`, so Chrome counts two
     // arguments (measured).
     pub const constructor = bridge.constructor(PromiseRejectionEvent.init, .{ .arity = 2 });
+    pub const promise = bridge.accessor(PromiseRejectionEvent.getPromise, null, .{});
     // An absent `reason` reads back as undefined, not null (measured).
     pub const reason = bridge.accessor(PromiseRejectionEvent.getReason, null, .{ .null_as_undefined = true });
-    pub const promise = bridge.accessor(PromiseRejectionEvent.getPromise, null, .{});
 };
 
 const testing = @import("../../../testing.zig");

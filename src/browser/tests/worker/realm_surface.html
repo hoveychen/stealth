@@ -31,16 +31,38 @@ in results/probes/expr-worker-surface.chrome.json).
       // all: it is absent, not false.
       testing.expectEqual('', data.window_only_in_navigator);
 
-      // Chrome's WorkerNavigator.prototype, minus the ones this engine cannot
-      // serve without a Frame (connection, hid, mediaCapabilities, serial, usb,
-      // locks). `gpu` and `storageBuckets` are here because the only thing
-      // either service wanted a Frame for was the object factory, which every
-      // Execution carries.
+      // Chrome's WorkerNavigator.prototype, whole. The six that used to be
+      // missing here -- connection, hid, mediaCapabilities, serial, usb, locks
+      // -- wanted a Frame only for the object factory, which every Execution
+      // carries, same as `gpu` and `storageBuckets` before them.
       testing.expectEqual(
-        'appCodeName,appName,appVersion,constructor,deviceMemory,gpu,hardwareConcurrency,' +
-        'language,languages,onLine,permissions,platform,product,storage,storageBuckets,' +
-        'userAgent,userAgentData',
+        'appCodeName,appName,appVersion,connection,constructor,deviceMemory,gpu,' +
+        'hardwareConcurrency,hid,language,languages,locks,mediaCapabilities,onLine,' +
+        'permissions,platform,product,serial,storage,storageBuckets,usb,userAgent,' +
+        'userAgentData',
         data.wn_proto_own);
+
+      // And in Chrome's own declaration order, which is not alphabetical.
+      // `constructor` is filtered out on both sides: Chrome puts it between
+      // `connection` and `hid`, this engine's bridge puts it after the declared
+      // members, and that is a property of every interface here rather than of
+      // this one.
+      testing.expectEqual(
+        'hardwareConcurrency,appCodeName,appName,appVersion,platform,product,userAgent,' +
+        'language,languages,onLine,connection,hid,mediaCapabilities,permissions,' +
+        'serial,usb,deviceMemory,userAgentData,locks,storage,gpu,storageBuckets',
+        data.wn_proto_order);
+
+      // Each answers with the same interface it does in a Window realm.
+      testing.expectEqual(
+        'connection=[object NetworkInformation] hid=[object HID] ' +
+        'mediaCapabilities=[object MediaCapabilities] serial=[object Serial] ' +
+        'usb=[object USB] locks=[object LockManager]',
+        data.wn_services);
+      // The same four values the Window realm reports: one network, one reading.
+      testing.expectEqual('4g/100/1.45/false', data.wn_connection);
+      testing.expectEqual(true, data.wn_connection_stable);
+      testing.expectEqual(true, data.wn_connection_is_event_target);
 
       // An unnamed worker's name is the empty string, and it is own on the
       // global because `name` is DedicatedWorkerGlobalScope's own member.

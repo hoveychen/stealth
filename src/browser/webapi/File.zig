@@ -119,6 +119,21 @@ pub fn getLastModified(self: *const File) f64 {
     return @floatFromInt(self._last_modified);
 }
 
+/// The same instant as `lastModified`, as a Date. Chrome still carries this
+/// legacy pair on File.prototype (measured: a File made with
+/// `lastModified: 1234567890000` answers a Date whose ISO form is
+/// 2009-02-13T23:31:30.000Z).
+pub fn getLastModifiedDate(self: *const File, exec: *const js.Execution) !js.Value {
+    return exec.js.local.?.newDate(self.getLastModified());
+}
+
+/// The path a directory picker would have given the file. Always empty: no
+/// picker here fills one in, and Chrome answers "" for a constructed File too
+/// (measured).
+pub fn getWebkitRelativePath(_: *const File) []const u8 {
+    return "";
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(File);
 
@@ -133,6 +148,8 @@ pub const JsApi = struct {
     pub const constructor = bridge.constructor(File.init, .{ .arity = 2 });
     pub const name = bridge.accessor(File.getName, null, .{});
     pub const lastModified = bridge.accessor(File.getLastModified, null, .{});
+    pub const lastModifiedDate = bridge.accessor(File.getLastModifiedDate, null, .{});
+    pub const webkitRelativePath = bridge.accessor(File.getWebkitRelativePath, null, .{});
 };
 
 const testing = @import("../../testing.zig");

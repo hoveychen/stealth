@@ -319,3 +319,66 @@
     testing.expectEqual(true, video.paused);
   }
 </script>
+
+<script id="media_members_a_sensor_reads">
+  {
+    // Every default here is measured on a headed Chrome 151
+    // (tools/fingerprint/probes/expr-read-path-members.js). The interstitial
+    // this work is aimed at reads canPlayType twelve times per round, which is
+    // a walk over this prototype.
+    const v = document.createElement('video');
+    testing.expectEqual(1, v.defaultPlaybackRate);
+    testing.expectEqual(true, v.preservesPitch);
+    testing.expectEqual(0, v.webkitAudioDecodedByteCount);
+    testing.expectEqual(0, v.webkitVideoDecodedByteCount);
+    testing.expectEqual(null, v.srcObject);
+    testing.expectEqual('', v.sinkId);
+    // A media element's missing-value default is `eager`; an iframe's is
+    // `auto` (see frames/iframe_members.html).
+    testing.expectEqual('eager', v.loading);
+    v.loading = 'lazy';
+    testing.expectEqual('lazy', v.loading);
+    testing.expectEqual('lazy', v.getAttribute('loading'));
+
+    // defaultPlaybackRate does not move playbackRate.
+    v.defaultPlaybackRate = 2.5;
+    testing.expectEqual(2.5, v.defaultPlaybackRate);
+    testing.expectEqual(1, v.playbackRate);
+
+    // preservesPitch is a slot, not a reflection: nothing lands in the markup.
+    v.preservesPitch = false;
+    testing.expectEqual(false, v.preservesPitch);
+    testing.expectEqual(null, v.getAttribute('preservespitch'));
+
+    testing.expectEqual('DOMTokenList', v.controlsList.constructor.name);
+    testing.expectEqual(0, v.controlsList.length);
+    testing.expectEqual(true, v.controlsList === v.controlsList);
+    v.controlsList = 'nodownload';
+    testing.expectEqual('nodownload', v.getAttribute('controlslist'));
+
+    testing.expectEqual('MediaStream', v.captureStream().constructor.name);
+    testing.expectEqual(0, v.captureStream.length);
+    testing.expectEqual(1, v.setSinkId.length);
+  }
+</script>
+
+<script id="media_set_sink_id" type=module>
+  {
+    // The empty string is the default device and resolves; anything else is a
+    // device this engine does not have, and the rejection carries Blink's own
+    // sentence.
+    const v = document.createElement('video');
+    const state = await testing.async();
+    const seen = [];
+    v.setSinkId('')
+      .then(() => seen.push('resolved:' + v.sinkId))
+      .then(() => v.setSinkId('bogus'))
+      .then(() => seen.push('unexpectedly resolved'), (e) => seen.push(e.name + '|' + e.message))
+      .then(() => state.resolve(seen));
+
+    await state.done((s) => {
+      testing.expectEqual('resolved:', s[0]);
+      testing.expectEqual('NotFoundError|Requested device not found', s[1]);
+    });
+  }
+</script>

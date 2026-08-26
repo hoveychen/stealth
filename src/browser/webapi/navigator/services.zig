@@ -861,6 +861,10 @@ pub const StorageBucket = struct {
 
         pub const Meta = struct {
             pub const name = "StorageBucket";
+            // Chrome's `constructor` sits here rather than last; the members
+            // below it are the ones Blink installs per context. See
+            // Snapshot.moveConstructorSlots.
+            pub const constructor_after = "setExpires";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -873,7 +877,7 @@ pub const StorageBucket = struct {
         pub const getDirectory = bridge.function(StorageBucket.getDirectory, .{});
         pub const persisted = bridge.function(StorageBucket.persisted, .{});
         pub const setExpires = bridge.function(StorageBucket.setExpires, .{});
-        pub const persist = bridge.function(StorageBucket.persist, .{});
+        pub const persist = bridge.function(StorageBucket.persist, .{ .exposed = .window });
     };
 };
 

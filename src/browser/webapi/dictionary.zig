@@ -277,6 +277,23 @@ fn DictionaryWithPrefix(comptime prefix: []const u8, comptime dict: []const u8, 
             return matchEnum(name, idl, allowed, member, exec);
         }
 
+        /// A *required* enumeration member: absent is the required-member
+        /// refusal, present but unknown is the invalid-enum one. Reading order
+        /// matters, and it is the dictionary's own declaration order rather
+        /// than the caller's: `xhr.setPrivateToken({operation: 'nope'})`
+        /// answers about `operation` even though `version` is missing too
+        /// (measured on Chrome 151).
+        pub fn requiredEnum(
+            self: Self,
+            comptime name: []const u8,
+            comptime idl: []const u8,
+            comptime allowed: []const []const u8,
+            exec: *const Execution,
+        ) ![]const u8 {
+            const member = try self.required(name, exec);
+            return (try matchEnum(name, idl, allowed, member, exec)).?;
+        }
+
         /// A *nullable* enumeration member (`VideoColorPrimaries?`): an explicit
         /// `null` stays null instead of being stringified into an
         /// invalid-enum error. Measured on a headed Chrome 150:

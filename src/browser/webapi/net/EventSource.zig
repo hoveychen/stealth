@@ -579,22 +579,20 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(EventSource.init, .{});
-
-    pub const CONNECTING = bridge.property(@intFromEnum(ReadyState.connecting), .{ .template = true });
-    pub const OPEN = bridge.property(@intFromEnum(ReadyState.open), .{ .template = true });
-    pub const CLOSED = bridge.property(@intFromEnum(ReadyState.closed), .{ .template = true });
-
     pub const url = bridge.accessor(EventSource.getUrl, null, .{});
-    pub const readyState = bridge.accessor(EventSource.getReadyState, null, .{});
     pub const withCredentials = bridge.accessor(EventSource.getWithCredentials, null, .{});
+    pub const readyState = bridge.accessor(EventSource.getReadyState, null, .{});
+    pub const onopen = bridge.accessor(handler(.onopen).get, handler(.onopen).set, .{});
+    pub const onmessage = bridge.accessor(handler(.onmessage).get, handler(.onmessage).set, .{});
+    pub const onerror = bridge.accessor(handler(.onerror).get, handler(.onerror).set, .{});
 
     fn handler(comptime which: @import("../global_event_handlers.zig").Handler) type {
         return @import("../handler_property.zig").accessors(EventSource, which);
     }
 
-    pub const onopen = bridge.accessor(handler(.onopen).get, handler(.onopen).set, .{});
-    pub const onmessage = bridge.accessor(handler(.onmessage).get, handler(.onmessage).set, .{});
-    pub const onerror = bridge.accessor(handler(.onerror).get, handler(.onerror).set, .{});
+    pub const CONNECTING = bridge.property(@intFromEnum(ReadyState.connecting), .{ .template = true });
+    pub const OPEN = bridge.property(@intFromEnum(ReadyState.open), .{ .template = true });
+    pub const CLOSED = bridge.property(@intFromEnum(ReadyState.closed), .{ .template = true });
 
     pub const close = bridge.function(EventSource.close, .{});
 };

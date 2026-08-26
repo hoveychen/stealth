@@ -1,2 +1,11 @@
 <!DOCTYPE html>
-<a href="support/after_link.html" id=link>a link</a>
+<!--
+`after_link.html` sits next to this file, so the href is a bare filename: this
+document's address is `frames/support/with_link.html`, and a link inside a frame
+resolves against the frame's own document, not the parent's. Measured on Chrome
+151 with the old `support/after_link.html`: `a.href` reads
+`frames/support/support/after_link.html`, i.e. a 404. That spelling only ever
+worked here because clicking it resolved the navigation against the *parent*
+frame's base.
+-->
+<a href="after_link.html" id=link>a link</a>

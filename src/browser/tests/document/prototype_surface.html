@@ -330,8 +330,10 @@
     testing.expectEqual('function', typeof window.ViewTransitionTypeSet);
     const vt = document.startViewTransition();
     testing.expectEqual('ViewTransition', vt.constructor.name);
-    testing.expectEqual(['finished', 'ready', 'updateCallbackDone', 'types', 'skipTransition',
-                         'transitionRoot', 'waitUntil', 'constructor'],
+    // Chrome 151's own order, re-measured: transitionRoot before
+    // skipTransition, not after (probes/expr-constructor-slot.js).
+    testing.expectEqual(['finished', 'ready', 'updateCallbackDone', 'types', 'transitionRoot',
+                         'skipTransition', 'waitUntil', 'constructor'],
                         Object.getOwnPropertyNames(ViewTransition.prototype));
     testing.expectEqual('HTMLHtmlElement', vt.transitionRoot.constructor.name);
     testing.expectEqual(1, vt.waitUntil.length);
@@ -447,10 +449,10 @@
   {
     // The whole of Document.prototype, in order. Declaration order is
     // own-property order, and own-property order is itself a fingerprint, so
-    // this is Chrome 150's list verbatim with one documented exception:
-    // Blink emits `constructor` in the middle of the run (right after writeln,
-    // before the runtime-enabled tail), while V8 always appends it. Everything
-    // else lines up name for name.
+    // this is Chrome 150's list verbatim -- `constructor` included, which sits
+    // right after writeln and ahead of the runtime-enabled tail. V8 appends
+    // its own entry last; Snapshot.moveConstructorSlots puts the tail back
+    // behind it (Meta.constructor_after on Document's JsApi).
     const expected = [
       'implementation', 'URL', 'documentURI', 'compatMode', 'characterSet', 'charset',
       'inputEncoding', 'contentType', 'doctype', 'documentElement', 'xmlEncoding',
@@ -501,9 +503,9 @@
       'queryCommandSupported', 'queryCommandValue', 'querySelector', 'querySelectorAll',
       'releaseEvents', 'replaceChildren', 'requestStorageAccess', 'requestStorageAccessFor',
       'startViewTransition', 'webkitCancelFullScreen', 'webkitExitFullscreen', 'write',
-      'writeln', 'fragmentDirective', 'onpointerrawupdate', 'browsingTopics',
+      'writeln', 'constructor', 'fragmentDirective', 'onpointerrawupdate', 'browsingTopics',
       'hasPrivateToken', 'hasRedemptionRecord', 'activeViewTransition', 'onscrollsnapchange',
-      'onscrollsnapchanging', 'customElementRegistry', 'ariaNotify', 'constructor'
+      'onscrollsnapchanging', 'customElementRegistry', 'ariaNotify'
     ];
     testing.expectEqual(expected, Object.getOwnPropertyNames(Document.prototype));
   }

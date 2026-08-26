@@ -267,8 +267,8 @@ pub const EntryList = struct {
         };
 
         pub const getEntries = bridge.function(EntryList.getEntries, .{});
-        pub const getEntriesByType = bridge.function(EntryList.getEntriesByType, .{});
         pub const getEntriesByName = bridge.function(EntryList.getEntriesByName, .{});
+        pub const getEntriesByType = bridge.function(EntryList.getEntriesByType, .{});
     };
 };
 

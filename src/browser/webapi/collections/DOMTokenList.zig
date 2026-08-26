@@ -323,8 +323,8 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const length = bridge.accessor(DOMTokenList.length, null, .{});
-    pub const item = bridge.function(_item, .{});
+    pub const entries = bridge.function(DOMTokenList.entries, .{});
+    pub const keys = bridge.function(DOMTokenList.keys, .{});
     fn _item(self: *const DOMTokenList, index: i32, frame: *Frame) !?[]const u8 {
         if (index < 0) {
             return null;
@@ -332,19 +332,19 @@ pub const JsApi = struct {
         return self.item(@intCast(index), frame);
     }
 
-    pub const contains = bridge.function(DOMTokenList.contains, .{});
-    pub const supports = bridge.function(DOMTokenList.supports, .{});
-    pub const add = bridge.function(DOMTokenList.add, .{ .ce_reactions = true, .arity = 0 });
-    pub const remove = bridge.function(DOMTokenList.remove, .{ .ce_reactions = true, .arity = 0 });
-    pub const toggle = bridge.function(DOMTokenList.toggle, .{ .ce_reactions = true });
-    pub const replace = bridge.function(DOMTokenList.replace, .{ .ce_reactions = true });
-    pub const value = bridge.accessor(DOMTokenList.getValue, DOMTokenList.setValue, .{ .ce_reactions = true });
-    pub const toString = bridge.function(DOMTokenList.getValue, .{});
-    pub const keys = bridge.function(DOMTokenList.keys, .{});
     pub const values = bridge.function(DOMTokenList.values, .{});
-    pub const entries = bridge.function(DOMTokenList.entries, .{});
-    pub const symbol_iterator = bridge.iterator(DOMTokenList.values, .{});
     pub const forEach = bridge.function(DOMTokenList.forEach, .{});
+    pub const length = bridge.accessor(DOMTokenList.length, null, .{});
+    pub const value = bridge.accessor(DOMTokenList.getValue, DOMTokenList.setValue, .{ .ce_reactions = true });
+    pub const add = bridge.function(DOMTokenList.add, .{ .ce_reactions = true, .arity = 0 });
+    pub const contains = bridge.function(DOMTokenList.contains, .{});
+    pub const item = bridge.function(_item, .{});
+    pub const remove = bridge.function(DOMTokenList.remove, .{ .ce_reactions = true, .arity = 0 });
+    pub const replace = bridge.function(DOMTokenList.replace, .{ .ce_reactions = true });
+    pub const supports = bridge.function(DOMTokenList.supports, .{});
+    pub const toggle = bridge.function(DOMTokenList.toggle, .{ .ce_reactions = true });
+    pub const symbol_iterator = bridge.iterator(DOMTokenList.values, .{});
+    pub const toString = bridge.function(DOMTokenList.getValue, .{});
     pub const @"[]" = bridge.indexed(DOMTokenList.item, getIndexes, .{ .null_as_undefined = true });
 
     /// Web IDL: an indexed property getter makes the indices *own* properties,

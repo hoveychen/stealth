@@ -70,8 +70,9 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const toString = bridge.function(WorkerLocation.toString, .{});
-    pub const href = bridge.accessor(WorkerLocation.toString, null, .{});
+    // Chrome's own-property order, measured in a blob worker: the URL
+    // decomposition members first, `href` and `toString` last -- the reverse of
+    // where they were declared here.
     pub const origin = bridge.accessor(WorkerLocation.getOrigin, null, .{});
     pub const protocol = bridge.accessor(WorkerLocation.getProtocol, null, .{});
     pub const host = bridge.accessor(WorkerLocation.getHost, null, .{});
@@ -80,4 +81,6 @@ pub const JsApi = struct {
     pub const pathname = bridge.accessor(WorkerLocation.getPathname, null, .{});
     pub const search = bridge.accessor(WorkerLocation.getSearch, null, .{});
     pub const hash = bridge.accessor(WorkerLocation.getHash, null, .{});
+    pub const href = bridge.accessor(WorkerLocation.toString, null, .{});
+    pub const toString = bridge.function(WorkerLocation.toString, .{});
 };

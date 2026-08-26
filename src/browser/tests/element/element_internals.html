@@ -21,7 +21,7 @@
     Object.getOwnPropertyNames(ElementInternals).filter((k) => !['length', 'name', 'prototype'].includes(k)),
   );
 
-  // The 62 prototype members, in Chrome's own order.
+  // The 63 prototype members, in Chrome's own order.
   const getterOnly = ['form', 'willValidate', 'validity', 'validationMessage', 'labels', 'states', 'shadowRoot'];
   const accessors = ['role',
     'ariaAtomic', 'ariaAutoComplete', 'ariaBusy', 'ariaBrailleLabel', 'ariaBrailleRoleDescription',
@@ -32,7 +32,7 @@
     'ariaRequired', 'ariaRoleDescription', 'ariaRowCount', 'ariaRowIndex', 'ariaRowSpan', 'ariaSelected',
     'ariaSetSize', 'ariaSort', 'ariaValueMax', 'ariaValueMin', 'ariaValueNow', 'ariaValueText'];
   const methods = [['checkValidity', 0], ['reportValidity', 0], ['setFormValue', 1], ['setValidity', 1]];
-  const tail = ['ariaColIndexText', 'ariaRowIndexText', 'ariaActiveDescendantElement',
+  const tail = ['ariaColIndexText', 'ariaRowIndexText', 'ariaActionsElements', 'ariaActiveDescendantElement',
     'ariaControlsElements', 'ariaDescribedByElements', 'ariaDetailsElements',
     'ariaErrorMessageElements', 'ariaFlowToElements', 'ariaLabelledByElements'];
 
@@ -42,7 +42,7 @@
     .concat(tail)
     .concat(['constructor']);
   testing.expectEqual(expected, Object.getOwnPropertyNames(ElementInternals.prototype));
-  testing.expectEqual(62, expected.length - 1);
+  testing.expectEqual(63, expected.length - 1);
 
   for (const name of getterOnly) {
     const d = Object.getOwnPropertyDescriptor(ElementInternals.prototype, name);

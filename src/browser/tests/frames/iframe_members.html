@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<div id="host"></div>
+
+<!--
+The eleven members HTMLIFrameElement.prototype was short. The interstitial this
+work is aimed at reads `contentWindow` eighteen times and `contentDocument`
+three times per round, so the walk that finds them walks this whole list -- and
+until this pass it was both short and in the wrong order.
+
+Every default below is measured on a headed Chrome 151
+(tools/fingerprint/probes/expr-read-path-members.js), not derived from the IDL.
+-->
+
+<script id="iframe_defaults">
+  {
+    const f = document.createElement('iframe');
+    testing.expectEqual('', f.csp);
+    testing.expectEqual('', f.allow);
+    testing.expectEqual('', f.privateToken);
+    testing.expectEqual(false, f.credentialless);
+    testing.expectEqual(false, f.allowPaymentRequest);
+    testing.expectEqual(false, f.browsingTopics);
+    testing.expectEqual(false, f.adAuctionHeaders);
+    testing.expectEqual(false, f.sharedStorageWritable);
+
+    // An iframe's missing-value default is `auto`. A media element's is
+    // `eager` -- same attribute name, different default (see media.html).
+    testing.expectEqual('auto', f.loading);
+  }
+</script>
+
+<script id="iframe_loading_keywords">
+  {
+    const f = document.createElement('iframe');
+    f.loading = 'LAZY';
+    testing.expectEqual('lazy', f.loading);
+    f.loading = 'bogus';
+    // An unknown keyword reads back as the invalid-value default while the
+    // content attribute keeps whatever was written.
+    testing.expectEqual('auto', f.loading);
+    testing.expectEqual('bogus', f.getAttribute('loading'));
+    f.loading = 'eager';
+    testing.expectEqual('eager', f.loading);
+  }
+</script>
+
+<script id="iframe_reflections">
+  {
+    const f = document.createElement('iframe');
+    f.csp = 'script-src x';
+    testing.expectEqual('script-src x', f.getAttribute('csp'));
+    f.allow = 'camera';
+    testing.expectEqual('camera', f.getAttribute('allow'));
+    f.privateToken = 'tok';
+    testing.expectEqual('tok', f.getAttribute('privatetoken'));
+    // The boolean ones write the empty string, not "true".
+    f.credentialless = true;
+    testing.expectEqual('', f.getAttribute('credentialless'));
+    f.browsingTopics = true;
+    testing.expectEqual('', f.getAttribute('browsingtopics'));
+    f.sharedStorageWritable = true;
+    testing.expectEqual('', f.getAttribute('sharedstoragewritable'));
+    f.adAuctionHeaders = true;
+    testing.expectEqual('', f.getAttribute('adauctionheaders'));
+    f.allowPaymentRequest = true;
+    testing.expectEqual('', f.getAttribute('allowpaymentrequest'));
+  }
+</script>
+
+<script id="iframe_feature_policy_and_svg_document">
+  {
+    const f = document.createElement('iframe');
+    testing.expectEqual('FeaturePolicy', f.featurePolicy.constructor.name);
+    // Chrome hands back the same object every time.
+    testing.expectEqual(true, f.featurePolicy === f.featurePolicy);
+
+    // null whether or not the element is in the document.
+    testing.expectEqual(null, f.getSVGDocument());
+    testing.expectEqual(0, f.getSVGDocument.length);
+    document.getElementById('host').appendChild(f);
+    testing.expectEqual(null, f.getSVGDocument());
+    f.remove();
+  }
+</script>

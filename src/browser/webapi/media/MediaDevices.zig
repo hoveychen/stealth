@@ -212,9 +212,9 @@ pub const MediaDeviceInfo = struct {
         };
 
         pub const deviceId = bridge.accessor(MediaDeviceInfo.getDeviceId, null, .{});
-        pub const groupId = bridge.accessor(MediaDeviceInfo.getGroupId, null, .{});
         pub const kind = bridge.accessor(MediaDeviceInfo.getKind, null, .{});
         pub const label = bridge.accessor(MediaDeviceInfo.getLabel, null, .{});
+        pub const groupId = bridge.accessor(MediaDeviceInfo.getGroupId, null, .{});
         pub const toJSON = bridge.function(MediaDeviceInfo.toJSON, .{});
     };
 };
@@ -255,12 +255,12 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const ondevicechange = bridge.accessor(handlerProperty(MediaDevices, .ondevicechange).get, handlerProperty(MediaDevices, .ondevicechange).set, .{});
     pub const enumerateDevices = bridge.function(MediaDevices.enumerateDevices, .{});
+    pub const getSupportedConstraints = bridge.function(MediaDevices.getSupportedConstraints, .{});
     pub const getUserMedia = bridge.function(MediaDevices.getUserMedia, .{});
     pub const getDisplayMedia = bridge.function(MediaDevices.getDisplayMedia, .{});
-    pub const getSupportedConstraints = bridge.function(MediaDevices.getSupportedConstraints, .{});
     pub const setCaptureHandleConfig = bridge.function(MediaDevices.setCaptureHandleConfig, .{});
-    pub const ondevicechange = bridge.accessor(handlerProperty(MediaDevices, .ondevicechange).get, handlerProperty(MediaDevices, .ondevicechange).set, .{});
 };
 
 const testing = @import("../../../testing.zig");

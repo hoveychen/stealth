@@ -55,11 +55,11 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(OL);
-    pub const compact = reflect.boolean("compact");
+    pub const reversed = reflect.boolean("reversed");
 
     pub const start = reflect.long("start", 1);
-    pub const reversed = reflect.boolean("reversed");
     pub const @"type" = bridge.accessor(OL.getType, OL.setType, .{ .ce_reactions = true });
+    pub const compact = reflect.boolean("compact");
 };
 
 const testing = @import("../../../../testing.zig");

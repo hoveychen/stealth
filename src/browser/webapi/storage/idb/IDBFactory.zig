@@ -385,6 +385,15 @@ const DeleteContext = struct {
     }
 };
 
+/// Resolves with the origin's database list. Empty: the engine's databases
+/// live in a per-origin sqlite file it does not enumerate, and the list is
+/// empty for a fresh origin in Chrome too. Being *absent* is the tell -- the
+/// name is on Chrome's prototype (measured).
+pub fn databases(_: *IDBFactory, exec: *Execution) !js.Promise {
+    const empty: []const struct {} = &.{};
+    return exec.js.local.?.resolvePromise(empty);
+}
+
 pub fn cmp(_: *IDBFactory, first: js.Value, second: js.Value, exec: *Execution) !i32 {
     const a = try Key.encodeValue(exec.call_arena, first);
     const b = try Key.encodeValue(exec.call_arena, second);
@@ -405,7 +414,9 @@ pub const JsApi = struct {
         pub const empty_with_no_proto = true;
     };
 
-    pub const open = bridge.function(IDBFactory.open, .{});
-    pub const deleteDatabase = bridge.function(IDBFactory.deleteDatabase, .{});
+    // Chrome's order.
     pub const cmp = bridge.function(IDBFactory.cmp, .{});
+    pub const databases = bridge.function(IDBFactory.databases, .{});
+    pub const deleteDatabase = bridge.function(IDBFactory.deleteDatabase, .{});
+    pub const open = bridge.function(IDBFactory.open, .{});
 };

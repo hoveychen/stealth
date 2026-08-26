@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const std = @import("std");
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const Viewport = @import("../Viewport.zig");
@@ -114,6 +115,10 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "Screen";
+        // Chrome's `constructor` sits here rather than last; the members
+        // below it are the ones Blink installs per context. See
+        // Snapshot.moveConstructorSlots.
+        pub const constructor_after = "orientation";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
@@ -160,6 +165,38 @@ pub const Orientation = struct {
         return "landscape-primary";
     }
 
+    /// The six OrientationLockType keywords plus `any` and `natural`. Both
+    /// failure modes are *rejections*, not throws: Chrome hands back a Promise
+    /// for every call, including one with no argument at all, and rejects it
+    /// (measured -- a first reading with `await` around the call could not
+    /// tell the two apart, and the plausible answer was the wrong one). A
+    /// value inside the set rejects too, because a desktop screen is not
+    /// lockable. Both sentences are Blink's; the arity one comes from the
+    /// bridge.
+    const lock_types = [_][]const u8{
+        "any",              "natural",            "landscape",         "portrait",
+        "portrait-primary", "portrait-secondary", "landscape-primary", "landscape-secondary",
+    };
+
+    pub fn lock(_: *Orientation, orientation: []const u8, frame: *Frame) !js.Promise {
+        for (lock_types) |candidate| {
+            if (std.mem.eql(u8, candidate, orientation)) {
+                return frame.js.local.?.rejectPromise(.{ .dom_exception = .{
+                    .err = error.NotSupported,
+                    .message = "screen.orientation.lock() is not available on this device.",
+                } });
+            }
+        }
+        return frame.js.fail(error.TypeError, try std.fmt.allocPrint(
+            frame.call_arena,
+            "Failed to execute 'lock' on 'ScreenOrientation': The provided value '{s}' is not a valid enum value of type OrientationLockType.",
+            .{orientation},
+        ));
+    }
+
+    /// Returns undefined, not a promise (measured).
+    pub fn unlock(_: *Orientation) void {}
+
     pub const JsApi = struct {
         pub const bridge = js.Bridge(Orientation);
 
@@ -171,5 +208,8 @@ pub const Orientation = struct {
 
         pub const angle = bridge.accessor(Orientation.getAngle, null, .{});
         pub const @"type" = bridge.accessor(Orientation.getType, null, .{});
+        pub const onchange = bridge.accessor(handlerProperty(Orientation, .onchange).get, handlerProperty(Orientation, .onchange).set, .{});
+        pub const lock = bridge.function(Orientation.lock, .{});
+        pub const unlock = bridge.function(Orientation.unlock, .{});
     };
 };

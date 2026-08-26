@@ -849,38 +849,49 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const constructor = bridge.constructor(Range.init, .{});
+
+    // Chrome's order: commonAncestorContainer, the four constants, then the
+    // methods alphabetically.
+    pub const commonAncestorContainer = bridge.accessor(Range.getCommonAncestorContainer, null, .{});
+
     // Constants for compareBoundaryPoints
     pub const START_TO_START = bridge.property(0, .{ .template = true });
     pub const START_TO_END = bridge.property(1, .{ .template = true });
     pub const END_TO_END = bridge.property(2, .{ .template = true });
     pub const END_TO_START = bridge.property(3, .{ .template = true });
-
-    pub const constructor = bridge.constructor(Range.init, .{});
-    pub const commonAncestorContainer = bridge.accessor(Range.getCommonAncestorContainer, null, .{});
-    pub const setStart = bridge.function(Range.setStart, .{});
-    pub const setEnd = bridge.function(Range.setEnd, .{});
-    pub const setStartBefore = bridge.function(Range.setStartBefore, .{});
-    pub const setStartAfter = bridge.function(Range.setStartAfter, .{});
-    pub const setEndBefore = bridge.function(Range.setEndBefore, .{});
-    pub const setEndAfter = bridge.function(Range.setEndAfter, .{});
-    pub const selectNode = bridge.function(Range.selectNode, .{});
-    pub const selectNodeContents = bridge.function(Range.selectNodeContents, .{});
+    pub const cloneContents = bridge.function(Range.cloneContents, .{ .ce_reactions = true });
+    pub const cloneRange = bridge.function(Range.cloneRange, .{});
     pub const collapse = bridge.function(Range.collapse, .{});
-    pub const detach = bridge.function(Range.detach, .{});
     pub const compareBoundaryPoints = bridge.function(Range.compareBoundaryPoints, .{});
     pub const comparePoint = bridge.function(Range.comparePoint, .{});
-    pub const isPointInRange = bridge.function(Range.isPointInRange, .{});
-    pub const intersectsNode = bridge.function(Range.intersectsNode, .{});
-    pub const cloneRange = bridge.function(Range.cloneRange, .{});
-    pub const insertNode = bridge.function(Range.insertNode, .{ .ce_reactions = true });
-    pub const deleteContents = bridge.function(Range.deleteContents, .{ .ce_reactions = true });
-    pub const cloneContents = bridge.function(Range.cloneContents, .{ .ce_reactions = true });
-    pub const extractContents = bridge.function(Range.extractContents, .{ .ce_reactions = true });
-    pub const surroundContents = bridge.function(Range.surroundContents, .{ .ce_reactions = true });
     pub const createContextualFragment = bridge.function(Range.createContextualFragment, .{ .ce_reactions = true });
-    pub const toString = bridge.function(Range.toString, .{});
+    pub const deleteContents = bridge.function(Range.deleteContents, .{ .ce_reactions = true });
+    pub const detach = bridge.function(Range.detach, .{});
+
+    /// A WebKit leftover Chrome still carries: it grows the range out to the
+    /// nearest word, sentence, block or document boundary. Nothing here lays
+    /// text out into words, so this leaves the range alone -- being absent is
+    /// the readable difference, and its arity is 0 (measured).
+    pub const expand = bridge.function(_expand, .{ .arity = 0 });
+    fn _expand(_: *Range, _: ?[]const u8) void {}
+
+    pub const extractContents = bridge.function(Range.extractContents, .{ .ce_reactions = true });
     pub const getBoundingClientRect = bridge.function(Range.getBoundingClientRect, .{});
     pub const getClientRects = bridge.function(Range.getClientRects, .{});
+    pub const insertNode = bridge.function(Range.insertNode, .{ .ce_reactions = true });
+    pub const intersectsNode = bridge.function(Range.intersectsNode, .{});
+    pub const isPointInRange = bridge.function(Range.isPointInRange, .{});
+    pub const selectNode = bridge.function(Range.selectNode, .{});
+    pub const selectNodeContents = bridge.function(Range.selectNodeContents, .{});
+    pub const setEnd = bridge.function(Range.setEnd, .{});
+    pub const setEndAfter = bridge.function(Range.setEndAfter, .{});
+    pub const setEndBefore = bridge.function(Range.setEndBefore, .{});
+    pub const setStart = bridge.function(Range.setStart, .{});
+    pub const setStartAfter = bridge.function(Range.setStartAfter, .{});
+    pub const setStartBefore = bridge.function(Range.setStartBefore, .{});
+    pub const surroundContents = bridge.function(Range.surroundContents, .{ .ce_reactions = true });
+    pub const toString = bridge.function(Range.toString, .{});
 };
 
 const testing = @import("../../testing.zig");

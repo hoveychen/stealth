@@ -34,9 +34,9 @@ pub const JsApi = struct {
 
     const reflect = Element.Reflect(TableCol);
     pub const span = reflect.unsignedLong("span", .{ .default = 1, .clamp = .{ .min = 1, .max = 1000 } });
-    pub const width = reflect.string("width");
-    pub const vAlign = reflect.string("valign");
-    pub const chOff = reflect.string("charoff");
-    pub const ch = reflect.string("char");
     pub const @"align" = reflect.string("align");
+    pub const ch = reflect.string("char");
+    pub const chOff = reflect.string("charoff");
+    pub const vAlign = reflect.string("valign");
+    pub const width = reflect.string("width");
 };

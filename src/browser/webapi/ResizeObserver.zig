@@ -241,8 +241,8 @@ pub const ResizeObserverEntry = struct {
 
         pub const target = bridge.accessor(ResizeObserverEntry.getTarget, null, .{});
         pub const contentRect = bridge.accessor(ResizeObserverEntry.getContentRect, null, .{});
-        pub const borderBoxSize = bridge.accessor(ResizeObserverEntry.getBorderBoxSize, null, .{});
         pub const contentBoxSize = bridge.accessor(ResizeObserverEntry.getContentBoxSize, null, .{});
+        pub const borderBoxSize = bridge.accessor(ResizeObserverEntry.getBorderBoxSize, null, .{});
         pub const devicePixelContentBoxSize = bridge.accessor(ResizeObserverEntry.getDevicePixelContentBoxSize, null, .{});
     };
 };
@@ -290,9 +290,9 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(ResizeObserver.init, .{});
+    pub const disconnect = bridge.function(ResizeObserver.disconnect, .{});
     pub const observe = bridge.function(ResizeObserver.observe, .{});
     pub const unobserve = bridge.function(ResizeObserver.unobserve, .{});
-    pub const disconnect = bridge.function(ResizeObserver.disconnect, .{});
 };
 
 const testing = @import("../../testing.zig");

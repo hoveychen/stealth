@@ -653,12 +653,13 @@ pub fn setAutofocus(self: *HtmlElement, autofocus: bool, frame: *Frame) !void {
     }
 }
 
-pub fn getNonce(self: *HtmlElement) []const u8 {
-    return self.asElement().getAttributeSafe(comptime .wrap("nonce")) orelse "";
+// Not the content attribute -- see Element.getNonce for the measurement.
+pub fn getNonce(self: *HtmlElement, frame: *Frame) []const u8 {
+    return self.asElement().getNonce(frame);
 }
 
 pub fn setNonce(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
-    try self.asElement().setAttributeSafe(comptime .wrap("nonce"), .wrap(value), frame);
+    return self.asElement().setNonce(value, frame);
 }
 
 pub fn getLang(self: *HtmlElement) []const u8 {
@@ -2478,6 +2479,10 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "HTMLElement";
+        // Chrome's `constructor` sits here rather than last; the members
+        // below it are the ones Blink installs per context. See
+        // Snapshot.moveConstructorSlots.
+        pub const constructor_after = "focusGroupStart";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };

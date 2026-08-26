@@ -93,34 +93,61 @@ pub const JsApi = struct {
         pub const name = "HTMLScriptElement";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // `attributionSrc` is behind a runtime flag, so Chrome installs it from
+        // the per-context batch and it lands after `constructor` (measured).
+        pub const constructor_after = "innerText";
     };
 
     const reflect = Element.Reflect(Script);
-    pub const crossOrigin = reflect.enumerated("crossorigin", &.{ "anonymous", "use-credentials" }, .{ .missing = null, .nullable = true, .invalid = "anonymous" });
-    pub const integrity = reflect.string("integrity");
-    pub const htmlFor = reflect.string("for");
-    pub const event = reflect.string("event");
 
+    // Chrome's order. No `nonce`: that one is HTMLElement's, from the
+    // HTMLOrSVGElement mixin (measured).
     pub const src = bridge.accessor(Script.getSrc, Script.setSrc, .{ .ce_reactions = true });
-    pub const @"defer" = reflect.boolean("defer");
-    pub const async = bridge.accessor(Script.getAsync, Script.setAsync, .{ .ce_reactions = true });
     pub const @"type" = reflect.string("type");
-    pub const nonce = reflect.string("nonce");
-    pub const charset = reflect.string("charset");
     pub const noModule = reflect.boolean("nomodule");
-    pub const supports = bridge.function(Script.supports, .{ .static = true });
-    pub const innerText = bridge.accessor(_innerText, Script.setInnerText, .{ .ce_reactions = true });
-    fn _innerText(self: *Script, frame: *const Frame) ![]const u8 {
-        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
-        try self.asNode().getTextContent(&buf.writer);
-        return buf.written();
-    }
+    pub const charset = reflect.string("charset");
+    pub const async = bridge.accessor(Script.getAsync, Script.setAsync, .{ .ce_reactions = true });
+    pub const @"defer" = reflect.boolean("defer");
+    pub const crossOrigin = reflect.enumerated("crossorigin", &.{ "anonymous", "use-credentials" }, .{ .missing = null, .nullable = true, .invalid = "anonymous" });
+
     pub const text = bridge.accessor(_text, Script.setInnerText, .{ .ce_reactions = true });
     fn _text(self: *Script, frame: *const Frame) ![]const u8 {
         var buf = std.Io.Writer.Allocating.init(frame.local_arena);
         try self.asNode().getChildTextContent(&buf.writer);
         return buf.written();
     }
+
+    pub const referrerPolicy = reflect.referrerPolicy();
+    pub const fetchPriority = reflect.enumerated("fetchpriority", &.{ "high", "low" }, .{ .missing = "auto" });
+    pub const event = reflect.string("event");
+    pub const htmlFor = reflect.string("for");
+    pub const integrity = reflect.string("integrity");
+    pub const blocking = reflect.tokenList(.blocking);
+
+    // Chrome redeclares `textContent` here for Trusted Types; the behaviour is
+    // Node's, and the tell is the name being an own property of this prototype
+    // rather than only of Node's.
+    pub const textContent = bridge.accessor(_textContent, _setTextContent, .{ .ce_reactions = true });
+    fn _textContent(self: *Script, frame: *const Frame) ![]const u8 {
+        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+        try self.asNode().getTextContent(&buf.writer);
+        return buf.written();
+    }
+    fn _setTextContent(self: *Script, value: js.Value, frame: *Frame) !void {
+        return self.asNode().setTextContent(if (value.isNull()) "" else try value.toZig([]const u8), frame);
+    }
+
+    pub const innerText = bridge.accessor(_innerText, Script.setInnerText, .{ .ce_reactions = true });
+    fn _innerText(self: *Script, frame: *const Frame) ![]const u8 {
+        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+        try self.asNode().getTextContent(&buf.writer);
+        return buf.written();
+    }
+
+    pub const attributionSrc = reflect.string("attributionsrc");
+
+    // `supports` is static, so it is on the interface object, not here.
+    pub const supports = bridge.function(Script.supports, .{ .static = true });
 };
 
 pub const Build = struct {

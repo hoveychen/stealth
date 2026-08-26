@@ -47,9 +47,12 @@
   state.resolve();
 
   await state.done(() => {
-    // The nonce reflects the content attribute, which is what the policy check
-    // reads; if this is empty the IDL attribute is the bug, not the matching.
-    testing.expectEqual('v4r3E9xWYvR93f3o09vl4E', s.getAttribute('nonce'));
+    // The IDL setter does *not* write the content attribute -- Chrome keeps
+    // the nonce in a slot, measured -- so the policy check has to read the
+    // slot. An engine that reads the attribute here sees nothing and stays on
+    // the interstitial, which is the whole point of this case.
+    testing.expectEqual(null, s.getAttribute('nonce'));
+    testing.expectEqual('v4r3E9xWYvR93f3o09vl4E', s.nonce);
     testing.expectEqual('load', fired);
     testing.expectEqual(1, window.cspNonced);
   });

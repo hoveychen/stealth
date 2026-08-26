@@ -71,11 +71,19 @@
 
 <script id="blocking">
   {
+    // A DOMTokenList, not a string: Chrome's `blocking` stringifies to the
+    // token list and assigning a string writes the attribute verbatim
+    // (measured on <style>, <link> and <script> alike).
     const style = document.createElement('style');
-    testing.expectEqual('', style.blocking);
+    testing.expectEqual('DOMTokenList', style.blocking.constructor.name);
+    testing.expectEqual('', String(style.blocking));
+    testing.expectEqual(0, style.blocking.length);
 
     style.blocking = 'render';
-    testing.expectEqual('render', style.blocking);
+    testing.expectEqual('render', String(style.blocking));
+    testing.expectEqual('render', style.blocking.value);
+    testing.expectEqual(1, style.blocking.length);
+    testing.expectEqual('render', style.getAttribute('blocking'));
   }
 </script>
 

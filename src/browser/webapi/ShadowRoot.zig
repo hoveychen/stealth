@@ -24,8 +24,12 @@ const Frame = @import("../Frame.zig");
 
 const Node = @import("Node.zig");
 const Element = @import("Element.zig");
+const Document = @import("Document.zig");
+const Selection = @import("Selection.zig");
 const DocumentFragment = @import("DocumentFragment.zig");
 const StyleSheetList = @import("css/StyleSheetList.zig");
+const Animation = @import("animation/Animation.zig");
+const CustomElementRegistry = @import("CustomElementRegistry.zig");
 
 const ShadowRoot = @This();
 
@@ -201,6 +205,54 @@ pub fn getStyleSheets(self: *ShadowRoot, frame: *Frame) !*StyleSheetList {
     return sheets;
 }
 
+// The rest of DocumentOrShadowRoot. Chrome puts all of it on
+// ShadowRoot.prototype as well as on Document's -- ten names this side was
+// missing outright (measured) -- and the answers a shadow root gives are the
+// document's, not a second set of state.
+fn ownerDocument(self: *ShadowRoot, frame: *Frame) *Document {
+    return self.asNode().ownerDocument(frame) orelse frame.document;
+}
+
+pub fn getFullscreenElement(_: *ShadowRoot) ?*Element {
+    return null;
+}
+
+/// `fullscreenElement` is `[LegacyLenientSetter]`: readonly, but with a setter
+/// that exists and silently drops the assignment. `pointerLockElement` and
+/// `pictureInPictureElement` have no setter at all (measured, both sides).
+pub fn setLeniently(_: *ShadowRoot, _: js.Value) void {}
+
+/// Chrome does not retarget the hit test into the shadow tree: a point over an
+/// element outside this root still answers with that element (measured --
+/// `shadow.elementFromPoint(1, 1)` on a fresh root gives the HTML element).
+pub fn elementFromPoint(self: *ShadowRoot, x: f64, y: f64, frame: *Frame) !?*Element {
+    return self.ownerDocument(frame).elementFromPoint(x, y, frame);
+}
+
+pub fn elementsFromPoint(self: *ShadowRoot, x: f64, y: f64, frame: *Frame) ![]const *Element {
+    return self.ownerDocument(frame).elementsFromPoint(x, y, frame);
+}
+
+pub fn getAnimations(_: *ShadowRoot) []*Animation {
+    return &.{};
+}
+
+pub fn getSelection(self: *ShadowRoot, frame: *Frame) *Selection {
+    return self.ownerDocument(frame).getSelection();
+}
+
+/// We have no scoped registries, so a shadow root's is the document's -- which
+/// is what Chrome answers for a root attached without one (measured:
+/// `shadow.customElementRegistry === document.customElementRegistry`).
+pub fn getCustomElementRegistry(self: *ShadowRoot, frame: *Frame) ?*CustomElementRegistry {
+    return self.ownerDocument(frame).getCustomElementRegistry(frame);
+}
+
+pub fn setHTML(self: *ShadowRoot, html: []const u8, _: ?js.Object, frame: *Frame) !void {
+    try self.setHTMLUnsafe(html, frame);
+    Element.sanitizeTree(self.asNode(), frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(ShadowRoot);
 
@@ -210,27 +262,38 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const activeElement = bridge.accessor(ShadowRoot.getActiveElement, null, .{});
+    // Chrome's order, which is the order a page reads back from
+    // getOwnPropertyNames. No `getElementById`: that one is DocumentFragment's
+    // and is inherited (it dispatches back to this root's id map).
     pub const mode = bridge.accessor(ShadowRoot.getMode, null, .{});
     pub const host = bridge.accessor(ShadowRoot.getHost, null, .{});
+    pub const onslotchange = bridge.accessor(ShadowRoot.getOnSlotChange, ShadowRoot.setOnSlotChange, .{});
+
+    pub const innerHTML = bridge.accessor(_getInnerHTML, _setInnerHTML, .{ .ce_reactions = true });
+    fn _getInnerHTML(self: *ShadowRoot, frame: *Frame) ![]const u8 {
+        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+        try self.asDocumentFragment().getInnerHTML(&buf.writer, frame);
+        return buf.written();
+    }
+    fn _setInnerHTML(self: *ShadowRoot, value: js.Value, frame: *Frame) !void {
+        // `[LegacyNullToEmptyString] DOMString`: a JS null becomes "", not "null".
+        return self.asDocumentFragment().setInnerHTML(if (value.isNull()) "" else try value.toZig([]const u8), frame);
+    }
+
     pub const delegatesFocus = bridge.accessor(ShadowRoot.getDelegatesFocus, null, .{});
     pub const slotAssignment = bridge.accessor(ShadowRoot.getSlotAssignment, null, .{});
-    pub const clonable = bridge.accessor(ShadowRoot.getClonable, null, .{});
     pub const serializable = bridge.accessor(ShadowRoot.getSerializable, null, .{});
-    pub const getElementById = bridge.function(_getElementById, .{});
-    fn _getElementById(self: *ShadowRoot, value_: ?js.Value, frame: *Frame) !?*Element {
-        const value = value_ orelse return null;
-        if (value.isNull()) {
-            return self.getElementById("null", frame);
-        }
-        if (value.isUndefined()) {
-            return self.getElementById("undefined", frame);
-        }
-        return self.getElementById(try value.toZig([]const u8), frame);
-    }
-    pub const adoptedStyleSheets = bridge.accessor(ShadowRoot.getAdoptedStyleSheets, ShadowRoot.setAdoptedStyleSheets, .{});
+    pub const clonable = bridge.accessor(ShadowRoot.getClonable, null, .{});
+    pub const activeElement = bridge.accessor(ShadowRoot.getActiveElement, null, .{});
     pub const styleSheets = bridge.accessor(ShadowRoot.getStyleSheets, null, .{});
-    pub const setHTMLUnsafe = bridge.function(ShadowRoot.setHTMLUnsafe, .{ .ce_reactions = true });
+    pub const pointerLockElement = bridge.accessor(ShadowRoot.getFullscreenElement, null, .{});
+    pub const fullscreenElement = bridge.accessor(ShadowRoot.getFullscreenElement, ShadowRoot.setLeniently, .{});
+    pub const adoptedStyleSheets = bridge.accessor(ShadowRoot.getAdoptedStyleSheets, ShadowRoot.setAdoptedStyleSheets, .{});
+    pub const pictureInPictureElement = bridge.accessor(ShadowRoot.getFullscreenElement, null, .{});
+    pub const elementFromPoint = bridge.function(ShadowRoot.elementFromPoint, .{});
+    pub const elementsFromPoint = bridge.function(ShadowRoot.elementsFromPoint, .{});
+    pub const getAnimations = bridge.function(ShadowRoot.getAnimations, .{});
+
     pub const getHTML = bridge.function(_getHTML, .{});
     const GetHTMLOpts = struct {
         serializableShadowRoots: bool = false,
@@ -245,7 +308,11 @@ pub const JsApi = struct {
         }, &buf.writer, frame);
         return buf.written();
     }
-    pub const onslotchange = bridge.accessor(ShadowRoot.getOnSlotChange, ShadowRoot.setOnSlotChange, .{});
+
+    pub const getSelection = bridge.function(ShadowRoot.getSelection, .{});
+    pub const setHTMLUnsafe = bridge.function(ShadowRoot.setHTMLUnsafe, .{ .ce_reactions = true });
+    pub const customElementRegistry = bridge.accessor(ShadowRoot.getCustomElementRegistry, null, .{});
+    pub const setHTML = bridge.function(ShadowRoot.setHTML, .{ .ce_reactions = true });
 };
 
 const testing = @import("../../testing.zig");

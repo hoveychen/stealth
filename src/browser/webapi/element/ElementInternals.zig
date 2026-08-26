@@ -363,6 +363,7 @@ pub const JsApi = struct {
 
     pub const ariaColIndexText = bridge.accessor(ariaString("ariaColIndexText").get, ariaString("ariaColIndexText").set, .{});
     pub const ariaRowIndexText = bridge.accessor(ariaString("ariaRowIndexText").get, ariaString("ariaRowIndexText").set, .{});
+    pub const ariaActionsElements = bridge.accessor(ariaElements("ariaActionsElements").get, ariaElements("ariaActionsElements").set, .{});
     pub const ariaActiveDescendantElement = bridge.accessor(ElementInternals.getAriaActiveDescendantElement, ElementInternals.setAriaActiveDescendantElement, .{});
     pub const ariaControlsElements = bridge.accessor(ariaElements("ariaControlsElements").get, ariaElements("ariaControlsElements").set, .{});
     pub const ariaDescribedByElements = bridge.accessor(ariaElements("ariaDescribedByElements").get, ariaElements("ariaDescribedByElements").set, .{});

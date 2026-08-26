@@ -34,6 +34,26 @@ pub fn insertRow(self: *TableSection, index_: ?i32, frame: *Frame) !*Node {
     return table_insert.insertAt(self.asNode(), .row, index_ orelse -1, frame);
 }
 
+/// The section's own half of HTMLTableElement.deleteRow: same rules, but over
+/// this section's rows rather than the table's.
+pub fn deleteRow(self: *TableSection, index: i32, frame: *Frame) !void {
+    if (index < -1) {
+        return error.IndexSizeError;
+    }
+    var rows = self.getRows(frame);
+    const len: i32 = @intCast(rows.length(frame));
+    const at = if (index == -1) len - 1 else index;
+    if (at < 0 or at >= len) {
+        if (index == -1) {
+            return;
+        }
+        return error.IndexSizeError;
+    }
+    const row = rows.getAtIndex(@intCast(at), frame) orelse return error.IndexSizeError;
+    const node = row.asNode();
+    _ = try node.parentNode().?.removeChild(node, frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(TableSection);
 
@@ -44,11 +64,13 @@ pub const JsApi = struct {
     };
 
     const reflect = Element.Reflect(TableSection);
-    pub const vAlign = reflect.string("valign");
-    pub const chOff = reflect.string("charoff");
-    pub const ch = reflect.string("char");
-    pub const @"align" = reflect.string("align");
 
+    // Chrome's order.
     pub const rows = bridge.accessor(TableSection.getRows, null, .{});
+    pub const @"align" = reflect.string("align");
+    pub const ch = reflect.string("char");
+    pub const chOff = reflect.string("charoff");
+    pub const vAlign = reflect.string("valign");
+    pub const deleteRow = bridge.function(TableSection.deleteRow, .{ .ce_reactions = true });
     pub const insertRow = bridge.function(TableSection.insertRow, .{ .ce_reactions = true });
 };

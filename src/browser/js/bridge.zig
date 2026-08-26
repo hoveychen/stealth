@@ -1659,8 +1659,6 @@ const worker_common_apis = [_]type{
     @import("../webapi/DOMPointReadOnly.zig"),
     @import("../webapi/DOMPoint.zig"),
     @import("../webapi/DOMQuad.zig"),
-    // Chrome's worker scope carries IdleDetector (measured, probe-win30).
-    @import("../webapi/IdleDetector.zig"),
     @import("../webapi/net/URLSearchParams.zig"),
     @import("../webapi/encoding/TextEncoder.zig"),
     @import("../webapi/encoding/TextDecoder.zig"),
@@ -1739,12 +1737,6 @@ const worker_common_apis = [_]type{
     @import("../webapi/MessageChannel.zig"),
     @import("../webapi/MessagePort.zig"),
     @import("../webapi/collections/DOMStringList.zig"),
-    // The RTC surface a Chrome DedicatedWorkerGlobalScope carries, measured:
-    // exactly RTCTransformEvent, RTCRtpScriptTransformer, RTCDataChannel,
-    // RTCEncodedVideoFrame and RTCEncodedAudioFrame — no RTCPeerConnection.
-    @import("../webapi/webrtc/encoded_frames.zig"),
-    @import("../webapi/webrtc/RTCDataChannel.zig"),
-    @import("../webapi/webrtc/worker_transform.zig"),
     // The File System Access handles are Exposed=(Window,Worker): a worker is
     // where OPFS is actually usable, since createSyncAccessHandle only exists
     // there. FileSystemSyncAccessHandle itself is Exposed=DedicatedWorker, so it
@@ -1786,22 +1778,11 @@ const worker_common_apis = [_]type{
     //   (CSSTransformComponent, CSSStyleValue), so matching it is not just a
     //   mechanical conversion of the largest file in the audit.
     //
-    // WebCodecs: the encode/decode pipeline is the reason a page moves media
-    // work into a worker at all, so all four codecs and every chunk and frame
-    // type is Exposed=(Window,Worker).
-    @import("../webapi/webcodecs/chunks.zig"),
-    @import("../webapi/webcodecs/codecs.zig"),
-    @import("../webapi/webcodecs/frames.zig"),
-    @import("../webapi/webcodecs/image_decoder.zig"),
-    // MSE-in-Worker. A dedicated worker is the only realm Chrome lets a
-    // MediaSource be constructed in at all -- `canConstructInDedicatedWorker`
-    // is a static that exists to say so -- so this family being absent here was
-    // the surface contradicting its own static. Its two list accessors took a
-    // `*Page`, which a worker realm *can* be handed, and that was the trap: the
-    // page's factory is the page's, so the SourceBufferList would have come
-    // back branded in the owner's realm. Through the Execution it is this
-    // realm's.
-    @import("../webapi/media/MediaSource.zig"),
+    // WebCodecs, the RTC worker surface, MSE, IdleDetector and the device
+    // families all used to sit here. They are Exposed=DedicatedWorker, not
+    // Exposed=Worker: a Chrome SharedWorker carries none of the 41 interface
+    // objects they bring (measured, probes/expr-shared-worker-proto-table.js).
+    // See dedicated_worker_only_apis below.
     // The font families. `FontFaceSet.load` dispatches two events, and the
     // listener list it dispatched into was the frame's -- through
     // `GlobalScope.eventManagerBase()` it is this realm's, which is what an
@@ -1823,17 +1804,6 @@ const worker_common_apis = [_]type{
     // shared PerformanceEntry prototype is already in this realm.
     @import("../webapi/performance/timing.zig").ResourceTiming,
     @import("../webapi/performance/timing.zig").ServerTiming,
-    // The device families, whole: a Chrome worker carries every USB, HID and
-    // Serial interface object even though the WorkerNavigator members that hand
-    // them out are window-only.
-    @import("../webapi/navigator/usb.zig"),
-    @import("../webapi/navigator/hid_serial.zig"),
-    // Only the three device entry points out of devices.zig. The other ten it
-    // registers -- Bluetooth, Clipboard, ServiceWorkerContainer, XRSystem and
-    // friends -- are window-only.
-    @import("../webapi/navigator/devices.zig").HID,
-    @import("../webapi/navigator/devices.zig").Serial,
-    @import("../webapi/navigator/devices.zig").USB,
     // The service-worker client surface, minus the two of service_worker.zig's
     // twelve that a dedicated worker does not carry: ServiceWorker itself and
     // CookieStoreManager (the cookie store is Window and ServiceWorker only,
@@ -1887,11 +1857,57 @@ const worker_common_apis = [_]type{
     @import("../webapi/trusted_types.zig"),
 };
 
+// Exposed=DedicatedWorker, not Exposed=Worker. Measured by running the same
+// interface-table probe in a dedicated worker and in a shared worker on Chrome
+// 151 (probes/expr-worker-proto-table.js and
+// probes/expr-shared-worker-proto-table.js): the dedicated realm carries all of
+// these and the shared realm carries none of them -- 41 interface objects that
+// were on this engine's SharedWorker global and are not on Chrome's.
+//
+// That is not a hypothetical surface. The Akamai interstitial on macys.com
+// runs its sensor from a SharedWorker, so every name here was one an
+// `Object.getOwnPropertyNames(self)` in that realm could read off us and not
+// off a browser.
+const dedicated_worker_only_apis = [_]type{
+    // Chrome's dedicated worker scope carries IdleDetector (measured,
+    // probe-win30).
+    @import("../webapi/IdleDetector.zig"),
+    // The RTC surface a Chrome DedicatedWorkerGlobalScope carries, measured:
+    // exactly RTCTransformEvent, RTCRtpScriptTransformer, RTCDataChannel,
+    // RTCEncodedVideoFrame and RTCEncodedAudioFrame — no RTCPeerConnection.
+    @import("../webapi/webrtc/encoded_frames.zig"),
+    @import("../webapi/webrtc/RTCDataChannel.zig"),
+    @import("../webapi/webrtc/worker_transform.zig"),
+    // WebCodecs: the encode/decode pipeline is the reason a page moves media
+    // work into a dedicated worker at all.
+    @import("../webapi/webcodecs/chunks.zig"),
+    @import("../webapi/webcodecs/codecs.zig"),
+    @import("../webapi/webcodecs/frames.zig"),
+    @import("../webapi/webcodecs/image_decoder.zig"),
+    // MSE-in-Worker. A dedicated worker is the only realm Chrome lets a
+    // MediaSource be constructed in at all -- `canConstructInDedicatedWorker`
+    // is a static that exists to say so. Its two list accessors reach the
+    // factory through the Execution, so the SourceBufferList is branded in
+    // this realm rather than the owner's.
+    @import("../webapi/media/MediaSource.zig"),
+    // The device families, whole: a Chrome dedicated worker carries every USB,
+    // HID and Serial interface object even though the WorkerNavigator members
+    // that hand them out are window-only.
+    @import("../webapi/navigator/usb.zig"),
+    @import("../webapi/navigator/hid_serial.zig"),
+    // Only the three device entry points out of devices.zig. The other ten it
+    // registers -- Bluetooth, Clipboard, ServiceWorkerContainer, XRSystem and
+    // friends -- are window-only.
+    @import("../webapi/navigator/devices.zig").HID,
+    @import("../webapi/navigator/devices.zig").Serial,
+    @import("../webapi/navigator/devices.zig").USB,
+};
+
 pub const DedicatedWorkerJsApis = flattenTypes(&([_]type{
     @import("../webapi/DedicatedWorkerGlobalScope.zig"),
     // [Exposed=DedicatedWorker]: a shared worker does not carry it.
     @import("../webapi/file_system_access.zig").FileSystemSyncAccessHandle,
-} ++ worker_common_apis));
+} ++ dedicated_worker_only_apis ++ worker_common_apis));
 pub const SharedWorkerJsApis = flattenTypes(&([_]type{@import("../webapi/SharedWorkerGlobalScope.zig")} ++ worker_common_apis));
 
 // Master list of ALL JS APIs across all contexts.
