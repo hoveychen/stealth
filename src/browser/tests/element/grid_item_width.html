@@ -10,9 +10,7 @@ turns that off, and treating every grid item as filling made an item under
 
 Measured in both arms with tools/fingerprint/scratch/expr-flex-item-width.js
 against Chrome 151 on the 1904px line this test server serves. A flex item is
-in the same probe and is asserted here as unchanged: the default one is
-shrink-to-fit in both engines already, and the `flex-grow` cases are a separate
-change that has to expand the `flex` shorthand first.
+in the same probe; how one of those is sized is flex_item_width.html.
 -->
 
 <script id=grid_item_justify>
@@ -63,10 +61,10 @@ change that has to expand the `flex` shorthand first.
 </script>
 
 <!--
-Flex items are untouched by this. A default one shrinks to fit in both engines;
-the `flex-grow` and `flex-basis` cases are the `flex-grow-stretches` plan and
-need the `flex` shorthand expanded first -- `chrome_shorthands.zig` leaves it
-`.unmodelled`, so `flex:1` does not even reach `flexGrow`.
+Flex items are sized by their own container, not by this: a default one shrinks
+to fit, and a growing one takes the line. Both are Chrome's answers, and the
+whole of that model is flex_item_width.html; these two are here because a grid
+change that reached flex items would show up in them first.
 -->
 
 <script id=flex_item_unchanged>
@@ -78,11 +76,9 @@ need the `flex` shorthand expanded first -- `chrome_shorthands.zig` leaves it
     '<div style="display:flex"><div id=gfb style="flex:1">x</div></div>';
   host.appendChild(wrap);
 
-  // Agrees with Chrome.
   testing.expectEqual(8, wrap.querySelector('#gfa').offsetWidth);
-  // Does not: Chrome says 1904. Recorded so the fix shows up here.
-  testing.expectEqual(8, wrap.querySelector('#gfb').offsetWidth);
-  testing.expectEqual('0', String(getComputedStyle(wrap.querySelector('#gfb')).flexGrow));
+  testing.expectEqual(1904, wrap.querySelector('#gfb').offsetWidth);
+  testing.expectEqual('1', String(getComputedStyle(wrap.querySelector('#gfb')).flexGrow));
 
   host.remove();
 }

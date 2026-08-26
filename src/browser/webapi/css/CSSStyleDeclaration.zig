@@ -298,6 +298,23 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // resolving the value. Chrome resolves the both-declared case in
                 // one storage slot instead, where the later declaration wins for
                 // both names; see css/computed_logical_physical.html.
+                // Chrome reports a used width, and a flex item's width is its
+                // container's to give -- so a declared one is not the answer
+                // when the flex layout overrode it. Measured with
+                // tools/fingerprint/scratch/expr-flex-item-width.js:
+                // `flex: 1; width: 60px` computes 1904px, because `flex: 1`
+                // sizes from a `0%` basis and the width never enters the
+                // sizing. Asked before the cascade for that reason; every other
+                // case falls through to the same resolvedDimension below.
+                if (wrapped.eql(comptime .wrap("width")) or
+                    wrapped.eql(comptime .wrap("inline-size")) or
+                    wrapped.eqlSlice("-webkit-logical-width"))
+                {
+                    if (flexItemWidth(element, frame, 0, true) != null) {
+                        return resolvedDimension(element, .width, frame);
+                    }
+                }
+
                 switch (cascadedValue(style_manager, element, normalized, wrapped)) {
                     .value => |value| return self.resolveCurrentColour(value, frame, surface),
                     .unreportable => {},
@@ -413,21 +430,8 @@ const Declared = union(enum) {
 /// `var()` is substituted at computed-value time either way; the specified value
 /// `el.style` hands out keeps its var() text.
 fn declaredValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) Declared {
-    const rule = style_manager.cascadedLonghand(element, property_name);
-    const inline_declaration = style_manager.inlineStyleDeclaration(element, wrapped);
-    const rule_wins = if (rule) |declaration| declaration.important and
-        !(inline_declaration != null and inline_declaration.?.important) else false;
-
-    const winner: ?StyleManager.Declaration = if (rule_wins)
-        rule
-    else if (inline_declaration) |declaration|
-        declaration
-    else
-        rule;
-
-    const declaration = winner orelse return .none;
-
-    const substituted = style_manager.substituteVars(element, declaration.value) orelse "";
+    const substituted = declaredText(style_manager, element, property_name, wrapped) orelse
+        return flexShorthandDeclared(style_manager, element, property_name);
     const frame = element.ownerFrame(style_manager.frame);
 
     // `transform` computes to one matrix rather than to the list the author
@@ -465,6 +469,126 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
         return .unreportable;
     }
     return .{ .value = substituted };
+}
+
+/// The declaration text one element carries for a property, with its `var()`
+/// substituted and before anything a computed style does to it. Null when
+/// neither a rule nor the style attribute declares it.
+fn declaredText(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) ?[]const u8 {
+    const rule = style_manager.cascadedLonghand(element, property_name);
+    const inline_declaration = style_manager.inlineStyleDeclaration(element, wrapped);
+    const rule_wins = if (rule) |declaration| declaration.important and
+        !(inline_declaration != null and inline_declaration.?.important) else false;
+
+    const winner: ?StyleManager.Declaration = if (rule_wins)
+        rule
+    else if (inline_declaration) |declaration|
+        declaration
+    else
+        rule;
+
+    const declaration = winner orelse return null;
+    return style_manager.substituteVars(element, declaration.value) orelse "";
+}
+
+/// What `flex-grow`, `flex-shrink` and `flex-basis` read when nothing declared
+/// them but a `flex` shorthand did.
+///
+/// `flex` is `.unmodelled` in chrome_shorthands.zig -- no distribution rule
+/// reproduced every reading, because `flex: none` is `0 0 auto` while every
+/// other value fills the two numbers and then the basis -- so the declaration
+/// is kept whole and the three longhands had nothing declared at all. Chrome
+/// stores them, so `getComputedStyle(el).flexGrow` on `flex: 1` reads 1 there
+/// and read the initial 0 here, and the layout asking whether an item grows
+/// read that same 0. The declaration is still stored whole, so `style.length`
+/// answers 1 where Chrome says 3; only the computed read is derived.
+fn flexShorthandDeclared(style_manager: *StyleManager, element: *Element, property_name: []const u8) Declared {
+    if (!std.mem.eql(u8, property_name, "flex-grow") and
+        !std.mem.eql(u8, property_name, "flex-shrink") and
+        !std.mem.eql(u8, property_name, "flex-basis")) return .none;
+
+    // The raw declaration rather than declaredValue's: a `flex: 50%` would come
+    // back `unreportable` from the computed path, which refuses a percentage it
+    // cannot resolve, and the percentage is exactly what the basis keeps.
+    const value = declaredText(style_manager, element, "flex", comptime .wrap("flex")) orelse return .none;
+    const part = flexShorthandPart(value, property_name) orelse return .none;
+    return .{ .value = part };
+}
+
+/// One longhand of a `flex` shorthand, or null when the value does not parse --
+/// which is the same answer, because Chrome drops a `flex` it cannot parse and
+/// the three initial values are what a dropped declaration leaves behind.
+///
+/// Measured with tools/fingerprint/scratch/expr-flex-shorthand.js against
+/// Chrome 151: `1` is `1 1 0%`, `0` is `0 1 0%`, `none` is `0 0 auto`, `auto`
+/// and `1 auto` are `1 1 auto`, `2 3` is `2 3 0%`, `200px` and `1 200px` are
+/// `1 1 200px`, `2 3 40px` is itself, `50%` is `1 1 50%`, and `content` is
+/// `1 1 content`. So the numbers fill grow and then shrink, anything else is
+/// the basis, and what the value left out is 1, 1 and `0%` -- except after
+/// `none`, which is the one value no distribution rule covers.
+fn flexShorthandPart(value: []const u8, longhand: []const u8) ?[]const u8 {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+
+    const on_grow = std.mem.eql(u8, longhand, "flex-grow");
+    const on_shrink = std.mem.eql(u8, longhand, "flex-shrink");
+
+    if (std.ascii.eqlIgnoreCase(trimmed, "none")) {
+        return if (on_grow or on_shrink) "0" else "auto";
+    }
+
+    var grow: ?[]const u8 = null;
+    var shrink: ?[]const u8 = null;
+    var basis: ?[]const u8 = null;
+
+    var seen: usize = 0;
+    var it = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
+    while (it.next()) |token| {
+        seen += 1;
+        if (seen > 3) return null;
+        if (isFlexFactor(token)) {
+            if (grow == null) {
+                grow = token;
+            } else if (shrink == null) {
+                shrink = token;
+            } else return null;
+            continue;
+        }
+        if (basis != null or !isFlexBasis(token)) return null;
+        basis = token;
+    }
+
+    if (on_grow) return grow orelse "1";
+    if (on_shrink) return shrink orelse "1";
+    return basis orelse "0%";
+}
+
+/// A `flex` component that is one of the two factors: a bare number, which is
+/// the only shape either takes.
+fn isFlexFactor(token: []const u8) bool {
+    const parsed = units.parse(token) catch return false;
+    return parsed.unit == .none;
+}
+
+/// A `flex` component that is the basis: a length or percentage, or one of the
+/// keywords `flex-basis` takes. A bare `0` is NOT one -- measured,
+/// expr-flex-more.js: `flex-basis: 0` is dropped and the item comes out at its
+/// content width.
+fn isFlexBasis(token: []const u8) bool {
+    const KEYWORDS = [_][]const u8{ "auto", "content", "min-content", "max-content", "fit-content" };
+    for (KEYWORDS) |keyword| {
+        if (std.ascii.eqlIgnoreCase(token, keyword)) return true;
+    }
+    const parsed = units.parse(token) catch return false;
+    return parsed.unit != .none;
+}
+
+/// The properties whose computed value keeps a percentage rather than resolving
+/// it against anything. Measured with expr-flex-shorthand.js: `flex: 50%`
+/// computes to `1 1 50%`, so the basis is one of them. Every other percentage
+/// this engine cannot resolve is still refused rather than reported as written.
+fn percentageIsComputedValue(property_name: []const u8) bool {
+    return std.mem.eql(u8, property_name, "flex-basis");
 }
 
 /// The px a computed style reports for a declaration written in some other
@@ -574,6 +698,8 @@ fn lengthFactor(style_manager: *StyleManager, element: *Element, property_name: 
             .{ .pixels = style_manager.computedFontSize(element.parentElement()) / 100.0 }
         else if (on_line_height)
             .{ .pixels = style_manager.computedFontSize(element) / 100.0 }
+        else if (percentageIsComputedValue(property_name))
+            .verbatim
         else if (percentageOfContainingBlockWidth(property_name)) blk: {
             const parent = element.parentElement() orelse break :blk .unresolvable;
             const frame = element.ownerFrame(style_manager.frame);
@@ -622,7 +748,8 @@ fn resolvesHere(property_name: []const u8, value: []const u8) bool {
     if (trimmed.len == 0) return true;
 
     if (std.ascii.indexOfIgnoreCase(trimmed, "calc(") != null) return false;
-    if (std.mem.indexOfScalar(u8, trimmed, '%') != null) return false;
+    if (std.mem.indexOfScalar(u8, trimmed, '%') != null and
+        !percentageIsComputedValue(property_name)) return false;
 
     if (std.mem.eql(u8, property_name, "line-height")) {
         // `normal` and a length are reportable; a bare multiplier is not, and a
@@ -981,6 +1108,184 @@ fn stretchesInGrid(element: *Element, parent: *Element, frame: *Frame) bool {
     const effective = declared orelse
         cascadedKeyword(style_manager, parent, "justify-items") orelse
         // Neither declared: `justify-items` computes to `normal`, which stretches.
+        return true;
+
+    return std.ascii.eqlIgnoreCase(effective, "stretch") or
+        std.ascii.eqlIgnoreCase(effective, "normal");
+}
+
+/// How wide a flex item comes out, or null when nothing about the flex layout
+/// decides its width and the box keeps the one it already had.
+///
+/// `width_declared` says the caller already took a width off the cascade. It
+/// only settles the cross axis: in a ROW, `flex-grow` outranks a declared width
+/// -- measured, `flex: 1; width: 60px` is 1904 and not 60, because `flex: 1`
+/// sets the basis to `0%` and the width never enters the sizing.
+///
+/// Measured against Chrome 151 on the 1904px line with
+/// tools/fingerprint/scratch/expr-flex-shorthand.js and expr-flex-more.js:
+///
+///   * a row divides its line the way CSS Flexbox does. Each item starts at its
+///     flex base size -- `flex-basis` when that is a length or a percentage,
+///     else whatever width the box would have had -- and every item whose
+///     `flex-grow` is above zero takes a share of what is left over, in
+///     proportion to its factor. Two `flex: 1` items are 952 each; `1` beside
+///     `3` is 476 and 1428; `flex: 1` beside a 300px sibling is 1604; bases of
+///     100 and 500 with equal factors come out 752 and 1152.
+///   * a margin comes off the line before anything is shared: `flex: 1;
+///     margin: 0 20px` in a 400px row is 360.
+///   * a COLUMN container lays its items along the other axis, so a width there
+///     is a cross-axis size: the item stretches unless `align-items` or its own
+///     `align-self` places it instead, and unless it declares a width. That is
+///     the shape `stretchesInGrid` has for `justify-items`.
+///   * an out-of-flow or `display: none` child is not an item and takes no
+///     share -- `flex: 1` beside an absolutely positioned sibling is the whole
+///     400px line.
+///   * whatever the line gives it, an item is never narrower than its own
+///     longest word (`flooredAtMinContent`). That floor is why `flex-basis: 0`
+///     leaves an item at its content width rather than at 0.
+///
+/// What is deliberately not modelled, with the reading that says so:
+/// `flex-shrink` (two 300px items in a 200px row are 100 each in Chrome and 300
+/// here); a declared `min-width` / `max-width`; and the anonymous item Chrome
+/// makes of a text node between two elements, which is why one there divides a
+/// 400px line into 184s where this divides it into 200s.
+pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared: bool) ?f64 {
+    // The same backstop the containing-block walk has, for the same reason: a
+    // tree that somehow made a cycle stops rather than recursing forever.
+    if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
+    const parent = element.parentElement() orelse return null;
+    const parent_display = resolvedDisplay(parent, frame);
+    if (!std.mem.eql(u8, parent_display, "flex") and
+        !std.mem.eql(u8, parent_display, "inline-flex")) return null;
+    if (!isFlexItem(element, frame)) return null;
+
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const container = parent.dimensionsAt(frame, true, depth + 1, true).width;
+
+    if (isColumnFlex(style_manager, parent)) {
+        if (width_declared) return null;
+        return if (stretchesAcrossFlexLine(element, parent, frame)) container else null;
+    }
+
+    // An item that does not grow takes no share, so it needs nothing from its
+    // siblings: a declared basis is its width, and otherwise the box keeps the
+    // one it has. Asked first because it is the common case, and because the
+    // walk below measures every sibling -- a cost no ordinary flex item should
+    // pay for a share it is not taking.
+    const own_basis = flexBasisLength(element, container, frame);
+    const own_grow = flexFactor(element, "flex-grow", frame);
+    if (own_grow <= 0) {
+        return flooredAtMinContent(element, frame, own_basis orelse return null);
+    }
+
+    var total_grow: f64 = 0;
+    var taken: f64 = 0;
+    var own_base: f64 = 0;
+
+    var child = parent.firstElementChild();
+    while (child) |sibling| : (child = sibling.nextElementSibling()) {
+        if (!isFlexItem(sibling, frame)) continue;
+        const base = if (sibling == element)
+            own_basis orelse sibling.dimensionsAt(frame, true, depth + 1, false).width
+        else
+            flexBaseSize(sibling, container, frame, depth);
+        taken += base + Element.horizontalMargin(sibling, frame);
+        total_grow += flexFactor(sibling, "flex-grow", frame);
+        if (sibling == element) own_base = base;
+    }
+
+    const free = container - taken;
+    if (total_grow > 0 and free > 0) {
+        return flooredAtMinContent(element, frame, own_base + free * own_grow / total_grow);
+    }
+    return flooredAtMinContent(element, frame, own_basis orelse return null);
+}
+
+/// A flex item's automatic minimum size: it is never laid out narrower than its
+/// own longest word, whatever the line has to give it. Element.minContentWidth
+/// carries the measurements.
+///
+/// Skipped when the page declares a `min-width` of its own, because that is the
+/// property this floor is the `auto` value OF -- `min-width: 0` turns it off in
+/// Chrome, and this engine models neither the zero nor any other value, so the
+/// honest answer to a declared one is to leave the size alone.
+fn flooredAtMinContent(element: *Element, frame: *Frame, width: f64) f64 {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    if (cascadedKeyword(style_manager, element, "min-width") != null) return width;
+    const floor = element.minContentWidth(frame) orelse return width;
+    return @max(width, floor);
+}
+
+/// The flex base size one item starts from: its `flex-basis` when that is a
+/// length or a percentage of the container, and otherwise the width the box
+/// would have had on its own.
+///
+/// That second measurement is taken with the distribution turned off, which is
+/// what keeps this from recursing: an item asking for a sibling's base would
+/// otherwise send the sibling back around the same walk, asking for this one's.
+fn flexBaseSize(element: *Element, container: f64, frame: *Frame, depth: u8) f64 {
+    if (flexBasisLength(element, container, frame)) |px| return px;
+    return element.dimensionsAt(frame, true, depth + 1, false).width;
+}
+
+/// The `flex-basis` of one item in px, or null when it is `auto`, `content`, or
+/// nothing at all -- the three that send the base back to the box.
+fn flexBasisLength(element: *Element, container: f64, frame: *Frame) ?f64 {
+    const declared = cascadedComputedValue(element, "flex-basis", frame) orelse return null;
+    const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return null;
+    return switch (parsed.unit) {
+        .px => parsed.value,
+        .percentage => container * parsed.value / 100.0,
+        else => null,
+    };
+}
+
+/// A flex factor, which is a bare number. Zero when the page declared none, or
+/// declared one this engine cannot read: `flex-grow`'s initial value is 0 and
+/// `flex-shrink`'s is 1, and only `flex-grow` is asked for here.
+fn flexFactor(element: *Element, name: []const u8, frame: *Frame) f64 {
+    const declared = cascadedComputedValue(element, name, frame) orelse return 0;
+    const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return 0;
+    if (parsed.unit != .none) return 0;
+    return @max(0, parsed.value);
+}
+
+/// Whether a child of a flex container is one of its items. An out-of-flow box
+/// is not laid out on the line, and a `display: none` one is not laid out at
+/// all; both were measured taking no share of a 400px row.
+fn isFlexItem(element: *Element, frame: *Frame) bool {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    if (cascadedKeyword(style_manager, element, "position")) |position| {
+        if (std.ascii.eqlIgnoreCase(position, "absolute") or
+            std.ascii.eqlIgnoreCase(position, "fixed")) return false;
+    }
+    return !std.mem.eql(u8, resolvedDisplay(element, frame), "none");
+}
+
+/// Whether the container stacks its items down the page, which puts a width on
+/// the cross axis.
+fn isColumnFlex(style_manager: *StyleManager, container: *Element) bool {
+    const declared = cascadedKeyword(style_manager, container, "flex-direction") orelse return false;
+    return std.ascii.eqlIgnoreCase(declared, "column") or
+        std.ascii.eqlIgnoreCase(declared, "column-reverse");
+}
+
+/// Whether an item stretches across the flex line rather than being placed on
+/// it. Measured with expr-flex-shorthand.js: a column container's item is
+/// 1904px by default, 8px under `align-items: flex-start`, and 1904 again when
+/// it answers with `align-self: stretch` -- the same `stretch`/`normal` pair,
+/// and the same self-beats-container rule, that `justify-items` has on a grid.
+fn stretchesAcrossFlexLine(element: *Element, parent: *Element, frame: *Frame) bool {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+
+    const declared = if (cascadedKeyword(style_manager, element, "align-self")) |self_value| blk: {
+        if (std.ascii.eqlIgnoreCase(self_value, "auto")) break :blk null;
+        break :blk self_value;
+    } else null;
+
+    const effective = declared orelse
+        cascadedKeyword(style_manager, parent, "align-items") orelse
         return true;
 
     return std.ascii.eqlIgnoreCase(effective, "stretch") or
