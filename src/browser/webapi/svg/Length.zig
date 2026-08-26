@@ -424,7 +424,10 @@ fn fromShared(unit: units.Unit) ?Unit {
         .in => .in,
         .pt => .pt,
         .pc => .pc,
-        .vh, .vw, .deg, .rad, .grad, .turn => null,
+        // SVG's own unit list is the CSS 2.1 one: the units CSS added since --
+        // rem, ch, the viewport pair, Q -- have no SVGLength constant to map
+        // to, so a length written in one is a syntax error there.
+        .rem, .ch, .q, .vh, .vw, .vmin, .vmax, .deg, .rad, .grad, .turn => null,
     };
 }
 
