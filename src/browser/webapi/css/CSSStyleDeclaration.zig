@@ -3312,3 +3312,7 @@ test "WebApi: CSSStyleDeclaration important beats the style attribute" {
 test "WebApi: CSSStyleDeclaration author longhands" {
     try testing.htmlRunner("css/computed_author_longhands.html", .{});
 }
+
+test "WebApi: CSSStyleDeclaration inheritance" {
+    try testing.htmlRunner("css/computed_inheritance.html", .{});
+}
