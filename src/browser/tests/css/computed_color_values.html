@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A computed colour is always an `rgb()` or `rgba()` function in a browser. Never a
+keyword, never `currentcolor`. Measured on Chrome 151:
+
+  style="color:red"                     color              -> rgb(255, 0, 0)
+                                        borderTopColor     -> rgb(255, 0, 0)
+  style="color:rgb(1,2,3);
+         background-color:currentcolor" backgroundColor    -> rgb(1, 2, 3)
+
+This engine answered `red` for the first — `getComputedStyle(el).color === 'red'`
+is one expression that no browser can produce — and `rgb(0, 0, 0)` for the six
+longhands whose initial value is `currentcolor`, which is right only while the
+element's colour happens to be black.
+
+The `currentcolor` half is not about the keyword being written out. Every one of
+these six has `currentcolor` as its *initial* value, so an element that declares
+nothing but `color` still has to answer its colour for all of them.
+-->
+
+<script id=named_colours_compute_to_rgb>
+{
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    host.innerHTML = '<p style="' + decl + '">x</p>';
+    document.body.appendChild(host);
+    const got = String(getComputedStyle(host.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+
+  testing.expectEqual('rgb(255, 0, 0)', probe('color:red', 'color'));
+  testing.expectEqual('rgb(0, 128, 0)', probe('color:green', 'color'));
+  testing.expectEqual('rgb(255, 255, 255)', probe('color:white', 'color'));
+  testing.expectEqual('rgba(0, 0, 0, 0)', probe('background-color:transparent', 'backgroundColor'));
+  testing.expectEqual('rgb(255, 0, 0)', probe('background-color:#f00', 'backgroundColor'));
+  testing.expectEqual('rgb(255, 0, 0)', probe('background-color:#ff0000', 'backgroundColor'));
+  testing.expectEqual('rgba(255, 0, 0, 0.5)', probe('background-color:rgba(255,0,0,0.5)', 'backgroundColor'));
+  // Already canonical, and it stays that way.
+  testing.expectEqual('rgb(1, 2, 3)', probe('color:rgb(1,2,3)', 'color'));
+
+  // A rule reaches the same place the style attribute does.
+  const style = document.createElement('style');
+  style.textContent = '.cxc{color:red}';
+  document.head.appendChild(style);
+  const host = document.createElement('div');
+  host.innerHTML = '<p class="cxc">x</p>';
+  document.body.appendChild(host);
+  testing.expectEqual('rgb(255, 0, 0)', getComputedStyle(host.firstChild).color);
+  host.remove();
+  style.remove();
+}
+</script>
+
+<script id=currentcolor_resolves_to_the_elements_colour>
+{
+  const CURRENT = ['borderTopColor', 'borderRightColor', 'borderBottomColor',
+                   'borderLeftColor', 'outlineColor', 'textDecorationColor',
+                   'caretColor', 'columnRuleColor', 'textEmphasisColor'];
+
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    host.innerHTML = '<p style="' + decl + '">x</p>';
+    document.body.appendChild(host);
+    const cs = getComputedStyle(host.firstChild);
+    const out = {};
+    for (const prop of CURRENT) out[prop] = String(cs[prop]);
+    out.backgroundColor = String(cs.backgroundColor);
+    host.remove();
+    return out;
+  };
+
+  // The initial value of all nine is `currentcolor`, so they follow `color`.
+  const red = probe('color:red');
+  for (const prop of CURRENT) testing.expectEqual(prop + '=rgb(255, 0, 0)', prop + '=' + red[prop]);
+
+  // Written out explicitly, on a property whose initial value it is not.
+  testing.expectEqual('rgb(1, 2, 3)',
+    probe('color:rgb(1,2,3);background-color:currentcolor').backgroundColor);
+
+  // An element with no colour of its own inherits one, and currentcolor
+  // follows the inherited value rather than the initial one.
+  const style = document.createElement('style');
+  style.textContent = '.cxd{color:rgb(4,5,6)}';
+  document.head.appendChild(style);
+  const host = document.createElement('div');
+  host.innerHTML = '<div class="cxd"><p>x</p></div>';
+  document.body.appendChild(host);
+  testing.expectEqual('rgb(4, 5, 6)', getComputedStyle(host.firstChild.firstChild).borderTopColor);
+  host.remove();
+  style.remove();
+
+  // Black is still black.
+  const plain = probe('');
+  for (const prop of CURRENT) testing.expectEqual(prop + '=rgb(0, 0, 0)', prop + '=' + plain[prop]);
+}
+</script>

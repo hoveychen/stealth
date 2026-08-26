@@ -195,7 +195,19 @@ pub fn getComputedValue(self: *const CSSStyleDeclaration, property_name: []const
 }
 
 fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame, surface: Surface) []const u8 {
-    const normalized = normalizePropertyName(property_name, &frame.buf);
+    // The name is normalised into a local buffer rather than `frame.buf`,
+    // because it has to outlive every call below and that one does not. The
+    // cascade's first read is the one that rebuilds the stylesheets, and the
+    // rebuild normalises declaration names into the same shared buffer -- so
+    // the name went to garbage mid-lookup and the initial-value table missed,
+    // which is why the *first* property read off a fresh computed style
+    // answered "". See css/computed_first_read.html.
+    //
+    // 128 is well past the longest name Chrome computes
+    // (-webkit-text-decorations-in-effect, 35); anything longer falls back to
+    // the caller's spelling, exactly as normalizePropertyName does for frame.buf.
+    var name_buf: [128]u8 = undefined;
+    const normalized = normalizePropertyName(property_name, &name_buf);
     const wrapped = String.wrap(normalized);
 
     // Computed styles must reflect stylesheet rules, not just the element's
@@ -346,7 +358,12 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
     if (!resolvesHere(property_name, declaration.value)) {
         return .unreportable;
     }
-    return .{ .value = style_manager.substituteVars(element, declaration.value) orelse "" };
+    const substituted = style_manager.substituteVars(element, declaration.value) orelse "";
+    const frame = element.ownerFrame(style_manager.frame);
+    if (computedColourText(frame.call_arena, property_name, substituted)) |folded| {
+        return .{ .value = folded };
+    }
+    return .{ .value = substituted };
 }
 
 /// Whether a specified value is already in the shape a computed style reports,
@@ -1844,6 +1861,36 @@ fn alphaByte(channel: Channel) ?u8 {
         .angle => return null,
     };
     return colourByte(std.math.clamp(alpha, 0, 1) * 255.0);
+}
+
+/// The `rgb()` a computed style reports for a value written as a colour
+/// keyword, or null when the value is not one.
+///
+/// A *specified* value keeps the keyword -- `el.style.color` answers `red` on
+/// Chrome 151 -- so this is not part of canonicaliseValue, which is what
+/// storeProperty runs. A *computed* colour is always a function there:
+/// `getComputedStyle(el).color === 'red'` is one expression no browser can
+/// produce, and this engine produced it for every keyword a page wrote.
+///
+/// The `any_identifier` gate is the reason this can look at the value rather
+/// than needing a list of which longhands are colours: it is the measured set of
+/// properties whose value may be an author's own name, and `font-family: red`
+/// is a family called red, not a colour. Everything outside that set that
+/// spells a colour keyword means the colour.
+fn computedColourText(arena: Allocator, property_name: []const u8, value: []const u8) ?[]const u8 {
+    if (chrome_keywords.any_identifier.has(property_name)) return null;
+
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0 or trimmed.len > 32) return null;
+    // A function or a hash was already folded by canonicaliseValue; what
+    // reaches here as a colour is a bare keyword.
+    if (std.mem.indexOfAny(u8, trimmed, "(#, \t") != null) return null;
+
+    const rgba = color.RGBA.parse(trimmed) catch return null;
+
+    var buf = std.Io.Writer.Allocating.init(arena);
+    writeColour(&buf.writer, .{ .rgb = .{ rgba.r, rgba.g, rgba.b }, .alpha = rgba.a }) catch return null;
+    return buf.written();
 }
 
 fn writeColour(writer: *std.Io.Writer, colour: Colour) !void {
@@ -3345,4 +3392,12 @@ test "WebApi: CSSStyleDeclaration author longhands" {
 
 test "WebApi: CSSStyleDeclaration inheritance" {
     try testing.htmlRunner("css/computed_inheritance.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed colours" {
+    try testing.htmlRunner("css/computed_color_values.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration first computed read" {
+    try testing.htmlRunner("css/computed_first_read.html", .{});
 }
