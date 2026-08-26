@@ -13761,3 +13761,136 @@ Chrome (`bogus` reads back as `""`, `shipping` too, `section-x cc-name` reads
 back verbatim) and both HTMLInputElement's and HTMLTextAreaElement's reflect it
 as a plain string here. That is a value difference, not a shape one, so it is
 outside this pass.
+
+## The three interfaces a sensor reads, and SVGElement's missing half (B49, 2026-08-25)
+
+B48 left 871 of 923 shared prototypes byte-identical and 366 members on the
+missing side, sorted into four piles. This session re-measured that table on a
+**ReleaseFast** build first -- B48's reading was Debug, and B45 was misled for a
+whole session by a Debug-only artefact -- and got the same numbers to the name,
+so the binding table really is build-mode independent. The one member left on
+the extra side, `navigator.modelContext`, is this branch trailing main rather
+than a gap: main put the WebMCP surface behind `--webmcp` in `7b00aeff9`, and
+the branch is 65 commits behind it.
+
+**Both arms after this session: 875 of 923 byte-identical, 245 members on the
+missing side.**
+
+### The sweep, and a reference column that was measured wrong
+
+The lightpanda arm, run alone rather than concurrently, is **19 of 29 passing
+against B47's 14, with no station going the other way**. Three of the five
+changes are B47's known concurrency false-reds -- `ak-kohls`, `ak-expedia` and
+`px-wayfair` all report `timeout: Page.navigate` under load and pass when run
+alone. The other two, `dd-leboncoin` and `x-zillow`, genuinely changed verdict,
+but one reading each is not enough to attribute them to the prototype work.
+
+The Chrome column of that sweep is **not** usable and is recorded here so the
+next session does not repeat the mistake: `antibot-sweep.mjs chrome` is
+*headless* unless `--headed` is passed, and headless Chrome scores 3 of 29 --
+worse than this engine, on stations it has no trouble with otherwise. Every
+prior reference reading in `results/` that means anything used `--headed`. The
+same error made a first pass at `ak-macys` read `refused-403` on the Chrome
+side and look like a burned IP; re-run headed in the same sitting, **Chrome
+passes macys with 8018 nodes while this engine still gets the 33-node
+interstitial**. The gap is real and still open.
+
+### MouseEvent, WheelEvent, PointerEvent
+
+These three were picked out of B48's remaining pile because Akamai's and
+Kasada's sensors read them directly. All three were short of members *and* in
+the wrong own-property order -- MouseEvent's was alphabetical, which no
+interface in Chrome is. All three are byte-identical now.
+
+Three values would have been written wrong from the IDL:
+
+- **`fromElement`/`toElement` are not symmetric aliases of `relatedTarget`.**
+  The type string alone picks the branch, and it is a literal match on two
+  names: for `mouseout` and `mouseleave`, `fromElement` is the target and
+  `toElement` the relatedTarget; for everything else -- including `pointerout`,
+  which reads like it should be on the other side -- it is the other way round.
+  Detached and attached elements read the same on both arms.
+- **`momentum` is a boolean**, not the enum string the name suggests, and it
+  goes through ToBoolean (`'x'` is true, `0` is false).
+- **`wheelDelta*` and `delta*` fill each other's gaps**, and only the legacy →
+  standard direction flips the sign:
+
+  | init | deltaY | wheelDeltaY |
+  |---|---|---|
+  | `{deltaY: 10}` | 10 | 10 |
+  | `{wheelDeltaY: 2}` | **-2** | 2 |
+  | `{deltaY: 10, wheelDeltaY: 2}` | **10** | 2 |
+
+  A given value is always kept; only a *missing* one is derived. Both members
+  had to become optional for "absent" to be distinguishable from "0".
+  `deltaMode` never scales either value on a synthesised event -- the
+  120-per-notch factor is a trusted-event thing. `wheelDelta` is not an init
+  key at all: it is Y unless Y is exactly zero, then X.
+
+The third row is worth dwelling on, because the first pass got it wrong *and
+the test agreed*: the same misreading was written into the code and into the
+assertion, so `make test` was green on a value both arms disagree about. What
+caught it was running the measurement probe against **both** engines and
+diffing, which is the check B48 recommended and which is now the reason this
+section can say what it says.
+
+### SVGElement, and the nonce slot behind it
+
+`SVGElement` was 110 members short. Chrome's `SVGElement.prototype` and
+`MathMLElement.prototype` carry an **identical 113-name tail** (measured), so
+this was MathMLElement's block pointed at the SVG side, behind the same
+`constructor_after = "focusGroupStart"`. Adding the members meant measuring
+what they answer, and three were wrong here in ways `getOwnPropertyNames`
+cannot show:
+
+- **`focusGroup` is a `DOMTokenList`.** SVGElement and MathMLElement were both
+  handing back a bare object. The earlier note claiming otherwise measured
+  `JSON.stringify(el.focusGroup)`, which is `{}` for a DOMTokenList too -- a
+  measurement that was consistent and still wrong, because it never asked for
+  the constructor.
+- **`<a>` is the only SVG tag focusable by default**, and unlike HTML's it does
+  not need an href.
+- **`nonce` is a slot, not the content attribute.** One storage, two writers,
+  and only one touches the markup:
+
+  | sequence | `el.nonce` | `getAttribute('nonce')` |
+  |---|---|---|
+  | `el.nonce = 'abc'` | `'abc'` | `null` |
+  | `setAttribute('nonce','zzz')` | `'zzz'` | `'zzz'` |
+  | `nonce='abc'` then `setAttribute('zzz')` | `'zzz'` | `'zzz'` |
+  | ...then `removeAttribute` | `''` | `null` |
+  | `setAttribute('zzz')` then `nonce='abc'` | `'abc'` | `'zzz'` |
+
+  A read-time rule over (slot, attribute) cannot tell the fourth row's end
+  state from the first's, so the attribute's writers have to reach into the
+  slot. An *unset* slot still falls back to the attribute, which is what a
+  parsed `<script nonce=…>` reads -- the parser fills initial attributes
+  without running change reactions.
+
+That last one is not cosmetic. The CSP check read the content attribute, and
+Cloudflare's interstitial sets `a.nonce` as an IDL property -- which in Chrome
+writes no attribute at all. This engine only admitted that loader because it
+mirrored the IDL write into the markup, and `csp_nonce.html` asserted that
+mirror as though it were Chrome's. Fixing the surface without fixing the check
+would have taken the cf-challenge path down.
+
+### What is left: 48 interfaces, 245 members
+
+Unchanged from B48's shape minus the four done here. The largest remaining are
+`SVGSVGElement` (20), `HTMLFrameSetElement` (18, the windowed handler set),
+`HTMLIFrameElement` and `Request` (11 each), and `HTMLMediaElement` /
+`HTMLObjectElement` / `HTMLOutputElement` / `HTMLTableElement` (10 each). The
+form-associated set -- `form`, `willValidate`, `validity`,
+`validationMessage`, `checkValidity`, `reportValidity`, `setCustomValidity` --
+still shows up together on HTMLFieldSetElement, HTMLObjectElement and
+HTMLOutputElement, and Button/Input/Select/TextArea already have it.
+
+**Found while cross-checking, not fixed:** the event dictionaries are read in a
+different member order than Chrome reads them, and `WheelEventInit` here is
+missing `sourceCapabilities`, the six `modifier*` members and `region`. A Proxy
+passed as the dictionary sees that order, so it is readable in one expression
+-- but it is every event dictionary's problem, not one interface's.
+
+**Still not measured: the worker realm.** B46 read `WorkerNavigator.prototype`'s
+`constructor` between `connection` and `hid`; every table since, this one
+included, has been the window realm only.
