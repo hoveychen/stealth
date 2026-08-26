@@ -102,8 +102,11 @@ pub const ScreenDetailed = struct {
         return true;
     }
 
+    // The same number Window reports. A page that can reach this surface can
+    // reach `window.devicePixelRatio` too, so the two disagreeing is a reading
+    // in itself.
     pub fn getDevicePixelRatio(_: *const ScreenDetailed) f64 {
-        return 1;
+        return 2;
     }
 
     pub fn getLabel(_: *const ScreenDetailed) []const u8 {

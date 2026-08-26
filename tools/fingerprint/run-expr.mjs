@@ -65,6 +65,14 @@ const arg = (name, fallback) => {
 };
 const targetUrl = arg('--url', 'about:blank');
 const windowSize = arg('--window-size', null);
+// Extra Chrome switches, repeatable, the way antibot-sweep.mjs takes them. One
+// launch flag at a time against one expression is how a reading gets attributed
+// to the flag rather than to the browser: `--chrome-arg
+// --force-device-scale-factor=2` twice over the same probe says exactly which
+// values follow from devicePixelRatio and which only looked like they did.
+// Chrome only; ignored for the lightpanda arm.
+const chromeArgs = process.argv.reduce((acc, a, i) => (
+    a === '--chrome-arg' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc), []);
 // Same reason the sweep has it: the product token is a one-word tell, and a
 // reading taken with it is a reading of the harness.
 const headedUa = process.argv.includes('--headed-ua');
@@ -113,6 +121,7 @@ if (engine === 'chrome') {
         ...(headed ? [] : ['--headless=new']),
         `--window-size=${windowSize ?? '1920,1080'}`,
         ...(userAgentOverride ? [`--user-agent=${userAgentOverride}`] : []),
+        ...chromeArgs,
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {
     if (headedUa) {

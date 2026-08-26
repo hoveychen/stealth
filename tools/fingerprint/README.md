@@ -15879,12 +15879,26 @@ Mac reports that combination. Whether a guard acts on it is an A/B nobody has
 run; `display-capability-persona` and `device-pixel-ratio-persona` are that
 A/B, and their acceptance is `b53-arm.sh` over these same ten stations.
 
-**One of the differences needs no reference at all.** With `devicePixelRatio`
-1, `min-resolution` must be true at or below 1 and false above it. This engine
-answers *true* at `1.0000038146972656dppx` and `1.0000044107437134dppx`, and
-*false* at `37.795257568359375dpcm`, which is 0.99999995dppx. A monotone
-predicate answered non-monotonically is a defect on its own terms, whatever
-Chrome's display is: `resolution-query-monotonicity`.
+**The engine also disagrees with itself near the boundary — but so does Chrome.**
+With `devicePixelRatio` 1, this engine answers `min-resolution` *true* at
+`1.0000038146972656dppx` and `1.0000044107437134dppx`, and *false* at
+`37.795257568359375dpcm`, which is 0.99999995dppx. That was written up here as a
+monotone predicate answered non-monotonically, i.e. a defect needing no
+reference browser — **and that was wrong**. Driving the same halving ladder in
+all three units against Chrome under `--force-device-scale-factor` produces
+non-monotone pairs there too: Chrome's dpcm conversion is coarse enough that its
+tie region is about 0.005dppx wide, five hundred times wider than this engine's.
+
+What survives is smaller and has to be stated as a *difference*, not a defect.
+Asked the three thresholds above, Chrome at ratio 1 answers false, false, true;
+this engine answers true, true, false. All three. So the near-boundary answers
+diverge in both directions, which matters here only because Kasada's 314 queries
+are a binary search that spends its last twenty rungs inside exactly that
+region.
+
+The plan named for this is `resolution-query-monotonicity`; its premise is
+corrected to "match Chrome's near-boundary answers", and asserting monotonicity
+would now be asserting something the reference does not do.
 
 **The negative result is worth as much.** Forty-five `canPlayType` strings,
 nineteen `MediaSource.isTypeSupported`, seventeen

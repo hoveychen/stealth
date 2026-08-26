@@ -45,7 +45,8 @@
 //!
 //! The interaction features and the display descriptors answer for one fixed
 //! device persona, and it has to stay consistent with the rest of the fork:
-//! an Apple GPU driving a 1920x1200 display at devicePixelRatio 1 with
+//! an Apple GPU driving a 1920x1200 display at devicePixelRatio 2 -- so a
+//! 3840x2400 panel, since `screen.*` is CSS pixels -- with
 //! `screen.colorDepth` 30 — a wide-gamut, HDR-capable panel, which is the only
 //! kind the Apple M4 named by this fork's WebGL renderer ever drives — driven
 //! with a mouse, showing a 1920x1080 page in a maximised window (Viewport
@@ -397,10 +398,11 @@ const COLOR_BITS_PER_CHANNEL: u32 = 10;
 const COLOR_INDEX: u32 = 0;
 const MONOCHROME_BITS: u32 = 0;
 
-// devicePixelRatio, mirroring Window's own property. Held as a float because a
-// resolution bound is a float: `(min-resolution: 0.625dppx)` has to compare
-// against 1 without either side being rounded first.
-const DEVICE_PIXEL_RATIO: f64 = 1;
+// devicePixelRatio, mirroring Window's own property -- change one and the other
+// has to move, because a page can read both and Kasada does. Held as a float
+// because a resolution bound is a float: `(min-resolution: 0.625dppx)` has to
+// compare against it without either side being rounded first.
+const DEVICE_PIXEL_RATIO: f64 = 2;
 
 fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
     if (name.len > 32) {
@@ -1745,9 +1747,10 @@ test "MediaQuery: the device persona, as measured on a headed Chrome" {
     try testing.expect(matches("(overflow-inline: scroll)", v));
     try testing.expect(matches("(grid: 0)", v));
     try testing.expect(matches("(color-index: 0)", v));
-    try testing.expect(matches("(resolution: 1dppx)", v));
-    try testing.expect(matches("(resolution: 96dpi)", v));
-    try testing.expect(!matches("(resolution: 2dppx)", v));
+    try testing.expect(matches("(resolution: 2dppx)", v));
+    try testing.expect(matches("(resolution: 192dpi)", v));
+    try testing.expect(!matches("(resolution: 1dppx)", v));
+    try testing.expect(!matches("(resolution: 96dpi)", v));
 }
 
 test "MediaQuery: ratio compares as a fraction, not a division" {
@@ -1778,7 +1781,7 @@ test "MediaQuery: ratio compares as a fraction, not a division" {
 // wrong. Every expectation below was measured on a headed Chrome via
 // tools/fingerprint/probes/media-feature-forms.js.
 test "MediaQuery: resolution accepts fractions, dpi and dpcm" {
-    const v = Viewport.default; // devicePixelRatio 1
+    const v = Viewport.default; // devicePixelRatio 2
 
     // Fractional dppx, in the forms the binary search produces.
     try testing.expect(matches("(min-resolution: 0.625dppx)", v));
@@ -1787,17 +1790,20 @@ test "MediaQuery: resolution accepts fractions, dpi and dpcm" {
     try testing.expect(matches("(min-resolution: 0dppx)", v));
     // A leading dot is a valid CSS number; Chrome serializes it back as 0.625.
     try testing.expect(matches("(min-resolution: .625dppx)", v));
-    try testing.expect(!matches("(min-resolution: 1.5dppx)", v));
+    try testing.expect(matches("(min-resolution: 1.5dppx)", v));
+    try testing.expect(!matches("(min-resolution: 2.5dppx)", v));
 
     // dpi that is not a multiple of 96, and the max- form.
     try testing.expect(matches("(min-resolution: 50dpi)", v));
     try testing.expect(matches("(max-resolution: 256dpi)", v));
     try testing.expect(!matches("(max-resolution: 50dpi)", v));
 
-    // dpcm: 1in is 2.54cm and CSS fixes 1in at 96px, so 1dppx is ~37.8dpcm.
+    // dpcm: 1in is 2.54cm and CSS fixes 1in at 96px, so 1dppx is ~37.8dpcm and
+    // this persona's 2dppx is ~75.6.
     try testing.expect(matches("(min-resolution: 30dpcm)", v));
     try testing.expect(!matches("(max-resolution: 30dpcm)", v));
-    try testing.expect(matches("(max-resolution: 50dpcm)", v));
+    try testing.expect(!matches("(max-resolution: 50dpcm)", v));
+    try testing.expect(matches("(max-resolution: 80dpcm)", v));
 
     // Still fails closed on a malformed value: a bare number is not a
     // resolution, `5.` is not a CSS number, and negatives are rejected.
@@ -2006,12 +2012,13 @@ test "MediaQuery: range syntax, two-sided" {
 
 test "MediaQuery: range syntax on the numeric descriptors" {
     const v = Viewport.default;
-    try testing.expect(matches("(resolution = 1dppx)", v));
-    try testing.expect(matches("(resolution >= 1dppx)", v));
-    try testing.expect(matches("(resolution <= 1dppx)", v));
+    try testing.expect(matches("(resolution = 2dppx)", v));
+    try testing.expect(matches("(resolution >= 2dppx)", v));
+    try testing.expect(matches("(resolution <= 2dppx)", v));
     try testing.expect(matches("(resolution > 50dpi)", v));
     try testing.expect(!matches("(resolution < 50dpi)", v));
     try testing.expect(!matches("(resolution > 2dppx)", v));
+    try testing.expect(matches("(resolution > 1dppx)", v));
 
     try testing.expect(matches("(color = 10)", v));
     try testing.expect(matches("(color > 4)", v));
