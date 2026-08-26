@@ -16870,3 +16870,26 @@ day: a sweep log where the first N stations look normal and everything after is
 `CRASHED … timeout` is **one** crash, not N failures. Only the first line is
 signal, the trailing `N/29` is void, and the way to tell a station that shut
 from an engine that died is to re-run the suspects one at a time.
+
+### What was fixed from this, and what it cost
+
+`css-system-color-keywords` (merge `f86cb92b0`): the forty-two system colours
+resolve to the measured `rgb()`, and `color` is graded against the value classes
+it was measured as taking, so `FakeColor` and the `-moz-` names are refused the
+way Chrome refuses them. **53 of 53 readings differed before, 0 of 53 after**;
+1510/1510.
+
+`colour-fold-needs-colour-property` (merge `0f5e1ebcb`): the first change had a
+regression the tests did not cover. The system colours are words other
+properties take as keywords — `menu`, `caption`, `field`, `window`, `mark`,
+`background` — and `font` takes six of them, so `getComputedStyle(el).font`
+answered `rgb(255, 255, 255)` for `font: menu`. It was caught by *measuring*
+the six system font keywords on both arms rather than by a test, which is the
+lesson: a fold that reaches every property outside one gate reaches more than
+the properties it was written for. `currentcolor` is now the gate, and it is
+exact — all sixty colour-valued properties in the measured tables list it and no
+other property does.
+
+Neither opens the station: x-hyatt was in a refusing window by the time both
+landed, with a clean headed Chrome control answering 429 as well
+(`results/b55-chrome-control.json`), so no verdict was measurable either way.
