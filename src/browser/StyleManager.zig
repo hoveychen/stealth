@@ -514,7 +514,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
                 for (expansion.names, expansion.values) |longhand_name, longhand_value| {
                     try longhands.append(self.arena.allocator(), .{
                         .name = longhand_name,
-                        .value = try self.arena.allocator().dupe(u8, longhand_value),
+                        .value = canonicalValue(self.arena.allocator(), longhand_name, longhand_value),
                         .important = decl.important,
                     });
                 }
@@ -522,9 +522,10 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
             }
         }
 
+        const lowered = try lowerDuped(self.arena.allocator(), name);
         try longhands.append(self.arena.allocator(), .{
-            .name = try lowerDuped(self.arena.allocator(), name),
-            .value = try self.arena.allocator().dupe(u8, val),
+            .name = lowered,
+            .value = canonicalValue(self.arena.allocator(), lowered, val),
             .important = decl.important,
         });
     }
@@ -1221,6 +1222,18 @@ fn lowerDuped(arena: Allocator, name: []const u8) ![]const u8 {
     return std.ascii.lowerString(out, name);
 }
 
+/// The canonical spelling of a raw declaration's value. The CSSOM path's
+/// declarations went through storeProperty and are already canonical; the raw
+/// path's are whatever the author typed, and a computed style has to report the
+/// same string either way -- `rgb(1,2,3)` reads back `rgb(1, 2, 3)` on both.
+///
+/// No copy either way: what it hands back is either freshly allocated on
+/// `arena` or a slice of the sheet text, which parseSheet already put on the
+/// same arena. That is why the reduced fields above store `val` unowned too.
+fn canonicalValue(arena: Allocator, property_name: []const u8, raw: []const u8) []const u8 {
+    return CSSStyleDeclaration.normalizePropertyValue(arena, property_name, raw) catch raw;
+}
+
 // Computes CSS specificity for a selector.
 // Returns packed value: (id_count << 20) | (class_count << 10) | element_count
 pub fn computeSpecificity(selector: Selector.Selector) u32 {
@@ -1431,6 +1444,16 @@ fn getInlineStyleProperty(el: *Element, property_name: String, frame: *Frame) ?*
 pub fn inlineStyleValue(self: *StyleManager, el: *Element, property_name: String) ?[]const u8 {
     const property = getInlineStyleProperty(el, property_name, self.frame) orelse return null;
     return property._value.str();
+}
+
+/// The same declaration with its importance, for the callers that have to rank
+/// it against a rule. The style attribute is the highest specificity rather
+/// than a tier of its own, so an `!important` rule beats it and an `!important`
+/// style attribute beats that (CSS Cascade 4 §6.9; see
+/// css/important_vs_inline.html).
+pub fn inlineStyleDeclaration(self: *StyleManager, el: *Element, property_name: String) ?Declaration {
+    const property = getInlineStyleProperty(el, property_name, self.frame) orelse return null;
+    return .{ .value = property._value.str(), .important = property._important };
 }
 
 /// Bounds computedFontSize's ancestor recursion (the parent walk and
