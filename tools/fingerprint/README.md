@@ -13566,3 +13566,29 @@ being the same numbers as `width`/`height`. `(aspect-ratio: 16/9)` is the page
 and still holds; `(device-aspect-ratio: 8/5)` is the display. CreepJS compares
 the two families against `screen.*` to catch an iframe-shrunk window, so they
 have to be told apart rather than aliased.
+
+### The sweep says the door is unchanged
+
+Two ReleaseFast arms, same IP, minutes apart (`results/b75-*.json`). On all
+**21 non-DataDome stations the two arms agree station for station** — the same
+16 passes, the same three Cloudflare challenges on scrapingcourse / nopecha /
+zeroclover, the same `cf-blocked` on allopneus, the same empty document on
+macys, the same 429 on hyatt. The window box moved nothing there, in either
+direction.
+
+The eight DataDome stations are not readable in this window, and the control
+says so rather than the arms doing. The first patched run scored two fewer than
+baseline; a `--fresh` rerun of the *same* patched binary then scored two fewer
+again; and a third run of the **unmodified baseline** scored 0/8 — every station
+challenged, including three it had passed forty minutes earlier. Individual
+stations flipped both ways on both arms (`dd-leboncoin` challenge → pass → 
+challenge on baseline alone). DataDome is rate-limiting the address, and a
+column measured while that is happening prices the address, not the binary.
+
+One other trap worth writing down, because it produced three convincing
+failures: the first patched run ended with `px-wayfair` timing out on
+`Runtime.evaluate` and `ks-canadagoose` / `x-hyatt` then timing out on
+`Page.navigate`. All three passed on the `--fresh` rerun. That is the cascade
+this file's own header warns about — one engine process serves the whole sweep
+unless `--fresh` is passed, so a station that wedges the page takes every
+station after it with it. Read a run's *tail* failures with that in mind.
