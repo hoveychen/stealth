@@ -72,6 +72,11 @@ Three separate things are pinned here.
       testing.expectEqual('CacheStorage', d.caches_ctor);
       testing.expectEqual('function', d.createImageBitmap_is_function);
       testing.expectEqual(null, d.onlanguagechange_initially);
+
+      // A variadic operation's arity is 0. The bridge counted the variadic
+      // slice as one required argument, so this answered 1 -- read from inside
+      // a worker, which is where the sensor reads it.
+      testing.expectEqual(0, d.importScripts_arity);
     });
   }
 </script>

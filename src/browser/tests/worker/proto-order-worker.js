@@ -19,5 +19,6 @@ onmessage = () => {
     caches_ctor: self.caches ? self.caches.constructor.name : null,
     createImageBitmap_is_function: typeof self.createImageBitmap,
     onlanguagechange_initially: self.onlanguagechange,
+    importScripts_arity: self.importScripts.length,
   });
 };

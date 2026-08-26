@@ -776,7 +776,11 @@ pub const JsApi = struct {
         }
     }.createImageBitmap, .{ .arity = 1 });
     pub const fetch = bridge.function(WorkerGlobalScope.fetch, .{});
-    pub const importScripts = bridge.function(WorkerGlobalScope.importScripts, .{});
+    // A variadic operation's arity is 0, and the bridge would count the
+    // variadic slice as one required argument (measured: Chrome's
+    // `importScripts.length` is 0, this engine answered 1 -- read from inside
+    // a worker, where the sensor reads it).
+    pub const importScripts = bridge.function(WorkerGlobalScope.importScripts, .{ .arity = 0 });
 
     // A worker's secure-context state is its owner's, not a constant: measured
     // on a headed Chrome 151, a worker on http://localhost:8777 answers true
