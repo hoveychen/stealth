@@ -1989,18 +1989,15 @@ fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: bool
         }
     }
 
-    // Height still reads the style attribute alone. Putting it on the cascade
-    // would put one on `getElementHeight`, and gating it the way width is gated
-    // would leave `getElementHeight` and `getClientHeight` disagreeing about a
-    // stylesheet-sized element -- a new contradiction where today both simply
-    // miss the rule. That is its own change, with its own measurement.
-    if (self.getStyle(frame)) |style| {
-        const declared_height = blk: {
-            const physical = style.getPropertyValue("height", frame);
-            if (physical.len > 0) break :blk physical;
-            break :blk style.getPropertyValue("block-size", frame);
-        };
-        if (CSS.parseDimensionViewport(declared_height, frame)) |h| {
+    // Height comes from the cascade too, and unlike width it is NOT gated:
+    // `getElementHeight` is the y-only path document.elementFromPoint rejects
+    // thousands of elements on, and it needs the height. What makes that
+    // affordable is StyleManager's index of the longhand names any rule in the
+    // document declares -- a page that never mentions `height` answers the
+    // lookup in one hash probe instead of comparing the name against every
+    // declaration of every rule keyed to the element.
+    if (CSSStyleDeclaration.cascadedComputedValue(self, "height", frame)) |declared| {
+        if (CSS.parseDimensionViewport(declared, frame)) |h| {
             dims.height = h;
             dims.explicit_height = true;
         }

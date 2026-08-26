@@ -69,16 +69,15 @@ rows below passed before this and have to keep passing.
     if (got.offset !== offset) wrong.push(html + ' offsetWidth: want ' + offset + ', got ' + got.offset);
   }
 
-  // Height is deliberately NOT part of this: it still reads the style
-  // attribute alone. Chrome answers 70 for `.sbw-h{height:70px}` and this
-  // engine answers 18, the line box. Putting height on the cascade would put a
-  // cascade on `getElementHeight`, which is the y-only path elementFromPoint
-  // rejects thousands of elements on and which `element_from_point.html`
-  // budgets at 1500ms for 40 calls over 800 elements. Gating it the way width
-  // is gated would instead leave `getElementHeight` and `getClientHeight`
-  // disagreeing about a rule-sized element, where today both simply miss it.
+  // A height a rule declares reaches the box too. This one arrived later than
+  // the width beside it, because putting height on the cascade puts one on
+  // `getElementHeight` -- the y-only path elementFromPoint rejects thousands of
+  // elements on, budgeted at 1500ms for 40 calls over 800 elements in
+  // element_from_point.html. What made it affordable is StyleManager's index of
+  // the longhand names any rule declares: a document that never mentions
+  // `height` answers the lookup in one hash probe.
   const h = measure('<div data-m class="sbw-h">x</div>');
-  if (h.offsetHeight !== 18) wrong.push('sheet height (known gap): want 18, got ' + h.offsetHeight);
+  if (h.offsetHeight !== 70) wrong.push('sheet height: want 70, got ' + h.offsetHeight);
 
   host.remove();
   sheet.remove();
