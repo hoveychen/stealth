@@ -83,6 +83,18 @@ next_doc_order: u32 = 1,
 // When true, rules need to be rebuilt
 dirty: bool = false,
 
+// Every longhand name any rule in the document declares, rebuilt with the
+// rules. A cascade lookup for a name that is not in here cannot have a winner,
+// and answering that in one hash probe is what makes the lookup affordable on
+// the paths that ask per element: `cascadedNamedDeclaration` otherwise compares
+// the wanted name against every declaration of every rule keyed to the
+// element's id, classes and tag before it can say "nobody declared it".
+//
+// document.elementFromPoint is the path that cares. It rejects thousands of
+// elements on their y alone, and `element_from_point.html` budgets 40 calls
+// over 800 elements at 1500ms.
+declared_longhands: std.StringHashMapUnmanaged(void) = .empty,
+
 pub fn init(frame: *Frame) !StyleManager {
     return .{
         .frame = frame,
@@ -531,6 +543,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
     }
     props.custom = custom.items;
     props.longhands = longhands.items;
+    try self.indexLonghands(props);
 
     if (!props.isRelevant()) return;
 
@@ -620,6 +633,8 @@ fn rebuildIfDirty(self: *StyleManager) !void {
 
     self.other_rules = .{};
     try self.other_rules.ensureTotalCapacity(self.arena.allocator(), other_rules_count);
+
+    self.declared_longhands = .empty;
 
     const sheets = self.frame.document._style_sheets orelse return;
     for (sheets._sheets.items) |sheet| {
@@ -1031,6 +1046,7 @@ fn addRule(self: *StyleManager, build_arena: Allocator, style_rule: *CSSStyleRul
     // Check if the rule declares anything we resolve
     const style = style_rule._style orelse return;
     const props = try extractRuleProperties(self.arena.allocator(), style);
+    try self.indexLonghands(props);
     if (!props.isRelevant()) {
         return;
     }
@@ -1136,6 +1152,14 @@ fn getBucketKey(compound: Selector.Compound) ?BucketKey {
 /// Extracts the properties we resolve from a style declaration. `arena` owns
 /// the copies of any value we keep verbatim: the declaration belongs to the
 /// stylesheet, which outlives no rebuild in particular.
+/// Records the longhand names a rule declares, so a lookup for a name nothing
+/// declares can stop at one hash probe.
+fn indexLonghands(self: *StyleManager, props: RuleProperties) !void {
+    for (props.longhands) |declaration| {
+        try self.declared_longhands.put(self.arena.allocator(), declaration.name, {});
+    }
+}
+
 fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RuleProperties {
     var props = RuleProperties{};
     const decl = style;
@@ -2010,6 +2034,11 @@ pub fn cascadedLonghand(self: *StyleManager, el: *Element, name: []const u8) ?De
 
 fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8, which: NamedList) ?Declaration {
     self.rebuildIfDirty() catch return null;
+
+    // Nothing in the document declares it, so no rule can win it.
+    if (which == .longhand and !self.declared_longhands.contains(name)) {
+        return null;
+    }
 
     var best: ?Declaration = null;
     var best_priority: u64 = 0;
