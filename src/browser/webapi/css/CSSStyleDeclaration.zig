@@ -714,8 +714,13 @@ fn lengthFactor(style_manager: *StyleManager, element: *Element, property_name: 
         else if (percentageIsComputedValue(property_name))
             .verbatim
         else if (percentageOfContainingBlockWidth(property_name)) blk: {
-            const parent = element.parentElement() orelse break :blk .unresolvable;
             const frame = element.ownerFrame(style_manager.frame);
+            // The containing block, which is not always the parent: an inline
+            // box is not one, so `<span><div style="width:50%">x</div></span>`
+            // takes its half from the block the span sits in. Chrome answers
+            // 952 on the 1904px line, measured -- and asking the span instead
+            // was a closed loop, because the span's own ink is the div's box.
+            const parent = element.containingBlock(frame) orelse break :blk .unresolvable;
             break :blk .{ .pixels = parent.getElementDimensions(frame).width / 100.0 };
         } else .unresolvable,
         .vw => .{ .pixels = width / 100.0 },
@@ -1194,16 +1199,68 @@ pub const BoxEdges = struct {
 };
 
 pub fn boxEdges(element: *Element, frame: *Frame) BoxEdges {
+    var containing: ?f64 = null;
+    return boxEdgesSharing(element, frame, &containing, 0);
+}
+
+/// boxEdges with the containing block's width shared with the caller, which is
+/// what keeps a percentage padding from costing an exponential number of
+/// measurements.
+///
+/// A percentage padding resolves against the containing block, so reading one
+/// means measuring the parent -- and there are four of them, on top of the
+/// measurement `dimensionsAt` already makes to fill a containing block. Asking
+/// separately each time made the parent's box cost five of the grandparent's,
+/// which is 5^n down a chain: eight nested `padding: 1%` elements took 626ms to
+/// answer one clientWidth and twelve never came back at all. On www.sony.com it
+/// took the engine out with a SIGBUS in the middle of an antibot sweep.
+///
+/// `containing` is that measurement, made at most once and then reused --
+/// including by the fill branch in `dimensionsAt` -- which makes the whole
+/// chain linear again.
+pub fn boxEdgesSharing(element: *Element, frame: *Frame, containing: *?f64, depth: u8) BoxEdges {
     return .{
-        .padding_x = computedPx(element, "padding-left", frame) + computedPx(element, "padding-right", frame),
-        .padding_y = computedPx(element, "padding-top", frame) + computedPx(element, "padding-bottom", frame),
+        .padding_x = paddingPx(element, "padding-left", frame, containing, depth) +
+            paddingPx(element, "padding-right", frame, containing, depth),
+        .padding_y = paddingPx(element, "padding-top", frame, containing, depth) +
+            paddingPx(element, "padding-bottom", frame, containing, depth),
         // A border that draws nothing is 0 wide however the page wrote it, and
         // `thin` is 1px -- both are already the used value the computed border
         // width reports (computed-border-width-used-value), so nothing here has
-        // to know about `none`.
+        // to know about `none`. A border width is never a percentage, so none
+        // of this applies to one.
         .border_x = borderPx(element, "border-left", frame) + borderPx(element, "border-right", frame),
         .border_y = borderPx(element, "border-top", frame) + borderPx(element, "border-bottom", frame),
     };
+}
+
+/// One padding in px. A percentage is resolved here, against the shared
+/// containing-block width, rather than through the computed-value machinery --
+/// that path measures the parent from scratch for every property that asks.
+fn paddingPx(element: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) f64 {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    if (declaredText(style_manager, element, name, .wrap(name))) |declared| {
+        const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
+        if (std.mem.endsWith(u8, trimmed, "%")) {
+            const parsed = units.parse(trimmed) catch return 0;
+            const width = containingWidth(element, frame, containing, depth) orelse return 0;
+            return @max(0, width * parsed.value / 100.0);
+        }
+    }
+    return computedPx(element, name, frame);
+}
+
+/// The containing block's content width, measured once and remembered.
+pub fn containingWidth(element: *Element, frame: *Frame, containing: *?f64, depth: u8) ?f64 {
+    if (containing.*) |width| return width;
+    if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
+    // The same ancestor the fill branch measures -- Element.containingBlock,
+    // which walks past an inline one -- so the two share a number rather than
+    // each measuring a different element.
+    const parent = element.containingBlock(frame) orelse return null;
+    const width = parent.dimensionsAt(frame, true, depth + 1, true).width;
+    containing.* = width;
+    return width;
 }
 
 /// Whether a declared width and height name the border box rather than the
@@ -1457,6 +1514,12 @@ fn stretchesAcrossFlexLine(element: *Element, parent: *Element, frame: *Frame) b
         std.ascii.eqlIgnoreCase(effective, "normal");
 }
 
+/// Whether this element is block-level, which is what breaks an inline box it
+/// sits inside into fragments around it.
+pub fn breaksInline(element: *Element, frame: *Frame) bool {
+    return fillsAtDisplay(resolvedDisplay(element, frame));
+}
+
 fn fillsAtDisplay(display: []const u8) bool {
     const FILLS = [_][]const u8{ "block", "flow-root", "list-item", "grid", "flex" };
     for (FILLS) |name| {
@@ -1503,7 +1566,15 @@ fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame
         .height => .{ edges.padding_y, edges.border_y },
     };
     const value = if (usesBorderBox(element, frame)) client + border else @max(0, client - padding);
-    return std.fmt.allocPrint(frame.local_arena, "{d}px", .{value}) catch "auto";
+
+    // Six significant figures, the way every other computed length is written.
+    // `{d}` printed a fractional box in full -- a percentage-padded element
+    // computed `1619.8527949957197px` here where Chrome prints `1619.85px`,
+    // and seventeen digits is a number no browser has ever answered.
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    units.writeNumber(&buf.writer, value) catch return "auto";
+    buf.writer.writeAll("px") catch return "auto";
+    return buf.written();
 }
 
 /// `transform-origin` and `perspective-origin` both compute to the centre of the

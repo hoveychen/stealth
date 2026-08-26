@@ -1928,7 +1928,7 @@ pub fn minContentWidth(self: *Element, frame: *Frame) ?f64 {
 /// </span>` is 32 wide (its own text plus the child's), and a <span> holding a
 /// <div> is 1904 -- the block escapes the inline and fills the block container,
 /// which is what containingBlock walks up to find.
-fn inlineInk(self: *Element, frame: *Frame, depth: u8) struct { width: f64, height: f64 } {
+fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) struct { width: f64, height: f64 } {
     // The same backstop the containing-block walk has. A chain of inline
     // elements is measured one level at a time, and this is what stops a page
     // that nests them beyond anything real from walking forever.
@@ -1952,6 +1952,18 @@ fn inlineInk(self: *Element, frame: *Frame, depth: u8) struct { width: f64, heig
         }
         if (node.is(Element)) |el| {
             if (!el.checkVisibilityCached(&visibility_cache, frame)) continue;
+            // A block-level child breaks the inline in two and the box it
+            // leaves behind spans the whole line, whatever width the child
+            // itself took: `<span><div style="width:50%">x</div></span>` is
+            // 1904 in Chrome on the 1904px line and not the 952 the <div> is.
+            if (CSSStyleDeclaration.breaksInline(el, frame)) {
+                const box = el.dimensionsAt(frame, true, depth + 1, true);
+                height = @max(height, box.height + box.padding_y + box.border_y);
+                if (CSSStyleDeclaration.containingWidth(self, frame, containing, depth)) |line| {
+                    width = @max(width, line);
+                }
+                continue;
+            }
             // ONE measurement per child, carrying the depth down. Asking
             // getOffsetWidth and getOffsetHeight instead measured the child
             // twice and started each measurement over at depth 0, so a chain
@@ -2058,6 +2070,11 @@ fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) 
     return self.dimensionsAt(frame, measure_text_width, 0, true);
 }
 
+/// How many measurements may be in flight at once, counting every route in --
+/// including the ones that do not carry `depth`. Well past any real page's
+/// nesting, and small enough that a cycle unwinds long before the stack ends.
+pub const MAX_LAYOUT_REENTRY = 256;
+
 /// How deep the containing-block walk may go. A page's block nesting is far
 /// shallower than this; the cap exists so a tree that somehow made a cycle
 /// stops rather than recursing forever.
@@ -2067,7 +2084,7 @@ pub const MAX_CONTAINING_BLOCK_DEPTH = 64;
 /// always the parent element: an inline box is not a containing block for a
 /// block-level child, so a <div> inside a <span> fills the block container the
 /// span itself sits in -- 1904 and not the span's 8, measured.
-fn containingBlock(self: *Element, frame: *Frame) ?*Element {
+pub fn containingBlock(self: *Element, frame: *Frame) ?*Element {
     var ancestor = self.parentElement();
     while (ancestor) |current| : (ancestor = current.parentElement()) {
         if (!CSSStyleDeclaration.isInlineBox(current, frame)) return current;
@@ -2095,6 +2112,20 @@ pub fn horizontalMargin(self: *Element, frame: *Frame) f64 {
 /// recursing: measuring one item's flex base size asks its siblings for theirs,
 /// and a sibling asked with the distribution still on would ask back.
 pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool) Dimensions {
+    // A backstop the `depth` parameter cannot be: not every path down carries
+    // it. A percentage width resolves through the computed-value machinery,
+    // which reaches back for the containing block's box through
+    // `getElementDimensions` -- and that starts a fresh measurement at depth 0.
+    // `<span><div style="width:50%">x</div></span>` used to be a closed loop
+    // because of it: the span's ink asked the div, the div's percentage asked
+    // the span, and neither call's depth ever grew. This counter grows for
+    // every measurement in flight whatever route it came in by.
+    if (frame._layout_depth >= MAX_LAYOUT_REENTRY) {
+        return .{ .width = 5.0, .height = 5.0 };
+    }
+    frame._layout_depth += 1;
+    defer frame._layout_depth -= 1;
+
     var dims: Dimensions = .{ .width = 5.0, .height = 5.0 };
 
     // Width comes from the cascade, so a stylesheet rule reaches the box the
@@ -2108,6 +2139,12 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // (chrome_logical.zig is the measured pairing); cascadedComputedValue asks
     // for the other one when the first has nothing, the same as the computed
     // path does.
+    // The containing block's content width, measured at most once for this
+    // element and then shared: a percentage padding needs it, and so does the
+    // fill branch below. Measuring it per asker cost 5^n down a chain of
+    // percentage-padded elements -- see CSSStyleDeclaration.boxEdgesSharing.
+    var containing: ?f64 = null;
+
     // What a declared width and height name: the content box, or the border box
     // when `box-sizing` says so. Only asked on this path -- see Dimensions.
     const border_box = if (comptime measure_text_width) CSSStyleDeclaration.usesBorderBox(self, frame) else false;
@@ -2118,12 +2155,12 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // `<span style="width:300px">x</span>` is 8px wide in Chrome and reports
     // the 300px only from getComputedStyle.
     if (dims.inline_box) {
-        const edges = CSSStyleDeclaration.boxEdges(self, frame);
+        const edges = CSSStyleDeclaration.boxEdgesSharing(self, frame, &containing, depth);
         dims.padding_x = edges.padding_x;
         dims.padding_y = edges.padding_y;
         dims.border_x = edges.border_x;
         dims.border_y = edges.border_y;
-        const ink = self.inlineInk(frame, depth);
+        const ink = self.inlineInk(frame, depth, &containing);
         dims.width = ink.width;
         dims.height = ink.height;
         dims.explicit_width = true;
@@ -2132,7 +2169,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     }
 
     if (comptime measure_text_width) {
-        const edges = CSSStyleDeclaration.boxEdges(self, frame);
+        const edges = CSSStyleDeclaration.boxEdgesSharing(self, frame, &containing, depth);
         dims.padding_x = edges.padding_x;
         dims.padding_y = edges.padding_y;
         dims.border_x = edges.border_x;
@@ -2271,7 +2308,12 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
                     // `padding:10px` on the 1904px line is 1884 of content and
                     // 1904 of offsetWidth, and `padding:20px;border:5px solid`
                     // leaves its own children 1854 to fill.
-                    dims.width = @max(0, parent.dimensionsAt(frame, measure_text_width, depth + 1, true).width -
+                    const available = if (comptime measure_text_width)
+                        CSSStyleDeclaration.containingWidth(self, frame, &containing, depth) orelse
+                            parent.dimensionsAt(frame, measure_text_width, depth + 1, true).width
+                    else
+                        parent.dimensionsAt(frame, measure_text_width, depth + 1, true).width;
+                    dims.width = @max(0, available -
                         horizontalMargin(self, frame) - dims.padding_x - dims.border_x);
                     // Not a declared value, but the same thing a declared one
                     // means here: the box has a width of its own, so
@@ -2307,9 +2349,13 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
 // can't just ignore the children since some sites append nodes until a certain
 // width / height treshold is reached. If the size isn't explicit, we fallback
 // to contentWidth/contentHeight
+/// clientWidth is a `long` in the IDL, and Chrome rounds the box to reach one:
+/// a 1652.911px padding box reads 1653, measured. The `WithCache` form keeps
+/// the fraction, because a computed `width` is built off it and Chrome prints
+/// `1619.97px` there rather than an integer.
 pub fn getClientWidth(self: *Element, frame: *Frame) f64 {
     var visibility_cache: VisibilityCache = .{};
-    return self.getClientWidthWithCache(frame, &visibility_cache);
+    return @round(self.getClientWidthWithCache(frame, &visibility_cache));
 }
 
 pub fn getClientWidthWithCache(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache) f64 {
@@ -2334,7 +2380,7 @@ pub fn getClientWidthWithCache(self: *Element, frame: *Frame, visibility_cache: 
 
 pub fn getClientHeight(self: *Element, frame: *Frame) f64 {
     var visibility_cache: VisibilityCache = .{};
-    return self.getClientHeightWithCache(frame, &visibility_cache);
+    return @round(self.getClientHeightWithCache(frame, &visibility_cache));
 }
 
 pub fn getClientHeightWithCache(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache) f64 {
@@ -2474,7 +2520,7 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 
     if (dims.inline_box) return 0;
 
-    return @max(dims.height, self.contentHeight(frame, &visibility_cache)) + dims.padding_y;
+    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache)) + dims.padding_y);
 }
 
 // The height of the direct child elements stacked vertically, the counterpart
@@ -2522,8 +2568,8 @@ pub fn getScrollWidth(self: *Element, frame: *Frame) f64 {
 
     // The scrollable overflow area includes the padding: measured, a
     // `width:100px;padding:10px` box holding a 300px child answers 120 for
-    // clientWidth and 320 for scrollWidth.
-    return @max(dims.width, self.contentWidth(frame, &visibility_cache)) + dims.padding_x;
+    // clientWidth and 320 for scrollWidth. Rounded, like the other two.
+    return @round(@max(dims.width, self.contentWidth(frame, &visibility_cache)) + dims.padding_x);
 }
 
 // The width of the direct child elements laid end to end on a single row.
@@ -2573,8 +2619,8 @@ pub fn getOffsetHeight(self: *Element, frame: *Frame) f64 {
         return 0.0;
     }
     const dims = self.getElementDimensions(frame);
-    if (dims.inline_box) return dims.height + dims.padding_y + dims.border_y;
-    return self.getClientHeightWithCache(frame, &visibility_cache) + dims.border_y;
+    if (dims.inline_box) return @round(dims.height + dims.padding_y + dims.border_y);
+    return @round(self.getClientHeightWithCache(frame, &visibility_cache) + dims.border_y);
 }
 
 /// offsetWidth is the BORDER box: content, padding and border. It takes the
@@ -2588,8 +2634,8 @@ pub fn getOffsetWidth(self: *Element, frame: *Frame) f64 {
     const dims = self.getElementDimensions(frame);
     // An inline box has no clientWidth to build on -- that reading is 0 for one
     // -- so its ink is added up directly.
-    if (dims.inline_box) return dims.width + dims.padding_x + dims.border_x;
-    return self.getClientWidthWithCache(frame, &visibility_cache) + dims.border_x;
+    if (dims.inline_box) return @round(dims.width + dims.padding_x + dims.border_x);
+    return @round(self.getClientWidthWithCache(frame, &visibility_cache) + dims.border_x);
 }
 
 pub fn getOffsetTop(self: *Element, frame: *Frame) f64 {
