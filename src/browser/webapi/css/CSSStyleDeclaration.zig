@@ -244,13 +244,47 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
         // Only return default values for computed styles
         if (self._is_computed) {
             if (self._element) |element| {
-                // Resolve inline `style=` declarations through the element's
-                // parsed inline style, so computed values match `el.style`.
+                // The author cascade and the inline `style=` declaration, in the
+                // order CSS Cascade §6.2 puts them: an `!important` rule first,
+                // then the style attribute, then a normal rule. This is the
+                // order computedFontSize already spells out for its one
+                // property, generalised -- an inline declaration outranks a
+                // rule, and an important rule outranks the inline one.
+                //
+                // var() is substituted at computed-value time either way; the
+                // specified value `el.style` hands out keeps its var() text.
                 const style_manager = &element.ownerFrame(frame)._style_manager;
-                if (style_manager.inlineStyleValue(element, wrapped)) |value| {
-                    // var() is substituted at computed-value time; the
-                    // specified value `el.style` hands out keeps its var() text.
-                    return style_manager.substituteVars(element, value) orelse "";
+                const rule = style_manager.cascadedLonghand(element, normalized);
+                const inline_declaration = style_manager.inlineStyleDeclaration(element, wrapped);
+                const rule_wins = if (rule) |declaration| declaration.important and
+                    !(inline_declaration != null and inline_declaration.?.important) else false;
+
+                const winner: ?StyleManager.Declaration = if (rule_wins)
+                    rule
+                else if (inline_declaration) |declaration|
+                    declaration
+                else
+                    rule;
+
+                if (winner) |declaration| {
+                    // A specified value this engine cannot finish resolving is
+                    // *not* reported. A computed style never carries `2em` or
+                    // `calc(10px + 5px)` in a browser -- font- and
+                    // viewport-relative lengths resolve at computed-value time
+                    // and percentages at used-value time -- so answering the
+                    // author's text would trade one wrong answer for a wronger
+                    // one: `0px` is a value Chrome does print, and `2em` is a
+                    // value it never prints from here. Falling through leaves
+                    // the initial value that was reported before the cascade
+                    // was consulted at all, which is never worse.
+                    //
+                    // Resolving them properly is its own plan
+                    // (computed-style-relative-units); the list below is what
+                    // the two-arm probe actually surfaced, not a claim to have
+                    // enumerated every unresolvable shape.
+                    if (resolvesHere(normalized, declaration.value)) {
+                        return style_manager.substituteVars(element, declaration.value) orelse "";
+                    }
                 }
 
                 // Computed width/height must agree with the synthetic layout
@@ -284,6 +318,57 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
     };
     return prop._value.str();
 }
+
+/// Whether a specified value is already in the shape a computed style reports,
+/// so the cascade's answer can be handed straight back.
+///
+/// The three that are not: `calc()`, which a browser reduces; a font- or
+/// viewport-relative length, which resolves against the element's own font or
+/// the viewport; and a percentage, which resolves against the containing block.
+/// A bare number counts for `line-height`, where it means a multiple of the
+/// font size and Chrome reports the product in px.
+fn resolvesHere(property_name: []const u8, value: []const u8) bool {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return true;
+
+    if (std.ascii.indexOfIgnoreCase(trimmed, "calc(") != null) return false;
+    if (std.mem.indexOfScalar(u8, trimmed, '%') != null) return false;
+
+    if (std.mem.eql(u8, property_name, "line-height")) {
+        // `normal` and a length are reportable; a bare multiplier is not, and a
+        // bare number is the one with no alphabetic tail.
+        if (std.ascii.isDigit(trimmed[0]) or trimmed[0] == '.') {
+            const has_unit = for (trimmed) |c| {
+                if (std.ascii.isAlphabetic(c)) break true;
+            } else false;
+            if (!has_unit) return false;
+        }
+    }
+
+    // The unit is the alphabetic tail of a numeric token, so this walks the
+    // value looking for one rather than tokenising it properly -- a family name
+    // like `Georgia` has no digit in front of it and is left alone.
+    var i: usize = 0;
+    while (i < trimmed.len) : (i += 1) {
+        if (!std.ascii.isDigit(trimmed[i]) and trimmed[i] != '.') continue;
+        while (i < trimmed.len and (std.ascii.isDigit(trimmed[i]) or trimmed[i] == '.')) : (i += 1) {}
+        const unit_start = i;
+        while (i < trimmed.len and std.ascii.isAlphabetic(trimmed[i])) : (i += 1) {}
+        if (i == unit_start) continue;
+        for (RELATIVE_UNITS) |unit| {
+            if (std.ascii.eqlIgnoreCase(trimmed[unit_start..i], unit)) return false;
+        }
+    }
+    return true;
+}
+
+/// Length units a computed value never carries, because they resolve before it.
+const RELATIVE_UNITS = [_][]const u8{
+    "em",    "ex",    "rem",   "ch",    "cap",   "ic",    "lh",  "rlh",
+    "vw",    "vh",    "vmin",  "vmax",  "vi",    "vb",    "svw", "svh",
+    "lvw",   "lvh",   "dvw",   "dvh",   "rex",   "rch",   "ric", "rcap",
+    "svmin", "svmax", "lvmin", "lvmax", "dvmin", "dvmax",
+};
 
 /// The shorthand `name` reads back as, or null when it is not a shorthand this
 /// engine joins or not every longhand it covers is in the declaration. Reading
@@ -662,8 +747,14 @@ pub fn isCustomProperty(name: []const u8) bool {
     return std.mem.startsWith(u8, name, "--");
 }
 
-// Normalize CSS property values for canonical serialization
-fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value: []const u8) ![]const u8 {
+// Normalize CSS property values for canonical serialization.
+//
+// Public for StyleManager's raw rule path, which parses declarations straight
+// out of a sheet's text and so never went through storeProperty. A computed
+// style reports the canonical spelling whatever the author wrote -- `rgb(1,2,3)`
+// reads back `rgb(1, 2, 3)` -- and without this the same declaration answered
+// one way through `style=` and another through a rule.
+pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value: []const u8) ![]const u8 {
     // A custom property's value is an arbitrary token stream: Chrome stores it
     // as written, minus the surrounding whitespace (`--c: 01.50` stays
     // "01.50", `--e: a  b   c` keeps its inner runs).
@@ -3216,4 +3307,8 @@ test "WebApi: CSSStyleDeclaration display cascade" {
 
 test "WebApi: CSSStyleDeclaration important beats the style attribute" {
     try testing.htmlRunner("css/important_vs_inline.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration author longhands" {
+    try testing.htmlRunner("css/computed_author_longhands.html", .{});
 }

@@ -34,6 +34,7 @@ const CSSStyleRule = @import("webapi/css/CSSStyleRule.zig");
 const CSSStyleSheet = @import("webapi/css/CSSStyleSheet.zig");
 const CSSStyleDeclaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const CSSStyleProperty = @import("webapi/css/CSSStyleDeclaration.zig").Property;
+const shorthand = @import("webapi/css/shorthand.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -467,7 +468,8 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
     if (selector_text.len == 0) return;
 
     var props = RuleProperties{};
-    var custom: std.ArrayList(CustomDeclaration) = .empty;
+    var custom: std.ArrayList(NamedDeclaration) = .empty;
+    var longhands: std.ArrayList(NamedDeclaration) = .empty;
     var it = CssParser.parseDeclarationsList(block_text);
     while (it.next()) |decl| {
         const name = decl.name;
@@ -491,15 +493,44 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
             props.font_family = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "text-transform")) {
             props.text_transform = .{ .value = val, .important = decl.important };
-        } else if (CSSStyleDeclaration.isCustomProperty(name)) {
+        }
+
+        if (CSSStyleDeclaration.isCustomProperty(name)) {
             try custom.append(self.arena.allocator(), .{
                 .name = try self.arena.allocator().dupe(u8, name),
                 .value = try self.arena.allocator().dupe(u8, val),
                 .important = decl.important,
             });
+            continue;
         }
+
+        // The raw path parses declarations straight out of the sheet's text, so
+        // unlike the CSSOM one it sees shorthands unexpanded. A rule that says
+        // `margin:11px` has said `margin-top:11px`, and a computed style is
+        // asked for the longhand, so the expansion happens here rather than
+        // being missing on whichever of the two paths a page happens to take.
+        if (shorthand.lookup(name)) |entry| {
+            if (shorthand.expand(self.arena.allocator(), entry, val) catch null) |expansion| {
+                for (expansion.names, expansion.values) |longhand_name, longhand_value| {
+                    try longhands.append(self.arena.allocator(), .{
+                        .name = longhand_name,
+                        .value = canonicalValue(self.arena.allocator(), longhand_name, longhand_value),
+                        .important = decl.important,
+                    });
+                }
+                continue;
+            }
+        }
+
+        const lowered = try lowerDuped(self.arena.allocator(), name);
+        try longhands.append(self.arena.allocator(), .{
+            .name = lowered,
+            .value = canonicalValue(self.arena.allocator(), lowered, val),
+            .important = decl.important,
+        });
     }
     props.custom = custom.items;
+    props.longhands = longhands.items;
 
     if (!props.isRelevant()) return;
 
@@ -1157,23 +1188,50 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
         props.pointer_events_none = property._value.eql(comptime .wrap("none"));
     }
 
-    var custom: std.ArrayList(CustomDeclaration) = .empty;
+    var custom: std.ArrayList(NamedDeclaration) = .empty;
+    var longhands: std.ArrayList(NamedDeclaration) = .empty;
     var node = decl._properties.first;
     while (node) |n| : (node = n.next) {
         const property = CSSStyleProperty.fromNodeLink(n);
         const name = property._name.str();
-        if (!CSSStyleDeclaration.isCustomProperty(name)) {
-            continue;
-        }
-        try custom.append(arena, .{
+        const entry: NamedDeclaration = .{
             .name = try arena.dupe(u8, name),
             .value = try arena.dupe(u8, property._value.str()),
             .important = property._important,
-        });
+        };
+        // This path reads a materialised CSSOM declaration, whose shorthands
+        // the declaration's own parser already expanded -- unlike the raw one,
+        // which has to expand them itself.
+        if (CSSStyleDeclaration.isCustomProperty(name)) {
+            try custom.append(arena, entry);
+        } else {
+            try longhands.append(arena, entry);
+        }
     }
     props.custom = custom.items;
+    props.longhands = longhands.items;
 
     return props;
+}
+
+/// A lower-case copy of `name`, for the by-name lookups. The raw parser hands
+/// declaration names back as the sheet spelled them and CSS property names are
+/// ASCII case-insensitive, so `COLOR:red` has to answer a lookup for `color`.
+fn lowerDuped(arena: Allocator, name: []const u8) ![]const u8 {
+    const out = try arena.alloc(u8, name.len);
+    return std.ascii.lowerString(out, name);
+}
+
+/// The canonical spelling of a raw declaration's value. The CSSOM path's
+/// declarations went through storeProperty and are already canonical; the raw
+/// path's are whatever the author typed, and a computed style has to report the
+/// same string either way -- `rgb(1,2,3)` reads back `rgb(1, 2, 3)` on both.
+///
+/// No copy either way: what it hands back is either freshly allocated on
+/// `arena` or a slice of the sheet text, which parseSheet already put on the
+/// same arena. That is why the reduced fields above store `val` unowned too.
+fn canonicalValue(arena: Allocator, property_name: []const u8, raw: []const u8) []const u8 {
+    return CSSStyleDeclaration.normalizePropertyValue(arena, property_name, raw) catch raw;
 }
 
 // Computes CSS specificity for a selector.
@@ -1272,7 +1330,15 @@ const RuleProperties = struct {
     // Every custom property the rule declares, in declaration order. Unlike
     // the fields above there is no fixed set of names to pick from, and a page
     // can read any of them back through getComputedStyle.
-    custom: []const CustomDeclaration = &.{},
+    custom: []const NamedDeclaration = &.{},
+    // ...and every *standard* longhand it declares, for the same reason: a page
+    // can read any of them back too, and there is no fixed set worth picking
+    // from once the answer has to be right for all of them.
+    //
+    // The named fields above stay rather than being folded into this list. They
+    // are read on the hidden-element path, which runs per element per layout
+    // question, and a field access is not a name scan.
+    longhands: []const NamedDeclaration = &.{},
 
     // return true if any field in RuleProperties is not null
     fn isRelevant(self: RuleProperties) bool {
@@ -1285,11 +1351,12 @@ const RuleProperties = struct {
             self.font_size != null or
             self.font_family != null or
             self.text_transform != null or
-            self.custom.len > 0;
+            self.custom.len > 0 or
+            self.longhands.len > 0;
     }
 };
 
-pub const CustomDeclaration = struct {
+pub const NamedDeclaration = struct {
     name: []const u8,
     value: []const u8,
     important: bool,
@@ -1377,6 +1444,16 @@ fn getInlineStyleProperty(el: *Element, property_name: String, frame: *Frame) ?*
 pub fn inlineStyleValue(self: *StyleManager, el: *Element, property_name: String) ?[]const u8 {
     const property = getInlineStyleProperty(el, property_name, self.frame) orelse return null;
     return property._value.str();
+}
+
+/// The same declaration with its importance, for the callers that have to rank
+/// it against a rule. The style attribute is the highest specificity rather
+/// than a tier of its own, so an `!important` rule beats it and an `!important`
+/// style attribute beats that (CSS Cascade 4 §6.9; see
+/// css/important_vs_inline.html).
+pub fn inlineStyleDeclaration(self: *StyleManager, el: *Element, property_name: String) ?Declaration {
+    const property = getInlineStyleProperty(el, property_name, self.frame) orelse return null;
+    return .{ .value = property._value.str(), .important = property._important };
 }
 
 /// Bounds computedFontSize's ancestor recursion (the parent walk and
@@ -1909,9 +1986,29 @@ fn findVarReference(input: []const u8) ?VarReference {
     };
 }
 
+/// Which of a rule's two by-name declaration lists a lookup reads.
+const NamedList = enum { custom, longhand };
+
 /// The winning declaration of custom property `name` among the stylesheet
 /// rules matching `el`. Custom property names are case-sensitive.
 fn cascadedCustomDeclaration(self: *StyleManager, el: *Element, name: []const u8) ?Declaration {
+    return self.cascadedNamedDeclaration(el, name, .custom);
+}
+
+/// The winning declaration of standard longhand `name` among the stylesheet
+/// rules matching `el`, or null when no matching rule declares it. `name` is
+/// compared as stored, which is lower-case on both build paths -- callers
+/// normalise (`CSSStyleDeclaration.normalizePropertyName` does).
+///
+/// This is what lets a computed style answer what the author sheet said for a
+/// property nothing precomputes. The reduced fields on RuleProperties stay for
+/// the hidden-element path, which asks the same question per element per layout
+/// operation and can afford neither the name scan nor a miss.
+pub fn cascadedLonghand(self: *StyleManager, el: *Element, name: []const u8) ?Declaration {
+    return self.cascadedNamedDeclaration(el, name, .longhand);
+}
+
+fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8, which: NamedList) ?Declaration {
     self.rebuildIfDirty() catch return null;
 
     var best: ?Declaration = null;
@@ -1919,12 +2016,16 @@ fn cascadedCustomDeclaration(self: *StyleManager, el: *Element, name: []const u8
     var best_important = false;
 
     const checkRules = struct {
-        fn check(rules: *const RuleList, wanted: []const u8, winner: *?Declaration, priority: *u64, important: *bool, elem: *Element, frame: *Frame) void {
+        fn check(rules: *const RuleList, wanted: []const u8, list: NamedList, winner: *?Declaration, priority: *u64, important: *bool, elem: *Element, frame: *Frame) void {
             for (rules.items(.priority), rules.items(.props), rules.items(.selector)) |p, props, selector| {
-                if (props.custom.len == 0) continue;
-                var matched: ?CustomDeclaration = null;
+                const declarations = switch (list) {
+                    .custom => props.custom,
+                    .longhand => props.longhands,
+                };
+                if (declarations.len == 0) continue;
+                var matched: ?NamedDeclaration = null;
                 // Within one rule the last declaration of a name wins.
-                for (props.custom) |declaration| {
+                for (declarations) |declaration| {
                     if (std.mem.eql(u8, declaration.name, wanted)) {
                         matched = declaration;
                     }
@@ -1942,7 +2043,7 @@ fn cascadedCustomDeclaration(self: *StyleManager, el: *Element, name: []const u8
 
     if (el.getAttributeSafe(comptime .wrap("id"))) |id| {
         if (self.id_rules.get(id)) |rules| {
-            checkRules(&rules, name, &best, &best_priority, &best_important, el, self.frame);
+            checkRules(&rules, name, which, &best, &best_priority, &best_important, el, self.frame);
         }
     }
 
@@ -1950,16 +2051,16 @@ fn cascadedCustomDeclaration(self: *StyleManager, el: *Element, name: []const u8
         var it = std.mem.tokenizeAny(u8, class_attr, &std.ascii.whitespace);
         while (it.next()) |class| {
             if (self.class_rules.get(class)) |rules| {
-                checkRules(&rules, name, &best, &best_priority, &best_important, el, self.frame);
+                checkRules(&rules, name, which, &best, &best_priority, &best_important, el, self.frame);
             }
         }
     }
 
     if (self.tag_rules.get(el.getTag())) |rules| {
-        checkRules(&rules, name, &best, &best_priority, &best_important, el, self.frame);
+        checkRules(&rules, name, which, &best, &best_priority, &best_important, el, self.frame);
     }
 
-    checkRules(&self.other_rules, name, &best, &best_priority, &best_important, el, self.frame);
+    checkRules(&self.other_rules, name, which, &best, &best_priority, &best_important, el, self.frame);
 
     return best;
 }
