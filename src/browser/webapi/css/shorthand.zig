@@ -109,6 +109,15 @@ pub fn expand(arena: Allocator, entry: Shorthand, value: []const u8) !?Expansion
 /// answers nothing for a `border` whose components all hold their initial
 /// value, because it cannot be written as one shorthand.
 pub fn join(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]const u8 {
+    return joinKeeping(arena, entry, values, false);
+}
+
+/// `join` with the option to write every component, whatever it holds. The
+/// border family's computed serialisation does exactly that: `border` off a
+/// computed view is `0px none rgb(0, 0, 0)` where the same declaration read off
+/// `el.style` drops the `none`. Measured across five declaration states with
+/// tools/fingerprint/scratch/expr-computed-border-join.js.
+pub fn joinKeeping(arena: Allocator, entry: Shorthand, values: []const []const u8, keep_all: bool) ![]const u8 {
     std.debug.assert(values.len == entry.longhands.len);
 
     // Every longhand holding the same CSS-wide keyword reads back as it.
@@ -160,7 +169,7 @@ pub fn join(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]c
             for (0..entry.group) |n| {
                 const slot = if (entry.order.len > 0) entry.order[n] else n;
                 const held = values[representative(entry, slot)];
-                if (dropped(entry.omit[slot], held)) continue;
+                if (!keep_all and dropped(entry.omit[slot], held)) continue;
                 try kept.append(arena, held);
             }
             if (kept.items.len == 0) return entry.empty orelse "";
