@@ -536,28 +536,60 @@ pub const Jar = struct {
 
             if (is_expired) {
                 // Dispatch while c still points at the live old cookie,
-                // then free its arena, then remove from the array. After
-                // swapRemove, items[i] holds a different (still-live)
-                // entry, so deinit must happen before that.
+                // then free its arena, then remove from the array.
                 self.dispatchChange(.deleted, c);
                 c.deinit();
-                _ = self.cookies.swapRemove(i);
+                _ = self.cookies.orderedRemove(i);
             } else {
+                // Whether this counts as a new creation, which is what decides
+                // if it keeps its place. Read before c.deinit() frees the
+                // arena c.value lives in.
+                const same_value = std.mem.eql(u8, c.value, cookie.value);
                 // Free the old cookie's arena before overwriting the slot;
                 // after the assignment, c points at the new cookie.
                 c.deinit();
-                self.cookies.items[i] = cookie;
-                stored = true;
-                self.dispatchChange(.changed, &self.cookies.items[i]);
+                if (same_value) {
+                    self.cookies.items[i] = cookie;
+                    stored = true;
+                    self.dispatchChange(.changed, &self.cookies.items[i]);
+                } else {
+                    // A changed value is a fresh creation, so the entry goes
+                    // to the back of its own path group. The slot it vacates
+                    // is capacity the insert reuses, so this cannot fail.
+                    _ = self.cookies.orderedRemove(i);
+                    const at = self.creationIndex(cookie.path.len);
+                    try self.cookies.insert(self.allocator, at, cookie);
+                    stored = true;
+                    self.dispatchChange(.changed, &self.cookies.items[at]);
+                }
             }
             return;
         }
 
         if (!is_expired) {
-            try self.cookies.append(self.allocator, cookie);
+            const at = self.creationIndex(cookie.path.len);
+            try self.cookies.insert(self.allocator, at, cookie);
             stored = true;
-            self.dispatchChange(.changed, &self.cookies.items[self.cookies.items.len - 1]);
+            self.dispatchChange(.changed, &self.cookies.items[at]);
         }
+    }
+
+    // Where a cookie of this path length belongs, so that the jar is always in
+    // the order RFC 6265 5.4 wants a request to list it in: path length
+    // descending, then creation ascending. Holding the invariant here rather
+    // than sorting in forRequest keeps the cost on the mutations, which are far
+    // rarer than the requests that read it, and it means the CDP domains that
+    // walk `cookies.items` directly see the same order the wire does.
+    //
+    // Newest within its group goes last, so the slot wanted is the first one
+    // holding a shorter path. Every removal in this file is ordered for the
+    // same reason -- a swapRemove would drop an unrelated entry into the hole
+    // and break the ordering silently.
+    fn creationIndex(self: *const Jar, path_len: usize) usize {
+        for (self.cookies.items, 0..) |*c, i| {
+            if (c.path.len < path_len) return i;
+        }
+        return self.cookies.items.len;
     }
 
     fn dispatchChange(
@@ -586,7 +618,7 @@ pub const Jar = struct {
             i -= 1;
             const cookie = &self.cookies.items[i];
             if (isCookieExpired(cookie, time)) {
-                self.cookies.swapRemove(i).deinit();
+                self.cookies.orderedRemove(i).deinit();
             }
         }
     }
@@ -924,7 +956,7 @@ test "Jar: forRequest" {
     });
 
     // matching path without trailing /
-    try expectCookies("global1=1; global2=2; path1=3", &jar, "http://lightpanda.io/about", .{
+    try expectCookies("path1=3; global1=1; global2=2", &jar, "http://lightpanda.io/about", .{
         .origin_url = test_url,
         .is_http = true,
     });
@@ -948,13 +980,13 @@ test "Jar: forRequest" {
     });
 
     // exact directory match
-    try expectCookies("global1=1; global2=2; path2=4", &jar, "http://lightpanda.io/docs/", .{
+    try expectCookies("path2=4; global1=1; global2=2", &jar, "http://lightpanda.io/docs/", .{
         .origin_url = test_url,
         .is_http = true,
     });
 
     // sub directory match
-    try expectCookies("global1=1; global2=2; path2=4", &jar, "http://lightpanda.io/docs/more", .{
+    try expectCookies("path2=4; global1=1; global2=2", &jar, "http://lightpanda.io/docs/more", .{
         .origin_url = test_url,
         .is_http = true,
     });
@@ -966,13 +998,13 @@ test "Jar: forRequest" {
     });
 
     // navigational cross domain, secure
-    try expectCookies("global1=1; global2=2; secure=5; sitenone=6; sitelax=7", &jar, "https://lightpanda.io/x/", .{
+    try expectCookies("sitenone=6; sitelax=7; global1=1; global2=2; secure=5", &jar, "https://lightpanda.io/x/", .{
         .origin_url = "https://example.com/",
         .is_http = true,
     });
 
     // navigational cross domain, insecure
-    try expectCookies("global1=1; global2=2; sitelax=7", &jar, "http://lightpanda.io/x/", .{
+    try expectCookies("sitelax=7; global1=1; global2=2", &jar, "http://lightpanda.io/x/", .{
         .origin_url = "https://example.com/",
         .is_http = true,
     });
@@ -992,7 +1024,7 @@ test "Jar: forRequest" {
     });
 
     // non-navigational same origin
-    try expectCookies("global1=1; global2=2; sitelax=7; sitestrict=8", &jar, "http://lightpanda.io/x/", .{
+    try expectCookies("sitelax=7; sitestrict=8; global1=1; global2=2", &jar, "http://lightpanda.io/x/", .{
         .origin_url = "https://lightpanda.io/",
         .is_http = true,
         .is_navigation = false,
@@ -1026,6 +1058,56 @@ test "Jar: forRequest" {
 
     // If you add more cases after this point, note that the above test removes
     // the 'global2' cookie
+}
+
+test "Jar: a request lists cookies longest path first, oldest first within a path" {
+    // RFC 6265 5.4: sort by path length descending, then by creation time
+    // ascending. Both halves were missing here -- a request listed the jar in
+    // insertion order -- and both are observable from a page.
+    //
+    // Creation time is the half with a wrinkle, and it is measured rather than
+    // read off the RFC. 5.3 says an overwrite retains the original creation
+    // time; Chrome 151 retains it only when the value is unchanged and stamps a
+    // fresh one when the value differs, which moves the cookie to the back.
+    // Ten cases in tools/fingerprint/cookie-jar-order.mjs vary persistence,
+    // HttpOnly, Secure/SameSite, and whether the overwrite arrived on a
+    // navigation, a subresource or document.cookie: every one of them moves the
+    // cookie except the one that writes the same value back.
+    // results/b54-jar-chrome.json is that reading.
+    const expectCookies = struct {
+        fn expect(expected: []const u8, jar: *Jar, target_url: [:0]const u8, opts: Jar.LookupOpts) !void {
+            var aw: std.Io.Writer.Allocating = .init(testing.allocator);
+            defer aw.deinit();
+            try jar.forRequest(target_url, &aw.writer, opts);
+            try testing.expectEqual(expected, aw.written());
+        }
+    }.expect;
+
+    const now = lp.datetime.timestamp(.real);
+    var jar = Jar.init(testing.allocator, null);
+    defer jar.deinit();
+
+    try jar.add(try Cookie.parse(testing.allocator, test_url, "p1=1"), now, true);
+    try jar.add(try Cookie.parse(testing.allocator, test_url, "p2=1"), now, true);
+    try jar.add(try Cookie.parse(testing.allocator, test_url, "p3=1"), now, true);
+    try expectCookies("p1=1; p2=1; p3=1", &jar, test_url, .{ .is_http = true });
+
+    // A value that differs is a new creation, so p1 goes to the back.
+    try jar.add(try Cookie.parse(testing.allocator, test_url, "p1=2"), now, true);
+    try expectCookies("p2=1; p3=1; p1=2", &jar, test_url, .{ .is_http = true });
+
+    // The same value written again keeps the creation it had, so nothing moves.
+    try jar.add(try Cookie.parse(testing.allocator, test_url, "p1=2"), now, true);
+    try expectCookies("p2=1; p3=1; p1=2", &jar, test_url, .{ .is_http = true });
+
+    // And a longer path outranks every one of them, however young it is.
+    try jar.add(try Cookie.parse(testing.allocator, test_url, "deep=1; Path=/deep"), now, true);
+    try expectCookies("deep=1; p2=1; p3=1; p1=2", &jar, "http://lightpanda.io/deep/x", .{ .is_http = true });
+
+    // Overwriting the deep one keeps it in its own path group rather than
+    // sending it behind the shorter-path cookies.
+    try jar.add(try Cookie.parse(testing.allocator, test_url, "deep=2; Path=/deep"), now, true);
+    try expectCookies("deep=2; p2=1; p3=1; p1=2", &jar, "http://lightpanda.io/deep/x", .{ .is_http = true });
 }
 
 test "Jar: forRequest SameSite=Strict on cross-site navigation" {

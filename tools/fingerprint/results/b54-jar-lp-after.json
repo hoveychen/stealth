@@ -1,0 +1,126 @@
+{
+  "engine": "lightpanda",
+  "readings": [
+    {
+      "case": "A",
+      "why": "baseline: three plain session cookies, p1 re-set by a subresource",
+      "stage": "after",
+      "order": [
+        "p2",
+        "p3",
+        "p1"
+      ],
+      "raw": "p2=1; p3=1; p1=2"
+    },
+    {
+      "case": "B",
+      "why": "all three persistent",
+      "stage": "after",
+      "order": [
+        "p2",
+        "p3",
+        "p1"
+      ],
+      "raw": "p2=1; p3=1; p1=2"
+    },
+    {
+      "case": "C",
+      "why": "only the overwritten one is persistent",
+      "stage": "after",
+      "order": [
+        "p2",
+        "p3",
+        "p1"
+      ],
+      "raw": "p2=1; p3=1; p1=2"
+    },
+    {
+      "case": "D",
+      "why": "only the untouched ones are persistent",
+      "stage": "after",
+      "order": [
+        "p2",
+        "p3",
+        "p1"
+      ],
+      "raw": "p2=1; p3=1; p1=2"
+    },
+    {
+      "case": "E",
+      "why": "the overwritten one is HttpOnly",
+      "stage": "after",
+      "order": [
+        "p2",
+        "p3",
+        "p1"
+      ],
+      "raw": "p2=1; p3=1; p1=2"
+    },
+    {
+      "case": "F",
+      "why": "the overwritten one is Secure; SameSite=None",
+      "stage": "after",
+      "order": [
+        "p2",
+        "p3",
+        "p1"
+      ],
+      "raw": "p2=1; p3=1; p1=2"
+    },
+    {
+      "case": "G",
+      "why": "the overwrite arrives on a navigation, not a subresource",
+      "stage": "after",
+      "order": [
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "raw": "p1=1; p2=1; p3=1"
+    },
+    {
+      "case": "G",
+      "why": "the overwrite arrives on a navigation, not a subresource",
+      "stage": "after+1",
+      "order": [
+        "p2",
+        "p3",
+        "p1"
+      ],
+      "raw": "p2=1; p3=1; p1=2"
+    },
+    {
+      "case": "H",
+      "why": "the overwrite comes from document.cookie",
+      "stage": "after",
+      "order": [
+        "p2",
+        "p3",
+        "p1"
+      ],
+      "raw": "p2=1; p3=1; p1=2"
+    },
+    {
+      "case": "I",
+      "why": "the overwrite re-sets the same value",
+      "stage": "after",
+      "order": [
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "raw": "p1=1; p2=1; p3=1"
+    },
+    {
+      "case": "J",
+      "why": "no overwrite; p2 sits on a longer path",
+      "stage": "after",
+      "order": [
+        "p2",
+        "p1",
+        "p3"
+      ],
+      "raw": "p2=1; p1=1; p3=1"
+    }
+  ]
+}

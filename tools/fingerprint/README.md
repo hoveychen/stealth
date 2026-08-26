@@ -16373,6 +16373,67 @@ reading and not evidence of a gain — `ks-canadagoose` went 429→200 in this o
 and stations are known to open and shut in windows. Nothing here opened a door,
 and nothing here was expected to.
 
+## What moves a cookie in the jar (B53, 2026-08-26)
+
+The other half of the cookie finding, and the one where the first rule that fit
+was wrong.
+
+`h2-cookie-order.mjs` showed Chrome moving an overwritten cookie to the back of
+the `Cookie` header while this engine never reordered — and, in the same run, a
+second visit re-setting all four cookies and moving nothing at all. "An
+overwrite refreshes the creation time" explains the first and cannot produce the
+second.
+
+`cookie-jar-order.mjs` is the matrix that settles it: ten cases, each planting
+`p1 p2 p3` and overwriting `p1`, one property varied at a time, each case in its
+own process with its own profile because a jar carries state. Chrome 151
+(`results/b54-jar-chrome.json`):
+
+| case | | Chrome | this engine, before |
+|---|---|---|---|
+| A | baseline, three session cookies, subresource overwrite | `p2 p3 p1` | `p1 p2 p3` |
+| B | all three persistent | `p2 p3 p1` | `p1 p2 p3` |
+| C | only the overwritten one persistent | `p2 p3 p1` | `p1 p2 p3` |
+| D | only the untouched ones persistent | `p2 p3 p1` | `p1 p2 p3` |
+| E | the overwritten one is `HttpOnly` | `p2 p3 p1` | `p1 p2 p3` |
+| F | the overwritten one is `Secure; SameSite=None` | `p2 p3 p1` | `p1 p2 p3` |
+| G | overwrite arrives on a navigation | `p2 p3 p1` | `p1 p2 p3` |
+| H | overwrite comes from `document.cookie` | `p2 p3 p1` | `p1 p2 p3` |
+| I | **overwrite writes the same value back** | **`p1 p2 p3`** | `p1 p2 p3` |
+| J | no overwrite; `p2` on a longer path | `p2 p1 p3` | `p1 p2 p3` |
+
+So the rule is RFC 6265 §5.4's sort — path length descending, then creation
+ascending — with one measured deviation from §5.3: **Chrome keeps the original
+creation time only when the overwrite writes the same value, and stamps a fresh
+one when the value differs.** Persistence, `HttpOnly`, `Secure`, and who did the
+overwriting make no difference at all.
+
+That turns the reading that looked like a counter-example into a confirmation.
+The second visit re-set four cookies, but two of them (`source-country`,
+`source-region`) were written back unchanged and so kept their place, while the
+two that did change (`a-ssn`, `a`) were already at the back.
+
+Case J is worth its own line: this engine did not sort by path length either,
+and that half is the RFC rather than a Chrome habit.
+
+After the fix, `cookie-jar-order.mjs --diff` goes from **9 differences to 0**
+(`results/b54-jar-lp-after.json`), and `h2-cookie-order.mjs --diff` — field
+sequence, cookie field count and cookie order together — reports **0 differences
+on all six request shapes** (`results/b54-h2c-lp-final.json`). 1510/1510,
+`zig fmt` 0.
+
+**Regression sweep: 21 of 29, against 19 for the same main without this change**
+(`results/b54-sweep-jar.json` against `results/b54-sweep-patched.json`). **The
+two extra passes are not this change.** `dd-leboncoin` and `dd-hermes` were the
+stations that moved, and three alternating rounds on each, treatment against a
+main build carrying everything but this cut
+(`results/b54-ab-dd-{hermes,leboncoin}-{treat,ctrl}-{1,2,3}.json`), put **both
+arms at `datadome-challenge` 3/3**. The stations had reopened between the two
+sweeps and shut again. `dd-hermes` is in any case one of the six B52 measured as
+shut to headed Chrome too.
+
+Read the sweep as "nothing broke". No door opened here either.
+
 ## One element, three boxes (B79, 2026-08-26)
 
 `<div style="padding:10px">` on the 1904px line answered 1904 for computed
