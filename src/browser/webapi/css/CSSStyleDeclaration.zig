@@ -946,15 +946,45 @@ pub fn fillsContainingBlock(element: *Element, frame: *Frame) bool {
 
     if (!fillsAtDisplay(resolvedDisplay(element, frame))) return false;
 
-    // A flex item is sized by its content, not by the line it sits on. Grid
-    // items stretch, so only flex is asked about here.
     if (element.parentElement()) |parent| {
         const parent_display = resolvedDisplay(parent, frame);
+
+        // A flex item is sized by its content, not by the line it sits on.
         if (std.mem.eql(u8, parent_display, "flex") or
             std.mem.eql(u8, parent_display, "inline-flex")) return false;
+
+        // A grid item stretches across its column -- but only while nothing has
+        // said to place it instead. Measured with
+        // tools/fingerprint/scratch/expr-grid-justify.js: `stretch` and
+        // `normal` stretch, `start` / `end` / `center` / `left` do not, the
+        // item's own `justify-self` wins whenever it is not `auto`, and
+        // `justify-self: stretch` stretches an item inside a
+        // `justify-items: start` container.
+        if (std.mem.eql(u8, parent_display, "grid") or
+            std.mem.eql(u8, parent_display, "inline-grid"))
+        {
+            return stretchesInGrid(element, parent, frame);
+        }
     }
 
     return true;
+}
+
+fn stretchesInGrid(element: *Element, parent: *Element, frame: *Frame) bool {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+
+    const declared = if (cascadedKeyword(style_manager, element, "justify-self")) |self_value| blk: {
+        if (std.ascii.eqlIgnoreCase(self_value, "auto")) break :blk null;
+        break :blk self_value;
+    } else null;
+
+    const effective = declared orelse
+        cascadedKeyword(style_manager, parent, "justify-items") orelse
+        // Neither declared: `justify-items` computes to `normal`, which stretches.
+        return true;
+
+    return std.ascii.eqlIgnoreCase(effective, "stretch") or
+        std.ascii.eqlIgnoreCase(effective, "normal");
 }
 
 fn fillsAtDisplay(display: []const u8) bool {
@@ -968,8 +998,10 @@ fn fillsAtDisplay(display: []const u8) bool {
 /// The cascaded keyword for a property whose value is one, skipping everything
 /// a computed style does to a length or a colour. `position` and `float` are
 /// both keywords and neither inherits, so this is the declaration itself.
-fn cascadedKeyword(style_manager: *StyleManager, element: *Element, comptime name: []const u8) ?[]const u8 {
-    return switch (cascadedValue(style_manager, element, name, comptime .wrap(name))) {
+fn cascadedKeyword(style_manager: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
+    // Not `comptime .wrap`: a comptime String has to fit the small-string
+    // optimisation's twelve bytes and `justify-items` is thirteen.
+    return switch (cascadedValue(style_manager, element, name, .wrap(name))) {
         .value => |value| value,
         .unreportable, .none => null,
     };
