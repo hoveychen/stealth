@@ -14,9 +14,13 @@
 //   * the *document's* HTTP status, taken off Network.responseReceived. A
 //     Cloudflare managed challenge is served as 403, so status alone separates
 //     "served the site" from "served the interstitial" without parsing anything.
-//     lightpanda's responseReceived carries no headers (src/cdp/domains/
-//     network.zig, ResponseWriter), so `cf-mitigated` is not readable from
-//     either column symmetrically and is deliberately not used.
+//     This used to add that lightpanda's responseReceived carries no headers,
+//     so `cf-mitigated` could not be read symmetrically. That is no longer
+//     true: ResponseWriter in src/cdp/domains/network.zig writes the header
+//     map, and a --trace-headers run at x-hyatt gets 17 response headers off
+//     this engine's `res` event, the same count Chrome reports. Reading
+//     `cf-mitigated` is now an open option rather than a blocked one; the
+//     status column simply has not needed it yet.
 //   * the guard's marks in the DOM (extractAntibot). A challenge that ends in a
 //     200 by the time the settle expires -- the interstitial solving itself and
 //     redirecting -- looks identical to a plain pass on status alone, and the
@@ -46,7 +50,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--headed-ua] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--attach-frames|--same-process]]');
+    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--headed-ua] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--trace-headers] [--attach-frames|--same-process]]');
     process.exit(2);
 }
 const arg = (name, fallback) => {
@@ -87,6 +91,31 @@ const injects = process.argv.reduce((acc, a, i) => (
 // diagnosis. Off by default because it is per-station noise nobody wants in a
 // fifteen-station snapshot.
 const trace = process.argv.includes('--trace');
+// Also record the header block of every request and every response. Separate
+// from --trace because a guard's conversation is legible from the URLs alone
+// and the headers multiply a station's trace by roughly ten; you want them only
+// when the question has narrowed to one exchange. The question they answer is
+// the one a body-only trace cannot: two arms that send the same POST to the same
+// URL and get different verdicts differ either in what they sent *around* the
+// body, or in the body. This settles the cheap half first.
+const traceHeaders = process.argv.includes('--trace-headers');
+// Pull the *body* back for responses whose URL contains one of these, via
+// Network.getResponseBody. Repeatable. A guard's verdict is often in the reply
+// it sends the challenge program rather than in the status line -- Kasada's
+// /tl answers 200 to a client it is about to refuse -- and the sweep otherwise
+// records only that reply's length. The call is client-to-browser, so the page
+// cannot see it happen.
+//
+// Two things a reader of the result has to know. An empty `body` can be the
+// answer rather than a miss: Kasada's refusal to this engine at x-hyatt is a
+// 200 with `content-length: 0`, and the capture reporting nothing there is it
+// working. And Chrome loses a body to any navigation in the same tick -- it
+// flushes the resource buffer on commit, so the reply that *clears* a challenge
+// is exactly the one that tends to come back `-32000 No resource`, because
+// clearing it is what makes the page navigate. Read the reply's headers, which
+// --trace-headers keeps either way.
+const traceBodies = process.argv.reduce((acc, a, i) => (
+    a === '--trace-body' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc), []);
 // Put Chrome's cross-origin iframes back in the page's renderer, so their
 // requests reach the page session this sweep attaches to. Without it a
 // challenge that does its real work inside a `challenges.cloudflare.com` iframe
@@ -257,6 +286,10 @@ let docs = [];
 let wire = [];
 // The zero for `--trace` timestamps, reset per station.
 let stationStarted = Date.now();
+// requestId -> url, for the responses --trace-body matched: the body can only
+// be asked for once loadingFinished says the transfer is complete, and by then
+// the event carrying the URL is gone.
+let bodyWanted = new Map();
 // Filled by --attach-frames: the sessions of Chrome's out-of-process iframes.
 const frameSessions = new Set();
 let pageSession = null;
@@ -303,16 +336,56 @@ const onEvent = (msg) => {
                 ...(body === undefined
                     ? (p.request?.hasPostData ? { postLen: -1 } : {})
                     : { postLen: body.length, post: body.slice(0, 300) }),
+                ...(traceHeaders ? { headers: p.request?.headers ?? null } : {}),
             });
         } else if (msg.method === 'Network.responseReceived') {
-            push({ ev: 'res', id: p.requestId, status: p.response?.status, url: p.response?.url, type: p.type });
+            push({
+                ev: 'res', id: p.requestId, status: p.response?.status, url: p.response?.url, type: p.type,
+                ...(traceHeaders ? { headers: p.response?.headers ?? null, resProto: p.response?.protocol ?? null } : {}),
+            });
+            const url = p.response?.url ?? '';
+            if (traceBodies.some((m) => url.includes(m))) bodyWanted.set(p.requestId, url);
+        } else if (traceHeaders && msg.method === 'Network.requestWillBeSentExtraInfo') {
+            // Chrome's requestWillBeSent carries only what the renderer set.
+            // Cookie, Accept-Encoding, Accept-Language, Sec-Fetch-*, Origin and
+            // Content-Length are added afterwards by the network service and
+            // appear only here. lightpanda has one stack and reports the final
+            // set on requestWillBeSent, so comparing the two arms on that event
+            // alone reads Chrome's provisional block against this engine's wire
+            // block and invents a dozen headers Chrome does in fact send.
+            push({ ev: 'reqxi', id: p.requestId, headers: p.headers ?? null });
+        } else if (traceHeaders && msg.method === 'Network.responseReceivedExtraInfo') {
+            // The response side of the same asymmetry: Set-Cookie is stripped
+            // out of responseReceived and delivered only here.
+            push({ ev: 'resxi', id: p.requestId, status: p.statusCode, headers: p.headers ?? null });
         } else if (msg.method === 'Network.loadingFinished') {
             // How big the reply was, not just that it came. A Cloudflare `fo/`
             // response *is* the VM program the client then runs -- its length
             // decides how much work the challenge asks for -- and the page-side
             // instruments can only see it after the engine has parsed it. This
             // is the same number off the wire, so the two can be cross-checked.
+            //
+            // Within one arm. NOT across the two: `encodedDataLength` is each
+            // engine's own accounting, and the two do not agree on what to
+            // count. At x-hyatt both arms are served a byte-identical 429 --
+            // same header set, `content-length: 495` against `496`, the one
+            // byte being the token -- and this field reports 1475 for Chrome
+            // and 1882 for lightpanda. A trace that reads those two numbers as
+            // "the guard served us a different interstitial" is reading the
+            // instrument. Compare `content-length` off --trace-headers instead.
             push({ ev: 'done', id: p.requestId, len: p.encodedDataLength });
+            const wanted = bodyWanted.get(p.requestId);
+            if (wanted !== undefined) {
+                bodyWanted.delete(p.requestId);
+                // Fire and forget: the entry lands in `wire` whenever the reply
+                // comes, and the station's settle is long enough that it always
+                // does. Awaiting here would stall the event stream.
+                const entry = { ev: 'body', id: p.requestId, url: wanted, ms: Date.now() - stationStarted };
+                wire.push(entry);
+                liveCdp?.send('Network.getResponseBody', { requestId: p.requestId }, msg.sessionId)
+                    .then((r) => { entry.body = r?.body ?? null; entry.base64 = r?.base64Encoded ?? false; })
+                    .catch((e) => { entry.bodyError = String(e?.message ?? e); });
+            }
         } else if (msg.method === 'Network.loadingFailed') {
             push({ ev: 'fail', text: p.errorText, url: p.request?.url });
         } else if (msg.method === 'Runtime.consoleAPICalled') {
@@ -489,6 +562,7 @@ try {
         stationStarted = started;
         docs = [];
         wire = [];
+        bodyWanted = new Map();
         let reading = null;
         try {
             if (fresh) live = await session();

@@ -1,0 +1,4024 @@
+{
+  "engine": "chrome",
+  "headed": true,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T17:53:29.683Z",
+  "egress": {
+    "fl": "1232f1",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787766809.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Chrome/151.0.7922.174",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.23",
+    "WebKit-Version": "537.36 (@39c51c70dd5feca6b6aba5bb7997b595011c553d)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:15003/devtools/browser/f970db40-a64f-439f-bf80-9808ce5edd81"
+  },
+  "stations": [
+    {
+      "name": "x-hyatt",
+      "vendor": "unattributed",
+      "url": "https://www.hyatt.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hyatt.com/",
+          "status": 429,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.hyatt.com/loyalty/en-US",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "id": "8536FC032F3849C2D2186FDECE7E3B76",
+          "method": "GET",
+          "url": "https://www.hyatt.com/",
+          "type": "Document",
+          "headers": {
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\""
+          },
+          "ms": 2
+        },
+        {
+          "ev": "res",
+          "id": "8536FC032F3849C2D2186FDECE7E3B76",
+          "status": 429,
+          "url": "https://www.hyatt.com/",
+          "type": "Document",
+          "headers": {
+            "access-control-expose-headers": "x-kpsdk-ct,x-kpsdk-r,x-kpsdk-c,x-kpsdk-h,x-kpsdk-fc",
+            "cache-control": "max-age=0, no-cache, no-store",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "content-encoding": "br",
+            "content-length": "496",
+            "content-type": "text/html; charset=utf-8",
+            "date": "Wed, 26 Aug 2026 17:53:30 GMT",
+            "expires": "Wed, 26 Aug 2026 17:53:30 GMT",
+            "p3p": "CP=\"This site does not specify a policy in the P3P header\"",
+            "pragma": "no-cache",
+            "source-country": "US",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "x-kpsdk-ct": "03GfwP5XLm5Ba4IxwAAY9wAwGm4tHVuoxA9KBV7tqVVQvuNaS7Y78V4TcxfLEALe4IeyzJzfeLgfzLxkPmiCvJP9Af33PM4GGPq3NNBoEkJVvTWeavsIBv6nbnQ8RfRCLQzoRrR8ZK1x8NpP31icGyPpKn1Aq9pC6PW82Dez9S8J12DdV8",
+            "x-kpsdk-r": "1-AA"
+          },
+          "resProto": "h2",
+          "ms": 294
+        },
+        {
+          "ev": "req",
+          "id": "3835.2",
+          "method": "GET",
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/ips.js?tkrm_alpekz_s1.3=03GfwP5XLm5Ba4IxwAAY9wAwGm4tHVuoxA9KBV7tqVVQvuNaS7Y78V4TcxfLEALe4IeyzJzfeLgfzLxkPmiCvJP9Af33PM4GGPq3NNBoEkJVvTWeavsIBv6nbnQ8RfRCLQzoRrR8ZK1x8NpP31icGyPpKn1Aq9pC6PW82Dez9S8J12DdV8&x-kpsdk-im=AAJaI1-I9_o1B9IyKpoLOSQ9JykijZ_y5gza7VKR5MEEOhlKb6x6IjELoYrwgS_gH1FxeYbj6EnxomshBeTZUMzmC0jEft-SR5-GWVcTCbnmwA-HTCl3iWJe5A3ps2hU1R5zdzAOX46gxCoTAhwI",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 298
+        },
+        {
+          "ev": "done",
+          "id": "8536FC032F3849C2D2186FDECE7E3B76",
+          "len": 1484,
+          "ms": 298
+        },
+        {
+          "ev": "res",
+          "id": "3835.2",
+          "status": 200,
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/ips.js?tkrm_alpekz_s1.3=03GfwP5XLm5Ba4IxwAAY9wAwGm4tHVuoxA9KBV7tqVVQvuNaS7Y78V4TcxfLEALe4IeyzJzfeLgfzLxkPmiCvJP9Af33PM4GGPq3NNBoEkJVvTWeavsIBv6nbnQ8RfRCLQzoRrR8ZK1x8NpP31icGyPpKn1Aq9pC6PW82Dez9S8J12DdV8&x-kpsdk-im=AAJaI1-I9_o1B9IyKpoLOSQ9JykijZ_y5gza7VKR5MEEOhlKb6x6IjELoYrwgS_gH1FxeYbj6EnxomshBeTZUMzmC0jEft-SR5-GWVcTCbnmwA-HTCl3iWJe5A3ps2hU1R5zdzAOX46gxCoTAhwI",
+          "type": "Script",
+          "headers": {
+            "x-kpsdk-r": "1-AA",
+            "x-kpsdk-ct": "03tUKaxxT4dKJdeK08gfNNxJklf1idVS8re63Ko8AqkfFjfOxinu2mdGnz9mql3zviOD8nFHe6msklM3UBnS0gocWwE99QeJydKFYOI3dG7mFdNAtqezjiZ8gwMdhzAvctHwE79kR7nVm5FpFkVcbc6s5IJvnlGSFRPbTvcHvDM27VoQ9O",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "access-control-expose-headers": "x-kpsdk-ct,x-kpsdk-r,x-kpsdk-c,x-kpsdk-h,x-kpsdk-fc",
+            "cache-control": "max-age=0, no-cache",
+            "content-encoding": "br",
+            "pragma": "no-cache",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Wed, 26 Aug 2026 17:53:30 GMT",
+            "content-length": "299650",
+            "p3p": "CP=\"This site does not specify a policy in the P3P header\"",
+            "date": "Wed, 26 Aug 2026 17:53:30 GMT",
+            "source-country": "US",
+            "content-type": "application/javascript; charset=utf-8"
+          },
+          "resProto": "h2",
+          "ms": 664
+        },
+        {
+          "ev": "done",
+          "id": "3835.2",
+          "len": 300762,
+          "ms": 665
+        },
+        {
+          "ev": "req",
+          "id": "3835.4",
+          "method": "POST",
+          "url": "https://reporting.cdndex.io/error",
+          "type": "XHR",
+          "postLen": 255,
+          "post": "{\"data\":\"FE8TDR8VSV9JDg9FWE0RCBECAANFTk0RBwkEGE9LVgAXSV9JBxkTBBxKREocGBpJHBYRHxFFDAIKVkNSGAwPTVdFEV8LMyAHNiUQOh4gWg5bJDwXLj0xUi8jGCdUEi4hIzQBKlAaVkNSCQofXl9VQU1KEEcZTVdFDzNSAgMbM09dRVlAX1ReWF9STUMsSQwHBDFFTlxJWV1YXFVeRFcNSUlJG09dRUNSCUdRXhBLVhsZBgBJVV8a\"}",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "Content-Type": "application/json;charset=UTF-8",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 1484
+        },
+        {
+          "ev": "req",
+          "id": "6459DA33AD5A72709ADF82A2BD0DB6FF",
+          "method": "OPTIONS",
+          "url": "https://reporting.cdndex.io/error",
+          "type": "Other",
+          "headers": {
+            "Accept": "*/*",
+            "Access-Control-Request-Headers": "content-type",
+            "Access-Control-Request-Method": "POST",
+            "Origin": "https://www.hyatt.com",
+            "Sec-Fetch-Mode": "cors",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+          },
+          "ms": 1484
+        },
+        {
+          "ev": "req",
+          "id": "9EB60F7EEC0D344FE20129362B2B9572",
+          "method": "GET",
+          "url": "blob:https://www.hyatt.com/e6ce4c80-5225-44d8-b089-f39ed176984d",
+          "type": "Script",
+          "headers": {
+            "Accept": "*/*"
+          },
+          "ms": 1564
+        },
+        {
+          "ev": "res",
+          "id": "6459DA33AD5A72709ADF82A2BD0DB6FF",
+          "status": 200,
+          "url": "https://reporting.cdndex.io/error",
+          "type": "Preflight",
+          "headers": {
+            "access-control-allow-headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
+            "access-control-allow-methods": "GET,POST,OPTIONS",
+            "access-control-allow-origin": "*",
+            "access-control-expose-headers": "*",
+            "content-length": "2",
+            "content-type": "application/json",
+            "date": "Wed, 26 Aug 2026 17:53:31 GMT",
+            "server": "CloudFront",
+            "via": "1.1 0f1ad28bbe358153c2fbe34c30aa9462.cloudfront.net (CloudFront)",
+            "x-amz-cf-id": "RuYTjg-PabBw_wALijJqbVqzlsj7ZneukjMBDOFmmBCVLydalsZASQ==",
+            "x-amz-cf-pop": "LAX53-P6",
+            "x-cache": "Miss from cloudfront"
+          },
+          "resProto": "h2",
+          "ms": 1586
+        },
+        {
+          "ev": "done",
+          "id": "6459DA33AD5A72709ADF82A2BD0DB6FF",
+          "len": 0,
+          "ms": 1587
+        },
+        {
+          "ev": "req",
+          "id": "3835.5",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSJXaW5kb3dUZXh0IiBkPSJNMTEuOTkgMkM2LjQ3IDIgMiA2LjQ4IDIgMTJzNC40NyAxMCA5Ljk5IDEwQzE3LjUyIDIyIDIyIDE3LjUyIDIyIDEyUzE3LjUyIDIgMTEuOTkgMnpNMTIgMjBjLTQuNDIgMC04LTMuNTgtOC04czMuNTgtOCA4LTggOCAzLjU4IDggOC0zLjU4IDgtOCA4eiIvPjxwYXRoIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBmaWxsPSJXaW5kb3dUZXh0IiBkPSJNMTIuNSA3SDExdjZsNS4yNSAzLjE1Ljc1LTEuMjMtNC41LTIuNjd6Ii8+PC9zdmc+",
+          "type": "Image",
+          "headers": {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Referer": ""
+          },
+          "ms": 1618
+        },
+        {
+          "ev": "res",
+          "id": "3835.5",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSJXaW5kb3dUZXh0IiBkPSJNMTEuOTkgMkM2LjQ3IDIgMiA2LjQ4IDIgMTJzNC40NyAxMCA5Ljk5IDEwQzE3LjUyIDIyIDIyIDE3LjUyIDIyIDEyUzE3LjUyIDIgMTEuOTkgMnpNMTIgMjBjLTQuNDIgMC04LTMuNTgtOC04czMuNTgtOCA4LTggOCAzLjU4IDggOC0zLjU4IDgtOCA4eiIvPjxwYXRoIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBmaWxsPSJXaW5kb3dUZXh0IiBkPSJNMTIuNSA3SDExdjZsNS4yNSAzLjE1Ljc1LTEuMjMtNC41LTIuNjd6Ii8+PC9zdmc+",
+          "type": "Image",
+          "headers": {
+            "Content-Type": "image/svg+xml"
+          },
+          "resProto": "data",
+          "ms": 1618
+        },
+        {
+          "ev": "done",
+          "id": "3835.5",
+          "len": 0,
+          "ms": 1618
+        },
+        {
+          "ev": "req",
+          "id": "3835.7",
+          "method": "GET",
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Other",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 1629
+        },
+        {
+          "ev": "res",
+          "id": "3835.7",
+          "status": 200,
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Other",
+          "headers": {
+            "mpulse_cdn_cache": "HIT",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "mpulse_origin_time": "0",
+            "accept-ranges": "bytes",
+            "content-length": "166",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:31 GMT",
+            "content-type": "image/x-icon",
+            "last-modified": "Mon, 26 Jan 2026 16:25:48 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 1662
+        },
+        {
+          "ev": "done",
+          "id": "3835.7",
+          "len": 391,
+          "ms": 1662
+        },
+        {
+          "ev": "req",
+          "id": "3835.8",
+          "method": "POST",
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/tl",
+          "type": "XHR",
+          "postLen": 19602,
+          "post": "\u0000\u0002Bz\u0003óJ\u0010\u0000\tF\u0011Û¼·=Ô\u000fQYõDßß\u0011q+íÖôsK/Í¥*\u0003\nÃ\u0010\u0016¨nj\u0000\u00198¾9|e\f>´Ü>×íÄ\u001a½°~<Øö$oG<©Ðw\u0007ü?\u0000ð\nTðSE=7ËÇþháBº­Êr)Ú¶:\u001do%¢©³L\u0019½\u0014\u0016ÅWÜû \\ K¡IVR<Qûñ%ÄJ!8$ñ× S;\u000b\fªLçó_\u000f£\u0018ÊþÍ£\u001eô£Öìü¡ +äûtä¼ï(Á!à\u0000r\u001a\r)ù\u0007(3­³\u0017\u0012\"·úvÎ\u0006yû\f¯ãã¶¬o¨\f¤\u001dÍ]ìà¡mýíñc¼lp»»áöÚ\u0013ª­X\n¤6û#6Ù\"­\u0005(·\u0012yfG\u001fBow'\u0005#N]0*_Ìý_| ",
+          "headers": {
+            "x-kpsdk-ct": "03yijWOPr1BjCmUZCjoQJ5f4RBb5JbH3uAQVseF5ex4EEREKlCSFIRc4DMP1WD7H3ahLAJXCxrMETBNjxg9aTVW6Sos8Ox4oFqhG5tldFaC8C3Xmvh4fxL2nUnkswpKGQeimSZASToO3bui828KlB5pFOBIS0oOlEYS81mBdrMHVQpa1G8",
+            "x-kpsdk-dt": "174xd2ez01knx85iz52lyb0w93izc91y2dz32w63oxa0z1bgz4p3",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "x-kpsdk-im": "AAJaI1-I9_o1B9IyKpoLOSQ9JykijZ_y5gza7VKR5MEEOhlKb6x6IjELoYrwgS_gH1FxeYbj6EnxomshBeTZUMzmC0jEft-SR5-GWVcTCbnmwA-HTCl3iWJe5A3ps2hU1R5zdzAOX46gxCoTAhwI",
+            "sec-ch-ua-mobile": "?0",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Content-Type": "application/octet-stream"
+          },
+          "ms": 1698
+        },
+        {
+          "ev": "req",
+          "id": "C4C5A478923E25A8DA3C2C2569D9FB01",
+          "method": "GET",
+          "url": "https://www.hyatt.com/",
+          "type": "Document",
+          "headers": {
+            "Referer": "https://www.hyatt.com/",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\""
+          },
+          "ms": 1861
+        },
+        {
+          "ev": "res",
+          "id": "3835.8",
+          "status": 200,
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/tl",
+          "type": "XHR",
+          "headers": {
+            "x-kpsdk-r": "1-B1ViAFM",
+            "x-kpsdk-ct": "0bU6cyL3Polfvu3uwV3oC1pTxOuajEBXtDswZuR9q3b3RFQXKVJ3ZnJTq28b7ME8BwheYewqYos80bPUhPcbKravvhfIYceSwqezV1SfK71goKjMeXJACEW8SxvpYsTCP13oiLqn0mfwXmZlCD3JnMRsvxxwyLKkOngqj8oK7Z84YSw",
+            "access-control-expose-headers": "x-kpsdk-ct,x-kpsdk-r,x-kpsdk-c,x-kpsdk-h,x-kpsdk-fc",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Wed, 26 Aug 2026 17:53:32 GMT",
+            "x-kpsdk-cr": "true",
+            "p3p": "CP=\"This site does not specify a policy in the P3P header\"",
+            "date": "Wed, 26 Aug 2026 17:53:32 GMT",
+            "content-type": "application/json; charset=utf-8",
+            "x-kpsdk-st": "1787766812089",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=0, no-cache",
+            "pragma": "no-cache",
+            "access-control-allow-credentials": "true",
+            "access-control-allow-origin": "https://www.hyatt.com",
+            "content-length": "15",
+            "source-country": "US"
+          },
+          "resProto": "h2",
+          "ms": 1861
+        },
+        {
+          "ev": "done",
+          "id": "3835.8",
+          "len": 1030,
+          "ms": 1861
+        },
+        {
+          "ev": "body",
+          "id": "3835.8",
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/tl",
+          "ms": 1862,
+          "bodyError": "-32000 No resource with given identifier found"
+        },
+        {
+          "ev": "res",
+          "id": "3835.4",
+          "status": 200,
+          "url": "https://reporting.cdndex.io/error",
+          "type": "XHR",
+          "headers": {
+            "access-control-allow-methods": "GET,POST,OPTIONS",
+            "via": "1.1 0f1ad28bbe358153c2fbe34c30aa9462.cloudfront.net (CloudFront)",
+            "access-control-allow-origin": "*",
+            "x-cache": "Miss from cloudfront",
+            "content-length": "8",
+            "x-amz-cf-id": "nd1koT_0T8FrbBCrUroed9K7VPtnvIMF1xk9mcKdjC3XrQTsN7cy2Q==",
+            "date": "Wed, 26 Aug 2026 17:53:32 GMT",
+            "content-type": "application/json",
+            "x-amz-cf-pop": "LAX53-P6",
+            "server": "CloudFront",
+            "access-control-allow-headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token"
+          },
+          "resProto": "h2",
+          "ms": 1879
+        },
+        {
+          "ev": "done",
+          "id": "3835.4",
+          "len": 383,
+          "ms": 1879
+        },
+        {
+          "ev": "req",
+          "id": "C4C5A478923E25A8DA3C2C2569D9FB01",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty",
+          "type": "Document",
+          "headers": {
+            "Referer": "https://www.hyatt.com/",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\""
+          },
+          "ms": 2032
+        },
+        {
+          "ev": "req",
+          "id": "C4C5A478923E25A8DA3C2C2569D9FB01",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/en-US",
+          "type": "Document",
+          "headers": {
+            "Referer": "https://www.hyatt.com/",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\""
+          },
+          "ms": 2202
+        },
+        {
+          "ev": "res",
+          "id": "C4C5A478923E25A8DA3C2C2569D9FB01",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/en-US",
+          "type": "Document",
+          "headers": {
+            "access-control-expose-headers": "x-kpsdk-ct,x-kpsdk-r,x-kpsdk-c,x-kpsdk-h,x-kpsdk-fc",
+            "cache-control": "max-age=0, no-cache, no-store",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "content-encoding": "br",
+            "content-length": "9921",
+            "content-type": "text/html; charset=utf-8",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "expect-ct": "max-age=0",
+            "expires": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "link": "</loyalty/_next/static/css/5766cdf992a191ce.css>; rel=preload; as=\"style\"",
+            "p3p": "CP=\"This site does not specify a policy in the P3P header\"",
+            "pragma": "no-cache",
+            "source-country": "US",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "vary": "rsc\nnext-router-state-tree\nnext-router-prefetch\nnext-router-segment-prefetch\nAccept-Encoding",
+            "x-content-type-options": "nosniff",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "x-frame-options": "SAMEORIGIN",
+            "x-kpsdk-ct": "03RRwe8UnDUTgTfDtuxgBR2KbNfQEGELEip8PScHmuG8AgAgtd1TBx2wk03pqljMjWKp3CyAchdPrhvLBmhZeAw6LrcHQg6cULDln8nkOA2SGnV66HoMXguDtBJ9d4upfysZQaqFEcgMI22TWYFduuaRZJgr2YJfT6MZQArHBjDNu7Q7wQ",
+            "x-kpsdk-r": "1-BwRlZEc",
+            "x-permitted-cross-domain-policies": "none",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 2750
+        },
+        {
+          "ev": "req",
+          "id": "3835.10",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/5766cdf992a191ce.css",
+          "type": "Stylesheet",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 2755
+        },
+        {
+          "ev": "req",
+          "id": "3835.12",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/webpack-2d4a0da6b99edb88.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 2756
+        },
+        {
+          "ev": "req",
+          "id": "3835.13",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/4bd1b696-d327213a749c538a.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 2756
+        },
+        {
+          "ev": "req",
+          "id": "3835.14",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/3794-6ea8126567ef5e33.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 2756
+        },
+        {
+          "ev": "req",
+          "id": "3835.15",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/main-app-12615208b21c370c.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 2756
+        },
+        {
+          "ev": "req",
+          "id": "3835.16",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/app/global-error-ce38ce4598dbae2e.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 2756
+        },
+        {
+          "ev": "req",
+          "id": "3835.17",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/0d999d2970affaa2.css",
+          "type": "Stylesheet",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 2756
+        },
+        {
+          "ev": "req",
+          "id": "3835.18",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/19891f75a499724c.css",
+          "type": "Stylesheet",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 2756
+        },
+        {
+          "ev": "req",
+          "id": "3835.19",
+          "method": "GET",
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/cc.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 2756
+        },
+        {
+          "ev": "req",
+          "id": "3835.20",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/themes/0.35.0/world-2024.min.css",
+          "type": "Stylesheet",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 2757
+        },
+        {
+          "ev": "done",
+          "id": "C4C5A478923E25A8DA3C2C2569D9FB01",
+          "len": 11240,
+          "ms": 2757
+        },
+        {
+          "ev": "res",
+          "id": "3835.10",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/5766cdf992a191ce.css",
+          "type": "Stylesheet",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "text/css; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=60853",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "83",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 2813
+        },
+        {
+          "ev": "done",
+          "id": "3835.10",
+          "len": 444,
+          "ms": 2813
+        },
+        {
+          "ev": "res",
+          "id": "3835.18",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/19891f75a499724c.css",
+          "type": "Stylesheet",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "text/css; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=19124",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "57",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 2813
+        },
+        {
+          "ev": "done",
+          "id": "3835.18",
+          "len": 418,
+          "ms": 2814
+        },
+        {
+          "ev": "res",
+          "id": "3835.12",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/webpack-2d4a0da6b99edb88.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=16066",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "2900",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 2814
+        },
+        {
+          "ev": "done",
+          "id": "3835.12",
+          "len": 3272,
+          "ms": 2814
+        },
+        {
+          "ev": "res",
+          "id": "3835.17",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/0d999d2970affaa2.css",
+          "type": "Stylesheet",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "text/css; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=32543",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "3025",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 2823
+        },
+        {
+          "ev": "done",
+          "id": "3835.17",
+          "len": 3387,
+          "ms": 2823
+        },
+        {
+          "ev": "res",
+          "id": "3835.19",
+          "status": 200,
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/cc.js",
+          "type": "Script",
+          "headers": {
+            "mpulse_cdn_cache": "HIT",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "private, max-age=23444",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "mpulse_origin_time": "0",
+            "expires": "Thu, 27 Aug 2026 00:24:17 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "68523",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/javascript",
+            "last-modified": "Mon, 23 Mar 2026 15:19:01 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 2844
+        },
+        {
+          "ev": "done",
+          "id": "3835.19",
+          "len": 68833,
+          "ms": 2844
+        },
+        {
+          "ev": "res",
+          "id": "3835.13",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/4bd1b696-d327213a749c538a.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=32559",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "61171",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 2888
+        },
+        {
+          "ev": "done",
+          "id": "3835.13",
+          "len": 61571,
+          "ms": 2888
+        },
+        {
+          "ev": "res",
+          "id": "3835.14",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/3794-6ea8126567ef5e33.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=38881",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "61689",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 2934
+        },
+        {
+          "ev": "done",
+          "id": "3835.14",
+          "len": 62089,
+          "ms": 2934
+        },
+        {
+          "ev": "res",
+          "id": "3835.15",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/main-app-12615208b21c370c.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=45995",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "194",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 2976
+        },
+        {
+          "ev": "done",
+          "id": "3835.15",
+          "len": 566,
+          "ms": 2976
+        },
+        {
+          "ev": "res",
+          "id": "3835.16",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/app/global-error-ce38ce4598dbae2e.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=38084",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "292",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3064
+        },
+        {
+          "ev": "done",
+          "id": "3835.16",
+          "len": 663,
+          "ms": 3064
+        },
+        {
+          "ev": "res",
+          "id": "3835.20",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/themes/0.35.0/world-2024.min.css",
+          "type": "Stylesheet",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=44965",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 06:22:58 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "5204",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "text/css",
+            "last-modified": "Mon, 08 Jun 2026 21:56:40 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3096
+        },
+        {
+          "ev": "done",
+          "id": "3835.20",
+          "len": 5426,
+          "ms": 3096
+        },
+        {
+          "ev": "req",
+          "id": "3835.51",
+          "method": "GET",
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/scripttemplates/otSDKStub.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3109
+        },
+        {
+          "ev": "req",
+          "id": "3835.52",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/3479-769c6359cb5e28e9.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3109
+        },
+        {
+          "ev": "req",
+          "id": "3835.53",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/app/%5Blang%5D/layout-fee6ee9b324431b1.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3109
+        },
+        {
+          "ev": "req",
+          "id": "3835.54",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/app/%5Blang%5D/not-found-d5e9e7f640b22f90.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3109
+        },
+        {
+          "ev": "req",
+          "id": "3835.55",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/3b3b4050cd725a4a.css",
+          "type": "Stylesheet",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3109
+        },
+        {
+          "ev": "req",
+          "id": "3835.56",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/app/%5Blang%5D/page-d7b6703d05255693.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3109
+        },
+        {
+          "ev": "res",
+          "id": "3835.54",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/app/%5Blang%5D/not-found-d5e9e7f640b22f90.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=32543",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "1225",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3164
+        },
+        {
+          "ev": "done",
+          "id": "3835.54",
+          "len": 1597,
+          "ms": 3165
+        },
+        {
+          "ev": "res",
+          "id": "3835.56",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/app/%5Blang%5D/page-d7b6703d05255693.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=40357",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "7723",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3165
+        },
+        {
+          "ev": "done",
+          "id": "3835.56",
+          "len": 8095,
+          "ms": 3165
+        },
+        {
+          "ev": "res",
+          "id": "3835.53",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/app/%5Blang%5D/layout-fee6ee9b324431b1.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=44979",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "2872",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3172
+        },
+        {
+          "ev": "done",
+          "id": "3835.53",
+          "len": 3244,
+          "ms": 3172
+        },
+        {
+          "ev": "res",
+          "id": "3835.52",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/3479-769c6359cb5e28e9.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=32551",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "16127",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3233
+        },
+        {
+          "ev": "done",
+          "id": "3835.52",
+          "len": 16500,
+          "ms": 3234
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED",
+          "ms": 3250
+        },
+        {
+          "ev": "req",
+          "id": "3835.75",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/8874.04eced10402f09ba.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3250
+        },
+        {
+          "ev": "req",
+          "id": "3835.76",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/2407.46f1b04ac94f6c89.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3250
+        },
+        {
+          "ev": "req",
+          "id": "3835.78",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/bellhop.esm.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3250
+        },
+        {
+          "ev": "req",
+          "id": "3835.79",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/bookends/1.latest/ecommerce/en-US/bookends.min.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3250
+        },
+        {
+          "ev": "req",
+          "id": "3835.80",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2025/08/14/1651/Hotel-du-Palais-Biarritz-P032-Hotel-Exterior.jpg/Hotel-du-Palais-Biarritz-P032-Hotel-Exterior.16x9.jpg?imwidth=1920",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3250
+        },
+        {
+          "ev": "req",
+          "id": "3835.81",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2020/12/17/1625/HYCOM-WOH-Contactless-Credit-Card.jpg/HYCOM-WOH-Contactless-Credit-Card.16x9.jpg?imwidth=320",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3250
+        },
+        {
+          "ev": "req",
+          "id": "3835.90",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2019/11/27/1853/Park-Hyatt-Paris-Vendome-P1215-Vendome-Suite-Balcony.jpg/Park-Hyatt-Paris-Vendome-P1215-Vendome-Suite-Balcony.16x9.jpg?imwidth=960",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3250
+        },
+        {
+          "ev": "req",
+          "id": "3835.91",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2019/11/27/1853/Park-Hyatt-Paris-Vendome-P1215-Vendome-Suite-Balcony.jpg/Park-Hyatt-Paris-Vendome-P1215-Vendome-Suite-Balcony.4x3.jpg?imwidth=640",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3251
+        },
+        {
+          "ev": "req",
+          "id": "3835.92",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2019/09/06/1254/Parisi-Udvar-Budapest-P052-Lobby-Elevators.jpg/Parisi-Udvar-Budapest-P052-Lobby-Elevators.16x9.jpg?imwidth=960",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3251
+        },
+        {
+          "ev": "req",
+          "id": "3835.93",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2019/09/06/1254/Parisi-Udvar-Budapest-P052-Lobby-Elevators.jpg/Parisi-Udvar-Budapest-P052-Lobby-Elevators.4x3.jpg?imwidth=640",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3251
+        },
+        {
+          "ev": "req",
+          "id": "3835.94",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2025/05/30/1112/HSL-R0007-King-Standard.jpg/HSL-R0007-King-Standard.16x9.jpg?imwidth=960",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3251
+        },
+        {
+          "ev": "req",
+          "id": "3835.95",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2025/05/30/1112/HSL-R0007-King-Standard.jpg/HSL-R0007-King-Standard.4x3.jpg?imwidth=640",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3251
+        },
+        {
+          "ev": "req",
+          "id": "3835.96",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2024/01/22/0929/WOH-P0618-Wedding-Bride-Grandma-Necklace.jpg/WOH-P0618-Wedding-Bride-Grandma-Necklace.16x9.jpg?imwidth=960",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3251
+        },
+        {
+          "ev": "req",
+          "id": "3835.97",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2024/01/22/0929/WOH-P0618-Wedding-Bride-Grandma-Necklace.jpg/WOH-P0618-Wedding-Bride-Grandma-Necklace.4x3.jpg?imwidth=640",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3251
+        },
+        {
+          "ev": "req",
+          "id": "3835.134",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/media/tier-default.e28aca3c.svg",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/_next/static/css/0d999d2970affaa2.css",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3252
+        },
+        {
+          "ev": "req",
+          "id": "3835.135",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2023/06/14/2128/UTPAZ-P0255-Ocean-View-Heritage-House-With-Pool.jpg/UTPAZ-P0255-Ocean-View-Heritage-House-With-Pool.16x9.jpg?imwidth=1280",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3252
+        },
+        {
+          "ev": "req",
+          "id": "3835.49",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/webfonts/NotoSansDisplay/NotoSansDisplay_700_latin.woff2",
+          "type": "Font",
+          "headers": {
+            "Origin": "https://www.hyatt.com",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/hds/static/themes/0.35.0/world-2024.min.css",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3253
+        },
+        {
+          "ev": "req",
+          "id": "3835.45",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/webfonts/NotoSansDisplay/NotoSansDisplay_400_latin.woff2",
+          "type": "Font",
+          "headers": {
+            "Origin": "https://www.hyatt.com",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/hds/static/themes/0.35.0/world-2024.min.css",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3253
+        },
+        {
+          "ev": "req",
+          "id": "3835.33",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/webfonts/DarbySansPosterCond/DarbySansPosterCond_700.woff2",
+          "type": "Font",
+          "headers": {
+            "Origin": "https://www.hyatt.com",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/hds/static/themes/0.35.0/world-2024.min.css",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3254
+        },
+        {
+          "ev": "req",
+          "id": "3835.136",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/bellhop.esm.js",
+          "type": "Script",
+          "headers": {
+            "Origin": "https://www.hyatt.com",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3254
+        },
+        {
+          "ev": "req",
+          "id": "3835.83",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2018/02/15/1203/Hyatt-Centric-Ginza-P081-Exterior-Entrance.jpg/Hyatt-Centric-Ginza-P081-Exterior-Entrance.4x3.jpg?imwidth=320",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3254
+        },
+        {
+          "ev": "req",
+          "id": "3835.85",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2026/05/22/1038/CA101-P0114-Updated-Hotel-Exterior.jpg/CA101-P0114-Updated-Hotel-Exterior.4x3.jpg?imwidth=320",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3254
+        },
+        {
+          "ev": "req",
+          "id": "3835.87",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2016/09/27/1203/Hyatt-Place-Waikiki-Beach-P042-Exterior.jpg/Hyatt-Place-Waikiki-Beach-P042-Exterior.4x3.jpg?imwidth=320",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3254
+        },
+        {
+          "ev": "req",
+          "id": "3835.89",
+          "method": "GET",
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2019/01/10/1420/Grand-Hyatt-Kauai-Resort-and-Spa-P765-Exterior.jpg/Grand-Hyatt-Kauai-Resort-and-Spa-P765-Exterior.4x3.jpg?imwidth=320",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3255
+        },
+        {
+          "ev": "req",
+          "id": "3835.142",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/5020519c10405acc.css",
+          "type": "Stylesheet",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3255
+        },
+        {
+          "ev": "res",
+          "id": "3835.76",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/2407.46f1b04ac94f6c89.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=32552",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "880",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3270
+        },
+        {
+          "ev": "done",
+          "id": "3835.76",
+          "len": 1252,
+          "ms": 3271
+        },
+        {
+          "ev": "res",
+          "id": "3835.142",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/css/5020519c10405acc.css",
+          "type": "Stylesheet",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "text/css; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=40395",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "6256",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3306
+        },
+        {
+          "ev": "done",
+          "id": "3835.142",
+          "len": 6618,
+          "ms": 3306
+        },
+        {
+          "ev": "res",
+          "id": "3835.134",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/media/tier-default.e28aca3c.svg",
+          "type": "Image",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "image/svg+xml",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=16067",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "622",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3306
+        },
+        {
+          "ev": "done",
+          "id": "3835.134",
+          "len": 977,
+          "ms": 3307
+        },
+        {
+          "ev": "res",
+          "id": "3835.75",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/8874.04eced10402f09ba.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=16067",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "36954",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3309
+        },
+        {
+          "ev": "done",
+          "id": "3835.75",
+          "len": 37345,
+          "ms": 3309
+        },
+        {
+          "ev": "req",
+          "id": "3835.161",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/6570.19cdffcdcf451788.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3313
+        },
+        {
+          "ev": "req",
+          "id": "3835.162",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/2937.30c5964732791ca4.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3313
+        },
+        {
+          "ev": "req",
+          "id": "3835.163",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/5538.0f7f2f12eb4f279f.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3313
+        },
+        {
+          "ev": "req",
+          "id": "3835.164",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/5099.dff0129f0171964c.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3313
+        },
+        {
+          "ev": "res",
+          "id": "3835.78",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/bellhop.esm.js",
+          "type": "Script",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=40369",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 05:06:22 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "2208",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/javascript; charset=utf-8",
+            "last-modified": "Mon, 08 Jun 2026 21:56:05 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3336
+        },
+        {
+          "ev": "done",
+          "id": "3835.78",
+          "len": 2450,
+          "ms": 3337
+        },
+        {
+          "ev": "res",
+          "id": "3835.49",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/webfonts/NotoSansDisplay/NotoSansDisplay_700_latin.woff2",
+          "type": "Font",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=25497",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 00:58:30 GMT",
+            "accept-ranges": "bytes",
+            "access-control-allow-origin": "*",
+            "content-length": "18000",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "font/woff2",
+            "last-modified": "Mon, 08 Jun 2026 21:55:51 GMT"
+          },
+          "resProto": "h2",
+          "ms": 3337
+        },
+        {
+          "ev": "done",
+          "id": "3835.49",
+          "len": 18222,
+          "ms": 3337
+        },
+        {
+          "ev": "res",
+          "id": "3835.136",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/bellhop.esm.js",
+          "type": "Script",
+          "headers": {
+            "cache-control": "max-age=40369",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 05:06:22 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "2208",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/javascript; charset=utf-8",
+            "last-modified": "Mon, 08 Jun 2026 21:56:05 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3338
+        },
+        {
+          "ev": "done",
+          "id": "3835.136",
+          "len": 0,
+          "ms": 3338
+        },
+        {
+          "ev": "req",
+          "id": "3835.182",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/p-1ba9bbbd.js",
+          "type": "Script",
+          "headers": {
+            "Origin": "https://www.hyatt.com",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/bellhop.esm.js",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3338
+        },
+        {
+          "ev": "req",
+          "id": "3835.183",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/p-ea042b0b.js",
+          "type": "Script",
+          "headers": {
+            "Origin": "https://www.hyatt.com",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/bellhop.esm.js",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3338
+        },
+        {
+          "ev": "req",
+          "id": "3835.184",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/p-d1242ae7.js",
+          "type": "Script",
+          "headers": {
+            "Origin": "https://www.hyatt.com",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/bellhop.esm.js",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3338
+        },
+        {
+          "ev": "req",
+          "id": "3835.185",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/p-b62a8650.js",
+          "type": "Script",
+          "headers": {
+            "Origin": "https://www.hyatt.com",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/bellhop.esm.js",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3338
+        },
+        {
+          "ev": "res",
+          "id": "3835.45",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/webfonts/NotoSansDisplay/NotoSansDisplay_400_latin.woff2",
+          "type": "Font",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=29213",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 02:00:26 GMT",
+            "accept-ranges": "bytes",
+            "access-control-allow-origin": "*",
+            "content-length": "18028",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "font/woff2",
+            "last-modified": "Mon, 08 Jun 2026 21:55:51 GMT"
+          },
+          "resProto": "h2",
+          "ms": 3394
+        },
+        {
+          "ev": "done",
+          "id": "3835.45",
+          "len": 18250,
+          "ms": 3395
+        },
+        {
+          "ev": "res",
+          "id": "3835.51",
+          "status": 200,
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/scripttemplates/otSDKStub.js",
+          "type": "Script",
+          "headers": {
+            "mpulse_cdn_cache": "HIT",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=44059",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "mpulse_origin_time": "0",
+            "expires": "Thu, 27 Aug 2026 06:07:52 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "8383",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/javascript",
+            "last-modified": "Mon, 23 Mar 2026 15:19:01 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3398
+        },
+        {
+          "ev": "done",
+          "id": "3835.51",
+          "len": 8650,
+          "ms": 3398
+        },
+        {
+          "ev": "res",
+          "id": "3835.161",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/6570.19cdffcdcf451788.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=45002",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "1347",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3398
+        },
+        {
+          "ev": "done",
+          "id": "3835.161",
+          "len": 1719,
+          "ms": 3398
+        },
+        {
+          "ev": "req",
+          "id": "3835.186",
+          "method": "GET",
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/consent/c2a45b44-87a7-45f8-a7f1-dc8a9add12cf/c2a45b44-87a7-45f8-a7f1-dc8a9add12cf.json",
+          "type": "XHR",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3399
+        },
+        {
+          "ev": "res",
+          "id": "3835.33",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/webfonts/DarbySansPosterCond/DarbySansPosterCond_700.woff2",
+          "type": "Font",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=28899",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 01:55:12 GMT",
+            "accept-ranges": "bytes",
+            "access-control-allow-origin": "*",
+            "content-length": "27221",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "font/woff2",
+            "last-modified": "Mon, 08 Jun 2026 21:55:51 GMT"
+          },
+          "resProto": "h2",
+          "ms": 3399
+        },
+        {
+          "ev": "done",
+          "id": "3835.33",
+          "len": 27443,
+          "ms": 3399
+        },
+        {
+          "ev": "res",
+          "id": "3835.162",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/2937.30c5964732791ca4.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=38116",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "677",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3399
+        },
+        {
+          "ev": "done",
+          "id": "3835.162",
+          "len": 1049,
+          "ms": 3399
+        },
+        {
+          "ev": "res",
+          "id": "3835.163",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/5538.0f7f2f12eb4f279f.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=16067",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "2049",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3399
+        },
+        {
+          "ev": "done",
+          "id": "3835.163",
+          "len": 2421,
+          "ms": 3399
+        },
+        {
+          "ev": "res",
+          "id": "3835.164",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/5099.dff0129f0171964c.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=32550",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "1794",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3399
+        },
+        {
+          "ev": "done",
+          "id": "3835.164",
+          "len": 2166,
+          "ms": 3399
+        },
+        {
+          "ev": "req",
+          "id": "3835.187",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/icons/0.latest/json/general.json",
+          "type": "Fetch",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3402
+        },
+        {
+          "ev": "req",
+          "id": "3835.188",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/images/0.latest/themes/world-2024/separator-basic-on-light.svg",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3409
+        },
+        {
+          "ev": "req",
+          "id": "3835.189",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/images/0.latest/themes/world-2024/separator-decorative-on-light.svg",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3409
+        },
+        {
+          "ev": "res",
+          "id": "3835.184",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/p-d1242ae7.js",
+          "type": "Script",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=42696",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 05:45:09 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "256",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/javascript; charset=utf-8",
+            "last-modified": "Mon, 08 Jun 2026 21:56:05 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3453
+        },
+        {
+          "ev": "done",
+          "id": "3835.184",
+          "len": 498,
+          "ms": 3453
+        },
+        {
+          "ev": "res",
+          "id": "3835.182",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/p-1ba9bbbd.js",
+          "type": "Script",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=38839",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 04:40:52 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "6928",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/javascript; charset=utf-8",
+            "last-modified": "Mon, 08 Jun 2026 21:56:05 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3453
+        },
+        {
+          "ev": "done",
+          "id": "3835.182",
+          "len": 7170,
+          "ms": 3453
+        },
+        {
+          "ev": "res",
+          "id": "3835.185",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/p-b62a8650.js",
+          "type": "Script",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=16068",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Wed, 26 Aug 2026 22:21:21 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "925",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/javascript; charset=utf-8",
+            "last-modified": "Mon, 08 Jun 2026 21:56:05 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3453
+        },
+        {
+          "ev": "done",
+          "id": "3835.185",
+          "len": 1167,
+          "ms": 3453
+        },
+        {
+          "ev": "res",
+          "id": "3835.79",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/bookends/1.latest/ecommerce/en-US/bookends.min.js",
+          "type": "Script",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=34853",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 03:34:26 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "34306",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/javascript; charset=utf-8",
+            "last-modified": "Fri, 24 Jul 2026 17:02:17 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3454
+        },
+        {
+          "ev": "done",
+          "id": "3835.79",
+          "len": 34567,
+          "ms": 3454
+        },
+        {
+          "ev": "req",
+          "id": "3835.207",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/bookends/images/locales/_01/en-US/ios@2x.png",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3460
+        },
+        {
+          "ev": "req",
+          "id": "3835.208",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/bookends/images/locales/_01/en-US/play@2x.png",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3460
+        },
+        {
+          "ev": "req",
+          "id": "3835.209",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/bookends/images/logos/_01/woh-horizontal_ol.svg",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3460
+        },
+        {
+          "ev": "req",
+          "id": "3835.217",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/bookends/images/sprites/_15/brandbar.svg",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3464
+        },
+        {
+          "ev": "req",
+          "id": "3835.218",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGcgZmlsbD0iI0I2QjZCNiIgZmlsbC1ydWxlPSJub256ZXJvIj48cGF0aCBkPSJNMTUuMDQgMS41MzJMMTAuMTEgNi4xNmEuODMuODMgMCAxIDAgMS4xMzUgMS4yMDhsNC45MzItNC42M0EuODMuODMgMCAxIDAgMTUuMDQgMS41M3YuMDAyeiIvPjxwYXRoIGQ9Ik0xNy42OTguMzQyYy4wMzItLjE4OC0uMTUtLjM3LS4zMzktLjMzOGwtNC44My44MjlhLjI5NC4yOTQgMCAwIDAtLjE1Ny40OTdjLjA0LjA0LjA5LjA2Ni4xNDQuMDc4bDIuNTE4IDEuMjYgMS4yNiAyLjUyYS4yOTMuMjkzIDAgMCAwIC41NzYtLjAxNGwuODI4LTQuODMyek0xNC4zMjIgOC4zODd2OC40NTJoLjgyOWwtLjU4Ny0uNTg2LjU3Ny41OTV2LS44MjlILjg0di44M2wuNTg2LS41ODctLjU5NS41NzdoLjgyOFYyLjUzNkguODNsLjU4Ni41ODctLjU3Ny0uNTk1di44MjhoOC4zMzZhLjgzLjgzIDAgMSAwIDAtMS42NTdILjgzOGEuODMuODMgMCAwIDAtLjU4Ni4yNDMuODM2LjgzNiAwIDAgMC0uMjUyLjU5NFYxNi44NGMwIC4yMi4wODguNDMuMjQ0LjU4NS4xNTYuMTYuMzcuMjUxLjU5NC4yNTJoMTQuMzA0YS44My44MyAwIDAgMCAuNTg3LS4yNDIuODM2LjgzNiAwIDAgMCAuMjUtLjU5NVY4LjM4N2EuODMuODMgMCAwIDAtMS42NTYgMGgtLjAwMXoiLz48L2c+PC9zdmc+",
+          "type": "Image",
+          "headers": {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Referer": ""
+          },
+          "ms": 3464
+        },
+        {
+          "ev": "res",
+          "id": "3835.218",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGcgZmlsbD0iI0I2QjZCNiIgZmlsbC1ydWxlPSJub256ZXJvIj48cGF0aCBkPSJNMTUuMDQgMS41MzJMMTAuMTEgNi4xNmEuODMuODMgMCAxIDAgMS4xMzUgMS4yMDhsNC45MzItNC42M0EuODMuODMgMCAxIDAgMTUuMDQgMS41M3YuMDAyeiIvPjxwYXRoIGQ9Ik0xNy42OTguMzQyYy4wMzItLjE4OC0uMTUtLjM3LS4zMzktLjMzOGwtNC44My44MjlhLjI5NC4yOTQgMCAwIDAtLjE1Ny40OTdjLjA0LjA0LjA5LjA2Ni4xNDQuMDc4bDIuNTE4IDEuMjYgMS4yNiAyLjUyYS4yOTMuMjkzIDAgMCAwIC41NzYtLjAxNGwuODI4LTQuODMyek0xNC4zMjIgOC4zODd2OC40NTJoLjgyOWwtLjU4Ny0uNTg2LjU3Ny41OTV2LS44MjlILjg0di44M2wuNTg2LS41ODctLjU5NS41NzdoLjgyOFYyLjUzNkguODNsLjU4Ni41ODctLjU3Ny0uNTk1di44MjhoOC4zMzZhLjgzLjgzIDAgMSAwIDAtMS42NTdILjgzOGEuODMuODMgMCAwIDAtLjU4Ni4yNDMuODM2LjgzNiAwIDAgMC0uMjUyLjU5NFYxNi44NGMwIC4yMi4wODguNDMuMjQ0LjU4NS4xNTYuMTYuMzcuMjUxLjU5NC4yNTJoMTQuMzA0YS44My44MyAwIDAgMCAuNTg3LS4yNDIuODM2LjgzNiAwIDAgMCAuMjUtLjU5NVY4LjM4N2EuODMuODMgMCAwIDAtMS42NTYgMGgtLjAwMXoiLz48L2c+PC9zdmc+",
+          "type": "Image",
+          "headers": {
+            "Content-Type": "image/svg+xml"
+          },
+          "resProto": "data",
+          "ms": 3465
+        },
+        {
+          "ev": "done",
+          "id": "3835.218",
+          "len": 0,
+          "ms": 3465
+        },
+        {
+          "ev": "req",
+          "id": "3835.219",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/bookends/images/sprites/_15/social.svg",
+          "type": "Image",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3465
+        },
+        {
+          "ev": "res",
+          "id": "3835.80",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2025/08/14/1651/Hotel-du-Palais-Biarritz-P032-Hotel-Exterior.jpg/Hotel-du-Palais-Biarritz-P032-Hotel-Exterior.16x9.jpg?imwidth=1920",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"3aa801-650b5b191c426\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "266822",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Sat, 02 May 2026 17:30:09 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3467
+        },
+        {
+          "ev": "res",
+          "id": "3835.183",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/elements/0.35.0/bellhop/p-ea042b0b.js",
+          "type": "Script",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=19153",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Wed, 26 Aug 2026 23:12:46 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "66",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/javascript; charset=utf-8",
+            "last-modified": "Mon, 08 Jun 2026 21:56:05 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3496
+        },
+        {
+          "ev": "done",
+          "id": "3835.183",
+          "len": 307,
+          "ms": 3499
+        },
+        {
+          "ev": "res",
+          "id": "3835.209",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/bookends/images/logos/_01/woh-horizontal_ol.svg",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=29414",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 02:03:47 GMT",
+            "accept-ranges": "bytes",
+            "content-length": "1217",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "image/svg+xml",
+            "last-modified": "Fri, 24 Jul 2026 17:01:42 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3499
+        },
+        {
+          "ev": "done",
+          "id": "3835.209",
+          "len": 1447,
+          "ms": 3499
+        },
+        {
+          "ev": "res",
+          "id": "3835.219",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/bookends/images/sprites/_15/social.svg",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=30706",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 02:25:19 GMT",
+            "accept-ranges": "bytes",
+            "content-length": "2456",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "image/svg+xml",
+            "last-modified": "Fri, 24 Jul 2026 17:01:43 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3499
+        },
+        {
+          "ev": "done",
+          "id": "3835.219",
+          "len": 2686,
+          "ms": 3499
+        },
+        {
+          "ev": "res",
+          "id": "3835.81",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2020/12/17/1625/HYCOM-WOH-Contactless-Credit-Card.jpg/HYCOM-WOH-Contactless-Credit-Card.16x9.jpg?imwidth=320",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"10485d-6369aa001e6c7\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "3434",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 20 Aug 2026 17:00:03 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3509
+        },
+        {
+          "ev": "done",
+          "id": "3835.81",
+          "len": 3631,
+          "ms": 3509
+        },
+        {
+          "ev": "done",
+          "id": "3835.80",
+          "len": 267165,
+          "ms": 3509
+        },
+        {
+          "ev": "res",
+          "id": "3835.90",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2019/11/27/1853/Park-Hyatt-Paris-Vendome-P1215-Vendome-Suite-Balcony.jpg/Park-Hyatt-Paris-Vendome-P1215-Vendome-Suite-Balcony.16x9.jpg?imwidth=960",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"acced-625965f779d62\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "59672",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Mon, 11 Aug 2025 18:21:59 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3509
+        },
+        {
+          "ev": "done",
+          "id": "3835.90",
+          "len": 59896,
+          "ms": 3510
+        },
+        {
+          "ev": "res",
+          "id": "3835.93",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2019/09/06/1254/Parisi-Udvar-Budapest-P052-Lobby-Elevators.jpg/Parisi-Udvar-Budapest-P052-Lobby-Elevators.4x3.jpg?imwidth=640",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"14020d-62573ca939383\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "55526",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Tue, 29 Jul 2025 17:48:45 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3511
+        },
+        {
+          "ev": "done",
+          "id": "3835.93",
+          "len": 55752,
+          "ms": 3512
+        },
+        {
+          "ev": "res",
+          "id": "3835.91",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2019/11/27/1853/Park-Hyatt-Paris-Vendome-P1215-Vendome-Suite-Balcony.jpg/Park-Hyatt-Paris-Vendome-P1215-Vendome-Suite-Balcony.4x3.jpg?imwidth=640",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"c527f-6266644b5d9b7\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "33000",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Wed, 10 Jun 2026 02:10:30 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3514
+        },
+        {
+          "ev": "done",
+          "id": "3835.91",
+          "len": 33216,
+          "ms": 3514
+        },
+        {
+          "ev": "res",
+          "id": "3835.92",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2019/09/06/1254/Parisi-Udvar-Budapest-P052-Lobby-Elevators.jpg/Parisi-Udvar-Budapest-P052-Lobby-Elevators.16x9.jpg?imwidth=960",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "W/\"f9332-63624906ad816\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "87406",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Sun, 13 Jul 2025 16:52:01 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3515
+        },
+        {
+          "ev": "done",
+          "id": "3835.92",
+          "len": 87650,
+          "ms": 3520
+        },
+        {
+          "ev": "res",
+          "id": "3835.94",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2025/05/30/1112/HSL-R0007-King-Standard.jpg/HSL-R0007-King-Standard.16x9.jpg?imwidth=960",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"45960-650c18e3b3682\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "16154",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Tue, 18 Aug 2026 18:05:30 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3520
+        },
+        {
+          "ev": "done",
+          "id": "3835.94",
+          "len": 16351,
+          "ms": 3520
+        },
+        {
+          "ev": "res",
+          "id": "3835.95",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2025/05/30/1112/HSL-R0007-King-Standard.jpg/HSL-R0007-King-Standard.4x3.jpg?imwidth=640",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"430b6-6407fdb6d1199\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "7108",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Sun, 10 May 2026 16:03:29 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3522
+        },
+        {
+          "ev": "done",
+          "id": "3835.95",
+          "len": 7305,
+          "ms": 3523
+        },
+        {
+          "ev": "res",
+          "id": "3835.96",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2024/01/22/0929/WOH-P0618-Wedding-Bride-Grandma-Necklace.jpg/WOH-P0618-Wedding-Bride-Grandma-Necklace.16x9.jpg?imwidth=960",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "W/\"93297-6513057e9db32\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "35660",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 07 May 2026 01:38:56 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3523
+        },
+        {
+          "ev": "done",
+          "id": "3835.96",
+          "len": 35878,
+          "ms": 3523
+        },
+        {
+          "ev": "res",
+          "id": "3835.97",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2024/01/22/0929/WOH-P0618-Wedding-Bride-Grandma-Necklace.jpg/WOH-P0618-Wedding-Bride-Grandma-Necklace.4x3.jpg?imwidth=640",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"c6c17-659bd229e775d\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "14772",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Sun, 23 Aug 2026 20:58:46 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3523
+        },
+        {
+          "ev": "done",
+          "id": "3835.97",
+          "len": 14969,
+          "ms": 3523
+        },
+        {
+          "ev": "res",
+          "id": "3835.135",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2023/06/14/2128/UTPAZ-P0255-Ocean-View-Heritage-House-With-Pool.jpg/UTPAZ-P0255-Ocean-View-Heritage-House-With-Pool.16x9.jpg?imwidth=1280",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"d7d95-636f4a5e0e4ae\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "127190",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Tue, 19 May 2026 08:42:17 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3524
+        },
+        {
+          "ev": "req",
+          "id": "3835.220",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/9192.b85d4c5ad9e010f0.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3547
+        },
+        {
+          "ev": "req",
+          "id": "3835.221",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/7860.fdfe8657c15caf68.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3548
+        },
+        {
+          "ev": "req",
+          "id": "3835.222",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/1800.47a75cdc0daf62a8.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3548
+        },
+        {
+          "ev": "req",
+          "id": "3835.223",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/723.df84bd89577b98d9.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3548
+        },
+        {
+          "ev": "req",
+          "id": "3835.224",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/1311.d5b8dafcfb3c63eb.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3548
+        },
+        {
+          "ev": "req",
+          "id": "3835.225",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/4187.eb9a61ff9a1f8090.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3548
+        },
+        {
+          "ev": "req",
+          "id": "3835.226",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/8107.d9d93ac79d904d5c.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3548
+        },
+        {
+          "ev": "req",
+          "id": "3835.227",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/7541.a5079f9d640f12a1.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3548
+        },
+        {
+          "ev": "done",
+          "id": "3835.135",
+          "len": 127450,
+          "ms": 3550
+        },
+        {
+          "ev": "res",
+          "id": "3835.83",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2018/02/15/1203/Hyatt-Centric-Ginza-P081-Exterior-Entrance.jpg/Hyatt-Centric-Ginza-P081-Exterior-Entrance.4x3.jpg?imwidth=320",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"197d2c-637737f5bdc6c\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "11628",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Sun, 15 Jun 2025 22:18:42 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3554
+        },
+        {
+          "ev": "done",
+          "id": "3835.83",
+          "len": 11826,
+          "ms": 3555
+        },
+        {
+          "ev": "res",
+          "id": "3835.85",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2026/05/22/1038/CA101-P0114-Updated-Hotel-Exterior.jpg/CA101-P0114-Updated-Hotel-Exterior.4x3.jpg?imwidth=320",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"993dc-6541572f03944\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "9374",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Fri, 17 Jul 2026 02:41:00 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3555
+        },
+        {
+          "ev": "done",
+          "id": "3835.85",
+          "len": 9571,
+          "ms": 3555
+        },
+        {
+          "ev": "res",
+          "id": "3835.87",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2016/09/27/1203/Hyatt-Place-Waikiki-Beach-P042-Exterior.jpg/Hyatt-Place-Waikiki-Beach-P042-Exterior.4x3.jpg?imwidth=320",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "\"b9264-62e9aec99edcc\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "11832",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 20 Feb 2025 23:08:29 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3555
+        },
+        {
+          "ev": "done",
+          "id": "3835.87",
+          "len": 12029,
+          "ms": 3555
+        },
+        {
+          "ev": "res",
+          "id": "3835.89",
+          "status": 200,
+          "url": "https://assets.hyatt.com/content/dam/hyatt/hyattdam/images/2019/01/10/1420/Grand-Hyatt-Kauai-Resort-and-Spa-P765-Exterior.jpg/Grand-Hyatt-Kauai-Resort-and-Spa-P765-Exterior.4x3.jpg?imwidth=320",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000",
+            "cache-control": "private, no-transform, max-age=43200",
+            "etag": "W/\"f00bc-6363c1c555a21\"",
+            "expires": "Thu, 27 Aug 2026 05:53:33 GMT",
+            "content-length": "14738",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 29 May 2025 01:21:28 GMT",
+            "content-type": "image/webp",
+            "server": "Akamai Image Manager"
+          },
+          "resProto": "h2",
+          "ms": 3555
+        },
+        {
+          "ev": "done",
+          "id": "3835.89",
+          "len": 14937,
+          "ms": 3555
+        },
+        {
+          "ev": "res",
+          "id": "3835.187",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/icons/0.latest/json/general.json",
+          "type": "Fetch",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=56584",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 09:36:37 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "32710",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/json",
+            "last-modified": "Mon, 08 Jun 2026 21:55:52 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3571
+        },
+        {
+          "ev": "res",
+          "id": "3835.188",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/images/0.latest/themes/world-2024/separator-basic-on-light.svg",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=20021",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Wed, 26 Aug 2026 23:27:14 GMT",
+            "content-length": "228",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "image/svg+xml",
+            "last-modified": "Mon, 08 Jun 2026 21:55:58 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3572
+        },
+        {
+          "ev": "done",
+          "id": "3835.188",
+          "len": 449,
+          "ms": 3573
+        },
+        {
+          "ev": "res",
+          "id": "3835.189",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/images/0.latest/themes/world-2024/separator-decorative-on-light.svg",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=36315",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 03:58:48 GMT",
+            "accept-ranges": "bytes",
+            "content-length": "400",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "image/svg+xml",
+            "last-modified": "Mon, 08 Jun 2026 21:55:58 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3573
+        },
+        {
+          "ev": "done",
+          "id": "3835.189",
+          "len": 630,
+          "ms": 3573
+        },
+        {
+          "ev": "res",
+          "id": "3835.207",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/bookends/images/locales/_01/en-US/ios@2x.png",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "private, no-transform, max-age=2076050",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Sat, 19 Sep 2026 18:34:23 GMT",
+            "content-length": "2290",
+            "source-country": "US",
+            "x-serial": "2010",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Fri, 24 Jul 2026 19:30:45 GMT",
+            "content-type": "image/png"
+          },
+          "resProto": "h2",
+          "ms": 3573
+        },
+        {
+          "ev": "done",
+          "id": "3835.207",
+          "len": 2520,
+          "ms": 3573
+        },
+        {
+          "ev": "res",
+          "id": "3835.208",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/bookends/images/locales/_01/en-US/play@2x.png",
+          "type": "Image",
+          "headers": {
+            "mpulse_cdn_cache": "HIT",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "private, no-transform, max-age=475547",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "mpulse_origin_time": "0",
+            "expires": "Tue, 01 Sep 2026 05:59:20 GMT",
+            "content-length": "2536",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 16 Oct 2025 00:24:49 GMT",
+            "content-type": "image/avif"
+          },
+          "resProto": "h2",
+          "ms": 3573
+        },
+        {
+          "ev": "done",
+          "id": "3835.208",
+          "len": 2788,
+          "ms": 3574
+        },
+        {
+          "ev": "res",
+          "id": "3835.217",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/bookends/images/sprites/_15/brandbar.svg",
+          "type": "Image",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=29342",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Thu, 27 Aug 2026 02:02:35 GMT",
+            "accept-ranges": "bytes",
+            "content-length": "97154",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "image/svg+xml",
+            "last-modified": "Fri, 24 Jul 2026 17:01:42 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3574
+        },
+        {
+          "ev": "done",
+          "id": "3835.187",
+          "len": 32948,
+          "ms": 3574
+        },
+        {
+          "ev": "done",
+          "id": "3835.217",
+          "len": 97430,
+          "ms": 3586
+        },
+        {
+          "ev": "res",
+          "id": "3835.220",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/9192.b85d4c5ad9e010f0.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=27971",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "2445",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3616
+        },
+        {
+          "ev": "done",
+          "id": "3835.220",
+          "len": 2817,
+          "ms": 3616
+        },
+        {
+          "ev": "req",
+          "id": "3835.228",
+          "method": "GET",
+          "url": "https://www.hyatt.com/hds/static/locales/en-US.json",
+          "type": "Fetch",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3617
+        },
+        {
+          "ev": "res",
+          "id": "3835.222",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/1800.47a75cdc0daf62a8.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=32568",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "1952",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3617
+        },
+        {
+          "ev": "done",
+          "id": "3835.222",
+          "len": 2324,
+          "ms": 3618
+        },
+        {
+          "ev": "res",
+          "id": "3835.221",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/7860.fdfe8657c15caf68.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=16068",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "6619",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3618
+        },
+        {
+          "ev": "done",
+          "id": "3835.221",
+          "len": 6991,
+          "ms": 3618
+        },
+        {
+          "ev": "res",
+          "id": "3835.225",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/4187.eb9a61ff9a1f8090.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=38839",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "1437",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3618
+        },
+        {
+          "ev": "done",
+          "id": "3835.225",
+          "len": 1809,
+          "ms": 3618
+        },
+        {
+          "ev": "res",
+          "id": "3835.224",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/1311.d5b8dafcfb3c63eb.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=63524",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "9324",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3618
+        },
+        {
+          "ev": "done",
+          "id": "3835.224",
+          "len": 9696,
+          "ms": 3618
+        },
+        {
+          "ev": "res",
+          "id": "3835.226",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/8107.d9d93ac79d904d5c.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=16068",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "1119",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3618
+        },
+        {
+          "ev": "done",
+          "id": "3835.226",
+          "len": 1491,
+          "ms": 3618
+        },
+        {
+          "ev": "res",
+          "id": "3835.227",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/7541.a5079f9d640f12a1.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=32550",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "1087",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3618
+        },
+        {
+          "ev": "done",
+          "id": "3835.227",
+          "len": 1459,
+          "ms": 3618
+        },
+        {
+          "ev": "req",
+          "id": "3835.229",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/5686.42430d3c22d23e9e.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3624
+        },
+        {
+          "ev": "res",
+          "id": "3835.186",
+          "status": 200,
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/consent/c2a45b44-87a7-45f8-a7f1-dc8a9add12cf/c2a45b44-87a7-45f8-a7f1-dc8a9add12cf.json",
+          "type": "XHR",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=0, no-cache, no-store",
+            "content-encoding": "br",
+            "pragma": "no-cache",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "1922",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/json",
+            "last-modified": "Mon, 23 Mar 2026 15:19:01 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3717
+        },
+        {
+          "ev": "req",
+          "id": "3835.247",
+          "method": "GET",
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/scripttemplates/202602.1.0/otBannerSdk.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3717
+        },
+        {
+          "ev": "done",
+          "id": "3835.186",
+          "len": 2214,
+          "ms": 3718
+        },
+        {
+          "ev": "res",
+          "id": "3835.228",
+          "status": 200,
+          "url": "https://www.hyatt.com/hds/static/locales/en-US.json",
+          "type": "Fetch",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=14295",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Wed, 26 Aug 2026 21:51:48 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "474",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "content-type": "application/json",
+            "last-modified": "Mon, 08 Jun 2026 21:56:45 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3718
+        },
+        {
+          "ev": "res",
+          "id": "3835.223",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/723.df84bd89577b98d9.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:33 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=16068",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "2750",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3718
+        },
+        {
+          "ev": "done",
+          "id": "3835.223",
+          "len": 3122,
+          "ms": 3718
+        },
+        {
+          "ev": "done",
+          "id": "3835.228",
+          "len": 701,
+          "ms": 3718
+        },
+        {
+          "ev": "req",
+          "id": "3835.248",
+          "method": "GET",
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/8364.b4f314dd4c2a96e1.js",
+          "type": "Script",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3719
+        },
+        {
+          "ev": "res",
+          "id": "3835.229",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/5686.42430d3c22d23e9e.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:34 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=45028",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "2090",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3832
+        },
+        {
+          "ev": "done",
+          "id": "3835.229",
+          "len": 2462,
+          "ms": 3832
+        },
+        {
+          "ev": "res",
+          "id": "3835.248",
+          "status": 200,
+          "url": "https://www.hyatt.com/loyalty/_next/static/chunks/8364.b4f314dd4c2a96e1.js",
+          "type": "Script",
+          "headers": {
+            "content-encoding": "br",
+            "expect-ct": "max-age=0",
+            "x-permitted-cross-domain-policies": "none",
+            "x-content-type-options": "nosniff",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "date": "Wed, 26 Aug 2026 17:53:34 GMT",
+            "last-modified": "Thu, 06 Aug 2026 19:08:19 GMT",
+            "content-type": "application/javascript; charset=UTF-8",
+            "vary": "Accept-Encoding",
+            "x-frame-options": "SAMEORIGIN",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "public, max-age=41648",
+            "x-dns-prefetch-control": "off",
+            "x-download-options": "noopen",
+            "content-length": "3754",
+            "source-country": "US",
+            "x-xss-protection": "0"
+          },
+          "resProto": "h2",
+          "ms": 3839
+        },
+        {
+          "ev": "done",
+          "id": "3835.248",
+          "len": 4126,
+          "ms": 3839
+        },
+        {
+          "ev": "res",
+          "id": "3835.247",
+          "status": 200,
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/scripttemplates/202602.1.0/otBannerSdk.js",
+          "type": "Script",
+          "headers": {
+            "mpulse_cdn_cache": "HIT",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=69904",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "mpulse_origin_time": "0",
+            "expires": "Thu, 27 Aug 2026 13:18:38 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "124035",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:34 GMT",
+            "content-type": "application/javascript",
+            "last-modified": "Mon, 23 Mar 2026 15:19:01 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3842
+        },
+        {
+          "ev": "done",
+          "id": "3835.247",
+          "len": 124367,
+          "ms": 3842
+        },
+        {
+          "ev": "req",
+          "id": "3835.283",
+          "method": "GET",
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/consent/c2a45b44-87a7-45f8-a7f1-dc8a9add12cf/01959054-2f1c-76f8-8893-f696fa8bc105/en.json",
+          "type": "Fetch",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3843
+        },
+        {
+          "ev": "req",
+          "id": "3835.284",
+          "method": "GET",
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Other",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 3844
+        },
+        {
+          "ev": "res",
+          "id": "3835.284",
+          "status": 200,
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Other",
+          "headers": {
+            "mpulse_cdn_cache": "HIT",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "mpulse_origin_time": "0",
+            "accept-ranges": "bytes",
+            "content-length": "166",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:31 GMT",
+            "content-type": "image/x-icon",
+            "last-modified": "Mon, 26 Jan 2026 16:25:48 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 3845
+        },
+        {
+          "ev": "done",
+          "id": "3835.284",
+          "len": 0,
+          "ms": 3845
+        },
+        {
+          "ev": "res",
+          "id": "3835.283",
+          "status": 200,
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/consent/c2a45b44-87a7-45f8-a7f1-dc8a9add12cf/01959054-2f1c-76f8-8893-f696fa8bc105/en.json",
+          "type": "Fetch",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=0, no-cache, no-store",
+            "content-encoding": "br",
+            "pragma": "no-cache",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Wed, 26 Aug 2026 17:53:34 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "31318",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:34 GMT",
+            "content-type": "application/json",
+            "last-modified": "Mon, 23 Mar 2026 15:19:01 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 4177
+        },
+        {
+          "ev": "done",
+          "id": "3835.283",
+          "len": 31580,
+          "ms": 4178
+        },
+        {
+          "ev": "req",
+          "id": "DBD1D68652EB20010842A05DD7DD57EB",
+          "method": "OPTIONS",
+          "url": "https://cookies-data.onetrust.io/cfw/cmp/v1/session",
+          "type": "Other",
+          "headers": {
+            "Accept": "*/*",
+            "Access-Control-Request-Headers": "content-type",
+            "Access-Control-Request-Method": "POST",
+            "Origin": "https://www.hyatt.com",
+            "Sec-Fetch-Mode": "cors",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+          },
+          "ms": 4180
+        },
+        {
+          "ev": "req",
+          "id": "3835.285",
+          "method": "POST",
+          "url": "https://cookies-data.onetrust.io/cfw/cmp/v1/session",
+          "type": "Fetch",
+          "postLen": 51,
+          "post": "{\"domainId\":\"c2a45b44-87a7-45f8-a7f1-dc8a9add12cf\"}",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "Content-Type": "application/json",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 4182
+        },
+        {
+          "ev": "req",
+          "id": "3835.286",
+          "method": "GET",
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/scripttemplates/202602.1.0/assets/otFlat.json",
+          "type": "Fetch",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 4182
+        },
+        {
+          "ev": "req",
+          "id": "3835.287",
+          "method": "GET",
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/scripttemplates/202602.1.0/assets/otCommonStyles.css",
+          "type": "Fetch",
+          "headers": {
+            "sec-ch-ua-platform": "\"macOS\"",
+            "Referer": "https://www.hyatt.com/loyalty/en-US",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0"
+          },
+          "ms": 4182
+        },
+        {
+          "ev": "res",
+          "id": "DBD1D68652EB20010842A05DD7DD57EB",
+          "status": 200,
+          "url": "https://cookies-data.onetrust.io/cfw/cmp/v1/session",
+          "type": "Preflight",
+          "headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cf-ray": "a314b25ecfbe6e82-SJC",
+            "content-length": "0",
+            "date": "Wed, 26 Aug 2026 17:53:34 GMT",
+            "server": "cloudflare",
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "x-content-type-options": "nosniff"
+          },
+          "resProto": "h2",
+          "ms": 4249
+        },
+        {
+          "ev": "done",
+          "id": "DBD1D68652EB20010842A05DD7DD57EB",
+          "len": 0,
+          "ms": 4249
+        },
+        {
+          "ev": "res",
+          "id": "3835.285",
+          "status": 200,
+          "url": "https://cookies-data.onetrust.io/cfw/cmp/v1/session",
+          "type": "Fetch",
+          "headers": {
+            "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+            "x-content-type-options": "nosniff",
+            "cf-ray": "a314b25ee8606e82-SJC",
+            "access-control-allow-origin": "*",
+            "content-length": "16",
+            "date": "Wed, 26 Aug 2026 17:53:34 GMT",
+            "content-type": "application/json",
+            "server": "cloudflare"
+          },
+          "resProto": "h2",
+          "ms": 4275
+        },
+        {
+          "ev": "res",
+          "id": "3835.287",
+          "status": 200,
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/scripttemplates/202602.1.0/assets/otCommonStyles.css",
+          "type": "Fetch",
+          "headers": {
+            "mpulse_cdn_cache": "HIT",
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=38021",
+            "content-encoding": "br",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "mpulse_origin_time": "0",
+            "expires": "Thu, 27 Aug 2026 04:27:15 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "4328",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:34 GMT",
+            "content-type": "text/css",
+            "last-modified": "Mon, 23 Mar 2026 15:19:01 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 4313
+        },
+        {
+          "ev": "done",
+          "id": "3835.287",
+          "len": 4585,
+          "ms": 4313
+        },
+        {
+          "ev": "done",
+          "id": "3835.285",
+          "len": 84,
+          "ms": 4325
+        },
+        {
+          "ev": "res",
+          "id": "3835.286",
+          "status": 200,
+          "url": "https://www.hyatt.com/jse/tms/cc/prod/public/oneTrust/06/scripttemplates/202602.1.0/assets/otFlat.json",
+          "type": "Fetch",
+          "headers": {
+            "strict-transport-security": "max-age=15768000 ; includeSubDomains",
+            "cache-control": "max-age=0, no-cache, no-store",
+            "content-encoding": "br",
+            "pragma": "no-cache",
+            "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+            "expires": "Wed, 26 Aug 2026 17:53:34 GMT",
+            "access-control-allow-origin": "*",
+            "content-length": "3116",
+            "source-country": "US",
+            "date": "Wed, 26 Aug 2026 17:53:34 GMT",
+            "content-type": "application/json",
+            "last-modified": "Mon, 23 Mar 2026 15:19:01 GMT",
+            "vary": "Accept-Encoding"
+          },
+          "resProto": "h2",
+          "ms": 4403
+        },
+        {
+          "ev": "done",
+          "id": "3835.286",
+          "len": 3368,
+          "ms": 4403
+        }
+      ],
+      "verdict": "pass",
+      "first": 429,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Hotel Reservations | Book Hotel Rooms Online - Hyatt Hotels and Resorts",
+      "landedOn": "https://www.hyatt.com/loyalty/en-US",
+      "nodes": 879,
+      "textLength": 3944,
+      "snippet": "SKIP MAIN NAVIGATION Sign In or Join Explore Offers Meetings & Events Loyalty Program Our Credit Cards Hotel Reservations | Book Hotel Rooms Online - Hyatt Hotels & Resorts Try \"Extended-stay hotel in",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26689
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:15003/devtools/browser/f970db40-a64f-439f-bf80-9808ce5edd81",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[3822:2084423:0826/105330.242998:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[3822:2084423:0826/105330.243245:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[3822:2084475:0826/105333.494672:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[3822:2084475:0826/105333.499747:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[3822:2084475:0826/105333.500322:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "Created TensorFlow Lite XNNPACK delegate for CPU.",
+    "[3913:2085459:0826/105349.016957:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake-all --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[3913:2085459:0826/105349.017740:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 37493, parent pid: 3822",
+    "[3913:2085459:0826/105349.019468:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 95980195840B (89.389GiB) / 994662584320B (926.352GiB)",
+    "[3913:2085459:0826/105349.019480:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 95980195840B (89.389GiB) / 994662584320B (926.352GiB)",
+    "[3913:2085459:0826/105349.019538:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[3915:2085464:0826/105349.026222:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[3915:2085464:0826/105349.026592:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 37493, parent pid: 1",
+    "[3915:2085464:0826/105349.027815:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 95980195840B (89.389GiB) / 994662584320B (926.352GiB)",
+    "[3915:2085464:0826/105349.027824:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 95980195840B (89.389GiB) / 994662584320B (926.352GiB)",
+    "[3915:2085464:0826/105349.027871:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[3913:2085459:0826/105349.028200:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[3913:2085459:0826/105349.028646:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[3913:2085459:0826/105349.028698:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[3913:2085459:0826/105349.028752:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[3913:2085459:0826/105349.028761:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[3913:2085459:0826/105349.028799:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+    "[3913:2085459:0826/105349.028805:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[3913:2085459:0826/105349.028814:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[3913:2085472:0826/105349.029022:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+    "[3913:2085472:0826/105349.029100:VERBOSE1:chrome/updater/app/app_wakeall.cc:64] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` process invalid: Undefined error: 0 (0)",
+    "[3913:2085472:0826/105349.029109:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+    "[3917:2085477:0826/105349.033992:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[3917:2085477:0826/105349.034323:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 37493, parent pid: 3913",
+    "[3917:2085477:0826/105349.035446:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 95980195840B (89.389GiB) / 994662584320B (926.352GiB)",
+    "[3917:2085477:0826/105349.035454:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 95980195840B (89.389GiB) / 994662584320B (926.352GiB)",
+    "[3917:2085477:0826/105349.035494:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[3919:2085481:0826/105349.040720:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[3919:2085481:0826/105349.041047:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 37493, parent pid: 1",
+    "[3919:2085481:0826/105349.042133:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 95980195840B (89.389GiB) / 994662584320B (926.352GiB)",
+    "[3919:2085481:0826/105349.042142:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 95980195840B (89.389GiB) / 994662584320B (926.352GiB)",
+    "[3919:2085481:0826/105349.042182:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[3917:2085477:0826/105349.042472:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[3917:2085477:0826/105349.042874:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[3917:2085477:0826/105349.042928:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[3917:2085477:0826/105349.042979:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[3917:2085477:0826/105349.042986:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[3917:2085477:0826/105349.043023:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+    "[3917:2085477:0826/105349.043028:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[3917:2085477:0826/105349.043037:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[3917:2085477:0826/105349.043145:VERBOSE1:chrome/updater/ipc/update_service_internal_proxy_mojo.cc:61] Run"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}
