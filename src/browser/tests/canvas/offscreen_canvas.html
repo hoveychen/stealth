@@ -1981,3 +1981,33 @@
     Object.getOwnPropertyNames(ImageData.prototype).join(','));
 }
 </script>
+
+<script id="offscreen_canvas_is_an_event_target">
+  {
+    // Chrome's OffscreenCanvas inherits EventTarget, which is what makes
+    // oncontextlost/oncontextrestored handler properties in the first place.
+    // This engine had it as a prototype root: `oc instanceof EventTarget` was
+    // false and `oc.addEventListener` was undefined, both readable in one
+    // expression.
+    const oc = new OffscreenCanvas(1, 1);
+    testing.expectEqual(true, oc instanceof EventTarget);
+    testing.expectEqual('function', typeof oc.addEventListener);
+    testing.expectEqual(true, Object.getPrototypeOf(OffscreenCanvas.prototype) === EventTarget.prototype);
+
+    testing.expectEqual('width,height,oncontextlost,oncontextrestored,convertToBlob,getContext,transferToImageBitmap,constructor',
+      Object.getOwnPropertyNames(OffscreenCanvas.prototype).join(','));
+
+    testing.expectEqual(null, oc.oncontextlost);
+    testing.expectEqual(null, oc.oncontextrestored);
+    const d = Object.getOwnPropertyDescriptor(OffscreenCanvas.prototype, 'oncontextlost');
+    testing.expectEqual('function', typeof d.get);
+    testing.expectEqual(true, d.enumerable);
+    testing.expectEqual(true, d.configurable);
+
+    const f = () => {};
+    oc.oncontextlost = f;
+    testing.expectEqual(true, oc.oncontextlost === f);
+    oc.oncontextlost = null;
+    testing.expectEqual(null, oc.oncontextlost);
+  }
+</script>

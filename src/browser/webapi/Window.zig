@@ -142,7 +142,7 @@ _voices: ?[]*SpeechSynthesisVoice = null,
 // window.TEMPORARY / window.PERSISTENT. Built on first request and then reused:
 // a second request for the same quota type returns the same object (measured).
 _filesystems: [2]?*@import("filesystem.zig").DOMFileSystem = .{ null, null },
-_performance: Performance,
+_performance: *Performance,
 // Epoch milliseconds at which the load event fired, or 0 before that. Only
 // chrome.csi() / chrome.loadTimes() read it — both report the load timestamp,
 // and the alternative was inventing one.
@@ -396,7 +396,7 @@ pub fn getCSS(self: *Window) *CSS {
 }
 
 pub fn getPerformance(self: *Window) *Performance {
-    return &self._performance;
+    return self._performance;
 }
 
 // window.chrome. Assembled on first read and cached, so it keeps its identity

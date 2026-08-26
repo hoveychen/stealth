@@ -496,7 +496,11 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
         ._location = undefined,
         // Born not-isolated, as `cross_origin_isolated` is; the clamp follows
         // it once a document commits.
-        ._performance = .init(Performance.clock_resolution_micros),
+        // Heap-allocated rather than inline: Performance is an EventTarget
+        // now, and the prototype chain is one allocation with the parent
+        // immediately before the child (Factory.protoOf is pointer
+        // arithmetic).
+        ._performance = try factory.eventTarget(Performance.init(Performance.clock_resolution_micros)),
         ._screen = screen,
         ._visual_viewport = visual_viewport,
         // Its own object too, as in Chrome.
@@ -2580,7 +2584,7 @@ pub fn getElementByIdFromNode(self: *Frame, node: *Node, id: []const u8) ?*Eleme
 }
 
 pub fn performance(self: *Frame) *Performance {
-    return &self.window._performance;
+    return self.window._performance;
 }
 
 // Files a finished subresource load as a `resource` PerformanceEntry, for the

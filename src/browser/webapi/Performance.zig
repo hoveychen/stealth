@@ -24,6 +24,7 @@ const js = @import("../js/js.zig");
 const EventCounts = @import("EventCounts.zig");
 const PerformanceObserver = @import("PerformanceObserver.zig");
 const timing = @import("performance/timing.zig");
+const EventTarget = @import("EventTarget.zig");
 const http = @import("../../network/http.zig");
 
 const Execution = js.Execution;
@@ -35,6 +36,7 @@ pub fn registerTypes() []const type {
 
 const Performance = @This();
 
+_proto: *EventTarget,
 _time_origin: u64,
 
 // What `now()` rounds to. One of the two clock_resolution_* constants below,
@@ -77,10 +79,10 @@ _paint_entries: bool = false,
 // what a script sets.
 //
 // This is the one handler property still kept in a field. The rest went to the
-// event manager's handler store, which is keyed by EventTarget -- and Chrome's
-// Performance *is* an EventTarget while this one is not (measured: our
-// `performance.addEventListener` is undefined, Chrome's runs). Giving
-// Performance that prototype is its own change, with its own measurement.
+// event manager's handler store, which is keyed by EventTarget. Performance is
+// an EventTarget now (see Proto below), so this could join them; nothing fires
+// the event either way, so the move would be a change with no reading behind
+// it.
 _on_resource_timing_buffer_full: ?js.Function.Global = null,
 
 /// How far the current navigation has got. Level 2 can read an unreached
@@ -134,8 +136,22 @@ fn clamp(micros: i64, resolution_micros: u64) i64 {
     return @divTrunc(micros + half, resolution) * resolution;
 }
 
+// Chrome's Performance inherits EventTarget -- `performance instanceof
+// EventTarget` is true there and `performance.addEventListener` is a function.
+// This engine had it as a prototype root in both realms, which the member
+// table could not show: `Performance.prototype`'s own names were already
+// byte-identical, and only the *chain* differed
+// (probes/expr-proto-chains.js). It was the last chain difference in either
+// realm.
+pub const Proto = EventTarget;
+
+pub fn asEventTarget(self: *Performance) *EventTarget {
+    return self._proto;
+}
+
 pub fn init(resolution_micros: u64) Performance {
     return .{
+        ._proto = undefined,
         ._clock_resolution_micros = resolution_micros,
         ._time_origin = highResTimestamp(resolution_micros),
         // Clamped the same way `now()` is: the pair is what a page compares,

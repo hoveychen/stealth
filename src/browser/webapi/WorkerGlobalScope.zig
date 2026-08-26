@@ -116,7 +116,7 @@ _proto: *EventTarget,
 _console: Console = .init,
 _crypto: Crypto = .init,
 _navigator: WorkerNavigator = .{},
-_performance: Performance,
+_performance: *Performance,
 _idb_factory: ?*idb.IDBFactory = null,
 // `self.fonts`, the worker realm's counterpart to `document.fonts`. Its own,
 // for the same reason the trusted-types factory below is: the set is an
@@ -193,10 +193,13 @@ pub fn init(
             // A worker inherits its owner's cross-origin isolation, so it
             // inherits the clock clamp that follows from it. Settled once at
             // birth: a worker outlives no navigation of the frame that made it.
-            ._performance = .init(if (frame.cross_origin_isolated)
+            // Heap-allocated on the worker's own arena rather than inline:
+            // Performance is an EventTarget, and the prototype chain is one
+            // allocation with the parent immediately before the child.
+            ._performance = try factory.eventTargetWithAllocator(arena, Performance.init(if (frame.cross_origin_isolated)
                 Performance.clock_resolution_isolated_micros
             else
-                Performance.clock_resolution_micros),
+                Performance.clock_resolution_micros)),
             ._http_owner = undefined,
         },
         leaf_value,
@@ -402,7 +405,7 @@ pub fn getTrustedTypes(self: *WorkerGlobalScope) *trusted_types.TrustedTypePolic
 }
 
 pub fn performance(self: *WorkerGlobalScope) *Performance {
-    return &self._performance;
+    return self._performance;
 }
 
 pub fn getLocation(self: *WorkerGlobalScope) *WorkerLocation {
