@@ -87,7 +87,18 @@
   testing.expectEqual('fine', pick('any-pointer', ['fine', 'coarse', 'none']));
   testing.expectEqual('fine', pick('pointer', ['fine', 'coarse', 'none']));
   testing.expectEqual('browser', pick('display-mode', ['fullscreen', 'standalone', 'minimal-ui', 'browser']));
-  testing.expectEqual('srgb', pick('color-gamut', ['rec2020', 'p3', 'srgb']));
+  // A wide-gamut HDR panel, which is what the Apple M4 this fork's WebGL
+  // renderer names has: srgb and p3 both match, rec2020 does not.
+  testing.expectEqual('p3', pick('color-gamut', ['rec2020', 'p3', 'srgb']));
+  testing.expectEqual(true, window.matchMedia('(color-gamut: srgb)').matches);
+  testing.expectEqual(false, window.matchMedia('(color-gamut: rec2020)').matches);
+  testing.expectEqual('high', pick('dynamic-range', ['high', 'standard']));
+  testing.expectEqual(true, window.matchMedia('(dynamic-range: standard)').matches);
+  // Chrome answers the *boolean* form false even on an HDR panel -- measured
+  // on a display where `(dynamic-range: high)` matches -- so it does not
+  // implement dynamic-range in boolean context at all. color-gamut it does.
+  testing.expectEqual(false, window.matchMedia('(dynamic-range)').matches);
+  testing.expectEqual(true, window.matchMedia('(color-gamut)').matches);
 
   // device-* line up with screen, which is how CreepJS spots an iframe-shrunk one.
   testing.expectEqual(true, window.matchMedia(`(device-width: ${screen.width}px) and (device-height: ${screen.height}px)`).matches);
@@ -99,8 +110,9 @@
   // Consistent with devicePixelRatio and screen.colorDepth.
   testing.expectEqual(true, window.matchMedia('(resolution: 1dppx)').matches);
   testing.expectEqual(1, window.devicePixelRatio);
-  testing.expectEqual(true, window.matchMedia('(color: 8)').matches);
-  testing.expectEqual(24, screen.colorDepth);
+  testing.expectEqual(true, window.matchMedia('(color: 10)').matches);
+  testing.expectEqual(false, window.matchMedia('(color: 8)').matches);
+  testing.expectEqual(30, screen.colorDepth);
 
   // devicePixelRatio survives being binary-searched. Kasada narrows it on
   // x-hyatt by halving a min-resolution bound and then repeating the ladder in

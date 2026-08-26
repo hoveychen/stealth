@@ -91,9 +91,14 @@ pub fn getAvailHeight(_: *const Screen, frame: *Frame) u32 {
     return frame._page.getViewport().availHeight();
 }
 
-// 24-bit colour, which is what every desktop Chrome reports.
+// 30-bit colour: ten bits a channel across three channels. Chrome reports 24 on
+// an ordinary 8-bit panel and 30 on a wide-gamut one, and this fork's WebGL
+// renderer names an Apple M4, which only ever drives the latter. The media
+// features that describe the same panel — `color`, `color-gamut`,
+// `dynamic-range` — are derived from this number in css/MediaQuery.zig and move
+// with it.
 pub fn getColorDepth(_: *const Screen) u32 {
-    return 24;
+    return 30;
 }
 
 pub fn getAvailLeft(_: *const Screen) u32 {
@@ -129,8 +134,9 @@ pub const JsApi = struct {
     pub const availHeight = bridge.accessor(Screen.getAvailHeight, null, .{});
     pub const width = bridge.accessor(Screen.getWidth, null, .{});
     pub const height = bridge.accessor(Screen.getHeight, null, .{});
-    // colorDepth and pixelDepth are the same 24 in Chrome and answer through
-    // separate getters only because the two names are separate accessors there.
+    // colorDepth and pixelDepth are the same number in Chrome and answer
+    // through separate getters only because the two names are separate
+    // accessors there.
     pub const colorDepth = bridge.accessor(Screen.getColorDepth, null, .{});
     pub const pixelDepth = bridge.accessor(Screen.getColorDepth, null, .{});
     pub const availLeft = bridge.accessor(Screen.getAvailLeft, null, .{});

@@ -46,14 +46,15 @@
 //! The interaction features and the display descriptors answer for one fixed
 //! device persona, and it has to stay consistent with the rest of the fork:
 //! an Apple GPU driving a 1920x1200 display at devicePixelRatio 1 with
-//! `screen.colorDepth` 24, driven with a mouse, showing a 1920x1080 page in a
-//! maximised window (Viewport derives the one from the other). Note that the
-//! `width`/`height` features read the page and the `device-*` ones read the
-//! display, so the two are no longer the same pair of numbers. Every value
-//! below was measured
-//! on a headed Chrome (tools/fingerprint, media-features probe) except the
-//! three that follow from *this* persona rather than from the reference
-//! laptop's built-in panel — see COLOR_BITS_PER_CHANNEL.
+//! `screen.colorDepth` 30 — a wide-gamut, HDR-capable panel, which is the only
+//! kind the Apple M4 named by this fork's WebGL renderer ever drives — driven
+//! with a mouse, showing a 1920x1080 page in a maximised window (Viewport
+//! derives the one from the other). Note that the `width`/`height` features
+//! read the page and the `device-*` ones read the display, so the two are no
+//! longer the same pair of numbers. Every value below was measured
+//! on a headed Chrome (tools/fingerprint, media-features probe); the three that
+//! describe the panel follow from *this* persona's colour depth rather than
+//! from any one reference display — see COLOR_BITS_PER_CHANNEL.
 //!
 //! `inverted-colors` and `video-dynamic-range` are deliberately absent: Chrome
 //! does not implement them (measured — neither the boolean nor any value form
@@ -374,13 +375,21 @@ fn evalFeature(text: []const u8, viewport: Viewport) bool {
     return evalBoolean(trimmed, viewport);
 }
 
-// Bits per colour channel. `screen.colorDepth` is 24 across three channels, so
-// Chrome's `color` feature answers 8. The reference laptop reports 10 because
-// its built-in panel is HDR; copying that while still reporting colorDepth 24
-// would be a self-contradiction, so this persona's display is a plain 8-bit
-// one. `color-gamut: srgb` and `dynamic-range: standard` follow from the same
-// choice, for the same reason.
-const COLOR_BITS_PER_CHANNEL: u32 = 8;
+// Bits per colour channel. `screen.colorDepth` is 30 across three channels, so
+// Chrome's `color` feature answers 10, and `color-gamut: p3` and
+// `dynamic-range: high` follow from the same panel. The four move together or
+// not at all: an 8-bit sRGB SDR display and a 10-bit one are both perfectly
+// ordinary, but half of each is a display that does not exist.
+//
+// Which half this fork picks is settled by a claim it already makes elsewhere.
+// Its WebGL renderer answers `ANGLE (Apple, ANGLE Metal Renderer: Apple M4,
+// Unspecified Version)`, and every Mac an M4 ships in has a P3, 10-bit,
+// HDR-capable panel. The previous 8-bit sRGB persona contradicted that, and the
+// contradiction sat on the one axis B53 measured both remaining DataDome and
+// Kasada stations reading: dd-saks asks eleven media queries and this engine
+// answered `color-gamut: p3` and `dynamic-range: high` the other way from the
+// headed Chrome that clears the station.
+const COLOR_BITS_PER_CHANNEL: u32 = 10;
 
 // A colour screen with no indexed palette and no monochrome depth. Both are the
 // numbers Chrome reports (measured); they are named because the `min-` / `max-`
@@ -549,8 +558,17 @@ fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
     // A desktop display does not fold, and `navigator.devicePosture.type`
     // already answers `continuous` — the two have to agree.
     if (std.mem.eql(u8, lname, "device-posture")) return std.ascii.eqlIgnoreCase(value, "continuous");
-    if (std.mem.eql(u8, lname, "color-gamut")) return std.ascii.eqlIgnoreCase(value, "srgb");
-    if (std.mem.eql(u8, lname, "dynamic-range")) return std.ascii.eqlIgnoreCase(value, "standard");
+    // Both are cumulative, not a single answer: a P3 panel matches `srgb` as
+    // well as `p3`, an HDR one matches `standard` as well as `high`. Chrome on
+    // such a display answers exactly this way (measured), and a page that only
+    // asks the narrower value would otherwise read a display that is wide-gamut
+    // but somehow not sRGB.
+    if (std.mem.eql(u8, lname, "color-gamut")) {
+        return std.ascii.eqlIgnoreCase(value, "srgb") or std.ascii.eqlIgnoreCase(value, "p3");
+    }
+    if (std.mem.eql(u8, lname, "dynamic-range")) {
+        return std.ascii.eqlIgnoreCase(value, "standard") or std.ascii.eqlIgnoreCase(value, "high");
+    }
     if (std.mem.eql(u8, lname, "forced-colors")) return std.ascii.eqlIgnoreCase(value, "none");
     if (std.mem.eql(u8, lname, "prefers-color-scheme")) return std.ascii.eqlIgnoreCase(value, "light");
     if (std.mem.eql(u8, lname, "prefers-reduced-motion") or
@@ -597,7 +615,11 @@ fn evalBoolean(name: []const u8, viewport: Viewport) bool {
     if (std.mem.eql(u8, lname, "display-mode")) return true;
     if (std.mem.eql(u8, lname, "device-posture")) return true;
     if (std.mem.eql(u8, lname, "color-gamut")) return true;
-    if (std.mem.eql(u8, lname, "dynamic-range")) return true;
+    // `(dynamic-range)` with no value is false in Chrome even on a display
+    // where `(dynamic-range: high)` matches — measured, so it is not the
+    // panel's answer, it is that Chrome does not implement the feature in
+    // boolean context at all. `(color-gamut)` above it does.
+    if (std.mem.eql(u8, lname, "dynamic-range")) return false;
     if (std.mem.eql(u8, lname, "prefers-color-scheme")) return true;
     if (std.mem.eql(u8, lname, "prefers-reduced-motion") or
         std.mem.eql(u8, lname, "prefers-reduced-transparency") or
@@ -1699,14 +1721,21 @@ test "MediaQuery: the device persona, as measured on a headed Chrome" {
     try testing.expect(!matches("(device-height: 1080px)", v));
     try testing.expect(matches("(width: 1920px) and (height: 1080px)", v));
 
-    // These three follow from this fork's persona (colorDepth 24, dpr 1)
-    // rather than from the reference laptop's HDR panel — see the header.
+    // These three follow from this fork's persona (colorDepth 30 across three
+    // channels, a wide-gamut HDR panel) — see the header. Both are cumulative:
+    // a P3 display matches srgb as well, an HDR one matches standard as well.
     try testing.expect(matches("(color-gamut: srgb)", v));
-    try testing.expect(!matches("(color-gamut: p3)", v));
-    try testing.expect(matches("(color: 8)", v));
-    try testing.expect(!matches("(color: 10)", v));
+    try testing.expect(matches("(color-gamut: p3)", v));
+    try testing.expect(!matches("(color-gamut: rec2020)", v));
+    try testing.expect(matches("(color: 10)", v));
+    try testing.expect(!matches("(color: 8)", v));
     try testing.expect(matches("(dynamic-range: standard)", v));
-    try testing.expect(!matches("(dynamic-range: high)", v));
+    try testing.expect(matches("(dynamic-range: high)", v));
+    // Chrome answers the boolean form of dynamic-range false even where
+    // `(dynamic-range: high)` matches, so it does not implement the feature in
+    // boolean context. color-gamut it does.
+    try testing.expect(!matches("(dynamic-range)", v));
+    try testing.expect(matches("(color-gamut)", v));
 
     try testing.expect(matches("(prefers-contrast: no-preference)", v));
     try testing.expect(matches("(prefers-reduced-transparency: no-preference)", v));
@@ -1984,10 +2013,11 @@ test "MediaQuery: range syntax on the numeric descriptors" {
     try testing.expect(!matches("(resolution < 50dpi)", v));
     try testing.expect(!matches("(resolution > 2dppx)", v));
 
-    try testing.expect(matches("(color = 8)", v));
+    try testing.expect(matches("(color = 10)", v));
     try testing.expect(matches("(color > 4)", v));
-    try testing.expect(matches("(color <= 8)", v));
-    try testing.expect(!matches("(color > 8)", v));
+    try testing.expect(matches("(color <= 10)", v));
+    try testing.expect(!matches("(color > 10)", v));
+    try testing.expect(matches("(color > 8)", v));
     try testing.expect(matches("(color-index = 0)", v));
     try testing.expect(matches("(color-index >= 0)", v));
     try testing.expect(matches("(monochrome = 0)", v));
