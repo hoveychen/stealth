@@ -1129,16 +1129,19 @@ test "cdp.dom: getBoxModel" {
         .method = "DOM.getBoxModel",
         .params = .{ .nodeId = 3 },
     });
-    // The <p> holds the single character "2", and an element with no box of its
-    // own gets one from its text: one digit of the default 16px font is 8 wide
-    // and its line is 18 tall, rather than the 5x5 the placeholder reported.
-    // The reference Chrome also reports 18 for a 16px serif line.
+    // The <p> holds the single character "2". Its width is its containing
+    // block's -- a block-level box in normal flow is as wide as the line it
+    // sits on, which on the default 1920 viewport is a 1904px body -- and its
+    // height is the one line the digit makes, 18 tall for a 16px serif. This
+    // used to read 8 wide, the width of the digit itself, from the days when
+    // an unsized box measured its own text; Chrome reports the body's width
+    // for a <p> like this one, not the glyph's.
     try ctx.expectSentResult(.{ .model = BoxModel{
-        .content = Quad{ 25.0, 25.0, 33.0, 25.0, 33.0, 43.0, 25.0, 43.0 },
+        .content = Quad{ 25.0, 25.0, 1929.0, 25.0, 1929.0, 43.0, 25.0, 43.0 },
         .padding = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
         .border = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
         .margin = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
-        .width = 8,
+        .width = 1904,
         .height = 18,
     } }, .{ .id = 5 });
 }

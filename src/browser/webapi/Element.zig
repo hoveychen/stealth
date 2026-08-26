@@ -1942,6 +1942,29 @@ pub fn getElementHeight(self: *Element, frame: *Frame) f64 {
 }
 
 fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) Dimensions {
+    return self.dimensionsAt(frame, measure_text_width, 0);
+}
+
+/// How deep the containing-block walk may go. A page's block nesting is far
+/// shallower than this; the cap exists so a tree that somehow made a cycle
+/// stops rather than recursing forever.
+const MAX_CONTAINING_BLOCK_DEPTH = 64;
+
+/// The horizontal margin that comes off the containing block before the box
+/// gets what is left. Read from the cascade, so a stylesheet rule counts.
+fn horizontalMargin(self: *Element, frame: *Frame) f64 {
+    var total: f64 = 0;
+    inline for (.{ "margin-left", "margin-right" }) |name| {
+        if (self.getStyle(frame)) |style| {
+            if (CSS.parseDimensionViewport(style.getPropertyValue(name, frame), frame)) |px| {
+                total += px;
+            }
+        }
+    }
+    return total;
+}
+
+fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8) Dimensions {
     var dims: Dimensions = .{ .width = 5.0, .height = 5.0 };
 
     if (self.getStyle(frame)) |style| {
@@ -1983,7 +2006,7 @@ fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) 
         if (tag == .html or tag == .body) {
             const owner = self.ownerFrame(frame);
             const box: Dimensions = if (owner.iframe) |iframe|
-                iframe.asElement().dimensions(frame, measure_text_width)
+                iframe.asElement().dimensionsAt(frame, measure_text_width, depth + 1)
             else blk: {
                 const viewport = owner._page.getViewport();
                 break :blk .{
@@ -2026,6 +2049,37 @@ fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) 
             if (tag == .iframe) {
                 if (dims.width == 5.0) dims.width = 300.0;
                 if (dims.height == 5.0) dims.height = 150.0;
+            }
+        } else if (measure_text_width and dims.width == 5.0 and depth < MAX_CONTAINING_BLOCK_DEPTH) {
+            // A block-level box in normal flow is as wide as its containing
+            // block, whatever it holds -- and measuring its text instead is how
+            // an ordinary `<div>x</div>` in a 1904px body came out 8px wide,
+            // and an empty one 5px. Neither is a number a browser reports, and
+            // both guards read this: Kasada asks for `width` 19 times on
+            // x-hyatt, and the Cloudflare challenge sweeps it with 735 other
+            // property names.
+            //
+            // Which boxes fill and which shrink to fit is
+            // CSSStyleDeclaration.fillsContainingBlock's question, measured
+            // against Chrome. The width itself is the parent's, recursively,
+            // terminating at the <html>/<body> branch above -- so the depth cap
+            // is a backstop against a cycle, not a real page's nesting.
+            //
+            // Behind `measure_text_width` for the same reason the text walk
+            // below is: asking costs a cascade, and `getElementHeight` -- the
+            // reason that flag exists -- has no use for a width. Without the
+            // gate, document.elementFromPoint pays it for every element it
+            // rejects on height alone, which is thousands per call.
+            if (CSSStyleDeclaration.fillsContainingBlock(self, frame)) {
+                if (self.parentElement()) |parent| {
+                    dims.width = @max(0, parent.dimensionsAt(frame, measure_text_width, depth + 1).width -
+                        horizontalMargin(self, frame));
+                    // Not a declared value, but the same thing a declared one
+                    // means here: the box has a width of its own, so
+                    // clientWidth must not take the max with its content and
+                    // the text walk below has nothing left to answer.
+                    dims.explicit_width = true;
+                }
             }
         }
     }

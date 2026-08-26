@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A block-level element in normal flow with `width: auto` is as wide as its
+containing block, whatever it holds. This engine measured its text instead, so
+an ordinary `<div>x</div>` in a 1904px body reported 8px -- and an empty one
+reported the 5px sentinel the faux layout starts from. No browser reports either
+for a plain div, and both guards read this: Kasada asks for `width` 19 times and
+`height` 17 on x-hyatt, and the Cloudflare challenge reads both as part of a
+736-name sweep over one declaration.
+
+Measured with tools/fingerprint/scratch/expr-layout-box-shapes.js against Chrome
+151 on the same 1920x1080 viewport this test server serves (readings in
+tools/fingerprint/scratch/b78-layout-{ch,lp}.json). The numbers below are
+Chrome's, less the 8px UA margin on <body>: a 1920 viewport gives a 1904px body
+content box, and a block child of it is 1904px wide.
+
+The shrink-to-fit cases are here because they must NOT move. An inline-block, a
+float, an absolutely positioned box and a flex item all size to their content,
+and this engine already agreed with Chrome on every one of them -- 8px for a
+one-character box. A fix that made everything fill would break the half that was
+right.
+-->
+
+<script id=block_fills_containing_block>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = {
+      css: String(cs.width),
+      client: el.clientWidth,
+      offset: el.offsetWidth,
+      rect: Math.round(el.getBoundingClientRect().width),
+    };
+    wrap.remove();
+    return out;
+  };
+
+  // width: the computed one, and the three box readings that have to agree with
+  // it. A detector needs one expression to catch a disagreement between them.
+  const CASES = [
+    // Plain blocks fill, whatever they hold.
+    ['<div data-m></div>', '1904px', 1904, 1904],
+    ['<div data-m>x</div>', '1904px', 1904, 1904],
+    ['<div data-m>a<br>b</div>', '1904px', 1904, 1904],
+    ['<div><div data-m>x</div></div>', '1904px', 1904, 1904],
+    ['<div data-m><p>a</p><p>b</p></div>', '1904px', 1904, 1904],
+    ['<div data-m style="visibility:hidden">x</div>', '1904px', 1904, 1904],
+    // A narrower containing block narrows the child with it.
+    ['<div style="width:300px"><div data-m>x</div></div>', '300px', 300, 300],
+    // A declared width still wins.
+    ['<div data-m style="width:123px">x</div>', '123px', 123, 123],
+  ];
+
+  const wrong = [];
+  for (const [html, css, client, offset] of CASES) {
+    const got = measure(html);
+    if (got.css !== css) wrong.push(html + ' css: want ' + css + ', got ' + got.css);
+    if (got.client !== client) wrong.push(html + ' clientWidth: want ' + client + ', got ' + got.client);
+    if (got.offset !== offset) wrong.push(html + ' offsetWidth: want ' + offset + ', got ' + got.offset);
+    if (got.rect !== offset) wrong.push(html + ' rect: want ' + offset + ', got ' + got.rect);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The half that was already right. Each of these sizes to its content, so a
+one-character box is 8px wide in Chrome and in this engine both.
+-->
+
+<script id=shrink_to_fit_does_not_fill>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const out = { css: String(getComputedStyle(el).width), offset: el.offsetWidth };
+    wrap.remove();
+    return out;
+  };
+
+  const CASES = [
+    ['<div data-m style="display:inline-block">x</div>', '8px', 8],
+    ['<div data-m style="float:left">x</div>', '8px', 8],
+    ['<div style="position:relative"><div data-m style="position:absolute">x</div></div>', '8px', 8],
+    ['<div data-m style="position:fixed">x</div>', '8px', 8],
+    ['<div style="display:flex"><div data-m>x</div></div>', '8px', 8],
+    // Inside a 300px parent, a shrink-to-fit child still measures its content:
+    // this is the case that proves `width` is not inherited.
+    ['<div style="width:300px"><div data-m style="display:inline-block">x</div></div>', '8px', 8],
+    ['<div style="width:300px"><div data-m style="float:left">x</div></div>', '8px', 8],
+  ];
+
+  const wrong = [];
+  for (const [html, css, offset] of CASES) {
+    const got = measure(html);
+    if (got.css !== css) wrong.push(html + ' css: want ' + css + ', got ' + got.css);
+    if (got.offset !== offset) wrong.push(html + ' offsetWidth: want ' + offset + ', got ' + got.offset);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+What this does NOT do yet: split the box into its three parts. Chrome answers
+three different numbers for a padded or bordered block -- `padding:10px` on a
+1904px line gives a computed `width` of 1884px (the content box), a clientWidth
+of 1904 (the padding box) and an offsetWidth of 1904 (the border box), and
+`border:5px` gives 1894 / 1894 / 1904. This engine has one number per box and
+answers 1904 for all three, which is right for two of the three readings and
+20px out on the first.
+
+That is a separate change -- it moves clientWidth for every padded element in
+the document, not just the ones whose width was wrong -- and it is measured and
+waiting in the `element-box-parts` plan. The readings are in
+tools/fingerprint/scratch/b78-layout-{ch,lp}.json.
+-->
