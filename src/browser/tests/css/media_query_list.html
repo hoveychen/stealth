@@ -138,6 +138,40 @@
 }
 </script>
 
+<script id=matchMedia_datadome_question_set>
+{
+  // The eleven media queries dd-saks's DataDome script was measured asking, in
+  // the order it asked them -- read out of the prop_read log in
+  // tools/fingerprint/results/b53-reads-dd-saks.json, not invented. Two of them
+  // used to come back the other way from the headed Chrome that clears the
+  // station, and this block is what stops them drifting back.
+  //
+  // The expected column is that headed Chrome, measured in the same sitting
+  // (tools/fingerprint/probes/expr-b53-guard-questions.js).
+  const ask = (q) => window.matchMedia(q).matches;
+  testing.expectEqual(true, ask('(any-pointer:fine)'));
+  testing.expectEqual(true, ask('(any-hover:hover)'));
+  testing.expectEqual(false, ask('(color-gamut:rec2020)'));
+  testing.expectEqual(true, ask('(color-gamut:p3)'));
+  testing.expectEqual(true, ask('(color-gamut:srgb)'));
+  testing.expectEqual(true, ask('(dynamic-range:high)'));
+  testing.expectEqual(true, ask('(dynamic-range:standard)'));
+  testing.expectEqual(false, ask('(display-mode:standalone)'));
+  testing.expectEqual(false, ask('(display-mode:fullscreen)'));
+  testing.expectEqual(false, ask('(display-mode:minimal-ui)'));
+  testing.expectEqual(true, ask('(display-mode:browser)'));
+
+  // The reverse assertions. A panel that answered yes to everything would pass
+  // the eleven above and still be a display nobody sells, so the ceiling is
+  // named too: rec2020 stays out of reach, and the depth that puts p3 and high
+  // within it is the one screen reports.
+  testing.expectEqual(false, ask('(color: 12)'));
+  testing.expectEqual(true, ask('(color: 10)'));
+  testing.expectEqual(30, screen.colorDepth);
+  testing.expectEqual(30, screen.pixelDepth);
+}
+</script>
+
 <script id=matchMedia_combined>
 {
   testing.expectEqual(true,  window.matchMedia('screen and (min-width: 600px)').matches);
