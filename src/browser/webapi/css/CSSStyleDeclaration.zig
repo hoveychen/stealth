@@ -35,6 +35,7 @@ const chrome_keywords = @import("chrome_keywords.zig");
 const chrome_current_color = @import("chrome_current_color.zig");
 const chrome_inherited = @import("chrome_inherited.zig");
 const chrome_initial_values = @import("chrome_initial_values.zig");
+const chrome_logical = @import("chrome_logical.zig");
 const chrome_per_tag_values = @import("chrome_per_tag_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
@@ -272,24 +273,27 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
             if (self._element) |element| {
                 const style_manager = &element.ownerFrame(frame)._style_manager;
 
-                // What the element itself was given, and then -- for a property
-                // a child takes from its parent -- what the nearest ancestor
-                // that declares one was given. The walk stops at the first
-                // ancestor with a declaration whether or not that declaration
-                // can be reported: an ancestor declaring `letter-spacing:2em`
-                // is the one that decides the answer, so a grandparent's
-                // `3px` must not show through it.
-                switch (declaredValue(style_manager, element, normalized, wrapped)) {
+                // What the cascade says about this name, and then -- when it says
+                // nothing at all -- what it says about the name's other
+                // spelling. `margin-block-start` and `margin-top` are one
+                // property under two names, so an element declaring either
+                // computes both, and this engine stores only what the page
+                // wrote. chrome_logical.zig is the measured pairing.
+                //
+                // Only when the name being asked for has no declaration of its
+                // own. A counterpart must never outrank one the page made under
+                // this very name, and `unreportable` is a declaration -- the
+                // page did set this property, this engine just cannot finish
+                // resolving the value. Chrome resolves the both-declared case in
+                // one storage slot instead, where the later declaration wins for
+                // both names; see css/computed_logical_physical.html.
+                switch (cascadedValue(style_manager, element, normalized, wrapped)) {
                     .value => |value| return self.resolveCurrentColour(value, frame, surface),
                     .unreportable => {},
-                    .none => if (chrome_inherited.inherits(normalized)) {
-                        var ancestor = element.parentElement();
-                        while (ancestor) |current| : (ancestor = current.parentElement()) {
-                            switch (declaredValue(style_manager, current, normalized, wrapped)) {
-                                .value => |value| return self.resolveCurrentColour(value, frame, surface),
-                                .unreportable => break,
-                                .none => {},
-                            }
+                    .none => if (chrome_logical.counterpart(normalized)) |other| {
+                        switch (cascadedValue(style_manager, element, other, .wrap(other))) {
+                            .value => |value| return self.resolveCurrentColour(value, frame, surface),
+                            .unreportable, .none => {},
                         }
                     },
                 }
@@ -352,6 +356,34 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
         return "";
     };
     return prop._value.str();
+}
+
+/// What the cascade says about one property name on one element: what the
+/// element itself was given, and then -- for a property a child takes from its
+/// parent -- what the nearest ancestor that declares one was given.
+///
+/// The ancestor walk stops at the first ancestor with a declaration whether or
+/// not that declaration can be reported: an ancestor declaring
+/// `letter-spacing:2em` is the one that decides the answer, so a grandparent's
+/// `3px` must not show through it.
+fn cascadedValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) Declared {
+    switch (declaredValue(style_manager, element, property_name, wrapped)) {
+        .value => |value| return .{ .value = value },
+        .unreportable => return .unreportable,
+        .none => {},
+    }
+    if (!chrome_inherited.inherits(property_name)) {
+        return .none;
+    }
+    var ancestor = element.parentElement();
+    while (ancestor) |current| : (ancestor = current.parentElement()) {
+        switch (declaredValue(style_manager, current, property_name, wrapped)) {
+            .value => |value| return .{ .value = value },
+            .unreportable => return .unreportable,
+            .none => {},
+        }
+    }
+    return .none;
 }
 
 /// What one element was declared for a property: nothing, something this engine
