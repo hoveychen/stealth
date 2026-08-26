@@ -16922,3 +16922,30 @@ So the zeros on the station come from something else — the element Kasada
 measures is laid out with no width there, not merely with the wrong font.
 Whoever takes `system-font-shorthand-readback` P2 should fix the expansion on
 its own merits and expect the station's four zeros to survive it.
+
+### The voice race, read again: this engine is not wrong, it is early
+
+Worth being precise about, because the first reading above invites the wrong
+fix. The independent poll in `inject-b55-voices-time.js` starts at document
+start on both arms and answers 0 at 500ms and 199 at 700ms **on both**. So the
+665ms this engine models is not out of step with Chrome at all — the timer runs
+the same on each. What differs is only when the guard gets round to asking:
+555ms here, 1400ms there.
+
+There is no engine bug in that. A Chrome driven this fast would hand Kasada the
+same empty list.
+
+Which leaves a real trade-off rather than a defect, and it is the whole of
+`speech-voice-warmup-race` P1:
+
+* **Shorten or drop the latency.** The guard then reads what every real browser
+  it meets on this page hands it — a full list. Costs the CreepJS row that
+  `webapi/speech/SpeechSynthesis.zig`'s header documents: with nothing warming
+  it, a headed Chrome renders all three speech hashes blocked, and so does this
+  engine today. Zero latency would put us on the other side of that.
+* **Leave it.** Faithful in the timing dimension, and wrong in the dimension
+  Kasada actually reads.
+
+Do not decide this from the desk. It wants a station measurement, and x-hyatt
+was refusing every client by the time this was found — so it waits for a window
+where a headed Chrome control passes.
