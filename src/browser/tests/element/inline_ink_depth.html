@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+An inline box's ink is its own text plus its children's boxes, and measuring a
+child used to ask for its offsetWidth and its offsetHeight separately -- two
+measurements per child, each starting over at depth 0. Down a chain of nested
+inlines that is 2^n: sixty <span>s around one character never came back, and a
+real page's nesting took the engine out with a SIGBUS in the middle of an
+antibot sweep.
+
+Each child is measured once now, carrying the depth down, so the chain is
+linear and capped the way the containing-block walk is.
+
+The numbers are Chrome 151's for the same page, read with
+tools/fingerprint/scratch/expr-deep-inline.js on the 1904px line: the block
+around them fills, the outermost <span> has no box of its own, and its ink is
+the one character at the bottom of the chain.
+-->
+
+<script id=inline_ink_depth>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const root = document.createElement('div');
+  host.appendChild(root);
+  let leaf = root;
+  for (let i = 0; i < 60; i++) {
+    const span = document.createElement('span');
+    leaf.appendChild(span);
+    leaf = span;
+  }
+  leaf.textContent = 'x';
+
+  const span = root.firstElementChild;
+  testing.expectEqual(1904, root.clientWidth);
+  testing.expectEqual('auto', String(getComputedStyle(span).width));
+  testing.expectEqual(0, span.clientWidth);
+  testing.expectEqual(8, span.offsetWidth);
+  testing.expectEqual(18, span.offsetHeight);
+
+  host.remove();
+}
+</script>
