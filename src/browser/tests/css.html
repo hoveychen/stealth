@@ -7,6 +7,29 @@
   testing.expectEqual('function', typeof CSS.supports);
 </script>
 
+<script id="window_property">
+  // How `CSS` is hung off the window. It is a WebIDL *namespace* object, and
+  // WebIDL §3.2 hangs one as a plain data property that does not enumerate —
+  // measured on Chrome 151 with
+  // tools/fingerprint/scratch/expr-chrome-css-descriptor.js:
+  // {writable: true, enumerable: false, configurable: true}, own, with nothing
+  // named CSS on Window.prototype.
+  //
+  // An accessor is one expression away from being read, and the enumerable bit
+  // is another: `for (const k in window)` lists it here and does not in a real
+  // browser.
+  const d = Object.getOwnPropertyDescriptor(window, 'CSS');
+  testing.expectEqual('object', typeof d.value);
+  testing.expectEqual(undefined, d.get);
+  testing.expectEqual(undefined, d.set);
+  testing.expectEqual(true, d.writable);
+  testing.expectEqual(false, d.enumerable);
+  testing.expectEqual(true, d.configurable);
+  testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(Window.prototype, 'CSS'));
+  // Same object on every read, which the accessor already got right.
+  testing.expectEqual(true, window.CSS === window.CSS);
+</script>
+
 <script id="entries">
   const entries = Object.entries(CSS);
   testing.expectEqual(true, entries.length >= 2);
