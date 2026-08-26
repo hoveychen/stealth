@@ -58,3 +58,77 @@ real cross-origin frame without needing the network.
   });
 }
 </script>
+
+<!--
+The own-property list itself: which keys, in which order, and with which bits.
+Same reading, same fixture. The order is Blink's CrossOriginProperties table top
+to bottom -- nine attributes, then four operations -- with `then` and two
+well-known symbols appended by CrossOriginOwnPropertyKeys.
+
+Every key is non-enumerable, so `Object.keys(w)` and a for-in over the proxy are
+both empty even though getOwnPropertyNames answers fourteen. A detector that
+walks one and then the other reads the pair, not either alone.
+-->
+
+<script id=proxy_own_keys type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+
+  const iframe = document.createElement('iframe');
+  iframe.src = ALT_BASE + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    const w = iframe.contentWindow;
+
+    testing.expectEqual(
+      'window,self,location,closed,frames,length,top,opener,parent,blur,close,focus,postMessage,then',
+      Object.getOwnPropertyNames(w).join(','));
+    testing.expectEqual(
+      'Symbol(Symbol.toStringTag),Symbol(Symbol.hasInstance),Symbol(Symbol.isConcatSpreadable)',
+      Object.getOwnPropertySymbols(w).map(String).join(','));
+
+    testing.expectEqual('', Object.keys(w).join(','));
+    const seen = [];
+    for (const k in w) seen.push(k);
+    testing.expectEqual('', seen.join(','));
+
+    const bits = (k) => {
+      const d = Object.getOwnPropertyDescriptor(w, k);
+      if (d === undefined) return 'absent';
+      const kind = 'value' in d
+        ? `data ${typeof d.value === 'function' ? 'fn' : String(d.value)} w=${d.writable}`
+        : `accessor get=${typeof d.get} set=${typeof d.set}`;
+      return `${kind} e=${d.enumerable} c=${d.configurable}`;
+    };
+
+    // The nine attributes are getter-only accessor pairs, except `location`:
+    // assigning to it navigates the other origin's frame, which is the one
+    // thing a cross-origin caller may do to a window it cannot read.
+    for (const k of ['window', 'self', 'closed', 'frames', 'length', 'top', 'opener', 'parent']) {
+      testing.expectEqual('accessor get=function set=undefined e=false c=true', bits(k));
+    }
+    testing.expectEqual('accessor get=function set=function e=false c=true', bits('location'));
+    // Chrome answers a CrossOriginLocation object; this engine has none, and
+    // the read stays the `undefined` it answered before `location` became an
+    // own property rather than becoming a newly wrong `null`.
+    testing.expectEqual(undefined, w.location);
+
+    // The four operations are non-writable data properties, not the writable
+    // ones an ordinary Web IDL operation gets.
+    for (const k of ['blur', 'close', 'focus', 'postMessage']) {
+      testing.expectEqual('data fn w=false e=false c=true', bits(k));
+    }
+
+    // ...and the four keys the proxy owns but never fills.
+    for (const k of ['then', Symbol.hasInstance, Symbol.isConcatSpreadable, Symbol.toStringTag]) {
+      testing.expectEqual('data undefined w=false e=false c=true', bits(k));
+    }
+  });
+}
+</script>

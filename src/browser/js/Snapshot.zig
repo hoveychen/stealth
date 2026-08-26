@@ -1121,9 +1121,17 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     attachOperationProperty(name, logged, isolate, signature, template, v8.None);
                 } else {
                     // Web IDL: operations on the interface prototype object
-                    // (and mirrored onto [Global] instances) are enumerable,
-                    // unless the member opted out (window.webkitURL).
-                    const attribute: v8.PropertyAttribute = if (value.enumerable) v8.None else v8.DontEnum;
+                    // (and mirrored onto [Global] instances) are enumerable and
+                    // writable, unless the member opted out (window.webkitURL
+                    // for the first, a cross-origin WindowProxy's four for the
+                    // second).
+                    var attribute: v8.PropertyAttribute = 0;
+                    if (value.enumerable == false) {
+                        attribute |= v8.DontEnum;
+                    }
+                    if (value.writable == false) {
+                        attribute |= v8.ReadOnly;
+                    }
                     attachOperationProperty(name, logged, isolate, signature, define_on orelse member_template, attribute);
                 }
             },
@@ -1192,6 +1200,35 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
             },
             bridge.Constructor => {},
             else => {},
+        }
+    }
+
+    // HTML's CrossOriginOwnPropertyKeys ends with four keys the proxy owns but
+    // never fills: `then`, then @@hasInstance and @@isConcatSpreadable (the
+    // brand symbol is the third, and it is already written above so that it
+    // sorts first). Each is a data property whose value is undefined --
+    // `{ value: undefined, writable: false, enumerable: false, configurable:
+    // true }` on Chrome 151 (expr-xo-proxy-detail). They are here, after the
+    // member loop, because their order among the own names is the tail.
+    //
+    // `then` earns its place: an object with an own `then` is a thenable, and
+    // `await w` on one that answers undefined resolves to the object instead of
+    // hanging on a call to it. The symbols do the same job for
+    // Object.prototype.toString, instanceof and Array.prototype.concat.
+    if (comptime !flatten and @hasDecl(JsApi.Meta, "undefined_own_keys")) {
+        inline for (JsApi.Meta.undefined_own_keys) |key| {
+            const js_key: *const v8.Name = if (comptime @typeInfo(@TypeOf(key)) == .enum_literal) switch (key) {
+                .has_instance => @ptrCast(v8.v8__Symbol__GetHasInstance(isolate)),
+                .is_concat_spreadable => @ptrCast(v8.v8__Symbol__GetIsConcatSpreadable(isolate)),
+                else => @compileError("unknown well-known symbol: " ++ @tagName(key)),
+            } else @ptrCast(v8.v8__String__NewFromUtf8(isolate, key.ptr, v8.kNormal, @intCast(key.len)));
+
+            v8.v8__Template__Set(
+                @ptrCast(instance),
+                @ptrCast(js_key),
+                @ptrCast(v8.v8__Undefined(isolate)),
+                v8.ReadOnly + v8.DontEnum,
+            );
         }
     }
 
