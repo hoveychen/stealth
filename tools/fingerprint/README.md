@@ -15389,3 +15389,84 @@ twenty that were already there.
 
 163 of 170 readings across the probe match; the seven that do not are the two
 deferred members and the `Temporal` global behind one of them.
+
+### The worker realms came along for free
+
+Nothing in these three batches was aimed at a worker, and both worker realms
+moved anyway: the interfaces are the same objects, so filling a prototype fills
+it everywhere it is exposed. Re-read with the same probes P1 used:
+
+| realm | before (B51) | after |
+|---|---|---|
+| dedicated worker | 271 of 283 identical, 47 missing over 12, 5 mis-ordered | **277 of 283, 22 missing over 6, 1 mis-ordered** |
+| shared worker | 231 of 241 identical, 45 missing over 10, 5 mis-ordered | **237 of 241, 20 missing over 4, 1 mis-ordered** |
+
+What is left there is almost entirely *interfaces*, not members: 17 globals each
+realm does not have (`Observable`/`Subscriber`, `Temporal`, `WebSocketStream`/
+`WebSocketError`, `CSSSkewX`/`CSSSkewY`, `PressureObserver`/`PressureRecord`,
+`BarcodeDetector`, `FileSystemObserver`, `CreateMonitor`, `RestrictionTarget`,
+the webkit filesystem-sync pair), plus the same two names the window realm is
+short. Only two single-member prototypes remain in a worker and nowhere else:
+`FileSystemSyncAccessHandle.mode` and `MediaSource.handle`.
+
+## Acceptance: what 921 of 923 bought at the door (B52 P5, 2026-08-26)
+
+Six ReleaseFast antibot sweeps, alternating base and head across 70 minutes --
+`control` is this branch's base (`6b5b27398`), `treatment` is its head, both
+built ReleaseFast so a debug SIGABRT on x-sony cannot masquerade as a collapse,
+and every run on its own `--port`. 29 stations, 87 station-runs per arm.
+
+```
+control:   56/87 station-runs passed (64.4%)   per round: 21, 18, 17
+treatment: 54/87 station-runs passed (62.1%)   per round: 17, 20, 17
+```
+
+**25 of the 29 stations answered identically in all six runs.** The four that
+did not are two findings, and neither is "the batch cost a station":
+
+```
+station          c1          t1          c2          t2          c3          t3
+dd-datadome      pass        DD-chal     DD-chal     DD-chal     DD-chal     DD-chal
+dd-hermes        pass        DD-chal     DD-chal     DD-chal     DD-chal     DD-chal
+dd-leboncoin     pass        DD-chal     DD-chal     pass        DD-chal     DD-chal
+dd-etsy          pass        pass        pass        pass        DD-chal     DD-chal
+ks-canadagoose   error       error       error       pass        error       refused-400
+x-hyatt          error       error       error       refused-429 error       refused-429
+px-wayfair       pass        error       pass        pass        pass        pass
+```
+
+**The DataDome "difference" is a window, not an engine.** All four DataDome
+stations were open on the first run of the session and shut between `c1` and
+`t1` -- the very first arm switch -- and stayed shut for *both* arms after
+that. `dd-datadome` and `dd-hermes` therefore read "control 1/3, treatment 0/3"
+while the control's only pass at each is its first run, before the door closed.
+Reading that as a regression is exactly the mistake the interleaving exists to
+catch: `dd-leboncoin` and `dd-etsy` swung the same way with no rate difference
+at all, because their swings happened to straddle an arm boundary differently.
+
+**The one difference that does track the binary is an improvement.** The
+control times out on `Page.navigate` at `ks-canadagoose` and `x-hyatt` in
+*every* run -- c1, c2 and c3, with t1 and t2 interleaved between them -- while
+the treatment completes the navigation in rounds 2 and 3, passing canadagoose
+once and getting real 400/429 answers instead of no response at all. A clock
+cannot produce that shape: `c2` sits between the treatment's failing t1 and its
+succeeding t2 and still hung. All three of the treatment's timeouts, `px-wayfair`
+included, are in round 1 and none recur.
+
+### What this says about the lever
+
+**No station moved from challenge to pass because of these 156 members**, and
+none regressed. That is worth stating plainly rather than dressing up: the
+prototype-completeness hypothesis that B50 proved on ak-macys -- by twelve
+builds and 41 site runs -- is now essentially spent as a lever. The window realm
+is 921 of 923 byte-identical with 0 mis-ordered prototypes, and the two names
+left are two whole interfaces and a missing JS built-in, not a fidelity gap
+anyone can close by declaring members.
+
+The eight stations still closed to this engine are `cf-scrapingcourse`,
+`cf-nopecha`, `cf-zeroclover` (Cloudflare's managed challenge), `dd-allopneus`
+(CF edge, DataDome cookie), `dd-g2`, `dd-saks`, `dd-datadome`, `dd-hermes`
+(DataDome), and `x-hyatt`. ak-macys, ak-kohls, ak-homedepot, ak-expedia,
+x-sony, x-zillow, px-wayfair and every Cloudflare-fronted ordinary page pass
+3 of 3 on both arms. Whatever those eight read, it is not the shape of a
+prototype.
