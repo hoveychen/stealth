@@ -16798,3 +16798,75 @@ person should either find an anchor that survives the shuffle — padding one
 family and watching which token length moves would do it — or accept that the
 byte count is the wrong question, since the two loudest divergences found here
 are worth nothing in bytes and everything in value.
+
+## Two ways to measure the same box forever (B79, 2026-08-26)
+
+A regression sweep found this, not a test. Nine stations in, `x-sony` died with
+`CRASHED SIGBUS ERR timeout: Runtime.enable`, and the nineteen stations after it
+timed out against a process that was already gone. `lldb` on the same page:
+`EXC_BAD_ACCESS (code=2)` — a write to the guard page, which is a stack
+overflow. Bisecting three merged branches put it in `inline-box-has-no-width`,
+and a spike that made the inline ink measurement return zero confirmed it.
+
+The minimal reproduction is five lines:
+
+```html
+<span><div style="width:50%">x</div></span>
+```
+
+**The loop.** A percentage width resolves through the computed-value machinery,
+which reaches back for the containing block's box — and it asked the *parent*.
+An inline box is not a containing block, so the `<div>` asked the `<span>`,
+whose own ink is that div's box, which asked the span again. Neither call
+carried a depth that grew, because `getElementDimensions` starts a fresh
+measurement at zero. It resolves against the containing block now, which is
+also Chrome's answer: the div takes half of the block the SPAN sits in — 952 on
+the 1904px line — and the span is 1904, because a block-level child breaks an
+inline in two and what is left spans the line whatever width the child took.
+
+**The fan-out.** The same width is what a percentage padding needs, and an
+element has four of those — each measuring the parent from scratch, on top of
+the measurement the fill branch already makes. Five of the parent's box per
+element is 5^n down a chain:
+
+| nested `padding: 1%` | before | after | Chrome |
+|---|---|---|---|
+| 8 deep | 626ms | 1ms | 1653 |
+| 12 deep | never returned | 1ms | 1525 |
+| 16 deep | never returned | 1ms | 1406 |
+| 20 deep | never returned | 1ms | 1297 |
+
+The measurement is made once per element and shared with the fill branch, which
+makes the chain linear and the widths Chrome's to the pixel.
+
+**The backstop.** `Frame._layout_depth` counts every measurement in flight
+whatever route it came in by. A `depth` parameter cannot do that job on its own
+— the percentage path above proves it, and there is no reason to think it is
+the last route into the layout that drops one.
+
+### What the repro pages exposed on the way past
+
+Two differences that had nothing to do with the crash, both measured on the
+same fractional box:
+
+* **clientWidth, offsetWidth and scrollWidth are integers.** They are a `long`
+  in the IDL and Chrome rounds the box to reach one: a 1652.911px padding box
+  reads **1653** for all three. `getBoundingClientRect` keeps the fraction.
+* **A computed `width` is written to six significant figures**, like every
+  other computed length. `{d}` printed `1619.8527949957197px` where Chrome
+  prints `1619.85px` — seventeen digits is a number no browser has ever
+  answered, so that one was a tell on its own.
+
+### Acceptance
+
+`x-sony` passes again. `expr-box-parts.js` goes from 216 to **221 of 223 field
+readings** (the two left are the 1/64px grid); `expr-inline-box.js` holds 16/16,
+`expr-flex-item-width.js` 10/10, `expr-box-parts-flex.js` 8/8,
+`expr-abs-inline-display.js` 9/9, `expr-layout-box-shapes.js` 18/25 cases and
+217/250 readings. 1510/1510.
+
+**The reading discipline this cost us**, since it has now bitten twice in one
+day: a sweep log where the first N stations look normal and everything after is
+`CRASHED … timeout` is **one** crash, not N failures. Only the first line is
+signal, the trailing `N/29` is void, and the way to tell a station that shut
+from an engine that died is to re-run the suspects one at a time.
