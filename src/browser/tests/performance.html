@@ -17,6 +17,74 @@
   testing.expectEqual(true, t2 >= t1);
 </script>
 
+<script id=now_lands_on_the_reference_lattice>
+  {
+    // The clamp to 100us is only half of what `performance.now()` gives away.
+    // The other half is how the clamped number is spelled: the reference host
+    // answers 133.79999999701977, not 133.8, because its value is the grid
+    // point rounded to the nearest multiple of 2^-26 ms. Four grid points in
+    // five are not on that lattice, so four readings in five carry a dozen
+    // digits of dust -- and a clock that prints "133.8" every time is a clock
+    // no browser has. Measured across 75M samples of Chrome 151 spanning
+    // 0.1ms to 32s: the offset from k/10 is always one of {0, +/-1, +/-2}
+    // multiples of 2^-25/10 ms, fixed by k mod 5, exactly as this lattice
+    // predicts (tools/fingerprint/scratch/expr-now-octave.js).
+    // The unit the dust comes in, and the offset a grid point carries, by grid
+    // index mod 5.
+    const U = Math.pow(2, -25) / 10;
+    const F = [0, -2, 1, -1, 2];
+
+    const offsets = {};
+    const gridPoints = new Set();
+    let offLattice = 0;
+    let x = 0;
+    // Spin between reads, by a length that changes every iteration. A tight
+    // loop returns one value over and over, and a fixed amount of work between
+    // reads walks the clock by a fixed number of grid points -- which can be a
+    // multiple of five, leaving every sample on one residue and the pattern
+    // this is about invisible.
+    for (let i = 0; i < 3000 && (gridPoints.size < 10 || Object.keys(offsets).length < 5); i++) {
+      const v = performance.now();
+      const k = Math.round(v * 10);
+      gridPoints.add(k);
+      const m = (v - k / 10) / U;
+      if (Math.abs(m - Math.round(m)) > 0.01) offLattice++;
+      const r = ((k % 5) + 5) % 5;
+      (offsets[r] ??= new Set()).add(Math.round(m));
+      for (let j = 0; j < (i % 13) * 40; j++) x += Math.sqrt(j);
+    }
+    if (x < 0) throw new Error('unreachable');
+
+    // Guards everything below against passing on one lucky grid point.
+    testing.expectEqual(true, gridPoints.size >= 6,
+      { desc: 'sampled enough distinct grid points, got ' + gridPoints.size });
+    testing.expectEqual(0, offLattice,
+      { desc: 'every reading is a whole number of lattice units off its grid point' });
+    testing.expectEqual(true, Object.keys(offsets).length >= 3,
+      { desc: 'covered enough grid residues, got ' + Object.keys(offsets).length });
+    for (const r of Object.keys(offsets)) {
+      testing.expectEqual(1, offsets[r].size,
+        { desc: 'grid residue ' + r + ' always carries the same offset' });
+    }
+
+    // The five offsets are the reference table rotated by wherever this
+    // document's origin fell on the lattice: five candidate rotations, exactly
+    // one of which has to fit. An engine that hands out the double nearest the
+    // grid point reads as all-zeroes here, which is no rotation at all.
+    let rotation = null;
+    for (let c = 0; c < 5 && rotation === null; c++) {
+      let fits = true;
+      for (const r of Object.keys(offsets)) {
+        if ([...offsets[r]][0] !== F[(Number(r) + c) % 5] - F[c]) fits = false;
+      }
+      if (fits) rotation = c;
+    }
+    testing.expectEqual(true, rotation !== null,
+      { desc: 'offsets are a rotation of the reference table, got ' +
+        JSON.stringify(Object.keys(offsets).map((r) => [r, [...offsets[r]][0]])) });
+  }
+</script>
+
 <script id=timeOrigin>
   const origin = performance.timeOrigin;
   testing.expectEqual('number', typeof origin);
