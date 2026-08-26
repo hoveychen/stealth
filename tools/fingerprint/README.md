@@ -14101,3 +14101,74 @@ already works for `DOMTokenList`.
 
 **Still unmeasured:** the event dictionaries' member read order, carried over
 from B49. A Proxy passed as the dictionary sees it in one expression.
+
+### ak-macys passes, and which change did it
+
+The sweep after this session's commits reads **21 of 29** against B49's 19, and
+the station that moved is the one this plan is named after:
+
+```
+ak-macys   pass  doc=200  nodes=10198   "Macy's - Shop Fashion Clothing & Access…"
+```
+
+Every reading of it since B36 has been `empty-document doc=200 nodes=32`. Headed
+Chrome in the same sitting on the same address reads `pass doc=200 nodes=8010`
+-- same title, fewer nodes.
+
+B49 spent a session learning that a station's verdict is a sample, not a
+measurement, so the claim was checked the way that session's lesson says to: a
+ReleaseFast build of the pre-session commit (`c99c498ca`) in a throwaway
+worktree, run **interleaved** with the new binary, one pair at a time.
+
+| round | control `c99c498ca` | this session |
+|---|---|---|
+| 1 | empty-document, 32 nodes | pass, 10184 |
+| 2 | empty-document, 32 nodes | pass, 10182 |
+| 3 | empty-document, 32 nodes | pass, 10181 |
+
+Then twelve more build variants, to find out *which* change did it. The answer
+is not the one this session expected -- the worker-realm work, on the realm the
+sensor demonstrably runs in, does nothing for this station:
+
+| build | new `HTMLIFrameElement.prototype` members | verdict |
+|---|---|---|
+| control `c99c498ca` | none | fail ×3 |
+| + the five-interface window batch | none | fail ×2 |
+| + both worker realms | none | fail ×2 |
+| + the iframe **order** only, no new members | none | fail ×2 |
+| **full session build minus all iframe work** | none | **fail ×3** |
+| + `allow` **alone** | 1 | **pass ×3** |
+| + `csp`, `allow` | 2 | pass ×2 |
+| + `csp`, `allow`, `featurePolicy`, `loading`, `getSVGDocument` | 5 | pass ×2 |
+| + all eleven | 11 | pass ×2 |
+| full session build | 11 | pass ×5 |
+| full session build **minus `allow`** | 10 | **pass ×3** |
+
+Three things fall out of that table, and the third is why it was worth twelve
+builds:
+
+1. **The iframe prototype's member set is necessary.** Take the winning build
+   and revert `IFrame.zig` alone -- keeping the worker realms, the media
+   members, the prototype chains, everything -- and macys refuses it again,
+   3 for 3. Nothing else in the session substitutes for it.
+2. **It is not order.** Putting the members the engine already had into
+   Chrome's order, adding none, fails 2 for 2.
+3. **It is not one name.** `allow` on its own is enough, 3 for 3 -- and so are
+   the other ten without it, 3 for 3. Two disjoint subsets of the same
+   eleven-name addition each clear the bar.
+
+So the guard is not looking for a particular member and not hashing the list in
+order; it is scoring how complete `HTMLIFrameElement.prototype` is, and this
+engine's was short enough to fail. Any of several missing names crosses the
+line. That is a much more useful thing to know than "the bug was `allow`",
+because it says where to look for the eight stations still refusing: **the
+prototypes an interstitial reaches for, measured for completeness, not for any
+single tell.** The read log (`results/b50-prop-reads-replay.json`) is the list
+of which prototypes those are.
+
+It is also a caution about this session's own method. The read log correctly
+named `HTMLIFrameElement` as something the challenge touches -- 18 reads of
+`contentWindow`, three of `contentDocument`, four of `srcdoc` per round -- but
+none of those three members was missing. What was missing was everything
+*around* them on the same prototype, which a read log cannot show, because a
+guard does not read a member it has already decided you do not have.
