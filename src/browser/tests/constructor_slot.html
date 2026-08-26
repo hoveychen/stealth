@@ -47,6 +47,10 @@
       Crypto: 'getRandomValues',                       // subtle, randomUUID
       WebGLRenderingContext: 'drawingBufferStorage',   // makeXRCompatible
       WebGL2RenderingContext: 'drawingBufferStorage',  // makeXRCompatible
+      Navigator: 'vibrate',                            // deprecatedRunAdAuctionEnforcesKAnonymity, protectedAudience, ...
+      HTMLImageElement: 'decode',                      // browsingTopics, attributionSrc, sharedStorageWritable
+      HTMLAnchorElement: 'toString',                   // hrefTranslate, attributionSrc
+      DOMMatrixReadOnly: 'translate',                  // toString
     };
     for (const name of Object.keys(AFTER)) {
       testing.expectEqual('function', typeof globalThis[name], { desc: name + ' is a global' });

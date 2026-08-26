@@ -169,3 +169,51 @@
   testing.expectEqual(document, pi.ownerDocument);
 }
 </script>
+
+<!-- The pseudo-attribute half, against a headed Chrome 151. A processing
+     instruction's data is a run of `name="value"` pairs and Chrome exposes
+     seven Element-shaped methods over it. -->
+<script id="pi_pseudo_attributes">
+{
+  const pi = document.createProcessingInstruction('xml-stylesheet', 'href="/s.css"  type=\'text/css\'');
+
+  // Nothing here fetches a stylesheet.
+  testing.expectEqual(null, pi.sheet);
+
+  // Reading never rewrites the data.
+  testing.expectEqual('href="/s.css"  type=\'text/css\'', pi.data);
+  testing.expectEqual('/s.css', pi.getAttribute('href'));
+  testing.expectEqual('text/css', pi.getAttribute('type'));
+  testing.expectEqual(null, pi.getAttribute('nope'));
+  testing.expectEqual(true, pi.hasAttribute('href'));
+  testing.expectEqual(false, pi.hasAttribute('nope'));
+  testing.expectEqual(true, pi.hasAttributes());
+  testing.expectEqual('href,type', pi.getAttributeNames().join(','));
+
+  // The first write re-serialises the whole run with double quotes and single
+  // spaces. Chrome's member order here comes out of a hash map -- it answers
+  // `type,href` for this same source -- which is not a rule worth imitating,
+  // so this keeps source order.
+  pi.setAttribute('a', 'b');
+  testing.expectEqual('href="/s.css" type="text/css" a="b"', pi.data);
+  testing.expectEqual('b', pi.getAttribute('a'));
+  pi.setAttribute('href', '/z.css');
+  testing.expectEqual('href="/z.css" type="text/css" a="b"', pi.data);
+
+  // toggleAttribute answers undefined here, unlike Element's, which answers
+  // whether the attribute is now present.
+  testing.expectEqual(undefined, pi.toggleAttribute('t'));
+  testing.expectEqual('href="/z.css" type="text/css" a="b" t=""', pi.data);
+  testing.expectEqual(undefined, pi.toggleAttribute('t'));
+  testing.expectEqual('href="/z.css" type="text/css" a="b"', pi.data);
+
+  pi.removeAttribute('a');
+  testing.expectEqual('href="/z.css" type="text/css"', pi.data);
+  testing.expectEqual(null, pi.getAttribute('a'));
+
+  // Data that is not attribute-shaped has no pseudo-attributes at all.
+  const plain = document.createProcessingInstruction('x', 'plain text');
+  testing.expectEqual('', plain.getAttributeNames().join(','));
+  testing.expectEqual(false, plain.hasAttributes());
+}
+</script>

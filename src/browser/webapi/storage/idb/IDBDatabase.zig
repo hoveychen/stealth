@@ -27,6 +27,7 @@ const Key = @import("Key.zig");
 const Engine = @import("Engine.zig");
 const IDBTransaction = @import("IDBTransaction.zig");
 const IDBObjectStore = @import("IDBObjectStore.zig");
+const handler_property = @import("../../handler_property.zig");
 const DOMStringList = @import("../../collections.zig").DOMStringList;
 
 const FunctionSetter = idb.FunctionSetter;
@@ -241,12 +242,21 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's order: the attributes, then the four handlers, then the
+    // operations alphabetically.
     pub const name = bridge.accessor(IDBDatabase.getName, null, .{});
     pub const version = bridge.accessor(IDBDatabase.getVersion, null, .{});
     pub const objectStoreNames = bridge.accessor(IDBDatabase.getObjectStoreNames, null, .{});
+    pub const onabort = bridge.accessor(handler(.onabort).get, handler(.onabort).set, .{});
+    pub const onclose = bridge.accessor(handler(.onclose).get, handler(.onclose).set, .{});
+    pub const onerror = bridge.accessor(IDBDatabase.getOnError, IDBDatabase.setOnError, .{});
+    pub const onversionchange = bridge.accessor(handler(.onversionchange).get, handler(.onversionchange).set, .{});
+    pub const close = bridge.function(IDBDatabase.close, .{});
     pub const createObjectStore = bridge.function(IDBDatabase.createObjectStore, .{});
     pub const deleteObjectStore = bridge.function(IDBDatabase.deleteObjectStore, .{});
     pub const transaction = bridge.function(IDBDatabase.transaction, .{});
-    pub const close = bridge.function(IDBDatabase.close, .{});
-    pub const onerror = bridge.accessor(IDBDatabase.getOnError, IDBDatabase.setOnError, .{});
+
+    fn handler(comptime which: handler_property.Handler) type {
+        return handler_property.accessors(IDBDatabase, which);
+    }
 };

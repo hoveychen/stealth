@@ -53,6 +53,11 @@ _credentials: Credentials,
 _redirect: Redirect,
 _signal: ?*AbortSignal,
 _body_used: bool = false,
+_mode: Mode = .cors,
+_referrer: []const u8 = REFERRER_CLIENT,
+_referrer_policy: []const u8 = "",
+_integrity: []const u8 = "",
+_keepalive: bool = false,
 
 pub const Input = union(enum) {
     request: *Request,
@@ -72,7 +77,25 @@ pub const InitOpts = struct {
     signal: ?*AbortSignal = null,
     priority: ?[]const u8 = null,
     duplex: ?[]const u8 = null,
+    mode: ?[]const u8 = null,
+    referrer: ?[]const u8 = null,
+    referrerPolicy: ?[]const u8 = null,
+    integrity: ?[]const u8 = null,
+    keepalive: ?bool = null,
 };
+
+const Mode = enum {
+    @"same-origin",
+    @"no-cors",
+    cors,
+    navigate,
+    websocket,
+    pub const js_enum_from_string = true;
+};
+
+// The default referrer for a request nobody gave one to: not the empty string,
+// which is what an explicit `{referrer: ''}` produces. Measured on Chrome 151.
+const REFERRER_CLIENT = "about:client";
 
 // The only value RequestDuplex has. A streaming body must name it, which is
 // what Vite's module-preload helper feature-tests for on every page it ships.
@@ -251,9 +274,92 @@ fn initWithContext(input: Input, opts_: ?InitOpts, exec: *const Execution, prefi
         ._body = body,
         ._body_stream = body_stream,
         ._signal = signal,
+        ._mode = try enumMember(Mode, "mode", "RequestMode", opts.mode, exec, prefix) orelse switch (input) {
+            .url => .cors,
+            .request => |r| r._mode,
+        },
+        ._referrer = if (opts.referrer) |r| try arena.dupe(u8, r) else switch (input) {
+            .url => REFERRER_CLIENT,
+            .request => |r| r._referrer,
+        },
+        ._referrer_policy = if (opts.referrerPolicy) |r| try arena.dupe(u8, r) else switch (input) {
+            .url => "",
+            .request => |r| r._referrer_policy,
+        },
+        ._integrity = if (opts.integrity) |i| try arena.dupe(u8, i) else switch (input) {
+            .url => "",
+            .request => |r| r._integrity,
+        },
+        ._keepalive = opts.keepalive orelse switch (input) {
+            .url => false,
+            .request => |r| r._keepalive,
+        },
     };
     arena.report();
     return self;
+}
+
+pub fn getMode(self: *const Request) []const u8 {
+    return @tagName(self._mode);
+}
+
+pub fn getReferrer(self: *const Request) []const u8 {
+    return self._referrer;
+}
+
+pub fn getReferrerPolicy(self: *const Request) []const u8 {
+    return self._referrer_policy;
+}
+
+pub fn getIntegrity(self: *const Request) []const u8 {
+    return self._integrity;
+}
+
+pub fn getKeepalive(self: *const Request) bool {
+    return self._keepalive;
+}
+
+/// The four a request built from script never has anything to say about.
+/// Chrome answers "" for the destination of a `new Request(...)`, "unknown"
+/// for the address space it would be allowed to reach, and false for both
+/// navigation flags (measured on Chrome 151).
+pub fn getDestination(_: *const Request) []const u8 {
+    return "";
+}
+
+pub fn getTargetAddressSpace(_: *const Request) []const u8 {
+    return "unknown";
+}
+
+pub fn getIsHistoryNavigation(_: *const Request) bool {
+    return false;
+}
+
+pub fn getIsReloadNavigation(_: *const Request) bool {
+    return false;
+}
+
+/// The only value RequestDuplex has, and the one Chrome answers whether or not
+/// the request carries a streaming body.
+pub fn getDuplex(_: *const Request) []const u8 {
+    return DUPLEX_HALF;
+}
+
+/// The body as a stream of text chunks, and reading it consumes the body --
+/// Response's counterpart, same refusal.
+pub fn textStream(self: *Request, exec: *const Execution) !*ReadableStream {
+    if (self._body_used) {
+        return exec.js.fail(
+            error.TypeError,
+            "Failed to execute 'textStream' on 'Request': body stream already read",
+        );
+    }
+    if (self._body_stream) |stream| {
+        self._body_used = true;
+        return stream;
+    }
+    self._body_used = true;
+    return ReadableStream.initWithText(self._body orelse "", exec);
 }
 
 pub fn deinit(self: *Request, _: *Page) void {
@@ -503,22 +609,36 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(Request.constructor, .{});
-    pub const url = bridge.accessor(Request.getUrl, null, .{});
+
+    // Chrome's own-property order, which interleaves the Body mixin's members
+    // with the request's own and puts five late-added ones after `text`.
     pub const method = bridge.accessor(Request.getMethod, null, .{});
+    pub const url = bridge.accessor(Request.getUrl, null, .{});
     pub const headers = bridge.accessor(Request.getHeaders, null, .{});
-    pub const cache = bridge.accessor(Request.getCache, null, .{});
+    pub const destination = bridge.accessor(Request.getDestination, null, .{});
+    pub const referrer = bridge.accessor(Request.getReferrer, null, .{});
+    pub const referrerPolicy = bridge.accessor(Request.getReferrerPolicy, null, .{});
+    pub const mode = bridge.accessor(Request.getMode, null, .{});
     pub const credentials = bridge.accessor(Request.getCredentials, null, .{});
+    pub const cache = bridge.accessor(Request.getCache, null, .{});
     pub const redirect = bridge.accessor(Request.getRedirect, null, .{});
+    pub const integrity = bridge.accessor(Request.getIntegrity, null, .{});
+    pub const keepalive = bridge.accessor(Request.getKeepalive, null, .{});
     pub const signal = bridge.accessor(Request.getSignal, null, .{});
-    pub const body = bridge.accessor(Request.getBody, null, .{});
+    pub const duplex = bridge.accessor(Request.getDuplex, null, .{});
+    pub const isHistoryNavigation = bridge.accessor(Request.getIsHistoryNavigation, null, .{});
     pub const bodyUsed = bridge.accessor(Request.getBodyUsed, null, .{});
-    pub const blob = bridge.function(Request.blob, .{});
-    pub const text = bridge.function(Request.text, .{});
-    pub const json = bridge.function(Request.json, .{});
     pub const arrayBuffer = bridge.function(Request.arrayBuffer, .{});
-    pub const bytes = bridge.function(Request.bytes, .{});
-    pub const formData = bridge.function(Request.formData, .{});
+    pub const blob = bridge.function(Request.blob, .{});
     pub const clone = bridge.function(Request.clone, .{});
+    pub const formData = bridge.function(Request.formData, .{});
+    pub const json = bridge.function(Request.json, .{});
+    pub const text = bridge.function(Request.text, .{});
+    pub const targetAddressSpace = bridge.accessor(Request.getTargetAddressSpace, null, .{});
+    pub const isReloadNavigation = bridge.accessor(Request.getIsReloadNavigation, null, .{});
+    pub const body = bridge.accessor(Request.getBody, null, .{});
+    pub const bytes = bridge.function(Request.bytes, .{});
+    pub const textStream = bridge.function(Request.textStream, .{});
 };
 
 const testing = @import("../../../testing.zig");

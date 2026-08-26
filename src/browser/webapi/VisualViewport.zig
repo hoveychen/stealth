@@ -19,6 +19,7 @@
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const EventTarget = @import("EventTarget.zig");
+const handler_property = @import("handler_property.zig");
 
 const VisualViewport = @This();
 
@@ -82,4 +83,15 @@ pub const JsApi = struct {
     pub const width = bridge.accessor(VisualViewport.getWidth, null, .{});
     pub const height = bridge.accessor(VisualViewport.getHeight, null, .{});
     pub const scale = bridge.accessor(VisualViewport.getScale, null, .{});
+
+    // The three events a viewport fires. Nothing resizes or scrolls here, so
+    // they never run -- but a page that installs one and reads it back gets
+    // its function, which is what the property is for.
+    pub const onresize = bridge.accessor(handler(.onresize).get, handler(.onresize).set, .{});
+    pub const onscroll = bridge.accessor(handler(.onscroll).get, handler(.onscroll).set, .{});
+    pub const onscrollend = bridge.accessor(handler(.onscrollend).get, handler(.onscrollend).set, .{});
+
+    fn handler(comptime which: handler_property.Handler) type {
+        return handler_property.accessors(VisualViewport, which);
+    }
 };

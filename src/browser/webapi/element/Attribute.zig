@@ -634,11 +634,46 @@ pub const NamedNodeMap = struct {
         return self.list().putAttribute(attribute, self._element, frame);
     }
 
-    pub fn removeByName(self: *const NamedNodeMap, name: String, frame: *Frame) !?*Attribute {
+    /// Chrome refuses a name that is not there rather than answering null --
+    /// measured on Chrome 151, where `getNamedItem` does answer null and this
+    /// throws a NotFoundError quoting the name.
+    pub fn removeByName(self: *const NamedNodeMap, name: String, frame: *Frame) !*Attribute {
         // this 2-step process (get then delete) isn't efficient. But we don't
         // expect this to be called often, and this lets us keep delete straightforward.
-        const attr = (try self.getByName(name, frame)) orelse return null;
+        const attr = (try self.getByName(name, frame)) orelse {
+            return frame.js.fail(error.NotFound, try std.fmt.allocPrint(
+                frame.call_arena,
+                "Failed to execute 'removeNamedItem' on 'NamedNodeMap': No item with name '{s}' was found.",
+                .{name.str()},
+            ));
+        };
         try self.list().delete(name, self._element, frame);
+        return attr;
+    }
+
+    // The namespaced trio. No attribute here carries a namespace -- the whole
+    // engine stores a bare name -- so a null namespace is the plain lookup and
+    // any other namespace matches nothing, which is the answer Chrome gives
+    // for these same attributes too (measured: `getNamedItemNS('urn:x',
+    // 'data-x')` is null on an element whose `data-x` is set).
+    pub fn getByNameNS(self: *const NamedNodeMap, namespace_: ?[]const u8, local_name: String, frame: *Frame) !?*Attribute {
+        if (namespace_ != null) {
+            return null;
+        }
+        return self.getByName(local_name, frame);
+    }
+
+    /// The refusal names the attribute as `namespace::localName`, with an empty
+    /// namespace printing as the bare `::name` (measured on Chrome 151).
+    pub fn removeByNameNS(self: *const NamedNodeMap, namespace_: ?[]const u8, local_name: String, frame: *Frame) !*Attribute {
+        const attr = (try self.getByNameNS(namespace_, local_name, frame)) orelse {
+            return frame.js.fail(error.NotFound, try std.fmt.allocPrint(
+                frame.call_arena,
+                "Failed to execute 'removeNamedItemNS' on 'NamedNodeMap': No item with name '{s}::{s}' was found.",
+                .{ namespace_ orelse "", local_name.str() },
+            ));
+        };
+        try self.list().delete(local_name, self._element, frame);
         return attr;
     }
 
@@ -687,10 +722,14 @@ pub const NamedNodeMap = struct {
             }
             return arr;
         }
+        // Chrome's order: length, then the operations alphabetically.
         pub const getNamedItem = bridge.function(NamedNodeMap.getByName, .{});
-        pub const setNamedItem = bridge.function(NamedNodeMap.set, .{ .ce_reactions = true });
-        pub const removeNamedItem = bridge.function(NamedNodeMap.removeByName, .{ .ce_reactions = true });
+        pub const getNamedItemNS = bridge.function(NamedNodeMap.getByNameNS, .{ .arity = 2 });
         pub const item = bridge.function(_item, .{});
+        pub const removeNamedItem = bridge.function(NamedNodeMap.removeByName, .{ .ce_reactions = true });
+        pub const removeNamedItemNS = bridge.function(NamedNodeMap.removeByNameNS, .{ .ce_reactions = true, .arity = 2 });
+        pub const setNamedItem = bridge.function(NamedNodeMap.set, .{ .ce_reactions = true });
+        pub const setNamedItemNS = bridge.function(NamedNodeMap.set, .{ .ce_reactions = true });
         fn _item(self: *const NamedNodeMap, index: i32, frame: *Frame) !?*Attribute {
             // the bridge.indexed handles this, so if we want
             //   list.item(-2) to return the same as list[-2] we need to

@@ -61,3 +61,36 @@
     testing.expectTrue(result === document.fonts);
 }
 </script>
+
+<!-- The five descriptors added after the original eight, and the constructor
+     dictionary that sets them. Chrome 151's defaults. -->
+<script id="font_face_overrides">
+{
+  const face = new FontFace('F', 'url(/f.woff2)');
+  testing.expectEqual('normal', face.ascentOverride);
+  testing.expectEqual('normal', face.descentOverride);
+  testing.expectEqual('normal', face.lineGapOverride);
+  testing.expectEqual('100%', face.sizeAdjust);
+  testing.expectEqual('normal', face.variationSettings);
+
+  face.ascentOverride = '90%';
+  testing.expectEqual('90%', face.ascentOverride);
+  face.sizeAdjust = '50%';
+  testing.expectEqual('50%', face.sizeAdjust);
+  face.variationSettings = '"wght" 700';
+  testing.expectEqual('"wght" 700', face.variationSettings);
+
+  // The constructor's third argument applies them, which it previously ignored.
+  const configured = new FontFace('F', 'url(/f.woff2)', {
+    ascentOverride: '95%',
+    sizeAdjust: '80%',
+    variationSettings: '"wdth" 120',
+    weight: '700',
+  });
+  testing.expectEqual('95%', configured.ascentOverride);
+  testing.expectEqual('80%', configured.sizeAdjust);
+  testing.expectEqual('"wdth" 120', configured.variationSettings);
+  testing.expectEqual('700', configured.weight);
+  testing.expectEqual('normal', configured.descentOverride);
+}
+</script>

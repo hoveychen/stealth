@@ -302,3 +302,42 @@
       () => el.removeAttribute());
   }
 </script>
+
+<!-- NamedNodeMap's namespaced half, and the refusal its non-namespaced half
+     shares. Chrome 151 throws for a name that is not there rather than
+     answering null (measured; `getNamedItem` does answer null). -->
+<script id="named_node_map_ns">
+{
+  const el = document.createElement('div');
+  el.setAttribute('data-x', '1');
+  const attrs = el.attributes;
+
+  testing.expectEqual(null, attrs.getNamedItem('gone'));
+  testing.expectError('NotFoundError', () => attrs.removeNamedItem('gone'));
+  testing.expectEqual(
+    "Failed to execute 'removeNamedItem' on 'NamedNodeMap': No item with name 'gone' was found.",
+    (() => { try { attrs.removeNamedItem('gone'); } catch (e) { return e.message; } })(),
+  );
+
+  // There are no namespaced attributes here, so a null namespace behaves like
+  // the plain lookup and any other namespace matches nothing -- which is the
+  // answer Chrome gives for these same attributes too.
+  testing.expectEqual('1', attrs.getNamedItemNS(null, 'data-x').value);
+  testing.expectEqual(null, attrs.getNamedItemNS('urn:x', 'data-x'));
+  testing.expectEqual(null, attrs.getNamedItemNS(null, 'gone'));
+
+  const added = document.createAttribute('data-y');
+  added.value = '2';
+  testing.expectEqual(null, attrs.setNamedItemNS(added));
+  testing.expectEqual('2', el.getAttribute('data-y'));
+
+  testing.expectEqual('1', attrs.removeNamedItemNS(null, 'data-x').value);
+  testing.expectEqual(null, el.getAttribute('data-x'));
+  testing.expectError('NotFoundError', () => attrs.removeNamedItemNS(null, 'gone'));
+  testing.expectEqual(
+    "Failed to execute 'removeNamedItemNS' on 'NamedNodeMap': No item with name '::gone' was found.",
+    (() => { try { attrs.removeNamedItemNS(null, 'gone'); } catch (e) { return e.message; } })(),
+  );
+  testing.expectError('NotFoundError', () => attrs.removeNamedItemNS('urn:x', 'data-y'));
+}
+</script>

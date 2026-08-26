@@ -23,6 +23,7 @@ const js = @import("../js/js.zig");
 const Page = @import("../Page.zig");
 const SvgMatrix = @import("svg/Matrix.zig");
 const DOMMatrix = @import("DOMMatrix.zig");
+const DOMPoint = @import("DOMPoint.zig");
 
 const DOMMatrixReadOnly = @This();
 
@@ -661,6 +662,88 @@ pub fn getF(self: *const DOMMatrixReadOnly) f64 {
     return self._m[13];
 }
 
+/// The 24 numbers `JSON.stringify(matrix)` sees. Not an interface object: a
+/// plain object, which is why every field is spelled out rather than coming
+/// off a serializer.
+pub fn toJSON(self: *const DOMMatrixReadOnly) struct {
+    a: f64,
+    b: f64,
+    c: f64,
+    d: f64,
+    e: f64,
+    f: f64,
+    m11: f64,
+    m12: f64,
+    m13: f64,
+    m14: f64,
+    m21: f64,
+    m22: f64,
+    m23: f64,
+    m24: f64,
+    m31: f64,
+    m32: f64,
+    m33: f64,
+    m34: f64,
+    m41: f64,
+    m42: f64,
+    m43: f64,
+    m44: f64,
+    is2D: bool,
+    isIdentity: bool,
+} {
+    return .{
+        .a = self._m[0],
+        .b = self._m[1],
+        .c = self._m[4],
+        .d = self._m[5],
+        .e = self._m[12],
+        .f = self._m[13],
+        .m11 = self._m[0],
+        .m12 = self._m[1],
+        .m13 = self._m[2],
+        .m14 = self._m[3],
+        .m21 = self._m[4],
+        .m22 = self._m[5],
+        .m23 = self._m[6],
+        .m24 = self._m[7],
+        .m31 = self._m[8],
+        .m32 = self._m[9],
+        .m33 = self._m[10],
+        .m34 = self._m[11],
+        .m41 = self._m[12],
+        .m42 = self._m[13],
+        .m43 = self._m[14],
+        .m44 = self._m[15],
+        .is2D = self._is_2d,
+        .isIdentity = self.getIsIdentity(),
+    };
+}
+
+/// The point argument is a DOMPointInit dictionary, and it is optional --
+/// Chrome reports arity 0 and an omitted one is the origin, so a matrix with a
+/// translation answers that translation.
+pub fn transformPoint(self: *const DOMMatrixReadOnly, point_: ?PointInit, exec: *const js.Execution) !*DOMPoint {
+    const point = point_ orelse PointInit{};
+    const x = point.x orelse 0;
+    const y = point.y orelse 0;
+    const z = point.z orelse 0;
+    const w = point.w orelse 1;
+    return DOMPoint.create(
+        self._m[0] * x + self._m[4] * y + self._m[8] * z + self._m[12] * w,
+        self._m[1] * x + self._m[5] * y + self._m[9] * z + self._m[13] * w,
+        self._m[2] * x + self._m[6] * y + self._m[10] * z + self._m[14] * w,
+        self._m[3] * x + self._m[7] * y + self._m[11] * z + self._m[15] * w,
+        exec.page,
+    );
+}
+
+pub const PointInit = struct {
+    x: ?f64 = null,
+    y: ?f64 = null,
+    z: ?f64 = null,
+    w: ?f64 = null,
+};
+
 pub fn getIs2D(self: *const DOMMatrixReadOnly) bool {
     return self._is_2d;
 }
@@ -984,6 +1067,10 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "DOMMatrixReadOnly";
+        // `toString` is the Window-only stringifier, which Blink installs per
+        // context -- after V8 appends the slot. Measured on Chrome 151, where
+        // the prototype ends `…translate, constructor, toString`.
+        pub const constructor_after = "translate";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
@@ -1021,21 +1108,26 @@ pub const JsApi = struct {
     pub const is2D = bridge.accessor(DOMMatrixReadOnly.getIs2D, null, .{});
     pub const isIdentity = bridge.accessor(DOMMatrixReadOnly.getIsIdentity, null, .{});
 
-    pub const translate = bridge.function(DOMMatrixReadOnly.translate, .{});
-    pub const scale = bridge.function(DOMMatrixReadOnly.scale, .{});
-    pub const scaleNonUniform = bridge.function(DOMMatrixReadOnly.scaleNonUniform, .{});
-    pub const scale3d = bridge.function(DOMMatrixReadOnly.scale3d, .{});
-    pub const rotate = bridge.function(DOMMatrixReadOnly.rotate, .{});
-    pub const rotateFromVector = bridge.function(DOMMatrixReadOnly.rotateFromVector, .{});
-    pub const rotateAxisAngle = bridge.function(DOMMatrixReadOnly.rotateAxisAngle, .{});
-    pub const skewX = bridge.function(DOMMatrixReadOnly.skewX, .{});
-    pub const skewY = bridge.function(DOMMatrixReadOnly.skewY, .{});
-    pub const multiply = bridge.function(DOMMatrixReadOnly.multiply, .{});
+    // Chrome's order: the operations alphabetically, and the Window-only
+    // stringifier after `constructor` -- see Meta.constructor_after above.
     pub const flipX = bridge.function(DOMMatrixReadOnly.flipX, .{});
     pub const flipY = bridge.function(DOMMatrixReadOnly.flipY, .{});
     pub const inverse = bridge.function(DOMMatrixReadOnly.inverse, .{});
+    pub const multiply = bridge.function(DOMMatrixReadOnly.multiply, .{});
+    pub const rotate = bridge.function(DOMMatrixReadOnly.rotate, .{});
+    pub const rotateAxisAngle = bridge.function(DOMMatrixReadOnly.rotateAxisAngle, .{});
+    pub const rotateFromVector = bridge.function(DOMMatrixReadOnly.rotateFromVector, .{});
+    pub const scale = bridge.function(DOMMatrixReadOnly.scale, .{});
+    pub const scale3d = bridge.function(DOMMatrixReadOnly.scale3d, .{});
+    pub const scaleNonUniform = bridge.function(DOMMatrixReadOnly.scaleNonUniform, .{});
+    pub const skewX = bridge.function(DOMMatrixReadOnly.skewX, .{});
+    pub const skewY = bridge.function(DOMMatrixReadOnly.skewY, .{});
     pub const toFloat32Array = bridge.function(DOMMatrixReadOnly.toFloat32Array, .{});
     pub const toFloat64Array = bridge.function(DOMMatrixReadOnly.toFloat64Array, .{});
+    pub const toJSON = bridge.function(DOMMatrixReadOnly.toJSON, .{});
+    pub const transformPoint = bridge.function(DOMMatrixReadOnly.transformPoint, .{});
+    pub const translate = bridge.function(DOMMatrixReadOnly.translate, .{});
+
     // The stringifier depends on CSS serialization and is Window-only.
     pub const toString = bridge.function(DOMMatrixReadOnly.toString, .{ .exposed = .window });
 

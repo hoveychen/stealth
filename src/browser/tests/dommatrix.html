@@ -399,3 +399,34 @@
     testing.expectEqual(4, sum); // identity has four 1s on the diagonal
   }
 </script>
+
+<!-- toJSON and transformPoint, against a headed Chrome 151. -->
+<script id="matrix_json_and_transform">
+{
+  const m = new DOMMatrixReadOnly([1, 2, 3, 4, 5, 6]);
+
+  const json = m.toJSON();
+  testing.expectEqual('Object', json.constructor.name);
+  testing.expectEqual(
+    'a,b,c,d,e,f,m11,m12,m13,m14,m21,m22,m23,m24,m31,m32,m33,m34,m41,m42,m43,m44,is2D,isIdentity',
+    Object.keys(json).join(','));
+  testing.expectEqual(1, json.a);
+  testing.expectEqual(6, json.f);
+  testing.expectEqual(true, json.is2D);
+  testing.expectEqual(false, json.isIdentity);
+
+  // The point argument is optional -- Chrome reports arity 0 -- and an omitted
+  // one is the origin, so the answer is the matrix's own translation.
+  testing.expectEqual(0, DOMMatrixReadOnly.prototype.transformPoint.length);
+  const origin = m.transformPoint();
+  testing.expectEqual(true, origin instanceof DOMPoint);
+  testing.expectEqual(5, origin.x);
+  testing.expectEqual(6, origin.y);
+
+  const at = m.transformPoint({ x: 1, y: 1 });
+  testing.expectEqual(9, at.x);
+  testing.expectEqual(12, at.y);
+  testing.expectEqual(0, at.z);
+  testing.expectEqual(1, at.w);
+}
+</script>

@@ -15313,3 +15313,79 @@ findings, both wider than this batch:
   three. The new `select.autocomplete` is the existing `reflect.string`, which
   keeps the three consistent; implementing the autofill field-name grammar is
   one change for all of them and is not a prototype-completeness gap.
+
+## The last eighteen, and the two that are not worth faking (B52, 2026-08-26)
+
+The remaining 63 names had nothing in common but being short. 61 of them are
+in, over fifteen interfaces plus `Navigator`'s misplaced `constructor` slot,
+and the window realm now reads **921 of 923 byte-identical, 2 missing, 0
+mis-ordered, 0 order-only**.
+
+| interface | was short by | | interface | was short by |
+|---|---|---|---|---|
+| `Request` | 11 | | `NamedNodeMap` | 3 |
+| `ProcessingInstruction` | 8 | | `VisualViewport` | 3 |
+| `IntersectionObserver` | 6 | | `CustomElementRegistry` | 2 |
+| `FontFace` | 5 | | `DOMMatrixReadOnly` | 2 |
+| `Selection` | 5 | | `DataTransferItem` | 2 |
+| `Navigation` | 4 | | `IDBVersionChangeEvent` | 2 |
+| `DocumentType` | 3 | | `WebTransportDatagramDuplexStream` | 2 |
+| `IDBDatabase` | 3 | | `Navigator` | 0, order only |
+
+### The two left out, and why each is not one member
+
+- **`EventTarget.when`** returns an `Observable`, and `Observable` is 19
+  members with `Subscriber`'s 6 behind it -- two whole interfaces this engine
+  does not have. Adding a `when` that answers anything else would put a wrong
+  object on the most-walked prototype in the realm rather than a missing name.
+  It is worth its own plan; the member list is in `b51-ch-protos.json`.
+- **`Date.toTemporalInstant`** needs `Temporal`, and this V8 build has none:
+  `--harmony-temporal`, `--js-temporal`, `--js-staging` and `--harmony` all
+  leave `typeof Temporal` undefined. Installing the method alone would leave
+  the global missing underneath it, which reads worse than the missing method:
+  Chrome's `toTemporalInstant` is also the one non-enumerable member in this
+  whole batch (`enum=false`), so a script that finds it and then finds no
+  `Temporal` has learned more than one that finds neither.
+
+### Six more measured answers
+
+- **`Request`'s defaults are not all the empty string.** `referrer` is
+  `about:client` -- the empty string is what an explicit `{referrer: ''}`
+  produces -- while `destination` and `referrerPolicy` are empty,
+  `targetAddressSpace` is `unknown`, and `duplex` is `half` whether or not the
+  request carries a streaming body.
+- **A processing instruction's `data` is a pseudo-attribute list**, and Chrome
+  puts seven Element-shaped methods over it. Reading never rewrites it; the
+  first write re-serialises the whole run with double quotes and single
+  spaces. Its `toggleAttribute` answers **undefined**, unlike `Element`'s,
+  which answers whether the attribute is now there. One thing was deliberately
+  *not* copied: Chrome's member order is not source order (`href="…" type="…"`
+  reads back `type,href`) because Blink iterates a `WTF::HashMap`, and a
+  bucket order is not a rule.
+- **`IntersectionObserver` stores a margin in its four-sided form.** A
+  `rootMargin` of `5px` reads back `5px 5px 5px 5px` and `10px 20px` reads back
+  `10px 20px 10px 20px`. A `root` of `document` reads back null.
+- **`removeNamedItem` throws for a name that is not there** -- a `NotFoundError`
+  quoting the name -- where `getNamedItem` answers null. This engine answered
+  null from both, which is the one behaviour bug this batch fixed rather than
+  filled in (test-first: the assertion failed on the old binary before the
+  change). The namespaced form quotes `namespace::localName`, so an empty
+  namespace prints as `'::gone'`.
+- **`customElements.get` and `getName` disagree about the empty answer.** `get`
+  is undefined for an unknown name; `getName` is null for an unknown
+  constructor. Only one of the two carries the null-as-undefined flag.
+- **`WebTransportDatagramDuplexStream`'s two buffered-datagram limits both
+  default to 1**, read off `new WebTransport(...).datagrams` before the
+  connection settles. `web_transport.html`'s recorded shape predated them; it
+  is re-taken here.
+
+Four interfaces needed `Meta.constructor_after` in this batch and the last
+one: `Navigator` (after `vibrate` -- everything from
+`deprecatedRunAdAuctionEnforcesKAnonymity` down is installed per context),
+`HTMLImageElement` (after `decode`), `HTMLAnchorElement` (after `toString`) and
+`DOMMatrixReadOnly` (after `translate`, where the Window-only stringifier
+lands). All four are now asserted in `constructor_slot.html` alongside the
+twenty that were already there.
+
+163 of 170 readings across the probe match; the seven that do not are the two
+deferred members and the `Temporal` global behind one of them.

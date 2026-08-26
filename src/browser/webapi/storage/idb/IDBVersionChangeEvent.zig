@@ -78,6 +78,17 @@ pub fn getNewVersion(self: *const IDBVersionChangeEvent) ?u64 {
     return self._new_version;
 }
 
+/// The two members Chrome kept from the old `IDBVersionChangeEvent` proposal.
+/// Nothing here ever loses data, so they read "none" and "" -- which is what
+/// Chrome answers for a plainly constructed event too (measured on Chrome 151).
+pub fn getDataLoss(_: *const IDBVersionChangeEvent) []const u8 {
+    return "none";
+}
+
+pub fn getDataLossMessage(_: *const IDBVersionChangeEvent) []const u8 {
+    return "";
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(IDBVersionChangeEvent);
 
@@ -90,4 +101,6 @@ pub const JsApi = struct {
     pub const constructor = bridge.constructor(IDBVersionChangeEvent.init, .{});
     pub const oldVersion = bridge.accessor(IDBVersionChangeEvent.getOldVersion, null, .{});
     pub const newVersion = bridge.accessor(IDBVersionChangeEvent.getNewVersion, null, .{ .null_as_undefined = true });
+    pub const dataLoss = bridge.accessor(IDBVersionChangeEvent.getDataLoss, null, .{});
+    pub const dataLossMessage = bridge.accessor(IDBVersionChangeEvent.getDataLossMessage, null, .{});
 };
