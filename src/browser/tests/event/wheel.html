@@ -28,3 +28,57 @@
   testing.expectEqual(1, WheelEvent.DOM_DELTA_LINE);
   testing.expectEqual(2, WheelEvent.DOM_DELTA_PAGE);
 </script>
+
+<script id=legacy_deltas>
+  // Chrome lets the legacy pair drive the standard one, and the sign flip is
+  // only in that direction. Every line here is a measurement against Chrome
+  // 151, not a reading of the IDL.
+  const w = (init) => new WheelEvent('wheel', init);
+
+  // No legacy key: wheelDelta* tracks delta* with no flip and no scaling.
+  testing.expectEqual(10, w({deltaY: 10}).wheelDeltaY);
+  testing.expectEqual(10, w({deltaY: 10}).deltaY);
+  testing.expectEqual(-10, w({deltaY: -10}).wheelDeltaY);
+  testing.expectEqual(5, w({deltaX: 5}).wheelDeltaX);
+  testing.expectEqual(-5, w({deltaX: -5}).wheelDeltaX);
+
+  // deltaMode never scales either value on a synthesised event.
+  testing.expectEqual(10, w({deltaY: 10, deltaMode: 1}).wheelDeltaY);
+  testing.expectEqual(10, w({deltaY: 10, deltaMode: 2}).wheelDeltaY);
+
+  // Legacy key given: it wins, and delta* becomes its negation.
+  testing.expectEqual(2, w({wheelDeltaY: 2}).wheelDeltaY);
+  testing.expectEqual(-2, w({wheelDeltaY: 2}).deltaY);
+  testing.expectEqual(2, w({wheelDeltaY: -2}).deltaY);
+  testing.expectEqual(1, w({wheelDeltaX: 1}).wheelDeltaX);
+  testing.expectEqual(-1, w({wheelDeltaX: 1}).deltaX);
+  // ...but only into a gap: an explicit deltaY is kept as it was given.
+  testing.expectEqual(2, w({deltaY: 10, wheelDeltaY: 2}).wheelDeltaY);
+  testing.expectEqual(10, w({deltaY: 10, wheelDeltaY: 2}).deltaY);
+  // The axes are independent.
+  testing.expectEqual(10, w({deltaY: 10, wheelDeltaX: 1}).deltaY);
+  testing.expectEqual(-1, w({deltaY: 10, wheelDeltaX: 1}).deltaX);
+
+  // wheelDelta is Y unless Y is exactly zero, then X.
+  testing.expectEqual(7, w({deltaX: 3, deltaY: 7}).wheelDelta);
+  testing.expectEqual(5, w({deltaX: 5}).wheelDelta);
+  testing.expectEqual(0, w({}).wheelDelta);
+  // and `wheelDelta` itself is not an init key -- it is derived only.
+  testing.expectEqual(0, w({wheelDelta: 240}).wheelDelta);
+</script>
+
+<script id=momentum>
+  // A boolean, not the enum string the name suggests, and taken through the
+  // usual ToBoolean coercion.
+  testing.expectEqual(false, new WheelEvent('wheel').momentum);
+  testing.expectEqual(false, new WheelEvent('wheel', {momentum: false}).momentum);
+  testing.expectEqual(false, new WheelEvent('wheel', {momentum: 0}).momentum);
+  testing.expectEqual(true, new WheelEvent('wheel', {momentum: 'x'}).momentum);
+</script>
+
+<script id=own_property_order>
+  testing.expectEqual(
+    'deltaX,deltaY,deltaZ,deltaMode,wheelDeltaX,wheelDeltaY,wheelDelta,' +
+    'DOM_DELTA_PIXEL,DOM_DELTA_LINE,DOM_DELTA_PAGE,momentum,constructor',
+    Object.getOwnPropertyNames(WheelEvent.prototype).join(','));
+</script>

@@ -163,3 +163,38 @@
   testing.expectEqual(true, pe.cancelable);
 }
 </script>
+
+<script id=persistent_device_id>
+  testing.expectEqual(0, new PointerEvent('pointermove').persistentDeviceId);
+  testing.expectEqual(42, new PointerEvent('pointermove', {persistentDeviceId: 42}).persistentDeviceId);
+</script>
+
+<script id=coalesced_and_predicted>
+  const bare = new PointerEvent('pointermove');
+  testing.expectEqual(0, bare.getCoalescedEvents().length);
+  testing.expectEqual(0, bare.getPredictedEvents().length);
+  // Chrome hands back a fresh array each call, not a cached one.
+  testing.expectEqual(false, bare.getCoalescedEvents() === bare.getCoalescedEvents());
+  testing.expectEqual(true, Object.getPrototypeOf(bare.getCoalescedEvents()) === Array.prototype);
+
+  const filled = new PointerEvent('pointermove', {
+    coalescedEvents: [new PointerEvent('pointermove', {clientX: 1})],
+    predictedEvents: [new PointerEvent('pointermove', {clientX: 2})],
+  });
+  const c = filled.getCoalescedEvents();
+  const p = filled.getPredictedEvents();
+  testing.expectEqual(1, c.length);
+  testing.expectEqual(1, c[0].clientX);
+  testing.expectEqual('PointerEvent', c[0].constructor.name);
+  testing.expectEqual(1, p.length);
+  testing.expectEqual(2, p[0].clientX);
+</script>
+
+<script id=own_property_order>
+  // constructor is not last here: Chrome leaves getCoalescedEvents behind it.
+  testing.expectEqual(
+    'pointerId,width,height,pressure,tiltX,tiltY,azimuthAngle,altitudeAngle,' +
+    'tangentialPressure,twist,pointerType,isPrimary,getPredictedEvents,' +
+    'persistentDeviceId,constructor,getCoalescedEvents',
+    Object.getOwnPropertyNames(PointerEvent.prototype).join(','));
+</script>

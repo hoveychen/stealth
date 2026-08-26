@@ -35,16 +35,48 @@ _delta_x: f64,
 _delta_y: f64,
 _delta_z: f64,
 _delta_mode: u32,
+_wheel_delta_x: f64,
+_wheel_delta_y: f64,
+_momentum: bool,
 
 pub const DOM_DELTA_PIXEL: u32 = 0x00;
 pub const DOM_DELTA_LINE: u32 = 0x01;
 pub const DOM_DELTA_PAGE: u32 = 0x02;
 
 pub const WheelEventOptions = struct {
-    deltaX: f64 = 0.0,
-    deltaY: f64 = 0.0,
+    // Optional so that "absent" is distinguishable from "0": the legacy pair
+    // below only fills a delta in that was never given. See Deltas.
+    deltaX: ?f64 = null,
+    deltaY: ?f64 = null,
     deltaZ: f64 = 0.0,
     deltaMode: u32 = 0,
+    wheelDeltaX: ?f64 = null,
+    wheelDeltaY: ?f64 = null,
+    momentum: bool = false,
+};
+
+// Each axis is two members that fill each other's gaps, and only one of the
+// two directions flips the sign. Measured on a constructed Chrome 151 event,
+// both axes, both signs, all three deltaModes:
+//
+//   {deltaY: 10}                 -> deltaY  10, wheelDeltaY 10  (no flip)
+//   {wheelDeltaY: 2}             -> deltaY  -2, wheelDeltaY  2  (the flip)
+//   {deltaY: 10, wheelDeltaY: 2} -> deltaY  10, wheelDeltaY  2  (neither fills)
+//
+// So a given value is always kept, and only a *missing* delta is derived --
+// which is why both halves have to be optional rather than defaulted to zero.
+// deltaMode never scales either value; the 120-per-notch factor real Chrome
+// puts on a trusted wheel event is not applied to a synthesised one.
+const Deltas = struct {
+    delta: f64,
+    wheel_delta: f64,
+
+    fn derive(delta: ?f64, wheel_delta: ?f64) Deltas {
+        return .{
+            .delta = delta orelse if (wheel_delta) |wd| -wd else 0,
+            .wheel_delta = wheel_delta orelse delta orelse 0,
+        };
+    }
 };
 
 pub const Options = Event.inheritOptions(
@@ -66,6 +98,8 @@ fn initWithTrusted(typ: []const u8, _opts: ?Options, trusted: bool, frame: *Fram
     const type_string = try String.init(arena.allocator(), typ, .{});
 
     const opts = _opts orelse Options{};
+    const x = Deltas.derive(opts.deltaX, opts.wheelDeltaX);
+    const y = Deltas.derive(opts.deltaY, opts.wheelDeltaY);
 
     const event = try frame._factory.mouseEvent(
         arena,
@@ -84,13 +118,18 @@ fn initWithTrusted(typ: []const u8, _opts: ?Options, trusted: bool, frame: *Fram
             ._button = @truncate(opts.button),
             ._buttons = opts.buttons,
             ._related_target = opts.relatedTarget,
+            ._movement_x = opts.movementX,
+            ._movement_y = opts.movementY,
         },
         WheelEvent{
             ._proto = undefined,
-            ._delta_x = opts.deltaX,
-            ._delta_y = opts.deltaY,
+            ._delta_x = x.delta,
+            ._delta_y = y.delta,
             ._delta_z = opts.deltaZ,
             ._delta_mode = opts.deltaMode,
+            ._wheel_delta_x = x.wheel_delta,
+            ._wheel_delta_y = y.wheel_delta,
+            ._momentum = opts.momentum,
         },
     );
 
@@ -118,6 +157,25 @@ pub fn getDeltaMode(self: *const WheelEvent) u32 {
     return self._delta_mode;
 }
 
+pub fn getWheelDeltaX(self: *const WheelEvent) f64 {
+    return self._wheel_delta_x;
+}
+
+pub fn getWheelDeltaY(self: *const WheelEvent) f64 {
+    return self._wheel_delta_y;
+}
+
+// The single-axis reading: Y unless Y is exactly zero, then X. Measured on
+// {deltaX: 3, deltaY: 7} -> 7 and {deltaX: 5} -> 5.
+pub fn getWheelDelta(self: *const WheelEvent) f64 {
+    if (self._wheel_delta_y != 0) return self._wheel_delta_y;
+    return self._wheel_delta_x;
+}
+
+pub fn getMomentum(self: *const WheelEvent) bool {
+    return self._momentum;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(WheelEvent);
 
@@ -132,9 +190,13 @@ pub const JsApi = struct {
     pub const deltaY = bridge.accessor(WheelEvent.getDeltaY, null, .{});
     pub const deltaZ = bridge.accessor(WheelEvent.getDeltaZ, null, .{});
     pub const deltaMode = bridge.accessor(WheelEvent.getDeltaMode, null, .{});
+    pub const wheelDeltaX = bridge.accessor(WheelEvent.getWheelDeltaX, null, .{});
+    pub const wheelDeltaY = bridge.accessor(WheelEvent.getWheelDeltaY, null, .{});
+    pub const wheelDelta = bridge.accessor(WheelEvent.getWheelDelta, null, .{});
     pub const DOM_DELTA_PIXEL = bridge.property(WheelEvent.DOM_DELTA_PIXEL, .{ .template = true });
     pub const DOM_DELTA_LINE = bridge.property(WheelEvent.DOM_DELTA_LINE, .{ .template = true });
     pub const DOM_DELTA_PAGE = bridge.property(WheelEvent.DOM_DELTA_PAGE, .{ .template = true });
+    pub const momentum = bridge.accessor(WheelEvent.getMomentum, null, .{});
 };
 
 const testing = @import("../../../testing.zig");

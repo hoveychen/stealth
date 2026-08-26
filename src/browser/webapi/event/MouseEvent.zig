@@ -61,6 +61,8 @@ _client_x: f64,
 _client_y: f64,
 _ctrl_key: bool,
 _meta_key: bool,
+_movement_x: f64,
+_movement_y: f64,
 // https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/relatedTarget
 _related_target: ?*EventTarget = null,
 _screen_x: f64,
@@ -79,6 +81,8 @@ pub const MouseEventOptions = struct {
     button: i32 = 0,
     buttons: u16 = 0,
     relatedTarget: ?*EventTarget = null,
+    movementX: f64 = 0.0,
+    movementY: f64 = 0.0,
 };
 
 pub const Options = Event.inheritOptions(
@@ -119,6 +123,8 @@ fn initWithTrusted(arena: *lp.Arena, typ: String, _opts: ?Options, trusted: bool
             ._button = @truncate(opts.button),
             ._buttons = opts.buttons,
             ._related_target = opts.relatedTarget,
+            ._movement_x = opts.movementX,
+            ._movement_y = opts.movementY,
         },
     );
 
@@ -184,6 +190,33 @@ pub fn getPageY(self: *const MouseEvent) f64 {
 
 pub fn getRelatedTarget(self: *const MouseEvent) ?*EventTarget {
     return self._related_target;
+}
+
+pub fn getMovementX(self: *const MouseEvent) f64 {
+    return self._movement_x;
+}
+
+pub fn getMovementY(self: *const MouseEvent) f64 {
+    return self._movement_y;
+}
+
+// The IE-era pair. They are not symmetric aliases of relatedTarget: the type
+// string alone decides which way round they sit, and it is a literal match on
+// two names -- `pointerout` takes the same branch as `click`, measured on both
+// dispatched and undispatched events (see the note in event/mouse.html).
+fn isLeaving(self: *const MouseEvent) bool {
+    const typ = self._proto.asEvent().getType();
+    return std.mem.eql(u8, typ, "mouseout") or std.mem.eql(u8, typ, "mouseleave");
+}
+
+pub fn getFromElement(self: *MouseEvent) ?*EventTarget {
+    if (self.isLeaving()) return self.asEvent().getTarget();
+    return self._related_target;
+}
+
+pub fn getToElement(self: *MouseEvent) ?*EventTarget {
+    if (self.isLeaving()) return self._related_target;
+    return self.asEvent().getTarget();
 }
 
 pub fn getScreenX(self: *const MouseEvent) f64 {
@@ -279,25 +312,31 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(MouseEvent.init, .{});
-    pub const altKey = bridge.accessor(getAltKey, null, .{});
-    pub const button = bridge.accessor(getButton, null, .{});
-    pub const buttons = bridge.accessor(getButtons, null, .{});
+    // Chrome's own-property order, measured, not the alphabetical one the
+    // declarations used to carry.
+    pub const screenX = bridge.accessor(getScreenX, null, .{});
+    pub const screenY = bridge.accessor(getScreenY, null, .{});
     pub const clientX = bridge.accessor(getClientX, null, .{});
     pub const clientY = bridge.accessor(getClientY, null, .{});
     pub const ctrlKey = bridge.accessor(getCtrlKey, null, .{});
+    pub const shiftKey = bridge.accessor(getShiftKey, null, .{});
+    pub const altKey = bridge.accessor(getAltKey, null, .{});
     pub const metaKey = bridge.accessor(getMetaKey, null, .{});
-    pub const offsetX = bridge.accessor(getOffsetX, null, .{});
-    pub const offsetY = bridge.accessor(getOffsetY, null, .{});
+    pub const button = bridge.accessor(getButton, null, .{});
+    pub const buttons = bridge.accessor(getButtons, null, .{});
+    pub const relatedTarget = bridge.accessor(getRelatedTarget, null, .{});
     pub const pageX = bridge.accessor(getPageX, null, .{});
     pub const pageY = bridge.accessor(getPageY, null, .{});
-    pub const relatedTarget = bridge.accessor(getRelatedTarget, null, .{});
-    pub const screenX = bridge.accessor(getScreenX, null, .{});
-    pub const screenY = bridge.accessor(getScreenY, null, .{});
-    pub const shiftKey = bridge.accessor(getShiftKey, null, .{});
-    pub const layerX = bridge.accessor(getLayerX, null, .{});
-    pub const layerY = bridge.accessor(getLayerY, null, .{});
     pub const x = bridge.accessor(getClientX, null, .{});
     pub const y = bridge.accessor(getClientY, null, .{});
+    pub const offsetX = bridge.accessor(getOffsetX, null, .{});
+    pub const offsetY = bridge.accessor(getOffsetY, null, .{});
+    pub const movementX = bridge.accessor(getMovementX, null, .{});
+    pub const movementY = bridge.accessor(getMovementY, null, .{});
+    pub const fromElement = bridge.accessor(getFromElement, null, .{});
+    pub const toElement = bridge.accessor(getToElement, null, .{});
+    pub const layerX = bridge.accessor(getLayerX, null, .{});
+    pub const layerY = bridge.accessor(getLayerY, null, .{});
     pub const getModifierState = bridge.function(MouseEvent.getModifierState, .{});
     pub const initMouseEvent = bridge.function(MouseEvent.initMouseEvent, .{});
 };

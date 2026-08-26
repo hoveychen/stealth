@@ -116,3 +116,63 @@
     testing.expectEqual(0, evt.button);
   }
 </script>
+
+<script id=movement>
+  testing.expectEqual(0, new MouseEvent('mousemove').movementX);
+  testing.expectEqual(0, new MouseEvent('mousemove').movementY);
+  const m = new MouseEvent('mousemove', {movementX: 7, movementY: -9});
+  testing.expectEqual(7, m.movementX);
+  testing.expectEqual(-9, m.movementY);
+</script>
+
+<script id=from_to_element>
+  // The IE-era pair is not a symmetric alias of relatedTarget. The type
+  // string alone picks the branch, and it is a literal match on two names:
+  // `pointerout` and `click` take the same side as `mouseover`. Measured
+  // against Chrome 151 on dispatched and undispatched events alike -- and
+  // detached, which reads the same as attached on both arms, so this page does
+  // not need a body it does not have.
+  const a = document.createElement('div');
+  const b = document.createElement('div');
+
+  const undispatched = (type) => {
+    const e = new MouseEvent(type, {relatedTarget: b});
+    return [e.fromElement, e.toElement];
+  };
+  const dispatched = (type) => {
+    let seen = null;
+    a.addEventListener(type, (e) => { seen = [e.fromElement, e.toElement]; }, {once: true});
+    a.dispatchEvent(new MouseEvent(type, {relatedTarget: b}));
+    return seen;
+  };
+
+  for (const type of ['mousemove', 'mouseover', 'mouseenter', 'click', 'pointerover', 'pointerout']) {
+    testing.expectEqual(b, undispatched(type)[0]);
+    testing.expectEqual(null, undispatched(type)[1]);
+    testing.expectEqual(b, dispatched(type)[0]);
+    testing.expectEqual(a, dispatched(type)[1]);
+  }
+  // The two that swap.
+  for (const type of ['mouseout', 'mouseleave']) {
+    testing.expectEqual(null, undispatched(type)[0]);
+    testing.expectEqual(b, undispatched(type)[1]);
+    testing.expectEqual(a, dispatched(type)[0]);
+    testing.expectEqual(b, dispatched(type)[1]);
+  }
+
+  // With no relatedTarget at all, the leaving branch still reports the target.
+  let seen = null;
+  a.addEventListener('mouseout', (e) => { seen = [e.fromElement, e.toElement]; }, {once: true});
+  a.dispatchEvent(new MouseEvent('mouseout', {}));
+  testing.expectEqual(a, seen[0]);
+  testing.expectEqual(null, seen[1]);
+</script>
+
+<script id=own_property_order>
+  testing.expectEqual(
+    'screenX,screenY,clientX,clientY,ctrlKey,shiftKey,altKey,metaKey,button,' +
+    'buttons,relatedTarget,pageX,pageY,x,y,offsetX,offsetY,movementX,' +
+    'movementY,fromElement,toElement,layerX,layerY,getModifierState,' +
+    'initMouseEvent,constructor',
+    Object.getOwnPropertyNames(MouseEvent.prototype).join(','));
+</script>

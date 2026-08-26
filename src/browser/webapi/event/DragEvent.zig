@@ -73,6 +73,8 @@ fn initWithTrusted(typ: []const u8, _opts: ?Options, trusted: bool, frame: *Fram
             ._button = @truncate(opts.button),
             ._buttons = opts.buttons,
             ._related_target = opts.relatedTarget,
+            ._movement_x = opts.movementX,
+            ._movement_y = opts.movementY,
         },
         DragEvent{
             ._proto = undefined,

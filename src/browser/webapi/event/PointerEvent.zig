@@ -66,6 +66,9 @@ _twist: i32,
 _altitude_angle: f64,
 _azimuth_angle: f64,
 _is_primary: bool,
+_persistent_device_id: i32,
+_coalesced_events: []const *PointerEvent,
+_predicted_events: []const *PointerEvent,
 
 pub const PointerEventOptions = struct {
     pointerId: i32 = 0,
@@ -80,6 +83,9 @@ pub const PointerEventOptions = struct {
     altitudeAngle: f64 = std.math.pi / 2.0,
     azimuthAngle: f64 = 0.0,
     isPrimary: bool = false,
+    persistentDeviceId: i32 = 0,
+    coalescedEvents: []const *PointerEvent = &.{},
+    predictedEvents: []const *PointerEvent = &.{},
 };
 
 const Options = Event.inheritOptions(
@@ -118,6 +124,8 @@ fn initWithTrusted(typ: []const u8, _opts: ?Options, trusted: bool, frame: *Fram
             ._button = @truncate(opts.button),
             ._buttons = opts.buttons,
             ._related_target = opts.relatedTarget,
+            ._movement_x = opts.movementX,
+            ._movement_y = opts.movementY,
         },
         PointerEvent{
             ._proto = undefined,
@@ -133,6 +141,11 @@ fn initWithTrusted(typ: []const u8, _opts: ?Options, trusted: bool, frame: *Fram
             ._altitude_angle = opts.altitudeAngle,
             ._azimuth_angle = opts.azimuthAngle,
             ._is_primary = opts.isPrimary,
+            ._persistent_device_id = opts.persistentDeviceId,
+            // The dictionary's sequences are only borrowed for the call; the
+            // event outlives it.
+            ._coalesced_events = try arena.allocator().dupe(*PointerEvent, opts.coalescedEvents),
+            ._predicted_events = try arena.allocator().dupe(*PointerEvent, opts.predictedEvents),
         },
     );
 
@@ -192,6 +205,21 @@ pub fn getIsPrimary(self: *const PointerEvent) bool {
     return self._is_primary;
 }
 
+pub fn getPersistentDeviceId(self: *const PointerEvent) i32 {
+    return self._persistent_device_id;
+}
+
+// Both answer a fresh array every call in Chrome -- two calls on the same
+// event are not identical objects -- so the slice is handed back and the
+// bridge builds the array, rather than a cached one being reused.
+pub fn getCoalescedEvents(self: *const PointerEvent) []const *PointerEvent {
+    return self._coalesced_events;
+}
+
+pub fn getPredictedEvents(self: *const PointerEvent) []const *PointerEvent {
+    return self._predicted_events;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(PointerEvent);
 
@@ -199,21 +227,27 @@ pub const JsApi = struct {
         pub const name = "PointerEvent";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // Chrome leaves getCoalescedEvents behind the constructor slot.
+        pub const constructor_after = "persistentDeviceId";
     };
 
     pub const constructor = bridge.constructor(PointerEvent.init, .{});
+    // Chrome's own-property order, measured.
     pub const pointerId = bridge.accessor(PointerEvent.getPointerId, null, .{});
-    pub const pointerType = bridge.accessor(PointerEvent.getPointerType, null, .{});
     pub const width = bridge.accessor(PointerEvent.getWidth, null, .{});
     pub const height = bridge.accessor(PointerEvent.getHeight, null, .{});
     pub const pressure = bridge.accessor(PointerEvent.getPressure, null, .{});
-    pub const tangentialPressure = bridge.accessor(PointerEvent.getTangentialPressure, null, .{});
     pub const tiltX = bridge.accessor(PointerEvent.getTiltX, null, .{});
     pub const tiltY = bridge.accessor(PointerEvent.getTiltY, null, .{});
-    pub const twist = bridge.accessor(PointerEvent.getTwist, null, .{});
-    pub const altitudeAngle = bridge.accessor(PointerEvent.getAltitudeAngle, null, .{});
     pub const azimuthAngle = bridge.accessor(PointerEvent.getAzimuthAngle, null, .{});
+    pub const altitudeAngle = bridge.accessor(PointerEvent.getAltitudeAngle, null, .{});
+    pub const tangentialPressure = bridge.accessor(PointerEvent.getTangentialPressure, null, .{});
+    pub const twist = bridge.accessor(PointerEvent.getTwist, null, .{});
+    pub const pointerType = bridge.accessor(PointerEvent.getPointerType, null, .{});
     pub const isPrimary = bridge.accessor(PointerEvent.getIsPrimary, null, .{});
+    pub const getPredictedEvents = bridge.function(PointerEvent.getPredictedEvents, .{});
+    pub const persistentDeviceId = bridge.accessor(PointerEvent.getPersistentDeviceId, null, .{});
+    pub const getCoalescedEvents = bridge.function(PointerEvent.getCoalescedEvents, .{});
 };
 
 const testing = @import("../../../testing.zig");
