@@ -107,14 +107,23 @@
   document.body.appendChild(hidden);
   testing.expectEqual(0, hidden.scrollWidth);
 
-  // A visible width:0 box (an off-screen measurement container) is not
-  // hidden: its content still overflows it.
+  // A visible width:0 box (an off-screen measurement container) is not hidden:
+  // content overflows it. Content, though -- an EMPTY <span> is not any of it,
+  // and Chrome answers 0 for that case, measured with
+  // tools/fingerprint/scratch/expr-zero-width-span.js. This used to assert the
+  // opposite, from the days when an empty inline box still had a 5px one of
+  // its own.
   const zeroWidth = document.createElement('div');
   zeroWidth.style.width = '0';
   zeroWidth.appendChild(document.createElement('span'));
   document.body.appendChild(zeroWidth);
   testing.expectEqual(0, zeroWidth.clientWidth);
-  testing.expectTrue(zeroWidth.scrollWidth > 0);
+  testing.expectEqual(0, zeroWidth.scrollWidth);
+
+  // Give the span something to lay out and it does overflow, by the 8px its
+  // text takes -- Chrome's answer for the same page.
+  zeroWidth.firstChild.textContent = 'x';
+  testing.expectEqual(8, zeroWidth.scrollWidth);
 
   // The root containers keep their synthetic size rather than summing
   // children, so horizontal page-overflow checks stay stable.
