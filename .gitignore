@@ -6,6 +6,10 @@
 /.lp-agent.zon
 zig-pkg/
 zig-out
+# The sweep harness wants a ReleaseFast binary alongside the debug one, and
+# `zig build --prefix zig-out-rel` is where it puts it. Ignored for the same
+# reason zig-out is: `git add -A` otherwise stages 90MB of it.
+zig-out-rel
 lightpanda.id
 /src/html5ever/target/
 src/snapshot.bin
