@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A non-replaced inline box has no CSS box to measure. `width` and `height` do not
+apply to one, so its computed values are `auto` and clientWidth, clientHeight,
+scrollWidth and scrollHeight are all 0 -- while offsetWidth and
+getBoundingClientRect still answer the ink its line boxes take. This engine
+answered 8px and 8 for `<span>x</span>`, which is a box no browser gives it.
+
+Measured against Chrome 151 with tools/fingerprint/scratch/expr-inline-box.js
+on the 1904px line this test server serves.
+-->
+
+<script id=inline_box_has_no_box>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const read = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const out = [cs.width, cs.height, el.clientWidth, el.clientHeight,
+                 el.offsetWidth, el.offsetHeight, el.scrollWidth, el.scrollHeight,
+                 Math.round(r.width), Math.round(r.height)].join('/');
+    wrap.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // computed width/height, client w/h, offset w/h, scroll w/h, rect w/h
+  eq('span', read('<span data-m>x</span>'), 'auto/auto/0/0/8/18/0/0/8/18');
+  eq('a', read('<a data-m href="#">x</a>'), 'auto/auto/0/0/8/18/0/0/8/18');
+  eq('div made inline', read('<div data-m style="display:inline">x</div>'),
+     'auto/auto/0/0/8/18/0/0/8/18');
+
+  // No content at all: no line box, so even the ink is 0.
+  eq('empty', read('<span data-m></span>'), 'auto/auto/0/0/0/0/0/0/0/0');
+  eq('wide', read('<span data-m>xxxxxxxxxxxxxxxxxxxx</span>'), 'auto/auto/0/0/160/18/0/0/160/18');
+
+  // A declared width or height is reported by the computed style and ignored by
+  // the box: the ink is still the text.
+  eq('width declared', read('<span data-m style="width:300px">x</span>'),
+     '300px/auto/0/0/8/18/0/0/8/18');
+  eq('height declared', read('<span data-m style="height:200px">x</span>'),
+     'auto/200px/0/0/8/18/0/0/8/18');
+  eq('both declared', read('<span data-m style="width:300px;height:200px;padding:10px">x</span>'),
+     '300px/200px/0/0/28/38/0/0/28/38');
+
+  // Padding and border do apply, and are outside the ink.
+  eq('padding', read('<span data-m style="padding:10px">x</span>'),
+     'auto/auto/0/0/28/38/0/0/28/38');
+  eq('border', read('<span data-m style="border:5px solid">x</span>'),
+     'auto/auto/0/0/18/28/0/0/18/28');
+
+  // The ink is everything on the line: this element's own text plus whatever
+  // its children take.
+  eq('text and child', read('<span data-m>xx<b>yy</b></span>'), 'auto/auto/0/0/32/18/0/0/32/18');
+  eq('block inside', read('<span data-m><div>x</div></span>'),
+     'auto/auto/0/0/1904/18/0/0/1904/18');
+
+  // The neighbours that DO have a box, asserted unchanged.
+  eq('inline-block', read('<span data-m style="display:inline-block">x</span>'),
+     '8px/18px/8/18/8/18/8/18/8/18');
+  eq('inline-flex', read('<span data-m style="display:inline-flex">x</span>'),
+     '8px/18px/8/18/8/18/8/18/8/18');
+  // display:contents generates no box at all, which this engine already had.
+  eq('contents', read('<span data-m style="display:contents">x</span>'),
+     'auto/auto/0/0/0/0/0/0/0/0');
+  // A replaced element is inline and still has a box.
+  eq('img', read('<img data-m width=40 height=30 ' +
+     'src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">'),
+     '40px/30px/40/30/40/30/40/30/40/30');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

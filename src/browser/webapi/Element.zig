@@ -1918,6 +1918,46 @@ pub fn minContentWidth(self: *Element, frame: *Frame) ?f64 {
     return @round(widest);
 }
 
+/// The ink a non-replaced inline box's line boxes take: this element's own text
+/// plus whatever its children occupy. Neither a declared width nor a declared
+/// height reaches it -- neither property applies to an inline box -- so this is
+/// the only size it has.
+///
+/// Measured with tools/fingerprint/scratch/expr-inline-box.js against Chrome
+/// 151: `<span>x</span>` is 8x18 with an empty one at 0x0, `<span>xx<b>yy</b>
+/// </span>` is 32 wide (its own text plus the child's), and a <span> holding a
+/// <div> is 1904 -- the block escapes the inline and fills the block container,
+/// which is what containingBlock walks up to find.
+fn inlineInk(self: *Element, frame: *Frame) struct { width: f64, height: f64 } {
+    var width: f64 = 0;
+    var height: f64 = 0;
+    var text_width: f64 = 0;
+    var has_text = false;
+
+    const font = self.resolveFont(frame);
+    var child = self.asNode().firstChild();
+    while (child) |node| : (child = node.nextSibling()) {
+        if (node.is(CData.Text)) |text| {
+            const str = Factory.protoOf(text)._data.str();
+            if (str.len == 0) continue;
+            has_text = true;
+            text_width += text_measure.measure(font.family, str, font.size).width;
+            continue;
+        }
+        if (node.is(Element)) |el| {
+            width += el.getOffsetWidth(frame);
+            height = @max(height, el.getOffsetHeight(frame));
+        }
+    }
+
+    width += @round(text_width);
+    if (has_text) {
+        const box = font_metrics.boundingBox(font.family, font.size);
+        height = @max(height, @round(box.ascent + box.descent));
+    }
+    return .{ .width = width, .height = height };
+}
+
 /// Chrome draws a broken-image icon in place of an <img> whose bytes never
 /// became a picture, so the element still has a box even though it has no
 /// intrinsic size. Measured on Chrome 151 (probe `expr-broken-image.js`): a
@@ -1976,6 +2016,13 @@ pub const Dimensions = struct {
     padding_y: f64 = 0,
     border_x: f64 = 0,
     border_y: f64 = 0,
+    /// A non-replaced `display: inline` element, which has no CSS box: its
+    /// clientWidth, clientHeight, scrollWidth and scrollHeight are all 0 and
+    /// its computed `width` and `height` are `auto`, while offsetWidth and
+    /// getBoundingClientRect still answer the ink its line boxes take.
+    /// `width` and `height` here are that ink. Only ever set on the
+    /// `measure_text_width` path, like the edges.
+    inline_box: bool = false,
 };
 
 pub fn getElementDimensions(self: *Element, frame: *Frame) Dimensions {
@@ -2001,6 +2048,18 @@ fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) 
 /// shallower than this; the cap exists so a tree that somehow made a cycle
 /// stops rather than recursing forever.
 pub const MAX_CONTAINING_BLOCK_DEPTH = 64;
+
+/// The ancestor whose content box this element's own box is laid out in. Not
+/// always the parent element: an inline box is not a containing block for a
+/// block-level child, so a <div> inside a <span> fills the block container the
+/// span itself sits in -- 1904 and not the span's 8, measured.
+fn containingBlock(self: *Element, frame: *Frame) ?*Element {
+    var ancestor = self.parentElement();
+    while (ancestor) |current| : (ancestor = current.parentElement()) {
+        if (!CSSStyleDeclaration.isInlineBox(current, frame)) return current;
+    }
+    return null;
+}
 
 /// The horizontal margin that comes off the containing block before the box
 /// gets what is left. From the cascade, so a stylesheet rule counts -- and it
@@ -2038,6 +2097,25 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // What a declared width and height name: the content box, or the border box
     // when `box-sizing` says so. Only asked on this path -- see Dimensions.
     const border_box = if (comptime measure_text_width) CSSStyleDeclaration.usesBorderBox(self, frame) else false;
+    dims.inline_box = if (comptime measure_text_width) CSSStyleDeclaration.isInlineBox(self, frame) else false;
+
+    // A non-replaced inline box takes no width or height from a declaration --
+    // neither property applies to one -- so its ink is all there is. Measured:
+    // `<span style="width:300px">x</span>` is 8px wide in Chrome and reports
+    // the 300px only from getComputedStyle.
+    if (dims.inline_box) {
+        const edges = CSSStyleDeclaration.boxEdges(self, frame);
+        dims.padding_x = edges.padding_x;
+        dims.padding_y = edges.padding_y;
+        dims.border_x = edges.border_x;
+        dims.border_y = edges.border_y;
+        const ink = self.inlineInk(frame);
+        dims.width = ink.width;
+        dims.height = ink.height;
+        dims.explicit_width = true;
+        dims.explicit_height = true;
+        return dims;
+    }
 
     if (comptime measure_text_width) {
         const edges = CSSStyleDeclaration.boxEdges(self, frame);
@@ -2173,7 +2251,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
             // gate, document.elementFromPoint pays it for every element it
             // rejects on height alone, which is thousands per call.
             if (CSSStyleDeclaration.fillsContainingBlock(self, frame)) {
-                if (self.parentElement()) |parent| {
+                if (self.containingBlock(frame)) |parent| {
                     // What fills the containing block is the BORDER box, so the
                     // padding and the border come out of the content: measured,
                     // `padding:10px` on the 1904px line is 1884 of content and
@@ -2230,6 +2308,8 @@ pub fn getClientWidthWithCache(self: *Element, frame: *Frame, visibility_cache: 
     // clientWidth is the PADDING box: content plus the padding, with the border
     // left out. Measured -- `border:5px solid` on the 1904px line answers 1894
     // here and 1904 for offsetWidth.
+    if (dims.inline_box) return 0;
+
     const tag = self.getTag();
     if (tag == .html or tag == .body or dims.explicit_width) {
         return dims.width + dims.padding_x;
@@ -2249,6 +2329,8 @@ pub fn getClientHeightWithCache(self: *Element, frame: *Frame, visibility_cache:
     }
 
     const dims = self.getElementDimensions(frame);
+
+    if (dims.inline_box) return 0;
 
     const tag = self.getTag();
     if (tag == .html or tag == .body or dims.explicit_height) {
@@ -2376,6 +2458,8 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
         return dims.height;
     }
 
+    if (dims.inline_box) return 0;
+
     return @max(dims.height, self.contentHeight(frame, &visibility_cache)) + dims.padding_y;
 }
 
@@ -2419,6 +2503,8 @@ pub fn getScrollWidth(self: *Element, frame: *Frame) f64 {
     if (tag == .html or tag == .body) {
         return dims.width;
     }
+
+    if (dims.inline_box) return 0;
 
     // The scrollable overflow area includes the padding: measured, a
     // `width:100px;padding:10px` box holding a 300px child answers 120 for
@@ -2472,8 +2558,9 @@ pub fn getOffsetHeight(self: *Element, frame: *Frame) f64 {
     if (!self.checkVisibilityCached(&visibility_cache, frame)) {
         return 0.0;
     }
-    return self.getClientHeightWithCache(frame, &visibility_cache) +
-        self.getElementDimensions(frame).border_y;
+    const dims = self.getElementDimensions(frame);
+    if (dims.inline_box) return dims.height + dims.padding_y + dims.border_y;
+    return self.getClientHeightWithCache(frame, &visibility_cache) + dims.border_y;
 }
 
 /// offsetWidth is the BORDER box: content, padding and border. It takes the
@@ -2484,8 +2571,11 @@ pub fn getOffsetWidth(self: *Element, frame: *Frame) f64 {
     if (!self.checkVisibilityCached(&visibility_cache, frame)) {
         return 0.0;
     }
-    return self.getClientWidthWithCache(frame, &visibility_cache) +
-        self.getElementDimensions(frame).border_x;
+    const dims = self.getElementDimensions(frame);
+    // An inline box has no clientWidth to build on -- that reading is 0 for one
+    // -- so its ink is added up directly.
+    if (dims.inline_box) return dims.width + dims.padding_x + dims.border_x;
+    return self.getClientWidthWithCache(frame, &visibility_cache) + dims.border_x;
 }
 
 pub fn getOffsetTop(self: *Element, frame: *Frame) f64 {

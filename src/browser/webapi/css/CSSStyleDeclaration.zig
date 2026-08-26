@@ -322,7 +322,9 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // Measured: `width:20px` with 10px of padding and 5px of border
                 // per side computes `30px` -- the border box, clamped up to
                 // what its own parts need, with nothing left for the content.
-                if ((on_width or on_height) and usesBorderBox(element, frame)) {
+                if ((on_width or on_height) and !isInlineBox(element, frame) and
+                    usesBorderBox(element, frame))
+                {
                     return resolvedDimension(element, if (on_width) .width else .height, frame);
                 }
 
@@ -1044,11 +1046,33 @@ fn leftAtCurrentColour(
 /// exposes it and the reason innerText breaks a line there.
 pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
     const specified = frame._style_manager.computedDisplay(element) orelse getDefaultDisplay(element);
+
+    // Nothing below can change a display that is block-level already, and
+    // asking would cost two cascade reads per element on a path that runs per
+    // element -- so the inline-level ones are the only ones that pay.
+    const blockified = StyleManager.blockify(specified);
+    if (std.mem.eql(u8, blockified, specified)) return specified;
+
+    // Taking a box out of flow makes it block-level, and so does floating it.
+    // Measured with tools/fingerprint/scratch/expr-abs-inline-display.js:
+    // `<span style="position:absolute">` computes `display: block` in Chrome,
+    // as do `position:fixed` and `float:left`, while `relative` and `sticky`
+    // leave it inline. That is why an absolutely positioned <span> honours a
+    // declared width -- it is no longer an inline box.
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    if (cascadedKeyword(style_manager, element, "float")) |float| {
+        if (!std.ascii.eqlIgnoreCase(float, "none")) return blockified;
+    }
+    if (cascadedKeyword(style_manager, element, "position")) |position| {
+        if (std.ascii.eqlIgnoreCase(position, "absolute") or
+            std.ascii.eqlIgnoreCase(position, "fixed")) return blockified;
+    }
+
     const parent = element.parentElement() orelse return specified;
     if (!frame._style_manager.blockifiesChildren(parent)) {
         return specified;
     }
-    return StyleManager.blockify(specified);
+    return blockified;
 }
 
 /// The value the cascade gives `element` for one longhand -- a stylesheet rule,
@@ -1187,6 +1211,22 @@ pub fn boxEdges(element: *Element, frame: *Frame) BoxEdges {
 /// border:5px solid` is 370px of content, 390 of clientWidth and 400 of
 /// offsetWidth, and its computed `width` answers the 400 -- the border box,
 /// because that is the box `box-sizing` named.
+/// Whether this element is a non-replaced inline box -- one with no CSS box of
+/// its own, so `width` and `height` do not apply to it and clientWidth,
+/// clientHeight, scrollWidth and scrollHeight are all 0. Element.Dimensions
+/// carries what that leaves.
+///
+/// A replaced element is `display: inline` too and DOES have a box: an <img
+/// width=40 height=30> answers 40 and 30 for every one of those readings,
+/// measured with tools/fingerprint/scratch/expr-inline-box.js.
+pub fn isInlineBox(element: *Element, frame: *Frame) bool {
+    if (!std.mem.eql(u8, resolvedDisplay(element, frame), "inline")) return false;
+    return switch (element.getTag()) {
+        .img, .iframe, .video, .audio, .canvas, .embed, .object, .svg, .input, .select, .textarea, .button, .meter, .progress, .frame => false,
+        else => true,
+    };
+}
+
 pub fn usesBorderBox(element: *Element, frame: *Frame) bool {
     const style_manager = &element.ownerFrame(frame)._style_manager;
     const declared = cascadedKeyword(style_manager, element, "box-sizing") orelse return false;
@@ -1449,6 +1489,10 @@ fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame
     // content extent lives, and a computed width has to carry it too or a
     // "widen until it fits" loop reads two contradictory sizes and never
     // terminates.
+    // Neither property applies to a non-replaced inline box, so there is
+    // nothing to report: Chrome answers `auto` for both, measured.
+    if (isInlineBox(element, frame)) return "auto";
+
     const edges = boxEdges(element, frame);
     const client = switch (dimension) {
         .width => element.getClientWidthWithCache(frame, &visibility_cache),
