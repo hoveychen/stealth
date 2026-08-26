@@ -91,7 +91,9 @@
 
   // device-* line up with screen, which is how CreepJS spots an iframe-shrunk one.
   testing.expectEqual(true, window.matchMedia(`(device-width: ${screen.width}px) and (device-height: ${screen.height}px)`).matches);
-  testing.expectEqual(true, window.matchMedia('(device-aspect-ratio: 16/9)').matches);
+  // 1920x1200, so 8/5 -- the display's ratio, not the page's 16/9.
+  testing.expectEqual(true, window.matchMedia('(device-aspect-ratio: 8/5)').matches);
+  testing.expectEqual(true, window.matchMedia('(aspect-ratio: 16/9)').matches);
   testing.expectEqual(false, window.matchMedia('(device-width: 12345px)').matches);
 
   // Consistent with devicePixelRatio and screen.colorDepth.

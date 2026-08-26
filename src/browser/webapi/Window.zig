@@ -1229,28 +1229,35 @@ pub fn getInnerHeight(_: *const Window, frame: *Frame) u32 {
     return frame.viewport().height;
 }
 
-// The viewport is the whole screen here, so the window box is the viewport and
-// the window sits at the origin. Real browsers always answer these; scripts
-// read them bare (`outerWidth`, not `window.outerWidth`), so leaving them out
-// turns a fingerprinting probe into a ReferenceError that kills its caller.
+// The window around the page: taller than the viewport by the browser drawn
+// above it, and no wider. Real browsers always answer these; scripts read them
+// bare (`outerWidth`, not `window.outerWidth`), so leaving them out turns a
+// fingerprinting probe into a ReferenceError that kills its caller.
 //
-// Unlike inner*, these stay the *page's* viewport in a child frame: outer is the
+// Unlike inner*, these stay the *page's* window in a child frame: outer is the
 // browser window, which a frame does not have one of. Measured on Chrome 151 --
-// a 300x65 iframe's window reports outerWidth 1920 and outerHeight 1080.
+// a 300x65 iframe's window reports the top-level window's box.
+//
+// See Viewport for where the 87 comes from and for the rest of the arrangement
+// these have to agree with.
 pub fn getOuterWidth(_: *const Window, frame: *Frame) u32 {
-    return frame._page.getViewport().width;
+    return frame._page.getViewport().outerWidth();
 }
 
 pub fn getOuterHeight(_: *const Window, frame: *Frame) u32 {
-    return frame._page.getViewport().height;
+    return frame._page.getViewport().outerHeight();
 }
 
-pub fn getScreenX(_: *const Window) u32 {
-    return 0;
+// Where the window sits on the display. Not (0, 0): a maximised window starts
+// at the usable area's origin, and on a platform with a menu bar that is 33
+// pixels down. Chrome answers a position no matter how the window got there --
+// headless, which places its window nowhere in particular, still said (22, 22).
+pub fn getScreenX(_: *const Window, frame: *Frame) u32 {
+    return frame._page.getViewport().windowX();
 }
 
-pub fn getScreenY(_: *const Window) u32 {
-    return 0;
+pub fn getScreenY(_: *const Window, frame: *Frame) u32 {
+    return frame._page.getViewport().windowY();
 }
 
 const ScrollToOpts = union(enum) {
