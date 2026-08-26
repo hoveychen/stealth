@@ -2950,7 +2950,15 @@ fn computedColourText(arena: Allocator, property_name: []const u8, value: []cons
     // reaches here as a colour is a bare keyword.
     if (std.mem.indexOfAny(u8, trimmed, "(#, \t") != null) return null;
 
-    const rgba = color.RGBA.parse(trimmed) catch return null;
+    const rgba = color.RGBA.parse(trimmed) catch blk: {
+        // A system colour is a keyword `RGBA.parse` does not know, and it is a
+        // colour all the same: `color: buttonface` computes to `rgb(239, 239,
+        // 239)` in Chrome. canonicaliseValue has already lowercased it, but the
+        // lowering here is what makes that an optimisation rather than a
+        // premise.
+        var lower: [32]u8 = undefined;
+        break :blk color.systemColor(std.ascii.lowerString(lower[0..trimmed.len], trimmed)) orelse return null;
+    };
 
     var buf = std.Io.Writer.Allocating.init(arena);
     writeColour(&buf.writer, .{ .rgb = .{ rgba.r, rgba.g, rgba.b }, .alpha = rgba.a }) catch return null;
