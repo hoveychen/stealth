@@ -177,6 +177,12 @@ _element_edit_contexts: Element.EditContextLookup = .empty,
 _element_internals: ElementInternals.Lookup = .empty,
 _node_owner_documents: Node.OwnerDocumentLookup = .empty,
 _element_scroll_positions: Element.ScrollPositionLookup = .empty,
+
+/// How many `Element.dimensionsAt` measurements are in flight. The faux layout
+/// reaches for other elements' boxes -- a containing block's, a flex sibling's,
+/// an inline child's -- and not every one of those routes carries a depth, so
+/// this counts them all. See Element.MAX_LAYOUT_REENTRY.
+_layout_depth: u16 = 0,
 _element_namespace_uris: Element.NamespaceUriLookup = .empty,
 _element_prefixes: Element.PrefixLookup = .empty,
 _svg_animated_enumerations: AnimatedEnumeration.Lookup = .empty,

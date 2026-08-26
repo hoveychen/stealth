@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Two ways the faux layout used to measure the same box over and over, both found
+by an antibot sweep rather than by a test: www.sony.com took the engine out with
+a stack-overflow SIGBUS, and the station after it timed out against the corpse.
+
+The first is a closed loop. A percentage width resolves through the
+computed-value machinery, which reaches back for the containing block's box --
+and it used to ask the PARENT for it. An inline box is not a containing block,
+so `<span><div style="width:50%">x</div></span>` asked the span, whose own ink
+is that div's box, which asked the span again. Neither call carried a depth
+that grew, so nothing stopped it.
+
+Chrome's answers, measured with tools/fingerprint/scratch/expr-inline-pct.js:
+the div takes half of the block the SPAN sits in, and the span is the whole
+line -- a block-level child breaks an inline in two and what is left spans the
+line whatever width the child itself took.
+-->
+
+<script id=percentage_inside_inline>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML = '<span id=bmlspan><div id=bmldiv style="width:50%">x</div></span>';
+
+  const span = document.getElementById('bmlspan');
+  const div = document.getElementById('bmldiv');
+  testing.expectEqual('952px', String(getComputedStyle(div).width));
+  testing.expectEqual(952, div.clientWidth);
+  testing.expectEqual(1904, span.offsetWidth);
+
+  host.remove();
+}
+</script>
+
+<!--
+The second is a fan-out. A percentage padding needs the containing block's width
+too, and an element has four paddings -- each of which measured the parent from
+scratch, on top of the measurement the fill branch already makes. That is five
+of the parent's box per element, so 5^n down a chain: eight nested `padding: 1%`
+elements took 626ms to answer one clientWidth here, and twelve never came back.
+The measurement is shared now, so the chain is linear.
+
+Chrome's answers for the same pages (expr-deepest.js): 1653 at eight deep, 1525
+at twelve, 1406 at sixteen, 1297 at twenty.
+-->
+
+<script id=nested_percentage_padding>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const deep = (n) => {
+    const root = document.createElement('div');
+    host.appendChild(root);
+    let leaf = root;
+    for (let i = 0; i < n; i++) {
+      const box = document.createElement('div');
+      box.style.padding = '1%';
+      leaf.appendChild(box);
+      leaf = box;
+    }
+    leaf.textContent = 'x';
+    const width = leaf.clientWidth;
+    root.remove();
+    return width;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  eq('8 deep', deep(8), 1653);
+  eq('12 deep', deep(12), 1525);
+  eq('16 deep', deep(16), 1406);
+  eq('20 deep', deep(20), 1297);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+And what those pages exposed on the way past: clientWidth, offsetWidth and
+scrollWidth are a `long` in the IDL and Chrome rounds the box to reach one,
+while a computed `width` keeps the fraction and is written to six significant
+figures like every other computed length. A 1652.911px padding box reads 1653
+for all three, and `1619.85px` for its computed width -- not the seventeen
+digits `{d}` used to print.
+-->
+
+<script id=box_readings_are_integers>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const root = document.createElement('div');
+  host.appendChild(root);
+  let leaf = root;
+  for (let i = 0; i < 8; i++) {
+    const box = document.createElement('div');
+    box.style.padding = '1%';
+    leaf.appendChild(box);
+    leaf = box;
+  }
+  leaf.textContent = 'x';
+
+  testing.expectEqual(1653, leaf.clientWidth);
+  testing.expectEqual(1653, leaf.offsetWidth);
+  testing.expectEqual(1653, leaf.scrollWidth);
+  // Six significant figures, and a fraction rather than the rounded box.
+  testing.expectEqual('1619.85px', String(getComputedStyle(leaf).width));
+
+  host.remove();
+}
+</script>
