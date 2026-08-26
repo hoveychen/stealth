@@ -1962,30 +1962,98 @@ const CrossOriginWindow = struct {
     // Chrome 150 (probe-cross-origin-surface): all 24 names tested throw there.
     //
     // The interceptor is [[NonMasking]], so it only runs for names the normal
-    // lookup did not find -- the safelisted members live on the prototype and
-    // resolve before this is reached -- and only for strings, which leaves
-    // Symbol.toStringTag alone.
-    fn getDenied(_: *const CrossOriginWindow, name: []const u8) !?[]const u8 {
-        // Two names Chrome does *not* deny, so neither may start throwing here.
-        //
-        // `then` is an own property on Chrome's proxy whose value is undefined,
-        // rather than a denial: awaiting a cross-origin window has to answer
-        // "not a thenable" instead of throwing, or `await w` raises where a
-        // browser resolves. Measured -- `then` is in the proxy's own-name list
-        // and `typeof w.then` is 'undefined'.
-        //
-        // `location` is on the safelist and answers a CrossOriginLocation object
-        // in Chrome (own names `href replace then`, with `href` throwing on read
-        // and `replace` callable). This engine has no such object, so the read
-        // stays the `undefined` it has always been: wrong, but wrong in the
-        // direction it was already wrong in. Throwing here would be a *new*
-        // divergence on a name a browser lets through, which is worse than the
-        // standing one. The real fix is the object -- see the cross-origin
-        // section in tools/fingerprint/README.md.
-        if (std.mem.eql(u8, name, "then") or std.mem.eql(u8, name, "location")) {
-            return null;
-        }
-        return error.SecurityError;
+    // lookup did not find -- every safelisted member, plus `then`, is an own
+    // property of the proxy and resolves before this is reached -- and only for
+    // strings, which leaves the three own symbols alone. So nothing a browser
+    // answers arrives here, and everything that does is denied.
+    //
+    // The sentence matters as much as the throw. A script that catches the
+    // SecurityError and reads `.message` gets one from Blink that names both
+    // the property and the origin that was refused; DOMException's stock text
+    // ("The operation is insecure") names neither and is a sentence no browser
+    // prints for this. Measured on Chrome 151, expr-xo-proxy-detail.
+    fn getDenied(_: *const CrossOriginWindow, name: []const u8, frame: *Frame) !?[]const u8 {
+        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "read a named property '{s}' from", name));
+    }
+
+    fn setDenied(_: *CrossOriginWindow, name: []const u8, _: js.Value, frame: *Frame) !void {
+        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "set a named property '{s}' on", name));
+    }
+
+    // `'document' in w` is a denial too, and Blink's sentence for it is the bare
+    // one: no "Failed to ..." lead-in, because [[HasProperty]] is not a read of
+    // any particular property as far as the access check is concerned. Without
+    // this the `in` would fall through to the getter and answer the read
+    // sentence -- right kind of exception, wrong sentence.
+    fn queryDenied(_: *const CrossOriginWindow, _: []const u8, frame: *Frame) !u32 {
+        return frame.js.fail(error.SecurityError, try blockedSentence(frame));
+    }
+
+    // ...while `Object.getOwnPropertyDescriptor(w, 'document')` *is* a read of a
+    // named property and gets the named sentence. Without its own callback the
+    // descriptor lookup would fall through to `queryDenied` above and answer the
+    // bare one, which is the sentence Chrome keeps for `in`.
+    fn descriptorDenied(_: *const CrossOriginWindow, name: []const u8, frame: *Frame) !?[]const u8 {
+        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "read a named property '{s}' from", name));
+    }
+
+    // `delete w.document` throws, and gets the bare sentence the same as `in`:
+    // a delete is not a read. Measured on both engines -- Chrome and this one
+    // now answer the same string, byte for byte.
+    //
+    // No definer alongside it: V8 runs `Object.defineProperty` through the
+    // descriptor lookup first, so the define is already refused there and a
+    // definer callback never sees it (measured -- adding one changed nothing).
+    //
+    // The deleter only sees names the proxy does not own -- it is [[NonMasking]]
+    // like the rest -- so `delete w.length` still succeeds where Chrome throws.
+    // Closing that needs the access check; see the note in
+    // frames/cross_origin_proxy_shape.html.
+    fn deleterDenied(_: *CrossOriginWindow, _: []const u8, frame: *Frame) !bool {
+        return frame.js.fail(error.SecurityError, try blockedSentence(frame));
+    }
+
+    fn deniedMessage(frame: *Frame, comptime verb: []const u8, name: []const u8) ![]const u8 {
+        // call_arena, not local_arena: handleError reads the message back after
+        // this frame is gone, and local_arena is reset before it gets there.
+        // See Document.setDomain, which learned the same thing the hard way.
+        return std.fmt.allocPrint(
+            frame.call_arena,
+            "Failed to " ++ verb ++ " 'Window': {s}",
+            .{ name, try blockedSentence(frame) },
+        );
+    }
+
+    fn blockedSentence(frame: *Frame) ![]const u8 {
+        const origin = frame.window._location.getOrigin(&frame.js.execution) catch "null";
+        return std.fmt.allocPrint(
+            frame.call_arena,
+            "Blocked a frame with origin \"{s}\" from accessing a cross-origin frame.",
+            .{origin},
+        );
+    }
+
+    // Chrome answers a CrossOriginLocation object here -- own names `href
+    // replace then`, with `href` throwing on read and `replace` callable. This
+    // engine has no such object, so the read stays the `undefined` it has
+    // always been: wrong, but wrong in the direction it was already wrong in,
+    // and now at least the own name and its accessor pair are on the proxy. The
+    // real fix is the object -- see the cross-origin section in
+    // tools/fingerprint/README.md.
+    fn getLocation(_: *const CrossOriginWindow) ?[]const u8 {
+        return null;
+    }
+
+    // Navigating another origin's window by assigning to its `location` is the
+    // one thing a cross-origin caller is allowed to *do* to it -- that is how a
+    // popup opener sends its child somewhere -- so the safelist gives `location`
+    // a setter where every other cross-origin attribute is getter-only
+    // (measured: `Object.getOwnPropertyDescriptor(w, 'location').set` is a
+    // function on Chrome 151, and it is the only one of the nine that has one).
+    // The navigation belongs to the frame behind the proxy, not to the caller's.
+    fn setLocation(self: *CrossOriginWindow, url: [:0]const u8, frame: *Frame) !void {
+        const target = self.window._frame;
+        return target.scheduleNavigation(url, .{ .reason = .script, .kind = .{ .push = null } }, .{ .script = frame });
     }
 
     pub const JsApi = struct {
@@ -1999,42 +2067,74 @@ const CrossOriginWindow = struct {
             // and settled.
             pub const no_interface_object = true;
 
-            // The brand is *not* settled, and "Window" here is a placeholder.
-            // An earlier reading recorded Chrome's answer as '[object Window]',
-            // but it was taken synchronously right after appendChild, when the
-            // frame is still on its same-origin about:blank -- so it measured a
-            // same-origin window. Re-measured after the navigation commits
-            // (probe-cross-origin-surface, headed Chrome 150), Chrome answers
-            // '[object Object]': the proxy is a null-prototype object carrying an
-            // own Symbol.toStringTag whose *value is undefined*, which sends
-            // Object.prototype.toString all the way back to "Object".
-            //
-            // Reaching that needs the null prototype, which this class does not
-            // have, so neither value is Chrome's. "Window" is kept over the
-            // default "CrossOriginWindow" only because it is a string a real
-            // browser does print somewhere, while the class name is one no
-            // browser ever prints. The real fix is the proxy shape -- see the
-            // cross-origin section in tools/fingerprint/README.md.
-            pub const to_string_tag = "Window";
+            // Everything a cross-origin caller may reach is an own property of
+            // the proxy itself, and the proxy has no prototype at all --
+            // measured on a headed Chrome 151 (expr-xo-proxy-detail):
+            // `Object.getPrototypeOf(w)` is null, `w instanceof Object` is
+            // false, and the fourteen names are all own.
+            pub const own_properties = true;
+            pub const null_prototype = true;
+
+            // The brand is an own Symbol.toStringTag whose *value is undefined*
+            // rather than a string, which sends Object.prototype.toString past
+            // every branded tag and back to the ordinary "Object" -- Chrome
+            // answers '[object Object]'. An earlier reading recorded '[object
+            // Window]', but it was taken synchronously right after appendChild,
+            // when the frame is still on its same-origin about:blank, so it
+            // measured a same-origin window.
+            pub const to_string_tag_undefined = true;
+
+            // The tail of HTML's CrossOriginOwnPropertyKeys, in Chrome's order:
+            // `then` last among the names, then the two remaining well-known
+            // symbols (the brand is the first symbol and is written by
+            // `to_string_tag_undefined` above, before the member loop).
+            pub const undefined_own_keys = .{ "then", .has_instance, .is_concat_spreadable };
 
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
 
-        pub const @"[str]" = bridge.namedIndexed(CrossOriginWindow.getDenied, null, null, null, null, .{ .null_as_undefined = true });
+        pub const @"[str]" = bridge.namedIndexedFull(
+            CrossOriginWindow.getDenied,
+            CrossOriginWindow.setDenied,
+            CrossOriginWindow.deleterDenied,
+            null,
+            CrossOriginWindow.queryDenied,
+            null,
+            CrossOriginWindow.descriptorDenied,
+            .{ .null_as_undefined = true },
+        );
 
-        pub const postMessage = bridge.function(CrossOriginWindow.postMessage, .{});
-        pub const close = bridge.function(CrossOriginWindow.close, .{});
-        pub const focus = bridge.function(CrossOriginWindow.focus, .{});
-        pub const blur = bridge.function(CrossOriginWindow.blur, .{});
-        pub const window = bridge.accessor(CrossOriginWindow.getWindow, null, .{});
-        pub const self = bridge.accessor(CrossOriginWindow.getWindow, null, .{});
-        pub const frames = bridge.accessor(CrossOriginWindow.getWindow, null, .{});
-        pub const top = bridge.accessor(CrossOriginWindow.getTop, null, .{});
-        pub const parent = bridge.accessor(CrossOriginWindow.getParent, null, .{});
-        pub const opener = bridge.accessor(CrossOriginWindow.getOpener, null, .{});
-        pub const closed = bridge.accessor(CrossOriginWindow.getClosed, null, .{});
-        pub const length = bridge.accessor(CrossOriginWindow.getFramesLength, null, .{});
+        // Declaration order is own-property order, and this is Blink's
+        // CrossOriginProperties table read top to bottom: the nine attributes
+        // first, then the four operations. Measured on Chrome 151
+        // (expr-xo-proxy-detail): `Object.getOwnPropertyNames(w)` is exactly
+        // window self location closed frames length top opener parent blur
+        // close focus postMessage then.
+        //
+        // Every one of them is non-enumerable -- `Object.keys(w)` and a for-in
+        // over the proxy are both empty on Chrome, which is the reading that
+        // makes the whole set invisible to a naive enumeration and visible to
+        // getOwnPropertyNames. The four operations are non-writable on top of
+        // that; the nine attributes are accessor pairs, for which writability
+        // is not a bit at all.
+        pub const window = bridge.accessor(CrossOriginWindow.getWindow, null, .{ .enumerable = false });
+        pub const self = bridge.accessor(CrossOriginWindow.getWindow, null, .{ .enumerable = false });
+        // `null_as_undefined` keeps the read answering `undefined`, which is
+        // what the interceptor answered before `location` became an own
+        // property. Chrome answers an object; `undefined` and `null` are both
+        // wrong, and only one of them is a *new* wrongness.
+        pub const location = bridge.accessor(CrossOriginWindow.getLocation, CrossOriginWindow.setLocation, .{ .enumerable = false, .null_as_undefined = true });
+        pub const closed = bridge.accessor(CrossOriginWindow.getClosed, null, .{ .enumerable = false });
+        pub const frames = bridge.accessor(CrossOriginWindow.getWindow, null, .{ .enumerable = false });
+        pub const length = bridge.accessor(CrossOriginWindow.getFramesLength, null, .{ .enumerable = false });
+        pub const top = bridge.accessor(CrossOriginWindow.getTop, null, .{ .enumerable = false });
+        pub const opener = bridge.accessor(CrossOriginWindow.getOpener, null, .{ .enumerable = false });
+        pub const parent = bridge.accessor(CrossOriginWindow.getParent, null, .{ .enumerable = false });
+        pub const blur = bridge.function(CrossOriginWindow.blur, .{ .enumerable = false, .writable = false });
+        pub const close = bridge.function(CrossOriginWindow.close, .{ .enumerable = false, .writable = false });
+        pub const focus = bridge.function(CrossOriginWindow.focus, .{ .enumerable = false, .writable = false });
+        pub const postMessage = bridge.function(CrossOriginWindow.postMessage, .{ .enumerable = false, .writable = false });
     };
 };
 

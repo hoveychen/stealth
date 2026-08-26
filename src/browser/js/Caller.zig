@@ -1109,6 +1109,13 @@ pub const Function = struct {
         // window.webkitURL both come back with enumerable: false (measured on a
         // headed Chrome 150).
         enumerable: bool = true,
+        // Operations only. A Web IDL operation is a writable own/prototype data
+        // property, but the four an HTML cross-origin WindowProxy exposes are
+        // not: `Object.getOwnPropertyDescriptor(w, 'postMessage')` reports
+        // writable false there (measured, expr-xo-proxy-detail on Chrome 151),
+        // because those are minted by CrossOriginGetOwnPropertyHelper rather
+        // than by the ordinary member machinery.
+        writable: bool = true,
         // Accessors only, and only the setter half: it changes which of Blink's
         // three lead-ins a refusal carries. An operation reads "Failed to
         // execute 'x' on 'Y'", an attribute "Failed to set the 'x' property on

@@ -41,11 +41,16 @@ both must satisfy event.source === iframe.contentWindow.
     testing.expectFalse(cross.event.source === null);
     testing.expectTrue(cross.event.source === cross.iframe.contentWindow);
 
-    // The cross-origin proxy is branded '[object Window]', the same as a
-    // same-origin one, and nothing on the global names its interface. Measured
-    // on a headed Chrome 150 -- reading in
-    // tools/fingerprint/results/probes/probe-internal-globals.chrome.json.
-    testing.expectEqual('[object Window]', Object.prototype.toString.call(cross.iframe.contentWindow));
+    // The cross-origin proxy is *not* branded the way a same-origin window is,
+    // and nothing on the global names its interface. An earlier reading here
+    // recorded '[object Window]', but it was taken right after appendChild,
+    // while the frame was still on its same-origin about:blank, so it measured
+    // a same-origin window. Re-measured after the navigation commits (headed
+    // Chrome 151, tools/fingerprint/scratch/expr-xo-proxy-detail.js): the proxy
+    // has no prototype and its own Symbol.toStringTag holds `undefined`, so
+    // Object.prototype.toString falls all the way back to "Object". See
+    // frames/cross_origin_proxy_shape.html for the whole shape.
+    testing.expectEqual('[object Object]', Object.prototype.toString.call(cross.iframe.contentWindow));
     testing.expectEqual('[object Window]', Object.prototype.toString.call(window));
     testing.expectEqual(undefined, globalThis.CrossOriginWindow);
 

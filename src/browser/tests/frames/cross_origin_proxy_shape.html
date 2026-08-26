@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+A cross-origin WindowProxy is not an instance of anything. Measured on a headed
+Chrome 151 against a two-origin fixture
+(tools/fingerprint/scratch/expr-xo-proxy-detail.js, served by
+tools/fingerprint/scratch/xo-server.mjs):
+
+  Object.getPrototypeOf(w)              -> null
+  w instanceof Object                   -> false
+  Object.prototype.toString.call(w)     -> '[object Object]'
+  Object.getOwnPropertySymbols(w)       -> [toStringTag, hasInstance, isConcatSpreadable]
+  Object.getOwnPropertyDescriptor(w, Symbol.toStringTag)
+    -> { value: undefined, writable: false, enumerable: false, configurable: true }
+
+The brand is the symbol *without* a tag: an own Symbol.toStringTag whose value is
+undefined, which sends Object.prototype.toString past every branded answer and
+back to the ordinary "Object". This engine used to hand back a class instance
+whose prototype was CrossOriginWindow.prototype, so all four readings above
+disagreed with a browser at once -- and `Object.getPrototypeOf(w)` is one call, on
+an object a detector already holds.
+
+localhost is cross-origin to the 127.0.0.1 test page, so the child below is a
+real cross-origin frame without needing the network.
+-->
+
+<script id=proxy_has_no_prototype type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+
+  const iframe = document.createElement('iframe');
+  iframe.src = ALT_BASE + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    const w = iframe.contentWindow;
+
+    // Compared as a boolean rather than by handing the prototype to
+    // expectEqual: formatting a failure walks the object it was given, and
+    // reading an accessor off an interface prototype object raises "Illegal
+    // invocation", which buries the assertion that actually failed.
+    testing.expectEqual(true, Object.getPrototypeOf(w) === null);
+    testing.expectEqual(false, w instanceof Object);
+    testing.expectEqual('[object Object]', Object.prototype.toString.call(w));
+    testing.expectEqual('object', typeof w);
+
+    const tag = Object.getOwnPropertyDescriptor(w, Symbol.toStringTag);
+    testing.expectEqual('value=undefined writable=false enumerable=false configurable=true',
+      tag === undefined ? 'absent' :
+        `value=${tag.value} writable=${tag.writable}` +
+        ` enumerable=${tag.enumerable} configurable=${tag.configurable}`);
+  });
+}
+</script>
+
+<!--
+The own-property list itself: which keys, in which order, and with which bits.
+Same reading, same fixture. The order is Blink's CrossOriginProperties table top
+to bottom -- nine attributes, then four operations -- with `then` and two
+well-known symbols appended by CrossOriginOwnPropertyKeys.
+
+Every key is non-enumerable, so `Object.keys(w)` and a for-in over the proxy are
+both empty even though getOwnPropertyNames answers fourteen. A detector that
+walks one and then the other reads the pair, not either alone.
+-->
+
+<script id=proxy_own_keys type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+
+  const iframe = document.createElement('iframe');
+  iframe.src = ALT_BASE + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    const w = iframe.contentWindow;
+
+    testing.expectEqual(
+      'window,self,location,closed,frames,length,top,opener,parent,blur,close,focus,postMessage,then',
+      Object.getOwnPropertyNames(w).join(','));
+    testing.expectEqual(
+      'Symbol(Symbol.toStringTag),Symbol(Symbol.hasInstance),Symbol(Symbol.isConcatSpreadable)',
+      Object.getOwnPropertySymbols(w).map(String).join(','));
+
+    testing.expectEqual('', Object.keys(w).join(','));
+    const seen = [];
+    for (const k in w) seen.push(k);
+    testing.expectEqual('', seen.join(','));
+
+    const bits = (k) => {
+      const d = Object.getOwnPropertyDescriptor(w, k);
+      if (d === undefined) return 'absent';
+      const kind = 'value' in d
+        ? `data ${typeof d.value === 'function' ? 'fn' : String(d.value)} w=${d.writable}`
+        : `accessor get=${typeof d.get} set=${typeof d.set}`;
+      return `${kind} e=${d.enumerable} c=${d.configurable}`;
+    };
+
+    // The nine attributes are getter-only accessor pairs, except `location`:
+    // assigning to it navigates the other origin's frame, which is the one
+    // thing a cross-origin caller may do to a window it cannot read.
+    for (const k of ['window', 'self', 'closed', 'frames', 'length', 'top', 'opener', 'parent']) {
+      testing.expectEqual('accessor get=function set=undefined e=false c=true', bits(k));
+    }
+    testing.expectEqual('accessor get=function set=function e=false c=true', bits('location'));
+    // Chrome answers a CrossOriginLocation object; this engine has none, and
+    // the read stays the `undefined` it answered before `location` became an
+    // own property rather than becoming a newly wrong `null`.
+    testing.expectEqual(undefined, w.location);
+
+    // The four operations are non-writable data properties, not the writable
+    // ones an ordinary Web IDL operation gets.
+    for (const k of ['blur', 'close', 'focus', 'postMessage']) {
+      testing.expectEqual('data fn w=false e=false c=true', bits(k));
+    }
+
+    // ...and the four keys the proxy owns but never fills.
+    for (const k of ['then', Symbol.hasInstance, Symbol.isConcatSpreadable, Symbol.toStringTag]) {
+      testing.expectEqual('data undefined w=false e=false c=true', bits(k));
+    }
+  });
+}
+</script>
+
+<!--
+What a denied access *says*. A detector that catches the SecurityError and reads
+`.message` gets a sentence, and Blink's names both the property and the origin
+that was refused. Measured on Chrome 151 (expr-xo-proxy-detail):
+
+  w.document        -> Failed to read a named property 'document' from 'Window':
+                       Blocked a frame with origin "http://localhost:8872" from
+                       accessing a cross-origin frame.
+  w.foo = 1         -> Failed to set a named property 'foo' on 'Window':
+                       Blocked a frame with origin "..." from accessing a
+                       cross-origin frame.
+
+This engine answered DOMException's stock "The operation is insecure" for both,
+which names neither and is a sentence no browser prints here.
+
+Coercion throws for a different reason and needs no special case: the proxy has
+no prototype, so ToPrimitive's reach for @@toPrimitive, then `toString`, then
+`valueOf` finds none of them as own properties and every one of the three lands
+on the deny interceptor.
+-->
+
+<script id=denial_message type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+  const ORIGIN = testing.ORIGIN;
+
+  const iframe = document.createElement('iframe');
+  iframe.src = ALT_BASE + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    const w = iframe.contentWindow;
+    const blocked = `Blocked a frame with origin "${ORIGIN}" from accessing a cross-origin frame.`;
+
+    const caught = (fn) => {
+      try { fn(); return 'did not throw'; } catch (e) { return `${e.name}: ${e.message}`; }
+    };
+
+    testing.expectEqual(
+      `SecurityError: Failed to read a named property 'document' from 'Window': ${blocked}`,
+      caught(() => w.document));
+    testing.expectEqual(
+      `SecurityError: Failed to read a named property 'name' from 'Window': ${blocked}`,
+      caught(() => w.name));
+    testing.expectEqual(
+      `SecurityError: Failed to set a named property 'foo' on 'Window': ${blocked}`,
+      caught(() => { w.foo = 1; }));
+
+    // `in` gets the bare sentence: [[HasProperty]] is not a read of any
+    // particular property as far as the access check is concerned, so Blink
+    // leaves off the "Failed to ..." lead-in.
+    testing.expectEqual(`SecurityError: ${blocked}`, caught(() => ('document' in w)));
+
+    // getOwnPropertyDescriptor *is* a read of a named property, and keeps the
+    // named sentence -- Blink draws the line there, not at "does it return a
+    // value".
+    testing.expectEqual(
+      `SecurityError: Failed to read a named property 'document' from 'Window': ${blocked}`,
+      caught(() => Object.getOwnPropertyDescriptor(w, 'document')));
+
+    // A delete is not a read either, so it gets the bare sentence too.
+    testing.expectEqual(`SecurityError: ${blocked}`, caught(() => delete w.document));
+
+    // Coercion: three lookups, all denied, so the first one to be tried throws.
+    testing.expectEqual('SecurityError', caught(() => String(w)).split(':')[0]);
+    testing.expectEqual('SecurityError', caught(() => `${w}`).split(':')[0]);
+    testing.expectEqual('SecurityError', caught(() => w + '').split(':')[0]);
+
+    // Two readings this engine still gets wrong, asserted so the gap is a fact
+    // in the suite rather than a note in a file. Chrome throws for both, by way
+    // of V8's access-check callback rather than an interceptor:
+    //
+    //   - JSON.stringify never reaches the interceptor at all. V8's stringifier
+    //     looks `toJSON` up with PROTOTYPE_CHAIN_SKIP_INTERCEPTOR, which is why
+    //     `w.toJSON`, `Reflect.get(w, 'toJSON')` and `'toJSON' in w` all throw
+    //     here while `JSON.stringify(w)` answers "{}".
+    //   - `then` is an own property, so [[HasProperty]] finds it and never
+    //     reaches the [[NonMasking]] interceptor. Chrome's own-key list has
+    //     `then` too, and its `in` still throws, because the access check runs
+    //     before the own-property lookup.
+    //
+    // Cloudflare's widget reads `window.parent` 44 times per interstitial and
+    // gets "{}" every time, so the first of the two is a live signal.
+    testing.expectEqual('{}', JSON.stringify(w));
+    testing.expectEqual(true, 'then' in w);
+  });
+}
+</script>
