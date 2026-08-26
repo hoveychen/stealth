@@ -15137,3 +15137,85 @@ named `HTMLIFrameElement` as something the challenge touches -- 18 reads of
 none of those three members was missing. What was missing was everything
 *around* them on the same prototype, which a read log cannot show, because a
 guard does not read a member it has already decided you do not have.
+
+## Computed colours, and the first read that was empty (2026-08-26)
+
+Three separate wrongnesses in what a computed value *says*, found by taking the
+three "isolated value bugs" this plan was opened for and measuring each one
+apart. Two of the three turned out not to be what the plan said they were.
+
+### The plan's own premises were wrong, and the measurement said so
+
+`border-radius:9px` was recorded as "the shorthand does not expand". It does:
+every one of the four longhands reads `9px` on both arms. What is wrong is
+reading the **shorthand** back — `getComputedStyle(el).borderRadius` answers
+`0px` here — because the computed view never joins one (`propertyValue` gates
+`shorthandValue` behind `if (!self._is_computed)`). `white-space` is the same
+bug: its `white-space-collapse` and `text-wrap-mode` longhands agree with Chrome
+and only the shorthand read is wrong. Both moved to `computed-shorthand-join`,
+which `expr-computed-shorthands.js` sizes at **99 of 261 shorthand names wrong
+once anything is declared** — far more than the two that started it.
+
+### What that measurement turned up instead
+
+An element carrying `color:red` disagreed on 36 of the 261 in the *bare* case,
+almost all of them `rgb(255, 0, 0)` against `rgb(0, 0, 0)`. Following that back
+gave two bugs that a probe writing `rgb(1,2,3)` — which every probe here did —
+could never have caught:
+
+- **`getComputedStyle(el).color` answered `red`.** A computed colour is always a
+  function in a browser; the keyword survives only on the *specified* value,
+  where `el.style.color` is `red` on Chrome too. So the fold cannot live in
+  `canonicaliseValue` (what `storeProperty` runs) and belongs at the computed
+  read. Which longhands are colours needs no list: `chrome_keywords
+  .any_identifier` is the measured set of properties whose value may be an
+  author's own name — `font-family: red` is a family called red — and everything
+  outside it that spells a colour keyword means the colour.
+- **Sixteen longhands start from the element's colour, not from black.**
+  `chrome_initial_values.zig` measured one value per longhand on an element that
+  declares nothing, and on that element the text is black — so every longhand
+  whose real initial value is `currentcolor` was recorded as `rgb(0, 0, 0)`.
+  `dump-css-current-color.mjs` finds the set by giving one element two different
+  colours in turn and keeping the longhands that answered both, which is what
+  stops a name whose initial value merely *is* `rgb(1, 2, 3)` from getting in.
+
+Thirty readings in the currentcolor probe: 13 differences before, 0 after.
+
+### The first read off a fresh computed style answered ""
+
+Found while fixing the above, and introduced by this month's cascade work.
+`normalizePropertyName` lowercases into `frame.buf` — one buffer shared by the
+whole frame — and the computed lookup held that slice across the cascade's first
+call. That call is the one that rebuilds the stylesheets, and the rebuild
+normalises declaration names into the same buffer, so the name went to garbage
+mid-lookup and the initial-value table missed.
+
+Only the first read, because only the first read rebuilds. Only an undeclared
+property, because a declared one is answered before the table is reached. `""`
+is not a value Chrome reports for a supported longhand — the same reason
+`chrome_initial_values.zig` exists at all — and `getComputedStyle(el).color`
+returning it would end a conversation with any detector.
+
+It is worth naming the shape: **a fixed scratch buffer on a shared object,
+holding a value across a call that can reach the same buffer.** Nothing about
+the call site looks wrong, the failure is order-dependent, and the tests that
+would catch it are the ones that read a property exactly once.
+
+### transform
+
+`transform: translateX(3px)` computed to `translateX(3px)`; a browser folds the
+list into `matrix(1, 0, 0, 1, 3, 0)`. Both conventions are measured over 38
+forms (`expr-transform-matrix.js`): the list composes left to right — `rotate
+(45deg) translateX(3px)` translates by 2.12132 on both axes while the reverse
+order keeps its 3, 0 — and a list mentioning no third dimension answers
+`matrix()` while one that does answers `matrix3d()`, with `rotateZ` counting as
+two-dimensional. Numbers print to six decimals with trailing zeros dropped, so a
+cosine of 6.1e-17 answers a plain `0`.
+
+A function the converter does not model, or an argument needing the box
+(`translateX(50%)`), reports the initial `none` rather than a guess — the same
+rule the cascade guard follows.
+
+**The cascade probe now reads 51/60, from 7/60 before this month's computed-style
+work.** 1502/1502, and the 29-station sweep is unchanged once the three tail
+timeouts are re-checked with `--fresh` (all pass).
