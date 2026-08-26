@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A flex row divides its line between its items, and this engine used to hand
+every one of them its own content width: `<div style="display:flex"><div
+style="flex:1">x</div></div>` came out 8px where Chrome says 1904.
+
+Every number below was measured against Chrome 151 on the 1904px line this test
+server serves, with tools/fingerprint/scratch/expr-flex-shorthand.js and
+expr-flex-more.js.
+-->
+
+<script id=flex_item_main_axis>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const out = [];
+    for (const el of wrap.querySelectorAll('[data-m]')) out.push(el.offsetWidth);
+    wrap.remove();
+    return out.join('|');
+  };
+  const row = (style, items) =>
+    '<div style="display:flex;' + (style || '') + '">' +
+    items.map((s) => '<div data-m style="' + s + '">x</div>').join('') +
+    '</div>';
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // Nothing declared: the item is as wide as its content, which both engines
+  // already agreed on.
+  eq('plain', measure(row('', [''])), '8');
+
+  // `flex-grow` above zero takes what the line has left.
+  eq('grow', measure(row('', ['flex-grow:1'])), '1904');
+  eq('shorthand', measure(row('', ['flex:1'])), '1904');
+
+  // Two growers split it, and unequal factors split it in proportion.
+  eq('two even', measure(row('', ['flex:1', 'flex:1'])), '952|952');
+  eq('two 1:3', measure(row('', ['flex:1', 'flex:3'])), '476|1428');
+
+  // A grower starts from its base size and takes what is left after every
+  // other item has its own: 1904 less a 300px sibling, less a plain one's 8.
+  eq('beside fixed', measure(row('', ['flex:1', 'width:300px;flex:none'])), '1604|300');
+  eq('beside plain', measure(row('', ['flex:1', ''])), '1896|8');
+  // ...and its own base counts too: 100 and 500 of base, 1304 left, 652 each.
+  eq('bases differ', measure(row('', ['flex-grow:1;flex-basis:100px', 'flex-grow:1;flex-basis:500px'])), '752|1152');
+
+  // `flex: 1` sets the basis to 0%, so it outranks a declared width.
+  eq('grow over width', measure(row('', ['flex:1;width:60px'])), '1904');
+
+  // A basis with no grow is the width itself.
+  eq('basis length', measure(row('', ['flex-basis:200px'])), '200');
+  eq('basis percent', measure(row('width:400px', ['flex-basis:50%'])), '200');
+  eq('basis percent bounded', measure(row('width:400px', ['flex-basis:25%'])), '100');
+  // A basis below the content does not shrink the item past its longest word:
+  // that is the automatic minimum size, and it is why `flex-basis: 0` leaves
+  // the item at its content width rather than at 0. (`flex-basis: 0` is a
+  // length in both engines -- computed `0px` -- so the 8 here is the floor and
+  // not a dropped declaration.)
+  eq('basis unitless zero', measure(row('width:400px', ['flex-basis:0'])), '8');
+
+  // Margins come off the line before anything is shared.
+  eq('item margin', measure(row('width:400px', ['flex:1;margin:0 20px'])), '360');
+  eq('two margins', measure(row('width:400px', ['flex:1;margin-left:50px', 'flex:1'])), '175|175');
+
+  // A bounded container shares its own width, not the viewport's.
+  eq('bounded', measure(row('width:400px', ['flex:1', 'flex:1'])), '200|200');
+
+  // Out-of-flow and `display: none` children are not items and take no share.
+  eq('absolute sibling', measure('<div style="display:flex;width:400px">' +
+    '<div data-m style="flex:1">x</div><div style="position:absolute;flex:1">y</div></div>'), '400');
+  eq('none sibling', measure('<div style="display:flex;width:400px">' +
+    '<div data-m style="flex:1">x</div><div style="display:none;flex:1">y</div></div>'), '400');
+
+  // A wrap container still shares its line while the items fit on one.
+  eq('wrap fits', measure(row('width:400px;flex-wrap:wrap', ['flex:1', 'flex:1'])), '200|200');
+  // Once they do not, they wrap rather than shrink.
+  eq('wrap overflows', measure(row('width:400px;flex-wrap:wrap', ['flex-basis:300px', 'flex-basis:300px'])), '300|300');
+
+  // An inline-flex container is as wide as its content, so its item is too.
+  eq('inline flex', measure('<div style="display:inline-flex"><div data-m style="flex:1">x</div></div>'), '8');
+
+  // A flex item inside a flex item follows the chain up.
+  eq('nested', measure('<div style="display:flex"><div style="display:flex;flex:1">' +
+    '<div data-m style="flex:1">x</div></div></div>'), '1904');
+
+  // The floor is the longest WORD, not the whole run: an item of one 160px
+  // word keeps 160 whatever it is given, while one holding a sentence of
+  // four-letter words floors at 32.
+  const WORD = 'xxxxxxxxxxxxxxxxxxxx';
+  const SENTENCE = 'aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll';
+  const textRow = (style, item, text) =>
+    '<div style="display:flex;' + style + '"><div data-m style="' + item + '">' + text + '</div></div>';
+  eq('word plain', measure(textRow('width:400px', '', WORD)), '160');
+  eq('word basis 0', measure(textRow('width:400px', 'flex-basis:0', WORD)), '160');
+  eq('word basis 50', measure(textRow('width:400px', 'flex-basis:50px', WORD)), '160');
+  eq('sentence basis 0', measure(textRow('width:400px', 'flex-basis:0', SENTENCE)), '32');
+  eq('sentence basis 50', measure(textRow('width:400px', 'flex-basis:50px', SENTENCE)), '50');
+  // Two growers each entitled to 100 keep their 160 and overflow the row.
+  eq('words overflow', measure('<div style="display:flex;width:200px">' +
+    '<div data-m style="flex:1">' + WORD + '</div><div data-m style="flex:1">' + WORD + '</div></div>'), '160|160');
+  // A share above the floor is unaffected.
+  eq('sentences share', measure('<div style="display:flex;width:400px">' +
+    '<div data-m style="flex:1">' + SENTENCE + '</div><div data-m style="flex:1">' + SENTENCE + '</div></div>'), '200|200');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+A COLUMN container lays its items out along the other axis, so their width is a
+cross-axis size: the item stretches unless `align-items` or its own
+`align-self` places it instead. Same shape as `justify-items` on a grid.
+-->
+
+<script id=flex_item_cross_axis>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const out = el.offsetWidth;
+    wrap.remove();
+    return out;
+  };
+  const column = (style, item) =>
+    '<div style="display:flex;flex-direction:' + (style || 'column') + '">' +
+    '<div data-m style="' + (item || '') + '">x</div></div>';
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  eq('column plain', measure(column()), 1904);
+  eq('column grow', measure(column('column', 'flex:1')), 1904);
+  eq('column reverse', measure(column('column-reverse')), 1904);
+
+  // A declared width wins over the stretch.
+  eq('column width', measure(column('column', 'width:60px')), 60);
+
+  // `align-items` on the container places the item instead of stretching it...
+  eq('align-items start', measure('<div style="display:flex;flex-direction:column;align-items:flex-start">' +
+    '<div data-m>x</div></div>'), 8);
+  // ...and the item can take the stretch back for itself.
+  eq('align-self stretch', measure('<div style="display:flex;flex-direction:column;align-items:flex-start">' +
+    '<div data-m style="align-self:stretch">x</div></div>'), 1904);
+
+  // In a ROW the cross axis is vertical, so `align-items` says nothing about
+  // the width and the grow still fills the line.
+  eq('row align-items start', measure('<div style="display:flex;align-items:flex-start">' +
+    '<div data-m style="flex:1">x</div></div>'), 1904);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+`flex` is `.unmodelled` in chrome_shorthands.zig -- no distribution rule
+reproduced every reading, because `flex: none` is `0 0 auto` while every other
+value fills the two numbers and then the basis. The declaration is still kept
+whole, so `style.length` answers 1 where Chrome says 3, but a computed read of
+one of the three longhands now derives it from the shorthand instead of
+reporting the initial value.
+
+Measured with tools/fingerprint/scratch/expr-flex-shorthand.js.
+-->
+
+<script id=flex_shorthand_longhands>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const parts = (value) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="display:flex"><div data-m style="flex:' + value + '">x</div></div>';
+    host.appendChild(wrap);
+    const cs = getComputedStyle(wrap.querySelector('[data-m]'));
+    const out = [cs.flexGrow, cs.flexShrink, cs.flexBasis].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  eq('1', parts('1'), '1 1 0%');
+  eq('0', parts('0'), '0 1 0%');
+  eq('none', parts('none'), '0 0 auto');
+  eq('auto', parts('auto'), '1 1 auto');
+  eq('2 3', parts('2 3'), '2 3 0%');
+  eq('1 200px', parts('1 200px'), '1 1 200px');
+  eq('200px', parts('200px'), '1 1 200px');
+  eq('2 3 40px', parts('2 3 40px'), '2 3 40px');
+  eq('50%', parts('50%'), '1 1 50%');
+  eq('1 auto', parts('1 auto'), '1 1 auto');
+  eq('content', parts('content'), '1 1 content');
+  // A value that does not parse is dropped, and the three initial values are
+  // what a dropped declaration leaves behind.
+  eq('nonsense', parts('nonsense'), '0 1 auto');
+
+  // A longhand of its own still reads back, percentage included.
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div style="display:flex"><div id=fbp style="flex-basis:50%">x</div></div>';
+  host.appendChild(wrap);
+  eq('flex-basis longhand', String(getComputedStyle(document.getElementById('fbp')).flexBasis), '50%');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

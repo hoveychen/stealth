@@ -1882,6 +1882,42 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool) ?struct { widt
     return .{ .width = @round(width), .height = @round(box.ascent + box.descent) };
 }
 
+/// The narrowest box this element's text can be laid out in: its longest
+/// unbreakable word, since that is the one thing a line break cannot shorten.
+/// Null for an element this faux layout has no text run for -- one holding
+/// other elements, or holding nothing.
+///
+/// A flex item is never sized below this, which is CSS Flexbox's automatic
+/// minimum size. Measured against Chrome 151 with
+/// tools/fingerprint/scratch/expr-flex-min-content.js: an item of twenty `x`
+/// in a row, given `flex-basis: 0`, is 160px in Chrome and not 0 -- and one
+/// holding a sentence of four-letter words is 32, which is one word and not the
+/// 363 the whole sentence takes. Two `flex: 1` items of that same word in a
+/// 200px row are 160 each, overflowing the row rather than taking their 100.
+pub fn minContentWidth(self: *Element, frame: *Frame) ?f64 {
+    var child = self.asNode().firstChild();
+    while (child) |node| : (child = node.nextSibling()) {
+        if (node.is(Element) != null) {
+            return null;
+        }
+    }
+
+    const font = self.resolveFont(frame);
+    var widest: f64 = 0;
+    var seen = false;
+    child = self.asNode().firstChild();
+    while (child) |node| : (child = node.nextSibling()) {
+        const text = node.is(CData.Text) orelse continue;
+        var words = std.mem.tokenizeAny(u8, Factory.protoOf(text)._data.str(), &std.ascii.whitespace);
+        while (words.next()) |word| {
+            seen = true;
+            widest = @max(widest, text_measure.measure(font.family, word, font.size).width);
+        }
+    }
+    if (!seen) return null;
+    return @round(widest);
+}
+
 /// Chrome draws a broken-image icon in place of an <img> whose bytes never
 /// became a picture, so the element still has a box even though it has no
 /// intrinsic size. Measured on Chrome 151 (probe `expr-broken-image.js`): a
@@ -1942,19 +1978,19 @@ pub fn getElementHeight(self: *Element, frame: *Frame) f64 {
 }
 
 fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) Dimensions {
-    return self.dimensionsAt(frame, measure_text_width, 0);
+    return self.dimensionsAt(frame, measure_text_width, 0, true);
 }
 
 /// How deep the containing-block walk may go. A page's block nesting is far
 /// shallower than this; the cap exists so a tree that somehow made a cycle
 /// stops rather than recursing forever.
-const MAX_CONTAINING_BLOCK_DEPTH = 64;
+pub const MAX_CONTAINING_BLOCK_DEPTH = 64;
 
 /// The horizontal margin that comes off the containing block before the box
 /// gets what is left. From the cascade, so a stylesheet rule counts -- and it
 /// is only ever asked from inside the fill branch, which is already behind
 /// `measure_text_width`.
-fn horizontalMargin(self: *Element, frame: *Frame) f64 {
+pub fn horizontalMargin(self: *Element, frame: *Frame) f64 {
     var total: f64 = 0;
     inline for (.{ "margin-left", "margin-right" }) |name| {
         if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
@@ -1966,7 +2002,10 @@ fn horizontalMargin(self: *Element, frame: *Frame) f64 {
     return total;
 }
 
-fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8) Dimensions {
+/// `distribute_flex` is how a flex item's own share of its line is kept from
+/// recursing: measuring one item's flex base size asks its siblings for theirs,
+/// and a sibling asked with the distribution still on would ask back.
+pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool) Dimensions {
     var dims: Dimensions = .{ .width = 5.0, .height = 5.0 };
 
     // Width comes from the cascade, so a stylesheet rule reaches the box the
@@ -1983,6 +2022,18 @@ fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: bool
     if (comptime measure_text_width) {
         if (CSSStyleDeclaration.cascadedComputedValue(self, "width", frame)) |declared| {
             if (CSS.parseDimensionViewport(declared, frame)) |w| {
+                dims.width = w;
+                dims.explicit_width = true;
+            }
+        }
+
+        // A flex item's width is the flex container's to give: it is a share of
+        // the line in a row -- which outranks the width just read, because
+        // `flex: 1` sizes from a `0%` basis and never looks at one -- and a
+        // stretch across it in a column. CSSStyleDeclaration.flexItemWidth is
+        // where the measurements are.
+        if (distribute_flex) {
+            if (CSSStyleDeclaration.flexItemWidth(self, frame, depth, dims.explicit_width)) |w| {
                 dims.width = w;
                 dims.explicit_width = true;
             }
@@ -2031,7 +2082,7 @@ fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: bool
         if (tag == .html or tag == .body) {
             const owner = self.ownerFrame(frame);
             const box: Dimensions = if (owner.iframe) |iframe|
-                iframe.asElement().dimensionsAt(frame, measure_text_width, depth + 1)
+                iframe.asElement().dimensionsAt(frame, measure_text_width, depth + 1, true)
             else blk: {
                 const viewport = owner._page.getViewport();
                 break :blk .{
@@ -2097,7 +2148,7 @@ fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: bool
             // rejects on height alone, which is thousands per call.
             if (CSSStyleDeclaration.fillsContainingBlock(self, frame)) {
                 if (self.parentElement()) |parent| {
-                    dims.width = @max(0, parent.dimensionsAt(frame, measure_text_width, depth + 1).width -
+                    dims.width = @max(0, parent.dimensionsAt(frame, measure_text_width, depth + 1, true).width -
                         horizontalMargin(self, frame));
                     // Not a declared value, but the same thing a declared one
                     // means here: the box has a width of its own, so
