@@ -1,5 +1,5 @@
-// Where `cookie` sits in the h2 header block, for the four request shapes a
-// guard actually watches.
+// Where `cookie` sits in the h2 header block -- and in what order the cookies
+// inside it are listed -- for the four request shapes a guard actually watches.
 //
 //   node tools/fingerprint/h2-cookie-order.mjs chrome     [--out results/x.json]
 //   node tools/fingerprint/h2-cookie-order.mjs lightpanda [--out results/x.json]
@@ -15,6 +15,14 @@
 // is the last real field, with only `priority` behind it. Before the fix this
 // engine put it first, right behind the pseudo headers, because the field came
 // from curl's CURLOPT_COOKIE slot rather than from the ordered table.
+//
+// It measured only the field's *position* at first, and with one cookie in the
+// jar every ordering rule agrees, so the second question was invisible: given
+// several cookies, in what order does the value list them? The page here now
+// reproduces the shape x-hyatt hands out -- four cookies set at once on the
+// first response, two of them re-set by a later one -- because that is where
+// the two engines part. Chrome sends the two that were overwritten *last*;
+// this engine leaves them where they were first seen.
 //
 // Both engines meet a self-signed origin, so both are told to accept it:
 // Chrome via --ignore-certificate-errors, lightpanda via --ca-cert. Neither
@@ -51,9 +59,32 @@ if (process.argv.includes('--diff')) {
         const [ra, rb] = [a.m.get(k), b.m.get(k)];
         if (!ra || !rb) { console.log(`### ${k}\n  absent on the ${ra ? 'right' : 'left'}`); differences++; continue; }
         const [na, nb] = [ra.headers.map(([n]) => n), rb.headers.map(([n]) => n)];
-        if (na.join('|') === nb.join('|')) { console.log(`### ${k}\n  same order (${na.length} fields)`); continue; }
+        // Two orderings live in one request and they fail independently: where
+        // the `cookie` field sits among the header names, and how the cookies
+        // are sequenced inside its value. Report both under the same heading.
+        //
+        // Every `cookie` field is read, not just the first. h2 lets a client
+        // split the cookie list across several fields -- RFC 9113 8.2.3 spells
+        // it out, so that HPACK's dynamic table can hold one entry per cookie
+        // -- and Chrome always does, one field per cookie. Reading field [0]
+        // would report Chrome as sending a single cookie.
+        const fields = (r) => r.headers.filter(([n]) => n.toLowerCase() === 'cookie').map(([, v]) => v);
+        const names = (r) => fields(r).join('; ').split(';').map((c) => c.trim().split('=')[0]).filter(Boolean);
+        const [ca, cb] = [names(ra), names(rb)];
+        const [fa, fb] = [fields(ra).length, fields(rb).length];
+        const fieldsSame = na.join('|') === nb.join('|');
+        const cookiesSame = ca.join('|') === cb.join('|');
+        if (fieldsSame && cookiesSame) {
+            console.log(`### ${k}\n  same order (${na.length} fields, ${ca.length} cookies in ${fa} cookie field(s))`);
+            continue;
+        }
         differences++;
-        console.log(`### ${k}\n  left : ${na.join(' ')}\n  right: ${nb.join(' ')}`);
+        console.log(`### ${k}`);
+        if (!fieldsSame) {
+            console.log(`  fields  left : ${na.join(' ')}\n  fields  right: ${nb.join(' ')}`);
+            if (fa !== fb) console.log(`  cookie fields carrying ${ca.length}/${cb.length} cookies: left ${fa}, right ${fb}`);
+        }
+        if (!cookiesSame) console.log(`  cookies left : ${ca.join(' ')}\n  cookies right: ${cb.join(' ')}`);
     }
     console.log(`\n${differences} difference(s)`);
     process.exit(differences === 0 ? 0 : 1);
@@ -80,12 +111,30 @@ const post = (url, body, type) => new Promise((r) => {
   x.send(body);
 });
 (async () => {
+  await fetch('/refresh');                                    // re-sets two of the four
   await post('/sensor', 'x'.repeat(2000));                    // the sensor's own shape
   await post('/sensor-json', '{"a":1}', 'application/json');
   await fetch('/sensor-fetch', { method: 'POST', body: 'y'.repeat(64) });
   window.__done = 1;
 })();
 </script>`;
+
+// The cookies the first response plants, in this order and with this attribute
+// mix, which is the one hyatt.com serves on its 429. All four share Path=/, so
+// nothing here can be explained by RFC 6265's path-length rule.
+const PLANT = [
+    'a-ssn=1; Max-Age=86400; Path=/; HttpOnly; Secure; SameSite=None',
+    'a=1; Max-Age=86400; Path=/; HttpOnly',
+    'source-country=US; path=/',
+    'source-region=CA; path=/',
+];
+// /refresh re-sets the first two under the same names and attributes. Every
+// request after it carries all four, and the only question left is their order.
+const REPLANT = [
+    'a-ssn=2; Max-Age=86400; Path=/; HttpOnly; Secure; SameSite=None',
+    'a=2; Max-Age=86400; Path=/; HttpOnly',
+];
+const setCookiesFor = (p) => (p === '/' ? PLANT : p === '/refresh' ? REPLANT : []);
 
 const cert = await selfSignedCert();
 const records = [];
@@ -99,7 +148,11 @@ server.on('stream', (stream, headers, flags, rawHeaders) => {
     for (let i = 0; i < rawHeaders.length; i += 2) pairs.push([rawHeaders[i], rawHeaders[i + 1]]);
     records.push({ alpn: 'h2', method: headers[':method'], path: headers[':path'], headers: pairs });
     const html = headers[':path'] === '/';
-    stream.respond({ ':status': 200, 'content-type': html ? 'text/html; charset=utf-8' : 'application/json' });
+    stream.respond({
+        ':status': 200,
+        'content-type': html ? 'text/html; charset=utf-8' : 'application/json',
+        'set-cookie': setCookiesFor(headers[':path']),
+    });
     stream.end(html ? PAGE : '{"ok":true}');
 });
 server.on('request', (req, res) => {
@@ -110,7 +163,10 @@ server.on('request', (req, res) => {
     const html = req.url === '/';
     records.push({ alpn: 'http/1.1', method: req.method, path: req.url,
         headers: req.rawHeaders.filter((_, i) => i % 2 === 0).map((h, i) => [h, req.rawHeaders[i * 2 + 1]]) });
-    res.writeHead(200, { 'content-type': html ? 'text/html; charset=utf-8' : 'application/json' });
+    res.writeHead(200, {
+        'content-type': html ? 'text/html; charset=utf-8' : 'application/json',
+        'set-cookie': setCookiesFor(req.url),
+    });
     res.end(html ? PAGE : '{"ok":true}');
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));

@@ -32,7 +32,7 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `probe.js` | One async expression collecting ~90 fingerprint surface values. Every read is wrapped, so "this property throws" is recorded as data instead of aborting the run. |
 | `header-echo.mjs` | Raw-TCP HTTP server that records the byte-exact request head. `node:http` reorders headers, and header order is itself part of the fingerprint. Serves a page pulling one of every fetch destination (document, style, script, image, iframe, fetch, xhr). |
 | `sites.mjs` | URLs + in-page extractors for bot.sannysoft.com and CreepJS, plus the twelve-site detector list the sweep walks. |
-| `antibot-sweep.mjs` | Walks the commercial guards in `sites.mjs` (`ANTIBOT`) and records whether each one served the site or served a challenge. The detectors above *report* a fingerprint; these *act* on one, so the reading is the document's HTTP status plus the interstitial's own marks, not a verdict string. `--fresh` gives each station its own engine process, `--trace` records every request and console line for one. |
+| `antibot-sweep.mjs` | Walks the commercial guards in `sites.mjs` (`ANTIBOT`) and records whether each one served the site or served a challenge. The detectors above *report* a fingerprint; these *act* on one, so the reading is the document's HTTP status plus the interstitial's own marks, not a verdict string. `--fresh` gives each station its own engine process, `--trace` records every request and console line for one. `--trace-headers` adds every request's and response's header block (including Chrome's `*ExtraInfo` events, without which Chrome's block is only what the renderer set); `--trace-body <url-substring>` pulls a matching reply back. |
 | `detector-sweep.mjs` | Walks every detector in `sites.mjs` and records how far each page got — nodes, text length, verdict words, and whether the navigation happened at all. Answers "does the detector finish", which the collectors do not. |
 | `subresource-check.mjs` | Answers "did the request happen at all", per fetch destination. Exits non-zero on a miss. Takes engine flags after `--`. |
 | `collect-*.mjs` | Spawn the engine, run the four steps, write one JSON snapshot. |
@@ -16087,3 +16087,135 @@ out-of-process frame's traffic, with only `--same-process` changing the verdict.
 That is wrong. Back to back in one sitting, headed Chrome clears `x-hyatt` with
 plain `--trace` and is refused 429 with `--trace --attach-frames`. Kasada can
 see the attachment. Neither flag is free; the comment now says so.
+
+## The protocol layer is clean, and two of the three readings that said otherwise were the instrument (B53 P3, 2026-08-26)
+
+B52 left the target as "why is `POST /tl` declined", with the protocol layer to
+be ruled out first. It is now ruled out, and doing so cost three of the readings
+that pointed at it.
+
+### What Kasada actually answers
+
+`antibot-sweep.mjs` grew `--trace-headers`, which records the header block of
+every request and every response, and `--trace-body`, which pulls a matching
+reply back with `Network.getResponseBody`. One sitting, both arms, `x-hyatt`
+(`results/b54-hyatt-xi-chrome.json`, `results/b54-hyatt-hdr-lp.json`):
+
+| `POST …/tl` reply | Chrome | this engine |
+|---|---|---|
+| status | 200 | 200 |
+| `content-length` | 15 | 0 |
+| `content-type` | `application/json; charset=utf-8` | `text/plain` |
+| `x-kpsdk-r` | `1-B1RHfgQ` | *absent* |
+
+That is the clearance, stated in the reply. B52's conclusion — the challenge
+program read its own answer and correctly declined to reload — holds, and the
+signal it read is this one.
+
+### The request head is Chrome's, field for field
+
+* `POST /tl` request headers: **every name matches**, and 14 of the 20 values
+  match too. The six that differ are `content-length` and the three per-session
+  `x-kpsdk-*` tokens — plus `cookie`, below.
+* The first `GET /`: **identical, field for field.**
+* Local h2 echo, five request shapes (navigation, subresource, XHR POST, JSON
+  POST, fetch POST): `h2-cookie-order.mjs --diff` reports **0 differences**
+  (`results/b54-h2-{chrome,lp}.json`).
+
+**Nobody needs to re-run the header comparison.** What is left is the cookie
+value (two findings below) and the payload itself.
+
+### Three readings that were the instrument, not the guard
+
+**`encodedDataLength` is not comparable across the two arms.** B52 read the
+first 429 as 1882 bytes here and 1483 in Chrome and recorded it as the guard
+serving two different interstitials. With `--trace-headers` on, the two
+responses are the same response: same header set, gzip `content-length` 495
+against 496, the one byte being the token, `x-kpsdk-r` on both. The 1882/1483
+came from `Network.loadingFinished.encodedDataLength`, which each engine
+accounts for in its own way. The same applies to "the `/tl` reply is 1372 bytes
+here and 1028 there" — the real difference in that reply is the table above, not
+its size. `antibot-sweep.mjs` now says so where the field is pushed.
+
+**`connection: keep-alive` is not an extra header we send.** CDP shows it on
+every request of ours and on none of Chrome's, which reads as a connection-
+specific field forbidden by RFC 9113 going out on an h2 stream. Both halves are
+false. Chrome's `requestWillBeSent` carries only what the renderer set — Cookie,
+Accept-*, Sec-Fetch-*, Origin and Content-Length are added later by the network
+service and appear only on `requestWillBeSentExtraInfo`, which the sweep now
+records. And our `connection` never reaches the wire: curl strips it for h2, and
+it is absent from the HPACK block the local echo receives. Comparing the two
+arms on `requestWillBeSent` alone invents about a dozen headers Chrome does
+send.
+
+**`responseReceived` does carry headers on this engine.** The sweep's own header
+comment said it did not, and used that to explain why `cf-mitigated` is unread.
+`ResponseWriter` in `src/cdp/domains/network.zig` writes the map, and a traced
+run gets 17 response headers off this engine — the same count Chrome reports.
+
+### What survived: the cookie value
+
+`h2-cookie-order.mjs` measured where the `cookie` field sits in the header block
+and was blind to what is inside it, because its page set only ever one cookie
+and with one cookie every ordering rule agrees. It now serves the shape
+`hyatt.com` hands out — four cookies set at once, two of them re-set later — and
+two differences come out, on 6 of 6 request shapes
+(`results/b54-h2c-{chrome,lp}.json`).
+
+**Chrome sends one `cookie` field per cookie.** Off the same `POST /sensor`,
+node's unnormalised `rawHeaders`:
+
+```
+Chrome  cookie: source-country=US
+        cookie: source-region=CA
+        cookie: SENSOR-ID=abcdefghijklmnop
+        cookie: a-ssn=2
+        cookie: a=2
+here    cookie: a-ssn=2; a=2; source-country=US; source-region=CA; SENSOR-ID=abcdefghijklmnop
+```
+
+RFC 9113 §8.2.3 allows the split so HPACK's dynamic table can hold one entry per
+cookie, and Chrome always takes it. A receiver must join them again, so no
+server sees a difference — only something reading the HPACK block does.
+
+**And an overwritten cookie changes place.** Before the overwrite both arms send
+`a-ssn a source-country source-region SENSOR-ID`. After `/refresh` re-sets
+`a-ssn` and `a`, Chrome sends `source-country source-region SENSOR-ID a-ssn a`;
+this engine never reorders.
+
+The obvious explanation — Chrome refreshes a cookie's creation time on overwrite,
+so RFC 6265's "path length descending, then creation time ascending" moves it to
+the back — is contradicted by the same run. The second visit to `/` re-sets all
+four (the following request carries `a-ssn=1; a=1`, so it took) and moves
+nothing. Overwriting `a-ssn`/`a` reorders; overwriting `source-country`/
+`source-region` does not. The two groups differ in `Max-Age`, `HttpOnly`,
+`Secure; SameSite=None`, and in whether the overwrite arrived on a navigation or
+a subresource. Which of those is the rule is unmeasured — the plan that
+implements this has to isolate it rather than take the sentence above on trust.
+
+### The payload deficit
+
+`POST /tl` body length, three sittings: Chrome 19602 / 19602 / 19594, this
+engine 19042 / 19002. **A stable shortfall of about 600 bytes, near 3%.** With
+the protocol layer ruled out this is where the decision most likely lives, and
+the way in that does not require deobfuscating anything is the read log B50/B52
+already built: `results/b53-reads-x-hyatt.json` plus
+`probes/expr-b53-guard-questions.js` ask the guard's own 469 questions back, so
+the two arms' answers can be ranked by how much shorter ours serialise. A single
+`--inject` that lengthens one answer, followed by watching `postLen` move by the
+same amount, maps bytes to reads without touching the obfuscated code.
+
+### The preflight, which is a real bug either way
+
+Both arms send `POST https://reporting.cdndex.io/error` cross-origin with the
+same `Content-Type: application/json;charset=UTF-8`. Chrome sends an `OPTIONS`
+first, carrying `Access-Control-Request-Method: POST` and
+`Access-Control-Request-Headers: content-type`. This engine sends the POST
+directly. `application/json` is not a CORS-safelisted content type, so Fetch
+requires the preflight; this is a spec gap that happens to have been found here,
+and it needs no anti-bot station to verify.
+
+**None of the four is evidence that Kasada reads it.** They are what a clean
+protocol-layer comparison turned up: places where the two arms differ and this
+engine is the one that is wrong. A station that stays 429 after any one of them
+is fixed is the expected outcome, not a reason to call the fix worthless.
