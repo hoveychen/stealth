@@ -566,19 +566,40 @@ fn lengthFactor(style_manager: *StyleManager, element: *Element, property_name: 
         else
             style_manager.computedFontSize(element) },
         .rem => .{ .pixels = style_manager.computedFontSize(rootElement(element)) },
-        // The only two percentages with no containing block in them.
+        // `font-size` and `line-height` are the two percentages with no
+        // containing block in them. `width` now has one -- the containing
+        // block's width is what a block-level box already takes when it
+        // declares nothing -- so it is no longer refused.
         .percentage => if (on_font_size)
             .{ .pixels = style_manager.computedFontSize(element.parentElement()) / 100.0 }
         else if (on_line_height)
             .{ .pixels = style_manager.computedFontSize(element) / 100.0 }
-        else
-            .unresolvable,
+        else if (percentageOfContainingBlockWidth(property_name)) blk: {
+            const parent = element.parentElement() orelse break :blk .unresolvable;
+            const frame = element.ownerFrame(style_manager.frame);
+            break :blk .{ .pixels = parent.getElementDimensions(frame).width / 100.0 };
+        } else .unresolvable,
         .vw => .{ .pixels = width / 100.0 },
         .vh => .{ .pixels = height / 100.0 },
         .vmin => .{ .pixels = @min(width, height) / 100.0 },
         .vmax => .{ .pixels = @max(width, height) / 100.0 },
         else => .unresolvable,
     };
+}
+
+/// The properties whose percentage is a share of the containing block's width.
+///
+/// Only the two spellings of `width` so far. Measured with
+/// tools/fingerprint/scratch/expr-percentage-width.js: `width:50%` in a 400px
+/// parent is 200px, in a parent that declares nothing it is half the 1904 that
+/// parent itself took, and in a shrink-to-fit parent it is half of what that
+/// parent's content came to. The same probe shows `margin-left:10%` and
+/// `padding-left:10%` resolve against the same width -- and so does
+/// `padding-top`, which takes its share of the WIDTH and not the height -- but
+/// those are refused until they have a test of their own.
+fn percentageOfContainingBlockWidth(property_name: []const u8) bool {
+    return std.mem.eql(u8, property_name, "width") or
+        std.mem.eql(u8, property_name, "inline-size");
 }
 
 /// The document element, whose font size `rem` is a multiple of.
@@ -3912,6 +3933,10 @@ test "WebApi: CSSStyleDeclaration first computed read" {
 
 test "WebApi: CSSStyleDeclaration computed transform" {
     try testing.htmlRunner("css/computed_transform.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration percentage width" {
+    try testing.htmlRunner("css/percentage_width.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration default display" {
