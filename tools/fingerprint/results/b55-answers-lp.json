@@ -1,0 +1,5485 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T22:27:34.155Z",
+  "egress": {
+    "fl": "464f184",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787783254.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1457+0f124e384",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17000/"
+  },
+  "stations": [
+    {
+      "name": "x-hyatt",
+      "vendor": "unattributed",
+      "url": "https://www.hyatt.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hyatt.com/",
+          "status": 429,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "id": "LID-0000000001",
+          "method": "GET",
+          "url": "https://www.hyatt.com/",
+          "type": "Document",
+          "ms": 1
+        },
+        {
+          "ev": "res",
+          "id": "LID-0000000001",
+          "status": 429,
+          "url": "https://www.hyatt.com/",
+          "type": "Document",
+          "ms": 175
+        },
+        {
+          "ev": "done",
+          "id": "LID-0000000001",
+          "len": 1879,
+          "ms": 175
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000002",
+          "method": "GET",
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/ips.js?tkrm_alpekz_s1.3=03hCI4ZsLtpKXz52275uFDq8Z0R3sSrAu5CKh4iPSvyDWLwKqzRkELFkBQ3czqnLCNPDqllktNxVqSgQGsIXGuacT0kkajruAEKelK494yBGzTxg8fXkzOVcEBsjqK4UcUjIbB9yNyceGJlDhWUI24MmCnGmZvEDAiznUDm2YGHiaUsoJ7&x-kpsdk-im=AALCvwgTW9LN8nkrwJgMVLnks2EsNcNxwJsWfkTzrxyWPN2EqgcgAMGrl18kAGhMjFo3Nsxu_FAhW67BSdsinPOUYmud6D-p83E8BA_M5fZMJVa4ccL4ef2x1i7faSDlGTEy6TWNUvvNHuJ6-j2i",
+          "type": "Script",
+          "ms": 175
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000002",
+          "status": 200,
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/ips.js?tkrm_alpekz_s1.3=03hCI4ZsLtpKXz52275uFDq8Z0R3sSrAu5CKh4iPSvyDWLwKqzRkELFkBQ3czqnLCNPDqllktNxVqSgQGsIXGuacT0kkajruAEKelK494yBGzTxg8fXkzOVcEBsjqK4UcUjIbB9yNyceGJlDhWUI24MmCnGmZvEDAiznUDm2YGHiaUsoJ7&x-kpsdk-im=AALCvwgTW9LN8nkrwJgMVLnks2EsNcNxwJsWfkTzrxyWPN2EqgcgAMGrl18kAGhMjFo3Nsxu_FAhW67BSdsinPOUYmud6D-p83E8BA_M5fZMJVa4ccL4ef2x1i7faSDlGTEy6TWNUvvNHuJ6-j2i",
+          "type": "Script",
+          "ms": 470
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000002",
+          "len": 301838,
+          "ms": 471
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000006",
+          "method": "POST",
+          "url": "https://reporting.cdndex.io/error",
+          "type": "XHR",
+          "postLen": 651,
+          "post": "{\"data\":\"FE8TDR8VSV9JHw9FWE0RCBECAANFTk0RBwkEGE9LVgAXSV9JBxkTBBxKREocGBpJHBYRHxFFDAIKVkNSGAwPTVdFEV8LMyAHNiUQOh4gWg5bJDwXLj0xUi8jGCdUEQg5VhhJQ08FGxtBWVFYTVccVh1SUUcQM08EHDNSUREZGghLKE0ADTlJVTFFOQ4TIgsfCgE7VkMsSQEbM09dRkMsSQwGAjFFTgkRBxYOQzFFGQoDN0dRFDFFGQITN0dRX0E7VgIdDTlJVV1LKE0DGDlJVTYcKE0WGBc3TVc",
+          "ms": 553
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000008",
+          "method": "GET",
+          "url": "blob:https://www.hyatt.com/6b96cbd7-45fa-405a-a543-cacc53e680f8",
+          "type": "Script",
+          "ms": 558
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000009",
+          "method": "GET",
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Image",
+          "ms": 632
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000008",
+          "status": 200,
+          "url": "blob:https://www.hyatt.com/6b96cbd7-45fa-405a-a543-cacc53e680f8",
+          "type": "Script",
+          "ms": 632
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000008",
+          "len": 316,
+          "ms": 632
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000010",
+          "method": "POST",
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/tl",
+          "type": "XHR",
+          "postLen": 18978,
+          "post": "\u0000\u0002Bz\u0004\u0002ù-p\u0000£çu\u0013EÔ\u000bt,Éß5ámsÈG\u0005u¤þácël\u0000u¤újÀ*\u001fúçè±ÈY¾Æôá\u000béQ§N$mY1m4¶Q:¥XÛCåç+÷0¢äg à\u0005VF«Ò\u0007LPÏò¾Ü\u001bf\u001aú1\bÖ]vJÞ´g\u0011`ÞÓäÉÁ¹5Uuã\u001dH;À+^\r\u001eÛ\u001d\u0000¬ÞWpF9\u0011xÊõPôQá\f0Û\f\u0017¿\u0005¿?C\u000fÝÐfIqöHºä´H!C¡â\u00003zÑ\u0018c¾ægy)ë\u0011S\u001b(7Õ\u001e>D\u0013þOÄ5@\u0016\u0003Ì14\u0018Î[ÿøH~\u00160½ï-Í¹\u001f\u0012]½\u00175úëøàú×\u0014_çián¸Whÿ¦w%Nhk_MU&F§âS^Dt áû\u001d",
+          "ms": 672
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000009",
+          "status": 200,
+          "url": "https://www.hyatt.com/favicon.ico",
+          "type": "Image",
+          "ms": 674
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000009",
+          "len": 546,
+          "ms": 674
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000010",
+          "status": 200,
+          "url": "https://www.hyatt.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/tl",
+          "type": "XHR",
+          "ms": 809
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000010",
+          "len": 1372,
+          "ms": 809
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000006",
+          "status": 200,
+          "url": "https://reporting.cdndex.io/error",
+          "type": "XHR",
+          "ms": 935
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000006",
+          "len": 508,
+          "ms": 935
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000011",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=0&o=0&v=rect%3Awidth%3D5%20x18",
+          "type": "Image",
+          "ms": 1175
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000012",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=1&o=0&v=gl2%3A37445%3DGoogle%20Inc.%20(Apple)%20x2",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000013",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=2&o=0&v=gl2%3A37446%3DANGLE%20(Apple%2C%20ANGLE%20Metal%20Renderer%3A%20Apple%20M4%2C%20Unspecified%20Version)%20x3",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000014",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=3&o=0&v=plug%3Aname%3DPDF%20Viewer%20x3",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000015",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=4&o=0&v=plug%3Aname%3DChrome%20PDF%20Viewer%20x3",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000016",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=5&o=0&v=plug%3Aname%3DChromium%20PDF%20Viewer%20x3",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000017",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=6&o=0&v=plug%3Aname%3DMicrosoft%20Edge%20PDF%20Viewer%20x3",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000018",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=7&o=0&v=plug%3Aname%3DWebKit%20built-in%20PDF%20x3",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000019",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=8&o=0&v=el%3AclientWidth%3D1920%20x1",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000020",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=9&o=0&v=el%3AclientHeight%3D1080%20x1",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000021",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=10&o=0&v=css%3Afont-size%3D16px%20x3",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000022",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=11&o=0&v=css%3Aheight%3D18px%20x1",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000023",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=12&o=0&v=rect%3Aleft%3D50%20x2",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000024",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=13&o=0&v=rect%3Aright%3D1650%20x1",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000025",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=14&o=0&v=rect%3Abottom%3D68%20x2",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000026",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=15&o=0&v=rect%3Aheight%3D18%20x2",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000027",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=16&o=0&v=rect%3Atop%3D50%20x2",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000028",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=17&o=0&v=rect%3Awidth%3D1600%20x1",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000029",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=18&o=0&v=css%3Afont-family%3DTimes%20x2",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000030",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=19&o=0&v=rect%3Aright%3D970%20x1",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000031",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=20&o=0&v=rect%3Awidth%3D920%20x1",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000032",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=21&o=0&v=rect%3Awidth%3D16%20x1",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000033",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=22&o=0&v=rect%3Aheight%3D19%20x1",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000034",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=23&o=0&v=rect%3Awidth%3D98.88%20x4",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000035",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=24&o=0&v=rect%3Aheight%3D98.88%20x3",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000036",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=25&o=0&v=rect%3Aright%3D-99900.12%20x4",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000037",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=26&o=0&v=rect%3Aleft%3D-99999%20x15",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000038",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=27&o=0&v=rect%3Abottom%3D98.88%20x3",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000039",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=28&o=0&v=rect%3Atop%3D0%20x15",
+          "type": "Image",
+          "ms": 1176
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000040",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=29&o=0&v=el%3AoffsetWidth%3D98.88%20x4",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000041",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=30&o=0&v=el%3AoffsetHeight%3D98.88%20x3",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000042",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=31&o=0&v=rect%3Awidth%3D96.96%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000043",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=32&o=0&v=rect%3Aheight%3D96.96%20x2",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000044",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=33&o=0&v=rect%3Aright%3D-99902.04%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000045",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=34&o=0&v=rect%3Abottom%3D96.96%20x2",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000046",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=35&o=0&v=el%3AoffsetWidth%3D96.96%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000047",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=36&o=0&v=el%3AoffsetHeight%3D96.96%20x2",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000048",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=37&o=0&v=rect%3Awidth%3D96.7488%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000049",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=38&o=0&v=rect%3Aheight%3D96.7488%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000050",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=39&o=0&v=rect%3Aright%3D-99902.2512%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000051",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=40&o=0&v=rect%3Abottom%3D96.7488%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000052",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=41&o=0&v=el%3AoffsetWidth%3D96.7488%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000053",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=42&o=0&v=el%3AoffsetHeight%3D96.7488%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000054",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=43&o=0&v=rect%3Awidth%3D96.9984%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000055",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=44&o=0&v=rect%3Aheight%3D96.9984%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000056",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=45&o=0&v=rect%3Aright%3D-99902.0016%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000057",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=46&o=0&v=rect%3Abottom%3D96.9984%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000058",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=47&o=0&v=el%3AoffsetWidth%3D96.9984%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000059",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=48&o=0&v=el%3AoffsetHeight%3D96.9984%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000060",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=49&o=0&v=rect%3Awidth%3D101.002%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000061",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=50&o=0&v=rect%3Aheight%3D101.002%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000062",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=51&o=0&v=rect%3Aright%3D-99897.998%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000063",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=52&o=0&v=rect%3Abottom%3D101.002%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000064",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=53&o=0&v=el%3AoffsetWidth%3D101.002%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000065",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=54&o=0&v=el%3AoffsetHeight%3D101.002%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000066",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=55&o=0&v=rect%3Awidth%3D95.5008%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000067",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=56&o=0&v=rect%3Aheight%3D95.5008%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000068",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=57&o=0&v=rect%3Aright%3D-99903.4992%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000069",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=58&o=0&v=rect%3Abottom%3D95.5008%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000070",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=59&o=0&v=el%3AoffsetWidth%3D95.5008%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000071",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=60&o=0&v=el%3AoffsetHeight%3D95.5008%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000072",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=61&o=0&v=rect%3Awidth%3D96.48%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000073",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=62&o=0&v=rect%3Aheight%3D96.48%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000074",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=63&o=0&v=rect%3Aright%3D-99902.52%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000075",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=64&o=0&v=rect%3Abottom%3D96.48%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000076",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=65&o=0&v=el%3AoffsetWidth%3D96.48%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000077",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=66&o=0&v=el%3AoffsetHeight%3D96.48%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000078",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=67&o=0&v=rect%3Awidth%3D96.4896%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000079",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=68&o=0&v=rect%3Aheight%3D96.4896%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000080",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=69&o=0&v=rect%3Aright%3D-99902.5104%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000081",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=70&o=0&v=rect%3Abottom%3D96.4896%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000082",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=71&o=0&v=el%3AoffsetWidth%3D96.4896%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000083",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=72&o=0&v=el%3AoffsetHeight%3D96.4896%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000084",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=73&o=0&v=rect%3Awidth%3D96.4992%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000085",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=74&o=0&v=rect%3Aheight%3D96.4992%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000086",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=75&o=0&v=rect%3Aright%3D-99902.5008%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000087",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=76&o=0&v=rect%3Abottom%3D96.4992%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000088",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=77&o=0&v=el%3AoffsetWidth%3D96.4992%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000089",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=78&o=0&v=el%3AoffsetHeight%3D96.4992%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000090",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=79&o=0&v=rect%3Awidth%3D96.5088%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000091",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=80&o=0&v=rect%3Aheight%3D96.5088%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000092",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=81&o=0&v=rect%3Aright%3D-99902.4912%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000093",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=82&o=0&v=rect%3Abottom%3D96.5088%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000094",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=83&o=0&v=el%3AoffsetWidth%3D96.5088%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000095",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=84&o=0&v=el%3AoffsetHeight%3D96.5088%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000096",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=85&o=0&v=rect%3Awidth%3D96.5184%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000097",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=86&o=0&v=rect%3Aheight%3D96.5184%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000098",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=87&o=0&v=rect%3Aright%3D-99902.4816%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000099",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=88&o=0&v=rect%3Abottom%3D96.5184%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000100",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=89&o=0&v=el%3AoffsetWidth%3D96.5184%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000101",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=90&o=0&v=el%3AoffsetHeight%3D96.5184%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000102",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=91&o=0&v=rect%3Awidth%3D96%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000103",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=92&o=0&v=rect%3Aheight%3D96%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000104",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=93&o=0&v=rect%3Aright%3D-99903%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000105",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=94&o=0&v=rect%3Abottom%3D96%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000106",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=95&o=0&v=el%3AoffsetWidth%3D96%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000107",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=96&o=0&v=el%3AoffsetHeight%3D96%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000108",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=97&o=0&v=gl%3A37446%3DANGLE%20(Apple%2C%20ANGLE%20Metal%20Renderer%3A%20Apple%20M4%2C%20Unspecified%20Version)%20x156",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000109",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=98&o=0&v=el%3AoffsetHeight%3D160%20x2",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000110",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=99&o=0&v=css%3Acolor%3Daccentcolor%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000111",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=100&o=0&v=css%3Acolor%3Daccentcolortext%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000112",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=101&o=0&v=css%3Acolor%3Dcanvas%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000113",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=102&o=0&v=css%3Acolor%3Dcanvastext%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000114",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=103&o=0&v=css%3Acolor%3Dfield%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000115",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=104&o=0&v=css%3Acolor%3Dfieldtext%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000116",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=105&o=0&v=css%3Acolor%3Dbuttonborder%20x1",
+          "type": "Image",
+          "ms": 1177
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000117",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=106&o=0&v=css%3Acolor%3Dselecteditem%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000118",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=107&o=0&v=css%3Acolor%3Dselecteditemtext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000119",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=108&o=0&v=css%3Acolor%3Dmark%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000120",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=109&o=0&v=css%3Acolor%3Dmarktext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000121",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=110&o=0&v=css%3Acolor%3Dlinktext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000122",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=111&o=0&v=css%3Acolor%3Dvisitedtext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000123",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=112&o=0&v=css%3Acolor%3Dactivetext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000124",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=113&o=0&v=css%3Acolor%3Drgba(0%2C%200%2C%200%2C%200)%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000125",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=114&o=0&v=el%3AclientWidth%3D1904%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000126",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=115&o=0&v=el%3AclientHeight%3D1064%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000127",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=116&o=0&v=el%3AclientWidth%3D5%20x20",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000128",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=117&o=0&v=el%3AclientHeight%3D5%20x20",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000129",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=118&o=0&v=rect%3Aheight%3D5%20x10",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000130",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=119&o=0&v=cpt%3Avideo%2Fmp4%3B%3Dmaybe%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000131",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=120&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3D%22mp4v.20.8%2C%20mp4a.40.2%22%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000132",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=121&o=0&v=cpt%3Aaudio%2Fwav%3B%20codecs%3D%221%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000133",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=122&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3Dmp4a.40.2%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000134",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=123&o=0&v=cpt%3Avideo%2Fogg%3B%20codecs%3Dopus%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000135",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=124&o=0&v=cpt%3Aaudio%2Fwebm%3B%3Dmaybe%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000136",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=125&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3Dbogus%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000137",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=126&o=0&v=plug%3Adescription%3DPortable%20Document%20Format%20x10",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000138",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=127&o=0&v=mime%3Atype%3Dapplication%2Fpdf%20x10",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000139",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=128&o=0&v=mime%3Asuffixes%3Dpdf%20x20",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000140",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=129&o=0&v=mime%3Atype%3Dtext%2Fpdf%20x10",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000141",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=130&o=0&v=css%3Acolor%3Dactiveborder%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000142",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=131&o=0&v=css%3Acolor%3Dactivecaption%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000143",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=132&o=0&v=css%3Acolor%3Dappworkspace%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000144",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=133&o=0&v=css%3Acolor%3Dbackground%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000145",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=134&o=0&v=css%3Acolor%3Dbuttonface%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000146",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=135&o=0&v=css%3Acolor%3Dbuttonhighlight%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000147",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=136&o=0&v=css%3Acolor%3Dbuttonshadow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000148",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=137&o=0&v=css%3Acolor%3Dbuttontext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000149",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=138&o=0&v=css%3Acolor%3Dcaptiontext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000150",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=139&o=0&v=css%3Acolor%3Dgraytext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000151",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=140&o=0&v=css%3Acolor%3Dhighlight%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000152",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=141&o=0&v=css%3Acolor%3Dhighlighttext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000153",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=142&o=0&v=css%3Acolor%3Dinactiveborder%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000154",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=143&o=0&v=css%3Acolor%3Dinactivecaption%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000155",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=144&o=0&v=css%3Acolor%3Dinactivecaptiontext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000156",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=145&o=0&v=css%3Acolor%3Dinfobackground%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000157",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=146&o=0&v=css%3Acolor%3Dinfotext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000158",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=147&o=0&v=css%3Acolor%3Dmenu%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000159",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=148&o=0&v=css%3Acolor%3Dmenutext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000160",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=149&o=0&v=css%3Acolor%3Dscrollbar%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000161",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=150&o=0&v=css%3Acolor%3Dthreeddarkshadow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000162",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=151&o=0&v=css%3Acolor%3Dthreedface%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000163",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=152&o=0&v=css%3Acolor%3Dthreedhighlight%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000164",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=153&o=0&v=css%3Acolor%3Dthreedlightshadow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000165",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=154&o=0&v=css%3Acolor%3Dthreedshadow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000166",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=155&o=0&v=css%3Acolor%3Dwindow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000167",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=156&o=0&v=css%3Acolor%3Dwindowframe%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000168",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=157&o=0&v=css%3Acolor%3Dwindowtext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000169",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=158&o=0&v=css%3Acolor%3DFakeColor%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000170",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=159&o=0&v=css%3Acolor%3D-moz-ButtonDefault%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000171",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=160&o=0&v=css%3Acolor%3D-moz-ButtonHoverFace%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000172",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=161&o=0&v=css%3Acolor%3D-moz-ButtonHoverText%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000173",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=162&o=0&v=css%3Acolor%3D-moz-CellHighlight%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000174",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=163&o=0&v=css%3Acolor%3D-moz-CellHighlightText%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000175",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=164&o=0&v=css%3Acolor%3D-moz-Combobox%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000176",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=165&o=0&v=css%3Acolor%3D-moz-ComboboxText%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000177",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=166&o=0&v=css%3Acolor%3D-moz-Dialog%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000178",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=167&o=0&v=css%3Acolor%3D-moz-DialogText%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000179",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=168&o=0&v=css%3Acolor%3D-moz-dragtargetzone%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000180",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=169&o=0&v=css%3Acolor%3D-moz-EvenTreeRow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000181",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=170&o=0&v=css%3Acolor%3D-moz-Field%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000182",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=171&o=0&v=css%3Acolor%3D-moz-FieldText%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000183",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=172&o=0&v=css%3Acolor%3D-moz-html-CellHighlight%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000184",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=173&o=0&v=css%3Acolor%3D-moz-html-CellHighlightText%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000185",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=174&o=0&v=css%3Acolor%3D-moz-mac-accentdarkestshadow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000186",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=175&o=0&v=css%3Acolor%3D-moz-mac-accentdarkshadow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000187",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=176&o=0&v=css%3Acolor%3D-moz-mac-accentface%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000188",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=177&o=0&v=css%3Acolor%3D-moz-mac-accentlightesthighlight%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000189",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=178&o=0&v=css%3Acolor%3D-moz-mac-accentlightshadow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000190",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=179&o=0&v=css%3Acolor%3D-moz-mac-accentregularhighlight%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000191",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=180&o=0&v=css%3Acolor%3D-moz-mac-accentregularshadow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000192",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=181&o=0&v=css%3Acolor%3D-moz-mac-chrome-active%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000193",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=182&o=0&v=css%3Acolor%3D-moz-mac-chrome-inactive%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000194",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=183&o=0&v=css%3Acolor%3D-moz-mac-focusring%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000195",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=184&o=0&v=css%3Acolor%3D-moz-mac-menuselect%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000196",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=185&o=0&v=css%3Acolor%3D-moz-mac-menushadow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000197",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=186&o=0&v=css%3Acolor%3D-moz-mac-menutextselect%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000198",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=187&o=0&v=css%3Acolor%3D-moz-MenuHover%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000199",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=188&o=0&v=css%3Acolor%3D-moz-MenuHoverText%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000200",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=189&o=0&v=css%3Acolor%3D-moz-MenuBarText%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000201",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=190&o=0&v=css%3Acolor%3D-moz-MenuBarHoverText%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000202",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=191&o=0&v=css%3Acolor%3D-moz-nativehyperlinktext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000203",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=192&o=0&v=css%3Acolor%3D-moz-OddTreeRow%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000204",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=193&o=0&v=css%3Acolor%3D-moz-win-communicationstext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000205",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=194&o=0&v=css%3Acolor%3D-moz-win-mediatext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000206",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=195&o=0&v=css%3Acolor%3D-moz-win-accentcolor%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000207",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=196&o=0&v=css%3Acolor%3D-moz-win-accentcolortext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000208",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=197&o=0&v=css%3Acolor%3D-moz-activehyperlinktext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000209",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=198&o=0&v=css%3Acolor%3D-moz-default-background-color%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000210",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=199&o=0&v=css%3Acolor%3D-moz-default-color%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000211",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=200&o=0&v=css%3Acolor%3D-moz-hyperlinktext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000212",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=201&o=0&v=css%3Acolor%3D-moz-visitedhyperlinktext%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000213",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=202&o=0&v=gl2%3A36349%3D%23%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000214",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=203&o=0&v=cpt%3Avideo%2Fwebm%3B%20codecs%3D%22vorbis%2Cvp9%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000215",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=204&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3D%22avc1.64001E%2C%20mp4a.40.2%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000216",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=205&o=0&v=cpt%3Aaudio%2Fwave%3B%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000217",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=206&o=0&v=cpt%3Aaudio%2Fx-mpeg%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000218",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=207&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3D%22mp4v.20.240%2C%20mp4a.40.2%22%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000219",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=208&o=0&v=gl2%3A35379%3D%23%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000220",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=209&o=0&v=cpt%3Aaudio%2Fmp4%3B%20codecs%3D%22mp4a.40.2%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000221",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=210&o=0&v=cpt%3Aaudio%2Fmpeg%3B%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000222",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=211&o=0&v=cpt%3Avideo%2Fx-matroska%3B%20codecs%3D%22theora%2C%20vorbis%22%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000223",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=212&o=0&v=gl2%3A33902%3D%23%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000224",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=213&o=0&v=cpt%3Avideo%2Fx-mpeg%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000225",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=214&o=0&v=cpt%3Aaudio%2Fwav%3B%20codecs%3D%220%22%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000226",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=215&o=0&v=cpt%3Aaudio%2Fwav%3B%20codecs%3D%222%22%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000227",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=216&o=0&v=gl2%3A35375%3D%23%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000228",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=217&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3D%22avc1.42c00d%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000229",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=218&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3D%22avc1.42E01E%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000230",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=219&o=0&v=cpt%3Aaudio%2Fwav%3B%3Dmaybe%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000231",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=220&o=0&v=cpt%3Avideo%2Fogg%3B%20codecs%3Dspeex%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000232",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=221&o=0&v=gl2%3A7938%3DWebGL%202.0%20(OpenGL%20ES%203.0%20Chromium)%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000233",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=222&o=0&v=cpt%3Aaudio%2Fx-m4a%3B%3Dmaybe%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000234",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=223&o=0&v=cpt%3Aaudio%2Fwave%3B%20codecs%3D1%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000235",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=224&o=0&v=cpt%3Aaudio%2Fx-mpegurl%3Dmaybe%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000236",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=225&o=0&v=cpt%3Aaudio%2Fogg%3B%20codecs%3D%22vorbis%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000237",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=226&o=0&v=cpt%3Avideo%2F3gpp%3B%20codecs%3D%22mp4v.20.8%2C%20samr%22%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000238",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=227&o=0&v=gl2%3A35377%3D%23%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000239",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=228&o=0&v=cpt%3Avideo%2Fogg%3B%20codecs%3D%22theora%22%3D%20x1",
+          "type": "Image",
+          "ms": 1178
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000240",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=229&o=0&v=gl2%3A33901%3D%23%20x1",
+          "type": "Image",
+          "ms": 1179
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000241",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=230&o=0&v=cpt%3Avideo%2Fwebm%3B%20codecs%3Dvorbis%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1179
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000242",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=231&o=0&v=cpt%3Aaudio%2Fwave%3B%20codecs%3D2%3D%20x1",
+          "type": "Image",
+          "ms": 1179
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000243",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=232&o=0&v=cpt%3Aaudio%2Faac%3B%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1179
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000244",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=233&o=0&v=cpt%3Aaudio%2Fwave%3B%20codecs%3D0%3D%20x1",
+          "type": "Image",
+          "ms": 1179
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000245",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=234&o=0&v=cpt%3Avideo%2Fmp2t%3B%20codecs%3D%22avc1.42E01E%2Cmp4a.40.2%22%3D%20x1",
+          "type": "Image",
+          "ms": 1179
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000246",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=235&o=0&v=cpt%3Avideo%2Fwebm%3B%20codecs%3D%22vp8%2C%20vorbis%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1179
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000247",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=236&o=0&v=gl2%3A35374%3D%23%20x1",
+          "type": "Image",
+          "ms": 1179
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000248",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=237&o=0&v=cpt%3Avideo%2Fmpeg%3B%3D%20x1",
+          "type": "Image",
+          "ms": 1179
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000249",
+          "method": "GET",
+          "url": "https://www.hyatt.com/__b55a?i=238&o=0&v=cpt%3Avideo%2Fogg%3B%20codecs%3D%22theora%2C%20speex%22%3D%20x1",
+          "type": "Image",
+          "ms": 1179
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000022",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=11&o=0&v=css%3Aheight%3D18px%20x1",
+          "type": "Image",
+          "ms": 1302
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000022",
+          "len": 1796,
+          "ms": 1302
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000039",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=28&o=0&v=rect%3Atop%3D0%20x15",
+          "type": "Image",
+          "ms": 1302
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000039",
+          "len": 1794,
+          "ms": 1302
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000035",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=24&o=0&v=rect%3Aheight%3D98.88%20x3",
+          "type": "Image",
+          "ms": 1304
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000035",
+          "len": 1796,
+          "ms": 1304
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000017",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=6&o=0&v=plug%3Aname%3DMicrosoft%20Edge%20PDF%20Viewer%20x3",
+          "type": "Image",
+          "ms": 1306
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000017",
+          "len": 1798,
+          "ms": 1306
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000014",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=3&o=0&v=plug%3Aname%3DPDF%20Viewer%20x3",
+          "type": "Image",
+          "ms": 1309
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000014",
+          "len": 1797,
+          "ms": 1309
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000015",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=4&o=0&v=plug%3Aname%3DChrome%20PDF%20Viewer%20x3",
+          "type": "Image",
+          "ms": 1309
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000015",
+          "len": 1795,
+          "ms": 1309
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000012",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=1&o=0&v=gl2%3A37445%3DGoogle%20Inc.%20(Apple)%20x2",
+          "type": "Image",
+          "ms": 1311
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000012",
+          "len": 1799,
+          "ms": 1311
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000037",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=26&o=0&v=rect%3Aleft%3D-99999%20x15",
+          "type": "Image",
+          "ms": 1311
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000037",
+          "len": 1793,
+          "ms": 1311
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000032",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=21&o=0&v=rect%3Awidth%3D16%20x1",
+          "type": "Image",
+          "ms": 1312
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000032",
+          "len": 1794,
+          "ms": 1312
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000013",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=2&o=0&v=gl2%3A37446%3DANGLE%20(Apple%2C%20ANGLE%20Metal%20Renderer%3A%20Apple%20M4%2C%20Unspecified%20Version)%20x3",
+          "type": "Image",
+          "ms": 1315
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000013",
+          "len": 1794,
+          "ms": 1315
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000026",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=15&o=0&v=rect%3Aheight%3D18%20x2",
+          "type": "Image",
+          "ms": 1335
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000026",
+          "len": 1796,
+          "ms": 1335
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000027",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=16&o=0&v=rect%3Atop%3D50%20x2",
+          "type": "Image",
+          "ms": 1335
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000027",
+          "len": 1795,
+          "ms": 1335
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000028",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=17&o=0&v=rect%3Awidth%3D1600%20x1",
+          "type": "Image",
+          "ms": 1335
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000028",
+          "len": 1794,
+          "ms": 1335
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000029",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=18&o=0&v=css%3Afont-family%3DTimes%20x2",
+          "type": "Image",
+          "ms": 1355
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000029",
+          "len": 1794,
+          "ms": 1355
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000030",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=19&o=0&v=rect%3Aright%3D970%20x1",
+          "type": "Image",
+          "ms": 1355
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000030",
+          "len": 1796,
+          "ms": 1355
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000051",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=40&o=0&v=rect%3Abottom%3D96.7488%20x1",
+          "type": "Image",
+          "ms": 1419
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000051",
+          "len": 1796,
+          "ms": 1419
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000019",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=8&o=0&v=el%3AclientWidth%3D1920%20x1",
+          "type": "Image",
+          "ms": 1457
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000019",
+          "len": 1796,
+          "ms": 1457
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000024",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=13&o=0&v=rect%3Aright%3D1650%20x1",
+          "type": "Image",
+          "ms": 1457
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000024",
+          "len": 1797,
+          "ms": 1457
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000025",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=14&o=0&v=rect%3Abottom%3D68%20x2",
+          "type": "Image",
+          "ms": 1457
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000025",
+          "len": 1794,
+          "ms": 1457
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000031",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=20&o=0&v=rect%3Awidth%3D920%20x1",
+          "type": "Image",
+          "ms": 1457
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000031",
+          "len": 1796,
+          "ms": 1457
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000034",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=23&o=0&v=rect%3Awidth%3D98.88%20x4",
+          "type": "Image",
+          "ms": 1457
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000034",
+          "len": 1797,
+          "ms": 1457
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000052",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=41&o=0&v=el%3AoffsetWidth%3D96.7488%20x1",
+          "type": "Image",
+          "ms": 1457
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000052",
+          "len": 1795,
+          "ms": 1457
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000055",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=44&o=0&v=rect%3Aheight%3D96.9984%20x1",
+          "type": "Image",
+          "ms": 1457
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000055",
+          "len": 1795,
+          "ms": 1457
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000056",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=45&o=0&v=rect%3Aright%3D-99902.0016%20x1",
+          "type": "Image",
+          "ms": 1457
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000056",
+          "len": 1793,
+          "ms": 1457
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000057",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=46&o=0&v=rect%3Abottom%3D96.9984%20x1",
+          "type": "Image",
+          "ms": 1457
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000057",
+          "len": 1798,
+          "ms": 1457
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000060",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=49&o=0&v=rect%3Awidth%3D101.002%20x1",
+          "type": "Image",
+          "ms": 1457
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000060",
+          "len": 1799,
+          "ms": 1457
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000023",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=12&o=0&v=rect%3Aleft%3D50%20x2",
+          "type": "Image",
+          "ms": 1468
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000023",
+          "len": 1799,
+          "ms": 1468
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000036",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=25&o=0&v=rect%3Aright%3D-99900.12%20x4",
+          "type": "Image",
+          "ms": 1468
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000036",
+          "len": 1795,
+          "ms": 1468
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000044",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=33&o=0&v=rect%3Aright%3D-99902.04%20x1",
+          "type": "Image",
+          "ms": 1468
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000044",
+          "len": 1795,
+          "ms": 1468
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000047",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=36&o=0&v=el%3AoffsetHeight%3D96.96%20x2",
+          "type": "Image",
+          "ms": 1468
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000047",
+          "len": 1798,
+          "ms": 1468
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000053",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=42&o=0&v=el%3AoffsetHeight%3D96.7488%20x1",
+          "type": "Image",
+          "ms": 1468
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000053",
+          "len": 1796,
+          "ms": 1468
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000054",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=43&o=0&v=rect%3Awidth%3D96.9984%20x1",
+          "type": "Image",
+          "ms": 1468
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000054",
+          "len": 1797,
+          "ms": 1468
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000058",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=47&o=0&v=el%3AoffsetWidth%3D96.9984%20x1",
+          "type": "Image",
+          "ms": 1468
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000058",
+          "len": 1797,
+          "ms": 1468
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000061",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=50&o=0&v=rect%3Aheight%3D101.002%20x1",
+          "type": "Image",
+          "ms": 1468
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000061",
+          "len": 1798,
+          "ms": 1468
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000063",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=52&o=0&v=rect%3Abottom%3D101.002%20x1",
+          "type": "Image",
+          "ms": 1468
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000063",
+          "len": 1796,
+          "ms": 1468
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000021",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=10&o=0&v=css%3Afont-size%3D16px%20x3",
+          "type": "Image",
+          "ms": 1486
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000021",
+          "len": 1798,
+          "ms": 1486
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000033",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=22&o=0&v=rect%3Aheight%3D19%20x1",
+          "type": "Image",
+          "ms": 1486
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000033",
+          "len": 1795,
+          "ms": 1486
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000038",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=27&o=0&v=rect%3Abottom%3D98.88%20x3",
+          "type": "Image",
+          "ms": 1486
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000038",
+          "len": 1793,
+          "ms": 1486
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000042",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=31&o=0&v=rect%3Awidth%3D96.96%20x1",
+          "type": "Image",
+          "ms": 1486
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000042",
+          "len": 1795,
+          "ms": 1486
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000043",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=32&o=0&v=rect%3Aheight%3D96.96%20x2",
+          "type": "Image",
+          "ms": 1486
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000043",
+          "len": 1796,
+          "ms": 1486
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000046",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=35&o=0&v=el%3AoffsetWidth%3D96.96%20x1",
+          "type": "Image",
+          "ms": 1486
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000046",
+          "len": 1801,
+          "ms": 1486
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000050",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=39&o=0&v=rect%3Aright%3D-99902.2512%20x1",
+          "type": "Image",
+          "ms": 1486
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000050",
+          "len": 1800,
+          "ms": 1486
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000059",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=48&o=0&v=el%3AoffsetHeight%3D96.9984%20x1",
+          "type": "Image",
+          "ms": 1486
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000059",
+          "len": 1799,
+          "ms": 1486
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000065",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=54&o=0&v=el%3AoffsetHeight%3D101.002%20x1",
+          "type": "Image",
+          "ms": 1486
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000065",
+          "len": 1797,
+          "ms": 1486
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000018",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=7&o=0&v=plug%3Aname%3DWebKit%20built-in%20PDF%20x3",
+          "type": "Image",
+          "ms": 1489
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000018",
+          "len": 1795,
+          "ms": 1489
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000048",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=37&o=0&v=rect%3Awidth%3D96.7488%20x1",
+          "type": "Image",
+          "ms": 1489
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000048",
+          "len": 1796,
+          "ms": 1489
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000016",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=5&o=0&v=plug%3Aname%3DChromium%20PDF%20Viewer%20x3",
+          "type": "Image",
+          "ms": 1498
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000016",
+          "len": 1795,
+          "ms": 1498
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000041",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=30&o=0&v=el%3AoffsetHeight%3D98.88%20x3",
+          "type": "Image",
+          "ms": 1498
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000041",
+          "len": 1797,
+          "ms": 1498
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000049",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=38&o=0&v=rect%3Aheight%3D96.7488%20x1",
+          "type": "Image",
+          "ms": 1498
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000049",
+          "len": 1796,
+          "ms": 1498
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000020",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=9&o=0&v=el%3AclientHeight%3D1080%20x1",
+          "type": "Image",
+          "ms": 1517
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000020",
+          "len": 1800,
+          "ms": 1518
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000040",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=29&o=0&v=el%3AoffsetWidth%3D98.88%20x4",
+          "type": "Image",
+          "ms": 1518
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000040",
+          "len": 1795,
+          "ms": 1518
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000045",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=34&o=0&v=rect%3Abottom%3D96.96%20x2",
+          "type": "Image",
+          "ms": 1518
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000045",
+          "len": 1798,
+          "ms": 1518
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000064",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=53&o=0&v=el%3AoffsetWidth%3D101.002%20x1",
+          "type": "Image",
+          "ms": 1518
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000064",
+          "len": 1798,
+          "ms": 1518
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000011",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=0&o=0&v=rect%3Awidth%3D5%20x18",
+          "type": "Image",
+          "ms": 1527
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000011",
+          "len": 1796,
+          "ms": 1527
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000062",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=51&o=0&v=rect%3Aright%3D-99897.998%20x1",
+          "type": "Image",
+          "ms": 1548
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000062",
+          "len": 1795,
+          "ms": 1548
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000066",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=55&o=0&v=rect%3Awidth%3D95.5008%20x1",
+          "type": "Image",
+          "ms": 1592
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000066",
+          "len": 1797,
+          "ms": 1592
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000067",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=56&o=0&v=rect%3Aheight%3D95.5008%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000067",
+          "len": 1795,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000070",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=59&o=0&v=el%3AoffsetWidth%3D95.5008%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000070",
+          "len": 1792,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000071",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=60&o=0&v=el%3AoffsetHeight%3D95.5008%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000071",
+          "len": 1796,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000074",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=63&o=0&v=rect%3Aright%3D-99902.52%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000074",
+          "len": 1797,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000075",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=64&o=0&v=rect%3Abottom%3D96.48%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000075",
+          "len": 1794,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000077",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=66&o=0&v=el%3AoffsetHeight%3D96.48%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000077",
+          "len": 1795,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000078",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=67&o=0&v=rect%3Awidth%3D96.4896%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000078",
+          "len": 1796,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000079",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=68&o=0&v=rect%3Aheight%3D96.4896%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000079",
+          "len": 1799,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000080",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=69&o=0&v=rect%3Aright%3D-99902.5104%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000080",
+          "len": 1798,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000083",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=72&o=0&v=el%3AoffsetHeight%3D96.4896%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000083",
+          "len": 1796,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000085",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=74&o=0&v=rect%3Aheight%3D96.4992%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000085",
+          "len": 1794,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000086",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=75&o=0&v=rect%3Aright%3D-99902.5008%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000086",
+          "len": 1799,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000088",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=77&o=0&v=el%3AoffsetWidth%3D96.4992%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000088",
+          "len": 1796,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000090",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=79&o=0&v=rect%3Awidth%3D96.5088%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000090",
+          "len": 1795,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000093",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=82&o=0&v=rect%3Abottom%3D96.5088%20x1",
+          "type": "Image",
+          "ms": 1626
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000093",
+          "len": 1797,
+          "ms": 1626
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000081",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=70&o=0&v=rect%3Abottom%3D96.4896%20x1",
+          "type": "Image",
+          "ms": 1628
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000081",
+          "len": 1794,
+          "ms": 1628
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000069",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=58&o=0&v=rect%3Abottom%3D95.5008%20x1",
+          "type": "Image",
+          "ms": 1632
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000069",
+          "len": 1795,
+          "ms": 1632
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000092",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=81&o=0&v=rect%3Aright%3D-99902.4912%20x1",
+          "type": "Image",
+          "ms": 1632
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000092",
+          "len": 1795,
+          "ms": 1632
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000072",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=61&o=0&v=rect%3Awidth%3D96.48%20x1",
+          "type": "Image",
+          "ms": 1639
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000072",
+          "len": 1795,
+          "ms": 1639
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000082",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=71&o=0&v=el%3AoffsetWidth%3D96.4896%20x1",
+          "type": "Image",
+          "ms": 1639
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000082",
+          "len": 1794,
+          "ms": 1639
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000087",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=76&o=0&v=rect%3Abottom%3D96.4992%20x1",
+          "type": "Image",
+          "ms": 1639
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000087",
+          "len": 1794,
+          "ms": 1639
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000089",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=78&o=0&v=el%3AoffsetHeight%3D96.4992%20x1",
+          "type": "Image",
+          "ms": 1639
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000089",
+          "len": 1797,
+          "ms": 1639
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000095",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=84&o=0&v=el%3AoffsetHeight%3D96.5088%20x1",
+          "type": "Image",
+          "ms": 1639
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000095",
+          "len": 1797,
+          "ms": 1639
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000096",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=85&o=0&v=rect%3Awidth%3D96.5184%20x1",
+          "type": "Image",
+          "ms": 1639
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000096",
+          "len": 1793,
+          "ms": 1639
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000101",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=90&o=0&v=el%3AoffsetHeight%3D96.5184%20x1",
+          "type": "Image",
+          "ms": 1639
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000101",
+          "len": 1796,
+          "ms": 1639
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000091",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=80&o=0&v=rect%3Aheight%3D96.5088%20x1",
+          "type": "Image",
+          "ms": 1642
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000091",
+          "len": 1794,
+          "ms": 1642
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000068",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=57&o=0&v=rect%3Aright%3D-99903.4992%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000068",
+          "len": 1794,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000076",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=65&o=0&v=el%3AoffsetWidth%3D96.48%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000076",
+          "len": 1798,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000084",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=73&o=0&v=rect%3Awidth%3D96.4992%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000084",
+          "len": 1795,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000094",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=83&o=0&v=el%3AoffsetWidth%3D96.5088%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000094",
+          "len": 1797,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000097",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=86&o=0&v=rect%3Aheight%3D96.5184%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000097",
+          "len": 1794,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000098",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=87&o=0&v=rect%3Aright%3D-99902.4816%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000098",
+          "len": 1798,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000099",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=88&o=0&v=rect%3Abottom%3D96.5184%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000099",
+          "len": 1796,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000100",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=89&o=0&v=el%3AoffsetWidth%3D96.5184%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000100",
+          "len": 1794,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000107",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=96&o=0&v=el%3AoffsetHeight%3D96%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000107",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000108",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=97&o=0&v=gl%3A37446%3DANGLE%20(Apple%2C%20ANGLE%20Metal%20Renderer%3A%20Apple%20M4%2C%20Unspecified%20Version)%20x156",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000108",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000109",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=98&o=0&v=el%3AoffsetHeight%3D160%20x2",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000109",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000110",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=99&o=0&v=css%3Acolor%3Daccentcolor%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000110",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000111",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=100&o=0&v=css%3Acolor%3Daccentcolortext%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000111",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000112",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=101&o=0&v=css%3Acolor%3Dcanvas%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000112",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000113",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=102&o=0&v=css%3Acolor%3Dcanvastext%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000113",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000114",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=103&o=0&v=css%3Acolor%3Dfield%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000114",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000115",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=104&o=0&v=css%3Acolor%3Dfieldtext%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000115",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000116",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=105&o=0&v=css%3Acolor%3Dbuttonborder%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000116",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000118",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=107&o=0&v=css%3Acolor%3Dselecteditemtext%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000118",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000119",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=108&o=0&v=css%3Acolor%3Dmark%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000119",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000120",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=109&o=0&v=css%3Acolor%3Dmarktext%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000120",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000121",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=110&o=0&v=css%3Acolor%3Dlinktext%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000121",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000122",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=111&o=0&v=css%3Acolor%3Dvisitedtext%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000122",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000123",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=112&o=0&v=css%3Acolor%3Dactivetext%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000123",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000126",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=115&o=0&v=el%3AclientHeight%3D1064%20x1",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000126",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000127",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=116&o=0&v=el%3AclientWidth%3D5%20x20",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000127",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000128",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=117&o=0&v=el%3AclientHeight%3D5%20x20",
+          "type": "Image",
+          "ms": 1661
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000128",
+          "len": 730,
+          "ms": 1661
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000102",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=91&o=0&v=rect%3Awidth%3D96%20x1",
+          "type": "Image",
+          "ms": 1674
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000102",
+          "len": 1795,
+          "ms": 1674
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000125",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=114&o=0&v=el%3AclientWidth%3D1904%20x1",
+          "type": "Image",
+          "ms": 1674
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000125",
+          "len": 730,
+          "ms": 1674
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000073",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=62&o=0&v=rect%3Aheight%3D96.48%20x1",
+          "type": "Image",
+          "ms": 1685
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000073",
+          "len": 1798,
+          "ms": 1685
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000104",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=93&o=0&v=rect%3Aright%3D-99903%20x1",
+          "type": "Image",
+          "ms": 1685
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000104",
+          "len": 1798,
+          "ms": 1685
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000117",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=106&o=0&v=css%3Acolor%3Dselecteditem%20x1",
+          "type": "Image",
+          "ms": 1685
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000117",
+          "len": 730,
+          "ms": 1685
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000124",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=113&o=0&v=css%3Acolor%3Drgba(0%2C%200%2C%200%2C%200)%20x1",
+          "type": "Image",
+          "ms": 1685
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000124",
+          "len": 730,
+          "ms": 1685
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000130",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=119&o=0&v=cpt%3Avideo%2Fmp4%3B%3Dmaybe%20x1",
+          "type": "Image",
+          "ms": 1685
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000130",
+          "len": 730,
+          "ms": 1685
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000132",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=121&o=0&v=cpt%3Aaudio%2Fwav%3B%20codecs%3D%221%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1685
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000132",
+          "len": 730,
+          "ms": 1685
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000103",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=92&o=0&v=rect%3Aheight%3D96%20x1",
+          "type": "Image",
+          "ms": 1690
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000103",
+          "len": 1795,
+          "ms": 1690
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000129",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=118&o=0&v=rect%3Aheight%3D5%20x10",
+          "type": "Image",
+          "ms": 1690
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000129",
+          "len": 730,
+          "ms": 1690
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000133",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=122&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3Dmp4a.40.2%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000133",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000134",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=123&o=0&v=cpt%3Avideo%2Fogg%3B%20codecs%3Dopus%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000134",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000138",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=127&o=0&v=mime%3Atype%3Dapplication%2Fpdf%20x10",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000138",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000139",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=128&o=0&v=mime%3Asuffixes%3Dpdf%20x20",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000139",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000140",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=129&o=0&v=mime%3Atype%3Dtext%2Fpdf%20x10",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000140",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000141",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=130&o=0&v=css%3Acolor%3Dactiveborder%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000141",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000142",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=131&o=0&v=css%3Acolor%3Dactivecaption%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000142",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000143",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=132&o=0&v=css%3Acolor%3Dappworkspace%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000143",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000144",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=133&o=0&v=css%3Acolor%3Dbackground%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000144",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000145",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=134&o=0&v=css%3Acolor%3Dbuttonface%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000145",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000146",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=135&o=0&v=css%3Acolor%3Dbuttonhighlight%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000146",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000147",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=136&o=0&v=css%3Acolor%3Dbuttonshadow%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000147",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000148",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=137&o=0&v=css%3Acolor%3Dbuttontext%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000148",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000149",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=138&o=0&v=css%3Acolor%3Dcaptiontext%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000149",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000150",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=139&o=0&v=css%3Acolor%3Dgraytext%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000150",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000153",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=142&o=0&v=css%3Acolor%3Dinactiveborder%20x1",
+          "type": "Image",
+          "ms": 1722
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000153",
+          "len": 730,
+          "ms": 1722
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000154",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=143&o=0&v=css%3Acolor%3Dinactivecaption%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000154",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000155",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=144&o=0&v=css%3Acolor%3Dinactivecaptiontext%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000155",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000156",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=145&o=0&v=css%3Acolor%3Dinfobackground%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000156",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000157",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=146&o=0&v=css%3Acolor%3Dinfotext%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000157",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000158",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=147&o=0&v=css%3Acolor%3Dmenu%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000158",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000159",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=148&o=0&v=css%3Acolor%3Dmenutext%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000159",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000161",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=150&o=0&v=css%3Acolor%3Dthreeddarkshadow%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000161",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000162",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=151&o=0&v=css%3Acolor%3Dthreedface%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000162",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000163",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=152&o=0&v=css%3Acolor%3Dthreedhighlight%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000163",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000164",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=153&o=0&v=css%3Acolor%3Dthreedlightshadow%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000164",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000167",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=156&o=0&v=css%3Acolor%3Dwindowframe%20x1",
+          "type": "Image",
+          "ms": 1723
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000167",
+          "len": 730,
+          "ms": 1723
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000106",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=95&o=0&v=el%3AoffsetWidth%3D96%20x1",
+          "type": "Image",
+          "ms": 1730
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000106",
+          "len": 1796,
+          "ms": 1730
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000135",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=124&o=0&v=cpt%3Aaudio%2Fwebm%3B%3Dmaybe%20x1",
+          "type": "Image",
+          "ms": 1730
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000135",
+          "len": 730,
+          "ms": 1730
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000137",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=126&o=0&v=plug%3Adescription%3DPortable%20Document%20Format%20x10",
+          "type": "Image",
+          "ms": 1730
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000137",
+          "len": 730,
+          "ms": 1730
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000151",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=140&o=0&v=css%3Acolor%3Dhighlight%20x1",
+          "type": "Image",
+          "ms": 1730
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000151",
+          "len": 730,
+          "ms": 1730
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000131",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=120&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3D%22mp4v.20.8%2C%20mp4a.40.2%22%3D%20x1",
+          "type": "Image",
+          "ms": 1736
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000131",
+          "len": 730,
+          "ms": 1736
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000160",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=149&o=0&v=css%3Acolor%3Dscrollbar%20x1",
+          "type": "Image",
+          "ms": 1736
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000160",
+          "len": 730,
+          "ms": 1736
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000165",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=154&o=0&v=css%3Acolor%3Dthreedshadow%20x1",
+          "type": "Image",
+          "ms": 1736
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000165",
+          "len": 730,
+          "ms": 1736
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000152",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=141&o=0&v=css%3Acolor%3Dhighlighttext%20x1",
+          "type": "Image",
+          "ms": 1743
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000152",
+          "len": 730,
+          "ms": 1743
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000166",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=155&o=0&v=css%3Acolor%3Dwindow%20x1",
+          "type": "Image",
+          "ms": 1743
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000166",
+          "len": 730,
+          "ms": 1743
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000168",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=157&o=0&v=css%3Acolor%3Dwindowtext%20x1",
+          "type": "Image",
+          "ms": 1743
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000168",
+          "len": 730,
+          "ms": 1743
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000136",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=125&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3Dbogus%3D%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000136",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000170",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=159&o=0&v=css%3Acolor%3D-moz-ButtonDefault%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000170",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000171",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=160&o=0&v=css%3Acolor%3D-moz-ButtonHoverFace%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000171",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000172",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=161&o=0&v=css%3Acolor%3D-moz-ButtonHoverText%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000172",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000173",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=162&o=0&v=css%3Acolor%3D-moz-CellHighlight%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000173",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000174",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=163&o=0&v=css%3Acolor%3D-moz-CellHighlightText%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000174",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000175",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=164&o=0&v=css%3Acolor%3D-moz-Combobox%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000175",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000176",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=165&o=0&v=css%3Acolor%3D-moz-ComboboxText%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000176",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000177",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=166&o=0&v=css%3Acolor%3D-moz-Dialog%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000177",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000178",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=167&o=0&v=css%3Acolor%3D-moz-DialogText%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000178",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000179",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=168&o=0&v=css%3Acolor%3D-moz-dragtargetzone%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000179",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000180",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=169&o=0&v=css%3Acolor%3D-moz-EvenTreeRow%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000180",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000181",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=170&o=0&v=css%3Acolor%3D-moz-Field%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000181",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000183",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=172&o=0&v=css%3Acolor%3D-moz-html-CellHighlight%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000183",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000184",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=173&o=0&v=css%3Acolor%3D-moz-html-CellHighlightText%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000184",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000185",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=174&o=0&v=css%3Acolor%3D-moz-mac-accentdarkestshadow%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000185",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000186",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=175&o=0&v=css%3Acolor%3D-moz-mac-accentdarkshadow%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000186",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000187",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=176&o=0&v=css%3Acolor%3D-moz-mac-accentface%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000187",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000188",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=177&o=0&v=css%3Acolor%3D-moz-mac-accentlightesthighlight%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000188",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000193",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=182&o=0&v=css%3Acolor%3D-moz-mac-chrome-inactive%20x1",
+          "type": "Image",
+          "ms": 1788
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000193",
+          "len": 730,
+          "ms": 1788
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000105",
+          "status": 429,
+          "url": "https://www.hyatt.com/__b55a?i=94&o=0&v=rect%3Abottom%3D96%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000105",
+          "len": 1792,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000169",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=158&o=0&v=css%3Acolor%3DFakeColor%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000169",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000182",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=171&o=0&v=css%3Acolor%3D-moz-FieldText%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000182",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000189",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=178&o=0&v=css%3Acolor%3D-moz-mac-accentlightshadow%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000189",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000190",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=179&o=0&v=css%3Acolor%3D-moz-mac-accentregularhighlight%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000190",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000195",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=184&o=0&v=css%3Acolor%3D-moz-mac-menuselect%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000195",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000197",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=186&o=0&v=css%3Acolor%3D-moz-mac-menutextselect%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000197",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000198",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=187&o=0&v=css%3Acolor%3D-moz-MenuHover%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000198",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000199",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=188&o=0&v=css%3Acolor%3D-moz-MenuHoverText%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000199",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000200",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=189&o=0&v=css%3Acolor%3D-moz-MenuBarText%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000200",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000201",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=190&o=0&v=css%3Acolor%3D-moz-MenuBarHoverText%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000201",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000202",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=191&o=0&v=css%3Acolor%3D-moz-nativehyperlinktext%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000202",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000203",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=192&o=0&v=css%3Acolor%3D-moz-OddTreeRow%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000203",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000204",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=193&o=0&v=css%3Acolor%3D-moz-win-communicationstext%20x1",
+          "type": "Image",
+          "ms": 1800
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000204",
+          "len": 730,
+          "ms": 1800
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000194",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=183&o=0&v=css%3Acolor%3D-moz-mac-focusring%20x1",
+          "type": "Image",
+          "ms": 1805
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000194",
+          "len": 730,
+          "ms": 1805
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000192",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=181&o=0&v=css%3Acolor%3D-moz-mac-chrome-active%20x1",
+          "type": "Image",
+          "ms": 1808
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000192",
+          "len": 730,
+          "ms": 1808
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000196",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=185&o=0&v=css%3Acolor%3D-moz-mac-menushadow%20x1",
+          "type": "Image",
+          "ms": 1808
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000196",
+          "len": 730,
+          "ms": 1808
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000206",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=195&o=0&v=css%3Acolor%3D-moz-win-accentcolor%20x1",
+          "type": "Image",
+          "ms": 1815
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000206",
+          "len": 730,
+          "ms": 1815
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000207",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=196&o=0&v=css%3Acolor%3D-moz-win-accentcolortext%20x1",
+          "type": "Image",
+          "ms": 1815
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000207",
+          "len": 730,
+          "ms": 1815
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000208",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=197&o=0&v=css%3Acolor%3D-moz-activehyperlinktext%20x1",
+          "type": "Image",
+          "ms": 1815
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000208",
+          "len": 730,
+          "ms": 1815
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000209",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=198&o=0&v=css%3Acolor%3D-moz-default-background-color%20x1",
+          "type": "Image",
+          "ms": 1815
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000209",
+          "len": 730,
+          "ms": 1815
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000211",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=200&o=0&v=css%3Acolor%3D-moz-hyperlinktext%20x1",
+          "type": "Image",
+          "ms": 1815
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000211",
+          "len": 730,
+          "ms": 1815
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000212",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=201&o=0&v=css%3Acolor%3D-moz-visitedhyperlinktext%20x1",
+          "type": "Image",
+          "ms": 1815
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000212",
+          "len": 730,
+          "ms": 1815
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000214",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=203&o=0&v=cpt%3Avideo%2Fwebm%3B%20codecs%3D%22vorbis%2Cvp9%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1815
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000214",
+          "len": 730,
+          "ms": 1815
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000220",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=209&o=0&v=cpt%3Aaudio%2Fmp4%3B%20codecs%3D%22mp4a.40.2%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1815
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000220",
+          "len": 730,
+          "ms": 1815
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000222",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=211&o=0&v=cpt%3Avideo%2Fx-matroska%3B%20codecs%3D%22theora%2C%20vorbis%22%3D%20x1",
+          "type": "Image",
+          "ms": 1815
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000222",
+          "len": 730,
+          "ms": 1815
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000205",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=194&o=0&v=css%3Acolor%3D-moz-win-mediatext%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000205",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000210",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=199&o=0&v=css%3Acolor%3D-moz-default-color%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000210",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000213",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=202&o=0&v=gl2%3A36349%3D%23%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000213",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000215",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=204&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3D%22avc1.64001E%2C%20mp4a.40.2%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000215",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000216",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=205&o=0&v=cpt%3Aaudio%2Fwave%3B%3D%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000216",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000219",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=208&o=0&v=gl2%3A35379%3D%23%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000219",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000221",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=210&o=0&v=cpt%3Aaudio%2Fmpeg%3B%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000221",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000223",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=212&o=0&v=gl2%3A33902%3D%23%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000223",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000224",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=213&o=0&v=cpt%3Avideo%2Fx-mpeg%3D%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000224",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000225",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=214&o=0&v=cpt%3Aaudio%2Fwav%3B%20codecs%3D%220%22%3D%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000225",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000226",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=215&o=0&v=cpt%3Aaudio%2Fwav%3B%20codecs%3D%222%22%3D%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000226",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000227",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=216&o=0&v=gl2%3A35375%3D%23%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000227",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000228",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=217&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3D%22avc1.42c00d%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000228",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000230",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=219&o=0&v=cpt%3Aaudio%2Fwav%3B%3Dmaybe%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000230",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000231",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=220&o=0&v=cpt%3Avideo%2Fogg%3B%20codecs%3Dspeex%3D%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000231",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000232",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=221&o=0&v=gl2%3A7938%3DWebGL%202.0%20(OpenGL%20ES%203.0%20Chromium)%20x1",
+          "type": "Image",
+          "ms": 1846
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000232",
+          "len": 730,
+          "ms": 1846
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000233",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=222&o=0&v=cpt%3Aaudio%2Fx-m4a%3B%3Dmaybe%20x1",
+          "type": "Image",
+          "ms": 1847
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000233",
+          "len": 730,
+          "ms": 1847
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000235",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=224&o=0&v=cpt%3Aaudio%2Fx-mpegurl%3Dmaybe%20x1",
+          "type": "Image",
+          "ms": 1847
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000235",
+          "len": 730,
+          "ms": 1847
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000236",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=225&o=0&v=cpt%3Aaudio%2Fogg%3B%20codecs%3D%22vorbis%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1847
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000236",
+          "len": 730,
+          "ms": 1847
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000237",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=226&o=0&v=cpt%3Avideo%2F3gpp%3B%20codecs%3D%22mp4v.20.8%2C%20samr%22%3D%20x1",
+          "type": "Image",
+          "ms": 1847
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000237",
+          "len": 730,
+          "ms": 1847
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000239",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=228&o=0&v=cpt%3Avideo%2Fogg%3B%20codecs%3D%22theora%22%3D%20x1",
+          "type": "Image",
+          "ms": 1847
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000239",
+          "len": 730,
+          "ms": 1847
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000240",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=229&o=0&v=gl2%3A33901%3D%23%20x1",
+          "type": "Image",
+          "ms": 1847
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000240",
+          "len": 730,
+          "ms": 1847
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000191",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=180&o=0&v=css%3Acolor%3D-moz-mac-accentregularshadow%20x1",
+          "type": "Image",
+          "ms": 1895
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000191",
+          "len": 730,
+          "ms": 1895
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000217",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=206&o=0&v=cpt%3Aaudio%2Fx-mpeg%3D%20x1",
+          "type": "Image",
+          "ms": 1895
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000217",
+          "len": 730,
+          "ms": 1895
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000229",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=218&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3D%22avc1.42E01E%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1895
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000229",
+          "len": 730,
+          "ms": 1895
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000234",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=223&o=0&v=cpt%3Aaudio%2Fwave%3B%20codecs%3D1%3D%20x1",
+          "type": "Image",
+          "ms": 1895
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000234",
+          "len": 730,
+          "ms": 1895
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000238",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=227&o=0&v=gl2%3A35377%3D%23%20x1",
+          "type": "Image",
+          "ms": 1895
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000238",
+          "len": 730,
+          "ms": 1895
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000242",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=231&o=0&v=cpt%3Aaudio%2Fwave%3B%20codecs%3D2%3D%20x1",
+          "type": "Image",
+          "ms": 1910
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000242",
+          "len": 730,
+          "ms": 1910
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000243",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=232&o=0&v=cpt%3Aaudio%2Faac%3B%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1910
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000243",
+          "len": 730,
+          "ms": 1910
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000244",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=233&o=0&v=cpt%3Aaudio%2Fwave%3B%20codecs%3D0%3D%20x1",
+          "type": "Image",
+          "ms": 1910
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000244",
+          "len": 730,
+          "ms": 1910
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000245",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=234&o=0&v=cpt%3Avideo%2Fmp2t%3B%20codecs%3D%22avc1.42E01E%2Cmp4a.40.2%22%3D%20x1",
+          "type": "Image",
+          "ms": 1910
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000245",
+          "len": 730,
+          "ms": 1910
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000248",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=237&o=0&v=cpt%3Avideo%2Fmpeg%3B%3D%20x1",
+          "type": "Image",
+          "ms": 1910
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000248",
+          "len": 730,
+          "ms": 1910
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000241",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=230&o=0&v=cpt%3Avideo%2Fwebm%3B%20codecs%3Dvorbis%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1915
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000241",
+          "len": 730,
+          "ms": 1915
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000247",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=236&o=0&v=gl2%3A35374%3D%23%20x1",
+          "type": "Image",
+          "ms": 1915
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000247",
+          "len": 730,
+          "ms": 1915
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000218",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=207&o=0&v=cpt%3Avideo%2Fmp4%3B%20codecs%3D%22mp4v.20.240%2C%20mp4a.40.2%22%3D%20x1",
+          "type": "Image",
+          "ms": 1950
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000218",
+          "len": 730,
+          "ms": 1950
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000246",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=235&o=0&v=cpt%3Avideo%2Fwebm%3B%20codecs%3D%22vp8%2C%20vorbis%22%3Dprobably%20x1",
+          "type": "Image",
+          "ms": 1950
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000246",
+          "len": 730,
+          "ms": 1950
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000249",
+          "status": 403,
+          "url": "https://www.hyatt.com/__b55a?i=238&o=0&v=cpt%3Avideo%2Fogg%3B%20codecs%3D%22theora%2C%20speex%22%3D%20x1",
+          "type": "Image",
+          "ms": 1950
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000249",
+          "len": 730,
+          "ms": 1950
+        }
+      ],
+      "verdict": "refused-429",
+      "first": 429,
+      "last": 429,
+      "jsDetect": false,
+      "title": "",
+      "landedOn": "https://www.hyatt.com/",
+      "nodes": 6,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": true,
+        "script": true
+      },
+      "ms": 25178
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787783254370 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:17000"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

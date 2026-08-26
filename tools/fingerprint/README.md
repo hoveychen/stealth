@@ -16656,3 +16656,145 @@ that here recovered four of five (`results/b54-solo-*.json`); the fifth,
 `ak-kohls`, times out on the control binary too (2/2,
 `results/b54-kohls-{ctrl,treat}-*.json`) and is the known intermittent hang that
 already has its own plan.
+
+## What the /tl payload is actually short of, asked at the funnels (B55, 2026-08-26)
+
+B54 left this plan a method — lengthen a known answer, watch `postLen` — and a
+number: the body inflates content by about 2.2x, so the ~600-byte shortfall was
+~270 bytes of answers. The method holds. **The number was wrong, and so was the
+frame.**
+
+### The padding table: what the body carries, and what it does not
+
+One station run per candidate, one binary held fixed across all of them, two
+baselines taken either side of the set (19018 and 19010, so the sitting drifted
+8 bytes). Each family's accessors were lengthened by a fixed amount from
+`Page.addScriptToEvaluateOnNewDocument`, and each probe reports how many times
+its override fired through a beacon five seconds in — long after the `/tl` POST,
+which goes out at 861ms.
+
+| padded | pad chars | postLen | Δ | probe |
+|---|---|---|---|---|
+| `navigator.userAgent` | 200 | 19426 | **+412** | `inject-b55-ua-pad.js` |
+| `getPropertyValue` | 93 × 50 | 22626 | **+3612** | `inject-b55-cssvalue-pad.js` |
+| `Plugin`/`MimeType` strings | 65 × 30 | 20826 | **+1812** | `inject-b55-plugins-pad.js` |
+| `DOMRect`/offset/client | 212 × ~15 | 20042 | **+1028** | `inject-b55-rect-pad.js` |
+| `canPlayType` | 41 × 20 | 19722 | **+708** | `inject-b55-canplaytype-pad.js` |
+| `getParameter` strings | 166 × 100 | 19338 | **+324** | `inject-b55-glparam-pad.js` |
+| `toDataURL` | 80 × 20 | 19050 | **+36** | `inject-b55-todataurl-pad.js` |
+
+`toDataURL` is the control the set needed: eighty answers lengthened by sixteen
+hundred characters move the body by nothing. The canvas bytes are hashed, not
+carried. `getParameter` carries about one and a half copies of the renderer
+string out of 166 lengthened answers, which is what a guard that asks 153 times
+and stores once looks like from outside.
+
+### `--inject` was a no-op on the Chrome arm
+
+Chrome answers `Page.addScriptToEvaluateOnNewDocument` with an identifier
+whether or not the Page domain is on, and runs the script only if it is.
+`antibot-sweep` never sent `Page.enable`, so every `--inject` run against Chrome
+measured stock Chrome while reporting itself as patched. Verified both ways at
+`scratch/b55-inject-check.mjs`: the window marker is `MISSING` without the
+enable and present with it. Now sent for both engines whenever `--inject` is
+used, so the arms keep the same domains.
+
+Nothing already in the repo is invalidated — B54's injections were all
+single-arm — but a two-arm injected reading taken before this was one-armed.
+
+### Hooking the funnels instead of guessing the answers
+
+`TextEncoder.encode`, `btoa`, `crypto.subtle.digest` and `XMLHttpRequest.send`
+are where every value has to pass on its way into the body, and the read log
+already showed Kasada using all four. Hooking them (`inject-b55-funnels.js`)
+gives the payload's sections in plaintext on **both** arms, which is what the
+b53 read log could not do.
+
+The Kasada realm, side by side:
+
+| section | lightpanda | Chrome |
+|---|---|---|
+| timezone / date / GMT string | 21 / 57 / 32 | identical |
+| `MediaRecorder` codec list | 522 | 522 |
+| a four-value style readback | `0px,0px,0px,0px` | `100075px,155556px,165464px,305134px` |
+| **the serialised payload** | **18945–18990** | **19514–19552** |
+| `speechSynthesis.getVoices()` | `""` | 9619 |
+| `navigator.keyboard.getLayoutMap()` | `{}` | 596 |
+
+**The body is `TextEncoder.encode(payload)`** — 18990 characters against a
+postLen of 19002 — so content and body are one to one, not 2.2 to one. The
+target is not 270 bytes. It is **524 to 607 characters**, and it can now be read
+straight off the payload instead of inferred from the body.
+
+The payload is a JSON array of `<n>:<base64>` tokens, and **both arms emit
+exactly 449 of them**. Nothing is missing wholesale; the shortfall is spread
+inside about 47 tokens, and the array's order is shuffled per run, so index
+alignment across the arms is meaningless (`inject-b55-funnels.js` reports the
+per-token lengths; `difflib` on them produces nonsense, which is how the shuffle
+was found).
+
+### The voice list is a race this engine loses by being fast
+
+Kasada joins `getVoices()` into `name,voiceURI,lang,localService,default;`
+records and hashes the result. Chrome hands it 9619 characters of macOS voices;
+this engine hands it the empty string.
+
+This engine *has* the list — 199 entries in `webapi/speech/voices.zig` — and
+withholds it for a measured 665ms after first access because that is what Chrome
+does. An independent poll (`inject-b55-voices-time.js`) returns 0 at 500ms and
+199 at 700ms **on both arms**. What differs is when the guard asks:
+
+* Chrome: `voices@1400=199`, POST at 1670ms.
+* here: `voices@555=0`, POST at 858ms.
+
+Same latency, and this engine reaches the guard's collection in a third of the
+time. B53 tested this idea with a Debug build and called it settled — but a
+fifth slower (853ms against 732ms) does not cross a threshold missed by 145ms.
+
+Spinning the main thread 900ms at document start (`inject-b55-slow-start.js`)
+moves the read to `voices@4197=199`: **the list fills, and `postLen` goes to
+19026 against a 19014 baseline.** So the voice list is worth *zero* payload
+bytes — it is hashed — and the station is still refused. The same is true of the
+keyboard layout map. **Two of the three biggest readable differences cannot be
+part of the 524.**
+
+### Kasada plants a control colour, and this engine falls for it
+
+Capturing the answers themselves on the live station (`inject-b55-answers.js`)
+found what the ninety-three `getPropertyValue` calls are for. Kasada sets
+`color` to each of about ninety keywords and reads the computed value back.
+
+Reproduced away from the station, both arms on the same https page
+(`probes/expr-b55-system-colors.js`, `results/b55-syscolor-{lp,chrome}.json`),
+**53 of 53 differ**:
+
+* 42 CSS system colours — Chrome resolves `accentcolor` to `rgb(0, 117, 255)`,
+  `buttonface` to `rgb(239, 239, 239)`, `highlight` to `rgba(128, 188, 254,
+  0.6)`. This engine answers with the keyword it was handed.
+* 10 `-moz-` names, which only Firefox ever supported, and **`FakeColor`** —
+  Kasada's own control, chosen because no browser resolves it. Chrome rejects
+  all eleven and `color` keeps its previous value. This engine accepts and
+  echoes all eleven.
+
+A computed `color` of `FakeColor` is one expression that no browser on earth
+answers. It has its own plan (`css-system-color-keywords`).
+
+### What is attributed, and what is not
+
+Of the 524-character shortfall, measured directly off the payload string:
+
+* **~169 characters** of element geometry — 202 readings answering 985
+  characters in Chrome against 208 readings answering 816 here, because Chrome
+  answers on its 1/64px grid where this engine answers whole numbers. Feeds the
+  existing `layout-unit-64th-grid` plan.
+* **20 characters** in the style readback section above.
+* **0** from the voice list and **0** from the keyboard map, both proven hashed.
+
+**That leaves roughly 335 characters unaccounted for**, inside tokens that
+cannot be aligned across the arms because the array order is randomised. Saying
+so is the point: the padding table says which families are carried, but a family
+being carried is not evidence that *its* bytes are the missing ones. The next
+person should either find an anchor that survives the shuffle — padding one
+family and watching which token length moves would do it — or accept that the
+byte count is the wrong question, since the two loudest divergences found here
+are worth nothing in bytes and everything in value.
