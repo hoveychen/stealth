@@ -1966,8 +1966,71 @@ const CrossOriginWindow = struct {
     // property of the proxy and resolves before this is reached -- and only for
     // strings, which leaves the three own symbols alone. So nothing a browser
     // answers arrives here, and everything that does is denied.
-    fn getDenied(_: *const CrossOriginWindow, _: []const u8) !?[]const u8 {
-        return error.SecurityError;
+    //
+    // The sentence matters as much as the throw. A script that catches the
+    // SecurityError and reads `.message` gets one from Blink that names both
+    // the property and the origin that was refused; DOMException's stock text
+    // ("The operation is insecure") names neither and is a sentence no browser
+    // prints for this. Measured on Chrome 151, expr-xo-proxy-detail.
+    fn getDenied(_: *const CrossOriginWindow, name: []const u8, frame: *Frame) !?[]const u8 {
+        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "read a named property '{s}' from", name));
+    }
+
+    fn setDenied(_: *CrossOriginWindow, name: []const u8, _: js.Value, frame: *Frame) !void {
+        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "set a named property '{s}' on", name));
+    }
+
+    // `'document' in w` is a denial too, and Blink's sentence for it is the bare
+    // one: no "Failed to ..." lead-in, because [[HasProperty]] is not a read of
+    // any particular property as far as the access check is concerned. Without
+    // this the `in` would fall through to the getter and answer the read
+    // sentence -- right kind of exception, wrong sentence.
+    fn queryDenied(_: *const CrossOriginWindow, _: []const u8, frame: *Frame) !u32 {
+        return frame.js.fail(error.SecurityError, try blockedSentence(frame));
+    }
+
+    // ...while `Object.getOwnPropertyDescriptor(w, 'document')` *is* a read of a
+    // named property and gets the named sentence. Without its own callback the
+    // descriptor lookup would fall through to `queryDenied` above and answer the
+    // bare one, which is the sentence Chrome keeps for `in`.
+    fn descriptorDenied(_: *const CrossOriginWindow, name: []const u8, frame: *Frame) !?[]const u8 {
+        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "read a named property '{s}' from", name));
+    }
+
+    // `delete w.document` throws, and gets the bare sentence the same as `in`:
+    // a delete is not a read. Measured on both engines -- Chrome and this one
+    // now answer the same string, byte for byte.
+    //
+    // No definer alongside it: V8 runs `Object.defineProperty` through the
+    // descriptor lookup first, so the define is already refused there and a
+    // definer callback never sees it (measured -- adding one changed nothing).
+    //
+    // The deleter only sees names the proxy does not own -- it is [[NonMasking]]
+    // like the rest -- so `delete w.length` still succeeds where Chrome throws.
+    // Closing that needs the access check; see the note in
+    // frames/cross_origin_proxy_shape.html.
+    fn deleterDenied(_: *CrossOriginWindow, _: []const u8, frame: *Frame) !bool {
+        return frame.js.fail(error.SecurityError, try blockedSentence(frame));
+    }
+
+    fn deniedMessage(frame: *Frame, comptime verb: []const u8, name: []const u8) ![]const u8 {
+        // call_arena, not local_arena: handleError reads the message back after
+        // this frame is gone, and local_arena is reset before it gets there.
+        // See Document.setDomain, which learned the same thing the hard way.
+        return std.fmt.allocPrint(
+            frame.call_arena,
+            "Failed to " ++ verb ++ " 'Window': {s}",
+            .{ name, try blockedSentence(frame) },
+        );
+    }
+
+    fn blockedSentence(frame: *Frame) ![]const u8 {
+        const origin = frame.window._location.getOrigin(&frame.js.execution) catch "null";
+        return std.fmt.allocPrint(
+            frame.call_arena,
+            "Blocked a frame with origin \"{s}\" from accessing a cross-origin frame.",
+            .{origin},
+        );
     }
 
     // Chrome answers a CrossOriginLocation object here -- own names `href
@@ -2031,7 +2094,16 @@ const CrossOriginWindow = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
-        pub const @"[str]" = bridge.namedIndexed(CrossOriginWindow.getDenied, null, null, null, null, .{ .null_as_undefined = true });
+        pub const @"[str]" = bridge.namedIndexedFull(
+            CrossOriginWindow.getDenied,
+            CrossOriginWindow.setDenied,
+            CrossOriginWindow.deleterDenied,
+            null,
+            CrossOriginWindow.queryDenied,
+            null,
+            CrossOriginWindow.descriptorDenied,
+            .{ .null_as_undefined = true },
+        );
 
         // Declaration order is own-property order, and this is Blink's
         // CrossOriginProperties table read top to bottom: the nine attributes

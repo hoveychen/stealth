@@ -132,3 +132,97 @@ walks one and then the other reads the pair, not either alone.
   });
 }
 </script>
+
+<!--
+What a denied access *says*. A detector that catches the SecurityError and reads
+`.message` gets a sentence, and Blink's names both the property and the origin
+that was refused. Measured on Chrome 151 (expr-xo-proxy-detail):
+
+  w.document        -> Failed to read a named property 'document' from 'Window':
+                       Blocked a frame with origin "http://localhost:8872" from
+                       accessing a cross-origin frame.
+  w.foo = 1         -> Failed to set a named property 'foo' on 'Window':
+                       Blocked a frame with origin "..." from accessing a
+                       cross-origin frame.
+
+This engine answered DOMException's stock "The operation is insecure" for both,
+which names neither and is a sentence no browser prints here.
+
+Coercion throws for a different reason and needs no special case: the proxy has
+no prototype, so ToPrimitive's reach for @@toPrimitive, then `toString`, then
+`valueOf` finds none of them as own properties and every one of the three lands
+on the deny interceptor.
+-->
+
+<script id=denial_message type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+  const ORIGIN = testing.ORIGIN;
+
+  const iframe = document.createElement('iframe');
+  iframe.src = ALT_BASE + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    const w = iframe.contentWindow;
+    const blocked = `Blocked a frame with origin "${ORIGIN}" from accessing a cross-origin frame.`;
+
+    const caught = (fn) => {
+      try { fn(); return 'did not throw'; } catch (e) { return `${e.name}: ${e.message}`; }
+    };
+
+    testing.expectEqual(
+      `SecurityError: Failed to read a named property 'document' from 'Window': ${blocked}`,
+      caught(() => w.document));
+    testing.expectEqual(
+      `SecurityError: Failed to read a named property 'name' from 'Window': ${blocked}`,
+      caught(() => w.name));
+    testing.expectEqual(
+      `SecurityError: Failed to set a named property 'foo' on 'Window': ${blocked}`,
+      caught(() => { w.foo = 1; }));
+
+    // `in` gets the bare sentence: [[HasProperty]] is not a read of any
+    // particular property as far as the access check is concerned, so Blink
+    // leaves off the "Failed to ..." lead-in.
+    testing.expectEqual(`SecurityError: ${blocked}`, caught(() => ('document' in w)));
+
+    // getOwnPropertyDescriptor *is* a read of a named property, and keeps the
+    // named sentence -- Blink draws the line there, not at "does it return a
+    // value".
+    testing.expectEqual(
+      `SecurityError: Failed to read a named property 'document' from 'Window': ${blocked}`,
+      caught(() => Object.getOwnPropertyDescriptor(w, 'document')));
+
+    // A delete is not a read either, so it gets the bare sentence too.
+    testing.expectEqual(`SecurityError: ${blocked}`, caught(() => delete w.document));
+
+    // Coercion: three lookups, all denied, so the first one to be tried throws.
+    testing.expectEqual('SecurityError', caught(() => String(w)).split(':')[0]);
+    testing.expectEqual('SecurityError', caught(() => `${w}`).split(':')[0]);
+    testing.expectEqual('SecurityError', caught(() => w + '').split(':')[0]);
+
+    // Two readings this engine still gets wrong, asserted so the gap is a fact
+    // in the suite rather than a note in a file. Chrome throws for both, by way
+    // of V8's access-check callback rather than an interceptor:
+    //
+    //   - JSON.stringify never reaches the interceptor at all. V8's stringifier
+    //     looks `toJSON` up with PROTOTYPE_CHAIN_SKIP_INTERCEPTOR, which is why
+    //     `w.toJSON`, `Reflect.get(w, 'toJSON')` and `'toJSON' in w` all throw
+    //     here while `JSON.stringify(w)` answers "{}".
+    //   - `then` is an own property, so [[HasProperty]] finds it and never
+    //     reaches the [[NonMasking]] interceptor. Chrome's own-key list has
+    //     `then` too, and its `in` still throws, because the access check runs
+    //     before the own-property lookup.
+    //
+    // Cloudflare's widget reads `window.parent` 44 times per interstitial and
+    // gets "{}" every time, so the first of the two is a live signal.
+    testing.expectEqual('{}', JSON.stringify(w));
+    testing.expectEqual(true, 'then' in w);
+  });
+}
+</script>
