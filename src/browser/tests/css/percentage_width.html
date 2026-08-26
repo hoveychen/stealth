@@ -16,14 +16,11 @@ this test server serves (a 1904px body).
 
 Not resolved here, and each refused for its own reason:
 
-  * `margin-*` and `padding-*` percentages, which the same probe shows resolve
-    against the same width -- `margin-left:10%` of 400px is 40px, and
-    `padding-top:10%` takes its share of the WIDTH, not the height. They stay
-    refused until they have a test of their own.
-  * a containing block sized with `box-sizing: border-box`. Chrome takes the
-    percentage of its *content* box, so a 400px parent with 50px of padding
-    gives a 50% child 175px; this engine has one number per box and answers
-    200px. That is the `element-box-parts` gap, not this one.
+  * `margin-*` percentages, which the same probe shows resolve against the same
+    width -- `margin-left:10%` of 400px is 40px. They stay refused until they
+    have a test of their own. The paddings no longer are: box_parts.html is
+    that test, and `padding-top:10%` taking its share of the WIDTH rather than
+    the height is asserted there.
 -->
 
 <script id=percentage_width_resolves>
@@ -49,6 +46,9 @@ Not resolved here, and each refused for its own reason:
     ['<div style="width:400px"><div data-m style="width:50%">x</div></div>', '200px', 200],
     // The parent's own padding is outside its content box, so 400 is still 400.
     ['<div style="width:400px;padding:0 25px"><div data-m style="width:50%">x</div></div>', '200px', 200],
+    // ...unless `box-sizing` put the padding INSIDE the 400, which leaves the
+    // child half of 350.
+    ['<div style="width:400px;box-sizing:border-box;padding:0 25px"><div data-m style="width:50%">x</div></div>', '175px', 175],
     // A parent that declares nothing fills the 1904px body, and half of that
     // is 952 -- the percentage rides on the containing-block width the box
     // would have taken anyway.
@@ -90,10 +90,11 @@ rather than a side effect of this.
     return v;
   };
 
-  // Chrome answers 40px for both; this engine reports the initial value until
-  // they are done properly.
+  // Chrome answers 40px for both. The padding is resolved now (box_parts.html
+  // is where the rest of that is asserted); the margin reports the initial
+  // value until it is done properly.
   testing.expectEqual('0px', probe('margin-left:10%', 'marginLeft'));
-  testing.expectEqual('0px', probe('padding-left:10%', 'paddingLeft'));
+  testing.expectEqual('40px', probe('padding-left:10%', 'paddingLeft'));
 
   host.remove();
 }

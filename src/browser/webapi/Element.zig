@@ -1954,12 +1954,28 @@ pub fn hasBrokenImageBox(self: *const Element) bool {
     return self.asConstNode().isConnected();
 }
 
+/// `width` and `height` are the CONTENT box. What a page reads is one of three
+/// boxes and the edges are how they are told apart: clientWidth is content +
+/// padding, offsetWidth and getBoundingClientRect add the border, and a
+/// computed `width` is the content box (or the border box, under
+/// `box-sizing: border-box`). CSSStyleDeclaration.boxEdges carries the
+/// measurements.
+///
+/// The edges are only filled in on the `measure_text_width` path. The one
+/// caller that clears that flag is `getElementHeight`, the y-only walk
+/// document.elementFromPoint rejects thousands of elements on, and reading four
+/// more longhands per element there is what the whole flag exists to avoid --
+/// so hit testing goes on using the content box, as it always has.
 pub const Dimensions = struct {
     width: f64,
     height: f64,
     // if the value is explicit (e.g. inline style, width attribute, ...) or defaulted
     explicit_width: bool = false,
     explicit_height: bool = false,
+    padding_x: f64 = 0,
+    padding_y: f64 = 0,
+    border_x: f64 = 0,
+    border_y: f64 = 0,
 };
 
 pub fn getElementDimensions(self: *Element, frame: *Frame) Dimensions {
@@ -2019,10 +2035,20 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // (chrome_logical.zig is the measured pairing); cascadedComputedValue asks
     // for the other one when the first has nothing, the same as the computed
     // path does.
+    // What a declared width and height name: the content box, or the border box
+    // when `box-sizing` says so. Only asked on this path -- see Dimensions.
+    const border_box = if (comptime measure_text_width) CSSStyleDeclaration.usesBorderBox(self, frame) else false;
+
     if (comptime measure_text_width) {
+        const edges = CSSStyleDeclaration.boxEdges(self, frame);
+        dims.padding_x = edges.padding_x;
+        dims.padding_y = edges.padding_y;
+        dims.border_x = edges.border_x;
+        dims.border_y = edges.border_y;
+
         if (CSSStyleDeclaration.cascadedComputedValue(self, "width", frame)) |declared| {
             if (CSS.parseDimensionViewport(declared, frame)) |w| {
-                dims.width = w;
+                dims.width = if (border_box) @max(0, w - dims.padding_x - dims.border_x) else w;
                 dims.explicit_width = true;
             }
         }
@@ -2033,7 +2059,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
         // stretch across it in a column. CSSStyleDeclaration.flexItemWidth is
         // where the measurements are.
         if (distribute_flex) {
-            if (CSSStyleDeclaration.flexItemWidth(self, frame, depth, dims.explicit_width)) |w| {
+            if (CSSStyleDeclaration.flexItemWidth(self, frame, depth, dims.explicit_width, edges)) |w| {
                 dims.width = w;
                 dims.explicit_width = true;
             }
@@ -2049,7 +2075,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // declaration of every rule keyed to the element.
     if (CSSStyleDeclaration.cascadedComputedValue(self, "height", frame)) |declared| {
         if (CSS.parseDimensionViewport(declared, frame)) |h| {
-            dims.height = h;
+            dims.height = if (border_box) @max(0, h - dims.padding_y - dims.border_y) else h;
             dims.explicit_height = true;
         }
     }
@@ -2148,8 +2174,13 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
             // rejects on height alone, which is thousands per call.
             if (CSSStyleDeclaration.fillsContainingBlock(self, frame)) {
                 if (self.parentElement()) |parent| {
+                    // What fills the containing block is the BORDER box, so the
+                    // padding and the border come out of the content: measured,
+                    // `padding:10px` on the 1904px line is 1884 of content and
+                    // 1904 of offsetWidth, and `padding:20px;border:5px solid`
+                    // leaves its own children 1854 to fill.
                     dims.width = @max(0, parent.dimensionsAt(frame, measure_text_width, depth + 1, true).width -
-                        horizontalMargin(self, frame));
+                        horizontalMargin(self, frame) - dims.padding_x - dims.border_x);
                     // Not a declared value, but the same thing a declared one
                     // means here: the box has a width of its own, so
                     // clientWidth must not take the max with its content and
@@ -2196,12 +2227,15 @@ pub fn getClientWidthWithCache(self: *Element, frame: *Frame, visibility_cache: 
 
     const dims = self.getElementDimensions(frame);
 
+    // clientWidth is the PADDING box: content plus the padding, with the border
+    // left out. Measured -- `border:5px solid` on the 1904px line answers 1894
+    // here and 1904 for offsetWidth.
     const tag = self.getTag();
     if (tag == .html or tag == .body or dims.explicit_width) {
-        return dims.width;
+        return dims.width + dims.padding_x;
     }
 
-    return @max(dims.width, self.contentWidth(frame, visibility_cache));
+    return @max(dims.width, self.contentWidth(frame, visibility_cache)) + dims.padding_x;
 }
 
 pub fn getClientHeight(self: *Element, frame: *Frame) f64 {
@@ -2218,10 +2252,10 @@ pub fn getClientHeightWithCache(self: *Element, frame: *Frame, visibility_cache:
 
     const tag = self.getTag();
     if (tag == .html or tag == .body or dims.explicit_height) {
-        return dims.height;
+        return dims.height + dims.padding_y;
     }
 
-    return @max(dims.height, self.contentHeight(frame, visibility_cache));
+    return @max(dims.height, self.contentHeight(frame, visibility_cache)) + dims.padding_y;
 }
 
 pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
@@ -2246,10 +2280,16 @@ pub fn boundingClientRectValuesForVisible(self: *Element, frame: *Frame) DOMRect
 fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
     const dims = self.getElementDimensions(frame);
 
+    // getBoundingClientRect is the BORDER box, the same box offsetWidth
+    // reports: measured, a `padding:10px;border:5px solid` float is 8px of
+    // content, 28 of clientWidth and 38 of both offsetWidth and rect width.
+    const width = dims.width + dims.padding_x + dims.border_x;
+    const height = dims.height + dims.padding_y + dims.border_y;
+
     // An out-of-flow box is placed by its own declaration, which is the half of
     // positioning this engine can compute exactly.
     if (self.outOfFlowPosition(frame, depth)) |placed| {
-        return .{ .x = placed.x, .y = placed.y, .width = dims.width, .height = dims.height };
+        return .{ .x = placed.x, .y = placed.y, .width = width, .height = height };
     }
 
     const y = calculateDocumentPosition(self.asNode());
@@ -2260,8 +2300,8 @@ fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.
     return .{
         .x = x,
         .y = y,
-        .width = dims.width,
-        .height = dims.height,
+        .width = width,
+        .height = height,
     };
 }
 
@@ -2327,16 +2367,16 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
         return 0.0;
     }
 
-    const height = self.getElementDimensions(frame).height;
+    const dims = self.getElementDimensions(frame);
 
     const tag = self.getTag();
     // As in getScrollWidth: the root containers carry artificial giant
     // defaults, and page-level overflow checks read them.
     if (tag == .html or tag == .body) {
-        return height;
+        return dims.height;
     }
 
-    return @max(height, self.contentHeight(frame, &visibility_cache));
+    return @max(dims.height, self.contentHeight(frame, &visibility_cache)) + dims.padding_y;
 }
 
 // The height of the direct child elements stacked vertically, the counterpart
@@ -2370,17 +2410,20 @@ pub fn getScrollWidth(self: *Element, frame: *Frame) f64 {
         return 0.0;
     }
 
-    const width = self.getElementDimensions(frame).width;
+    const dims = self.getElementDimensions(frame);
 
     const tag = self.getTag();
     // The root containers carry artificial giant defaults (1920 and
     // 100_000_000, see getElementDimensions). Stacking their children on
     // top would inflate a value sites read to detect page overflow.
     if (tag == .html or tag == .body) {
-        return width;
+        return dims.width;
     }
 
-    return @max(width, self.contentWidth(frame, &visibility_cache));
+    // The scrollable overflow area includes the padding: measured, a
+    // `width:100px;padding:10px` box holding a 300px child answers 120 for
+    // clientWidth and 320 for scrollWidth.
+    return @max(dims.width, self.contentWidth(frame, &visibility_cache)) + dims.padding_x;
 }
 
 // The width of the direct child elements laid end to end on a single row.
@@ -2425,19 +2468,24 @@ fn contentWidth(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
 }
 
 pub fn getOffsetHeight(self: *Element, frame: *Frame) f64 {
-    if (!self.checkVisibilityCached(null, frame)) {
+    var visibility_cache: VisibilityCache = .{};
+    if (!self.checkVisibilityCached(&visibility_cache, frame)) {
         return 0.0;
     }
-    const dims = self.getElementDimensions(frame);
-    return dims.height;
+    return self.getClientHeightWithCache(frame, &visibility_cache) +
+        self.getElementDimensions(frame).border_y;
 }
 
+/// offsetWidth is the BORDER box: content, padding and border. It takes the
+/// same content fallback clientWidth does, so a box whose children overflow it
+/// still reports a width that grows with them.
 pub fn getOffsetWidth(self: *Element, frame: *Frame) f64 {
-    if (!self.checkVisibilityCached(null, frame)) {
+    var visibility_cache: VisibilityCache = .{};
+    if (!self.checkVisibilityCached(&visibility_cache, frame)) {
         return 0.0;
     }
-    const dims = self.getElementDimensions(frame);
-    return dims.width;
+    return self.getClientWidthWithCache(frame, &visibility_cache) +
+        self.getElementDimensions(frame).border_x;
 }
 
 pub fn getOffsetTop(self: *Element, frame: *Frame) f64 {

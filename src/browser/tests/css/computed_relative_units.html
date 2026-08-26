@@ -170,7 +170,9 @@ computed style, so falling back is the whole point rather than a shortcoming to
 be papered over.
 
 Chrome's answers here, for the record, are 200px / 200px / 100px / 17.9492px /
-15px.
+15px. The padding percentage is no longer among them -- box_parts.html resolves
+those against the containing block's width -- so it is asserted at Chrome's own
+100px below, and what is left refused is the margin, the `ex` and the `calc()`.
 -->
 
 <script id=unresolvable_still_falls_through>
@@ -187,7 +189,7 @@ Chrome's answers here, for the record, are 200px / 200px / 100px / 17.9492px /
   testing.expectEqual('0px', probe('margin-left:50%', 'marginLeft'));
   // A <p>'s own initial top margin, which is what falling through means here.
   testing.expectEqual('16px', probe('margin-top:50%', 'marginTop'));
-  testing.expectEqual('0px', probe('padding-top:25%', 'paddingTop'));
+  testing.expectEqual('100px', probe('padding-top:25%', 'paddingTop'));
   testing.expectEqual('0px', probe('font-size:20px;padding-top:2ex', 'paddingTop'));
   testing.expectEqual('0px', probe('padding-top:calc(10px + 5px)', 'paddingTop'));
 }

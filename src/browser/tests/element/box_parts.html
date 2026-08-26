@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+One element has three boxes and this engine had one number behind all of them:
+`<div style="padding:10px">` answered 1904 for computed width, clientWidth and
+offsetWidth alike, where Chrome answers 1884, 1904 and 1904.
+
+Which reading takes which box, measured against Chrome 151 with
+tools/fingerprint/scratch/expr-box-parts.js on the 1904px line this test server
+serves:
+
+  * computed `width` is the content box -- except under `box-sizing:
+    border-box`, where it is the border box;
+  * `clientWidth` is content + padding, with the border left out;
+  * `offsetWidth` and `getBoundingClientRect().width` are content + padding +
+    border;
+  * `scrollWidth` is the content extent plus the padding.
+
+A block-level box with `width: auto` fills its containing block with its BORDER
+box, so its padding and border come out of its content -- and what its own
+children fill is its content box.
+-->
+
+<script id=box_parts_width>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const read = (style, inner) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div data-m style="' + style + '">' + (inner === undefined ? 'x' : inner) + '</div>';
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [cs.width, el.clientWidth, el.offsetWidth, Math.round(el.getBoundingClientRect().width)].join('/');
+    wrap.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // computed width / clientWidth / offsetWidth / rect width
+  eq('plain', read(''), '1904px/1904/1904/1904');
+
+  // An auto-width block fills the line with its border box, so the padding and
+  // the border come out of the content.
+  eq('padding', read('padding:10px'), '1884px/1904/1904/1904');
+  eq('border', read('border:5px solid'), '1894px/1894/1904/1904');
+  eq('padding and border', read('padding:10px;border:5px solid'), '1874px/1894/1904/1904');
+  eq('border-box auto', read('box-sizing:border-box;padding:10px;border:5px solid'),
+     '1904px/1894/1904/1904');
+
+  // A declared width is the content box, and the padding and border are added
+  // outside it.
+  eq('declared', read('width:400px'), '400px/400/400/400');
+  eq('declared padding', read('width:400px;padding:10px'), '400px/420/420/420');
+  eq('declared padding border', read('width:400px;padding:10px;border:5px solid'),
+     '400px/420/430/430');
+
+  // ...unless `box-sizing` says the declaration was the border box.
+  eq('border-box declared', read('width:400px;box-sizing:border-box;padding:10px;border:5px solid'),
+     '400px/390/400/400');
+  // Too small to hold its own parts: the content clamps at 0 and the computed
+  // width is the clamped border box, not the 20px declared.
+  eq('border-box clamped', read('width:20px;box-sizing:border-box;padding:10px;border:5px solid'),
+     '30px/20/30/30');
+
+  // A shrink-to-fit box keeps its content and grows outward.
+  for (const [what, style] of [['float', 'float:left'], ['inline-block', 'display:inline-block'],
+                               ['absolute', 'position:absolute']]) {
+    eq(what, read(style + ';padding:10px;border:5px solid'), '8px/28/38/38');
+  }
+
+  // The two sides are read separately, not doubled from one.
+  eq('asymmetric', read('padding-left:7px;padding-right:13px;border-left:2px solid;border-right:4px solid'),
+     '1878px/1898/1904/1904');
+
+  // A border that draws nothing is 0 wide however it was written, and `thin`
+  // is 1px.
+  eq('border none', read('width:400px;border:5px none'), '400px/400/400/400');
+  eq('border zero', read('width:400px;border:0 solid'), '400px/400/400/400');
+  eq('border thin', read('width:400px;border:thin solid'), '400px/400/402/402');
+
+  // A padding in em resolves against the element's own font size.
+  eq('padding em', read('width:400px;font-size:20px;padding:0.5em'), '400px/420/420/420');
+
+  // What a child fills is the parent's content box.
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div style="padding:20px;border:5px solid"><div id=bpchild>x</div></div>';
+  host.appendChild(wrap);
+  const child = document.getElementById('bpchild');
+  eq('child of padded', [String(getComputedStyle(child).width), child.clientWidth, child.offsetWidth].join('/'),
+     '1854px/1854/1854');
+  wrap.remove();
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The same three boxes down the page. clientHeight is content + padding and
+offsetHeight adds the border, and a percentage padding takes its share of the
+containing block's WIDTH on both axes -- `padding:10%` in a 400px box is
+190.391px at the top as well as at the left.
+-->
+
+<script id=box_parts_height>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const read = (style) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div data-m style="' + style + '">x</div>';
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [cs.height, el.clientHeight, el.offsetHeight].join('/');
+    wrap.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  eq('plain', read(''), '18px/18/18');
+  eq('padding', read('padding:10px'), '18px/38/38');
+  eq('border', read('border:5px solid'), '18px/18/28');
+  eq('padding and border', read('padding:10px;border:5px solid'), '18px/38/48');
+  eq('border-box auto', read('box-sizing:border-box;padding:10px;border:5px solid'), '48px/38/48');
+  eq('border thin', read('width:400px;border:thin solid'), '18px/18/20');
+  eq('padding em', read('width:400px;font-size:20px;padding:0.5em'), '23px/43/43');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+A percentage padding resolves against the containing block's width, on both
+axes -- `padding-top` takes its share of the WIDTH, which is why the box below
+is 970 tall. Measured: 25% of the 1904px line is 476px per side, so clientWidth
+is 400 + 952 and clientHeight 18 + 952.
+
+25% and not the 10% the probe used first: 10% of 1904 is 190.4, and Chrome
+answers `190.391px` because it lays out on a 1/64px grid (190.390625, printed
+to six figures). That quantisation is the `layout-unit-64th-grid` plan's, not
+this one's, so the assertion here uses a percentage that lands on the grid.
+-->
+
+<script id=box_parts_percentage>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div id=bppct style="width:400px;padding:25%">x</div>';
+  host.appendChild(wrap);
+  const el = document.getElementById('bppct');
+  const cs = getComputedStyle(el);
+
+  testing.expectEqual('476px', String(cs.paddingLeft));
+  testing.expectEqual('476px', String(cs.paddingTop));
+  testing.expectEqual('400px', String(cs.width));
+  testing.expectEqual(1352, el.clientWidth);
+  testing.expectEqual(1352, el.offsetWidth);
+  testing.expectEqual(970, el.clientHeight);
+
+  host.remove();
+}
+</script>
+
+<!--
+scrollWidth is the content extent plus the padding, which is how it stays above
+clientWidth for a box whose child overflows it.
+-->
+
+<script id=box_parts_scroll>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div id=bpscroll style="width:100px;padding:10px;overflow:hidden">' +
+    '<div style="width:300px">x</div></div>';
+  host.appendChild(wrap);
+  const el = document.getElementById('bpscroll');
+
+  testing.expectEqual(120, el.clientWidth);
+  testing.expectEqual(120, el.offsetWidth);
+  testing.expectEqual(320, el.scrollWidth);
+
+  host.remove();
+}
+</script>
+
+<!--
+In a flex row the share each item takes is its BORDER box, while `flex-basis`
+is measured in the box-sizing's own terms -- a content size unless the item
+says `border-box`. So the free space is the line less every item's base plus
+its padding, border and margin, and what each item's content ends up at is its
+base plus its share.
+-->
+
+<script id=box_parts_flex>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const read = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const out = [];
+    for (const el of wrap.querySelectorAll('[data-m]')) {
+      out.push(getComputedStyle(el).width + '/' + el.clientWidth + '/' + el.offsetWidth);
+    }
+    wrap.remove();
+    return out.join(' | ');
+  };
+  const row = (style, items) =>
+    '<div style="display:flex;' + (style || '') + '">' +
+    items.map((s) => '<div data-m style="' + s + '">x</div>').join('') +
+    '</div>';
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  eq('grow padded', read(row('width:400px', ['flex:1;padding:0 25px'])), '350px/400/400');
+  eq('grow padded bordered',
+     read(row('width:400px', ['flex:1;padding:0 25px;border-left:5px solid;border-right:5px solid'])),
+     '340px/390/400');
+  eq('basis padded', read(row('width:400px', ['flex-basis:200px;padding:0 25px'])), '200px/250/250');
+  eq('basis padded border-box',
+     read(row('width:400px', ['flex-basis:200px;padding:0 25px;box-sizing:border-box'])), '200px/200/200');
+  eq('two growers, one padded',
+     read(row('width:400px', ['flex:1;padding:0 25px', 'flex:1'])), '175px/225/225 | 175px/175/175');
+  eq('container padded', read(row('width:400px;padding:0 30px', ['flex:1'])), '400px/400/400');
+  eq('plain padded', read(row('width:400px', ['padding:0 25px'])), '8px/58/58');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
