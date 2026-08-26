@@ -3525,3 +3525,7 @@ test "WebApi: CSSStyleDeclaration computed transform" {
 test "WebApi: CSSStyleDeclaration computed shorthand join" {
     try testing.htmlRunner("css/computed_shorthand_join.html", .{});
 }
+
+test "WebApi: CSSStyleDeclaration computed logical properties" {
+    try testing.htmlRunner("css/computed_logical_physical.html", .{});
+}

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`margin-block-start` and `margin-top` are two spellings of one property, so an
+element declaring either computes both. This engine stores what the page wrote
+and nothing else, so only the spelling the author used answered and the other
+read its initial value: `margin:1px 2px 3px 4px` left `marginBlock` reading a
+`<p>`'s UA default of `16px` where Chrome reads `1px 3px`.
+
+That is the largest block left after the shorthand join — 35 of its 62 remaining
+disagreements, measured with tools/fingerprint/scratch/expr-computed-shorthands.js.
+The join itself is right; the logical longhands under it hold nothing.
+
+Every expected string below is Chrome 151's own answer to the declaration above
+it, measured with tools/fingerprint/scratch/expr-logical-reads.js.
+
+The pairing is `horizontal-tb`, `ltr` — the writing mode this engine lays out,
+and the one chrome_logical.zig was measured in. `width`/`inline-size` already
+shared that assumption before this landed, which is why the size pairs are not
+asserted here: they reach the synthetic layout metrics on their own branch,
+above the mapping.
+-->
+
+<script id=physical_declaration_read_logical>
+{
+  const DECL = 'margin:1px 2px 3px 4px;padding:5px;border:2px solid rgb(1,2,3);' +
+    'position:relative;top:7px;right:8px;bottom:9px;left:10px;' +
+    'border-top-left-radius:11px;overflow-x:scroll';
+
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML = '<p style="' + DECL + '">x</p>';
+  const cs = getComputedStyle(host.firstChild);
+
+  const CASES = [
+    ['marginBlockStart', '1px'],
+    ['marginBlockEnd', '3px'],
+    ['marginInlineStart', '4px'],
+    ['marginInlineEnd', '2px'],
+    ['paddingBlockStart', '5px'],
+    ['borderBlockStartWidth', '2px'],
+    ['borderBlockStartColor', 'rgb(1, 2, 3)'],
+    ['borderBlockStartStyle', 'solid'],
+    ['insetBlockStart', '7px'],
+    ['insetInlineEnd', '8px'],
+    ['borderStartStartRadius', '11px'],
+    ['overflowInline', 'scroll'],
+    // The shorthand join sits above the mapping, so these follow for free once
+    // the longhands under them answer.
+    ['marginBlock', '1px 3px'],
+    ['marginInline', '4px 2px'],
+    ['paddingBlock', '5px'],
+    ['paddingInline', '5px'],
+    ['borderBlock', '2px solid rgb(1, 2, 3)'],
+    ['borderInline', '2px solid rgb(1, 2, 3)'],
+    ['borderBlockColor', 'rgb(1, 2, 3)'],
+    ['borderBlockStyle', 'solid'],
+    ['borderBlockWidth', '2px'],
+    ['insetBlock', '7px 9px'],
+    ['insetInline', '10px 8px'],
+  ];
+  const wrong = [];
+  for (const [prop, want] of CASES) {
+    const got = String(cs[prop]);
+    if (got !== want) wrong.push(prop + ': want ' + want + ', got ' + got);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The other direction, which has to work the same way: a logical declaration read
+back through the physical name. Nothing about the mapping is one-way in Chrome
+and chrome_logical.zig answers in both directions, because the pair was measured
+by swapping the two.
+-->
+
+<script id=logical_declaration_read_physical>
+{
+  const DECL = 'margin-block-start:1px;margin-inline-end:2px;padding-block-end:5px;' +
+    'border-inline-start-width:6px;border-inline-start-style:solid;' +
+    'position:relative;inset-block-start:7px;inset-inline-start:8px;' +
+    'border-start-start-radius:11px';
+
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML = '<p style="' + DECL + '">x</p>';
+  const cs = getComputedStyle(host.firstChild);
+
+  const CASES = [
+    ['marginTop', '1px'],
+    ['marginRight', '2px'],
+    ['paddingBottom', '5px'],
+    ['borderLeftWidth', '6px'],
+    ['borderLeftStyle', 'solid'],
+    ['top', '7px'],
+    ['left', '8px'],
+    ['borderTopLeftRadius', '11px'],
+    // And the physical shorthands over them. `margin`'s third component is the
+    // `<p>`'s own UA bottom margin, which nothing here declared.
+    ['margin', '1px 2px 16px 0px'],
+    ['padding', '0px 0px 5px'],
+    ['borderWidth', '0px 0px 0px 6px'],
+  ];
+  const wrong = [];
+  for (const [prop, want] of CASES) {
+    const got = String(cs[prop]);
+    if (got !== want) wrong.push(prop + ': want ' + want + ', got ' + got);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The mapping is a fallback and not an override: it answers only for a name the
+page declared nothing for. When a page declares *both* spellings, each one
+answers its own declaration here.
+
+Chrome does not — the two are one storage slot for it, so the later declaration
+wins for both names whichever order they come in. Measured with
+tools/fingerprint/scratch/expr-logical-conflict.js, all four orderings:
+
+  margin-top:1px;margin-block-start:2px    -> both read 2px
+  margin-block-start:3px;margin-top:4px    -> both read 4px
+  margin:5px;margin-block-start:6px        -> both read 6px
+  margin-block-start:7px;margin:8px        -> both read 8px
+
+Reproducing that means one slot at storage time, which would change what
+`el.style` — the *specified* view, a surface this plan does not touch — hands
+back. The boundary asserted below is the safe half: a counterpart never
+outranks a declaration made under the name being asked for, so nothing that
+answers correctly today starts answering the other declaration's value.
+-->
+
+<script id=own_declaration_outranks_counterpart>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML = '<p style="margin-top:1px;margin-block-start:2px">x</p>' +
+    '<p style="margin-block-start:3px;margin-top:4px">y</p>';
+  const first = getComputedStyle(host.children[0]);
+  const second = getComputedStyle(host.children[1]);
+
+  testing.expectEqual('1px', String(first.marginTop));
+  testing.expectEqual('2px', String(first.marginBlockStart));
+  testing.expectEqual('4px', String(second.marginTop));
+  testing.expectEqual('3px', String(second.marginBlockStart));
+  host.remove();
+}
+</script>
