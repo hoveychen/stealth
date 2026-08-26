@@ -16555,3 +16555,69 @@ holds 20/21 and `expr-flex-item-width.js` holds 10/10.
 1197ms of its 1500ms budget.
 
 **A fidelity fix, not a key.** No station opened.
+
+## The payload deficit: three shapes ruled out, and a bug found on the way (B53, 2026-08-26)
+
+With the protocol layer at x-hyatt ruled out, the only place left for Kasada's
+refusal was the `/tl` body, which is a stable ~600 bytes shorter here than in
+Chrome (19042/19002 against 19602/19602/19594, three sittings). This is what
+that shortfall is *not*.
+
+**It is not an enumeration of the global.** Plant a hundred own properties with
+six-character names on `window` -- six hundred bytes of names, chosen to match
+the gap -- and `postLen` moves by **-16**, inside the run-to-run noise
+(`probes/inject-b54-window-padding.js`, `results/b54-hyatt-{base,padded}.json`).
+That matters beyond this station: it would have put the search back on B52's
+prototype-completeness lever, which is recorded as spent.
+
+**It is not a collection budget a faster engine fills further.** The Debug
+build, a fifth slower to the POST (853ms against 732ms), posts 19034 -- the same
+length (`results/b54-hyatt-debug.json`).
+
+**It is not in the answers Kasada was measured taking.** 115 length-bearing
+answers drawn from `results/b53-reads-x-hyatt.json` -- the identity block,
+screen and viewport, WebGL including the `UNMASKED_RENDERER_WEBGL` the log asks
+for 153 times, the media-capability triple, timing, computed style, Intl, the
+`toDataURL` fan-out by length -- run on both arms on the same https page
+(`probes/expr-b54-answer-lengths.js`, `results/b54-answers-{chrome,lp}.json`).
+**19 differ and the total is -116 bytes, not -600**, and even that is mostly
+noise: the largest entry was a `performance.now` sample that looked twelve bytes
+short until a 4000-sample probe showed both arms have the same shape
+(`probes/expr-b54-now-shape.js`, Chrome mean length 15.04 against 14.66 here),
+and the ±1s are the headed window being one pixel taller.
+
+So the payload is a fixed set of answers, and what makes it short is not among
+the answers the read log names. Whoever picks this up should suspect that its
+length is not a linear function of its content at all.
+
+### `javascript:;` was being dropped about a third of the time
+
+Found while looking for the above. Every x-hyatt run leaves two
+`javascript-url compile CompilationError` lines in the engine log. Getting the
+source took three attempts and two of them were the instrument:
+
+* Planting candidate sources and seeing which warn measures the harness's
+  settle, not the engine. The javascript: URL runs as a *scheduled task*, so its
+  warning lands wherever the settle puts it -- with a shared engine it is
+  charged to the following source, and with a fresh engine per source every
+  source warns, including ones that cannot throw.
+* Reporting from an injected script over `console` produces nothing, because
+  `antibot-sweep` never sends `Runtime.enable` -- Kasada withholds clearance
+  from a client that has -- so a station run has no console at all.
+
+Reporting through `document.title` works, and the sweep records it. The answer:
+five `<iframe src="javascript:;">` (`probes/inject-b54-jsurl-source.js`,
+`results/b54-hyatt-jsurl3.json`). `;` is an empty statement — it compiles in
+every JS engine there is, so a CompilationError for it is ours.
+
+`URL.unescape` took an allocator and, for any input without a `%`, handed the
+caller's own slice back instead of allocating. `runJavascriptUrl` unescapes into
+a task arena and then *schedules* the task, and `javascript:;` has no `%` in it.
+Same page, same engine, twenty navigations on ReleaseFast: **six answered
+CompilationError before the fix, none after** (`scratch/b54-jsurl2.mjs`). It
+hides in a Debug build, where the freed bytes are not reused as promptly — eight
+of eight passed there beforehand, which nearly closed the file on it.
+
+At x-hyatt the warnings go **2 → 0** and all five scripts now run
+(`results/b54-hyatt-jsurlfix.json`). **The station is still refused-429 and the
+body is still ~600 bytes short.** A real bug, not the key.
