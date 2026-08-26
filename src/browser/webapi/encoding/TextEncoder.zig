@@ -45,6 +45,49 @@ pub fn encode(_: *const TextEncoder, v_: ?js.Value) !js.TypedArray(u8) {
     return .{ .values = str };
 }
 
+const encode_into_prefix = "Failed to execute 'encodeInto' on 'TextEncoder': ";
+
+/// https://encoding.spec.whatwg.org/#dom-textencoder-encodeinto
+///
+/// Writes straight into the caller's Uint8Array and reports how much of the
+/// source it got through, so a page can encode without allocating. Measured on
+/// Chrome 151: the result is a plain object rather than an interface instance,
+/// a code point is never split across the end of the destination
+/// (`encodeInto('é€', new Uint8Array(3))` reads 1 and writes 2, leaving the
+/// third byte at 0), an empty destination writes nothing rather than throwing,
+/// and anything that is not a Uint8Array is refused by parameter number.
+pub fn encodeInto(_: *const TextEncoder, source: js.Value, destination: js.Object, exec: *const js.Execution) !EncodeIntoResult {
+    if (!destination.toValue().isUint8Array()) {
+        return exec.js.fail(error.TypeMismatch, encode_into_prefix ++
+            "parameter 2 is not of type 'Uint8Array'.");
+    }
+    const into = try destination.toZig([]u8);
+    const text = try source.toStringSlice();
+
+    var read: u32 = 0;
+    var written: usize = 0;
+    var i: usize = 0;
+    while (i < text.len) {
+        const width = std.unicode.utf8ByteSequenceLength(text[i]) catch return error.InvalidUtf8;
+        if (written + width > into.len) {
+            break;
+        }
+        @memcpy(into[written..][0..width], text[i..][0..width]);
+        written += width;
+        i += width;
+        // `read` counts UTF-16 code units, which is what the page's own string
+        // is indexed in: an astral code point is four UTF-8 bytes and two of
+        // these.
+        read += if (width == 4) 2 else 1;
+    }
+    return .{ .read = read, .written = @intCast(written) };
+}
+
+const EncodeIntoResult = struct {
+    read: u32,
+    written: u32,
+};
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(TextEncoder);
 
@@ -55,9 +98,13 @@ pub const JsApi = struct {
         pub const empty_with_no_proto = true;
     };
 
+    // Declaration order is own-property order, and this is Chrome 151's own
+    // Object.getOwnPropertyNames(TextEncoder.prototype): the attribute first,
+    // then the two operations.
     pub const constructor = bridge.constructor(TextEncoder.init, .{});
-    pub const encode = bridge.function(TextEncoder.encode, .{ .as_typed_array = true });
     pub const encoding = bridge.property("utf-8", .{ .template = false });
+    pub const encode = bridge.function(TextEncoder.encode, .{ .as_typed_array = true });
+    pub const encodeInto = bridge.function(TextEncoder.encodeInto, .{});
 };
 
 const testing = @import("../../../testing.zig");

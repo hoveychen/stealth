@@ -382,3 +382,30 @@
     }
   }
 </script>
+
+<script id=get_set_cookie>
+  {
+    // Chrome's own Object.getOwnPropertyNames(Headers.prototype) order, and
+    // the member this engine was missing. Measured on Chrome 151.
+    testing.expectEqual(
+      'append,delete,get,getSetCookie,has,set,entries,forEach,keys,values,constructor',
+      Object.getOwnPropertyNames(Headers.prototype).join(','));
+    const d = Object.getOwnPropertyDescriptor(Headers.prototype, 'getSetCookie');
+    testing.expectEqual(0, d.value.length);
+    testing.expectEqual('getSetCookie', d.value.name);
+
+    // Unlike get(), which joins repeated values with ", ", getSetCookie hands
+    // back one entry per header line -- that is the whole reason it exists.
+    const h = new Headers();
+    testing.expectEqual([], h.getSetCookie());
+    h.append('set-cookie', 'a=1');
+    h.append('set-cookie', 'b=2');
+    testing.expectEqual(['a=1', 'b=2'], h.getSetCookie());
+    testing.expectEqual('a=1, b=2', h.get('set-cookie'));
+    // The name is matched case-insensitively, like every other Headers lookup.
+    const upper = new Headers();
+    upper.append('Set-Cookie', 'c=3');
+    testing.expectEqual(['c=3'], upper.getSetCookie());
+    testing.expectEqual(true, Array.isArray(h.getSetCookie()));
+  }
+</script>
