@@ -13700,9 +13700,14 @@ nothing, and is not in the tree.
 
 ### The eighteen that are left, and the one mechanism behind five of them
 
-`JSON.stringify(w)` answers `"{}"` where Chrome throws — and that one has a
-consumer, not just a spec. Cloudflare's widget reads `window.parent` **44 times
-per interstitial** and gets `"{}"` every time.
+`JSON.stringify(w)` answers `"{}"` where Chrome throws. Be careful about how
+strong that evidence is: the widget does read `window.parent` 44 times per
+interstitial (that count is from the `prop_read` log, which records the key and
+nothing else), and the `"{}"` was recorded in the r1 payload-length hunt above —
+but by **our own tracer's** serializer, not by the widget's. So this is a real
+divergence a detector could read, and there is no measurement of one doing it.
+The stronger reason to want it is that it is the same mechanism as four other
+divergences, not that it has a named consumer.
 
 It is not reachable from an interceptor. V8's `JsonStringifier` looks `toJSON` up
 with `PROTOTYPE_CHAIN_SKIP_INTERCEPTOR`, deliberately, to avoid the garbage a
