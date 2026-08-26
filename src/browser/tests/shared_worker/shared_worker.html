@@ -158,3 +158,37 @@
     });
   }
 </script>
+
+<script id="shared_worker_realm_shape" type=module>
+  // A shared worker's realm is narrower than a dedicated worker's, and this
+  // engine used to build them from one list. Measured on Chrome 151 by running
+  // the same interface table in both kinds
+  // (tools/fingerprint/probes/expr-shared-worker-proto-table.js): 41 interface
+  // objects and four members that a dedicated worker carries are absent here.
+  //
+  // The realm is worth pinning because the Akamai interstitial on macys.com
+  // runs its sensor from a SharedWorker
+  // (tools/fingerprint/results/b50-prop-reads-replay.json), so every one of
+  // those names was readable off this engine and not off a browser.
+  {
+    const state = await testing.async();
+    const worker = new SharedWorker('./realm-shape-worker.js');
+    worker.port.onmessage = (event) => state.resolve(event.data);
+    worker.port.start();
+
+    await state.done((d) => {
+      // [Global] moves attributes and operations onto the global; the two
+      // deprecated quota constants stay on the prototype.
+      testing.expectEqual('TEMPORARY,PERSISTENT,constructor', d.SharedWorkerGlobalScope);
+
+      testing.expectEqual('', d.dedicated_only_interfaces);
+      testing.expectEqual('', d.navigator_device_members);
+      testing.expectEqual(false, d.file_handle_has_sync);
+
+      testing.expectEqual('deviceMemory,userAgentData,locks,storage,gpu,storageBuckets',
+        d.WorkerNavigator_tail);
+      testing.expectEqual('function', d.has_fetch);
+      testing.expectEqual('object', d.has_caches);
+    });
+  }
+</script>

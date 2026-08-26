@@ -94,5 +94,5 @@ pub const JsApi = struct {
     pub const estimate = bridge.function(StorageManager.estimate, .{});
     pub const persisted = bridge.function(StorageManager.persisted, .{});
     pub const getDirectory = bridge.function(StorageManager.getDirectory, .{});
-    pub const persist = bridge.function(StorageManager.persist, .{});
+    pub const persist = bridge.function(StorageManager.persist, .{ .exposed = .window });
 };

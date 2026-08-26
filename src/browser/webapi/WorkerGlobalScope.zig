@@ -36,6 +36,8 @@ const ScriptManagerBase = @import("../ScriptManagerBase.zig");
 const Event = @import("Event.zig");
 const global_event_handlers = @import("global_event_handlers.zig");
 const Crypto = @import("Crypto.zig");
+const cache_storage = @import("storage/cache_storage.zig");
+const ImageBitmap = @import("canvas/ImageBitmap.zig");
 const Console = @import("Console.zig");
 const WorkerNavigator = @import("WorkerNavigator.zig");
 const Timers = @import("Timers.zig");
@@ -124,6 +126,8 @@ _fonts: ?*FontFaceSet = null,
 // realm's own for the same reason -- see slotsFor in filesystem.zig. Chrome's
 // worker carries both operations (measured).
 _filesystems: [2]?*filesystem.DOMFileSystem = .{ null, null },
+_caches: cache_storage.CacheStorage = .init,
+_on_language_change: ?JS.Function.Global = null,
 _on_error: ?JS.Function.Global = null,
 _on_rejection_handled: ?JS.Function.Global = null,
 _on_unhandled_rejection: ?JS.Function.Global = null,
@@ -418,6 +422,18 @@ pub fn getCookieStore(self: *WorkerGlobalScope) !*CookieStore {
     return cs;
 }
 
+pub fn getCaches(self: *WorkerGlobalScope) *cache_storage.CacheStorage {
+    return &self._caches;
+}
+
+pub fn getOnLanguageChange(self: *const WorkerGlobalScope) ?JS.Function.Global {
+    return self._on_language_change;
+}
+
+pub fn setOnLanguageChange(self: *WorkerGlobalScope, setter: ?FunctionSetter) void {
+    self._on_language_change = getFunctionFromSetter(setter);
+}
+
 pub fn getOnError(self: *const WorkerGlobalScope) ?JS.Function.Global {
     return self._on_error;
 }
@@ -700,14 +716,36 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "WorkerGlobalScope";
+        // Chrome's `constructor` sits after `importScripts`; everything below
+        // it is installed per context. Measured in a blob worker.
+        pub const constructor_after = "importScripts";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const crypto = bridge.accessor(WorkerGlobalScope.getCrypto, null, .{});
+    // Chrome's own-property order for WorkerGlobalScope.prototype, measured in
+    // a blob worker on Chrome 151 (probes/expr-worker-proto-table.js):
+    //
+    //   self, location, onerror, onlanguagechange, navigator,
+    //   onrejectionhandled, onunhandledrejection, origin, performance,
+    //   trustedTypes, crypto, indexedDB, fonts, createImageBitmap, fetch,
+    //   importScripts, constructor, isSecureContext, crossOriginIsolated,
+    //   scheduler, caches, atob, btoa, queueMicrotask, reportError,
+    //   structuredClone, clearInterval, clearTimeout, setInterval, setTimeout
+    //
+    // The members after `constructor` are the ones Blink installs per context;
+    // see Meta.constructor_after above.
+    pub const self = bridge.accessor(WorkerGlobalScope.getSelf, WorkerGlobalScope.setSelf, .{});
+    pub const location = bridge.accessor(WorkerGlobalScope.getLocation, null, .{});
+    pub const onerror = bridge.accessor(WorkerGlobalScope.getOnError, WorkerGlobalScope.setOnError, .{});
+    pub const onlanguagechange = bridge.accessor(WorkerGlobalScope.getOnLanguageChange, WorkerGlobalScope.setOnLanguageChange, .{});
     pub const navigator = bridge.accessor(WorkerGlobalScope.getNavigator, null, .{});
-    pub const scheduler = bridge.accessor(WorkerGlobalScope.getScheduler, null, .{});
-    pub const trustedTypes = bridge.accessor(WorkerGlobalScope.getTrustedTypes, null, .{});
+    pub const onrejectionhandled = bridge.accessor(WorkerGlobalScope.getOnRejectionHandled, WorkerGlobalScope.setOnRejectionHandled, .{});
+    pub const onunhandledrejection = bridge.accessor(WorkerGlobalScope.getOnUnhandledRejection, WorkerGlobalScope.setOnUnhandledRejection, .{});
+
+    // Measured on a headless Chrome 151 blob worker (probes/expr-worker-surface
+    // .js): `origin` is [Replaceable], so it has a setter as well as a getter.
+    pub const origin = bridge.accessor(WorkerGlobalScope.getOrigin, WorkerGlobalScope.setOrigin, .{});
     pub const performance = bridge.accessor(struct {
         // Unnecessary, But, our WebAPI getters are ALWAYS `fn getPerformance()...`.
         // But for performance, we _need_ to have fn performance() *Performance to
@@ -717,26 +755,25 @@ pub const JsApi = struct {
             return wgs.performance();
         }
     }.wrap, null, .{});
-    pub const self = bridge.accessor(WorkerGlobalScope.getSelf, WorkerGlobalScope.setSelf, .{});
-    pub const location = bridge.accessor(WorkerGlobalScope.getLocation, null, .{});
+    pub const trustedTypes = bridge.accessor(WorkerGlobalScope.getTrustedTypes, null, .{});
+    pub const crypto = bridge.accessor(WorkerGlobalScope.getCrypto, null, .{});
     pub const indexedDB = bridge.accessor(WorkerGlobalScope.getIndexedDB, null, .{});
     pub const fonts = bridge.accessor(WorkerGlobalScope.getFonts, null, .{});
-
-    pub const onerror = bridge.accessor(WorkerGlobalScope.getOnError, WorkerGlobalScope.setOnError, .{});
-    pub const onrejectionhandled = bridge.accessor(WorkerGlobalScope.getOnRejectionHandled, WorkerGlobalScope.setOnRejectionHandled, .{});
-    pub const onunhandledrejection = bridge.accessor(WorkerGlobalScope.getOnUnhandledRejection, WorkerGlobalScope.setOnUnhandledRejection, .{});
-
-    pub const btoa = bridge.function(WorkerGlobalScope.btoa, .{});
-    pub const atob = bridge.function(WorkerGlobalScope.atob, .{});
-    pub const structuredClone = bridge.function(WorkerGlobalScope.structuredClone, .{});
-    pub const reportError = bridge.function(WorkerGlobalScope.reportError, .{});
+    pub const createImageBitmap = bridge.function(struct {
+        fn createImageBitmap(
+            _: *WorkerGlobalScope,
+            source: ?JS.Value,
+            sx: ?JS.Value,
+            sy: ?JS.Value,
+            sw: ?JS.Value,
+            sh: ?JS.Value,
+            exec: *const JS.Execution,
+        ) !JS.Promise {
+            return ImageBitmap.create(source, sx, sy, sw, sh, exec);
+        }
+    }.createImageBitmap, .{ .arity = 1 });
     pub const fetch = bridge.function(WorkerGlobalScope.fetch, .{});
     pub const importScripts = bridge.function(WorkerGlobalScope.importScripts, .{});
-    pub const queueMicrotask = bridge.function(WorkerGlobalScope.queueMicrotask, .{});
-    pub const setTimeout = bridge.function(WorkerGlobalScope.setTimeout, .{});
-    pub const clearTimeout = bridge.function(WorkerGlobalScope.clearTimeout, .{});
-    pub const setInterval = bridge.function(WorkerGlobalScope.setInterval, .{});
-    pub const clearInterval = bridge.function(WorkerGlobalScope.clearInterval, .{});
 
     // A worker's secure-context state is its owner's, not a constant: measured
     // on a headed Chrome 151, a worker on http://localhost:8777 answers true
@@ -745,10 +782,16 @@ pub const JsApi = struct {
     // enumerable, configurable getter on WorkerGlobalScope.prototype, which is
     // an accessor here rather than the read-only data property it used to be.
     pub const isSecureContext = bridge.accessor(WorkerGlobalScope.getIsSecureContext, null, .{});
-
-    // Measured on a headless Chrome 151 blob worker (probes/expr-worker-surface
-    // .js): all four answer from WorkerGlobalScope.prototype, and `origin` is
-    // [Replaceable], so it has a setter as well as a getter.
-    pub const origin = bridge.accessor(WorkerGlobalScope.getOrigin, WorkerGlobalScope.setOrigin, .{});
     pub const crossOriginIsolated = bridge.accessor(WorkerGlobalScope.getCrossOriginIsolated, null, .{});
+    pub const scheduler = bridge.accessor(WorkerGlobalScope.getScheduler, null, .{});
+    pub const caches = bridge.accessor(WorkerGlobalScope.getCaches, null, .{});
+    pub const atob = bridge.function(WorkerGlobalScope.atob, .{});
+    pub const btoa = bridge.function(WorkerGlobalScope.btoa, .{});
+    pub const queueMicrotask = bridge.function(WorkerGlobalScope.queueMicrotask, .{});
+    pub const reportError = bridge.function(WorkerGlobalScope.reportError, .{});
+    pub const structuredClone = bridge.function(WorkerGlobalScope.structuredClone, .{});
+    pub const clearInterval = bridge.function(WorkerGlobalScope.clearInterval, .{});
+    pub const clearTimeout = bridge.function(WorkerGlobalScope.clearTimeout, .{});
+    pub const setInterval = bridge.function(WorkerGlobalScope.setInterval, .{});
+    pub const setTimeout = bridge.function(WorkerGlobalScope.setTimeout, .{});
 };

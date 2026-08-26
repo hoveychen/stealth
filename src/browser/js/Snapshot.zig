@@ -46,12 +46,18 @@ const Caller = @import("Caller.zig");
 
 const Realm = enum {
     window,
-    worker,
+    dedicated_worker,
+    shared_worker,
 
-    fn asExposed(comptime self: Realm) Caller.Function.Opts.Exposed {
-        return switch (self) {
-            .window => .window,
-            .worker => .worker,
+    /// Whether a member (or interface) tagged with `exposed` belongs in this
+    /// realm. The two worker kinds are one realm as far as [Exposed=Worker]
+    /// goes and two as far as [Exposed=DedicatedWorker] does.
+    fn allows(comptime self: Realm, comptime exposed: Caller.Function.Opts.Exposed) bool {
+        return switch (exposed) {
+            .both => true,
+            .window => self == .window,
+            .worker => self == .dedicated_worker or self == .shared_worker,
+            .dedicated_worker => self == .dedicated_worker,
         };
     }
 };
@@ -274,13 +280,13 @@ fn build() !Snapshot {
 
         {
             const DedicatedWorkerGlobalScope = @import("../webapi/DedicatedWorkerGlobalScope.zig");
-            const index = try createSnapshotContext(.worker, &DedicatedWorkerJsApis, DedicatedWorkerGlobalScope.JsApi, isolate, snapshot_creator.?, &templates, null);
+            const index = try createSnapshotContext(.dedicated_worker, &DedicatedWorkerJsApis, DedicatedWorkerGlobalScope.JsApi, isolate, snapshot_creator.?, &templates, null);
             std.debug.assert(index == 1);
         }
 
         {
             const SharedWorkerGlobalScope = @import("../webapi/SharedWorkerGlobalScope.zig");
-            const index = try createSnapshotContext(.worker, &SharedWorkerJsApis, SharedWorkerGlobalScope.JsApi, isolate, snapshot_creator.?, &templates, null);
+            const index = try createSnapshotContext(.shared_worker, &SharedWorkerJsApis, SharedWorkerGlobalScope.JsApi, isolate, snapshot_creator.?, &templates, null);
             std.debug.assert(index == 2);
         }
     }
@@ -421,7 +427,7 @@ fn createSnapshotContext(
         // and PerformanceNavigation in tow; Chrome exposes neither of those two
         // in a worker (measured, probes/expr-worker-surface.js).
         const interface_exposed = comptime if (@hasDecl(JsApi.Meta, "exposed")) JsApi.Meta.exposed else Caller.Function.Opts.Exposed.both;
-        const in_realm = comptime interface_exposed == .both or interface_exposed == realm.asExposed();
+        const in_realm = comptime realm.allows(interface_exposed);
 
         if (@hasDecl(JsApi.Meta, "name") and !no_interface_object and in_realm) {
             if (@hasDecl(JsApi.Meta, "constructor_alias")) {
@@ -511,7 +517,7 @@ fn createSnapshotContext(
                 const proto_obj: *const v8.Object = @ptrCast(proto_handle);
                 inline for (@typeInfo(JsApi).@"struct".decls) |d| {
                     const exposed = comptime memberExposed(@field(JsApi, d.name));
-                    if (comptime exposed != .both and exposed != realm.asExposed()) {
+                    if (comptime !realm.allows(exposed)) {
                         const name: [:0]const u8 = d.name;
                         const name_v8 = v8.v8__String__NewFromUtf8(isolate, name.ptr, v8.kNormal, @intCast(name.len));
                         var maybe_deleted: v8.MaybeBool = undefined;

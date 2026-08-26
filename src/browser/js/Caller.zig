@@ -1121,7 +1121,14 @@ pub const Function = struct {
         // anonymous, with a zero-length setter.
         anonymous: bool = false,
 
-        pub const Exposed = enum { both, window, worker };
+        // `worker` means both worker kinds. `dedicated_worker` is the
+        // narrower [Exposed=DedicatedWorker]: a member a shared worker does
+        // not carry. Measured on Chrome 151 by running the same interface
+        // table in both worker kinds -- `navigator.hid`/`serial`/`usb` and
+        // `FileSystemFileHandle.createSyncAccessHandle` are on the dedicated
+        // side only (tools/fingerprint/probes/expr-shared-worker-proto-table
+        // .js).
+        pub const Exposed = enum { both, window, worker, dedicated_worker };
 
         // We support two ways to cache a value directly into a v8::Object. The
         // difference between the two is like the difference between a Map

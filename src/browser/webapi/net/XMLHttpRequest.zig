@@ -883,7 +883,10 @@ pub const JsApi = struct {
     pub const setRequestHeader = bridge.function(XMLHttpRequest.setRequestHeader, .{});
 
     // --- everything below is behind `constructor` in Chrome ---
-    pub const responseXML = bridge.accessor(XMLHttpRequest.getResponseXML, null, .{});
+    // `[Exposed=Window]`: a worker has no document to parse into, and
+    // Chrome leaves the member off `XMLHttpRequest.prototype` there
+    // entirely (measured in a blob worker on Chrome 151).
+    pub const responseXML = bridge.accessor(XMLHttpRequest.getResponseXML, null, .{ .exposed = .window });
     pub const setAttributionReporting = bridge.function(XMLHttpRequest.setAttributionReporting, .{});
     pub const setPrivateToken = bridge.function(XMLHttpRequest.setPrivateToken, .{});
 };

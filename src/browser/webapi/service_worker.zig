@@ -226,7 +226,7 @@ pub const ServiceWorkerRegistration = struct {
         pub const backgroundFetch = bridge.accessor(R.backgroundFetch, null, .{});
         pub const periodicSync = bridge.accessor(R.periodicSync, null, .{});
         pub const sync = bridge.accessor(R.sync, null, .{});
-        pub const cookies = bridge.accessor(R.cookies, null, .{});
+        pub const cookies = bridge.accessor(R.cookies, null, .{ .exposed = .window });
         pub const pushManager = bridge.accessor(R.pushManager, null, .{});
         pub const getNotifications = bridge.function(R.refuse1, .{ .arity = 0 });
         pub const showNotification = bridge.function(R.refuse1, .{ .arity = 1 });

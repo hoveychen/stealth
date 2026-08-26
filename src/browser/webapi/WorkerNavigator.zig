@@ -155,6 +155,12 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "WorkerNavigator";
+        // Chrome's `constructor` sits after `connection`; everything below it
+        // is installed per context. Measured in a blob worker on Chrome 151
+        // (probes/expr-worker-proto-table.js) -- and read for real: the Akamai
+        // interstitial on macys reads nine of these members from inside a
+        // SharedWorker (results/b50-prop-reads-replay.json).
+        pub const constructor_after = "connection";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
@@ -174,11 +180,16 @@ pub const JsApi = struct {
     pub const languages = bridge.accessor(WorkerNavigator.getLanguages, null, .{});
     pub const onLine = bridge.accessor(WorkerNavigator.getOnLine, null, .{});
     pub const connection = bridge.accessor(WorkerNavigator.getConnection, null, .{});
-    pub const hid = bridge.accessor(WorkerNavigator.getHid, null, .{});
+    // [Exposed=DedicatedWorker] for these three: a shared worker's navigator
+    // has none of them (measured on Chrome 151,
+    // probes/expr-shared-worker-proto-table.js), which matters because the
+    // Akamai interstitial on macys reads its WorkerNavigator from a
+    // SharedWorker.
+    pub const hid = bridge.accessor(WorkerNavigator.getHid, null, .{ .exposed = .dedicated_worker });
     pub const mediaCapabilities = bridge.accessor(WorkerNavigator.getMediaCapabilities, null, .{});
     pub const permissions = bridge.accessor(WorkerNavigator.getPermissions, null, .{});
-    pub const serial = bridge.accessor(WorkerNavigator.getSerial, null, .{});
-    pub const usb = bridge.accessor(WorkerNavigator.getUsb, null, .{});
+    pub const serial = bridge.accessor(WorkerNavigator.getSerial, null, .{ .exposed = .dedicated_worker });
+    pub const usb = bridge.accessor(WorkerNavigator.getUsb, null, .{ .exposed = .dedicated_worker });
     pub const deviceMemory = bridge.accessor(WorkerNavigator.getDeviceMemory, null, .{});
     pub const userAgentData = bridge.accessor(WorkerNavigator.getUserAgentData, null, .{});
     pub const locks = bridge.accessor(WorkerNavigator.getLocks, null, .{});

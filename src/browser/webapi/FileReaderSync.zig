@@ -65,6 +65,9 @@ pub const JsApi = struct {
     pub const constructor = bridge.constructor(FileReaderSync.init, .{});
     pub const readAsArrayBuffer = bridge.function(FileReaderSync.readAsArrayBuffer, .{});
     pub const readAsBinaryString = bridge.function(FileReaderSync.readAsBinaryString, .{});
-    pub const readAsText = bridge.function(FileReaderSync.readAsText, .{});
+    // Chrome's order, measured in a blob worker: readAsDataURL before
+    // readAsText, which is IDL order and not the order the two were declared
+    // in here.
     pub const readAsDataURL = bridge.function(FileReaderSync.readAsDataURL, .{});
+    pub const readAsText = bridge.function(FileReaderSync.readAsText, .{});
 };

@@ -877,7 +877,7 @@ pub const StorageBucket = struct {
         pub const getDirectory = bridge.function(StorageBucket.getDirectory, .{});
         pub const persisted = bridge.function(StorageBucket.persisted, .{});
         pub const setExpires = bridge.function(StorageBucket.setExpires, .{});
-        pub const persist = bridge.function(StorageBucket.persist, .{});
+        pub const persist = bridge.function(StorageBucket.persist, .{ .exposed = .window });
     };
 };
 

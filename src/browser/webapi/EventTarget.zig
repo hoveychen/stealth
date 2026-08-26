@@ -633,9 +633,13 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's own-property order, in both the window realm and a worker's:
+    // addEventListener, dispatchEvent, removeEventListener. This is IDL order,
+    // not the declaration order the file used to carry, and it is on the most
+    // walked prototype in the realm.
     pub const constructor = bridge.constructor(EventTarget.init, .{});
-    pub const dispatchEvent = bridge.function(EventTarget.dispatchEvent, .{});
     pub const addEventListener = bridge.function(EventTarget.addEventListener, .{});
+    pub const dispatchEvent = bridge.function(EventTarget.dispatchEvent, .{});
     pub const removeEventListener = bridge.function(EventTarget.removeEventListener, .{});
 };
 

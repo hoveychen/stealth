@@ -253,6 +253,9 @@ pub const FileSystemFileHandle = struct {
 
         pub const Meta = struct {
             pub const name = "FileSystemFileHandle";
+            // `createSyncAccessHandle` is worker-only, so Blink installs it
+            // per context and `constructor` lands ahead of it (measured).
+            pub const constructor_after = "move";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
@@ -260,7 +263,7 @@ pub const FileSystemFileHandle = struct {
         pub const createWritable = bridge.function(FileSystemFileHandle.createWritable, .{});
         pub const getFile = bridge.function(FileSystemFileHandle.getFile, .{});
         pub const move = bridge.function(FileSystemFileHandle.move, .{});
-        pub const createSyncAccessHandle = bridge.function(FileSystemFileHandle.createSyncAccessHandle, .{ .exposed = .worker });
+        pub const createSyncAccessHandle = bridge.function(FileSystemFileHandle.createSyncAccessHandle, .{ .exposed = .dedicated_worker });
     };
 };
 

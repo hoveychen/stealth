@@ -424,7 +424,10 @@ pub const HID = struct {
         pub const onconnect = bridge.accessor(handlerProperty(HID, .onconnect).get, handlerProperty(HID, .onconnect).set, .{});
         pub const ondisconnect = bridge.accessor(handlerProperty(HID, .ondisconnect).get, handlerProperty(HID, .ondisconnect).set, .{});
         pub const getDevices = bridge.function(HID.getDevices, .{});
-        pub const requestDevice = bridge.function(HID.requestDevice, .{});
+        // `[Exposed=Window]` on the picker half of the three device APIs:
+        // a worker sees `navigator.hid` but not `hid.requestDevice`
+        // (measured in a blob worker on Chrome 151).
+        pub const requestDevice = bridge.function(HID.requestDevice, .{ .exposed = .window });
     };
 };
 
@@ -461,7 +464,7 @@ pub const Serial = struct {
         pub const onconnect = bridge.accessor(handlerProperty(Serial, .onconnect).get, handlerProperty(Serial, .onconnect).set, .{});
         pub const ondisconnect = bridge.accessor(handlerProperty(Serial, .ondisconnect).get, handlerProperty(Serial, .ondisconnect).set, .{});
         pub const getPorts = bridge.function(Serial.getPorts, .{});
-        pub const requestPort = bridge.function(Serial.requestPort, .{});
+        pub const requestPort = bridge.function(Serial.requestPort, .{ .exposed = .window });
     };
 };
 
@@ -498,7 +501,7 @@ pub const USB = struct {
         pub const onconnect = bridge.accessor(handlerProperty(USB, .onconnect).get, handlerProperty(USB, .onconnect).set, .{});
         pub const ondisconnect = bridge.accessor(handlerProperty(USB, .ondisconnect).get, handlerProperty(USB, .ondisconnect).set, .{});
         pub const getDevices = bridge.function(USB.getDevices, .{});
-        pub const requestDevice = bridge.function(USB.requestDevice, .{});
+        pub const requestDevice = bridge.function(USB.requestDevice, .{ .exposed = .window });
     };
 };
 
