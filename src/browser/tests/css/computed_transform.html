@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+The computed value of `transform` is one matrix, never the list the author
+wrote. Every expectation below is a reading from Chrome 151, taken with
+tools/fingerprint/scratch/expr-transform-matrix.js and pasted in unedited.
+
+Two conventions carry the whole table. The list composes left to right, which is
+why `rotate(45deg) translateX(3px)` translates by 2.12132 on both axes while
+`translateX(3px) rotate(45deg)` keeps its 3, 0. And a list that mentions no
+third dimension answers `matrix()` while one that does answers `matrix3d()` --
+`rotateZ` counts as two-dimensional by that rule, and Chrome agrees.
+
+The numbers are printed to six decimals with trailing zeros dropped, so a cosine
+of 6.1e-17 answers a plain `0`.
+
+Percentages are absent on purpose: they resolve against the element's own box,
+which this engine does not lay out, so `translateX(50%)` reports the initial
+value rather than a number Chrome never printed. See computed-style-relative-units.
+-->
+
+<script id=transform_computes_to_a_matrix>
+{
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    host.innerHTML = '<p style="width:100px;height:50px;transform:' + decl + '">x</p>';
+    document.body.appendChild(host);
+    const got = String(getComputedStyle(host.firstChild).transform);
+    host.remove();
+    return got;
+  };
+
+  const CASES = [
+    ['none', 'none'],
+    ['matrix(1, 0, 0, 1, 3, 0)', 'translateX(3px)'],
+    ['matrix(1, 0, 0, 1, 0, -4)', 'translateY(-4px)'],
+    ['matrix(1, 0, 0, 1, 3, 4)', 'translate(3px, 4px)'],
+    ['matrix(1, 0, 0, 1, 3, 0)', 'translate(3px)'],
+    ['matrix(2, 0, 0, 2, 0, 0)', 'scale(2)'],
+    ['matrix(2, 0, 0, 3, 0, 0)', 'scale(2, 3)'],
+    ['matrix(2, 0, 0, 1, 0, 0)', 'scaleX(2)'],
+    ['matrix(1, 0, 0, 3, 0, 0)', 'scaleY(3)'],
+    ['matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, 0)', 'rotate(45deg)'],
+    ['matrix(0, 1, -1, 0, 0, 0)', 'rotate(0.25turn)'],
+    ['matrix(0.540302, 0.841471, -0.841471, 0.540302, 0, 0)', 'rotate(1rad)'],
+    ['matrix(0, 1, -1, 0, 0, 0)', 'rotate(100grad)'],
+    ['matrix(1, 0, 0.176327, 1, 0, 0)', 'skew(10deg)'],
+    ['matrix(1, 0.36397, 0.176327, 1, 0, 0)', 'skew(10deg, 20deg)'],
+    ['matrix(1, 0, 0.176327, 1, 0, 0)', 'skewX(10deg)'],
+    ['matrix(1, 0.36397, 0, 1, 0, 0)', 'skewY(20deg)'],
+    ['matrix(1, 2, 3, 4, 5, 6)', 'matrix(1, 2, 3, 4, 5, 6)'],
+    ['matrix(0.707107, 0.707107, -0.707107, 0.707107, 3, 0)', 'translateX(3px) rotate(45deg)'],
+    ['matrix(0.707107, 0.707107, -0.707107, 0.707107, 2.12132, 2.12132)', 'rotate(45deg) translateX(3px)'],
+    ['matrix(2, 0, 0, 2, 6, 8)', 'scale(2) translate(3px, 4px)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 5, 1)', 'translateZ(5px)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 2, 3, 1)', 'translate3d(1px, 2px, 3px)'],
+    ['matrix3d(2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1)', 'scale3d(2, 3, 4)'],
+    ['matrix3d(1, 0, 0, 0, 0, 0.707107, 0.707107, 0, 0, -0.707107, 0.707107, 0, 0, 0, 0, 1)', 'rotateX(45deg)'],
+    ['matrix3d(0.707107, 0, -0.707107, 0, 0, 1, 0, 0, 0.707107, 0, 0.707107, 0, 0, 0, 0, 1)', 'rotateY(45deg)'],
+    ['matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, 0)', 'rotateZ(45deg)'],
+    ['matrix3d(0.853553, 0.146447, -0.5, 0, 0.146447, 0.853553, 0.5, 0, 0.5, -0.5, 0.707107, 0, 0, 0, 0, 1)', 'rotate3d(1, 1, 0, 45deg)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -0.002, 0, 0, 0, 1)', 'perspective(500px)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 2, 3, 1)', 'matrix3d(1,0,0,0, 0,1,0,0, 0,0,1,0, 1,2,3,1)'],
+    ['matrix(1.5, 0, 0, 1.5, 0, 0)', 'scale(1.5)'],
+    ['matrix(0.333333, 0, 0, 0.333333, 0, 0)', 'scale(0.333333333)'],
+    ['matrix(1, 0, 0, 1, 0.5, 0)', 'translateX(0.5px)'],
+    ['matrix(0.866025, 0.5, -0.5, 0.866025, 0, 0)', 'rotate(30deg)'],
+    ['matrix(0.5, 0.866025, -0.866025, 0.5, 0, 0)', 'rotate(60deg)'],
+    ['matrix(1, 0, 1, 1, 0, 0)', 'skewX(45deg)'],
+  ];
+  for (const [want, decl] of CASES) {
+    testing.expectEqual(decl + ' -> ' + want, decl + ' -> ' + probe(decl));
+  }
+
+  // A percentage cannot be resolved without the box, so the declaration is not
+  // reported at all rather than reported wrong.
+  testing.expectEqual('none', probe('translateX(50%)'));
+
+  // Nor is a function this engine does not model.
+  testing.expectEqual('none', probe('lp-not-a-transform(1px)'));
+}
+</script>

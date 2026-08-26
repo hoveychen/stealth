@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+The first property read off a fresh computed style has to answer the same thing
+the second one does. It answered "" — a value Chrome never reports for a
+supported longhand, and one that `getComputedStyle(el).color` reaching a
+detector would end the conversation with.
+
+The cause is a shared scratch buffer. `normalizePropertyName` lowercases into
+`frame.buf`, and the computed lookup held that slice across the cascade's first
+call — which is the one that rebuilds the stylesheets, a path that normalises
+declaration names into the very same buffer. So the name went to garbage
+mid-lookup, the initial-value table missed, and the answer was "". Only the
+first read, because only the first read rebuilds; only an undeclared property,
+because a declared one is answered from the cascade before the table is reached.
+-->
+
+<script id=first_read_is_not_empty>
+{
+  const fresh = (decl, prop) => {
+    const host = document.createElement('div');
+    host.innerHTML = '<p style="' + decl + '">x</p>';
+    document.body.appendChild(host);
+    const cs = getComputedStyle(host.firstChild);
+    const first = String(cs[prop]);
+    const second = String(cs[prop]);
+    host.remove();
+    return { first, second };
+  };
+
+  // Undeclared properties, each read first off its own computed style.
+  for (const prop of ['outlineColor', 'borderTopColor', 'fontStyle', 'cursor', 'zIndex']) {
+    const got = fresh('color:red', prop);
+    testing.expectEqual(prop + '=' + got.second, prop + '=' + got.first);
+    testing.expectFalse(got.first === '');
+  }
+
+  // And a declared one, which took a different route to the same answer.
+  const declared = fresh('cursor:pointer', 'cursor');
+  testing.expectEqual('pointer', declared.first);
+  testing.expectEqual('pointer', declared.second);
+
+  // A stylesheet added between two reads makes the next read the "first" one
+  // again, because it marks the cascade dirty.
+  const host = document.createElement('div');
+  host.innerHTML = '<p>x</p>';
+  document.body.appendChild(host);
+  const cs = getComputedStyle(host.firstChild);
+  testing.expectEqual('auto', String(cs.cursor));
+  const style = document.createElement('style');
+  style.textContent = '.cxe{color:rgb(1,2,3)}';
+  document.head.appendChild(style);
+  testing.expectEqual('auto', String(cs.cursor));
+  host.remove();
+  style.remove();
+}
+</script>
