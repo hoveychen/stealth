@@ -73,30 +73,77 @@ pub fn isColor(value: []const u8) bool {
     if (trimmed.len > buf.len) return false;
     const lower = std.ascii.lowerString(buf[0..trimmed.len], trimmed);
     if (std.mem.eql(u8, lower, "currentcolor")) return true;
-    for (system_colors) |name| {
-        if (std.mem.eql(u8, name, lower)) return true;
-    }
-    return false;
+    return systemColor(lower) != null;
 }
 
-/// The CSS system colours, current set and the deprecated CSS2 one, lowercased.
-/// Chrome takes `ButtonFace` here and refuses `AccentColor` (measured), which
-/// is a distinction this does not draw: accepting one Chrome refuses only
-/// leaves today's silence in place, while refusing one Chrome accepts would
-/// throw on a valid colour.
-const system_colors = [_][]const u8{
-    "accentcolor",         "accentcolortext",   "activetext",       "buttonborder",
-    "buttonface",          "buttontext",        "canvas",           "canvastext",
-    "field",               "fieldtext",         "graytext",         "highlight",
-    "highlighttext",       "linktext",          "mark",             "marktext",
-    "selecteditem",        "selecteditemtext",  "visitedtext",      "activeborder",
-    "activecaption",       "appworkspace",      "background",       "buttonhighlight",
-    "buttonshadow",        "captiontext",       "inactiveborder",   "inactivecaption",
-    "inactivecaptiontext", "infobackground",    "infotext",         "menu",
-    "menutext",            "scrollbar",         "threeddarkshadow", "threedface",
-    "threedhighlight",     "threedlightshadow", "threedshadow",     "window",
-    "windowframe",         "windowtext",
-};
+/// The colour a CSS system keyword resolves to, or null if the name is not one.
+/// `name` must already be lowercased.
+///
+/// Kasada asks for the whole table at x-hyatt — ninety-three
+/// `getPropertyValue('color')` calls after setting `color` to each keyword in
+/// turn — and a computed `color` that answers `buttonface` rather than
+/// `rgb(239, 239, 239)` is one expression no browser produces. The palette is
+/// Chrome 151 on macOS in light appearance, measured through that same
+/// expression (tools/fingerprint/probes/expr-b55-system-colors.js). It is a
+/// platform's palette rather than a constant, the way the voice list and the
+/// WebGL renderer string are this machine's; a dark appearance moves all of it.
+///
+/// `isColor` above is the *acceptance* question and answers true for every name
+/// here. Chrome takes `ButtonFace` through canvas' parser and refuses
+/// `AccentColor` (measured), a distinction this does not draw: accepting one
+/// Chrome refuses leaves today's silence in place, while refusing one Chrome
+/// accepts would throw on a valid colour.
+pub fn systemColor(name: []const u8) ?RGBA {
+    const table = [_]struct { []const u8, RGBA }{
+        .{ "accentcolor", .init(0, 117, 255, 1) },
+        .{ "accentcolortext", .init(255, 255, 255, 1) },
+        .{ "activeborder", .init(0, 0, 0, 1) },
+        .{ "activecaption", .init(255, 255, 255, 1) },
+        .{ "activetext", .init(255, 0, 0, 1) },
+        .{ "appworkspace", .init(255, 255, 255, 1) },
+        .{ "background", .init(255, 255, 255, 1) },
+        .{ "buttonborder", .init(0, 0, 0, 1) },
+        .{ "buttonface", .init(239, 239, 239, 1) },
+        .{ "buttonhighlight", .init(239, 239, 239, 1) },
+        .{ "buttonshadow", .init(239, 239, 239, 1) },
+        .{ "buttontext", .init(0, 0, 0, 1) },
+        .{ "canvas", .init(255, 255, 255, 1) },
+        .{ "canvastext", .init(0, 0, 0, 1) },
+        .{ "captiontext", .init(0, 0, 0, 1) },
+        .{ "field", .init(255, 255, 255, 1) },
+        .{ "fieldtext", .init(0, 0, 0, 1) },
+        .{ "graytext", .init(128, 128, 128, 1) },
+        // The one system colour that is not opaque.
+        .{ "highlight", .init(128, 188, 254, 0.6) },
+        .{ "highlighttext", .init(0, 0, 0, 1) },
+        .{ "inactiveborder", .init(0, 0, 0, 1) },
+        .{ "inactivecaption", .init(255, 255, 255, 1) },
+        .{ "inactivecaptiontext", .init(128, 128, 128, 1) },
+        .{ "infobackground", .init(255, 255, 255, 1) },
+        .{ "infotext", .init(0, 0, 0, 1) },
+        .{ "linktext", .init(0, 0, 238, 1) },
+        .{ "mark", .init(255, 255, 0, 1) },
+        .{ "marktext", .init(0, 0, 0, 1) },
+        .{ "menu", .init(255, 255, 255, 1) },
+        .{ "menutext", .init(0, 0, 0, 1) },
+        .{ "scrollbar", .init(255, 255, 255, 1) },
+        .{ "selecteditem", .init(179, 215, 255, 1) },
+        .{ "selecteditemtext", .init(0, 0, 0, 1) },
+        .{ "threeddarkshadow", .init(0, 0, 0, 1) },
+        .{ "threedface", .init(239, 239, 239, 1) },
+        .{ "threedhighlight", .init(0, 0, 0, 1) },
+        .{ "threedlightshadow", .init(0, 0, 0, 1) },
+        .{ "threedshadow", .init(0, 0, 0, 1) },
+        .{ "visitedtext", .init(85, 26, 139, 1) },
+        .{ "window", .init(255, 255, 255, 1) },
+        .{ "windowframe", .init(0, 0, 0, 1) },
+        .{ "windowtext", .init(0, 0, 0, 1) },
+    };
+    for (table) |entry| {
+        if (std.mem.eql(u8, entry[0], name)) return entry[1];
+    }
+    return null;
+}
 
 pub const RGBA = packed struct(u32) {
     r: u8,
