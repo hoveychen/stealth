@@ -994,7 +994,19 @@ fn usedBorderWidth(
                 .unreportable, .none => {},
             }
         }
-        // Nothing written under either spelling: `medium`.
+        // Nothing the page wrote under either spelling, which is where the UA
+        // stylesheet gets its turn -- and it is per-tag, so this cannot fall
+        // through to one number. Six tags carry a border of their own and this
+        // used to answer `medium` for all six, while the border-STYLE read
+        // beside it did consult the same table and came back `inset`: an
+        // `<input>` reported a 2px inset border as 3px, which is 2px of
+        // offsetWidth per side wrong on every form control on a page. Measured
+        // on Chrome 151 (tools/fingerprint/scratch/expr-empty-edges.js): input
+        // and button and iframe and fieldset 2px, textarea and select and hr
+        // 1px.
+        if (uaValue(element, name)) |value| break :found value;
+
+        // Nothing written and no UA rule: `medium`.
         return "3px";
     };
 
@@ -1118,14 +1130,7 @@ pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
     // as do `position:fixed` and `float:left`, while `relative` and `sticky`
     // leave it inline. That is why an absolutely positioned <span> honours a
     // declared width -- it is no longer an inline box.
-    const style_manager = &element.ownerFrame(frame)._style_manager;
-    if (cascadedKeyword(style_manager, element, "float")) |float| {
-        if (!std.ascii.eqlIgnoreCase(float, "none")) return blockified;
-    }
-    if (cascadedKeyword(style_manager, element, "position")) |position| {
-        if (std.ascii.eqlIgnoreCase(position, "absolute") or
-            std.ascii.eqlIgnoreCase(position, "fixed")) return blockified;
-    }
+    if (flowKind(element, frame) != .in_flow) return blockified;
 
     const parent = element.parentElement() orelse return specified;
     if (!frame._style_manager.blockifiesChildren(parent)) {
@@ -1160,6 +1165,36 @@ pub fn cascadedComputedValue(element: *Element, name: []const u8, frame: *Frame)
     };
 }
 
+/// How this element's box sits in its parent's flow. Three answers rather than a
+/// boolean, because a float and an out-of-flow box part company on exactly one
+/// reading: a float is out of its parent's HEIGHT but still inside the parent's
+/// scrollable overflow, while an `absolute` or `fixed` child is out of both.
+/// Measured on Chrome 151 with
+/// tools/fingerprint/scratch/expr-out-of-flow-stack.js -- a block holding one
+/// floated child answers 0 of clientHeight and 18 of scrollHeight, and the same
+/// block holding one absolute child answers 0 of both.
+///
+/// `relative` and `sticky` are `in_flow`: they keep their place in the stack, and
+/// they leave an inline display inline. Measured too, and they are the half that
+/// a "position is not static" test would get wrong.
+///
+/// Position before float, because `position: absolute` makes `float` compute to
+/// `none` -- the two existing callers are indifferent to the order since they
+/// only ask whether it is `in_flow` at all, but the third one is not.
+pub const FlowKind = enum { in_flow, floated, positioned };
+
+pub fn flowKind(element: *Element, frame: *Frame) FlowKind {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    if (cascadedKeyword(style_manager, element, "position")) |position| {
+        if (std.ascii.eqlIgnoreCase(position, "absolute") or
+            std.ascii.eqlIgnoreCase(position, "fixed")) return .positioned;
+    }
+    if (cascadedKeyword(style_manager, element, "float")) |float| {
+        if (!std.ascii.eqlIgnoreCase(float, "none")) return .floated;
+    }
+    return .in_flow;
+}
+
 /// Whether this element's box takes its width from its containing block rather
 /// than from its own content.
 ///
@@ -1180,15 +1215,7 @@ pub fn cascadedComputedValue(element: *Element, name: []const u8, frame: *Frame)
 /// This engine agreed with Chrome on every one of those before this existed,
 /// and the point of the list is that it still does.
 pub fn fillsContainingBlock(element: *Element, frame: *Frame) bool {
-    const style_manager = &element.ownerFrame(frame)._style_manager;
-
-    if (cascadedKeyword(style_manager, element, "float")) |float| {
-        if (!std.ascii.eqlIgnoreCase(float, "none")) return false;
-    }
-    if (cascadedKeyword(style_manager, element, "position")) |position| {
-        if (std.ascii.eqlIgnoreCase(position, "absolute") or
-            std.ascii.eqlIgnoreCase(position, "fixed")) return false;
-    }
+    if (flowKind(element, frame) != .in_flow) return false;
 
     if (!fillsAtDisplay(resolvedDisplay(element, frame))) return false;
 
@@ -1379,10 +1406,128 @@ pub fn isInlineBox(element: *Element, frame: *Frame) bool {
     };
 }
 
+/// What Chrome's UA stylesheet gives this element for a property the page did
+/// not declare, or null when the sheet says nothing about it either.
+///
+/// The layout's own readers -- paddingPx, borderPx, usesBorderBox, the used
+/// border width -- asked the cascade and stopped, and the cascade is the AUTHOR's
+/// only. So the box the layout built never saw the UA sheet, while the computed
+/// style beside it did (through getDefaultPropertyValue, which reaches this same
+/// table). Measured on Chrome 151 with
+/// tools/fingerprint/scratch/expr-empty-edges.js, what that cost:
+///
+///   * a <ul> kept its 40px padding-inline-start inside the content box, so its
+///     computed width was the whole 400px line and not 360;
+///   * an <iframe> and an <hr> drew no default border, so an iframe's offsetWidth
+///     was 300 against Chrome's 304 and an <hr> was 0 tall where Chrome is 2;
+///   * a <button>, whose entire 16x6 box IS padding and border around a 0x0
+///     content box, came out 0 by 0;
+///   * a <select> declared `width:100px` reported a clientWidth of 100 against
+///     Chrome's 98, because `box-sizing: border-box` is a UA rule for it and the
+///     1px border it takes off was invisible here too.
+fn uaValue(element: *Element, name: []const u8) ?[]const u8 {
+    const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse
+        chrome_per_tag_values.unknown_tag;
+    return rows.get(name);
+}
+
+/// Whether `white-space` keeps this element's spaces rather than collapsing
+/// them, which is what decides whether whitespace with nothing beside it makes a
+/// line box at all.
+///
+/// The longhand to ask is `white-space-collapse`, NOT `white-space`.
+/// `white-space` is a shorthand -- Chrome expands it to `white-space-collapse`
+/// and `text-wrap-mode`, which chrome_shorthands.zig carries as a measured
+/// preset table -- so the cascade never holds a longhand by that name and asking
+/// for one always finds nothing. The first version of the collapse rule asked
+/// for it anyway, so the escape hatch never fired and a `pre` div holding one
+/// space was 0 tall where Chrome makes it 18.
+///
+/// `preserve` (which `pre` and `pre-wrap` expand to) and `break-spaces` keep the
+/// space; `preserve-breaks` (from `pre-line`) and `collapse` (from `normal` and
+/// `nowrap`) drop it. All measured on Chrome 151 with
+/// tools/fingerprint/scratch/expr-whitespace-linebox.js.
+///
+/// Walked one element at a time, asking the cascade and THEN the UA sheet at
+/// each level, because the property inherits and the two origins interleave: a
+/// <pre> inside `white-space: normal` is `preserve` in Chrome, measured -- the UA
+/// rule on the element itself outranks an author value inherited from a parent,
+/// since inheritance only applies where nothing in the cascade set the property.
+/// Asking the whole chain for a declaration first and only then for UA values
+/// gets that case backwards.
+/// The cascaded value of an INHERITED property, walking one element at a time
+/// and asking the cascade and then the UA sheet at each level.
+///
+/// The levels have to interleave, because the two origins do: a <pre> inside
+/// `white-space: normal` is `preserve` in Chrome, measured -- the UA rule on the
+/// element itself outranks an author value inherited from a parent, since
+/// inheritance only applies where nothing in the cascade set the property on the
+/// element. Asking the whole ancestor chain for a declaration first and only then
+/// for UA values gets that case backwards.
+fn cascadedOrUaInherited(element: *Element, frame: *Frame, name: []const u8, wrapped: String) ?[]const u8 {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    var current: ?*Element = element;
+    while (current) |el| : (current = el.parentElement()) {
+        switch (declaredValue(style_manager, el, name, wrapped)) {
+            .value => |value| return std.mem.trim(u8, value, &std.ascii.whitespace),
+            .unreportable => return null,
+            .none => {},
+        }
+        if (uaValue(el, name)) |value| return std.mem.trim(u8, value, &std.ascii.whitespace);
+    }
+    return null;
+}
+
+/// `white-space-collapse`, which is the longhand `white-space` expands to along
+/// with `text-wrap-mode`. NOT `white-space`: that is a shorthand -- Chrome's
+/// expansion is the measured preset table in chrome_shorthands.zig -- so the
+/// cascade never holds a longhand by that name and asking for one always finds
+/// nothing. The first version of the collapse rule asked for it anyway, so the
+/// escape hatch never fired and a `pre` div holding one space was 0 tall where
+/// Chrome makes it 18.
+fn whiteSpaceCollapse(element: *Element, frame: *Frame) []const u8 {
+    // Not `comptime .wrap`: a comptime String has to fit the small-string
+    // optimisation's twelve bytes and `white-space-collapse` is twenty.
+    const name = "white-space-collapse";
+    return cascadedOrUaInherited(element, frame, name, .wrap(name)) orelse "collapse";
+}
+
+/// Whether a run of spaces survives, so whitespace with nothing beside it is
+/// still a line box. `preserve` (from `pre` and `pre-wrap`) and `break-spaces`
+/// keep it; `preserve-breaks` (from `pre-line`) and `collapse` (from `normal` and
+/// `nowrap`) drop it. All measured on Chrome 151 with
+/// tools/fingerprint/scratch/expr-whitespace-linebox.js.
+pub fn preservesWhitespace(element: *Element, frame: *Frame) bool {
+    const collapse = whiteSpaceCollapse(element, frame);
+    return std.ascii.eqlIgnoreCase(collapse, "preserve") or
+        std.ascii.eqlIgnoreCase(collapse, "break-spaces");
+}
+
+/// Whether a newline in the source is a line break rather than a space. Every
+/// value but `collapse` keeps it, which is `pre`, `pre-wrap`, `pre-line` and
+/// `break-spaces` -- measured: `a\nb\nc` is three lines under all four and one
+/// line under `normal`.
+pub fn preservesNewlines(element: *Element, frame: *Frame) bool {
+    return !std.ascii.eqlIgnoreCase(whiteSpaceCollapse(element, frame), "collapse");
+}
+
+/// Whether a line too long for its box breaks. `text-wrap-mode: nowrap` is the
+/// one that says no, and `white-space: pre` expands to it -- measured, forty
+/// words in a 100px box are 20 lines under `normal` and `pre-wrap` and one line
+/// under `nowrap` and `pre`.
+pub fn wrapsText(element: *Element, frame: *Frame) bool {
+    // Not `comptime .wrap`: fourteen bytes, and a comptime String has to fit the
+    // small-string optimisation's twelve.
+    const name = "text-wrap-mode";
+    const mode = cascadedOrUaInherited(element, frame, name, .wrap(name)) orelse return true;
+    return !std.ascii.eqlIgnoreCase(mode, "nowrap");
+}
+
 pub fn usesBorderBox(element: *Element, frame: *Frame) bool {
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    const declared = cascadedKeyword(style_manager, element, "box-sizing") orelse return false;
-    return std.ascii.eqlIgnoreCase(declared, "border-box");
+    const declared = cascadedKeyword(style_manager, element, "box-sizing") orelse
+        uaValue(element, "box-sizing") orelse return false;
+    return std.ascii.eqlIgnoreCase(std.mem.trim(u8, declared, &std.ascii.whitespace), "border-box");
 }
 
 /// One border's used width in px. `side` is the stem, so `border-left` reads
@@ -1391,7 +1536,11 @@ pub fn usesBorderBox(element: *Element, frame: *Frame) bool {
 /// (3px), and the keywords resolve to 1, 3 and 5.
 fn borderPx(element: *Element, comptime side: []const u8, frame: *Frame) f64 {
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    const style = cascadedKeyword(style_manager, element, side ++ "-style") orelse "none";
+    // The UA sheet before `none`: an <iframe> draws a 2px inset border and an
+    // <hr> a 1px one with nothing declared, and this asked the author cascade
+    // only -- so the layout saw no border on either. See uaValue.
+    const style = cascadedKeyword(style_manager, element, side ++ "-style") orelse
+        uaValue(element, side ++ "-style") orelse "none";
     const width_name = side ++ "-width";
     const used = usedBorderWidth(element, width_name, .wrap(width_name), style, frame);
     const parsed = units.parse(used) catch return 0;
@@ -1494,7 +1643,10 @@ fn usedLengthText(value: []const u8, specified: ?f64, frame: *Frame) ?[]const u8
 /// engine cannot finish resolving what it did declare. Percentages are already
 /// px by here for the properties that resolve them.
 fn computedPx(element: *Element, name: []const u8, frame: *Frame) f64 {
-    const declared = cascadedComputedValue(element, name, frame) orelse return 0;
+    // The UA sheet counts here too, which is what a <ul>'s 40px
+    // padding-inline-start and an <input>'s `1px 2px` ride in on. See uaValue.
+    const declared = cascadedComputedValue(element, name, frame) orelse
+        uaValue(element, name) orelse return 0;
     const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return 0;
     return switch (parsed.unit) {
         // The author's number rather than the six figures it printed to, when
@@ -4873,6 +5025,10 @@ test "WebApi: CSSStyleDeclaration percentage margin" {
 
 test "WebApi: CSSStyleDeclaration specified precision" {
     try testing.htmlRunner("css/specified_precision.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration block height" {
+    try testing.htmlRunner("css/block_height.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration default display" {

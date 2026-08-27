@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A block-level box with nothing in it is 0px tall. This engine answered 5px --
+the placeholder `dimensionsAt` starts every measurement at, leaking straight out
+through getComputedStyle, clientHeight, offsetHeight and getBoundingClientRect.
+5px is not a number a browser ever reports for an empty <div>, so one reading
+separated the engine from every real one.
+
+"Nothing in it" includes three shapes, all measured on Chrome 151 with
+tools/fingerprint/scratch/expr-block-height.js:
+
+  * no children at all, and a comment-only child, which is not content;
+  * a child that is only whitespace -- there is no line box, because collapsible
+    whitespace with nothing beside it collapses away entirely. This engine gave
+    it a full 18px line, which is the opposite mistake to the placeholder;
+  * a child block that is itself empty, which contributes its own 0.
+
+`transform-origin` is asserted beside each height because it is the reading that
+carries the mistake at half strength -- `952px 2.5px` for a box the page can see
+is 0 tall -- and it is read by the Cloudflare challenge in the same sweep as the
+height.
+-->
+
+<script id=empty_block_is_zero_tall>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (inner) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="width:400px">' + inner + '</div>';
+    host.appendChild(wrap);
+    const el = wrap.firstElementChild.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [cs.height, el.clientHeight, el.offsetHeight,
+                 el.getBoundingClientRect().height, cs.transformOrigin].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // inner html, then: computed height, clientHeight, offsetHeight, rect, origin
+  const CASES = [
+    ['<div data-m></div>', '0px 0 0 0 200px 0px'],
+    ['<div data-m><!-- c --></div>', '0px 0 0 0 200px 0px'],
+    // Collapsible whitespace with nothing beside it makes no line box.
+    ['<div data-m> </div>', '0px 0 0 0 200px 0px'],
+    // An empty child block contributes its own nothing.
+    ['<div data-m><div></div></div>', '0px 0 0 0 200px 0px'],
+    // The neighbours that must NOT become 0 on the way: one line of text is a
+    // line box, and a declared height is the declaration.
+    ['<div data-m>x</div>', '18px 18 18 18 200px 9px'],
+    ['<div data-m style="height:77px">x</div>', '77px 77 77 77 200px 38.5px'],
+    // ...including a declared zero, which was already right and stays right.
+    ['<div data-m style="height:0">x</div>', '0px 0 0 0 200px 0px'],
+    // Padding is outside the content height, so an empty padded box is 0 of
+    // content and 20 of client. A border is outside the CLIENT box too, which
+    // is why the bordered one answers 0 of content, 0 of client and 10 of
+    // offset -- three different numbers off one empty element.
+    ['<div data-m style="padding:10px"></div>', '0px 20 20 20 200px 10px'],
+    ['<div data-m style="border:5px solid"></div>', '0px 0 10 10 200px 5px'],
+  ];
+
+  const wrong = [];
+  for (const [inner, want] of CASES) {
+    const got = measure(inner);
+    if (got !== want) wrong.push(inner + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The placeholder is not just a wrong answer for an empty box: it is a magic
+number the layout reads back as a question. `dimensionsAt` starts at
+{width:5, height:5} and then asks `dims.height == 5.0` to mean "nothing has
+sized this yet" -- so an author who writes exactly `5px` has their declaration
+mistaken for the absence of one and overwritten by whatever the fallback for
+that shape is.
+
+Measured on Chrome 151 with tools/fingerprint/scratch/expr-five-sentinel.js.
+Seven readings across four shapes, and one of them is a contradiction no
+browser can produce: `<div style="width:5px">` reported a computed `width` of
+`5px` -- getComputedStyle reads the declaration, not the box -- beside a
+`clientWidth` of 400, because the fill branch had taken the declaration for a
+blank. A guard that reads both at once sees a 5px-wide box that is 400px wide.
+-->
+
+<script id=literal_five_is_a_declaration>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('div');
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const out = [cs.width, cs.height, el.clientWidth, el.clientHeight,
+                 el.offsetWidth, el.offsetHeight, r.width, r.height].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // html, then: computed w/h, client w/h, offset w/h, rect w/h
+  const CASES = [
+    // A 5px height is a 5px height even with a line of text in the box, which
+    // overflows it. This engine answered the text's 18 four times over.
+    ['<div style="height:5px">x</div>', '400px 5px 400 5 400 5 400 5'],
+    // A 5px width is a width, so the box does NOT fill its containing block.
+    ['<div style="width:5px">xxxxxxxx</div>', '5px 18px 5 18 5 18 5 18'],
+    ['<div style="width:5px;height:5px">xxxxxxxx</div>', '5px 5px 5 5 5 5 5 5'],
+    ['<div style="height:5px"></div>', '400px 5px 400 5 400 5 400 5'],
+    // The route in must not matter: a stylesheet rule declares 5px the same
+    // way an inline style does.
+    ['<style>.h5{height:5px}</style><div class=h5>x</div>',
+     '400px 5px 400 5 400 5 400 5'],
+    // The neighbours: 4px and 6px were never ambiguous, and must not move.
+    ['<div style="height:4px">x</div>', '400px 4px 400 4 400 4 400 4'],
+    ['<div style="height:6px">x</div>', '400px 6px 400 6 400 6 400 6'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+An empty element's size is not one number. Chrome's answers fall into groups and
+a blanket 0 is wrong for eleven of the twenty tags measured, so this is the table
+rather than a rule. Measured on Chrome 151 with
+tools/fingerprint/scratch/expr-five-sentinel.js and expr-empty-edges.js, inside
+a 400px-wide block.
+
+Three separate things decide a row:
+
+  * an intrinsic CONTENT box -- 300x150 for the replaced elements, and one
+    number per form control (`<input>` is 145x15, `<textarea>` 177x30);
+  * the UA stylesheet's padding and border, which this engine's layout could not
+    see at all: `paddingPx` and `borderPx` asked the author cascade and stopped,
+    so <ul> lost its 40px padding-inline-start, <iframe> and <hr> their default
+    borders, and <button> -- whose whole 16x6 box is padding and border around a
+    0x0 content box -- came out 0;
+  * `box-sizing: border-box`, which <select> and <button> carry from the UA
+    sheet, and which makes the resolved `width` the BORDER box: an empty select
+    reports 22px of computed width beside 20 of clientWidth, and both are right.
+    Measured against a plain div declared border-box, which answers the same way
+    (scratch/expr-border-box-resolved.js).
+-->
+
+<script id=empty_element_intrinsic_box>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (tag) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<' + tag + '></' + tag + '>';
+    host.appendChild(wrap);
+    const el = wrap.firstElementChild;
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const out = [cs.width, cs.height, el.clientWidth, el.clientHeight,
+                 el.offsetWidth, el.offsetHeight, r.width, r.height].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // tag, then: computed w/h, client w/h, offset w/h, rect w/h
+  const CASES = [
+    // A block that fills its line and holds nothing is 0 tall.
+    ['div', '400px 0px 400 0 400 0 400 0'],
+    ['p', '400px 0px 400 0 400 0 400 0'],
+    ['section', '400px 0px 400 0 400 0 400 0'],
+    // ...less its own UA padding, which comes off the content and stays in the
+    // client box: 40px of padding-inline-start on a <ul>.
+    ['ul', '360px 0px 400 0 400 0 400 0'],
+    // Shrink-to-fit and empty: nothing at all.
+    ['table', '0px 0px 0 0 0 0 0 0'],
+    // An <img> with NO src is 0, which is the opposite of the broken-image icon
+    // this engine models -- that icon is for an src that failed to load.
+    ['img', '0px 0px 0 0 0 0 0 0'],
+    // The replaced default is 300x150 with no attributes at all.
+    ['canvas', '300px 150px 300 150 300 150 300 150'],
+    ['video', '300px 150px 300 150 300 150 300 150'],
+    ['object', '300px 150px 300 150 300 150 300 150'],
+    // ...and an <iframe> adds its 2px default border, which is outside the
+    // client box: 300 of content and 304 of offset.
+    ['iframe', '300px 150px 300 150 304 154 304 154'],
+    // A form control's size is its own, and no two are alike.
+    ['input', '145px 15px 149 17 153 21 153 21'],
+    ['textarea', '177px 30px 181 34 183 36 183 36'],
+    ['select', '22px 19px 20 17 22 19 22 19'],
+    ['button', '16px 6px 12 2 16 6 16 6'],
+    ['progress', '160px 16px 160 16 160 16 160 16'],
+    ['meter', '80px 16px 80 16 80 16 80 16'],
+    // An <hr> fills the line as a BORDER box, so its 1px border comes off the
+    // content: 398 of content and 400 of offset, 0 tall and 2 of offset.
+    ['hr', '398px 0px 398 0 400 2 400 2'],
+    // A non-replaced inline box has no CSS box: `auto`, and 0 everywhere.
+    ['span', 'auto auto 0 0 0 0 0 0'],
+  ];
+
+  const wrong = [];
+  for (const [tag, want] of CASES) {
+    const got = measure(tag);
+    if (got !== want) wrong.push(tag + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+Two shapes an offsetWidth cannot express, kept apart from the table above.
+
+`<svg>` is 300x150 like the other replaced elements, but SVGElement has no
+offsetWidth or offsetHeight at all in Chrome -- reading one is `undefined`, and
+an engine that answers a number there is telling on itself.
+
+`<br>` has no box: 0 of client and 0 of offset. Its getBoundingClientRect is the
+LINE it breaks, though -- 0 wide and 18 tall -- which is the one reading that
+sees it. Both measured, scratch/expr-five-sentinel.js.
+-->
+
+<script id=empty_element_without_offset_box>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const wrong = [];
+
+  host.innerHTML = '<svg></svg>';
+  const svg = host.firstElementChild;
+  const svgCs = getComputedStyle(svg);
+  const svgGot = [svgCs.width, svgCs.height, svg.clientWidth, svg.clientHeight,
+                  svg.getBoundingClientRect().width,
+                  svg.getBoundingClientRect().height,
+                  typeof svg.offsetWidth].join(' ');
+  if (svgGot !== '300px 150px 300 150 300 150 undefined') {
+    wrong.push('svg: got [' + svgGot + ']');
+  }
+
+  host.innerHTML = '<br>';
+  const br = host.firstElementChild;
+  const brCs = getComputedStyle(br);
+  const brRect = br.getBoundingClientRect();
+  const brGot = [brCs.width, brCs.height, br.clientWidth, br.clientHeight,
+                 br.offsetWidth, br.offsetHeight,
+                 brRect.width, brRect.height].join(' ');
+  if (brGot !== 'auto auto 0 0 0 0 0 18') wrong.push('br: got [' + brGot + ']');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+A <canvas> is the one replaced element here with an intrinsic RATIO, and it comes
+from the canvas BUFFER rather than from CSS: the width/height content attributes
+are the buffer's size, not presentational hints the way <img> and <iframe> take
+them. So a declared width scales the other axis and does NOT leave the height
+attribute standing.
+
+Measured on Chrome 151, tools/fingerprint/scratch/expr-replaced-intrinsic.js and
+the ratio probe beside it. video, object, svg and iframe are the controls: none
+of them has a ratio, so each keeps its 300 or its 150 when the other axis is
+declared -- an <svg viewBox="0 0 40 10"> at 600px wide is still 150 tall.
+-->
+
+<script id=canvas_intrinsic_ratio>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const cs = getComputedStyle(wrap.firstElementChild);
+    const out = cs.width + ' ' + cs.height;
+    wrap.remove();
+    return out;
+  };
+
+  const CASES = [
+    // No buffer declared, so the buffer is 300x150 and the ratio is 2.
+    ['<canvas></canvas>', '300px 150px'],
+    ['<canvas style="width:600px"></canvas>', '600px 300px'],
+    ['<canvas style="height:60px"></canvas>', '120px 60px'],
+    ['<canvas style="height:5px"></canvas>', '10px 5px'],
+    // A declared buffer is the intrinsic size AND the ratio: 4 to 1 here.
+    ['<canvas width=400 height=100></canvas>', '400px 100px'],
+    ['<canvas width=400 height=100 style="width:600px"></canvas>', '600px 150px'],
+    ['<canvas width=400 height=100 style="height:50px"></canvas>', '200px 50px'],
+    // Both axes declared: no ratio to apply, and the buffer is ignored.
+    ['<canvas style="width:250px;height:120px"></canvas>', '250px 120px'],
+    ['<canvas width=200 height=100 style="width:250px;height:120px"></canvas>',
+     '250px 120px'],
+    // The controls: no ratio anywhere else.
+    ['<video style="width:600px"></video>', '600px 150px'],
+    ['<video style="height:60px"></video>', '300px 60px'],
+    ['<object style="width:600px"></object>', '600px 150px'],
+    ['<svg style="width:600px"></svg>', '600px 150px'],
+    ['<svg viewBox="0 0 40 10" style="width:600px"></svg>', '600px 150px'],
+    ['<iframe style="width:600px"></iframe>', '600px 150px'],
+    ['<iframe style="height:60px"></iframe>', '300px 60px'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The other half of "whitespace makes no line box": the values that keep it.
+
+`white-space` is a SHORTHAND -- Chrome expands it to `white-space-collapse` and
+`text-wrap-mode` -- so the cascade never holds a longhand called `white-space`
+and asking for one finds nothing. The first version of the collapse rule asked
+for it anyway, which meant the escape hatch never fired: `<div
+style="white-space:pre"> </div>` is 18px tall in Chrome and was 0 here, and a
+lone space measured 0 where Chrome makes it 4. The collapsing cases were the
+only ones asserted, so it went green.
+
+`white-space-collapse` is the longhand that answers, and it separates the four
+measured cases exactly: `preserve` (from `pre` and `pre-wrap`) and
+`break-spaces` keep the space, while `preserve-breaks` (from `pre-line`) and
+`collapse` (from `normal` and `nowrap`) drop it. Measured on Chrome 151 with
+tools/fingerprint/scratch/expr-whitespace-linebox.js.
+
+It has to reach the UA stylesheet and inheritance too: a <pre> gets
+`white-space-collapse: preserve` from the UA sheet with nothing declared, and a
+page that sets `white-space: pre` on a wrapper means it for the children.
+-->
+
+<script id=preserved_whitespace_is_a_line>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const heightOf = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const out = [getComputedStyle(el).height, el.clientHeight].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const CASES = [
+    // Preserved: the space is a space, and a space is a line.
+    ['<div data-m style="white-space:pre"> </div>', '18px 18'],
+    ['<div data-m style="white-space:pre-wrap"> </div>', '18px 18'],
+    ['<div data-m style="white-space:break-spaces"> </div>', '18px 18'],
+    // The longhand on its own says the same thing.
+    ['<div data-m style="white-space-collapse:preserve"> </div>', '18px 18'],
+    // Collapsed: no line box.
+    ['<div data-m style="white-space:pre-line"> </div>', '0px 0'],
+    ['<div data-m style="white-space:nowrap"> </div>', '0px 0'],
+    ['<div data-m style="white-space:normal"> </div>', '0px 0'],
+    ['<div data-m style="white-space-collapse:collapse"> </div>', '0px 0'],
+    // Inherited from the wrapper that declared it.
+    ['<div style="white-space:pre"><div data-m> </div></div>', '18px 18'],
+    // Preserving nothing is still nothing: no text, no line.
+    ['<div data-m style="white-space:pre"></div>', '0px 0'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = heightOf(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+
+  // A <pre> takes `preserve` from the UA stylesheet with nothing declared, so a
+  // <pre> holding one space is a line too. Chrome answers 15px there -- a
+  // 13.333px monospace line, not the 16px serif one -- which depends on font
+  // metrics this test is not about, so only the "not zero" half is asserted.
+  const preOne = heightOf('<pre data-m> </pre>');
+  const preNone = heightOf('<pre data-m></pre>');
+  if (preOne === '0px 0') wrong.push('pre with a space: got [' + preOne + ']');
+  if (preNone !== '0px 0') wrong.push('empty pre: want [0px 0], got [' + preNone + ']');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+A line box is worth its `line-height`, and this engine was always worth the
+font's own box: `line-height:30px` on a block holding one character read 18.
+
+The computed VALUE was already right -- getComputedStyle reported `30px`, `32px`,
+`24px` for every form -- so this is only the layout not asking. Measured on
+Chrome 151 with tools/fingerprint/scratch/expr-line-box.js.
+
+Two things the numbers pin down that a rule would not:
+
+  * a fractional line-height lands on the 1/64 layout grid like any other used
+    length: `line-height:1.1` at 16px is 17.6 in arithmetic and 17.59375 on the
+    page, which prints as `17.5938px` and rounds to 18 for clientHeight while
+    getBoundingClientRect keeps the fraction. Two lines of it are 35.1875 -- each
+    line snapped and then summed, not the sum snapped.
+  * `line-height` does NOT reach a non-replaced inline box's offsetHeight: a
+    `<span style="line-height:30px">` is still 18 tall in Chrome, where an
+    `inline-block` with the same declaration is 30. So this belongs to the block
+    path and not to the inline ink.
+-->
+
+<script id=line_box_is_worth_its_line_height>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [cs.height, el.clientHeight, el.offsetHeight,
+                 el.getBoundingClientRect().height].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const CASES = [
+    // A length is the length.
+    ['<div data-m style="line-height:30px">x</div>', '30px 30 30 30'],
+    ['<div data-m style="line-height:10px">x</div>', '10px 10 10 10'],
+    ['<div data-m style="line-height:0">x</div>', '0px 0 0 0'],
+    // A bare number multiplies the font size, and so do a percentage and an em.
+    ['<div data-m style="line-height:2">x</div>', '32px 32 32 32'],
+    ['<div data-m style="line-height:1.5">x</div>', '24px 24 24 24'],
+    ['<div data-m style="line-height:200%">x</div>', '32px 32 32 32'],
+    ['<div data-m style="line-height:2em">x</div>', '32px 32 32 32'],
+    // `normal` is the font's own box, which is what this always answered.
+    ['<div data-m>x</div>', '18px 18 18 18'],
+    ['<div data-m style="line-height:normal">x</div>', '18px 18 18 18'],
+    // The font size and the line-height are separate inputs.
+    ['<div data-m style="font-size:32px">x</div>', '37px 37 37 37'],
+    ['<div data-m style="font-size:32px;line-height:1">x</div>', '32px 32 32 32'],
+    ['<div data-m style="font-size:32px;line-height:40px">x</div>', '40px 40 40 40'],
+    // Inherited from the wrapper, which is where a page usually sets it.
+    ['<div style="line-height:30px"><div data-m>x</div></div>', '30px 30 30 30'],
+    // On the 1/64 grid, and rounded only where clientHeight rounds.
+    ['<div data-m style="line-height:1.1">x</div>', '17.5938px 18 18 17.59375'],
+    ['<div data-m style="line-height:17.3px">x</div>', '17.2969px 17 17 17.296875'],
+    ['<div data-m style="line-height:17.5px">x</div>', '17.5px 18 18 17.5'],
+    // A declared height still wins over any of it.
+    ['<div data-m style="line-height:30px;height:7px">x</div>', '7px 7 7 7'],
+    // The inline controls: an inline box keeps the font box, an inline-block
+    // does not.
+    ['<span data-m style="line-height:30px">x</span>', 'auto 0 18 18'],
+    ['<div data-m style="display:inline-block;line-height:30px">x</div>',
+     '30px 30 30 30'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+A block's height is the sum of its line boxes, and text that has to wrap makes
+more than one. This engine always made exactly one, so a forty-word paragraph in
+a 100px box read 18px where Chrome reads 360.
+
+Measured on Chrome 151 with tools/fingerprint/scratch/expr-line-box.js and the
+wrap probes beside it. The line count is greedy -- the break goes before the word
+that does not fit and never inside one -- and the advances here are within half a
+pixel of Chrome's, which is what makes the counts land together rather than
+merely close: forty `word`s are twenty lines in 100px, eight in 200px and four in
+400px, and all three agree.
+
+Two axes decide it, and they are separate longhands:
+
+  * `text-wrap-mode: nowrap`, which `white-space: pre` expands to, means no
+    width-driven break at all -- those same forty words are one line.
+  * `white-space-collapse` anything but `collapse` keeps a newline as a break.
+    The count there is measured rather than derived: it is one more line than
+    there are newlines, less one when the text ends with one.
+
+The width the text wraps in is the CONTENT width, so padding and a border come
+off it first -- a `box-sizing:border-box` box of 140px with 20px of padding each
+side wraps in 100 and gives the same 360.
+-->
+
+<script id=block_height_sums_its_line_boxes>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (style, text) => {
+    const wrap = document.createElement('div');
+    const el = document.createElement('div');
+    el.setAttribute('style', style);
+    el.textContent = text;
+    wrap.appendChild(el);
+    host.appendChild(wrap);
+    const out = [getComputedStyle(el).height, el.clientHeight,
+                 el.offsetHeight].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const FORTY = 'word '.repeat(40).trim();
+  const FIVE = 'aaa bbb ccc ddd eee';
+
+  const CASES = [
+    // The line count follows the box it has to fit in.
+    ['width:100px', FIVE, '36px 36 36'],
+    ['width:100px', FORTY, '360px 360 360'],
+    ['width:200px', FORTY, '144px 144 144'],
+    ['width:400px', FORTY, '72px 72 72'],
+    ['width:100px', 'aaa', '18px 18 18'],
+    // A word wider than the box overflows rather than breaking.
+    ['width:50px', 'aaaaaaaaaaaaaaaaaaaaaaaa', '18px 18 18'],
+    // Each line is worth the line-height, so the two multiply.
+    ['width:100px;line-height:30px', FIVE, '60px 60 60'],
+    ['width:100px;line-height:30px', FORTY, '600px 600 600'],
+    // Leading and trailing collapsible space changes nothing.
+    ['width:100px', '   ' + FIVE + '   ', '36px 36 36'],
+    // nowrap and pre do not break on width.
+    ['width:100px;white-space:nowrap', FORTY, '18px 18 18'],
+    ['width:100px;white-space:pre', FORTY, '18px 18 18'],
+    ['width:100px;white-space:pre-wrap', FORTY, '360px 360 360'],
+    // The wrap width is the CONTENT width: padding and border come off first.
+    ['width:100px;padding:0 20px', FORTY, '360px 360 360'],
+    // ...and the border is outside the CLIENT box as well, so an offsetHeight
+    // of 380 beside a content height of 360 is the border, not a wrong count.
+    ['width:100px;border:10px solid', FORTY, '360px 360 380'],
+    ['width:100px;padding:10px 20px', FORTY, '360px 380 380'],
+    ['box-sizing:border-box;width:140px;padding:0 20px', FORTY, '360px 360 360'],
+    // A newline is a break where white-space keeps it, and one line more than
+    // there are newlines -- less one when the text ends with one.
+    ['width:100px;white-space:pre', 'a\nb\nc', '54px 54 54'],
+    ['width:100px;white-space:pre-line', 'a\nb\nc', '54px 54 54'],
+    ['width:100px', 'a\nb\nc', '18px 18 18'],
+    ['width:100px;white-space:pre', 'a\n\nb', '54px 54 54'],
+    ['width:100px;white-space:pre', 'a\n\n\nb', '72px 72 72'],
+    ['width:100px;white-space:pre', '\na', '36px 36 36'],
+    ['width:100px;white-space:pre', 'a\nb\n', '36px 36 36'],
+    ['width:100px;white-space:pre', 'a\n\n', '36px 36 36'],
+    ['width:100px;white-space:pre', '\n', '18px 18 18'],
+    ['width:100px;white-space:pre', '\t', '18px 18 18'],
+    // A declared height still wins outright.
+    ['width:100px;height:7px', FORTY, '7px 7 7'],
+  ];
+
+  const wrong = [];
+  for (const [style, text, want] of CASES) {
+    const got = measure(style, text);
+    if (got !== want) {
+      wrong.push(JSON.stringify(text.slice(0, 12)) + ' @ ' + style +
+                 ': want [' + want + '], got [' + got + ']');
+    }
+  }
+
+  // A word that straddles two text nodes is one word: the fragments' advances
+  // sum, so this is two lines in a 100px box and not three. Chrome agrees,
+  // measured.
+  {
+    const wrap = document.createElement('div');
+    const el = document.createElement('div');
+    el.setAttribute('style', 'width:100px');
+    el.appendChild(document.createTextNode('wordwordwordwo'));
+    el.appendChild(document.createTextNode('rdword word'));
+    wrap.appendChild(el);
+    host.appendChild(wrap);
+    const got = [getComputedStyle(el).height, el.clientHeight].join(' ');
+    if (got !== '36px 36') wrong.push('split word: want [36px 36], got [' + got + ']');
+    wrap.remove();
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+A block's height is the stack of its IN-FLOW children, and two things were wrong
+about that.
+
+The rect was not built from the same box the other readings are. offsetHeight
+goes through clientHeight, which falls back to the sum of the children when the
+box has no height of its own -- and getBoundingClientRect used the raw dimensions
+instead. So a div holding three lines of text reported 54 of computed height, 54
+of clientHeight, 54 of offsetHeight and 0 of rect height, which is a
+contradiction no browser can produce and which a guard reading both at once sees.
+With padding and a border on the parent it was 66 against 30.
+
+And every visible child counted, including the ones that are not in the stack. A
+floated, `absolute` or `fixed` child does not contribute: Chrome puts a block
+holding only one of those at 0. `relative` and `sticky` DO contribute -- they keep
+their place -- and so do `inline` and `inline-block` children.
+
+The float is the one that splits: a float is out of the height but still inside
+the SCROLLABLE overflow, so a parent holding one float reads 0 of clientHeight
+and 18 of scrollHeight. An `absolute` child is out of both. Measured on Chrome
+151 with tools/fingerprint/scratch/expr-out-of-flow-stack.js.
+-->
+
+<script id=block_stacks_its_in_flow_children>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    // scrollWidth is deliberately not read. It sums the children's widths as if
+    // they were laid out in a ROW -- contentWidth says so in its own comment --
+    // so a stack of three 400px children answers 1200 where Chrome answers 400.
+    // That is a real reading and a real gap, but it is a different rule from the
+    // stack this test is about, and the row sum is what lets a page that appends
+    // nodes until a width threshold terminate. Recorded in the plan's P7 with
+    // the measurement (Chrome: 400 for the three-block stack, 390 for the padded
+    // one) rather than changed here.
+    const out = [cs.width, cs.height, el.clientWidth, el.clientHeight,
+                 el.offsetWidth, el.offsetHeight, r.width, r.height,
+                 el.scrollHeight].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const one = (childStyle) =>
+    '<div data-m><div style="' + childStyle + '">a</div></div>';
+
+  // html, then: computed w/h, client w/h, offset w/h, rect w/h, scrollHeight
+  const CASES = [
+    [one(''), '400px 18px 400 18 400 18 400 18 18'],
+    // Out of flow: not in the stack. A float stays in the scrollable overflow.
+    [one('position:absolute'), '400px 0px 400 0 400 0 400 0 0'],
+    [one('position:fixed'), '400px 0px 400 0 400 0 400 0 0'],
+    [one('float:left'), '400px 0px 400 0 400 0 400 0 18'],
+    [one('float:right'), '400px 0px 400 0 400 0 400 0 18'],
+    // In flow, and this is the half that must not move.
+    [one('position:relative'), '400px 18px 400 18 400 18 400 18 18'],
+    [one('position:sticky'), '400px 18px 400 18 400 18 400 18 18'],
+    [one('display:inline'), '400px 18px 400 18 400 18 400 18 18'],
+    [one('display:inline-block'), '400px 18px 400 18 400 18 400 18 18'],
+    // display:none was already out of everything.
+    [one('display:none'), '400px 0px 400 0 400 0 400 0 0'],
+    // One of each: the in-flow child still counts and the absolute one does not.
+    ['<div data-m><div>a</div><div style="position:absolute">b</div></div>',
+     '400px 18px 400 18 400 18 400 18 18'],
+    // The stack itself, and the rect that used to answer 0 beside it.
+    ['<div data-m><div>a</div><div>b</div><div>c</div></div>',
+     '400px 54px 400 54 400 54 400 54 54'],
+    // ...and with padding and a border, so all three boxes differ: 36 of
+    // content, 56 of client, 66 of offset and rect.
+    ['<div data-m style="padding:10px;border:5px solid"><div>a</div><div>b</div></div>',
+     '370px 36px 390 56 400 66 400 66 56'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
