@@ -299,13 +299,43 @@
         ['size', 'entries', 'forEach', 'get', 'has', 'keys', 'values', 'constructor'],
         Object.getOwnPropertyNames(KeyboardLayoutMap.prototype),
       );
-      // Deliberately empty: the entries are the host's physical keyboard
-      // layout, which we don't measure per host and won't bake one machine's
-      // into every deployment.
-      testing.expectEqual(0, map.size);
-      testing.expectEqual([], Array.from(map));
-      testing.expectEqual(undefined, map.get('KeyA'));
-      testing.expectEqual(false, map.has('KeyA'));
+      // The host's physical keyboard layout, verbatim from the reference
+      // Chrome: 48 entries in an order that is not alphabetical but was
+      // identical across three runs. `size === 0` is a shape no desktop
+      // Chrome produces, and this navigator already hands out one machine's
+      // fonts, voices, GPU strings and screen.
+      testing.expectEqual(48, map.size);
+      testing.expectEqual(
+        "KeyK,k;KeyG,g;Digit2,2;Digit0,0;KeyV,v;KeyA,a;Backquote,`;KeyL,l;IntlBackslash,§;Quote,';" +
+          'KeyW,w;Digit8,8;KeyM,m;KeyH,h;Period,.;Digit7,7;Digit1,1;KeyP,p;KeyD,d;KeyF,f;KeyO,o;' +
+          'KeyQ,q;KeyC,c;KeyN,n;BracketLeft,[;KeyZ,z;KeyY,y;Digit3,3;Digit6,6;Digit5,5;KeyX,x;' +
+          'Slash,/;Backslash,\\;Comma,,;Minus,-;Digit4,4;KeyB,b;KeyT,t;Digit9,9;KeyS,s;KeyI,i;' +
+          'KeyU,u;Equal,=;KeyJ,j;Semicolon,;;KeyR,r;BracketRight,];KeyE,e',
+        Array.from(map)
+          .map(([code, ch]) => code + ',' + ch)
+          .join(';'),
+      );
+      testing.expectEqual('a', map.get('KeyA'));
+      testing.expectEqual('§', map.get('IntlBackslash'));
+      testing.expectEqual(true, map.has('KeyA'));
+      testing.expectEqual(undefined, map.get('keya'));
+      testing.expectEqual(false, map.has('ShiftLeft'));
+
+      testing.expectEqual('KeyK', Array.from(map.keys())[0]);
+      testing.expectEqual('k', Array.from(map.values())[0]);
+      testing.expectEqual(48, Array.from(map.entries()).length);
+
+      // Chrome's maplike forEach hands the callback (value, key, map).
+      const seen = [];
+      let scoped = null;
+      map.forEach(function (v, k, m) {
+        scoped = `${this.tag}|${m === map}`;
+        seen.push(k + '=' + v);
+      }, { tag: 'scoped' });
+      testing.expectEqual('scoped|true', scoped);
+      testing.expectEqual(48, seen.length);
+      testing.expectEqual('KeyK=k', seen[0]);
+      testing.expectEqual('KeyE=e', seen[47]);
     });
   }
 </script>

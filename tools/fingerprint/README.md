@@ -18401,3 +18401,44 @@ size for `font-family: monospace` is **13px** (this engine says 16 — the famil
 does reach the box now, and 288.98 is monospace at 16px, exactly 16/13 of
 Chrome's 234.80), and `<font size="1">` is a legacy presentational attribute
 this engine does not map at all.
+
+## The keyboard layout map was the empty one (B83, 2026-08-27)
+
+`navigator.keyboard.getLayoutMap()` resolved a `KeyboardLayoutMap` with `size`
+0: right brand, right prototype, no entries. The reference Chrome resolves
+**48**, and three runs of `scratch/expr-keyboard-layout-map.js` returned the
+same 48 pairs in the same order and the same 401-character join
+(`scratch/b82-kbmap-ch-{1,2,3}.json`). The map is one of the values B55 caught
+being hashed rather than sent, so it weighs nothing in the payload — which is
+exactly why it was still worth sending after
+[the /tl payload does not weigh the geometry](#the-tl-payload-does-not-weigh-the-geometry-b82-2026-08-27):
+a hash that does not match is a lever the byte count never touched.
+
+The standing argument against it was in the source: baking one machine's layout
+in would hand every deployment a shared, wrong keyboard. That reasoning
+contradicts its own neighbours — this navigator already hands out one machine's
+182 font faces, 199 voices, GPU strings, screen size and device pixel ratio —
+and it trades a *shared and plausible* answer for a *unique and impossible* one.
+No desktop Chrome resolves an empty layout map. The 48 entries now ship
+verbatim, order included, because a collector joins the pairs before hashing
+them.
+
+The order is Chrome's own and is not alphabetical: `KeyK, KeyG, Digit2, Digit0,
+KeyV, KeyA, Backquote, …`. It also carries `IntlBackslash` → `§`, which is the
+reference machine's ISO key; that is the layout that was measured, so that is
+the layout that ships.
+
+### An empty struct cannot be its own forEach argument
+
+Writing the test surfaced a second, smaller gap. Chrome's maplike `forEach`
+hands the callback `(value, key, map)` and the third argument **is** the map;
+ours was a different object. `KeyboardLayoutMap` declared
+`empty_with_no_proto`, and that path deliberately stores no tagged opaque
+(`TaggedOpaque.fromJS` returns a pointer to one shared static instance instead),
+so `self` inside any method is never the pointer the caller's wrapper was
+created from. Dropping the flag for this one type restores identity.
+
+**Every other `empty_with_no_proto` maplike has the same gap** —
+`WGSLLanguageFeatures` next door passes `self` to its callback the same way.
+They were left alone: nothing has measured a collector reading that argument,
+and this one only came up because the map stopped being empty.
