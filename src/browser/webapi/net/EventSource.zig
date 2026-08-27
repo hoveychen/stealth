@@ -24,6 +24,7 @@ const js = @import("../../js/js.zig");
 const URL = @import("../../URL.zig");
 const Mime = @import("../../Mime.zig");
 const Page = @import("../../Page.zig");
+const cors = @import("../../../network/cors.zig");
 const Transfer = @import("../../../network/HttpClient.zig").Transfer;
 
 const Event = @import("../Event.zig");
@@ -333,11 +334,11 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
     return .proceed;
 }
 
-// The general http stack doesn't model CORS (fetch/XHR assume it passed),
-// but the EventSource WPTs require enforcement, and it's self-contained
-// enough to do here: the response must echo an acceptable
+// fetch()/XHR still assume a cross-origin response passed CORS, but the
+// EventSource WPTs require enforcement: the response must echo an acceptable
 // Access-Control-Allow-Origin (plus Allow-Credentials for credentialed
-// requests).
+// requests). The reading of that pair is shared with PreflightGate, which asks
+// the same question of a preflight's answer.
 fn corsAllowed(self: *const EventSource, transfer: *Transfer) bool {
     var allow_origin: ?[]const u8 = null;
     var allow_credentials: ?[]const u8 = null;
@@ -350,20 +351,12 @@ fn corsAllowed(self: *const EventSource, transfer: *Transfer) bool {
         }
     }
 
-    const allowed = allow_origin orelse return false;
-    if (std.mem.eql(u8, allowed, "*")) {
-        // the wildcard is not valid for credentialed requests
-        return !self._with_credentials;
-    }
-    const origin = self._exec.origin() orelse "null";
-    if (!std.mem.eql(u8, allowed, origin)) {
-        return false;
-    }
-    if (self._with_credentials) {
-        const creds = allow_credentials orelse return false;
-        return std.mem.eql(u8, creds, "true");
-    }
-    return true;
+    return cors.originAllowed(
+        allow_origin,
+        allow_credentials,
+        self._exec.origin() orelse "null",
+        self._with_credentials,
+    );
 }
 
 fn httpDataCallback(transfer: *Transfer, data: []const u8) !void {

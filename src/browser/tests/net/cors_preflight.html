@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The page is served from http://127.0.0.1:9582; the API below lives on
+  http://localhost:9582 — the same test server, a different origin, which is
+  all CORS cares about.
+
+  /cors/echo only permits the request when the preflight announced exactly the
+  method and header list named in its query, so "the request went through" is
+  an assertion about the *shape* of our Access-Control-Request-* headers.
+  /cors/count answers how many OPTIONS the server has answered, which makes
+  "no preflight was sent" assertable too.
+-->
+
+<script id=cors_preflight_json_post type=module>
+  {
+    const API = 'http://localhost:9582';
+    const preflights = async () => parseInt(await (await fetch('http://127.0.0.1:9582/cors/count?c=1')).text(), 10);
+    const state = await testing.async();
+    const before = await preflights();
+    const res = await fetch(API + '/cors/echo?m=POST&h=content-type&c=1', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: '{}',
+    });
+    const text = await res.text();
+    const after = await preflights();
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(200, res.status);
+      testing.expectEqual('ok', text);
+      testing.expectEqual(1, after - before);
+    });
+  }
+</script>
+
+<script id=cors_preflight_not_for_safelisted type=module>
+  {
+    const API = 'http://localhost:9582';
+    const preflights = async () => parseInt(await (await fetch('http://127.0.0.1:9582/cors/count?c=2')).text(), 10);
+    const state = await testing.async();
+    const before = await preflights();
+    const plain = await fetch(API + '/cors/echo?m=NONE&c=2', {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain'},
+      body: 'x',
+    });
+    const form = await fetch(API + '/cors/echo?m=NONE&c=2', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: 'a=1',
+    });
+    const get = await fetch(API + '/cors/echo?m=NONE&c=2');
+    const after = await preflights();
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(200, plain.status);
+      testing.expectEqual(200, form.status);
+      testing.expectEqual(200, get.status);
+      testing.expectEqual(0, after - before);
+    });
+  }
+</script>
+
+<script id=cors_preflight_same_origin_never type=module>
+  {
+    const preflights = async () => parseInt(await (await fetch('http://127.0.0.1:9582/cors/count?c=3')).text(), 10);
+    const state = await testing.async();
+    const before = await preflights();
+    const res = await fetch('http://127.0.0.1:9582/cors/echo?m=NONE&c=3', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Probe': '1'},
+      body: '{}',
+    });
+    const after = await preflights();
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(200, res.status);
+      testing.expectEqual(0, after - before);
+    });
+  }
+</script>
+
+<script id=cors_preflight_custom_header type=module>
+  {
+    const API = 'http://localhost:9582';
+    const state = await testing.async();
+    const res = await fetch(API + '/cors/echo?m=GET&h=x-probe', {
+      headers: {'X-Probe': '1'},
+    });
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(200, res.status);
+    });
+  }
+</script>
+
+<script id=cors_preflight_headers_sorted type=module>
+  {
+    const API = 'http://localhost:9582';
+    // Set out of order and mixed case: Access-Control-Request-Headers is
+    // lowercased, sorted and joined with a bare comma.
+    const state = await testing.async();
+    const res = await fetch(API + '/cors/echo?m=GET&h=x-alpha,x-zeta', {
+      headers: {'X-Zeta': '1', 'X-Alpha': '2'},
+    });
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(200, res.status);
+    });
+  }
+</script>
+
+<script id=cors_preflight_safelisted_type_not_announced type=module>
+  {
+    const API = 'http://localhost:9582';
+    // The custom header causes the preflight; a safelisted Content-Type
+    // alongside it must not join the announced list.
+    const state = await testing.async();
+    const res = await fetch(API + '/cors/echo?m=POST&h=x-probe', {
+      method: 'POST',
+      headers: {'X-Probe': '1', 'Content-Type': 'text/plain'},
+      body: 'x',
+    });
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(200, res.status);
+    });
+  }
+</script>
+
+<script id=cors_preflight_non_simple_methods type=module>
+  {
+    const API = 'http://localhost:9582';
+    // No page-set headers at all, so the preflight announces the method only.
+    const state = await testing.async();
+    const put = await fetch(API + '/cors/echo?m=PUT', {method: 'PUT', body: 'x'});
+    const del = await fetch(API + '/cors/echo?m=DELETE', {method: 'DELETE'});
+    const patch = await fetch(API + '/cors/echo?m=PATCH', {method: 'PATCH', body: 'x'});
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(200, put.status);
+      testing.expectEqual(200, del.status);
+      testing.expectEqual(200, patch.status);
+    });
+  }
+</script>
+
+<script id=cors_preflight_xhr type=module>
+  {
+    const API = 'http://localhost:9582';
+    const preflights = async () => parseInt(await (await fetch('http://127.0.0.1:9582/cors/count?c=4')).text(), 10);
+    const state = await testing.async();
+    const before = await preflights();
+    const status = await new Promise((resolve, reject) => {
+      const x = new XMLHttpRequest();
+      x.open('POST', API + '/cors/echo?m=POST&h=content-type&c=4', true);
+      x.setRequestHeader('Content-Type', 'application/json');
+      x.onload = () => resolve(x.status);
+      x.onerror = () => reject(new Error('xhr failed'));
+      x.send('{}');
+    });
+    const after = await preflights();
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(200, status);
+      testing.expectEqual(1, after - before);
+    });
+  }
+</script>
+
+<script id=cors_preflight_safelisted_method_needs_no_listing type=module>
+  {
+    const API = 'http://localhost:9582';
+    // Access-Control-Allow-Methods: GET does not block the POST beside it —
+    // POST is a CORS-safelisted method. Measured on Chrome 151.
+    const state = await testing.async();
+    const res = await fetch(API + '/cors/deny-method', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: '{}',
+    });
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(200, res.status);
+    });
+  }
+</script>
+
+<script id=cors_preflight_method_refused type=module>
+  {
+    const API = 'http://localhost:9582';
+    const state = await testing.async();
+    let err = null;
+    try {
+      await fetch(API + '/cors/deny-method', {method: 'PUT', body: 'x'});
+    } catch (e) {
+      err = e;
+    }
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(true, err instanceof TypeError);
+      testing.expectEqual('Failed to fetch', err.message);
+    });
+  }
+</script>
+
+<script id=cors_preflight_header_refused type=module>
+  {
+    const API = 'http://localhost:9582';
+    const state = await testing.async();
+    let err = null;
+    try {
+      await fetch(API + '/cors/deny-header', {headers: {'X-Probe': '1'}});
+    } catch (e) {
+      err = e;
+    }
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(true, err instanceof TypeError);
+      testing.expectEqual('Failed to fetch', err.message);
+    });
+  }
+</script>
+
+<script id=cors_preflight_origin_refused type=module>
+  {
+    const API = 'http://localhost:9582';
+    const state = await testing.async();
+    let err = null;
+    try {
+      await fetch(API + '/cors/deny-origin', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: '{}',
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(true, err instanceof TypeError);
+      testing.expectEqual('Failed to fetch', err.message);
+    });
+  }
+</script>
+
+<script id=cors_preflight_missing_acao_refused type=module>
+  {
+    const API = 'http://localhost:9582';
+    const state = await testing.async();
+    let err = null;
+    try {
+      await fetch(API + '/cors/no-acao', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: '{}',
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(true, err instanceof TypeError);
+      testing.expectEqual('Failed to fetch', err.message);
+    });
+  }
+</script>
+
+<script id=cors_preflight_error_status_refused type=module>
+  {
+    const API = 'http://localhost:9582';
+    // Allow-* headers on a 500: an error status is a refusal on its own.
+    const state = await testing.async();
+    let err = null;
+    try {
+      await fetch(API + '/cors/status-500', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: '{}',
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(true, err instanceof TypeError);
+      testing.expectEqual('Failed to fetch', err.message);
+    });
+  }
+</script>
+
+<script id=cors_preflight_max_age_cached type=module>
+  {
+    const API = 'http://localhost:9582';
+    const preflights = async () => parseInt(await (await fetch('http://127.0.0.1:9582/cors/count?c=5')).text(), 10);
+    // Two identical requests, one preflight: Access-Control-Max-Age caches the
+    // answer the way Chrome does.
+    const state = await testing.async();
+    const before = await preflights();
+    const first = await fetch(API + '/cors/maxage?c=5', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: '{}',
+    });
+    const second = await fetch(API + '/cors/maxage?c=5', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: '{}',
+    });
+    const after = await preflights();
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(200, first.status);
+      testing.expectEqual(200, second.status);
+      testing.expectEqual(1, after - before);
+    });
+  }
+</script>

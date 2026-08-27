@@ -1,0 +1,158 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T02:28:15.165Z",
+  "egress": {
+    "fl": "119f155",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787797695.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "PDX",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1481+32943c362",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17320/"
+  },
+  "stations": [
+    {
+      "name": "ak-kohls",
+      "vendor": "akamai",
+      "url": "https://www.kohls.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "error": "timeout: Runtime.enable",
+      "documents": [
+        {
+          "url": "https://www.kohls.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://kohls.demdex.net/dest5.html?d_nsid=0#https%3A%2F%2Fwww.kohls.com",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cm.g.doubleclick.net/partnerpixels?url=https%3A%2F%2Fwww.kohls.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?origin=publishertagids&topUrl=www.kohls.com#{%22bundle%22:{%22origin%22:0},%22optout%22:{%22value%22:false,%22origin%22:0},%22tld%22:%22kohls.com%22,%22topUrl%22:%22www.kohls.com%22,%22version%22:108763,%22origin%22:%22publishertagids%22,%22requestId%22:%220.23450424003223724%22}",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ads.pubmatic.com/AdServer/js/user_sync.html?gdpr=&gdpr_consent=&us_privacy=&predirect=https%3A%2F%2Fow.pubmatic.com%2Fsetuid%3Fbidder%3Dpubmatic%26gdpr%3D%26gdpr_consent%3D%26gpp%3D%26gpp_sid%3D%26f%3Db%26uid%3D",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=8e9bd9e0-8284-4dbd-ab20-145759728098&u_scsid=ebccb86f-a545-483c-83db-2799880f638d&u_sclid=91bb04f3-4d47-4aa7-971e-ff6a0b0d43ab",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=99ed79db-3aec-4b85-9a61-ed80a2993b62&u_scsid=ebccb86f-a545-483c-83db-2799880f638d&u_sclid=91bb04f3-4d47-4aa7-971e-ff6a0b0d43ab",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://servedby.flashtalking.com/container/1638;12462;1480;iframe/?spotName=Homepage&U3=27587896244104573773318664579747513973&U7=afedfa4f-0f9a-45b5-8a8e-2fe827a10fd4&U10=94301&cachebuster=210789.1256902725",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "error",
+      "first": 200,
+      "last": 200,
+      "ms": 55386
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787797702407 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702416 $scope=frame $level=error $msg=\"ResizeObserver.deliverEntries\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at https://www.kohls.com/shopnext-web-home/_astro/utils-tqB2gwhA.D69qYGgj.js:1:3266\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787797702416 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702425 $scope=frame $level=error $msg=\"ResizeObserver.deliverEntries\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at https://www.kohls.com/shopnext-web-home/_astro/utils-tqB2gwhA.D69qYGgj.js:1:3266\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787797702425 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702434 $scope=frame $level=error $msg=\"ResizeObserver.deliverEntries\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at https://www.kohls.com/shopnext-web-home/_astro/utils-tqB2gwhA.D69qYGgj.js:1:3266\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787797702434 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702443 $scope=frame $level=error $msg=\"ResizeObserver.deliverEntries\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at https://www.kohls.com/shopnext-web-home/_astro/utils-tqB2gwhA.D69qYGgj.js:1:3266\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787797702443 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702452 $scope=frame $level=error $msg=\"ResizeObserver.deliverEntries\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at https://www.kohls.com/shopnext-web-home/_astro/utils-tqB2gwhA.D69qYGgj.js:1:3266\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787797702452 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702461 $scope=frame $level=error $msg=\"ResizeObserver.deliverEntries\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at https://www.kohls.com/shopnext-web-home/_astro/utils-tqB2gwhA.D69qYGgj.js:1:3266\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787797702461 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702470 $scope=frame $level=error $msg=\"ResizeObserver.deliverEntries\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at https://www.kohls.com/shopnext-web-home/_astro/utils-tqB2gwhA.D69qYGgj.js:1:3266\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787797702470 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702479 $scope=frame $level=error $msg=\"ResizeObserver.deliverEntries\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at https://www.kohls.com/shopnext-web-home/_astro/utils-tqB2gwhA.D69qYGgj.js:1:3266\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787797702479 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702488 $scope=frame $level=error $msg=\"ResizeObserver.deliverEntries\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at https://www.kohls.com/shopnext-web-home/_astro/utils-tqB2gwhA.D69qYGgj.js:1:3266\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787797702488 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702490 $scope=frame $level=error $msg=\"ResizeObserver.deliverEntries\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at https://www.kohls.com/shopnext-web-home/_astro/utils-tqB2gwhA.D69qYGgj.js:1:3266\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787797702490 $scope=frame $level=error $msg=\"frame.deliverResizes\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797702520 $scope=js $level=warn $msg=\"eval script\" url=https://www.kohls.com/metrics5/ caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at e.setInterval (https://www.kohls.com/:2:28155)\\n    at bd (https://www.kohls.com/metrics5/:383:305)\\n    at new ly (https://www.kohls.com/metrics5/:785:706)\\n    at sy (https://www.kohls.com/metrics5/:788:237)\\n    at vy (https://www.kohls.com/metrics5/:788:39)\\n    at Nm (https://www.kohls.com/metrics5/:1232:183)\\n    at https://www.kohls.com/metrics5/:1235:313\\n    at c (https://www.kohls.com/metrics5/:1233:130)\\n    at https://www.kohls.com/metrics5/:1235:277\\n    at https://www.kohls.com/metrics5/:1235:282\\n    at https://www.kohls.com/metrics5/:1237:3\" caught.line=36 caught.caught=true",
+    "$time=1787797702521 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught Error: TooManyTimeout\" filename= line_number=0 column_number=0",
+    "$time=1787797702526 $scope=js $level=warn $msg=\"eval script\" url=https://www.kohls.com/ caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at e.setInterval (https://www.kohls.com/:2:28155)\\n    at bd (https://www.kohls.com/metrics5/:383:305)\\n    at new ly (https://www.kohls.com/metrics5/:785:706)\\n    at sy (https://www.kohls.com/metrics5/:788:237)\\n    at ry (https://www.kohls.com/metrics5/:787:274)\\n    at new lB (https://www.kohls.com/metrics5/:831:874)\\n    at nB (https://www.kohls.com/metrics5/:832:28)\\n    at Object.e [as execute] (https://www.kohls.com/metrics5/:837:124)\\n    at DB (https://www.kohls.com/metrics5/:838:742)\\n    at GB (https://www.kohls.com/metrics5/:842:202)\\n    at EE (https://www.kohls.com/metrics5/:902:245)\\n    at c.push (https://www.kohls.com/metrics5/:906:209)\\n    at gtag (https://www.kohls.com/:4:19)\\n    at https://www.kohls.com/:6:7\\n    at https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:279\\n    at qf.Z (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:228:273)\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:267)\\n    at t.HTMLElement.<computed> [as replaceChild] (https://www.kohls.com/:2:32920)\\n    at e._insertCursor (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5270)\\n    at e._writeScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5923)\\n    at e._handleScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4482)\\n    at e._writeImpl (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:3094)\\n    at e.write (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:2657)\\n    at e._onScriptDone (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5505)\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4516\\n    at https://assets.adobedtm.com/6d2e783b...+385 bytes\" caught.line=36 caught.caught=true",
+    "$time=1787797702527 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught Error: TooManyTimeout\" filename= line_number=0 column_number=0",
+    "$time=1787797702528 $scope=frame $level=error $msg=\"MutObserver.deliverRecords\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at c (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:97:288)\\n    at ba (64854_747627194.js:13:142)\\n    at ma (64854_747627194.js:9:413)\\n    at MutationObserver.eval (64854_747627194.js:7:344)\\n    at https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:279\\n    at qf.Z (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:228:273)\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:267)\\n    at t.HTMLElement.<computed> [as replaceChild] (https://www.kohls.com/:2:32920)\\n    at e._insertCursor (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5270)\\n    at e._writeScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5923)\\n    at e._handleScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4482)\\n    at e._writeImpl (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:3094)\\n    at e.write (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:2657)\\n    at e._onScriptDone (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5505)\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4516\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5903\\n    at o (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:6298)\\n    at HTMLScriptElement.onload (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:6617)\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:25:458)\" caught.line=97 caught.caught=true",
+    "$time=1787797702528 $scope=frame $level=error $msg=\"frame.deliverMutations\" err=JsException type=root url=https://www.kohls.com/",
+    "$time=1787797705267 $scope=js $level=warn $msg=\"console.warn\" param.0=Play/pause section not found: .pz-btf-kids",
+    "$time=1787797705445 $scope=js $level=warn $msg=\"console.warn\" param.0=[Sales Agent] Fast loading is enabled",
+    "$time=1787797705454 $scope=js $level=warn $msg=\"console.warn\" param.0=Google Deploy of the SharedId library has been deprecated. Please select another option in the GAM UI. If you use Prebid, we suggest the Prebid.js UserId option. If you do not, you may configure GAM to allow Google to share a first party user identifier with OB and AB participants, which is either the publisherProvidedId or the __gads value when that is missing.",
+    "$time=1787797705462 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] Using deprecated googletag.encryptedSignalProviders. Please use googletag.secureSignalProviders instead.",
+    "https://goo.gle/gpt-message#155",
+    "$time=1787797706443 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787797707885 $scope=js $level=warn $msg=\"eval script\" url=https://ads.pubmatic.com/AdServer/js/user_sync.html?gdpr=&gdpr_consent=&us_privacy=&predirect=https%3A%2F%2Fow.pubmatic.com%2Fsetuid%3Fbidder%3Dpubmatic%26gdpr%3D%26gdpr_consent%3D%26gpp%3D%26gpp_sid%3D%26f%3Db%26uid%3D caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at get (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:28:424)\" caught.line=28 caught.caught=true",
+    "$time=1787797707885 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787797708661 $scope=js $level=warn $msg=\"console.warn\" param.0=[TikTok Pixel] - Invalid email information",
+    "Issue: The emails shared with your events were invalid.",
+    "Suggestion: Go to your source code to double check shared emails. Leave your string empty when customer information isn't available. Avoid spaces, \"undefined\", or other hardcoded values. See https://ads.tiktok.com/marketing_api/docs?id=1739585700402178 for more information.",
+    "$time=1787797708664 $scope=js $level=warn $msg=\"console.warn\" param.0=[TikTok Pixel] - Invalid email information",
+    "Issue: The emails shared with your events were invalid.",
+    "Suggestion: Go to your source code to double check shared emails. Leave your string empty when customer information isn't available. Avoid spaces, \"undefined\", or other hardcoded values. See https://ads.tiktok.com/marketing_api/docs?id=1739585700402178 for more information.",
+    "$time=1787797708665 $scope=js $level=warn $msg=\"console.warn\" param.0=[TikTok Pixel] - Invalid email information",
+    "Issue: The emails shared with your events were invalid.",
+    "Suggestion: Go to your source code to double check shared emails. Leave your string empty when customer information isn't available. Avoid spaces, \"undefined\", or other hardcoded values. See https://ads.tiktok.com/marketing_api/docs?id=1739585700402178 for more information.",
+    "$time=1787797708778 $scope=js $level=warn $msg=\"eval script\" url=https://sc-static.net/scevent.min.js caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:33:84)\\n    at K (https://sc-static.net/scevent.min.js:2:4411)\\n    at tt (https://sc-static.net/scevent.min.js:2:4929)\" caught.line=33 caught.caught=true",
+    "$time=1787797708778 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787797708780 $scope=js $level=warn $msg=\"eval script\" url=https://sc-static.net/scevent.min.js caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:33:84)\\n    at K (https://sc-static.net/scevent.min.js:2:4411)\\n    at tt (https://sc-static.net/scevent.min.js:2:4929)\" caught.line=33 caught.caught=true",
+    "$time=1787797708780 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787797715768 $scope=js $level=warn $msg=\"eval script\" url=https://www.kohls.com/ caught.exception=\"_etmc is not defined\" caught.stack=\"ReferenceError: _etmc is not defined\\n    at https://www.kohls.com/:2:3\\n    at https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:279\\n    at qf.Z (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:228:273)\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:267)\\n    at t.HTMLElement.<computed> [as replaceChild] (https://www.kohls.com/:2:32920)\\n    at e._insertCursor (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5270)\\n    at e._writeScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5923)\\n    at e._handleScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4482)\\n    at e._writeImpl (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:3094)\\n    at e.write (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:2657)\\n    at s (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:325)\\n    at a (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:32423)\\n    at c (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:701)\\n    at i (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:23754)\\n    at s (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:24095)\\n    at g (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:24153)\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:24440\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=2 caught.caught=true",
+    "$time=1787797715768 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught ReferenceError: _etmc is not defined\" filename= line_number=0 column_number=0",
+    "$time=1787797720098 $scope=js $level=warn $msg=\"console.warn\" param.0=[TikTok Pixel] - Invalid email information",
+    "Issue: The emails shared with your events were invalid.",
+    "Suggestion: Go to your source code to double check shared emails. Leave your string empty when customer information isn't available. Avoid spaces, \"undefined\", or other hardcoded values. See https://ads.tiktok.com/marketing_api/docs?id=1739585700402178 for more information.",
+    "$time=1787797739404 $scope=app $level=error $msg=\"watchdog stall\" stalled_ms=30186",
+    "$time=1787797739419 $scope=frame $level=error $msg=\"IntsctObserver.deliverEntries\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797739419 $scope=frame $level=error $msg=\"frame.deliverIntersections\" err=ExecutionTerminated type=root url=https://www.kohls.com/",
+    "$time=1787797739420 $scope=http $level=error $msg=\"delivery callback\" err=ExecutionTerminated req=POST https://tr6.snapchat.com/p",
+    "$time=1787797739420 $scope=http $level=error $msg=\"handle error error\" original=ExecutionTerminated err=ExecutionTerminated",
+    "$time=1787797739420 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=GET https://lbs.eu-1-id5-sync.com/lbs/v1",
+    "$time=1787797739420 $scope=cdp $level=warn $msg=\"closing connection\" reason=\"pending terminate\""
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

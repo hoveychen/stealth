@@ -41,6 +41,7 @@ pub const ResponseTimes = http.ResponseTimes;
 const Network = @import("Network.zig");
 const Cache = @import("cache/Cache.zig");
 const RobotsGate = @import("RobotsGate.zig");
+const PreflightGate = @import("PreflightGate.zig");
 const ClientHints = @import("ClientHints.zig");
 const UrlBlocklist = @import("UrlBlocklist.zig");
 
@@ -203,6 +204,7 @@ serve_mode: bool,
 obey_robots: bool,
 
 robots: RobotsGate,
+preflight: PreflightGate,
 url_blocklist: ?UrlBlocklist,
 
 // Which high-entropy client hints each origin has asked for via Accept-CH.
@@ -251,6 +253,10 @@ pub fn init(self: *Client, allocator: Allocator, network: *Network, cdp: ?*CDP) 
             .network = network,
             .single_flight = .init(allocator),
         },
+        .preflight = .{
+            .allocator = allocator,
+            .single_flight = .init(allocator),
+        },
         .url_blocklist = url_blocklist,
         .arena_pool = &network.app.arena_pool,
     };
@@ -283,6 +289,7 @@ pub fn deinit(self: *Client) void {
     self.clearUrlBlocklist();
     self.client_hints.deinit(self.allocator);
     self.robots.deinit();
+    self.preflight.deinit();
     self.blocking_requests.deinit(self.allocator);
     self.transfers.deinit(self.allocator);
     self.inbox.deinit();
@@ -619,6 +626,7 @@ pub fn abort(self: *Client) void {
         // - self.robots.pending : each robots fetch's shutdown_callback
         //   drops its entry; parked waiters unlink in their own deinit.
         std.debug.assert(self.robots.single_flight.count() == 0);
+        std.debug.assert(self.preflight.single_flight.count() == 0);
     }
 }
 
@@ -1001,7 +1009,7 @@ fn startPending(self: *Client) !void {
     }
 }
 
-const SubmitFrom = enum { start, after_intercept, network };
+const SubmitFrom = enum { start, after_intercept, after_robots, network };
 
 // Process a transfer, passing it through our pipeline. A transfer an move off
 // the pipeline(e.g. while parked waiting for a robots.txt check) and then
@@ -1058,6 +1066,17 @@ fn pipeline(self: *Client, transfer: *Transfer, from: SubmitFrom) !void {
                     .pending => return,
                 }
             }
+            continue :sw SubmitFrom.after_robots;
+        },
+        .after_robots => {
+            // Cross-origin fetch()/XHR outside the CORS safelist has to be
+            // announced with an OPTIONS before it goes out. Same shape as the
+            // robots gate above: answered from cache, or parked until the
+            // preflight resolves.
+            switch (try self.preflight.check(transfer)) {
+                .allowed => {},
+                .pending => return,
+            }
             continue :sw SubmitFrom.network;
         },
         .network => try self.processTransfer(transfer),
@@ -1067,6 +1086,12 @@ fn pipeline(self: *Client, transfer: *Transfer, from: SubmitFrom) !void {
 // RobotsGate resumption. The robots gate is the last step before the
 // network, so an allowed transfer goes straight there.
 pub fn resumeAfterRobots(self: *Client, transfer: *Transfer) !void {
+    return self.pipeline(transfer, .after_robots);
+}
+
+// PreflightGate resumption. The preflight gate is the last step before the
+// network, so a permitted transfer goes straight there.
+pub fn resumeAfterPreflight(self: *Client, transfer: *Transfer) !void {
     return self.pipeline(transfer, .network);
 }
 
@@ -1964,6 +1989,11 @@ pub const Request = struct {
     // these do not need to be deferred and do not obey robots.txt.
     internal: bool = false,
 
+    // The internal OPTIONS a PreflightGate sends. Chrome writes a preflight
+    // with neither the client hints nor the field order of the request it is
+    // asking about, so seedHeaders and emitHeaders both need to know.
+    preflight: bool = false,
+
     // Set by syncRequest; only used to label the http_requests metric.
     sync: bool = false,
 
@@ -2360,6 +2390,9 @@ pub const Transfer = struct {
 
         // RobotsGate holds the transfer pending a robots.txt fetch.
         robots,
+
+        // PreflightGate holds the transfer pending its CORS OPTIONS.
+        preflight,
     };
 
     pub const HeaderResult = enum {
@@ -2395,7 +2428,7 @@ pub const Transfer = struct {
             return;
         }
         switch (self.state.parked) {
-            .robots => {},
+            .robots, .preflight => {},
             .intercept_request, .intercept_auth => {
                 lp.assert(self.client.intercepted > 0, "Transfer.leaveIntercept", .{ .value = self.client.intercepted });
                 self.client.intercepted -= 1;
@@ -2478,6 +2511,10 @@ pub const Transfer = struct {
         // while we're parked.
         if (self.state == .parked and self.state.parked == .robots) {
             self.client.robots.remove(self);
+        }
+        // Same for the preflight gate.
+        if (self.state == .parked and self.state.parked == .preflight) {
+            self.client.preflight.remove(self);
         }
 
         // A pending revalidation entry owns cache resources (possibly an
@@ -3355,6 +3392,28 @@ pub const Transfer = struct {
         "priority",
     };
 
+    // A CORS preflight, which is not the subresource table with two names
+    // added: Chrome leads with Accept, puts the two Access-Control-Request-*
+    // fields ahead of Origin, and -- unlike every other shape here -- writes
+    // Sec-Fetch-Mode *before* Sec-Fetch-Site. Measured, the OPTIONS requests of
+    // tools/fingerprint/results/b57-cors-chrome.json (all five agree).
+    // No Content-Length and no Cookie: a preflight has no body and is never
+    // credentialed, so neither name has a measured position to give it.
+    const chrome_preflight_order = [_][]const u8{
+        "Accept",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+        "Origin",
+        "User-Agent",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Dest",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "priority",
+    };
+
     // Materializes req_headers onto the connection in Chrome's order.
     //
     // One emission stays out of our hands: curl writes `Host` first, which is
@@ -3363,7 +3422,9 @@ pub const Transfer = struct {
     // it from here because the same list is reused for an HTTP/2 attempt, where
     // a connection header is a protocol error.
     fn emitHeaders(self: *Transfer, conn: *http.Connection, arena: Allocator) !void {
-        const order: []const []const u8 = if (self.req.resource_type == .document)
+        const order: []const []const u8 = if (self.req.preflight)
+            &chrome_preflight_order
+        else if (self.req.resource_type == .document)
             if (self._critical_hints_restarted)
                 &chrome_restarted_navigation_order
             else
@@ -3398,11 +3459,21 @@ pub const Transfer = struct {
 
     // The client's baseline headers, added to every request at creation.
     fn seedHeaders(self: *Transfer) !void {
+        // A preflight carries no client hints at all -- not the three baseline
+        // ones, not the negotiated ones -- while the request it asks about
+        // carries the full set. Measured on Chrome 151: the OPTIONS of the
+        // `post-json` case in tools/fingerprint/results/b57-cors-chrome.json
+        // has no sec-ch-ua* field, the POST behind it has three.
+        const preflight = self.req.preflight;
+
         for (self.client.baselineHeaders()) |hdr| {
+            if (preflight and std.ascii.startsWithIgnoreCase(hdr.name, "sec-ch-ua")) continue;
             try self.addHeader(hdr.name, hdr.value, .{ .source = hdr.source });
         }
 
-        try self.seedClientHints();
+        if (!preflight) {
+            try self.seedClientHints();
+        }
 
         // --http-header extras; setHeader so a same-name header (e.g.
         // Accept-Language) overrides the baseline instead of duplicating.

@@ -733,8 +733,146 @@ const GZIPPED_SCRIPT = [_]u8{
 // identical comment lines, which is what makes it compress 24-fold.
 const GZIPPED_SCRIPT_DECODED_LEN = 1745;
 
+// How many OPTIONS the CORS endpoints below have answered, per counter slot.
+// `net/cors_preflight.html` reads a slot either side of a request, so "a
+// preflight was / was not sent" is an assertion rather than a guess. Per slot
+// rather than one total because the page's script blocks run concurrently:
+// a shared counter would pick up every other block's preflights. A request
+// names its slot with `&c=N`; `/cors/count?c=N` reads it back.
+var cors_preflights_seen: [8]std.atomic.Value(u32) = @splat(.init(0));
+
+// The page origin for the web-api tests. The CORS endpoints answer to it and
+// to nothing else, so `localhost:9582` is a genuinely cross-origin API for a
+// page served from here -- same server, different origin.
+const CORS_PAGE_ORIGIN = "http://127.0.0.1:9582";
+
+// The CORS half of the test server. `/cors/echo` is the interesting one: it
+// only permits the request if the preflight announced exactly the method and
+// header list named in the query, so `net/cors_preflight.html` asserts the
+// *shape* of our Access-Control-Request-* by whether the request goes through,
+// with no shared state to race on. The rest are fixed refusals.
+fn corsHandler(req: *std.http.Server.Request, path: []const u8) !bool {
+    if (!std.mem.startsWith(u8, path, "/cors/")) return false;
+
+    const query = if (std.mem.indexOfScalar(u8, path, '?')) |i| path[i + 1 ..] else "";
+    const route = if (std.mem.indexOfScalar(u8, path, '?')) |i| path[0..i] else path;
+
+    if (std.mem.eql(u8, route, "/cors/count")) {
+        var buf: [16]u8 = undefined;
+        const slot = corsCounterSlot(query) orelse 0;
+        const body = std.fmt.bufPrint(&buf, "{d}", .{cors_preflights_seen[slot].load(.monotonic)}) catch unreachable;
+        try req.respond(body, .{
+            .extra_headers = &.{.{ .name = "Content-Type", .value = "text/plain" }},
+        });
+        return true;
+    }
+
+    if (req.head.method == .OPTIONS) {
+        if (corsCounterSlot(query)) |slot| {
+            _ = cors_preflights_seen[slot].fetchAdd(1, .monotonic);
+        }
+
+        const acrm = corsRequestHeader(req, "access-control-request-method");
+        const acrh = corsRequestHeader(req, "access-control-request-headers");
+
+        if (std.mem.eql(u8, route, "/cors/echo")) {
+            // The query says what the preflight must have announced. A
+            // mismatch answers without Allow-Origin, which refuses.
+            const want_method = corsQueryParam(query, "m") orelse "";
+            const want_headers = corsQueryParam(query, "h");
+            const method_ok = std.mem.eql(u8, acrm orelse "", want_method);
+            const headers_ok = if (want_headers) |want|
+                acrh != null and std.mem.eql(u8, acrh.?, want)
+            else
+                acrh == null;
+            if (!method_ok or !headers_ok) {
+                try req.respond("", .{ .status = .bad_request });
+                return true;
+            }
+        }
+
+        if (std.mem.eql(u8, route, "/cors/status-500")) {
+            // Allow-* headers on a 5xx: an error status is a refusal on its
+            // own, whatever it says.
+            try req.respond("", .{
+                .status = .internal_server_error,
+                .extra_headers = &.{
+                    .{ .name = "Access-Control-Allow-Origin", .value = CORS_PAGE_ORIGIN },
+                    .{ .name = "Access-Control-Allow-Methods", .value = "GET, POST, PUT, DELETE, PATCH" },
+                    .{ .name = "Access-Control-Allow-Headers", .value = "content-type, x-probe, x-alpha, x-zeta" },
+                },
+            });
+            return true;
+        }
+
+        var headers: [5]std.http.Header = undefined;
+        var n: usize = 0;
+        if (!std.mem.eql(u8, route, "/cors/no-acao")) {
+            headers[n] = .{
+                .name = "Access-Control-Allow-Origin",
+                .value = if (std.mem.eql(u8, route, "/cors/deny-origin"))
+                    "https://example.invalid"
+                else
+                    CORS_PAGE_ORIGIN,
+            };
+            n += 1;
+        }
+        headers[n] = .{
+            .name = "Access-Control-Allow-Methods",
+            .value = if (std.mem.eql(u8, route, "/cors/deny-method")) "GET" else "GET, POST, PUT, DELETE, PATCH",
+        };
+        n += 1;
+        if (!std.mem.eql(u8, route, "/cors/deny-header")) {
+            headers[n] = .{ .name = "Access-Control-Allow-Headers", .value = "content-type, x-probe, x-alpha, x-zeta" };
+            n += 1;
+        }
+        headers[n] = .{ .name = "Access-Control-Allow-Credentials", .value = "true" };
+        n += 1;
+        if (std.mem.eql(u8, route, "/cors/maxage")) {
+            headers[n] = .{ .name = "Access-Control-Max-Age", .value = "600" };
+            n += 1;
+        }
+        try req.respond("", .{ .status = .no_content, .extra_headers = headers[0..n] });
+        return true;
+    }
+
+    try req.respond("ok", .{
+        .extra_headers = &.{
+            .{ .name = "Content-Type", .value = "text/plain" },
+            .{ .name = "Access-Control-Allow-Origin", .value = CORS_PAGE_ORIGIN },
+            .{ .name = "Access-Control-Allow-Credentials", .value = "true" },
+        },
+    });
+    return true;
+}
+
+fn corsRequestHeader(req: *std.http.Server.Request, name: []const u8) ?[]const u8 {
+    var it = req.iterateHeaders();
+    while (it.next()) |header| {
+        if (std.ascii.eqlIgnoreCase(header.name, name)) return header.value;
+    }
+    return null;
+}
+
+fn corsCounterSlot(query: []const u8) ?usize {
+    const raw = corsQueryParam(query, "c") orelse return null;
+    const slot = std.fmt.parseInt(usize, raw, 10) catch return null;
+    return if (slot < cors_preflights_seen.len) slot else null;
+}
+
+fn corsQueryParam(query: []const u8, key: []const u8) ?[]const u8 {
+    var it = std.mem.splitScalar(u8, query, '&');
+    while (it.next()) |pair| {
+        const eq = std.mem.indexOfScalar(u8, pair, '=') orelse continue;
+        if (std.mem.eql(u8, pair[0..eq], key)) return pair[eq + 1 ..];
+    }
+    return null;
+}
+
 fn testHTTPHandler(req: *std.http.Server.Request) !void {
     const path = req.head.target;
+
+    if (try corsHandler(req, path)) return;
 
     if (std.mem.eql(u8, path, "/xhr")) {
         return req.respond("1234567890" ** 10, .{
