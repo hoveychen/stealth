@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A block whose children are inline gets line boxes, and this engine got none:
+`textLayout` returned null the moment it saw an element child, so
+`<div>a<br>b</div>` — two lines in every browser — had no text height at all and
+fell back to the stack of its children, which for a `<br>` is nothing. Zero,
+where Chrome says 37.
+
+A `<br>` is a hard line break and behaves exactly like a preserved newline does
+in `lineBoxCount`: one more line than there are breaks, less one when the
+content ends with one. Six readings say so, all measured on Chrome 151 at
+`--force-device-scale-factor=2` with
+tools/fingerprint/scratch/expr-inline-content-lines.js (readings in
+scratch/b82-inlinelines-ch-dsf2.json):
+
+  | content        | lines | height |
+  |----------------|-------|--------|
+  | `<br>`         | 1     | 18.5   |
+  | `a<br>`        | 1     | 18.5   |
+  | `a<br>b`       | 2     | 37     |
+  | `<br>a`        | 2     | 37     |
+  | `<br><br>`     | 2     | 37     |
+  | `a<br>b<br>c`  | 3     | 55.5   |
+  | `<br><br><br>` | 3     | 55.5   |
+
+18.5 and not 18 because a line box is worth its measured layout box at the
+device pixel ratio this engine claims — the `font-box-at-device-scale` plan.
+-->
+
+<script id=br_is_a_hard_line_break>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const read = (inner) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div data-m>' + inner + '</div>';
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [cs.height, el.clientHeight, el.offsetHeight,
+                 el.getBoundingClientRect().height, cs.transformOrigin].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // content, then: computed height, clientHeight, offsetHeight, rect, origin
+  const CASES = [
+    ['a<br>b', '37px 37 37 37 200px 18.5px'],
+    ['a<br>b<br>c', '55.5px 56 56 55.5 200px 27.75px'],
+    ['<br>a', '37px 37 37 37 200px 18.5px'],
+    // A trailing break does not open a line, the same way a trailing newline
+    // does not.
+    ['a<br>', '18.5px 19 19 18.5 200px 9.25px'],
+    ['<br>', '18.5px 19 19 18.5 200px 9.25px'],
+    ['<br><br>', '37px 37 37 37 200px 18.5px'],
+    ['<br><br><br>', '55.5px 56 56 55.5 200px 27.75px'],
+    // Collapsible whitespace either side of a break collapses away, so what is
+    // left ends with the break and is one line -- where the same box without
+    // the break has no line box at all.
+    [' <br> ', '18.5px 19 19 18.5 200px 9.25px'],
+    ['<br> ', '18.5px 19 19 18.5 200px 9.25px'],
+    [' <br>', '18.5px 19 19 18.5 200px 9.25px'],
+    ['a <br> b', '37px 37 37 37 200px 18.5px'],
+    ['<!-- c --><br>', '18.5px 19 19 18.5 200px 9.25px'],
+    [' ', '0px 0 0 0 200px 0px'],
+  ];
+
+  const wrong = [];
+  for (const [inner, want] of CASES) {
+    const got = read(inner);
+    if (got !== want) wrong.push(inner + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+An inline box on the line brings its own line box, and the line is the tallest
+ASCENT on it over the deepest DESCENT — not the tallest line-height. The two
+agree until one box has a baseline offset the others do not, and the case that
+separates them is a big font in a small line: `font-size:32px;line-height:20px`
+is 20.5 above the baseline and -0.5 below, so beside plain 16px text it makes a
+**24.5** line where the tallest-line-height model says 20. Chrome says 24.5.
+
+Thirteen more readings in the two blocks below, all measured on Chrome at
+`--force-device-scale-factor=2`:
+tools/fingerprint/scratch/expr-line-contributors.js and expr-line-halves.js.
+-->
+
+<script id=inline_boxes_share_the_line>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const read = (inner, style) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div data-m style="' + (style || '') + '">' + inner + '</div>';
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [cs.height, el.clientHeight, el.offsetHeight,
+                 el.getBoundingClientRect().height, cs.transformOrigin].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // markup, extra style, then: computed height, clientHeight, offsetHeight,
+  // rect, transform-origin
+  const CASES = [
+    ["a<br>b", null, '37px 37 37 37 200px 18.5px'],
+    ["a<br>b<br>c", null, '55.5px 56 56 55.5 200px 27.75px'],
+    ["<br>a", null, '37px 37 37 37 200px 18.5px'],
+    ["a<br>", null, '18.5px 19 19 18.5 200px 9.25px'],
+    ["<br>", null, '18.5px 19 19 18.5 200px 9.25px'],
+    ["<br><br>", null, '37px 37 37 37 200px 18.5px'],
+    ["<br><br><br>", null, '55.5px 56 56 55.5 200px 27.75px'],
+    ["a<span>b</span>c", null, '18.5px 19 19 18.5 200px 9.25px'],
+    ["<span>a</span>", null, '18.5px 19 19 18.5 200px 9.25px'],
+    ["<span>a</span><span>b</span>", null, '18.5px 19 19 18.5 200px 9.25px'],
+    ["<span>a</span><br><span>b</span>", null, '37px 37 37 37 200px 18.5px'],
+    ["<span style=\"line-height:30px\">a</span>", null, '30px 30 30 30 200px 15px'],
+    ["a<span style=\"line-height:30px\">b</span>", null, '30px 30 30 30 200px 15px'],
+    ["a<div>b</div>", null, '37px 37 37 37 200px 18.5px'],
+    ["a<div>b</div>c", null, '55.5px 56 56 55.5 200px 27.75px'],
+    ["<span>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word</span>", 'width:100px', '370px 370 370 370 50px 185px'],
+    ["word word <span>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word</span>", 'width:100px', '370px 370 370 370 50px 185px'],
+    ["a<div style=\"display:inline-block\">b</div>", null, '18.5px 19 19 18.5 200px 9.25px'],
+    ["a<img width=40 height=30>b", null, '34px 34 34 34 200px 17px'],
+  ];
+
+  const wrong = [];
+  for (const [inner, style, want] of CASES) {
+    const got = read(inner, style);
+    if (got !== want) wrong.push(inner.slice(0, 28) + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=the_line_is_the_tallest_ascent_over_the_deepest_descent>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const read = (inner, style) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div data-m style="' + (style || '') + '">' + inner + '</div>';
+    host.appendChild(wrap);
+    const h = wrap.querySelector('[data-m]').getBoundingClientRect().height;
+    wrap.remove();
+    return h;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // A taller inline box raises the line; a shorter one does not lower it,
+  // because the block's own strut is still on every line.
+  for (const [inner, style, want] of [
+    ["<span style=\"line-height:30px\">a</span>", null, '30px 30 30'],
+    ["a<span style=\"line-height:30px\">b</span>", null, '30px 30 30'],
+    ["<span style=\"line-height:5px\">a</span>", null, '18.5px 19 18.5'],
+    ["a<span style=\"line-height:5px\">b</span>", null, '18.5px 19 18.5'],
+    ["<span style=\"line-height:0\">a</span>", null, '18.5px 19 18.5'],
+    ["a<span style=\"line-height:5px\">b</span>", 'line-height:30px', '30px 30 30'],
+    ["a<span style=\"line-height:30px\">b</span>", 'line-height:5px', '30px 30 30'],
+    ["a<span style=\"font-size:32px\">b</span>", null, '37px 37 37'],
+    ["<span style=\"font-size:32px\">b</span>", null, '37px 37 37'],
+    ["<span>a</span><span>b</span>", null, '18.5px 19 18.5'],
+    ["<span>a</span><span style=\"line-height:40px\">b</span>", null, '40px 40 40'],
+    ["<span><span style=\"line-height:30px\">a</span></span>", null, '30px 30 30'],
+    ["<span style=\"line-height:30px\">a</span><br><span>b</span>", null, '48.5px 49 48.5'],
+  ]) eq(inner.slice(0, 30), read(inner, style), Number(String(want).split(' ')[0].replace('px', '')));
+
+  // An atomic inline is a box ON the line: a replaced element stands on the
+  // baseline and is all above it, while an inline-block with a line inside
+  // brings that line's baseline and an empty one has none to bring.
+  for (const [inner, want] of [
+    ["a<span style=\"font-size:32px;line-height:20px\">b</span>", 24.5],
+    ["<span style=\"font-size:32px;line-height:20px\">b</span>", 24.5],
+    ["a<span style=\"font-size:32px;line-height:10px\">b</span>", 19.5],
+    ["a<span style=\"font-size:8px;line-height:40px\">b</span>", 40],
+    ["a<img width=40 height=30>b", 34],
+    ["a<img width=40 height=10>b", 18.5],
+    ["a<img width=40 height=100>b", 104],
+    ["<img width=40 height=30>", 34],
+    ["a<div style=\"display:inline-block\">b</div>", 18.5],
+    ["a<div style=\"display:inline-block;height:50px\">b</div>", 50],
+    ["a<div style=\"display:inline-block;height:50px\"></div>", 54],
+    ["a<div style=\"display:inline-flex\">b</div>", 18.5],
+    ["a<div style=\"display:inline-block;width:30px\">b b b</div>", 37],
+  ]) eq(inner.slice(0, 30), read(inner, null), want);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

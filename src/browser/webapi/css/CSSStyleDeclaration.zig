@@ -1818,11 +1818,39 @@ pub fn containingWidth(element: *Element, frame: *Frame, containing: *?f64, dept
 /// A replaced element is `display: inline` too and DOES have a box: an <img
 /// width=40 height=30> answers 40 and 30 for every one of those readings,
 /// measured with tools/fingerprint/scratch/expr-inline-box.js.
+/// Whether the UA sheet alone makes this element inline-level, answered off the
+/// per-tag table with no cascade read at all.
+///
+/// It is the cheap first question the inline flow walk asks of every element
+/// child: a child the UA sheet calls block-level hands the box straight back to
+/// the child stack, which is what this engine did for every element child before
+/// there was an inline flow, and only the ones that could be inline pay for
+/// `resolvedDisplay` to confirm it. The walk sits under `elementFromPoint`,
+/// which the suite budgets at forty calls over eight hundred elements, and a
+/// cascade read per child there costs seconds.
+///
+/// A `<div style="display:inline">` is therefore not treated as inline content.
+/// That is the pre-existing answer -- the walk used to stop at any element child
+/// whatever its display -- and not a new one.
+pub fn defaultDisplayIsInline(element: *Element) bool {
+    return std.mem.eql(u8, getDefaultDisplay(element), "inline");
+}
+
 pub fn isInlineBox(element: *Element, frame: *Frame) bool {
     if (!std.mem.eql(u8, resolvedDisplay(element, frame), "inline")) return false;
+    return !isReplacedTag(element);
+}
+
+/// Whether this element has a box of its own however it is displayed — the
+/// replaced elements, which are `display: inline` and still 40 by 30. Split out
+/// of isInlineBox so a caller that has already paid for `resolvedDisplay` can
+/// ask the second half without paying for the first again: the cascade read is
+/// a selector match against every rule that could reach the element, and the
+/// inline flow walk does it per child.
+pub fn isReplacedTag(element: *Element) bool {
     return switch (element.getTag()) {
-        .img, .iframe, .video, .audio, .canvas, .embed, .object, .svg, .input, .select, .textarea, .button, .meter, .progress, .frame => false,
-        else => true,
+        .img, .iframe, .video, .audio, .canvas, .embed, .object, .svg, .input, .select, .textarea, .button, .meter, .progress, .frame => true,
+        else => false,
     };
 }
 
@@ -5518,6 +5546,10 @@ test "WebApi: CSSStyleDeclaration specified precision" {
 
 test "WebApi: CSSStyleDeclaration block height" {
     try testing.htmlRunner("css/block_height.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration inline content lines" {
+    try testing.htmlRunner("css/inline_content_lines.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration default display" {
