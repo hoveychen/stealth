@@ -18097,3 +18097,87 @@ field by field, against Chrome at dpr 2:
 
 Every field matches now, and the 88 characters the previous session attributed
 to the line's height were the whole of the residual.
+
+## A block's inline content is a line box, not a stack
+
+`textLayout` returned null the moment it saw an element child, and
+`contentHeight` then stacked those children as if each were a block. Nineteen
+shapes measured against Chrome at dpr 2
+(`scratch/expr-inline-content-lines.js`); four agreed.
+
+| shape | Chrome | before | after |
+|---|---|---|---|
+| `a<br>b` | 37 | 0 | **37** |
+| `<br>` alone | 18.5 | 0 | **18.5** |
+| `<span>a</span><span>b</span>` | 18.5 | 37 | **18.5** |
+| `<span style="line-height:30px">a</span>` | 30 | 18.5 | **30** |
+| a `<span>` of forty words in 100px | 370 | 18.5 | **370** |
+| `a<div>b</div>` | 37 | 18.5 | **37** |
+| `a<div>b</div>c` | 55.5 | 18.5 | **55.5** |
+| `a<img width=40 height=30>b` | 34 | 30 | **34** |
+
+Three things had to be right at once, and each is a measurement rather than a
+rule that sounded plausible.
+
+### A line is an ascent over a descent, not a tallest line-height
+
+Both models say a taller inline box raises the line and a shorter one does not
+lower it — `line-height:5px` inside a plain block is still 18.5, because the
+block's own strut is on every line. They part company as soon as one box has a
+baseline offset the others do not, and the case that separates them is a big
+font in a small line. `font-size:32px; line-height:20px` is a 37px font box in a
+20px line, so its half-leading is **negative**: 20.5 above the baseline and -0.5
+below. Beside plain 16px text, whose strut is 14.5 over 4:
+
+* tallest line-height says `max(18.5, 20)` = 20;
+* tallest ascent over deepest descent says `max(14.5, 20.5) + max(4, -0.5)` =
+  **24.5**.
+
+Chrome says 24.5 (`scratch/expr-line-halves.js`). The same reading also settles
+that the maximum is per LINE and not per run:
+`<span style="line-height:30px">a</span><br><span>b</span>` is 48.5, which is 30
+and then 18.5 — a count times one height would say 60 or 37.
+
+font_metrics already had the two halves for this: `layout_ascents` and
+`layout_descents` are separate arrays because the device scale moves them
+independently, and the same split is what a line box is assembled from.
+
+### An atomic inline brings its own baseline, or stands on the block's
+
+An `<img>`, an `inline-block`, an `inline-flex` is a box ON the line rather than
+a box the line is made of, and where its baseline sits is not one answer:
+
+| on the line | Chrome | why |
+|---|---|---|
+| `a<img width=40 height=30>b` | 34 | stands on the baseline: 30 above, the strut's 4 below |
+| `a<img width=40 height=10>b` | 18.5 | shorter than the strut, so the strut wins |
+| `a<div style="display:inline-block">b</div>` | 18.5 | brings its own line's baseline: 14.5 above, 4 below |
+| the same, two lines tall | 37 | still its LAST line's baseline |
+| the same, `height:50px` with text | 50 | 46 above, its own 4 below |
+| the same, `height:50px` and EMPTY | 54 | no line inside, so no baseline to bring — it stands on ours |
+
+### The hit test does not place inline boxes
+
+Knowing whether a child is inline costs a cascade read, and a cascade read is a
+selector match against every rule that could reach the element. The suite
+budgets `elementFromPoint` at forty calls over eight hundred elements in 1.5s;
+with a read per child it took **six seconds**, and the page it is measured on —
+four hundred rows of `.cN .dM span{display:block}` — is exactly the shape that
+makes the read expensive.
+
+So `getElementDimensions` places inline boxes and `getElementHeight` does not.
+Every reading a page can make goes through the first. The second is
+`document.elementFromPoint`, which rejects thousands of elements on their y
+alone and does it against a y model that is synthetic anyway — the same trade
+the wrapped-text path already made.
+
+The cheap half of the question is free and is asked first: a child the UA sheet
+calls block-level hands the box straight back to the child stack with no cascade
+read at all, which is what the walk did for every element child before there was
+an inline flow.
+
+### What it cost the nets
+
+box-parts 223/223, inline-box 176/176, flex-item-width 61/61, layout-grid 83/84
+unchanged, layout-box-shapes **240/250 → 245/250**. The five that moved are the
+`a<br>b` block and nothing else.
