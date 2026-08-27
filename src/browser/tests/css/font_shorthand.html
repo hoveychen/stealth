@@ -186,3 +186,56 @@ answers them, each with the plan that owns it:
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<script id=computed_font_is_a_different_join>
+{
+  // `getComputedStyle(el).font` is not `el.style.font`. Chrome resolves the
+  // weight to a number and the line height to px, writes the stretch BACK as a
+  // keyword even though computed `font-stretch` is a percentage, and answers the
+  // empty string when the shorthand cannot say what the element is at all.
+  // 27 cases, read with probes/expr-b83-computed-font-join.js; this engine
+  // agreed on 1 of them before (it answered the recorded initial `16px Times`
+  // for every element on every page) and on all 27 after.
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const el = document.createElement('div');
+  host.appendChild(el);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want [' + want + '], got [' + got + ']'); };
+  const font = (decl) => { el.setAttribute('style', decl); return String(getComputedStyle(el).font); };
+
+  eq('undeclared', font(''), '16px Times');
+  eq('size and family', font('font-size:13px;font-family:serif'), '13px serif');
+  // The weight is a number here, and 400 is left out.
+  eq('bold', font('font-size:16px;font-family:serif;font-weight:bold'), '700 16px serif');
+  eq('400', font('font-size:16px;font-family:serif;font-weight:400'), '16px serif');
+  eq('350', font('font-size:16px;font-family:serif;font-weight:350'), '350 16px serif');
+  eq('oblique angle', font('font-size:16px;font-family:serif;font-style:oblique 20deg'), 'oblique 20deg 16px serif');
+  // The stretch goes back to a keyword: the mapping runs both ways for this one
+  // part, and 100% is left out.
+  eq('stretch 75%', font('font-size:16px;font-family:serif;font-stretch:75%'), 'condensed 16px serif');
+  eq('stretch 87.5%', font('font-size:16px;font-family:serif;font-stretch:87.5%'), 'semi-condensed 16px serif');
+  eq('stretch 100%', font('font-size:16px;font-family:serif;font-stretch:100%'), '16px serif');
+  // The line height is in px, and `normal` leaves the slash out.
+  eq('line 1.4', font('font-size:16px;font-family:serif;line-height:1.4'), '16px / 22.4px serif');
+  eq('line 150%', font('font-size:16px;font-family:serif;line-height:150%'), '16px / 24px serif');
+  eq('line 2em', font('font-size:16px;font-family:serif;line-height:2em'), '16px / 32px serif');
+
+  // Four separate states the shorthand cannot express, each answering "".
+  eq('stretch with no keyword', font('font-size:16px;font-family:serif;font-stretch:60%'), '');
+  eq('variant beyond small-caps', font('font-size:16px;font-family:serif;font-variant-caps:all-small-caps'), '');
+  eq('kerning off its initial', font('font-size:16px;font-family:serif;font-kerning:none'), '');
+  eq('size-adjust off its initial', font('font-size:16px;font-family:serif;font-size-adjust:0.5'), '');
+
+  // The round trip through the shorthand, and through inheritance.
+  eq('shorthand', font('font:italic small-caps bold condensed 16px/1.4 serif'),
+     'italic small-caps 700 condensed 16px / 22.4px serif');
+  host.setAttribute('style', 'font:italic 700 20px/2 monospace');
+  eq('inherited', font(''), 'italic 700 20px / 40px monospace');
+  host.setAttribute('style', '');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

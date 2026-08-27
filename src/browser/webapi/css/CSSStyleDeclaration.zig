@@ -272,6 +272,16 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 return computedFontWeight(style_manager, element, frame, depth);
             } else if (wrapped.eql(comptime .wrap("font-stretch"))) {
                 return computedFontStretch(style_manager, element, wrapped);
+            } else if (wrapped.eql(comptime .wrap("font"))) {
+                // `font` is no longer stored under its own name -- it expands
+                // now -- so the generic computed join would answer the recorded
+                // initial `16px Times` for every element on every page. It
+                // cannot go through `computedShorthandValue` either: that one
+                // treats an empty join as "no answer" because Chrome answers
+                // every other shorthand off getComputedStyle, and `font` is the
+                // one that does answer "" -- measured, for four separate
+                // reasons. See computedFontText.
+                return self.computedFontText(frame, surface, depth);
             }
             // The used surface only. The CSS Typed OM reports the computed
             // width, which `border-style: none` does not collapse -- see
@@ -1166,6 +1176,97 @@ fn borderStyleFor(name: []const u8) ?[]const u8 {
 /// One known miss: `calc(2px + 3px)` computes to `5px` in Chrome and takes the
 /// rejected-declaration path here, so it answers `3px`. There is no calc
 /// evaluator to ask; `3px` is at least a shape Chrome prints.
+/// `getComputedStyle(el).font`, rebuilt from the computed longhands.
+///
+/// A different join from the one `el.style.font` uses, in four ways, all
+/// measured with probes/expr-b83-computed-font-join.js over 27 cases:
+///
+///   * the weight is a number and `400` is left out, where the specified side
+///     echoes `bold`;
+///   * the line height is in px and `normal` is left out, so `line-height: 1.4`
+///     on 16px writes `16px / 22.4px serif`;
+///   * the stretch goes BACK to a keyword. Computed `font-stretch` is a
+///     percentage, and the computed `font` writes `condensed` for 75% and
+///     `semi-condensed` for 87.5% -- so the mapping runs both ways for this one
+///     part, which is why it is read rather than derived.
+///   * and it answers the empty string when the shorthand cannot express the
+///     element's state at all. Four separate causes were measured: a stretch
+///     percentage with no keyword (60%, 133%), a `font-variant-caps` beyond the
+///     shorthand's two (`all-small-caps`), and any of the twelve longhands the
+///     grammar never names holding something other than its initial
+///     (`font-kerning: none`, `font-size-adjust: 0.5`).
+fn computedFontText(self: *const CSSStyleDeclaration, frame: *Frame, surface: Surface, depth: u8) []const u8 {
+    if (depth >= MAX_PROPERTY_DEPTH) return "";
+    // The twelve the `font` grammar cannot write. Any of them off its own
+    // initial and there is no shorthand that says what this element is.
+    const untouchable = [_][2][]const u8{
+        .{ "font-variant-ligatures", "normal" },  .{ "font-variant-numeric", "normal" },
+        .{ "font-variant-east-asian", "normal" }, .{ "font-variant-alternates", "normal" },
+        .{ "font-variant-position", "normal" },   .{ "font-variant-emoji", "normal" },
+        .{ "font-size-adjust", "none" },          .{ "font-language-override", "normal" },
+        .{ "font-kerning", "auto" },              .{ "font-optical-sizing", "auto" },
+        .{ "font-feature-settings", "normal" },   .{ "font-variation-settings", "normal" },
+    };
+    for (untouchable) |pair| {
+        const value = self.propertyValueAt(pair[0], frame, surface, depth + 1);
+        if (!std.ascii.eqlIgnoreCase(value, pair[1])) return "";
+    }
+
+    const style = self.propertyValueAt("font-style", frame, surface, depth + 1);
+    const variant = self.propertyValueAt("font-variant-caps", frame, surface, depth + 1);
+    const weight = self.propertyValueAt("font-weight", frame, surface, depth + 1);
+    const stretch = self.propertyValueAt("font-stretch", frame, surface, depth + 1);
+    const size = self.propertyValueAt("font-size", frame, surface, depth + 1);
+    const line_height = self.propertyValueAt("line-height", frame, surface, depth + 1);
+    const family = self.propertyValueAt("font-family", frame, surface, depth + 1);
+    if (size.len == 0 or family.len == 0) return "";
+    // `small-caps` is the only variant the shorthand carries; the other five
+    // `font-variant-caps` keywords have no place in it.
+    if (!std.ascii.eqlIgnoreCase(variant, "normal") and !std.ascii.eqlIgnoreCase(variant, "small-caps")) {
+        return "";
+    }
+    const stretch_word = computedStretchKeyword(stretch) orelse return "";
+
+    var out: std.ArrayList(u8) = .empty;
+    const append = struct {
+        fn one(list: *std.ArrayList(u8), arena: Allocator, text: []const u8) !void {
+            if (list.items.len > 0) try list.append(arena, ' ');
+            try list.appendSlice(arena, text);
+        }
+    }.one;
+    const arena = frame.local_arena;
+    if (!std.ascii.eqlIgnoreCase(style, "normal")) append(&out, arena, style) catch return "";
+    if (!std.ascii.eqlIgnoreCase(variant, "normal")) append(&out, arena, variant) catch return "";
+    if (!std.mem.eql(u8, weight, "400")) append(&out, arena, weight) catch return "";
+    if (stretch_word.len > 0) append(&out, arena, stretch_word) catch return "";
+    append(&out, arena, size) catch return "";
+    if (!std.ascii.eqlIgnoreCase(line_height, "normal")) {
+        out.appendSlice(arena, " /") catch return "";
+        append(&out, arena, line_height) catch return "";
+    }
+    append(&out, arena, family) catch return "";
+    return out.items;
+}
+
+/// The keyword a computed `font-stretch` percentage is written as inside the
+/// computed `font`, empty for the 100% that is left out, and null for a
+/// percentage with no keyword -- which is one of the four things that makes the
+/// whole shorthand unwritable.
+fn computedStretchKeyword(stretch: []const u8) ?[]const u8 {
+    const WORDS = std.StaticStringMap([]const u8).initComptime(.{
+        .{ "100%", "" },
+        .{ "50%", "ultra-condensed" },
+        .{ "62.5%", "extra-condensed" },
+        .{ "75%", "condensed" },
+        .{ "87.5%", "semi-condensed" },
+        .{ "112.5%", "semi-expanded" },
+        .{ "125%", "expanded" },
+        .{ "150%", "extra-expanded" },
+        .{ "200%", "ultra-expanded" },
+    });
+    return WORDS.get(stretch);
+}
+
 /// `font-weight` as the cascade computes it: a number, always.
 ///
 /// Chrome answers `400` for an undeclared weight and `700` for `bold`; the
