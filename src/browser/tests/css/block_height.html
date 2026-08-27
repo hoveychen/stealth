@@ -330,3 +330,79 @@ declared -- an <svg viewBox="0 0 40 10"> at 600px wide is still 150 tall.
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<!--
+The other half of "whitespace makes no line box": the values that keep it.
+
+`white-space` is a SHORTHAND -- Chrome expands it to `white-space-collapse` and
+`text-wrap-mode` -- so the cascade never holds a longhand called `white-space`
+and asking for one finds nothing. The first version of the collapse rule asked
+for it anyway, which meant the escape hatch never fired: `<div
+style="white-space:pre"> </div>` is 18px tall in Chrome and was 0 here, and a
+lone space measured 0 where Chrome makes it 4. The collapsing cases were the
+only ones asserted, so it went green.
+
+`white-space-collapse` is the longhand that answers, and it separates the four
+measured cases exactly: `preserve` (from `pre` and `pre-wrap`) and
+`break-spaces` keep the space, while `preserve-breaks` (from `pre-line`) and
+`collapse` (from `normal` and `nowrap`) drop it. Measured on Chrome 151 with
+tools/fingerprint/scratch/expr-whitespace-linebox.js.
+
+It has to reach the UA stylesheet and inheritance too: a <pre> gets
+`white-space-collapse: preserve` from the UA sheet with nothing declared, and a
+page that sets `white-space: pre` on a wrapper means it for the children.
+-->
+
+<script id=preserved_whitespace_is_a_line>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const heightOf = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const out = [getComputedStyle(el).height, el.clientHeight].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const CASES = [
+    // Preserved: the space is a space, and a space is a line.
+    ['<div data-m style="white-space:pre"> </div>', '18px 18'],
+    ['<div data-m style="white-space:pre-wrap"> </div>', '18px 18'],
+    ['<div data-m style="white-space:break-spaces"> </div>', '18px 18'],
+    // The longhand on its own says the same thing.
+    ['<div data-m style="white-space-collapse:preserve"> </div>', '18px 18'],
+    // Collapsed: no line box.
+    ['<div data-m style="white-space:pre-line"> </div>', '0px 0'],
+    ['<div data-m style="white-space:nowrap"> </div>', '0px 0'],
+    ['<div data-m style="white-space:normal"> </div>', '0px 0'],
+    ['<div data-m style="white-space-collapse:collapse"> </div>', '0px 0'],
+    // Inherited from the wrapper that declared it.
+    ['<div style="white-space:pre"><div data-m> </div></div>', '18px 18'],
+    // Preserving nothing is still nothing: no text, no line.
+    ['<div data-m style="white-space:pre"></div>', '0px 0'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = heightOf(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+
+  // A <pre> takes `preserve` from the UA stylesheet with nothing declared, so a
+  // <pre> holding one space is a line too. Chrome answers 15px there -- a
+  // 13.333px monospace line, not the 16px serif one -- which depends on font
+  // metrics this test is not about, so only the "not zero" half is asserted.
+  const preOne = heightOf('<pre data-m> </pre>');
+  const preNone = heightOf('<pre data-m></pre>');
+  if (preOne === '0px 0') wrong.push('pre with a space: got [' + preOne + ']');
+  if (preNone !== '0px 0') wrong.push('empty pre: want [0px 0], got [' + preNone + ']');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

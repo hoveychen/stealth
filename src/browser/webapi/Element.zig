@@ -1847,19 +1847,6 @@ fn isCollapsibleWhitespace(str: []const u8) bool {
     return true;
 }
 
-/// Whether `white-space` keeps this element's spaces rather than collapsing
-/// them. Only `pre`, `pre-wrap` and `break-spaces` do: `pre-line` collapses
-/// spaces and tabs (it preserves only newlines, and a newline alone still makes
-/// no line box) and `nowrap` collapses everything `normal` does. Measured, see
-/// textLayout.
-fn preservesWhitespace(self: *Element, frame: *Frame) bool {
-    const declared = CSSStyleDeclaration.cascadedComputedValue(self, "white-space", frame) orelse return false;
-    const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
-    return std.ascii.eqlIgnoreCase(trimmed, "pre") or
-        std.ascii.eqlIgnoreCase(trimmed, "pre-wrap") or
-        std.ascii.eqlIgnoreCase(trimmed, "break-spaces");
-}
-
 /// How an element's own text lays out, or null when the element is not one
 /// whose box its text decides — it has element children of its own, or it
 /// holds no text.
@@ -1905,9 +1892,12 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool) ?struct { widt
     // `nowrap` are 0; and `&nbsp;` and a zero-width space are 18, because
     // neither is collapsible whitespace to begin with.
     //
-    // Asking for `white-space` costs a cascade, so it is only asked once the
-    // characters have already said the answer could go either way.
-    if (all_collapsible and !self.preservesWhitespace(frame)) {
+    // Asking costs a cascade, so it is only asked once the characters have
+    // already said the answer could go either way. The property to ask for is
+    // `white-space-collapse` and not `white-space` -- see
+    // CSSStyleDeclaration.preservesWhitespace, which is where that went wrong
+    // the first time.
+    if (all_collapsible and !CSSStyleDeclaration.preservesWhitespace(self, frame)) {
         return null;
     }
 

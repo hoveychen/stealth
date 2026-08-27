@@ -1416,6 +1416,50 @@ fn uaValue(element: *Element, name: []const u8) ?[]const u8 {
     return rows.get(name);
 }
 
+/// Whether `white-space` keeps this element's spaces rather than collapsing
+/// them, which is what decides whether whitespace with nothing beside it makes a
+/// line box at all.
+///
+/// The longhand to ask is `white-space-collapse`, NOT `white-space`.
+/// `white-space` is a shorthand -- Chrome expands it to `white-space-collapse`
+/// and `text-wrap-mode`, which chrome_shorthands.zig carries as a measured
+/// preset table -- so the cascade never holds a longhand by that name and asking
+/// for one always finds nothing. The first version of the collapse rule asked
+/// for it anyway, so the escape hatch never fired and a `pre` div holding one
+/// space was 0 tall where Chrome makes it 18.
+///
+/// `preserve` (which `pre` and `pre-wrap` expand to) and `break-spaces` keep the
+/// space; `preserve-breaks` (from `pre-line`) and `collapse` (from `normal` and
+/// `nowrap`) drop it. All measured on Chrome 151 with
+/// tools/fingerprint/scratch/expr-whitespace-linebox.js.
+///
+/// Walked one element at a time, asking the cascade and THEN the UA sheet at
+/// each level, because the property inherits and the two origins interleave: a
+/// <pre> inside `white-space: normal` is `preserve` in Chrome, measured -- the UA
+/// rule on the element itself outranks an author value inherited from a parent,
+/// since inheritance only applies where nothing in the cascade set the property.
+/// Asking the whole chain for a declaration first and only then for UA values
+/// gets that case backwards.
+pub fn preservesWhitespace(element: *Element, frame: *Frame) bool {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    // Not `comptime .wrap`: a comptime String has to fit the small-string
+    // optimisation's twelve bytes and `white-space-collapse` is twenty.
+    const name = "white-space-collapse";
+    const wrapped: String = .wrap(name);
+    var current: ?*Element = element;
+    while (current) |el| : (current = el.parentElement()) {
+        const declared = switch (declaredValue(style_manager, el, name, wrapped)) {
+            .value => |value| value,
+            .unreportable => return false,
+            .none => uaValue(el, name) orelse continue,
+        };
+        const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
+        return std.ascii.eqlIgnoreCase(trimmed, "preserve") or
+            std.ascii.eqlIgnoreCase(trimmed, "break-spaces");
+    }
+    return false;
+}
+
 pub fn usesBorderBox(element: *Element, frame: *Frame) bool {
     const style_manager = &element.ownerFrame(frame)._style_manager;
     const declared = cascadedKeyword(style_manager, element, "box-sizing") orelse
