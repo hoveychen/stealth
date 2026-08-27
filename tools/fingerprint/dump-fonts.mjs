@@ -260,7 +260,25 @@ const measure = (family, quoted) => `(() => {
   svg.remove();
   strut.remove();
   marked.remove();
-  return JSON.stringify({ family: ${JSON.stringify(family)}, resolved, glyphs, probed, ascents, descents, layoutAscents, layoutDescents, svgAscents, svgDescents, lineBoxMismatch, dpr: devicePixelRatio, leader, witness, behind, seeds });
+  // The two constants a text control's box is built from. Chrome sizes an
+  // <input> as \`size * avgCharWidth + (maxCharWidth - avgCharWidth)\`, so two
+  // inputs of different \`size\` at the same font size solve for both: the slope
+  // over \`size\` is avgCharWidth and the remainder is maxCharWidth. Read off
+  // the offset box less the UA's constant 8px of padding and border, because
+  // the computed width follows the page's own box-sizing.
+  const charBox = (n) => {
+    const el = document.createElement('input');
+    el.setAttribute('size', String(n));
+    el.style.cssText = 'font-size:100px;font-family:${quoted}';
+    document.body.appendChild(el);
+    const w = el.offsetWidth - 8;
+    el.remove();
+    return w;
+  };
+  const cw10 = charBox(10), cw20 = charBox(20);
+  const avgCharWidth = (cw20 - cw10) / 10;
+  const maxCharWidth = cw10 - 10 * avgCharWidth + avgCharWidth;
+  return JSON.stringify({ family: ${JSON.stringify(family)}, resolved, glyphs, probed, ascents, descents, layoutAscents, layoutDescents, svgAscents, svgDescents, lineBoxMismatch, avgCharWidth, maxCharWidth, dpr: devicePixelRatio, leader, witness, behind, seeds });
 })()`;
 
 // A CSS family name needs quoting unless it is a keyword. Quoting a keyword
@@ -645,6 +663,14 @@ pub const Family = struct {
     /// At 16px sans-serif that makes U+0098 U+0080 32 where U+0080 alone is
     /// 8.898 — and it is why three of the ten strings the Turnstile widget
     /// measures come out wider than the sum of their code points.
+    /// The two font constants an \`<input>\`'s box is built from, at the 100px
+    /// basis: OS/2's \`xAvgCharWidth\` and hhea's \`advanceWidthMax\`. Chrome sizes
+    /// a text control as \`size * avgCharWidth + (maxCharWidth - avgCharWidth)\`,
+    /// so neither is derivable from \`glyphs\` -- Arial's mean ASCII advance is
+    /// 52.695 and the widest ASCII glyph 101.514, against the 50 and 91 Chrome
+    /// builds the box from.
+    avg_char_width: f64,
+    max_char_width: f64,
     seeds_last_resort: []const u21,
     after_fallback: []const Override,
 };
@@ -712,6 +738,8 @@ for (const [name, t] of names) {
             `.descents = &descents_${bare}, .layout_ascents = &layout_ascents_${bare}, ` +
             `.layout_descents = &layout_descents_${bare}, .svg_ascents = &svg_ascents_${bare}, ` +
             `.svg_descents = &svg_descents_${bare}, ` +
+            `.avg_char_width = ${num(t.avgCharWidth)}, ` +
+            `.max_char_width = ${num(t.maxCharWidth)}, ` +
             `.seeds_last_resort = &seeds_${bare}, .after_fallback = &after_${bare} };`,
     );
 }
