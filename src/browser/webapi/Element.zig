@@ -1847,50 +1847,26 @@ fn isCollapsibleWhitespace(str: []const u8) bool {
     return true;
 }
 
-/// How an element's own text lays out, or null when the element is not one
-/// whose box its text decides — it has element children of its own, or it
-/// holds no text.
+/// How an element's inline content lays out, or null when the element is not
+/// one whose box its own content decides — a block-level child means the box is
+/// a stack of child boxes and contentHeight owns it, and no content at all means
+/// there is no line.
 ///
 /// Advances are additive and we model no kerning (see `text_measure`), so the
 /// runs are summed rather than concatenated into a buffer: this sits under
 /// `offsetWidth`, which pages read in loops.
 ///
-/// Height is the font's own box, ascent plus descent. Chrome's line box is a
-/// little taller — it adds the font's line gap, which these tables do not
-/// carry (the reference reports 83 for 72px serif where ascent and descent sum
-/// to 80). Close and derived from a measurement, rather than exact; still the
-/// difference between a line that scales with its font and one that does not.
-///
-/// Because the height is the font's box and nothing else, a caller that wants
-/// only the height can pass `measure_width = false` and skip the walk over the
-/// text — which is the whole cost here on any element holding a sentence. The
-/// returned `width` is then 0 and must not be read.
-fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f64) ?struct { width: f64, height: f64 } {
-    var total_text: usize = 0;
-    var all_collapsible = true;
-    var has_newline = false;
-    var has_break = false;
-    var child = self.asNode().firstChild();
-    while (child) |node| : (child = node.nextSibling()) {
-        if (node.is(Element)) |el| {
-            // A <br> is content this box lays out, not a child box to stack:
-            // it is a hard line break, and the block that holds one has a line
-            // even when it holds nothing else. Every other element still hands
-            // the box back to the child stack.
-            if (el.getTag() == .br) {
-                has_break = true;
-                continue;
-            }
-            return null;
-        }
-        if (node.is(CData.Text)) |text| {
-            const str = Factory.protoOf(text)._data.str();
-            total_text += str.len;
-            if (all_collapsible and !isCollapsibleWhitespace(str)) all_collapsible = false;
-            if (!has_newline and std.mem.indexOfAny(u8, str, "\n\r") != null) has_newline = true;
-        }
+/// Because a plain one-line element's height is its strut and nothing else, a
+/// caller that wants only the height can pass `measure_width = false` and skip
+/// the walk over the text — which is the whole cost here on any element holding
+/// a sentence. The returned `width` is then 0 and must not be read.
+fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f64, place_inline: bool) ?struct { width: f64, height: f64 } {
+    var scan: InlineScan = .{ .place_inline = place_inline };
+    self.scanInline(frame, &scan, 0);
+    if (!scan.inline_only) {
+        return null;
     }
-    if (total_text == 0 and !has_break) {
+    if (scan.total_text == 0 and !scan.has_break) {
         return null;
     }
     // Whitespace with nothing beside it collapses away entirely, so there is no
@@ -1914,60 +1890,142 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
     // where `<div> </div>` is none. One and not two because the spaces either
     // side collapse away and what is left ends with the break, which is the
     // same rule a trailing newline follows.
-    if (all_collapsible and !has_break and !CSSStyleDeclaration.preservesWhitespace(self, frame)) {
+    if (scan.all_collapsible and !scan.has_break and !CSSStyleDeclaration.preservesWhitespace(self, frame)) {
         return null;
     }
 
     const font = self.resolveFont(frame);
-    var width: f64 = 0;
-    if (measure_width or available != null) {
-        child = self.asNode().firstChild();
-        while (child) |node| : (child = node.nextSibling()) {
-            if (node.is(CData.Text)) |text| {
-                // Each text node meets the grid on its own -- see
-                // textAdvanceUnit, where the two-node cases that say so are.
-                width += textAdvanceUnit(text_measure.measure(font.family, Factory.protoOf(text)._data.str(), font.size).width);
+    const strut = self.lineBoxHalves(frame, font.family, font.size);
+
+    // One line of this element's own text is the whole of most boxes, and it is
+    // answerable without the cascade reads and the per-word walk the flow below
+    // pays for. Nothing here can make a second line: no break, no newline to
+    // preserve, no inline box carrying text of its own, and a width that fits.
+    if (!scan.has_break and !scan.has_newline and !scan.has_inline_child) {
+        var width: f64 = 0;
+        if (measure_width or available != null) {
+            var child = self.asNode().firstChild();
+            while (child) |node| : (child = node.nextSibling()) {
+                if (node.is(CData.Text)) |text| {
+                    // Each text node meets the grid on its own -- see
+                    // textAdvanceUnit, where the two-node cases that say so are.
+                    width += textAdvanceUnit(text_measure.measure(font.family, Factory.protoOf(text)._data.str(), font.size).width);
+                }
             }
         }
+        const box = available orelse return .{ .width = width, .height = strut.above + strut.below };
+        if (width <= box) return .{ .width = width, .height = strut.above + strut.below };
     }
-
-    const line = self.lineBoxHeight(frame, font.family, font.size);
-
-    // How many of those lines. One, unless the text has a newline in it that
-    // `white-space` might keep, or it is wider than the box it has to sit in --
-    // and both of those are answered off the bytes and the width already
-    // measured, so the cascade reads inside lineBoxCount are only paid by an
-    // element that could actually take more than one line. This sits under
-    // `offsetWidth`, which pages read in loops.
-    const lines: f64 = blk: {
-        // A <br> breaks whatever `white-space` says, so unlike a newline it does
-        // not have to be asked about -- it is already a second line.
-        if (has_newline or has_break) break :blk self.lineBoxCount(frame, font.family, font.size, available);
-        const box = available orelse break :blk 1;
-        if (width <= box) break :blk 1;
-        break :blk self.lineBoxCount(frame, font.family, font.size, available);
-    };
 
     // The width is on the grid already -- each text node met it as it was
     // measured. It is NOT rounded to a whole pixel here: offsetWidth is an
     // integer and getBoundingClientRect is not, and the one dimension model
     // behind both serves them by keeping the fraction and letting the integer
     // readings round it, which is what Chrome does too.
-    return .{ .width = width, .height = line * lines };
+    var flow: LineFlow = .{
+        .keeps_newlines = CSSStyleDeclaration.preservesNewlines(self, frame),
+        .wraps = available != null and CSSStyleDeclaration.wrapsText(self, frame),
+        .box = available orelse 0,
+        .space = text_measure.measure(font.family, " ", font.size).width,
+        .strut_above = strut.above,
+        .strut_below = strut.below,
+        .open_above = strut.above,
+        .open_below = strut.below,
+        .line_above = strut.above,
+        .line_below = strut.below,
+        .measure_width = measure_width or available != null,
+    };
+    self.flowInline(frame, &flow, font.family, font.size, 0);
+    return .{ .width = flow.width, .height = flow.finish() };
 }
 
-/// How many line boxes this element's own text takes, given `available` px of
-/// content width to lay it out in -- or null when nothing constrains it, which
-/// is a box that shrinks to fit and a caller that only wanted the height.
+/// What one walk over an element's children says about laying its content out
+/// on lines, before any of it is measured.
+const InlineScan = struct {
+    total_text: usize = 0,
+    all_collapsible: bool = true,
+    has_newline: bool = false,
+    has_break: bool = false,
+    /// Whether an inline box of its own is on the line. It is the difference
+    /// between a one-line box the fast path can answer and one whose line
+    /// heights have to be walked, because an inline box brings its own.
+    has_inline_child: bool = false,
+    /// False once a block-level child is found: the box is then a stack of
+    /// child boxes rather than an inline formatting context.
+    inline_only: bool = true,
+    /// Whether inline boxes are placed at all, which is the caller's to decide.
+    ///
+    /// Every reading a page can make goes through getElementDimensions and says
+    /// yes. `getElementHeight` says no, and that is document.elementFromPoint:
+    /// it rejects thousands of elements on their y alone, and asking the cascade
+    /// what each of their children's `display` is turns forty hit tests over
+    /// eight hundred elements from under a second into six. It sees the height
+    /// the box had before inline boxes were placed -- the same trade the wrapped
+    /// text above it already makes against a y model that is synthetic anyway.
+    place_inline: bool = false,
+};
+
+fn scanInline(self: *Element, frame: *Frame, scan: *InlineScan, depth: u8) void {
+    var child = self.asNode().firstChild();
+    while (child) |node| : (child = node.nextSibling()) {
+        if (node.is(Element)) |el| {
+            if (el.getTag() == .br) {
+                scan.has_break = true;
+                continue;
+            }
+            // The two cheap questions first, and between them they answer
+            // almost every child without a cascade read: a caller that only
+            // wants a height does not place inline boxes at all, and a
+            // UA-block-level element hands the box back to the child stack.
+            // That is what this walk did for every element child before there
+            // was an inline flow, and it is why elementFromPoint still costs
+            // what it did.
+            if (!scan.place_inline or !CSSStyleDeclaration.defaultDisplayIsInline(el)) {
+                scan.inline_only = false;
+                return;
+            }
+            // One cascade read, and both halves of "is this an inline box" come
+            // off it: `display: none` is not on the line and is not a reason to
+            // give the box back either -- the text beside one still makes a
+            // line, measured on Chrome at dpr 2, where
+            // `a<span style="display:none">b</span>` is 18.5 and that span alone
+            // is 0. A declared block and an out-of-flow span (which blockifies)
+            // are boxes this walk cannot place, and neither is a replaced tag.
+            const display = CSSStyleDeclaration.resolvedDisplay(el, frame);
+            if (std.mem.eql(u8, display, "none")) continue;
+            if (!std.mem.eql(u8, display, "inline") or CSSStyleDeclaration.isReplacedTag(el)) {
+                scan.inline_only = false;
+                return;
+            }
+            scan.has_inline_child = true;
+            if (depth < MAX_CONTAINING_BLOCK_DEPTH) {
+                el.scanInline(frame, scan, depth + 1);
+                if (!scan.inline_only) return;
+            }
+            continue;
+        }
+        if (node.is(CData.Text)) |text| {
+            const str = Factory.protoOf(text)._data.str();
+            scan.total_text += str.len;
+            if (scan.all_collapsible and !isCollapsibleWhitespace(str)) scan.all_collapsible = false;
+            if (!scan.has_newline and std.mem.indexOfAny(u8, str, "\n\r") != null) scan.has_newline = true;
+        }
+    }
+}
+
+/// Walks this element's inline content into `flow`, one line box at a time.
 ///
-/// Two things make a line: a preserved newline, and running out of room.
+/// Two things make a line: a hard break -- a <br>, or a preserved newline --
+/// and running out of room.
 ///
-/// Newlines first, because they are not a width question. Every
-/// `white-space-collapse` but `collapse` keeps them, and the count is measured
-/// rather than derived: `a\nb\nc` is three lines under `pre`, `a\n\nb` is three
-/// (a blank line is a line), `\na` is two, `a\nb\n` is two and `\n` alone is one.
-/// So it is one more line than there are newlines, less one when the text ends
-/// with one -- six readings, all of them assertions in css/block_height.html.
+/// Breaks first, because they are not a width question. Every
+/// `white-space-collapse` but `collapse` keeps newlines, and the count is
+/// measured rather than derived: `a\nb\nc` is three lines under `pre`, `a\n\nb`
+/// is three (a blank line is a line), `\na` is two, `a\nb\n` is two and `\n`
+/// alone is one. So it is one more line than there are breaks, less one when the
+/// content ends with one -- six readings for the newline, seven more for the
+/// <br>, all of them assertions in css/block_height.html and
+/// css/inline_content_lines.html.
 ///
 /// Then each of those hard lines is wrapped, greedily, at whichever word does not
 /// fit. Greedy is what Chrome does and the advances here are within half a pixel
@@ -1978,33 +2036,151 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
 ///
 /// `text-wrap-mode: nowrap`, which `white-space: pre` expands to, skips the
 /// wrapping half entirely: those same forty words are one line.
-fn lineBoxCount(self: *Element, frame: *Frame, family: font_metrics.Family, size: f64, available: ?f64) f64 {
-    var counter: LineCounter = .{
-        .keeps_newlines = CSSStyleDeclaration.preservesNewlines(self, frame),
-        .wraps = available != null and CSSStyleDeclaration.wrapsText(self, frame),
-        .box = available orelse 0,
-        .space = text_measure.measure(family, " ", size).width,
-    };
-
+///
+/// An inline box on the line is walked with ITS font and brings ITS line box,
+/// which is why this recurses rather than reading the text off one string: a
+/// `<span style="font-size:32px">` of ten words in a 100px column is ten lines
+/// of 37 in Chrome, where the block's own 16px font would make five of 18.5.
+fn flowInline(self: *Element, frame: *Frame, flow: *LineFlow, family: font_metrics.Family, size: f64, depth: u8) void {
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
-        // A <br> ends the line it is on, whatever `white-space` says about
-        // newlines -- the only element textLayout lets through to here.
         if (node.is(Element)) |el| {
+            // A <br> ends the line it is on, whatever `white-space` says about
+            // newlines.
             if (el.getTag() == .br) {
-                counter.placeWord();
-                counter.endSegment();
+                flow.placeWord();
+                flow.endSegment();
+                continue;
             }
+            // The scan has already been over these children and refused the box
+            // if any of them was not an inline one, so the only thing left to
+            // skip here is a `display: none` child.
+            if (!CSSStyleDeclaration.isInlineBox(el, frame)) continue;
+            if (depth >= MAX_CONTAINING_BLOCK_DEPTH) continue;
+            const font = el.resolveFont(frame);
+            // An inline box raises every line its content lands on, including
+            // the ones a wrap opens inside it, which is why this is a stack and
+            // not a one-off `raise`.
+            const halves = el.lineBoxHalves(frame, font.family, font.size);
+            const outer_above = flow.open_above;
+            const outer_below = flow.open_below;
+            flow.open_above = @max(outer_above, halves.above);
+            flow.open_below = @max(outer_below, halves.below);
+            el.flowInline(frame, flow, font.family, font.size, depth + 1);
+            flow.open_above = outer_above;
+            flow.open_below = outer_below;
             continue;
         }
         const text = node.is(CData.Text) orelse continue;
         const str = Factory.protoOf(text)._data.str();
+        if (flow.measure_width and str.len > 0) {
+            // Each text node meets the grid on its own -- see textAdvanceUnit,
+            // where the two-node cases that say so are.
+            flow.width += textAdvanceUnit(text_measure.measure(family, str, size).width);
+        }
+        flow.addText(str, family, size);
+    }
+}
+
+/// The greedy line builder behind flowInline, kept as a struct because the state
+/// has to survive both the walk over the content and the two places a line ends.
+///
+/// It accumulates a HEIGHT rather than a count, because the lines are not all
+/// worth the same: every line carries the block's own strut, and each inline box
+/// raises the lines its content lands on to its own line box.
+/// `<span style="line-height:30px">a</span><br><span>b</span>` is 48.5 in Chrome
+/// — 30 and then 18.5 — where a count times one height would say 60 or 37.
+/// Measured, with twelve more readings, in
+/// tools/fingerprint/scratch/expr-line-contributors.js: a SHORTER inline box
+/// does not lower a line (`line-height:5px` inside a plain block is still 18.5),
+/// a taller one raises it whether it holds the whole line or shares it with
+/// text, and the tallest of two spans is the line.
+///
+/// A hard break ends a SEGMENT, and each segment is wrapped on its own. The
+/// last one is dropped when it is empty, which is the whole of why `a\nb\n` is
+/// two lines and `a\n\nb` is three.
+const LineFlow = struct {
+    keeps_newlines: bool,
+    wraps: bool,
+    box: f64,
+    space: f64,
+    /// The block's own line box, split at the baseline: every line carries it.
+    strut_above: f64,
+    strut_below: f64,
+    /// Whether the width of the text is wanted at all: the height-only callers
+    /// skip a measure per text node by saying no.
+    measure_width: bool,
+
+    /// The tallest ascent and deepest descent among the inline boxes open around
+    /// the text being placed, so a box that spans a wrap raises both lines.
+    ///
+    /// Seeded with the strut's own halves rather than with zero, because a half
+    /// can be NEGATIVE: `line-height: 10px` on a 16px serif is 10.25 above the
+    /// baseline and -0.25 below, and a zero floor there would make the line
+    /// 10.25 tall where Chrome says 10.
+    open_above: f64,
+    open_below: f64,
+    /// Lines already finished.
+    total: f64 = 0,
+    /// The line being built, split at the baseline.
+    line_above: f64 = 0,
+    line_below: f64 = 0,
+    /// Whether any word landed in this segment. An empty last segment is the
+    /// trailing break, and it is not a line.
+    segment_has_word: bool = false,
+    /// Width already on the current line, and the word being built.
+    placed: f64 = 0,
+    word: f64 = 0,
+    have_word: bool = false,
+    width: f64 = 0,
+    /// Whether a word or a break has landed in this run at all.
+    any: bool = false,
+
+    /// Whether anything at all landed in this run. A run with no word and no
+    /// break is not a line: the whitespace between two block children is a text
+    /// node like any other, and it contributes nothing.
+    fn hasContent(self: *const LineFlow) bool {
+        return self.any;
+    }
+
+    /// Starts a fresh run, which is what a block box between two of them does.
+    fn restart(self: *LineFlow) void {
+        self.total = 0;
+        self.open_above = self.strut_above;
+        self.open_below = self.strut_below;
+        self.line_above = self.strut_above;
+        self.line_below = self.strut_below;
+        self.segment_has_word = false;
+        self.placed = 0;
+        self.word = 0;
+        self.have_word = false;
+        self.any = false;
+    }
+
+    /// The run's height, and a fresh run after it.
+    fn flush(self: *LineFlow) f64 {
+        // `any` is set when a word is PLACED, and the last word of a run is
+        // still pending when the run ends -- so a run holding one word would
+        // otherwise flush as nothing.
+        if (!self.any and !self.have_word) {
+            self.restart();
+            return 0;
+        }
+        const height = self.finish();
+        self.restart();
+        return height;
+    }
+
+    /// One text node's words, measured in the font that reaches them.
+    fn addText(self: *LineFlow, str: []const u8, family: font_metrics.Family, size: f64) void {
+        if (str.len == 0) return;
+        self.raise();
         var i: usize = 0;
         while (i < str.len) {
             if (std.mem.indexOfScalar(u8, css_whitespace, str[i]) != null) {
                 const newline = str[i] == '\n' or str[i] == '\r';
-                counter.placeWord();
-                if (newline and counter.keeps_newlines) counter.endSegment();
+                self.placeWord();
+                if (newline and self.keeps_newlines) self.endSegment();
                 i += 1;
                 continue;
             }
@@ -2014,50 +2190,52 @@ fn lineBoxCount(self: *Element, frame: *Frame, family: font_metrics.Family, size
             // them rather than measured per node. Advances are additive and there
             // is no kerning here (see text_measure), so two fragments of one word
             // sum to the word: two nodes holding `wordwordwordwo` and
-            // `rdword word` are two lines in a 100px box in Chrome and here.
-            counter.word += text_measure.measure(family, str[start..i], size).width;
-            counter.have_word = true;
+            // `rdword word` are two lines in a 100px box in Chrome and here. Two
+            // spans holding the halves are the same word for the same reason.
+            self.word += text_measure.measure(family, str[start..i], size).width;
+            self.have_word = true;
         }
     }
-    return counter.finish();
-}
 
-/// The greedy line counter behind lineBoxCount, kept as a struct because the
-/// state has to survive both the walk over the text nodes and the two places a
-/// line ends.
-///
-/// A preserved newline ends a SEGMENT, and each segment is wrapped on its own.
-/// The count is then the sum of the segments' -- with the last one dropped when
-/// it is empty, which is the whole of why `a\nb\n` is two lines and `a\n\nb` is
-/// three. That rule is measured, not derived (css/block_height.html asserts all
-/// six readings): `\n` alone is one line, `\na` is two, `a\n\n` is two, and
-/// `a\n\n\nb` is four.
-const LineCounter = struct {
-    keeps_newlines: bool,
-    wraps: bool,
-    box: f64,
-    space: f64,
+    /// Text is about to land on this line, so whatever is open around it counts.
+    fn raise(self: *LineFlow) void {
+        if (self.open_above > self.line_above) self.line_above = self.open_above;
+        if (self.open_below > self.line_below) self.line_below = self.open_below;
+    }
 
-    /// Segments already finished.
-    lines: f64 = 0,
-    /// Lines within the segment being built, which starts at one.
-    segment_lines: f64 = 1,
-    /// Whether any word landed in this segment. An empty last segment is the
-    /// trailing newline, and it is not a line.
-    segment_has_word: bool = false,
-    /// Width already on the current line, and the word being built.
-    placed: f64 = 0,
-    word: f64 = 0,
-    have_word: bool = false,
+    /// An atomic inline — a replaced element, an inline-block — is a box ON the
+    /// line rather than a box the line is made of, so it raises the line by its
+    /// own two halves and takes its width along the line.
+    fn placeAtomic(self: *LineFlow, above: f64, below: f64, width: f64) void {
+        self.placeWord();
+        if (above > self.line_above) self.line_above = above;
+        if (below > self.line_below) self.line_below = below;
+        if (self.wraps and self.placed > 0 and self.placed + width > self.box) {
+            self.newLine();
+            if (above > self.line_above) self.line_above = above;
+            if (below > self.line_below) self.line_below = below;
+            self.placed = width;
+        } else {
+            self.placed += width;
+        }
+        self.segment_has_word = true;
+        self.any = true;
+    }
 
-    fn placeWord(self: *LineCounter) void {
+    fn newLine(self: *LineFlow) void {
+        self.total += self.line_above + self.line_below;
+        self.line_above = @max(self.strut_above, self.open_above);
+        self.line_below = @max(self.strut_below, self.open_below);
+    }
+
+    fn placeWord(self: *LineFlow) void {
         if (!self.have_word) return;
         const joined = if (self.placed > 0) self.placed + self.space + self.word else self.word;
         // The break goes BEFORE the word that does not fit, and never inside one:
         // a word wider than the whole box overflows instead, which is why
         // twenty-four `a` in a 50px box is one line in Chrome and not four.
         if (self.wraps and self.placed > 0 and joined > self.box) {
-            self.segment_lines += 1;
+            self.newLine();
             self.placed = self.word;
         } else {
             self.placed = joined;
@@ -2065,22 +2243,23 @@ const LineCounter = struct {
         self.word = 0;
         self.have_word = false;
         self.segment_has_word = true;
+        self.any = true;
     }
 
-    fn endSegment(self: *LineCounter) void {
-        self.lines += self.segment_lines;
-        self.segment_lines = 1;
+    fn endSegment(self: *LineFlow) void {
+        self.any = true;
+        self.newLine();
         self.placed = 0;
         self.segment_has_word = false;
     }
 
-    fn finish(self: *LineCounter) f64 {
+    fn finish(self: *LineFlow) f64 {
         self.placeWord();
         // The last segment counts unless it is empty -- and an empty FIRST
         // segment still counts, because a box holding one preserved space is a
         // line.
-        if (self.segment_has_word or self.lines == 0) self.lines += self.segment_lines;
-        return self.lines;
+        if (self.segment_has_word or self.total == 0) self.total += self.line_above + self.line_below;
+        return self.total;
     }
 };
 
@@ -2121,10 +2300,29 @@ const LineCounter = struct {
 /// unchanged and correct where it is read (src/browser/tests/element/
 /// line_box_height.html).
 fn lineBoxHeight(self: *Element, frame: *Frame, family: font_metrics.Family, size: f64) f64 {
-    if (CSSStyleDeclaration.cascadedComputedLength(self, "line-height", frame)) |px| {
-        return layoutUnit(@max(0, px));
-    }
-    return font_metrics.lineBox(family, size);
+    const halves = self.lineBoxHalves(frame, family, size);
+    return halves.above + halves.below;
+}
+
+/// A line box, split at the baseline — which is where two boxes on one line are
+/// lined up, and therefore the only form in which they can be combined.
+///
+/// The leading a `line-height` adds is half above and half below, so a font
+/// bigger than its declared line gets a NEGATIVE half and sticks out of the top
+/// of its own box. That is measurable and measured
+/// (tools/fingerprint/scratch/expr-line-halves.js, at dpr 2): a
+/// `font-size:32px; line-height:20px` span beside plain 16px text makes a
+/// **24.5** line in Chrome — 20.5 of the span above the baseline against the
+/// strut's 14.5, and the strut's own 4 below against the span's -0.5. The
+/// tallest-line-height model says 20 to the same page, and 19.5 where Chrome
+/// says 19.5 only because both halves happen to lose there.
+fn lineBoxHalves(self: *Element, frame: *Frame, family: font_metrics.Family, size: f64) struct { above: f64, below: f64 } {
+    const box = font_metrics.layoutBox(family, size);
+    const declared = CSSStyleDeclaration.cascadedComputedLength(self, "line-height", frame) orelse
+        return .{ .above = box.ascent, .below = box.descent };
+    const height = layoutUnit(@max(0, declared));
+    const leading = (height - (box.ascent + box.descent)) / 2;
+    return .{ .above = box.ascent + leading, .below = box.descent + leading };
 }
 
 /// The narrowest box this element's text can be laid out in: its longest
@@ -2821,7 +3019,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
         // wrapped text where the reported one is right, which is a hit test
         // against a y model that is already synthetic -- see
         // calculateDocumentPosition -- and not a reading a page can make.
-        if (self.textLayout(frame, wants_text_width, width)) |text| {
+        if (self.textLayout(frame, wants_text_width, width, measure_text_width)) |text| {
             if (wants_text_width) width = text.width;
             if (height == null) height = text.height;
         }
@@ -2897,7 +3095,7 @@ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_ca
         return dims.height + dims.padding_y;
     }
 
-    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow)) + dims.padding_y;
+    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width)) + dims.padding_y;
 }
 
 pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
@@ -3055,7 +3253,7 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 
     if (dims.inline_box) return 0;
 
-    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable)) + dims.padding_y);
+    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width)) + dims.padding_y);
 }
 
 // The height of the direct child elements stacked vertically, the counterpart
@@ -3068,19 +3266,128 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 // extent per axis rather than describing one coherent layout: reporting no
 // overflow when there is some is what wedges measure-then-mutate loops,
 // while the reverse merely over-reports.
-fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent) f64 {
+//
+// The stack is not all block boxes. Inline-level content between two of them --
+// this element's own text, its inline boxes, its <br>s -- is a RUN of line
+// boxes and contributes its lines rather than each child's box: two spans are
+// one 18.5px line in Chrome where stacking them says 37, and `a<div>b</div>c`
+// is 55.5 (a line, a block, a line) where stacking the block alone says 18.5.
+// Both measured at dpr 2 with
+// tools/fingerprint/scratch/expr-inline-content-lines.js.
+fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64) f64 {
     var total: f64 = 0;
+
+    const font = self.resolveFont(frame);
+    const strut = self.lineBoxHalves(frame, font.family, font.size);
+    var flow: LineFlow = .{
+        .keeps_newlines = CSSStyleDeclaration.preservesNewlines(self, frame),
+        .wraps = content_width != null and CSSStyleDeclaration.wrapsText(self, frame),
+        .box = content_width orelse 0,
+        .space = text_measure.measure(font.family, " ", font.size).width,
+        .strut_above = strut.above,
+        .strut_below = strut.below,
+        .open_above = strut.above,
+        .open_below = strut.below,
+        .measure_width = false,
+    };
+    flow.restart();
 
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(Element)) |el| {
+            if (el.getTag() == .br) {
+                flow.placeWord();
+                flow.endSegment();
+                continue;
+            }
+            if (CSSStyleDeclaration.defaultDisplayIsInline(el) and CSSStyleDeclaration.isInlineBox(el, frame)) {
+                const child_font = el.resolveFont(frame);
+                const halves = el.lineBoxHalves(frame, child_font.family, child_font.size);
+                const outer_above = flow.open_above;
+                const outer_below = flow.open_below;
+                flow.open_above = @max(outer_above, halves.above);
+                flow.open_below = @max(outer_below, halves.below);
+                el.flowInline(frame, &flow, child_font.family, child_font.size, 1);
+                flow.open_above = outer_above;
+                flow.open_below = outer_below;
+                continue;
+            }
             if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
             if (!extent.counts(CSSStyleDeclaration.flowKind(el, frame))) continue;
+            if (el.atomicInlineHalves(frame)) |halves| {
+                const box = el.getElementDimensions(frame);
+                flow.placeAtomic(halves.above, halves.below, box.width + box.padding_x + box.border_x);
+                continue;
+            }
+            // A block box ends the run of lines above it, and opens a new one
+            // below.
+            total += flow.flush();
             total += el.getElementDimensions(frame).height;
+            continue;
+        }
+        if (node.is(CData.Text)) |text| {
+            flow.addText(Factory.protoOf(text)._data.str(), font.family, font.size);
         }
     }
 
-    return total;
+    return total + flow.flush();
+}
+
+/// Where an atomic inline sits on the line, or null when the element is not one.
+///
+/// An atomic inline is a box ON the line rather than a box the line is made of:
+/// a replaced element, an `inline-block`, an `inline-flex`. Which half of it is
+/// above the baseline is what decides the line, and it is not the same answer
+/// for all of them — measured at dpr 2 with
+/// tools/fingerprint/scratch/expr-line-halves.js:
+///
+///   * a replaced element stands ON the baseline, so all of it is above and
+///     nothing below: `a<img width=40 height=30>b` is 34, which is the img's 30
+///     over the strut's own 4 of descent, and a 10px one is 18.5 because the
+///     strut is taller than it is;
+///   * an inline-block with a line inside it brings that line's baseline, so its
+///     descent is its own font's and the rest is above: `a<div
+///     style="display:inline-block">b</div>` is 18.5 and not 22.5, and one two
+///     lines tall is 37;
+///   * an inline-block with nothing in it has no baseline to bring and behaves
+///     like a replaced element: an empty one 50px tall makes a 54px line.
+fn atomicInlineHalves(self: *Element, frame: *Frame) ?struct { above: f64, below: f64 } {
+    const display = CSSStyleDeclaration.resolvedDisplay(self, frame);
+    const replaced = CSSStyleDeclaration.isReplacedTag(self);
+    const atomic = (replaced and std.mem.eql(u8, display, "inline")) or
+        std.mem.eql(u8, display, "inline-block") or
+        std.mem.eql(u8, display, "inline-flex") or
+        std.mem.eql(u8, display, "inline-grid") or
+        std.mem.eql(u8, display, "inline-table");
+    if (!atomic) return null;
+
+    const dims = self.getElementDimensions(frame);
+    const height = dims.height + dims.padding_y + dims.border_y;
+    if (replaced or !self.hasInlineBaseline(frame, 0)) {
+        return .{ .above = height, .below = 0 };
+    }
+    const font = self.resolveFont(frame);
+    const below = @min(height, font_metrics.layoutBox(font.family, font.size).descent);
+    return .{ .above = height - below, .below = below };
+}
+
+/// Whether this box has a line of its own for its baseline to come from, which
+/// for an atomic inline is the difference between sitting on the baseline and
+/// bringing its own. Bounded like every other walk here.
+fn hasInlineBaseline(self: *Element, frame: *Frame, depth: u8) bool {
+    var child = self.asNode().firstChild();
+    while (child) |node| : (child = node.nextSibling()) {
+        if (node.is(CData.Text)) |text| {
+            if (!isCollapsibleWhitespace(Factory.protoOf(text)._data.str())) return true;
+            continue;
+        }
+        if (node.is(Element)) |el| {
+            if (el.getTag() == .br) return true;
+            if (depth >= MAX_CONTAINING_BLOCK_DEPTH) continue;
+            if (el.hasInlineBaseline(frame, depth + 1)) return true;
+        }
+    }
+    return false;
 }
 
 /// Which of a box's children a reading is the extent of. Every visible child used
