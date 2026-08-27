@@ -127,3 +127,50 @@ the page wrote, keyword and all. Only the computed view resolves it.
   d.remove();
 }
 </script>
+
+<!--
+An undeclared border width is `medium` -- 3px -- only when the UA stylesheet has
+nothing to say either. Six tags carry a border of their own, and this engine
+answered 3px for all six because the used-width path asked the author cascade
+and then gave up, while the border-STYLE beside it did consult the per-tag table
+and came back `inset`. So `<input>` reported a 2px inset border as 3px, which is
+2px of offsetWidth per side wrong on every form control on a page.
+
+Measured on Chrome 151 with tools/fingerprint/scratch/expr-empty-edges.js.
+-->
+
+<script id=ua_border_width_per_tag>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  // tag, then the computed border-top-width and border-top-style Chrome gives
+  // it with nothing declared.
+  const CASES = [
+    ['input', '2px', 'inset'],
+    ['textarea', '1px', 'solid'],
+    ['select', '1px', 'solid'],
+    ['button', '2px', 'outset'],
+    ['hr', '1px', 'inset'],
+    ['iframe', '2px', 'inset'],
+    ['fieldset', '2px', 'groove'],
+    // A div has no UA border at all, so it keeps `medium` behind `none` -- and
+    // the used width of a border that is not drawn is 0.
+    ['div', '0px', 'none'],
+    ['span', '0px', 'none'],
+  ];
+
+  const wrong = [];
+  for (const [tag, width, style] of CASES) {
+    const el = document.createElement(tag);
+    host.appendChild(el);
+    const cs = getComputedStyle(el);
+    const got = [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth,
+                 cs.borderLeftWidth, cs.borderTopStyle].join(' ');
+    const want = [width, width, width, width, style].join(' ');
+    if (got !== want) wrong.push(tag + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

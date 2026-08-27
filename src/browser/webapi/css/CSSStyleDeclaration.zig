@@ -994,7 +994,21 @@ fn usedBorderWidth(
                 .unreportable, .none => {},
             }
         }
-        // Nothing written under either spelling: `medium`.
+        // Nothing the page wrote under either spelling, which is where the UA
+        // stylesheet gets its turn -- and it is per-tag, so this cannot fall
+        // through to one number. Six tags carry a border of their own and this
+        // used to answer `medium` for all six, while the border-STYLE read
+        // beside it did consult the same table and came back `inset`: an
+        // `<input>` reported a 2px inset border as 3px, which is 2px of
+        // offsetWidth per side wrong on every form control on a page. Measured
+        // on Chrome 151 (tools/fingerprint/scratch/expr-empty-edges.js): input
+        // and button and iframe and fieldset 2px, textarea and select and hr
+        // 1px.
+        const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse
+            chrome_per_tag_values.unknown_tag;
+        if (rows.get(name)) |value| break :found value;
+
+        // Nothing written and no UA rule: `medium`.
         return "3px";
     };
 
