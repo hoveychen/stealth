@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A `display: none` element has no box, so its computed style has nothing to
+resolve a percentage against -- and Chrome does not invent one. It reports the
+percentage as specified.
+
+This engine resolved against a zero box instead, which is a real answer for a
+real 0x0 element and the wrong one for an element that is not rendered at all.
+The two are separable, and that is what makes this a defect rather than a
+rounding difference: a rendered `width:0;height:0` div answers
+`transform-origin: 0px 0px` in Chrome, and a `display:none` div answers
+`50% 50%`. This engine said `0px 0px` to both.
+
+Measured on Chrome 151 with
+tools/fingerprint/scratch/expr-display-none-percentages.js over 36 longhands in
+seven states. The rule is one rule, not a list of properties:
+
+  * with nothing declared, `transform-origin` and `perspective-origin` are
+    `50% 50%` -- the initial value's own percentages, unresolved -- while `width`
+    and `height` are `auto`, which they already were here.
+  * with percentages declared, every one of them comes back verbatim:
+    `transform-origin: 25% 75%`, `width: 50%`, `padding-left: 10%`,
+    `margin-left: 10%`.
+  * `line-height: 150%` is `24px` in BOTH states, because a percentage
+    line-height resolves against the font size and not against a box. It is the
+    control that keeps this from being read as "display:none stops resolving
+    everything".
+  * `visibility: hidden` still has a box and still resolves.
+
+`transform-origin` is read by the Cloudflare challenge in the same property sweep
+as the heights, and `50% 50%` against `0px 0px` is one string.
+-->
+
+<script id=unrendered_keeps_its_percentages>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const PCT = 'transform-origin:25% 75%;perspective-origin:10% 90%;' +
+              'width:50%;height:50%;padding-left:10%;margin-left:10%;' +
+              'line-height:150%';
+
+  const read = (style, names) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div data-m style="' + style + '">x</div>';
+    host.appendChild(wrap);
+    const cs = getComputedStyle(wrap.querySelector('[data-m]'));
+    const out = names.map((n) => cs.getPropertyValue(n)).join(' | ');
+    wrap.remove();
+    return out;
+  };
+
+  const ORIGINS = ['transform-origin', 'perspective-origin',
+                   '-webkit-transform-origin', '-webkit-perspective-origin'];
+  const BOXES = ['width', 'height', 'inline-size', 'block-size',
+                 'padding-left', 'margin-left'];
+
+  const wrong = [];
+  const check = (what, got, want) => {
+    if (got !== want) wrong.push(what + ': want [' + want + '], got [' + got + ']');
+  };
+
+  // Unrendered, nothing declared: the initial value's percentages, unresolved.
+  check('none origins', read('display:none', ORIGINS),
+        '50% 50% | 50% 50% | 50% 50% | 50% 50%');
+  check('none boxes', read('display:none', BOXES),
+        'auto | auto | auto | auto | 0px | 0px');
+
+  // Unrendered with percentages declared: every one of them verbatim.
+  check('none pct origins', read('display:none;' + PCT, ORIGINS),
+        '25% 75% | 10% 90% | 25% 75% | 10% 90%');
+  check('none pct boxes', read('display:none;' + PCT, BOXES),
+        '50% | 50% | 50% | 50% | 10% | 10%');
+
+  // A percentage line-height resolves against the font size, not a box, so it
+  // is 24px whether the element is rendered or not.
+  check('none pct line-height', read('display:none;' + PCT, ['line-height']), '24px');
+  check('rendered pct line-height', read(PCT, ['line-height']), '24px');
+
+  // The controls. A rendered element resolves, and so does a hidden one -- and a
+  // rendered 0x0 box is the answer this engine used to give the unrendered one.
+  check('rendered origins', read('', ORIGINS),
+        '200px 9px | 200px 9px | 200px 9px | 200px 9px');
+  check('hidden origins', read('visibility:hidden', ORIGINS),
+        '200px 9px | 200px 9px | 200px 9px | 200px 9px');
+  check('zero box origins', read('width:0;height:0', ORIGINS),
+        '0px 0px | 0px 0px | 0px 0px | 0px 0px');
+  check('rendered boxes', read('', BOXES),
+        '400px | 18px | 400px | 18px | 0px | 0px');
+  check('hidden boxes', read('visibility:hidden', BOXES),
+        '400px | 18px | 400px | 18px | 0px | 0px');
+
+  // A LENGTH under display:none is still that length -- the rule is about
+  // percentages having nothing to resolve against, not about the property going
+  // quiet.
+  check('none lengths', read('display:none;width:123px;padding-left:7px;transform-origin:11px 12px',
+        ['width', 'padding-left', 'transform-origin']),
+        '123px | 7px | 11px 12px');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
