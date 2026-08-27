@@ -1440,24 +1440,72 @@ fn uaValue(element: *Element, name: []const u8) ?[]const u8 {
 /// since inheritance only applies where nothing in the cascade set the property.
 /// Asking the whole chain for a declaration first and only then for UA values
 /// gets that case backwards.
-pub fn preservesWhitespace(element: *Element, frame: *Frame) bool {
+/// The cascaded value of an INHERITED property, walking one element at a time
+/// and asking the cascade and then the UA sheet at each level.
+///
+/// The levels have to interleave, because the two origins do: a <pre> inside
+/// `white-space: normal` is `preserve` in Chrome, measured -- the UA rule on the
+/// element itself outranks an author value inherited from a parent, since
+/// inheritance only applies where nothing in the cascade set the property on the
+/// element. Asking the whole ancestor chain for a declaration first and only then
+/// for UA values gets that case backwards.
+fn cascadedOrUaInherited(element: *Element, frame: *Frame, name: []const u8, wrapped: String) ?[]const u8 {
     const style_manager = &element.ownerFrame(frame)._style_manager;
+    var current: ?*Element = element;
+    while (current) |el| : (current = el.parentElement()) {
+        switch (declaredValue(style_manager, el, name, wrapped)) {
+            .value => |value| return std.mem.trim(u8, value, &std.ascii.whitespace),
+            .unreportable => return null,
+            .none => {},
+        }
+        if (uaValue(el, name)) |value| return std.mem.trim(u8, value, &std.ascii.whitespace);
+    }
+    return null;
+}
+
+/// `white-space-collapse`, which is the longhand `white-space` expands to along
+/// with `text-wrap-mode`. NOT `white-space`: that is a shorthand -- Chrome's
+/// expansion is the measured preset table in chrome_shorthands.zig -- so the
+/// cascade never holds a longhand by that name and asking for one always finds
+/// nothing. The first version of the collapse rule asked for it anyway, so the
+/// escape hatch never fired and a `pre` div holding one space was 0 tall where
+/// Chrome makes it 18.
+fn whiteSpaceCollapse(element: *Element, frame: *Frame) []const u8 {
     // Not `comptime .wrap`: a comptime String has to fit the small-string
     // optimisation's twelve bytes and `white-space-collapse` is twenty.
     const name = "white-space-collapse";
-    const wrapped: String = .wrap(name);
-    var current: ?*Element = element;
-    while (current) |el| : (current = el.parentElement()) {
-        const declared = switch (declaredValue(style_manager, el, name, wrapped)) {
-            .value => |value| value,
-            .unreportable => return false,
-            .none => uaValue(el, name) orelse continue,
-        };
-        const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
-        return std.ascii.eqlIgnoreCase(trimmed, "preserve") or
-            std.ascii.eqlIgnoreCase(trimmed, "break-spaces");
-    }
-    return false;
+    return cascadedOrUaInherited(element, frame, name, .wrap(name)) orelse "collapse";
+}
+
+/// Whether a run of spaces survives, so whitespace with nothing beside it is
+/// still a line box. `preserve` (from `pre` and `pre-wrap`) and `break-spaces`
+/// keep it; `preserve-breaks` (from `pre-line`) and `collapse` (from `normal` and
+/// `nowrap`) drop it. All measured on Chrome 151 with
+/// tools/fingerprint/scratch/expr-whitespace-linebox.js.
+pub fn preservesWhitespace(element: *Element, frame: *Frame) bool {
+    const collapse = whiteSpaceCollapse(element, frame);
+    return std.ascii.eqlIgnoreCase(collapse, "preserve") or
+        std.ascii.eqlIgnoreCase(collapse, "break-spaces");
+}
+
+/// Whether a newline in the source is a line break rather than a space. Every
+/// value but `collapse` keeps it, which is `pre`, `pre-wrap`, `pre-line` and
+/// `break-spaces` -- measured: `a\nb\nc` is three lines under all four and one
+/// line under `normal`.
+pub fn preservesNewlines(element: *Element, frame: *Frame) bool {
+    return !std.ascii.eqlIgnoreCase(whiteSpaceCollapse(element, frame), "collapse");
+}
+
+/// Whether a line too long for its box breaks. `text-wrap-mode: nowrap` is the
+/// one that says no, and `white-space: pre` expands to it -- measured, forty
+/// words in a 100px box are 20 lines under `normal` and `pre-wrap` and one line
+/// under `nowrap` and `pre`.
+pub fn wrapsText(element: *Element, frame: *Frame) bool {
+    // Not `comptime .wrap`: fourteen bytes, and a comptime String has to fit the
+    // small-string optimisation's twelve.
+    const name = "text-wrap-mode";
+    const mode = cascadedOrUaInherited(element, frame, name, .wrap(name)) orelse return true;
+    return !std.ascii.eqlIgnoreCase(mode, "nowrap");
 }
 
 pub fn usesBorderBox(element: *Element, frame: *Frame) bool {

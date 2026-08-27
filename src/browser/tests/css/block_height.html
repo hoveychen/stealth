@@ -487,3 +487,121 @@ Two things the numbers pin down that a rule would not:
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<!--
+A block's height is the sum of its line boxes, and text that has to wrap makes
+more than one. This engine always made exactly one, so a forty-word paragraph in
+a 100px box read 18px where Chrome reads 360.
+
+Measured on Chrome 151 with tools/fingerprint/scratch/expr-line-box.js and the
+wrap probes beside it. The line count is greedy -- the break goes before the word
+that does not fit and never inside one -- and the advances here are within half a
+pixel of Chrome's, which is what makes the counts land together rather than
+merely close: forty `word`s are twenty lines in 100px, eight in 200px and four in
+400px, and all three agree.
+
+Two axes decide it, and they are separate longhands:
+
+  * `text-wrap-mode: nowrap`, which `white-space: pre` expands to, means no
+    width-driven break at all -- those same forty words are one line.
+  * `white-space-collapse` anything but `collapse` keeps a newline as a break.
+    The count there is measured rather than derived: it is one more line than
+    there are newlines, less one when the text ends with one.
+
+The width the text wraps in is the CONTENT width, so padding and a border come
+off it first -- a `box-sizing:border-box` box of 140px with 20px of padding each
+side wraps in 100 and gives the same 360.
+-->
+
+<script id=block_height_sums_its_line_boxes>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (style, text) => {
+    const wrap = document.createElement('div');
+    const el = document.createElement('div');
+    el.setAttribute('style', style);
+    el.textContent = text;
+    wrap.appendChild(el);
+    host.appendChild(wrap);
+    const out = [getComputedStyle(el).height, el.clientHeight,
+                 el.offsetHeight].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const FORTY = 'word '.repeat(40).trim();
+  const FIVE = 'aaa bbb ccc ddd eee';
+
+  const CASES = [
+    // The line count follows the box it has to fit in.
+    ['width:100px', FIVE, '36px 36 36'],
+    ['width:100px', FORTY, '360px 360 360'],
+    ['width:200px', FORTY, '144px 144 144'],
+    ['width:400px', FORTY, '72px 72 72'],
+    ['width:100px', 'aaa', '18px 18 18'],
+    // A word wider than the box overflows rather than breaking.
+    ['width:50px', 'aaaaaaaaaaaaaaaaaaaaaaaa', '18px 18 18'],
+    // Each line is worth the line-height, so the two multiply.
+    ['width:100px;line-height:30px', FIVE, '60px 60 60'],
+    ['width:100px;line-height:30px', FORTY, '600px 600 600'],
+    // Leading and trailing collapsible space changes nothing.
+    ['width:100px', '   ' + FIVE + '   ', '36px 36 36'],
+    // nowrap and pre do not break on width.
+    ['width:100px;white-space:nowrap', FORTY, '18px 18 18'],
+    ['width:100px;white-space:pre', FORTY, '18px 18 18'],
+    ['width:100px;white-space:pre-wrap', FORTY, '360px 360 360'],
+    // The wrap width is the CONTENT width: padding and border come off first.
+    ['width:100px;padding:0 20px', FORTY, '360px 360 360'],
+    // ...and the border is outside the CLIENT box as well, so an offsetHeight
+    // of 380 beside a content height of 360 is the border, not a wrong count.
+    ['width:100px;border:10px solid', FORTY, '360px 360 380'],
+    ['width:100px;padding:10px 20px', FORTY, '360px 380 380'],
+    ['box-sizing:border-box;width:140px;padding:0 20px', FORTY, '360px 360 360'],
+    // A newline is a break where white-space keeps it, and one line more than
+    // there are newlines -- less one when the text ends with one.
+    ['width:100px;white-space:pre', 'a\nb\nc', '54px 54 54'],
+    ['width:100px;white-space:pre-line', 'a\nb\nc', '54px 54 54'],
+    ['width:100px', 'a\nb\nc', '18px 18 18'],
+    ['width:100px;white-space:pre', 'a\n\nb', '54px 54 54'],
+    ['width:100px;white-space:pre', 'a\n\n\nb', '72px 72 72'],
+    ['width:100px;white-space:pre', '\na', '36px 36 36'],
+    ['width:100px;white-space:pre', 'a\nb\n', '36px 36 36'],
+    ['width:100px;white-space:pre', 'a\n\n', '36px 36 36'],
+    ['width:100px;white-space:pre', '\n', '18px 18 18'],
+    ['width:100px;white-space:pre', '\t', '18px 18 18'],
+    // A declared height still wins outright.
+    ['width:100px;height:7px', FORTY, '7px 7 7'],
+  ];
+
+  const wrong = [];
+  for (const [style, text, want] of CASES) {
+    const got = measure(style, text);
+    if (got !== want) {
+      wrong.push(JSON.stringify(text.slice(0, 12)) + ' @ ' + style +
+                 ': want [' + want + '], got [' + got + ']');
+    }
+  }
+
+  // A word that straddles two text nodes is one word: the fragments' advances
+  // sum, so this is two lines in a 100px box and not three. Chrome agrees,
+  // measured.
+  {
+    const wrap = document.createElement('div');
+    const el = document.createElement('div');
+    el.setAttribute('style', 'width:100px');
+    el.appendChild(document.createTextNode('wordwordwordwo'));
+    el.appendChild(document.createTextNode('rdword word'));
+    wrap.appendChild(el);
+    host.appendChild(wrap);
+    const got = [getComputedStyle(el).height, el.clientHeight].join(' ');
+    if (got !== '36px 36') wrong.push('split word: want [36px 36], got [' + got + ']');
+    wrap.remove();
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

@@ -1865,9 +1865,10 @@ fn isCollapsibleWhitespace(str: []const u8) bool {
 /// only the height can pass `measure_width = false` and skip the walk over the
 /// text — which is the whole cost here on any element holding a sentence. The
 /// returned `width` is then 0 and must not be read.
-fn textLayout(self: *Element, frame: *Frame, measure_width: bool) ?struct { width: f64, height: f64 } {
+fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f64) ?struct { width: f64, height: f64 } {
     var total_text: usize = 0;
     var all_collapsible = true;
+    var has_newline = false;
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(Element) != null) {
@@ -1877,6 +1878,7 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool) ?struct { widt
             const str = Factory.protoOf(text)._data.str();
             total_text += str.len;
             if (all_collapsible and !isCollapsibleWhitespace(str)) all_collapsible = false;
+            if (!has_newline and std.mem.indexOfAny(u8, str, "\n\r") != null) has_newline = true;
         }
     }
     if (total_text == 0) {
@@ -1903,7 +1905,7 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool) ?struct { widt
 
     const font = self.resolveFont(frame);
     var width: f64 = 0;
-    if (measure_width) {
+    if (measure_width or available != null) {
         child = self.asNode().firstChild();
         while (child) |node| : (child = node.nextSibling()) {
             if (node.is(CData.Text)) |text| {
@@ -1912,10 +1914,144 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool) ?struct { widt
         }
     }
 
+    const line = self.lineBoxHeight(frame, font.family, font.size);
+
+    // How many of those lines. One, unless the text has a newline in it that
+    // `white-space` might keep, or it is wider than the box it has to sit in --
+    // and both of those are answered off the bytes and the width already
+    // measured, so the cascade reads inside lineBoxCount are only paid by an
+    // element that could actually take more than one line. This sits under
+    // `offsetWidth`, which pages read in loops.
+    const lines: f64 = blk: {
+        if (has_newline) break :blk self.lineBoxCount(frame, font.family, font.size, available);
+        const box = available orelse break :blk 1;
+        if (width <= box) break :blk 1;
+        break :blk self.lineBoxCount(frame, font.family, font.size, available);
+    };
+
     // offsetWidth is an integer; getBoundingClientRect keeps the fraction, but
     // this engine has one dimension model behind both.
-    return .{ .width = @round(width), .height = self.lineBoxHeight(frame, font.family, font.size) };
+    return .{ .width = @round(width), .height = line * lines };
 }
+
+/// How many line boxes this element's own text takes, given `available` px of
+/// content width to lay it out in -- or null when nothing constrains it, which
+/// is a box that shrinks to fit and a caller that only wanted the height.
+///
+/// Two things make a line: a preserved newline, and running out of room.
+///
+/// Newlines first, because they are not a width question. Every
+/// `white-space-collapse` but `collapse` keeps them, and the count is measured
+/// rather than derived: `a\nb\nc` is three lines under `pre`, `a\n\nb` is three
+/// (a blank line is a line), `\na` is two, `a\nb\n` is two and `\n` alone is one.
+/// So it is one more line than there are newlines, less one when the text ends
+/// with one -- six readings, all of them assertions in css/block_height.html.
+///
+/// Then each of those hard lines is wrapped, greedily, at whichever word does not
+/// fit. Greedy is what Chrome does and the advances here are within half a pixel
+/// of its own, which is enough to land on the same count: forty `word`s in a
+/// 100px box are twenty lines in Chrome and twenty here, and in 200px eight and
+/// in 400px four. A word wider than the whole box overflows rather than breaking,
+/// which falls out of never splitting one -- twenty-four `a` in 50px is one line.
+///
+/// `text-wrap-mode: nowrap`, which `white-space: pre` expands to, skips the
+/// wrapping half entirely: those same forty words are one line.
+fn lineBoxCount(self: *Element, frame: *Frame, family: font_metrics.Family, size: f64, available: ?f64) f64 {
+    var counter: LineCounter = .{
+        .keeps_newlines = CSSStyleDeclaration.preservesNewlines(self, frame),
+        .wraps = available != null and CSSStyleDeclaration.wrapsText(self, frame),
+        .box = available orelse 0,
+        .space = text_measure.measure(family, " ", size).width,
+    };
+
+    var child = self.asNode().firstChild();
+    while (child) |node| : (child = node.nextSibling()) {
+        const text = node.is(CData.Text) orelse continue;
+        const str = Factory.protoOf(text)._data.str();
+        var i: usize = 0;
+        while (i < str.len) {
+            if (std.mem.indexOfScalar(u8, css_whitespace, str[i]) != null) {
+                const newline = str[i] == '\n' or str[i] == '\r';
+                counter.placeWord();
+                if (newline and counter.keeps_newlines) counter.endSegment();
+                i += 1;
+                continue;
+            }
+            const start = i;
+            while (i < str.len and std.mem.indexOfScalar(u8, css_whitespace, str[i]) == null) i += 1;
+            // The word may span two text nodes, so its width is carried across
+            // them rather than measured per node. Advances are additive and there
+            // is no kerning here (see text_measure), so two fragments of one word
+            // sum to the word: two nodes holding `wordwordwordwo` and
+            // `rdword word` are two lines in a 100px box in Chrome and here.
+            counter.word += text_measure.measure(family, str[start..i], size).width;
+            counter.have_word = true;
+        }
+    }
+    return counter.finish();
+}
+
+/// The greedy line counter behind lineBoxCount, kept as a struct because the
+/// state has to survive both the walk over the text nodes and the two places a
+/// line ends.
+///
+/// A preserved newline ends a SEGMENT, and each segment is wrapped on its own.
+/// The count is then the sum of the segments' -- with the last one dropped when
+/// it is empty, which is the whole of why `a\nb\n` is two lines and `a\n\nb` is
+/// three. That rule is measured, not derived (css/block_height.html asserts all
+/// six readings): `\n` alone is one line, `\na` is two, `a\n\n` is two, and
+/// `a\n\n\nb` is four.
+const LineCounter = struct {
+    keeps_newlines: bool,
+    wraps: bool,
+    box: f64,
+    space: f64,
+
+    /// Segments already finished.
+    lines: f64 = 0,
+    /// Lines within the segment being built, which starts at one.
+    segment_lines: f64 = 1,
+    /// Whether any word landed in this segment. An empty last segment is the
+    /// trailing newline, and it is not a line.
+    segment_has_word: bool = false,
+    /// Width already on the current line, and the word being built.
+    placed: f64 = 0,
+    word: f64 = 0,
+    have_word: bool = false,
+
+    fn placeWord(self: *LineCounter) void {
+        if (!self.have_word) return;
+        const joined = if (self.placed > 0) self.placed + self.space + self.word else self.word;
+        // The break goes BEFORE the word that does not fit, and never inside one:
+        // a word wider than the whole box overflows instead, which is why
+        // twenty-four `a` in a 50px box is one line in Chrome and not four.
+        if (self.wraps and self.placed > 0 and joined > self.box) {
+            self.segment_lines += 1;
+            self.placed = self.word;
+        } else {
+            self.placed = joined;
+        }
+        self.word = 0;
+        self.have_word = false;
+        self.segment_has_word = true;
+    }
+
+    fn endSegment(self: *LineCounter) void {
+        self.lines += self.segment_lines;
+        self.segment_lines = 1;
+        self.placed = 0;
+        self.segment_has_word = false;
+    }
+
+    fn finish(self: *LineCounter) f64 {
+        self.placeWord();
+        // The last segment counts unless it is empty -- and an empty FIRST
+        // segment still counts, because a box holding one preserved space is a
+        // line.
+        if (self.segment_has_word or self.lines == 0) self.lines += self.segment_lines;
+        return self.lines;
+    }
+};
 
 /// What one line box is worth: the computed `line-height` when the cascade or the
 /// UA sheet gives one, and the font's own box when it is `normal`.
@@ -2566,7 +2702,17 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // opt-out above.
     const wants_text_width = measure_text_width and width == null;
     if (wants_text_width or height == null) {
-        if (self.textLayout(frame, wants_text_width)) |text| {
+        // The width the text has to wrap in is this box's CONTENT width, which is
+        // what `width` already holds -- the fill branch took the padding and the
+        // border off it. Null when the box has no width of its own: a
+        // shrink-to-fit one takes its max-content width and does not wrap, and
+        // the height-only path (`getElementHeight`, which
+        // document.elementFromPoint rejects thousands of elements on) never asked
+        // for a width at all. That path therefore sees a one-line height for
+        // wrapped text where the reported one is right, which is a hit test
+        // against a y model that is already synthetic -- see
+        // calculateDocumentPosition -- and not a reading a page can make.
+        if (self.textLayout(frame, wants_text_width, width)) |text| {
             if (wants_text_width) width = text.width;
             if (height == null) height = text.height;
         }
