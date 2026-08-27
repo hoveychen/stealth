@@ -18720,7 +18720,26 @@ realm, which is the largest block of answers this engine is known to get wrong:
 * `measureText` of `""`, `" "`, `"m"` and `"mm"`.
 
 The rotated `fillText` block is the part with no honest answer here: this engine
-has no glyph outlines to raster (`cfsc-glyph-outline-raster`, still 0/3). Two
-closed stations now point at it — cf-scrapingcourse's remaining gap was already
-canvas rendering — and for the first time there is a way to test a change
-against Kasada in eleven seconds instead of a windowed station sweep.
+has no glyph outlines to raster (`cfsc-glyph-outline-raster`, still 0/3). That
+is the obvious suspect, and the next reading takes it away.
+
+### …and the deployment that tickets us reads the canvas too
+
+The same log for ks-canadagoose, restricted the same way to the guard's own
+realm, lists 27 canvas and WebGL members: `fillText`, `rotate`, `save`,
+`restore`, `translate`, `scale`, `transform`, the path builders, **and both
+readbacks — `getImageData` and `toDataURL`** — plus `getParameter` and
+`getExtension` on both WebGL versions.
+
+So the deployment that hands this engine a ticket rasters glyphs and reads the
+pixels back, on the same engine, in the same hour x-hyatt refuses one. **Canvas
+raster fidelity is not what separates the two.** That is worth more than it
+sounds: it is the one reading that keeps the next session out of
+`cfsc-glyph-outline-raster`, which is the most expensive plan in the queue —
+there are no glyph outlines in this repo at all — and which the paragraph above
+points straight at.
+
+What is left is quantitative: the same questions, the same kinds of wrong
+answers, and one customer grading them harder. Finding the weight means
+pointing the oracle at differences one at a time, which is now cheap enough to
+do — eleven seconds a verdict, deterministic, no station window.
