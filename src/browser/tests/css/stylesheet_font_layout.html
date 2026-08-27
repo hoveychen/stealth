@@ -5,6 +5,7 @@
 <style>
   .sheet-longhand { font-size: 13px; font-family: serif }
   .sheet-size-only { font-size: 13px }
+  .sheet-shorthand { font: 13px serif }
 </style>
 
 <!--
@@ -28,8 +29,6 @@ readings in scratch/b82-sheetfont-{ch-dsf2,lp}.json), a span of
 Three more routes in that probe are somebody else's, and all three are about
 what the CASCADE holds rather than about what reaches the box:
 
-  * `font: 13px serif` as a shorthand, inline or by rule — the cascade does not
-    hold it either way, which is the `font-shorthand-cascade` plan;
   * `font-family: monospace` alone computes to **13px** in Chrome, its default
     monospace size, where this engine says 16 — so the family reaches the box
     now (288.98 is monospace at 16px, exactly 16/13 of Chrome's 234.80) and the
@@ -64,6 +63,12 @@ Six of the probe's ten routes match Chrome now, against two before.
 
   // A rule on the element itself.
   eq('rule on the span', read('<span data-m class=sheet-longhand>' + TEXT + '</span>'),
+     '13px | 171.1484375 | 15.5');
+  // ...and the same rule written as the `font` shorthand. Its expansion reaches
+  // the computed style through one collection and the LAYOUT through another,
+  // and it was only filling the first: the box stayed 16px Times while
+  // getComputedStyle answered 13px.
+  eq('rule, font shorthand', read('<span data-m class=sheet-shorthand>' + TEXT + '</span>'),
      '13px | 171.1484375 | 15.5');
   // ...and inherited from a rule on an ancestor, which is the shape a page has.
   eq('rule on the parent', read('<div class=sheet-longhand><span data-m>' + TEXT + '</span></div>'),

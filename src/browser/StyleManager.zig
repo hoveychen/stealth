@@ -537,6 +537,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
                     .important = decl.important,
                     .specified = CSSStyleDeclaration.specifiedNumber(longhand_value),
                 });
+                carryFontProp(&props, longhand_name, longhand_value, decl.important);
             }
             continue;
         }
@@ -552,6 +553,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
                         .important = decl.important,
                         .specified = null,
                     });
+                    carryFontProp(&props, longhand_name, longhand_value, decl.important);
                 }
                 continue;
             },
@@ -563,6 +565,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
                         .important = decl.important,
                         .specified = CSSStyleDeclaration.specifiedNumber(longhand_value),
                     });
+                    carryFontProp(&props, longhand_name, longhand_value, decl.important);
                 }
                 continue;
             },
@@ -1768,6 +1771,23 @@ pub fn blockify(display: []const u8) []const u8 {
     // Already block-level (block / flex / grid / table / list-item / flow-root),
     // or box-less (contents / none): unchanged.
     return display;
+}
+
+/// The two longhands the LAYOUT reads out of a rule, carried across a shorthand
+/// expansion.
+///
+/// `props` is what `cascadedDeclaration` answers from, and it is filled by name
+/// while the declarations are walked — so a rule that writes `font-size`
+/// directly reaches the box and one that writes `font: 13px serif` reached only
+/// the computed style, whose longhand list is a different collection. Measured:
+/// `.x{font:13px serif}` computed `13px` and laid out at 210.64 where Chrome
+/// lays out at 171.148 (tools/fingerprint/scratch/expr-sheet-font-layout.js).
+fn carryFontProp(props: *RuleProperties, name: []const u8, value: []const u8, important: bool) void {
+    if (std.ascii.eqlIgnoreCase(name, "font-size")) {
+        props.font_size = .{ .value = value, .important = important };
+    } else if (std.ascii.eqlIgnoreCase(name, "font-family")) {
+        props.font_family = .{ .value = value, .important = important };
+    }
 }
 
 /// Cascaded `font-family` list, verbatim, or null when nothing declares one
