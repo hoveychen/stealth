@@ -2115,9 +2115,9 @@ pub fn containingBlock(self: *Element, frame: *Frame) ?*Element {
 }
 
 /// The horizontal margin that comes off the containing block before the box
-/// gets what is left. From the cascade, so a stylesheet rule counts -- and it
-/// is only ever asked from inside the fill branch, which is already behind
-/// `measure_text_width`.
+/// gets what is left. From the cascade, so a stylesheet rule counts. Asked from
+/// two places, both of which already hold the containing block's width: the fill
+/// branch in dimensionsAt, and the flex line in CSSStyleDeclaration.
 ///
 /// `containing` is the caller's own measurement of the containing block, shared
 /// so that a percentage margin costs nothing extra. Both margins go through the

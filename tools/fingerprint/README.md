@@ -17115,3 +17115,121 @@ On a 40-row page of fractional percentages, the measure the payload analysis
 uses — total characters of element-geometry readings — is **1790 here against
 Chrome's 1783**, over 280 reads. Before this it was short by an order more than
 that gap, and short in the direction that mattered.
+
+## A percentage margin is a share of the width, on all four sides (B80, 2026-08-26)
+
+`margin-left: 33.3%` in a 400px line is `133.188px` in Chrome and was `0px`
+here: the percentage had no containing block to take a share of, so the whole
+declaration fell through to the initial value. The box beside it kept the whole
+400 where Chrome gives it 266.8125, so one declaration was wrong in two
+readings at once.
+
+Measured with `scratch/expr-margin-pct.js`, seventeen shapes on the 1904px body.
+The reading worth writing down is the vertical pair:
+
+| declared, in a 400px line | Chrome `margin-*` | Chrome computed `width` |
+|---|---|---|
+| `margin-left: 33.3%` | 133.188px | 266.812px |
+| `margin-left: 10%` | 40px | 360px |
+| `margin-left: 10%; margin-right: 10%` | 40px / 40px | 320px |
+| `margin-top: 10%` | 40px | **400px** |
+| `margin: 10%` | 40px × 4 | 320px |
+| `margin-left: -10%` | -40px | **440px** |
+| `margin-inline-start: 10%` | 40px on the LEFT | 360px |
+
+**A percentage margin never looks at a height.** `margin-top: 10%` of a 400px
+line is 40px — the same width a percentage padding takes its share of, which is
+already why a `padding: 10%` box has a clientHeight of 399 and not 18. And a
+margin may be **negative**, which a padding may not: the box gets 440 of a 400px
+line, so the resolver had to stay signed where `paddingPx` clamps at zero.
+
+### The width is measured once, because two margins asking is the shape that crashed
+
+This is the third property family to want the containing block's width from
+inside the measurement that is already computing it. The rule from the padding
+crash applies unchanged: **the same parent width is measured once per element
+and shared** (`CSSStyleDeclaration.containingWidth`, a `*?f64` threaded through).
+Letting each of the two horizontal margins ask for itself would have put the
+same multiplier back on the chain that `boxEdgesSharing` exists to keep off it,
+and routing them through the computed-value path would be worse — that path
+starts a fresh measurement at depth 0, which is the loop that took `x-sony` out.
+
+Two places already hold the number and now hand it over: the fill branch in
+`dimensionsAt`, and the flex line in `flexItemWidth` — every item on a line has
+the same containing block, and `container` is already its content width, so the
+flex case costs nothing at all.
+
+Measured with `scratch/expr-deep-margin.js` on `named-probe/pctmargin-*.html`:
+
+| nested `margin: 1%` | one clientWidth | width here | Chrome |
+|---|---|---|---|
+| 8 deep | 3ms | 1619.97px | 1619.97px |
+| 12 deep | 1ms | 1494.28px | 1494.28px |
+| 20 deep | 1ms | 1271.34px | 1271.34px |
+| 60 deep | 2ms | 567.063px | 567.062px |
+
+Linear, and identical to Chrome sixty levels down but for one digit — and that
+digit is the six-figure tie, not the layout: 567.0625 rounds half to **even** in
+Chrome and half **up** here, which is `css-number-round-half-even`'s task.
+`inline-pct-margin.html`, the `<span><div style="margin-left:50%">` shape that
+was the crash's other half, answers 952px on both engines.
+
+### What is still not a margin here
+
+`margin: auto` centres the box in Chrome and it reports the used value it
+computed — **150px a side** for a 100px box on a 400px line. This engine reports
+the keyword `auto`. That is a used value for a keyword rather than a percentage
+against a width, so it is a different task and has no plan yet.
+
+Found on the way, and also not this: a `<p>`'s initial top margin is `1em` of
+its own font, so Chrome answers **20px** inside a `font-size: 20px` parent where
+this engine answers a fixed 16px.
+
+### Acceptance
+
+`expr-margin-pct.js` goes from 1 of 17 shapes to **16 of 17** (the 17th is
+`margin: auto`), and every field but one matches Chrome exactly — that one being
+the six-figure tie above. `expr-layout-grid.js` goes 81/88 field readings to
+**86/88**, and the two left are both that same tie. No regression anywhere else:
+`expr-box-parts.js` holds 223/223, `expr-inline-box.js` 176/176,
+`expr-flex-item-width.js` 60/60, `expr-box-parts-flex.js` 8/8,
+`expr-layout-box-shapes.js` 221/257 (its residue is the height family, which
+still has no plan). 1511/1511.
+
+Three assertions that pinned the refusal now carry Chrome's own numbers: 40px in
+`percentage_width.html`, 200px twice in `computed_relative_units.html` — the
+vertical one included — and 952px in `computed_author_longhands.html`.
+
+### The sweep, and the two stations that looked like a regression
+
+Compared against a sweep from earlier in the day the patched run printed
+**17/29** where that one printed 22/29, with two DataDome stations gone from
+pass to `datadome-challenge` and a four-station tail of `timeout: Page.navigate`.
+Read off the summary line, that is a regression. It is not one, and neither half
+of it survives a second look:
+
+* **The tail is one hung process, not four failures.** Re-run each station on
+  its own with `--only`, both binaries: `ak-expedia` pass/pass, `px-wayfair`
+  pass/pass, `ks-canadagoose` pass/pass, `x-hyatt` refused-429 on both. The
+  baseline sweep has the same tail in the same place, and its own head of it is
+  `ak-kohls` hanging 55s on `Runtime.enable` -- a known intermittent that is on
+  the control arm too.
+* **The two DataDome stations are a time window, not the patch.** The first
+  paired run had the baseline going first and passing, then the patched arm
+  seconds later getting challenged -- which reads exactly like a regression.
+  With the order **reversed** and repeated three times, **all twelve runs on
+  both arms were challenged**: 6 patched, 6 baseline, no exceptions. Then a
+  full baseline sweep in the same band as the patched one came back with
+  `dd-leboncoin` and `dd-hermes` challenged as well. The door was open for
+  whoever knocked first that hour and shut for everyone after it.
+
+Two full sweeps in the same time band, with every `error` replaced by its paired
+`--only` re-run: **baseline 20/29, patched 20/29, and one printed difference in
+29 stations** -- `ak-kohls`, which is the intermittent hang and re-runs to pass
+on both.
+
+A single A/B on a DataDome station cannot tell the engine from the hour. The
+only reading that can is an alternation whose order is flipped, and the claim it
+supports is deliberately narrow: **the two arms are indistinguishable at every
+station**, which is all a fidelity change should be asked to show. No door opened
+here, the same as every layout task before it on this line.

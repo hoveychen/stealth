@@ -44,7 +44,7 @@ a keyword, not a percentage against a width) and has no test of its own yet.
     //
     // Chrome writes that remainder `266.812px` where the string below says
     // `266.813px`, and that one digit is NOT a layout difference: the used
-    // value is 266.8125 in both engines -- the rect assertion after this block
+    // value is 266.8125 in both engines -- the rect assertion below the loop
     // is where that is pinned -- and six significant figures land the last
     // digit exactly on a tie. Chrome breaks a tie to even and this engine
     // breaks it up, which is css-number-round-half-even's task. When that
