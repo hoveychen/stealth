@@ -2756,7 +2756,7 @@ pub fn getClientWidthWithCache(self: *Element, frame: *Frame, visibility_cache: 
         return dims.width + dims.padding_x;
     }
 
-    return @max(dims.width, self.contentWidth(frame, visibility_cache)) + dims.padding_x;
+    return @max(dims.width, self.contentWidth(frame, visibility_cache, .in_flow)) + dims.padding_x;
 }
 
 pub fn getClientHeight(self: *Element, frame: *Frame) f64 {
@@ -2778,7 +2778,7 @@ pub fn getClientHeightWithCache(self: *Element, frame: *Frame, visibility_cache:
         return dims.height + dims.padding_y;
     }
 
-    return @max(dims.height, self.contentHeight(frame, visibility_cache)) + dims.padding_y;
+    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow)) + dims.padding_y;
 }
 
 pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
@@ -2806,8 +2806,26 @@ fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.
     // getBoundingClientRect is the BORDER box, the same box offsetWidth
     // reports: measured, a `padding:10px;border:5px solid` float is 8px of
     // content, 28 of clientWidth and 38 of both offsetWidth and rect width.
-    const width = dims.width + dims.padding_x + dims.border_x;
-    var height = dims.height + dims.padding_y + dims.border_y;
+    //
+    // So it is built the way offsetWidth and offsetHeight are, off the client
+    // box, and not off the raw dimensions -- which is what it used to do, and
+    // which skipped clientHeight's fallback to the sum of the children. A div
+    // holding three lines of text reported 54 of computed height, 54 of
+    // clientHeight, 54 of offsetHeight and 0 of rect height; with padding and a
+    // border it was 66 against 30. No browser produces either pair, and a guard
+    // reading both at once sees it.
+    //
+    // The one difference from offsetWidth is that this keeps the fraction:
+    // offsetWidth is a `long` in the IDL and rounds, and a rect does not.
+    var visibility_cache: VisibilityCache = .{};
+    const width = if (dims.inline_box)
+        dims.width + dims.padding_x + dims.border_x
+    else
+        self.getClientWidthWithCache(frame, &visibility_cache) + dims.border_x;
+    var height = if (dims.inline_box)
+        dims.height + dims.padding_y + dims.border_y
+    else
+        self.getClientHeightWithCache(frame, &visibility_cache) + dims.border_y;
 
     // A <br> is the one element whose rect is not the box offsetHeight reports.
     // It has no box at all -- 0 of clientHeight and 0 of offsetHeight, measured
@@ -2913,7 +2931,7 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 
     if (dims.inline_box) return 0;
 
-    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache)) + dims.padding_y);
+    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable)) + dims.padding_y);
 }
 
 // The height of the direct child elements stacked vertically, the counterpart
@@ -2926,20 +2944,45 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 // extent per axis rather than describing one coherent layout: reporting no
 // overflow when there is some is what wedges measure-then-mutate loops,
 // while the reverse merely over-reports.
-fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache) f64 {
+fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent) f64 {
     var total: f64 = 0;
 
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(Element)) |el| {
-            if (el.checkVisibilityCached(visibility_cache, frame)) {
-                total += el.getElementDimensions(frame).height;
-            }
+            if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
+            if (!extent.counts(CSSStyleDeclaration.flowKind(el, frame))) continue;
+            total += el.getElementDimensions(frame).height;
         }
     }
 
     return total;
 }
+
+/// Which of a box's children a reading is the extent of. Every visible child used
+/// to count for both, and a child that is not in the flow is not in the stack:
+/// Chrome puts a block holding only a floated, `absolute` or `fixed` child at 0
+/// of clientHeight, measured with
+/// tools/fingerprint/scratch/expr-out-of-flow-stack.js.
+///
+/// The two part company on the float, which is why this is not one predicate: a
+/// float is out of its parent's height and still inside the parent's scrollable
+/// overflow, so a block holding one reads 0 of clientHeight and 18 of
+/// scrollHeight. Measured; an `absolute` child is out of both.
+const Extent = enum {
+    /// clientWidth, clientHeight and the box a computed width and height report.
+    in_flow,
+    /// scrollWidth and scrollHeight.
+    scrollable,
+
+    fn counts(self: Extent, kind: CSSStyleDeclaration.FlowKind) bool {
+        return switch (kind) {
+            .in_flow => true,
+            .floated => self == .scrollable,
+            .positioned => false,
+        };
+    }
+};
 
 pub fn getScrollWidth(self: *Element, frame: *Frame) f64 {
     var visibility_cache: VisibilityCache = .{};
@@ -2962,7 +3005,7 @@ pub fn getScrollWidth(self: *Element, frame: *Frame) f64 {
     // The scrollable overflow area includes the padding: measured, a
     // `width:100px;padding:10px` box holding a 300px child answers 120 for
     // clientWidth and 320 for scrollWidth. Rounded, like the other two.
-    return @round(@max(dims.width, self.contentWidth(frame, &visibility_cache)) + dims.padding_x);
+    return @round(@max(dims.width, self.contentWidth(frame, &visibility_cache, .scrollable)) + dims.padding_x);
 }
 
 // The width of the direct child elements laid end to end on a single row.
@@ -2988,7 +3031,7 @@ pub fn getScrollWidth(self: *Element, frame: *Frame) f64 {
 // would report overflow for practically every element containing text, since a
 // few words already exceed the default box. Element children are what content
 // grown by script actually consists of.
-fn contentWidth(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache) f64 {
+fn contentWidth(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent) f64 {
     var total: f64 = 0;
 
     // The cache arrives seeded by the caller's own visibility walk, and
@@ -2997,9 +3040,9 @@ fn contentWidth(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(Element)) |el| {
-            if (el.checkVisibilityCached(visibility_cache, frame)) {
-                total += el.getElementDimensions(frame).width;
-            }
+            if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
+            if (!extent.counts(CSSStyleDeclaration.flowKind(el, frame))) continue;
+            total += el.getElementDimensions(frame).width;
         }
     }
 

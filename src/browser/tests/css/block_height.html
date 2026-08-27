@@ -605,3 +605,94 @@ side wraps in 100 and gives the same 360.
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<!--
+A block's height is the stack of its IN-FLOW children, and two things were wrong
+about that.
+
+The rect was not built from the same box the other readings are. offsetHeight
+goes through clientHeight, which falls back to the sum of the children when the
+box has no height of its own -- and getBoundingClientRect used the raw dimensions
+instead. So a div holding three lines of text reported 54 of computed height, 54
+of clientHeight, 54 of offsetHeight and 0 of rect height, which is a
+contradiction no browser can produce and which a guard reading both at once sees.
+With padding and a border on the parent it was 66 against 30.
+
+And every visible child counted, including the ones that are not in the stack. A
+floated, `absolute` or `fixed` child does not contribute: Chrome puts a block
+holding only one of those at 0. `relative` and `sticky` DO contribute -- they keep
+their place -- and so do `inline` and `inline-block` children.
+
+The float is the one that splits: a float is out of the height but still inside
+the SCROLLABLE overflow, so a parent holding one float reads 0 of clientHeight
+and 18 of scrollHeight. An `absolute` child is out of both. Measured on Chrome
+151 with tools/fingerprint/scratch/expr-out-of-flow-stack.js.
+-->
+
+<script id=block_stacks_its_in_flow_children>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    // scrollWidth is deliberately not read. It sums the children's widths as if
+    // they were laid out in a ROW -- contentWidth says so in its own comment --
+    // so a stack of three 400px children answers 1200 where Chrome answers 400.
+    // That is a real reading and a real gap, but it is a different rule from the
+    // stack this test is about, and the row sum is what lets a page that appends
+    // nodes until a width threshold terminate. Recorded in the plan's P7 with
+    // the measurement (Chrome: 400 for the three-block stack, 390 for the padded
+    // one) rather than changed here.
+    const out = [cs.width, cs.height, el.clientWidth, el.clientHeight,
+                 el.offsetWidth, el.offsetHeight, r.width, r.height,
+                 el.scrollHeight].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const one = (childStyle) =>
+    '<div data-m><div style="' + childStyle + '">a</div></div>';
+
+  // html, then: computed w/h, client w/h, offset w/h, rect w/h, scrollHeight
+  const CASES = [
+    [one(''), '400px 18px 400 18 400 18 400 18 18'],
+    // Out of flow: not in the stack. A float stays in the scrollable overflow.
+    [one('position:absolute'), '400px 0px 400 0 400 0 400 0 0'],
+    [one('position:fixed'), '400px 0px 400 0 400 0 400 0 0'],
+    [one('float:left'), '400px 0px 400 0 400 0 400 0 18'],
+    [one('float:right'), '400px 0px 400 0 400 0 400 0 18'],
+    // In flow, and this is the half that must not move.
+    [one('position:relative'), '400px 18px 400 18 400 18 400 18 18'],
+    [one('position:sticky'), '400px 18px 400 18 400 18 400 18 18'],
+    [one('display:inline'), '400px 18px 400 18 400 18 400 18 18'],
+    [one('display:inline-block'), '400px 18px 400 18 400 18 400 18 18'],
+    // display:none was already out of everything.
+    [one('display:none'), '400px 0px 400 0 400 0 400 0 0'],
+    // One of each: the in-flow child still counts and the absolute one does not.
+    ['<div data-m><div>a</div><div style="position:absolute">b</div></div>',
+     '400px 18px 400 18 400 18 400 18 18'],
+    // The stack itself, and the rect that used to answer 0 beside it.
+    ['<div data-m><div>a</div><div>b</div><div>c</div></div>',
+     '400px 54px 400 54 400 54 400 54 54'],
+    // ...and with padding and a border, so all three boxes differ: 36 of
+    // content, 56 of client, 66 of offset and rect.
+    ['<div data-m style="padding:10px;border:5px solid"><div>a</div><div>b</div></div>',
+     '370px 36px 390 56 400 66 400 66 56'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

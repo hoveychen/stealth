@@ -1130,14 +1130,7 @@ pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
     // as do `position:fixed` and `float:left`, while `relative` and `sticky`
     // leave it inline. That is why an absolutely positioned <span> honours a
     // declared width -- it is no longer an inline box.
-    const style_manager = &element.ownerFrame(frame)._style_manager;
-    if (cascadedKeyword(style_manager, element, "float")) |float| {
-        if (!std.ascii.eqlIgnoreCase(float, "none")) return blockified;
-    }
-    if (cascadedKeyword(style_manager, element, "position")) |position| {
-        if (std.ascii.eqlIgnoreCase(position, "absolute") or
-            std.ascii.eqlIgnoreCase(position, "fixed")) return blockified;
-    }
+    if (flowKind(element, frame) != .in_flow) return blockified;
 
     const parent = element.parentElement() orelse return specified;
     if (!frame._style_manager.blockifiesChildren(parent)) {
@@ -1172,6 +1165,36 @@ pub fn cascadedComputedValue(element: *Element, name: []const u8, frame: *Frame)
     };
 }
 
+/// How this element's box sits in its parent's flow. Three answers rather than a
+/// boolean, because a float and an out-of-flow box part company on exactly one
+/// reading: a float is out of its parent's HEIGHT but still inside the parent's
+/// scrollable overflow, while an `absolute` or `fixed` child is out of both.
+/// Measured on Chrome 151 with
+/// tools/fingerprint/scratch/expr-out-of-flow-stack.js -- a block holding one
+/// floated child answers 0 of clientHeight and 18 of scrollHeight, and the same
+/// block holding one absolute child answers 0 of both.
+///
+/// `relative` and `sticky` are `in_flow`: they keep their place in the stack, and
+/// they leave an inline display inline. Measured too, and they are the half that
+/// a "position is not static" test would get wrong.
+///
+/// Position before float, because `position: absolute` makes `float` compute to
+/// `none` -- the two existing callers are indifferent to the order since they
+/// only ask whether it is `in_flow` at all, but the third one is not.
+pub const FlowKind = enum { in_flow, floated, positioned };
+
+pub fn flowKind(element: *Element, frame: *Frame) FlowKind {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    if (cascadedKeyword(style_manager, element, "position")) |position| {
+        if (std.ascii.eqlIgnoreCase(position, "absolute") or
+            std.ascii.eqlIgnoreCase(position, "fixed")) return .positioned;
+    }
+    if (cascadedKeyword(style_manager, element, "float")) |float| {
+        if (!std.ascii.eqlIgnoreCase(float, "none")) return .floated;
+    }
+    return .in_flow;
+}
+
 /// Whether this element's box takes its width from its containing block rather
 /// than from its own content.
 ///
@@ -1192,15 +1215,7 @@ pub fn cascadedComputedValue(element: *Element, name: []const u8, frame: *Frame)
 /// This engine agreed with Chrome on every one of those before this existed,
 /// and the point of the list is that it still does.
 pub fn fillsContainingBlock(element: *Element, frame: *Frame) bool {
-    const style_manager = &element.ownerFrame(frame)._style_manager;
-
-    if (cascadedKeyword(style_manager, element, "float")) |float| {
-        if (!std.ascii.eqlIgnoreCase(float, "none")) return false;
-    }
-    if (cascadedKeyword(style_manager, element, "position")) |position| {
-        if (std.ascii.eqlIgnoreCase(position, "absolute") or
-            std.ascii.eqlIgnoreCase(position, "fixed")) return false;
-    }
+    if (flowKind(element, frame) != .in_flow) return false;
 
     if (!fillsAtDisplay(resolvedDisplay(element, frame))) return false;
 
