@@ -543,12 +543,10 @@ pub const WGSLLanguageFeatures = struct {
 pub const Keyboard = struct {
     _pad: bool = false,
 
-    // Chrome resolves a map of the host's physical keyboard layout (48 entries
-    // on the reference machine, and different ones on a different layout). We
-    // resolve an empty map: baking one machine's layout into every deployment
-    // would hand out a shared, wrong keyboard, and we have no per-host
-    // measurement to use instead. The type, brand and arity are exact; the
-    // contents are the shallow part.
+    // Resolves the host's physical keyboard layout, the same 48 entries the
+    // reference Chrome hands back. Every desktop Chrome resolves a populated
+    // map, so an empty one — which this used to answer — is a shape no browser
+    // has; a shared layout is at worst a common machine.
     pub fn getLayoutMap(_: *const Keyboard, exec: *const Execution) !js.Promise {
         const map = try exec._factory.create(KeyboardLayoutMap{});
         return exec.js.local.?.resolvePromise(map);
@@ -581,16 +579,82 @@ pub const Keyboard = struct {
 pub const KeyboardLayoutMap = struct {
     _pad: bool = false,
 
+    // Every writing-system key of the reference host's layout: the
+    // KeyboardEvent.code and the character that key produces. The order is
+    // Chrome's own — not alphabetical, but byte-identical across three runs —
+    // and it is load-bearing, because collectors join the pairs before hashing
+    // them.
+    const layout = [_][2][]const u8{
+        .{ "KeyK", "k" },
+        .{ "KeyG", "g" },
+        .{ "Digit2", "2" },
+        .{ "Digit0", "0" },
+        .{ "KeyV", "v" },
+        .{ "KeyA", "a" },
+        .{ "Backquote", "`" },
+        .{ "KeyL", "l" },
+        .{ "IntlBackslash", "§" },
+        .{ "Quote", "'" },
+        .{ "KeyW", "w" },
+        .{ "Digit8", "8" },
+        .{ "KeyM", "m" },
+        .{ "KeyH", "h" },
+        .{ "Period", "." },
+        .{ "Digit7", "7" },
+        .{ "Digit1", "1" },
+        .{ "KeyP", "p" },
+        .{ "KeyD", "d" },
+        .{ "KeyF", "f" },
+        .{ "KeyO", "o" },
+        .{ "KeyQ", "q" },
+        .{ "KeyC", "c" },
+        .{ "KeyN", "n" },
+        .{ "BracketLeft", "[" },
+        .{ "KeyZ", "z" },
+        .{ "KeyY", "y" },
+        .{ "Digit3", "3" },
+        .{ "Digit6", "6" },
+        .{ "Digit5", "5" },
+        .{ "KeyX", "x" },
+        .{ "Slash", "/" },
+        .{ "Backslash", "\\" },
+        .{ "Comma", "," },
+        .{ "Minus", "-" },
+        .{ "Digit4", "4" },
+        .{ "KeyB", "b" },
+        .{ "KeyT", "t" },
+        .{ "Digit9", "9" },
+        .{ "KeyS", "s" },
+        .{ "KeyI", "i" },
+        .{ "KeyU", "u" },
+        .{ "Equal", "=" },
+        .{ "KeyJ", "j" },
+        .{ "Semicolon", ";" },
+        .{ "KeyR", "r" },
+        .{ "BracketRight", "]" },
+        .{ "KeyE", "e" },
+    };
+
     pub fn getSize(_: *const KeyboardLayoutMap) u32 {
-        return 0;
+        return layout.len;
     }
 
-    pub fn get(_: *const KeyboardLayoutMap, _: []const u8) ?[]const u8 {
+    pub fn get(_: *const KeyboardLayoutMap, code: []const u8) ?[]const u8 {
+        const index = indexOf(code) orelse return null;
+        return layout[index][1];
+    }
+
+    pub fn has(_: *const KeyboardLayoutMap, code: []const u8) bool {
+        return indexOf(code) != null;
+    }
+
+    fn indexOf(code: []const u8) ?usize {
+        for (layout, 0..) |entry, i| {
+            if (std.mem.eql(u8, entry[0], code)) {
+                return i;
+            }
+        }
         return null;
-    }
-
-    pub fn has(_: *const KeyboardLayoutMap, _: []const u8) bool {
-        return false;
     }
 
     pub fn keys(self: *KeyboardLayoutMap, exec: *const Execution) !*KeyIterator {
@@ -605,15 +669,28 @@ pub const KeyboardLayoutMap = struct {
         return .init(.{ .map = self }, exec);
     }
 
-    pub fn forEach(_: *KeyboardLayoutMap, _: js.Function, _: ?js.Object) void {}
+    pub fn forEach(self: *KeyboardLayoutMap, cb_: js.Function, js_this_: ?js.Object) !void {
+        const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
+        for (layout) |entry| {
+            var caught: js.TryCatch.Caught = .{};
+            cb.tryCall(void, .{ entry[1], entry[0], self }, &caught) catch {};
+        }
+    }
 
     pub const Iterator = struct {
+        index: u32 = 0,
         map: *KeyboardLayoutMap,
 
         pub const Entry = struct { []const u8, []const u8 };
 
-        pub fn next(_: *Iterator, _: *const Execution) ?Iterator.Entry {
-            return null;
+        pub fn next(self: *Iterator, _: *const Execution) ?Iterator.Entry {
+            const index = self.index;
+            if (index >= KeyboardLayoutMap.layout.len) {
+                return null;
+            }
+            self.index = index + 1;
+
+            return .{ KeyboardLayoutMap.layout[index][0], KeyboardLayoutMap.layout[index][1] };
         }
     };
 
@@ -629,7 +706,11 @@ pub const KeyboardLayoutMap = struct {
             pub const name = "KeyboardLayoutMap";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
+            // Deliberately not `empty_with_no_proto`: that path stores no
+            // tagged opaque, so every method receives one shared static
+            // instance rather than the map the caller holds, and the third
+            // argument forEach hands its callback would not be the map itself
+            // the way Chrome's is.
         };
 
         pub const size = bridge.accessor(KeyboardLayoutMap.getSize, null, .{});
