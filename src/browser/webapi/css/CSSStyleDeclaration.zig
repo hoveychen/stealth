@@ -328,6 +328,20 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     return resolvedDimension(element, if (on_width) .width else .height, frame);
                 }
 
+                // `width` and `height` report a USED value, so whatever the
+                // cascade says lands on the layout grid: a declared `133.2px`
+                // computes `133.188px` in Chrome, measured. The cascade still
+                // answers rather than the box, because a detached element has
+                // no box to measure and Chrome hands back the declaration
+                // there. Asked after the two above, which decide that the
+                // declaration is not the answer at all.
+                if ((on_width or on_height) and declaredInPixels(style_manager, element, normalized, wrapped)) {
+                    switch (cascadedValue(style_manager, element, normalized, wrapped)) {
+                        .value => |value| if (usedLengthText(value, frame)) |snapped| return snapped,
+                        .unreportable, .none => {},
+                    }
+                }
+
                 switch (cascadedValue(style_manager, element, normalized, wrapped)) {
                     .value => |value| return self.resolveCurrentColour(value, frame, surface),
                     .unreportable => {},
@@ -653,7 +667,19 @@ fn computedLengthText(style_manager: *StyleManager, element: *Element, property_
             .unresolvable => return null,
             .verbatim => writer.writeAll(token) catch return null,
             .pixels => |factor| {
-                units.writeNumber(writer, parsed.value * factor) catch return null;
+                const product = parsed.value * factor;
+                // A percentage resolves against a used length, so its answer is
+                // one too and lands on the layout grid: `33.3%` of 400px is
+                // `133.188px` in Chrome and not 133.2. So does anything at all
+                // on `width` or `height`, which report the used value whatever
+                // unit the page wrote. A length in some other unit on any other
+                // property is only converted, not laid out -- `0.5em` of a
+                // 13.3px font is `6.65px` there -- so it goes through as it is.
+                const snaps = parsed.unit == .percentage or usedLengthProperty(property_name);
+                units.writeNumber(writer, if (snaps)
+                    Element.layoutUnit(product)
+                else
+                    product) catch return null;
                 writer.writeAll("px") catch return null;
                 converted = true;
             },
@@ -1244,7 +1270,7 @@ fn paddingPx(element: *Element, name: []const u8, frame: *Frame, containing: *?f
         if (std.mem.endsWith(u8, trimmed, "%")) {
             const parsed = units.parse(trimmed) catch return 0;
             const width = containingWidth(element, frame, containing, depth) orelse return 0;
-            return @max(0, width * parsed.value / 100.0);
+            return @max(0, Element.layoutUnit(width * parsed.value / 100.0));
         }
     }
     return computedPx(element, name, frame);
@@ -1301,6 +1327,88 @@ fn borderPx(element: *Element, comptime side: []const u8, frame: *Frame) f64 {
     const used = usedBorderWidth(element, width_name, .wrap(width_name), style, frame);
     const parsed = units.parse(used) catch return 0;
     return @max(0, parsed.value);
+}
+
+/// The px the cascade gives one property, as a NUMBER rather than the text a
+/// computed style writes. The layout asks through here so its numbers never
+/// make a round trip through six significant figures -- see Element.layoutUnit
+/// for what that costs.
+///
+/// One token only, which every length this is asked for is. Null when nothing
+/// declares the property, or when the value is not a length this engine
+/// resolves.
+pub fn cascadedComputedLength(element: *Element, name: []const u8, frame: *Frame) ?f64 {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const declared = cascadedLengthToken(style_manager, element, name) orelse blk: {
+        const other = chrome_logical.counterpart(name) orelse return null;
+        break :blk cascadedLengthToken(style_manager, element, other) orelse return null;
+    };
+    return declared;
+}
+
+fn cascadedLengthToken(style_manager: *StyleManager, element: *Element, name: []const u8) ?f64 {
+    const value = switch (cascadedValueRaw(style_manager, element, name)) {
+        .value => |v| v,
+        .unreportable, .none => return null,
+    };
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    const parsed = units.parse(trimmed) catch return null;
+    return switch (lengthFactor(style_manager, element, name, parsed.unit)) {
+        .verbatim => parsed.value,
+        .pixels => |factor| parsed.value * factor,
+        .unresolvable => null,
+    };
+}
+
+/// The cascade's answer before anything a computed style does to it: the
+/// specified text, with `var()` substituted and inheritance followed.
+fn cascadedValueRaw(style_manager: *StyleManager, element: *Element, name: []const u8) Declared {
+    if (declaredText(style_manager, element, name, .wrap(name))) |text| {
+        return .{ .value = text };
+    }
+    if (!chrome_inherited.inherits(name)) return .none;
+    var ancestor = element.parentElement();
+    while (ancestor) |current| : (ancestor = current.parentElement()) {
+        if (declaredText(style_manager, current, name, .wrap(name))) |text| {
+            return .{ .value = text };
+        }
+    }
+    return .none;
+}
+
+/// The properties whose computed value is the USED one, so it lands on the
+/// layout grid whatever unit the page wrote it in.
+fn usedLengthProperty(property_name: []const u8) bool {
+    return std.mem.eql(u8, property_name, "width") or
+        std.mem.eql(u8, property_name, "height") or
+        std.mem.eql(u8, property_name, "inline-size") or
+        std.mem.eql(u8, property_name, "block-size");
+}
+
+/// Whether the page wrote this property as a px length or a bare number, which
+/// is the only case a computed answer still needs putting on the grid: any
+/// other unit went through computedLengthText, which snapped it as it
+/// converted, and snapping again would work off the six figures that got
+/// written rather than the value behind them.
+fn declaredInPixels(style_manager: *StyleManager, element: *Element, name: []const u8, wrapped: String) bool {
+    const declared = declaredText(style_manager, element, name, wrapped) orelse return false;
+    const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return false;
+    return parsed.unit == .px or parsed.unit == .none;
+}
+
+/// A `width` or `height` the cascade answered, put on the layout grid and
+/// written the way every other computed length is. Null for anything that is
+/// not a plain px length -- `auto`, `min-content`, a keyword -- which goes
+/// through untouched.
+fn usedLengthText(value: []const u8, frame: *Frame) ?[]const u8 {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    const parsed = units.parse(trimmed) catch return null;
+    if (parsed.unit != .px) return null;
+
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    units.writeNumber(&buf.writer, Element.layoutUnit(parsed.value)) catch return null;
+    buf.writer.writeAll("px") catch return null;
+    return buf.written();
 }
 
 /// One computed length in px, or 0 when the page declared none and when this
@@ -1591,10 +1699,16 @@ fn boxCentre(element: *Element, frame: *Frame) []const u8 {
     const edges = boxEdges(element, frame);
     const width = element.getClientWidthWithCache(frame, &visibility_cache) + edges.border_x;
     const height = element.getClientHeightWithCache(frame, &visibility_cache) + edges.border_y;
-    return std.fmt.allocPrint(frame.local_arena, "{d}px {d}px", .{
-        width / 2,
-        height / 2,
-    }) catch "0px 0px";
+
+    // Six significant figures, like every other computed length: the centre of
+    // a 133.1875px box is `66.5938px` in Chrome and not the 66.59375 `{d}`
+    // prints.
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    units.writeNumber(&buf.writer, width / 2) catch return "0px 0px";
+    buf.writer.writeAll("px ") catch return "0px 0px";
+    units.writeNumber(&buf.writer, height / 2) catch return "0px 0px";
+    buf.writer.writeAll("px") catch return "0px 0px";
+    return buf.written();
 }
 
 pub fn getPropertyPriority(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame) []const u8 {
