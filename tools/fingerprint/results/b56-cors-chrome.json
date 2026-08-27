@@ -1,0 +1,556 @@
+{
+ "engine": "chrome",
+ "headed": true,
+ "pageOrigin": "http://localhost:60153",
+ "apiOrigin": "http://127.0.0.1:60152",
+ "cases": [
+  {
+   "name": "get-simple",
+   "expect": "no preflight",
+   "methods": [
+    "GET"
+   ],
+   "acrm": null,
+   "acrh": null,
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "post-text-plain",
+   "expect": "no preflight",
+   "methods": [
+    "POST"
+   ],
+   "acrm": null,
+   "acrh": null,
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "post-form-urlencoded",
+   "expect": "no preflight",
+   "methods": [
+    "POST"
+   ],
+   "acrm": null,
+   "acrh": null,
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "post-json",
+   "expect": "preflight",
+   "methods": [
+    "OPTIONS",
+    "POST"
+   ],
+   "acrm": "POST",
+   "acrh": "content-type",
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "post-json-charset",
+   "expect": "preflight",
+   "methods": [
+    "OPTIONS",
+    "POST"
+   ],
+   "acrm": "POST",
+   "acrh": "content-type",
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "get-custom-header",
+   "expect": "preflight",
+   "methods": [
+    "OPTIONS",
+    "GET"
+   ],
+   "acrm": "GET",
+   "acrh": "x-probe",
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "put",
+   "expect": "preflight",
+   "methods": [
+    "OPTIONS",
+    "PUT"
+   ],
+   "acrm": "PUT",
+   "acrh": null,
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "delete",
+   "expect": "preflight",
+   "methods": [
+    "OPTIONS",
+    "DELETE"
+   ],
+   "acrm": "DELETE",
+   "acrh": null,
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "patch",
+   "expect": "preflight",
+   "methods": [
+    "OPTIONS",
+    "PATCH"
+   ],
+   "acrm": "PATCH",
+   "acrh": null,
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "xhr-post-json",
+   "expect": "preflight",
+   "methods": [
+    "OPTIONS",
+    "POST"
+   ],
+   "acrm": "POST",
+   "acrh": "content-type",
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "credentials-include",
+   "expect": "preflight",
+   "methods": [
+    "OPTIONS",
+    "POST"
+   ],
+   "acrm": "POST",
+   "acrh": "content-type",
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "unlisted-post",
+   "expect": "preflight, request allowed (POST is safelisted)",
+   "methods": [
+    "OPTIONS",
+    "POST"
+   ],
+   "acrm": "POST",
+   "acrh": "content-type",
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  },
+  {
+   "name": "unlisted-put",
+   "expect": "preflight, request blocked",
+   "methods": [
+    "OPTIONS"
+   ],
+   "acrm": "PUT",
+   "acrh": null,
+   "origin": "http://localhost:60153",
+   "outcome": "threw",
+   "status": null,
+   "error": "Failed to fetch"
+  },
+  {
+   "name": "deny-header",
+   "expect": "preflight, request blocked",
+   "methods": [
+    "OPTIONS"
+   ],
+   "acrm": "GET",
+   "acrh": "x-probe",
+   "origin": "http://localhost:60153",
+   "outcome": "threw",
+   "status": null,
+   "error": "Failed to fetch"
+  },
+  {
+   "name": "deny-origin",
+   "expect": "preflight, request blocked",
+   "methods": [
+    "OPTIONS"
+   ],
+   "acrm": "POST",
+   "acrh": "content-type",
+   "origin": "http://localhost:60153",
+   "outcome": "threw",
+   "status": null,
+   "error": "Failed to fetch"
+  },
+  {
+   "name": "no-acao-simple",
+   "expect": "no preflight, read blocked",
+   "methods": [
+    "GET"
+   ],
+   "acrm": null,
+   "acrh": null,
+   "origin": "http://localhost:60153",
+   "outcome": "threw",
+   "status": null,
+   "error": "Failed to fetch"
+  },
+  {
+   "name": "no-acao-after-preflight",
+   "expect": "preflight, read blocked",
+   "methods": [
+    "OPTIONS",
+    "POST"
+   ],
+   "acrm": "POST",
+   "acrh": "content-type",
+   "origin": "http://localhost:60153",
+   "outcome": "threw",
+   "status": null,
+   "error": "Failed to fetch"
+  },
+  {
+   "name": "max-age-twice",
+   "expect": "one preflight for two requests",
+   "methods": [
+    "OPTIONS",
+    "POST",
+    "POST"
+   ],
+   "acrm": "POST",
+   "acrh": "content-type",
+   "origin": "http://localhost:60153",
+   "outcome": "ok",
+   "status": 200,
+   "error": null
+  }
+ ],
+ "requestLog": [
+  {
+   "name": "get-simple",
+   "method": "GET",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "post-text-plain",
+   "method": "POST",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "text/plain",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "post-form-urlencoded",
+   "method": "POST",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "application/x-www-form-urlencoded",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "post-json",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "POST",
+   "acrh": "content-type",
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "post-json",
+   "method": "POST",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "application/json",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "post-json-charset",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "POST",
+   "acrh": "content-type",
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "post-json-charset",
+   "method": "POST",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "application/json;charset=UTF-8",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "get-custom-header",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "GET",
+   "acrh": "x-probe",
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "get-custom-header",
+   "method": "GET",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": null,
+   "cookie": null,
+   "probe": "1"
+  },
+  {
+   "name": "put",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "PUT",
+   "acrh": null,
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "put",
+   "method": "PUT",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "text/plain;charset=UTF-8",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "delete",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "DELETE",
+   "acrh": null,
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "delete",
+   "method": "DELETE",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "patch",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "PATCH",
+   "acrh": null,
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "patch",
+   "method": "PATCH",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "text/plain;charset=UTF-8",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "xhr-post-json",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "POST",
+   "acrh": "content-type",
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "xhr-post-json",
+   "method": "POST",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "application/json",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "credentials-include",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "POST",
+   "acrh": "content-type",
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "credentials-include",
+   "method": "POST",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "application/json",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "unlisted-post",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "POST",
+   "acrh": "content-type",
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "unlisted-post",
+   "method": "POST",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "application/json",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "unlisted-put",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "PUT",
+   "acrh": null,
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "deny-header",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "GET",
+   "acrh": "x-probe",
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "deny-origin",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "POST",
+   "acrh": "content-type",
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "no-acao-simple",
+   "method": "GET",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "no-acao-after-preflight",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "POST",
+   "acrh": "content-type",
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "no-acao-after-preflight",
+   "method": "POST",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "application/json",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "max-age-twice",
+   "method": "OPTIONS",
+   "origin": "http://localhost:60153",
+   "acrm": "POST",
+   "acrh": "content-type",
+   "contentType": null,
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "max-age-twice",
+   "method": "POST",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "application/json",
+   "cookie": null,
+   "probe": null
+  },
+  {
+   "name": "max-age-twice",
+   "method": "POST",
+   "origin": "http://localhost:60153",
+   "acrm": null,
+   "acrh": null,
+   "contentType": "application/json",
+   "cookie": null,
+   "probe": null
+  }
+ ]
+}

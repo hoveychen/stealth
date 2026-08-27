@@ -1,0 +1,168 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T02:30:07.809Z",
+  "egress": {
+    "fl": "119f189",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787797807.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "PDX",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1481+32943c362",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17320/"
+  },
+  "stations": [
+    {
+      "name": "ak-kohls",
+      "vendor": "akamai",
+      "url": "https://www.kohls.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "error": "timeout: Runtime.enable",
+      "documents": [
+        {
+          "url": "https://www.kohls.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://kohls.demdex.net/dest5.html?d_nsid=0#https%3A%2F%2Fwww.kohls.com",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cm.g.doubleclick.net/partnerpixels?url=https%3A%2F%2Fwww.kohls.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ads.pubmatic.com/AdServer/js/user_sync.html?gdpr=&gdpr_consent=&us_privacy=&predirect=https%3A%2F%2Fow.pubmatic.com%2Fsetuid%3Fbidder%3Dpubmatic%26gdpr%3D%26gdpr_consent%3D%26gpp%3D%26gpp_sid%3D%26f%3Db%26uid%3D",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?origin=publishertagids&topUrl=www.kohls.com#{%22bundle%22:{%22origin%22:0},%22optout%22:{%22value%22:false,%22origin%22:0},%22tld%22:%22kohls.com%22,%22topUrl%22:%22www.kohls.com%22,%22version%22:108763,%22origin%22:%22publishertagids%22,%22requestId%22:%220.2626374450387551%22}",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.facebook.com/tr/",
+          "status": 200,
+          "mime": "text/plain"
+        },
+        {
+          "url": "https://www.facebook.com/tr/",
+          "status": 200,
+          "mime": "text/plain"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=8e9bd9e0-8284-4dbd-ab20-145759728098&u_scsid=1c0269cb-b455-43c4-9c81-5863ec3ccbeb&u_sclid=bb6a56bd-eb4a-4c20-be2b-95e74bea27f7",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=99ed79db-3aec-4b85-9a61-ed80a2993b62&u_scsid=1c0269cb-b455-43c4-9c81-5863ec3ccbeb&u_sclid=bb6a56bd-eb4a-4c20-be2b-95e74bea27f7",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://11577892.fls.doubleclick.net/activityi;dc_pre=CNzqm_Xhv5YDFTvm4wcdeUUMJw;src=11577892;type=pagev0;cat=kmnun0;rcb=15;ord=6683496522452;npa=0;auiddc=81107303.1787797813;u1=not%20set;u10=https%3A%2F%2Fwww.kohls.com%2F;u11=Kohl's%20%7C%20Shop%20Clothing%2C%20Shoes%2C%20Home%2C%20Kitchen%2C%20Bedding%2C%20Toys%20%26%20More;u13=n%2Fa;u2=not%20set;u23=New%20Customer;u24=52257399920352168034124546784620031072;u25=abc2abc4-4480-45a5-9124-aa9cba02f3bc;u5=not%20set;gdid=dYzZiYj.dNWVlNT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IFA;gtm=45c92e68p1v9135077764za204zd9135077764xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938466~115938468~118897920~118897930~119367802~119367810~120385423;epver=2;gap.gtb=2;dc_random=1787797830_W1CL61OgeQzOvkEvO5_zz-4tiCf8gm3GYA;_dc_test=1;~oref=https%3A%2F%2Fwww.kohls.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "error",
+      "first": 200,
+      "last": 200,
+      "ms": 55278
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=js $level=warn $msg=\"call caught\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787797862103 $scope=cdp $level=warn $msg=\"closing connection\" reason=\"pending terminate\""
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

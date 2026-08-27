@@ -1,0 +1,1511 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T02:02:07.720Z",
+  "egress": {
+    "fl": "467f179",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787796127.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1481+32943c362",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17320/"
+  },
+  "stations": [
+    {
+      "name": "cf-scrapingcourse",
+      "vendor": "cloudflare",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/vncua/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "nodes": 47,
+      "textLength": 270,
+      "snippet": "www.scrapingcourse.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a3177e08f9b73023",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25117
+    },
+    {
+      "name": "cf-nopecha",
+      "vendor": "cloudflare",
+      "url": "https://nopecha.com/demo/cloudflare",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://nopecha.com/demo/cloudflare",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/jpl9l/0x4AAAAAAAAjq6WYeRDKmebM/light/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://nopecha.com/demo/cloudflare",
+      "nodes": 47,
+      "textLength": 259,
+      "snippet": "nopecha.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a3177e",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a3177ea5e854349f",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25107
+    },
+    {
+      "name": "cf-zeroclover",
+      "vendor": "cloudflare",
+      "url": "https://turnstile.zeroclover.io/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://turnstile.zeroclover.io/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/x53g5/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://turnstile.zeroclover.io/",
+      "nodes": 47,
+      "textLength": 271,
+      "snippet": "turnstile.zeroclover.io Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ra",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a3177f42fb0c2518",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25133
+    },
+    {
+      "name": "cf-chatgpt",
+      "vendor": "cloudflare",
+      "url": "https://chatgpt.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://chatgpt.com/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "ChatGPT: Chat, Work, Create & Code with AI",
+      "landedOn": "https://chatgpt.com/",
+      "nodes": 524,
+      "textLength": 434,
+      "snippet": "New chat Search chats Images Plugins Deep research See plans and pricing Settings Help Get responses tailored to you Log in to get answers based on saved chats, plus create images and upload files. Lo",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25363
+    },
+    {
+      "name": "cf-claude",
+      "vendor": "cloudflare",
+      "url": "https://claude.ai/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://claude.ai/login",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Sign in - Claude",
+      "landedOn": "https://claude.ai/login",
+      "nodes": 1076,
+      "textLength": 2996,
+      "snippet": "Question what’s next Your thinking partner for big ambitions Continue with Google OR Continue with email Continue with SSO By continuing, you acknowledge Anthropic’s Privacy Policy (opens in a new tab",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25137
+    },
+    {
+      "name": "cf-indeed",
+      "vendor": "cloudflare",
+      "url": "https://www.indeed.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.indeed.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://sgtm.indeed.com/_/service_worker/68d0/sw_iframe.html?origin=https%3A%2F%2Fwww.indeed.com&1p=1",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Job Search | Indeed",
+      "landedOn": "https://www.indeed.com/",
+      "nodes": 1213,
+      "textLength": 618,
+      "snippet": "Skip to main content Home Company reviews Find salaries Sign in 🇺🇸 En Employers / Post Job Start of main content Keyword : all jobs &nbsp; Edit location input box label Search Your next job starts h",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25312
+    },
+    {
+      "name": "cf-nowsecure",
+      "vendor": "cloudflare",
+      "url": "https://nowsecure.nl/",
+      "guards": "none",
+      "settleMs": 10000,
+      "documents": [
+        {
+          "url": "https://nowsecure.nl/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4wpv8/3x00000000000000000000FF/auto/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/2g6ps/3x00000000000000000000FF/auto/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "nowsecure.nl",
+      "landedOn": "https://nowsecure.nl/",
+      "nodes": 53,
+      "textLength": 43,
+      "snippet": "NOWSECURE BY NODRIVER NOWSECURE BY NODRIVER",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 10902
+    },
+    {
+      "name": "cf-discord",
+      "vendor": "cloudflare",
+      "url": "https://discord.com/",
+      "guards": "none",
+      "settleMs": 12000,
+      "documents": [
+        {
+          "url": "https://discord.com/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Discord - Group Chat That’s All Fun & Games",
+      "landedOn": "https://discord.com/",
+      "nodes": 1531,
+      "textLength": 3325,
+      "snippet": "Skip to main content Download1 of 9 Nitro2 of 9 Discover 3 of 9 Resources Server Directory1 of 2Trending Games2 of 2 Safety 4 of 9 Resources Family Center 1 of 10Safety Library 2 of 10Safety News 3 of",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 12133
+    },
+    {
+      "name": "cf-pixiv",
+      "vendor": "cloudflare",
+      "url": "https://www.pixiv.net/",
+      "guards": "none",
+      "settleMs": 12000,
+      "documents": [
+        {
+          "url": "https://www.pixiv.net/en/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://imp.pixiv.net/premium_lp?g=anchor&i=index_footer&p=&d=pc",
+          "status": 200,
+          "mime": "text/plain"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Online community for artist [pixiv]",
+      "landedOn": "https://www.pixiv.net/en/",
+      "nodes": 311,
+      "textLength": 378,
+      "snippet": "pixiv has updated the Privacy Policy as of May 28, 2024.Revision history OK 無題 リメイク たゆめるさんの作品 VISIONS2026掲載クリエイター Special Roo Ryuさんの作品 VISIONS2026掲載クリエイター Log in with your pixiv account Create an acco",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 12408
+    },
+    {
+      "name": "dd-datadome",
+      "vendor": "datadome",
+      "url": "https://datadome.co/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://datadome.co/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAc3UiiNIPPUAAbNOzfA%3D%3D&hash=14D062F60A4BDE8CE8647DFC720349&cid=o7UeE2wTAwZy3QlPrbGckbuluqGLnTpc5kXpI8ck4q260qgxYNtukWOHIBRIazW8wYJ5O2htoBsyXuYAK5HQ3ZGz9zLyXWQhSzgGSDQLMsZVWj8zWAdTtRDfMyW~RtBa&t=fe&referer=https%3A%2F%2Fdatadome.co%2F&s=44330&e=39f861a3854f4f2f15315cdf9e886bdade1440c9c88c90b688eb669edbb8bbcefe44769c1f04d786c4a9a05f7ee24995&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "datadome.co",
+      "landedOn": "https://datadome.co/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25130
+    },
+    {
+      "name": "dd-g2",
+      "vendor": "datadome",
+      "url": "https://www.g2.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.g2.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAvNPdnceuvzsAbNOzfA%3D%3D&hash=229542D5C186C7F5A5BB092FBDD92B&cid=JU9uFJwdTfvL1PTGh60exr5ObPqi3k9u~3rCINl1AldG8jSuNJSXS9ULb4ywXZUdXltEbTD1t9ZE~7i9oVHN5UszdQ~MjekZu4dN9~6jMkQkf4nAAeP_N7NnvetVYrxc&t=fe&referer=https%3A%2F%2Fwww.g2.com%2F&s=48621&e=a1998fe28729c3a5779c6e0ad5cc92f9ff6630ec9afaa59b13ed07ca7e18c5f0df322ce9f0f477cd654ff55328500c68&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "g2.com",
+      "landedOn": "https://www.g2.com/",
+      "nodes": 11,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25114
+    },
+    {
+      "name": "dd-leboncoin",
+      "vendor": "datadome",
+      "url": "https://www.leboncoin.fr/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.leboncoin.fr/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMA_t-GfwFPo4cAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=zUOo2phln3L8SXln1BjWISPrI2J7mGjmjT3NCtvt9ejAC8yNtRwdk2L6MLnRfltGdJpeVAuA_eqmgmEWyxUJL~ZL9SyMVtTQG9KzKJwqMfj4jKuO9WCZIT5nXCqaMXWF&t=fe&referer=https%3A%2F%2Fwww.leboncoin.fr%2F&s=2089&e=449fcda4bc708fd3d030cbd096c3eb6546653c02d035c9f8fb4d64ea5c96efb3620ccf2075b7526b805e2507ed41a363&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "leboncoin.fr",
+      "landedOn": "https://www.leboncoin.fr/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25627
+    },
+    {
+      "name": "dd-hermes",
+      "vendor": "datadome",
+      "url": "https://www.hermes.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hermes.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMARW4E7iHCNXAAbNOzfA%3D%3D&hash=2211F522B61E269B869FA6EAFFB5E1&cid=YjJURXbc9LdLJGxs25qOWesAPu7cpWNLwHqepzyX2SI46LzQYApOk8gV2ROr3tafb6gmjZcYpdPiCNxCPuSjz_7udAjulVG6WEXABI11rdJ2b34~cRbWACKakNgjOfL~&t=fe&referer=https%3A%2F%2Fwww.hermes.com%2F&s=13461&e=bc6883f019f6d604b72e1997c7591d642a888aaa8197d586dad519000e5b8e82877e136577d50286fd0b06f962ea1df7&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "hermes.com",
+      "landedOn": "https://www.hermes.com/",
+      "nodes": 10,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25571
+    },
+    {
+      "name": "x-sony",
+      "vendor": "akamai",
+      "url": "https://www.sony.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.sony.com/en/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://sonygs.demdex.net/dest5.html?d_nsid=0#https%3A%2F%2Fwww.sony.com",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Home - Sony Group Portal",
+      "landedOn": "https://www.sony.com/en/",
+      "nodes": 1455,
+      "textLength": 6655,
+      "snippet": "Businesses & Products open About Sony Group open Technology open Sustainability open Design open Employees / Careers open Investor Relations open Contact Us Open search form Introducing the New \"Xperi",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25445
+    },
+    {
+      "name": "x-zillow",
+      "vendor": "perimeterx",
+      "url": "https://www.zillow.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.zillow.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.googletagmanager.com/ns.html?id=GTM-K3X2CMVS",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=efd79a2e-954c-4330-a6c2-56493f31ff29&u_scsid=6dd65779-4649-4e2b-a089-47d391d06c3f&u_sclid=a1e3fdfd-7ee6-4dee-8e4a-2fef66287e00",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ct.pinterest.com/ct.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://4704202.fls.doubleclick.net/activityi;dc_pre=COmD-d_cv5YDFUyk0QQdmYQ1Qg;src=4704202;type=web;cat=visit;rcb=8;npa=0;auiddc=310843923.1787796444;u1=undefined;u2=undefined;u3=undefined;u4=887035761.1787796442;u5=8a45eb17bc6d4d028f0feca1595e08f1;u6=undefined;u7=undefined;u8=undefined;u9=undefined;u10=undefined;u11=undefined;u12=undefined;u13=undefined;u14=undefined;u15=undefined;gdid=dZml0Zj;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;gpp=DBABzw~1YNN~BVVqAAAAAAJQ.QA;gpp_sid=usnat;_tu=KAAB;gtm=45fe68p1h1v9190373370z86577274za20gzb6577274zd6577274xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938466~115938469~118131809~118897920~118897930~119367802~119367810~120385423~120476658;epver=2;dc_random=1787796444_cagY_UcSSB_-YcY4KP1o49YW3-yAY7e1vA;_dc_test=1;~oref=https%3A%2F%2Fwww.zillow.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://4704202.fls.doubleclick.net/activityi;dc_pre=CL2q-d_cv5YDFV8NTwgdrfg4tg;src=4704202;type=unive0;cat=zillo0;rcb=8;ord=304641048352;npa=0;auiddc=310843923.1787796444;u3=undefined;u2=undefined;u1=undefined;u5=8a45eb17bc6d4d028f0feca1595e08f1;u4=887035761.1787796442;u6=undefined;u7=undefined;u8=undefined;u9=undefined;u10=undefined;u11=undefined;u12=undefined;u13=undefined;u14=undefined;u15=undefined;gdid=dZml0Zj;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;gpp=DBABzw~1YNN~BVVqAAAAAAJQ.QA;gpp_sid=usnat;_tu=KFA;gtm=45fe68p1h1v9190373370z86577274za20gzb6577274zd6577274xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938466~115938469~118131809~118897920~118897930~119367802~119367810~120385423~120476658;epver=2;dc_random=1787796444_AYN1lUBr-NXc_eqDfcb7AiK1BP9sZx1AjQ;_dc_test=1;~oref=https%3A%2F%2Fwww.zillow.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/p?rand=1787601893101&pnid=140&pcid=b5a9a46f-fb5c-4847-a81c-6074d6d41f8a",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Zillow: Real Estate, Apartments, Mortgages & Home Values",
+      "landedOn": "https://www.zillow.com/",
+      "nodes": 1902,
+      "textLength": 6351,
+      "snippet": "Skip main navigation Buy Rent Sell Get a mortgage Find an agent Manage rentals Advertise Get help Sign in Rentals. Homes. Agents. Loans. Submit Search Trending Homes in Menlo Park, CA Viewed and saved",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": true,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": true
+      },
+      "ms": 25364
+    },
+    {
+      "name": "cf-ubereats",
+      "vendor": "cloudflare",
+      "url": "https://www.ubereats.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.ubereats.com/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Uber Eats | Food & Grocery Delivery | Order Groceries and Food Online",
+      "landedOn": "https://www.ubereats.com/",
+      "nodes": 752,
+      "textLength": 1804,
+      "snippet": "Sign up Log in Create a business account Add your restaurant Sign up to deliver Get a ride There's more to love in the app. iPhone Android Skip to content Get a ride Log in Sign up Order delivery near",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25372
+    },
+    {
+      "name": "cf-doordash",
+      "vendor": "cloudflare",
+      "url": "https://www.doordash.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.doordash.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://8974041.fls.doubleclick.net/activityi;dc_pre=CICnzfjcv5YDFb2_0QQd-aIiNg;src=8974041;type=dddes0;cat=visit;rcb=2;ord=9832407306804;npa=0;auiddc=1750789689.1787796495;u27=undefined;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=KFA;gtm=45fe68p1v9190424548z871590578za20gzb71590578zd71590578xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616986~115938465~115938468~118131809~118897920~118897930~119259605~119367802~119367810~120213116~120385422;epver=2;dc_random=1787796495_E6D8_1d81knMFnn-eWG4O3GjT3zGyKJX5Q;_dc_test=1;~oref=https%3A%2F%2Fwww.doordash.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Fwww.doordash.com%2F&title=DoorDash%3A%20Food%2C%20Grocery%20and%20Retail%20-%20Fast%20Same%20Day%20Delivery&referrer=&muid=NA&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ct.pinterest.com/ct.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://m.stripe.network/inner.html#url=https%3A%2F%2Fwww.doordash.com%2F&title=DoorDash%3A%20Food%2C%20Grocery%20and%20Retail%20-%20Fast%20Same%20Day%20Delivery&referrer=&muid=NA&sid=NA&version=6&preview=false&__shared_params__[version]=v3",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://identity.doordash.com/auth?client_id=1666519390426295040&intl=en-US&is_iframe_modal=true&layout=identity_web_iframe&prompt=none&redirect_uri=https%3A%2F%2Fwww.doordash.com%2Fpost-login%2F&response_type=code&scope=%2A&state=%2F%7C%7C9eedb4e5-1fb6-411f-83a7-a9dec0b1f331",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://8974041.fls.doubleclick.net/activityi;dc_pre=CIiA4_jcv5YDFWeWdwEdmO8wgg;src=8974041;type=dd_mo00;cat=doord00;rcb=2;ord=1;num=8165124492013;npa=0;auiddc=1750789689.1787796495;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=KJA;gtm=45fe68p1v9190424548z871590578za20gzb71590578zd71590578xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616986~115938465~115938468~118131809~118897920~118897930~119259605~119367802~119367810~120213116~120385422;epver=2;dc_random=1787796496_vJjTWV4J28OhCutcyV4D-PQfdmnUPHnyKQ;_dc_test=1;~oref=https%3A%2F%2Fwww.doordash.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://9927915.fls.doubleclick.net/activityi;dc_pre=CL359Pjcv5YDFRmN0QQdP6s65w;src=9927915;type=ddcad00;cat=doord00;rcb=5;ord=1;num=8270472876752;npa=0;auiddc=1750789689.1787796495;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=KJA;gtm=45fe68p1v9190764479z871590578za20gzb71590578zd71590578xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~118131809~118897920~118897930~119259605~119367802~119367810~120385423~120763598;epver=2;dc_random=1787796496_j2FMhJQwnephAlAoJhzzDaQg3oKbH-OGMQ;_dc_test=1;~oref=https%3A%2F%2Fwww.doordash.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ct.pinterest.com/ct.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.facebook.com/tr/",
+          "status": 200,
+          "mime": "text/plain"
+        },
+        {
+          "url": "https://www.facebook.com/tr/",
+          "status": 200,
+          "mime": "text/plain"
+        },
+        {
+          "url": "https://8974041.fls.doubleclick.net/activityi;dc_pre=CJPZq_ncv5YDFekuTwgddZ0cyA;src=8974041;type=dddes0;cat=visit;rcb=6;ord=5457407055359;npa=0;auiddc=1750789689.1787796495;u27=undefined;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=2;_tu=KFA;gtm=45fe68p1v9190424548z871590578za20gzb71590578zd71590578xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938466~115938469~118131809~118897920~118897930~119367802~119367810~120213116~120385422;epver=2;dc_random=1787796497_VDXYnLVKFUAnFzOz09t1Fq85twfP0QJN_w;_dc_test=1;~oref=https%3A%2F%2Fidentity.doordash.com%2Fauth%3Fclient_id%3D1666519390426295040%26intl%3Den-US%26is_iframe_modal%3Dtrue%26layout%3Didentity_web_iframe%26prompt%3Dnone%26redirect_uri%3Dhttps%253A%252F%252Fwww.doordash.com%252Fpost-login%252F%26response_type%3Dcode%26scope%3D%252A%26state%3D%252F%257C%257C9eedb4e5-1fb6-411f-83a7-a9dec0b1f331",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "DoorDash: Food, Grocery and Retail - Fast Same Day Delivery",
+      "landedOn": "https://www.doordash.com/",
+      "nodes": 1141,
+      "textLength": 4030,
+      "snippet": "DoorDash $0 DELIVERY FEE ON FIRST ORDER Other fees apply Sign In Sign Up Sign in for saved address Use current Location Become a Dasher As a delivery driver, make money and work on your schedule. Sign",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25571
+    },
+    {
+      "name": "cf-glassdoor",
+      "vendor": "cloudflare",
+      "url": "https://www.glassdoor.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.glassdoor.com/index.htm",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Glassdoor | Job Search & Career Community",
+      "landedOn": "https://www.glassdoor.com/index.htm",
+      "nodes": 984,
+      "textLength": 5652,
+      "snippet": "Skip to content Skip to footer Community Jobs Companies Salaries For Employers Sign In You deserve a job that loves you back One login to help you get hired Streamline your research and get better job",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25804
+    },
+    {
+      "name": "dd-etsy",
+      "vendor": "datadome",
+      "url": "https://www.etsy.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.etsy.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://14895689.fls.doubleclick.net/activityi;dc_pre=CN2705Ddv5YDFRyFdwEdjnwYLQ;src=14895689;type=etsyf;cat=etsy-00;rcb=15;ord=2874389857425;npa=0;auiddc=712720563.1787796546;u3=https%3A%2F%2Fwww.etsy.com%2F;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=KFA;gtm=45fe68p1v9196083440z86935543za20gzb6935543zd6935543xea;gcs=G111;gcd=13t3t3t3t5l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~118897920~118897930~119367802~119367810~120213116~120385422~120476659;epver=2;dc_random=1787796546_qUu4eRUhv-mH9k5Zv6sIs2di7fmpckTHag;_dc_test=1;~oref=https%3A%2F%2Fwww.etsy.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://9910951.fls.doubleclick.net/activityi;dc_pre=CKTY1JDdv5YDFWI9TwgdxtM0yA;src=9910951;type=remarkt;cat=unive0;rcb=17;ord=9681579315626;npa=0;auiddc=712720563.1787796546;u2=%2F;u3=undefined;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=KFA;gtm=45fe68p1v9190758491z86935543za20gzb6935543zd6935543xea;gcs=G111;gcd=13t3t3t3t5l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~118897920~118897930~119367802~119367810~120385422~120763597;epver=2;dc_random=1787796546_D1wwB0Y0IbNH2Vye6UsA0M5Axi8VYw9d5g;_dc_test=1;~oref=https%3A%2F%2Fwww.etsy.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cei?advertiser_id=rvnx9fp&cookie_sync=1&upv=3.0.0&upid=3bige4d&ref=https%3a%2f%2fwww.etsy.com&redirect=1",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://secure-gl.imrworldwide.com/cgi-bin/m?ci=tradedesk&cg=d6852083-e802-437c-977f-79470f5de3d4",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://dmp.truoptik.com/6d78f32846d8648c/sync.gif?fck=d6852083-e802-437c-977f-79470f5de3d4",
+          "status": 204,
+          "mime": ""
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cmf/generic?ttd_pid=bidswitch",
+          "status": 200,
+          "mime": "image/gif"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Etsy - Shop for handmade, vintage, custom, and unique gifts for everyone",
+      "landedOn": "https://www.etsy.com/",
+      "nodes": 1827,
+      "textLength": 6766,
+      "snippet": "Etsy Categories Search for items or shops Skip to Content Sign in Gifts Etsy Staff Picks Home Favorites Fashion Finds Vintage Wedding Trends Gift Cards Fresh fall fashion from creative sellers Shop th",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25394
+    },
+    {
+      "name": "dd-seloger",
+      "vendor": "datadome",
+      "url": "https://www.seloger.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.seloger.com/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Petites annonces immobilières | N°1 des sites 100% immo | Portail immo",
+      "landedOn": "https://www.seloger.com/",
+      "nodes": 1477,
+      "textLength": 4143,
+      "snippet": "Navigation überspringen Acheter Louer Construire Bureaux & Commerces Emprunter Déménager Vendre Déposer une annonce Se connecter Vous êtes au bon endroit. Acheter Louer Estimer Nos services dédiés : E",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25303
+    },
+    {
+      "name": "dd-saks",
+      "vendor": "datadome",
+      "url": "https://www.saksfifthavenue.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.saksfifthavenue.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMABpEzdTwBm5UAbNOzfA%3D%3D&hash=52544002C090C19595D1C53AF37241&cid=A7O6wlFvDSTpxLYeLNrgLgFUOThcKiObrzB~Zy~6aA7fe16_rI8~CU9gvgxddl~KDxbMCQpImunPVjRCeSPU_dOeuCvuGjERypzF7JE9AgDFRjlX5A5HUSyT5W5I8zjW&t=fe&referer=https%3A%2F%2Fwww.saksfifthavenue.com%2F&s=46570&e=7a71df8caa522fdb5d3a93e0130869ee3bd737ba88290f713d1dd0971e94ba25bf8381b8bb3aeeec0bdec6a7ec09a782&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "saksfifthavenue.com",
+      "landedOn": "https://www.saksfifthavenue.com/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25125
+    },
+    {
+      "name": "dd-allopneus",
+      "vendor": "datadome",
+      "url": "https://www.allopneus.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.allopneus.com/",
+          "status": 403,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-blocked",
+      "first": 403,
+      "last": 403,
+      "jsDetect": false,
+      "title": "Attention Required! | Cloudflare",
+      "landedOn": "https://www.allopneus.com/",
+      "nodes": 45,
+      "textLength": 691,
+      "snippet": "Sorry, you have been blocked You are unable to access allopneus.com Why have I been blocked? This website is using a security service to protect itself from online attacks. The action you just perform",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": true,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": true,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25093
+    },
+    {
+      "name": "ak-homedepot",
+      "vendor": "akamai",
+      "url": "https://www.homedepot.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.homedepot.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3518820.fls.doubleclick.net/activityi;dc_pre=CJT5rcLdv5YDFRv7KAUdOwYAjg;src=3518820;type=thd;cat=homed00b;rcb=2;ord=6995421866508;npa=0;auiddc=1385903011.1787796650;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IFA;gtm=45fe68q0h2v9190728172za200xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938465~115938468~117776796~118131810~118897920~118897930~119367802~119367810~120385422~120476658;epver=2;match_id=0ed72de4-80c3-40f4-a875-da4957c473b4;dc_random=1787796650_N3XymSASvdUAMFAvjzeBZaUWhpZaV5jPig;_dc_test=1;~oref=https%3A%2F%2Fwww.homedepot.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "The Home Depot",
+      "landedOn": "https://www.homedepot.com/",
+      "nodes": 1539,
+      "textLength": 2632,
+      "snippet": "UP TO $1000 OFF Select Appliances - Shop Now Home Depot Credit Cards East Palo Alto 10PM 94303 Shop All Services DIY Log In Cart Today's Big Savings All in One Place Today Only! Fast Free Delivery Sho",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": true,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25569
+    },
+    {
+      "name": "ak-macys",
+      "vendor": "akamai",
+      "url": "https://www.macys.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=243d8345-f682-4dc3-8ef8-f38bef12bd39&u_scsid=6c90e6bb-f05f-4721-b50c-aac2712f6ca6&u_sclid=9044cc15-241f-445e-bca0-1de709693608",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=1746695c-6813-4174-87a6-d774871422bd&u_scsid=6c90e6bb-f05f-4721-b50c-aac2712f6ca6&u_sclid=9044cc15-241f-445e-bca0-1de709693608",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cdn.pbbl.co/i/pp.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://servedby.flashtalking.com/container/12518;131342;14478;iframe/?ns=https%3A%2F%2Fwww.macys.com%2F&ft_referrer=https%3A%2F%2Fwww.macys.com%2F&cachebuster=400407.0592012057",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?topUrl=www.macys.com&origin=onetag#{%22bundle%22:{%22identifierExtractor%22:{%22origin%22:0},%22value%22:null},%22cw%22:true,%22optout%22:{%22identifierExtractor%22:{%22origin%22:0},%22value%22:null},%22origin%22:%22onetag%22,%22tld%22:%22macys.com%22,%22topUrl%22:%22www.macys.com%22,%22version%22:%225_48_0%22,%22ifa%22:{%22identifierExtractor%22:{%22origin%22:0},%22value%22:null},%22lsw%22:true,%22pm%22:0,%22requestId%22:%22313e09ea-65f0-41e9-898b-512d033788e0%22}",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/p?rand=1787602270905&pnid=140&pcid=b5a9a46f-fb5c-4847-a81c-6074d6d41f8a",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/p?rand=1787601671758&pnid=140&pcid=b5a9a46f-fb5c-4847-a81c-6074d6d41f8a",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CNyLt9Ddv5YDFXPmKAUd3UgRFA;src=3856256;type=global;cat=landing;rcb=2;ord=1787796674318;npa=0;auiddc=994394666.1787796679;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68p1h1v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938466~115938469~118897920~118897930~119367802~119367810~120385423~120476659;epver=2;dc_random=1787796679_a8eX37v6YZ1oJLLSebMG25FEu7uYzRuTrA;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CNyHt9Ddv5YDFXPmKAUd3UgRFA;src=3856256;type=global;cat=landing;rcb=2;npa=0;auiddc=994394666.1787796679;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;user_data_mode=c;_tu=IAAB;gtm=45fe68p1h1v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938466~115938469~118897920~118897930~119367802~119367810~120385423~120476659;epver=2;em=tv.1~pc0.94304~co0.US;dc_random=1787796679_wUQcH2fO0_o1eLneveTId5b1-X8y_4VRAw;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://10289658.fls.doubleclick.net/activityi;dc_pre=CP2N7NDdv5YDFYYEigMdwe4HmA;src=10289658;type=globmmn;cat=mmn_g0;rcb=14;ord=1787796674318;npa=0;auiddc=994394666.1787796679;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68p1h1v9190905602za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938466~115938468~118897920~118897930~119367802~119367810~120213116~120385422~120476658;epver=2;dc_random=1787796679_WMDOLCgRVttvRq3BsVETRR439LckYgVzlw;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Macy's - Shop Fashion Clothing & Accessories - Official Site - Macys.com",
+      "landedOn": "https://www.macys.com/",
+      "nodes": 10257,
+      "textLength": 4067,
+      "snippet": "Skip to main content TODAY'S DEALS Up to 30% off buy more, save more Up to 50% off activewear Up to 60% off furniture & more 20-70% off women's shoes See All Ask Macy's Sign In See more of what you lo",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25436
+    },
+    {
+      "name": "ak-kohls",
+      "vendor": "akamai",
+      "url": "https://www.kohls.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "error": "timeout: Runtime.enable",
+      "documents": [
+        {
+          "url": "https://www.kohls.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://kohls.demdex.net/dest5.html?d_nsid=0#https%3A%2F%2Fwww.kohls.com",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cm.g.doubleclick.net/partnerpixels?url=https%3A%2F%2Fwww.kohls.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ads.pubmatic.com/AdServer/js/user_sync.html?gdpr=&gdpr_consent=&us_privacy=&predirect=https%3A%2F%2Fow.pubmatic.com%2Fsetuid%3Fbidder%3Dpubmatic%26gdpr%3D%26gdpr_consent%3D%26gpp%3D%26gpp_sid%3D%26f%3Db%26uid%3D",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?origin=publishertagids&topUrl=www.kohls.com#{%22bundle%22:{%22origin%22:0},%22optout%22:{%22value%22:false,%22origin%22:0},%22tld%22:%22kohls.com%22,%22topUrl%22:%22www.kohls.com%22,%22version%22:108763,%22origin%22:%22publishertagids%22,%22requestId%22:%220.3579500389483249%22}",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=8e9bd9e0-8284-4dbd-ab20-145759728098&u_scsid=682d8539-3d9b-43ac-8afa-f8198ba200ed&u_sclid=12121e36-9485-4dea-88d9-d1e18ab617cd",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=99ed79db-3aec-4b85-9a61-ed80a2993b62&u_scsid=682d8539-3d9b-43ac-8afa-f8198ba200ed&u_sclid=12121e36-9485-4dea-88d9-d1e18ab617cd",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://11577892.fls.doubleclick.net/activityi;dc_pre=COH-ht7dv5YDFSArigMdAQYxPA;src=11577892;type=pagev0;cat=kmnun0;rcb=8;ord=6880517440012;npa=0;auiddc=2138850233.1787796708;u1=not%20set;u10=https%3A%2F%2Fwww.kohls.com%2F;u11=Kohl's%20%7C%20Shop%20Clothing%2C%20Shoes%2C%20Home%2C%20Kitchen%2C%20Bedding%2C%20Toys%20%26%20More;u13=n%2Fa;u2=not%20set;u23=New%20Customer;u24=02544084637575936422967775736739789425;u25=25b163df-782c-42f6-8475-13f48dabb541;u5=not%20set;gdid=dYzZiYj.dNWVlNT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IFA;gtm=45c92e68p1v9135077764za204zd9135077764xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~117776796~118131810~118897920~118897930~119367802~119367810~120385423;epver=2;gap.gtb=2;dc_random=1787796708_y6cwLopcsP5LqBFRkVph46DFZjGMPFZ6lQ;_dc_test=1;~oref=https%3A%2F%2Fwww.kohls.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://servedby.flashtalking.com/container/1638;12462;1480;iframe/?spotName=Homepage&U3=02544084637575936422967775736739789425&U7=25b163df-782c-42f6-8475-13f48dabb541&U10=94301&cachebuster=841098.9180948525",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "error",
+      "first": 200,
+      "last": 200,
+      "ms": 55943
+    },
+    {
+      "name": "ak-expedia",
+      "vendor": "akamai",
+      "url": "https://www.expedia.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "error": "timeout: Page.navigate",
+      "documents": [],
+      "verdict": "error",
+      "first": null,
+      "last": null,
+      "ms": 30002
+    },
+    {
+      "name": "px-wayfair",
+      "vendor": "perimeterx",
+      "url": "https://www.wayfair.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "error": "timeout: Page.navigate",
+      "documents": [],
+      "verdict": "error",
+      "first": null,
+      "last": null,
+      "ms": 30003
+    },
+    {
+      "name": "ks-canadagoose",
+      "vendor": "kasada",
+      "url": "https://www.canadagoose.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "error": "timeout: Page.navigate",
+      "documents": [],
+      "verdict": "error",
+      "first": null,
+      "last": null,
+      "ms": 30001
+    },
+    {
+      "name": "x-hyatt",
+      "vendor": "unattributed",
+      "url": "https://www.hyatt.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "error": "timeout: Page.navigate",
+      "documents": [],
+      "verdict": "error",
+      "first": null,
+      "last": null,
+      "ms": 30003
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787796674944 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787796674953 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787796677081 $scope=js $level=warn $msg=\"console.warn\" param.0=[TSV scrub] Removed unsafe characters from 1 field(s): param.1=[object Object]",
+    "$time=1787796678077 $scope=http $level=warn $msg=\"script fetch error\" err=CouldntResolveHost req=https://d1n00d49gkbray.cloudfront.net/js/macys.js extra=frame status=0",
+    "$time=1787796678409 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught Error: MAI SDK has not been configured. Call conf() first.\" filename= line_number=0 column_number=0",
+    "$time=1787796678659 $scope=js $level=warn $msg=\"console.warn\" param.0=[TSV scrub] Removed unsafe characters from 1 field(s): param.1=[object Object]",
+    "$time=1787796678704 $scope=frame $level=warn $msg=\"cookie parse failed\" raw= err=Empty",
+    "$time=1787796682836 $scope=js $level=warn $msg=\"console.warn\" param.0=KAMPYLE_UTILS will be deprecated! Please, use in future KAMPYLE_ONSITE_SDK instead!",
+    "$time=1787796686158 $scope=app $level=error $msg=\"dispatch error\" err=Invalid event=http_response_header_done source=notification listener=cdp.CDP.BrowserContext",
+    "$time=1787796686204 $scope=http $level=error $msg=\"process_messages\" err=TooManyRedirects req=GET https://ap.lijit.com/pixel?redir=https%3A%2F%2Fpartner.mediawallahscript.com%2F%3Faccount_id%3D1009%26partner_id%3Dc182f930%26uid%3D%24UID%26custom%3D%26tag_format%3Dimg%26tag_action%3Dsync",
+    "$time=1787796688676 $scope=event $level=warn $msg=\"inline handler\" err=JsException caught.exception=\"undefined is not iterable (cannot read property Symbol(Symbol.iterator))\" caught.stack=\"TypeError: undefined is not iterable (cannot read property Symbol(Symbol.iterator))\\n    at N (https://s.pinimg.com/ct/lib/main.e47a302d.js:1:71750)\\n    at r.onload (https://s.pinimg.com/ct/lib/main.e47a302d.js:1:80528)\" caught.line=1 caught.caught=true",
+    "$time=1787796697292 $scope=js $level=warn $msg=\"console.warn\" param.0=Geolocation disabled via env flag not set - skipping store selection",
+    "$time=1787796698508 $scope=http $level=warn $msg=\"script fetch error\" err=CouldntResolveHost req=https://6249496.collect.igodigital.com/collect.js extra=frame status=0",
+    "$time=1787796698509 $scope=js $level=warn $msg=\"eval script\" url=https://www.kohls.com/ caught.exception=\"_etmc is not defined\" caught.stack=\"ReferenceError: _etmc is not defined\\n    at https://www.kohls.com/:1:1\\n    at https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:279\\n    at qf.Z (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:228:273)\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:267)\\n    at t.HTMLElement.<computed> [as replaceChild] (https://www.kohls.com/:2:32920)\\n    at e._insertCursor (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5270)\\n    at e._writeScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5923)\\n    at e._handleScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4482)\\n    at e._writeImpl (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:3094)\\n    at e.write (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:2657)\\n    at e._onScriptDone (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5505)\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4516\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5903\\n    at r (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:6341)\\n    at HTMLScriptElement.onerror (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:6792)\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:25:458)\" caught.line=1 caught.caught=true",
+    "$time=1787796698510 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught ReferenceError: _etmc is not defined\" filename= line_number=0 column_number=0",
+    "$time=1787796698514 $scope=js $level=warn $msg=\"console.error\" param.0=Error: Failed to create session param.1=something went wrong creating session",
+    "$time=1787796698514 $scope=js $level=warn $msg=\"console.error\" param.0=Error fetching user info: param.1=Error: Failed to create session",
+    "$time=1787796698848 $scope=js $level=warn $msg=\"console.warn\" param.0=Error: SBC list container not found.",
+    "$time=1787796703336 $scope=js $level=warn $msg=\"console.warn\" param.0=[Sales Agent] Fast loading is enabled",
+    "$time=1787796704936 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] PubAdsService.setTargeting is deprecated, use googletag.setConfig({targeting: ...}) instead.",
+    "https://goo.gle/gpt-message#170",
+    "$time=1787796704939 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] Slot.getTargetingKeys is deprecated, use Slot.getConfig('targeting') instead.",
+    "https://goo.gle/gpt-message#201",
+    "$time=1787796705075 $scope=js $level=warn $msg=\"console.warn\" param.0=Play/pause section not found: .pz-btf-kids",
+    "$time=1787796706281 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787796707664 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] Using deprecated googletag.encryptedSignalProviders. Please use googletag.secureSignalProviders instead.",
+    "https://goo.gle/gpt-message#155",
+    "$time=1787796707850 $scope=js $level=warn $msg=\"console.warn\" param.0=Google Deploy of the SharedId library has been deprecated. Please select another option in the GAM UI. If you use Prebid, we suggest the Prebid.js UserId option. If you do not, you may configure GAM to allow Google to share a first party user identifier with OB and AB participants, which is either the publisherProvidedId or the __gads value when that is missing.",
+    "$time=1787796707928 $scope=js $level=warn $msg=\"eval script\" url=https://ads.pubmatic.com/AdServer/js/user_sync.html?gdpr=&gdpr_consent=&us_privacy=&predirect=https%3A%2F%2Fow.pubmatic.com%2Fsetuid%3Fbidder%3Dpubmatic%26gdpr%3D%26gdpr_consent%3D%26gpp%3D%26gpp_sid%3D%26f%3Db%26uid%3D caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at get (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:28:424)\" caught.line=28 caught.caught=true",
+    "$time=1787796707928 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787796718080 $scope=js $level=warn $msg=\"console.warn\" param.0=[TikTok Pixel] - Invalid email information",
+    "Issue: The emails shared with your events were invalid.",
+    "Suggestion: Go to your source code to double check shared emails. Leave your string empty when customer information isn't available. Avoid spaces, \"undefined\", or other hardcoded values. See https://ads.tiktok.com/marketing_api/docs?id=1739585700402178 for more information.",
+    "$time=1787796718084 $scope=js $level=warn $msg=\"console.warn\" param.0=[TikTok Pixel] - Invalid email information",
+    "Issue: The emails shared with your events were invalid.",
+    "Suggestion: Go to your source code to double check shared emails. Leave your string empty when customer information isn't available. Avoid spaces, \"undefined\", or other hardcoded values. See https://ads.tiktok.com/marketing_api/docs?id=1739585700402178 for more information.",
+    "$time=1787796718085 $scope=js $level=warn $msg=\"console.warn\" param.0=[TikTok Pixel] - Invalid email information",
+    "Issue: The emails shared with your events were invalid.",
+    "Suggestion: Go to your source code to double check shared emails. Leave your string empty when customer information isn't available. Avoid spaces, \"undefined\", or other hardcoded values. See https://ads.tiktok.com/marketing_api/docs?id=1739585700402178 for more information.",
+    "$time=1787796718089 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=GET https://lbs.eu-1-id5-sync.com/lbs/v1",
+    "$time=1787796718105 $scope=js $level=warn $msg=\"eval script\" url=https://sc-static.net/scevent.min.js caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:33:84)\\n    at K (https://sc-static.net/scevent.min.js:2:4411)\\n    at tt (https://sc-static.net/scevent.min.js:2:4929)\" caught.line=33 caught.caught=true",
+    "$time=1787796718105 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787796718113 $scope=js $level=warn $msg=\"eval script\" url=https://sc-static.net/scevent.min.js caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:33:84)\\n    at K (https://sc-static.net/scevent.min.js:2:4411)\\n    at tt (https://sc-static.net/scevent.min.js:2:4929)\" caught.line=33 caught.caught=true",
+    "$time=1787796718113 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787796718219 $scope=js $level=warn $msg=\"eval script\" url=https://www.kohls.com/ caught.exception=\"_etmc is not defined\" caught.stack=\"ReferenceError: _etmc is not defined\\n    at https://www.kohls.com/:2:3\\n    at https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:279\\n    at qf.Z (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:228:273)\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:267)\\n    at t.HTMLElement.<computed> [as replaceChild] (https://www.kohls.com/:2:32920)\\n    at e._insertCursor (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5270)\\n    at e._writeScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5923)\\n    at e._handleScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4482)\\n    at e._writeImpl (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:3094)\\n    at e.write (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:2657)\\n    at s (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:325)\\n    at a (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:32423)\\n    at c (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:701)\\n    at i (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:23754)\\n    at s (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:24095)\\n    at g (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:24153)\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:24440\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=2 caught.caught=true",
+    "$time=1787796718220 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught ReferenceError: _etmc is not defined\" filename= line_number=0 column_number=0",
+    "$time=1787796749962 $scope=app $level=error $msg=\"watchdog stall\" stalled_ms=30286",
+    "$time=1787796749967 $scope=frame $level=error $msg=\"IntsctObserver.deliverEntries\" err=ExecutionTerminated caught.exception=??? caught.stack=na caught.line=null caught.caught=false",
+    "$time=1787796749967 $scope=frame $level=error $msg=\"frame.deliverIntersections\" err=ExecutionTerminated type=root url=https://www.kohls.com/",
+    "$time=1787796749968 $scope=http $level=error $msg=\"delivery callback\" err=ExecutionTerminated req=POST https://tr.snapchat.com/p",
+    "$time=1787796749968 $scope=http $level=error $msg=\"handle error error\" original=ExecutionTerminated err=ExecutionTerminated",
+    "$time=1787796749969 $scope=http $level=error $msg=\"handle error error\" original=OperationTimedout err=ExecutionTerminated",
+    "$time=1787796749969 $scope=frame $level=error $msg=\"navigate failed\" err=OperationTimedout type=frame url=https://8632166.fls.doubleclick.net/activityi;src=8632166;type=landi0;cat=unive0;rcb=3;ord=9347557519110;npa=0;auiddc=2138850233.1787796708;u1=not%20set;u10=https%3A%2F%2Fwww.kohls.com%2F;u11=Kohl's%20%7C%20Shop%20Clothing%2C%20Shoes%2C%20Home%2C%20Kitchen%2C%20Bedding%2C%20Toys%20%26%20More;u13=n%2Fa;u2=not%20set;u23=New%20Customer;u24=02544084637575936422967775736739789425;u25=25b163df-782c-42f6-8475-13f48dabb541;u5=not%20set;gdid=dYzZiYj.dNWVlNT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IFA;gtm=45c92e68p1v9135074177za204zd9135074177xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~117776796~118131810~118897920~118897930~119367802~119367810~120385423;epver=2;gap.gtb=2;dc_random=1787796718_Dr_2itP1Sw4d5WvD1u751Wrt2NZVBMWM6A;_dc_test=1;~oref=https%3A%2F%2Fwww.kohls.com%2F?",
+    "$time=1787796749969 $scope=frame $level=error $msg=\"document is loaded2\" err=ExecutionTerminated type=frame url=https://8632166.fls.doubleclick.net/activityi;src=8632166;type=landi0;cat=unive0;rcb=3;ord=9347557519110;npa=0;auiddc=2138850233.1787796708;u1=not%20set;u10=https%3A%2F%2Fwww.kohls.com%2F;u11=Kohl's%20%7C%20Shop%20Clothing%2C%20Shoes%2C%20Home%2C%20Kitchen%2C%20Bedding%2C%20Toys%20%26%20More;u13=n%2Fa;u2=not%20set;u23=New%20Customer;u24=02544084637575936422967775736739789425;u25=25b163df-782c-42f6-8475-13f48dabb541;u5=not%20set;gdid=dYzZiYj.dNWVlNT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IFA;gtm=45c92e68p1v9135074177za204zd9135074177xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~117776796~118131810~118897920~118897930~119367802~119367810~120385423;epver=2;gap.gtb=2;dc_random=1787796718_Dr_2itP1Sw4d5WvD1u751Wrt2NZVBMWM6A;_dc_test=1;~oref=https%3A%2F%2Fwww.kohls.com%2F?",
+    "$time=1787796749969 $scope=js $level=warn $msg=\"iframe onload\" err=ExecutionTerminated url=https://8632166.fls.doubleclick.net/activityi;src=8632166;type=landi0;cat=unive0;rcb=3;ord=9347557519110;npa=0;auiddc=2138850233.1787796708;u1=not%20set;u10=https%3A%2F%2Fwww.kohls.com%2F;u11=Kohl's%20%7C%20Shop%20Clothing%2C%20Shoes%2C%20Home%2C%20Kitchen%2C%20Bedding%2C%20Toys%20%26%20More;u13=n%2Fa;u2=not%20set;u23=New%20Customer;u24=02544084637575936422967775736739789425;u25=25b163df-782c-42f6-8475-13f48dabb541;u5=not%20set;gdid=dYzZiYj.dNWVlNT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IFA;gtm=45c92e68p1v9135074177za204zd9135074177xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~117776796~118131810~118897920~118897930~119367802~119367810~120385423;epver=2;gap.gtb=2;dc_random=1787796718_Dr_2itP1Sw4d5WvD1u751Wrt2NZVBMWM6A;_dc_test=1;~oref=https%3A%2F%2Fwww.kohls.com%2F?",
+    "$time=1787796749969 $scope=frame $level=error $msg=\"navigate failed\" err=OperationTimedout type=frame url=https://8632166.fls.doubleclick.net/activityi;src=8632166;type=landi0;cat=base_0;rcb=3;ord=1;npa=0;auiddc=2138850233.1787796708;u1=not%20set;u10=not%20set;u11=Kohl's%20%7C%20Shop%20Clothing%2C%20Shoes%2C%20Home%2C%20Kitchen%2C%20Bedding%2C%20Toys%20%26%20More;u13=n%2Fa;u2=not%20set;u23=New%20Customer;u24=02544084637575936422967775736739789425;u25=25b163df-782c-42f6-8475-13f48dabb541;gdid=dYzZiYj.dNWVlNT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45c92e68p1v9135074177za204zd9135074177xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~117776796~118131810~118897920~118897930~119367802~119367810~120385423;epver=2;gap.gtb=2;dc_random=1787796718_bLrVcAo5rRE2h8vn5WoDESMBfF8cBailTA;_dc_test=1;~oref=https%3A%2F%2Fwww.kohls.com%2F?",
+    "$time=1787796749969 $scope=frame $level=error $msg=\"document is loaded2\" err=ExecutionTerminated type=frame url=https://8632166.fls.doubleclick.net/activityi;src=8632166;type=landi0;cat=base_0;rcb=3;ord=1;npa=0;auiddc=2138850233.1787796708;u1=not%20set;u10=not%20set;u11=Kohl's%20%7C%20Shop%20Clothing%2C%20Shoes%2C%20Home%2C%20Kitchen%2C%20Bedding%2C%20Toys%20%26%20More;u13=n%2Fa;u2=not%20set;u23=New%20Customer;u24=02544084637575936422967775736739789425;u25=25b163df-782c-42f6-8475-13f48dabb541;gdid=dYzZiYj.dNWVlNT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45c92e68p1v9135074177za204zd9135074177xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~117776796~118131810~118897920~118897930~119367802~119367810~120385423;epver=2;gap.gtb=2;dc_random=1787796718_bLrVcAo5rRE2h8vn5WoDESMBfF8cBailTA;_dc_test=1;~oref=https%3A%2F%2Fwww.kohls.com%2F?",
+    "$time=1787796749969 $scope=js $level=warn $msg=\"iframe onload\" err=ExecutionTerminated url=https://8632166.fls.doubleclick.net/activityi;src=8632166;type=landi0;cat=base_0;rcb=3;ord=1;npa=0;auiddc=2138850233.1787796708;u1=not%20set;u10=not%20set;u11=Kohl's%20%7C%20Shop%20Clothing%2C%20Shoes%2C%20Home%2C%20Kitchen%2C%20Bedding%2C%20Toys%20%26%20More;u13=n%2Fa;u2=not%20set;u23=New%20Customer;u24=02544084637575936422967775736739789425;u25=25b163df-782c-42f6-8475-13f48dabb541;gdid=dYzZiYj.dNWVlNT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45c92e68p1v9135074177za204zd9135074177xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~117776796~118131810~118897920~118897930~119367802~119367810~120385423;epver=2;gap.gtb=2;dc_random=1787796718_bLrVcAo5rRE2h8vn5WoDESMBfF8cBailTA;_dc_test=1;~oref=https%3A%2F%2Fwww.kohls.com%2F?",
+    "$time=1787796749969 $scope=http $level=error $msg=\"handle error error\" original=OperationTimedout err=ExecutionTerminated",
+    "$time=1787796749969 $scope=cdp $level=warn $msg=\"closing connection\" reason=\"pending terminate\""
+  ],
+  "summary": {
+    "stations": 29,
+    "pass": 15
+  }
+}

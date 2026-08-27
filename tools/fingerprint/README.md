@@ -17047,6 +17047,138 @@ in that second column.
 
 Files: `b56-creep-{chrome,lp}-{cold,warm}*.json`.
 
+### Cross-origin: no preflight, and no check on the answer either
+
+`cors-preflight-nonsimple` P1. B53 found the headline case on x-hyatt — the same
+`POST application/json` to a third-party origin draws an `OPTIONS` from Chrome
+and none from this engine — and the plan asked for the whole shape of it,
+measured on loopback rather than on a station. `cors-preflight-echo.mjs` serves a
+page on `http://localhost:<a>` and an API on `http://127.0.0.1:<b>` (different
+port, therefore a different origin, and both trustworthy), runs eighteen
+cross-origin requests, and reports both halves of each: the methods the API
+origin actually saw, and what the page's promise did.
+
+| case | Chrome 151 (headed) | this engine |
+|---|---|---|
+| `GET`, no author headers | `GET` | `GET` |
+| `POST text/plain` | `POST` | `POST` |
+| `POST application/x-www-form-urlencoded` | `POST` | `POST` |
+| `POST application/json` | **`OPTIONS` → `POST`** | `POST` |
+| `POST application/json;charset=UTF-8` | **`OPTIONS` → `POST`** | `POST` |
+| `GET` with `X-Probe: 1` | **`OPTIONS` → `GET`** | `GET` |
+| `PUT` / `DELETE` / `PATCH` | **`OPTIONS` → the method** | the method alone |
+| XHR `POST application/json` | **`OPTIONS` → `POST`** | `POST` |
+| `credentials: 'include'` + json | **`OPTIONS` → `POST`** | `POST` |
+
+Both engines send `Origin` on every one of them, so that half is already right.
+
+The preflights Chrome sends carry `Access-Control-Request-Method` and, where an
+author header is involved, `Access-Control-Request-Headers: content-type` or
+`x-probe` — the same pair B53 read off x-hyatt.
+
+Chrome also *acts* on the answer, and this is the half the plan's title does not
+say out loud:
+
+| case | Chrome | this engine |
+|---|---|---|
+| preflight allows `GET` only, request is `POST` | `OPTIONS` → `POST`, resolves | same |
+| preflight allows `GET` only, request is `PUT` | `OPTIONS`, then **rejects** | `PUT` goes out, resolves |
+| preflight omits `Access-Control-Allow-Headers` | `OPTIONS`, then **rejects** | `GET` goes out, resolves |
+| preflight names another origin | `OPTIONS`, then **rejects** | `POST` goes out, resolves |
+| simple `GET`, response has no `Access-Control-Allow-Origin` | **rejects** | resolves, body readable |
+| preflight fine, actual response has no ACAO | `OPTIONS` → `POST`, **rejects** | resolves, body readable |
+| same request twice, `Access-Control-Max-Age: 600` | `OPTIONS` → `POST` → `POST` | `POST` → `POST` |
+
+The first row is not a bug in either engine: `POST` is a CORS-safelisted method,
+so leaving it out of `Access-Control-Allow-Methods` does not block it. `PUT` is
+the row that separates them.
+
+So there are two divergences here, not one. The missing `OPTIONS` is the visible
+one. The other is that a page in this engine can read *any* cross-origin
+response — the check that every real browser applies is not applied at all, which
+one expression distinguishes from every browser a guard has ever met.
+
+That is wider than this plan's P2, which is scoped to the preflight and its
+answer, and it is deliberately left to its own decision rather than folded in:
+this engine exists to fetch pages, and refusing cross-origin reads is a change
+with users on the other side of it.
+
+Where an implementation would hook, found while measuring: `Transfer.HeaderSource`
+in `network/HttpClient.zig` already separates `.author` (script-set) headers from
+the ones the engine adds, which is exactly the set that decides
+`Access-Control-Request-Headers`; and `EventSource.corsAllowed` in
+`browser/webapi/net/EventSource.zig` is already a working
+`Access-Control-Allow-Origin` / `-Allow-Credentials` check, written for the
+EventSource WPTs, with a comment saying the general stack does not model CORS.
+`Fetch.zig:215` marks the same gap in one line: `assume CORS passed`.
+
+Readings: `b56-cors-chrome.json`, `b56-cors-lp-baseline.json`; `--diff` prints
+the per-case comparison.
+
+### The preflight, sent — and what the OPTIONS itself has to look like
+
+`cors-preflight-nonsimple` P2. The gap above is closed: `network/PreflightGate.zig`
+sits at the end of the request pipeline, one step behind the robots gate and
+shaped like it — a cross-origin `fetch()`/XHR outside the CORS safelist parks,
+an internal `OPTIONS` goes out, and the parked transfer either resumes or fails
+with the `TypeError: Failed to fetch` that Chrome rejects with. Concurrent
+requests behind the same question share one preflight through `SingleFlight`,
+and a successful answer is cached for its `Access-Control-Max-Age` (capped at
+600s, as Chrome caps it).
+
+Re-measured with the same tool, two cases added: 18 of 20 now agree with Chrome
+151. The two that do not are the *other* divergence above — `no-acao-simple` and
+`no-acao-after-preflight`, where the preflight half is byte-identical and only
+the unapplied check on the actual response separates them.
+
+Sending an `OPTIONS` is not enough on its own: a preflight of the wrong shape is
+a fingerprint as surely as no preflight at all. Chrome's, read off the wire:
+
+```
+Host | Connection | Accept | Access-Control-Request-Method |
+Access-Control-Request-Headers | Origin | User-Agent | Sec-Fetch-Mode |
+Sec-Fetch-Site | Sec-Fetch-Dest | Referer | Accept-Encoding | Accept-Language
+```
+
+Three things in there are not carried over from any other request shape:
+
+- **No client hints at all.** The `POST` behind the preflight carries
+  `sec-ch-ua`, `sec-ch-ua-mobile` and `sec-ch-ua-platform`; the `OPTIONS` carries
+  none of the three, and none of the negotiated high-entropy ones either.
+- **`Sec-Fetch-Mode` before `Sec-Fetch-Site`.** Every other shape in
+  `emitHeaders` writes Site first. The preflight is the one that inverts them.
+- **Never credentialed.** `credentials: 'include'` still sends the `OPTIONS`
+  without a `Cookie`; only the answer is read more strictly (no `*` wildcard).
+
+`Access-Control-Request-Headers` is lowercased, sorted and joined with a bare
+comma — a page setting `X-Zeta` then `X-Alpha` announces `x-alpha,x-zeta` — and
+a safelisted `Content-Type` beside an unsafe header does *not* join the list.
+`Access-Control-Request-Headers` is omitted entirely when the preflight is
+caused by the method alone.
+
+15 of our 16 `OPTIONS` now match Chrome's field order byte for byte. The
+sixteenth is XHR's, and it differs for a reason that has nothing to do with
+preflight: an uncredentialed cross-origin XHR in this engine sends no `Referer`
+at all (`XMLHttpRequest.zig:308` only calls `headersForRequest` when cookies are
+in play), so the preflight faithfully copies a header that is not there.
+
+Two more pre-existing gaps the wire dump surfaced, both on the *actual* request
+and both outside this plan:
+
+- **On HTTP/1.1**, a script-set `Content-Type` reaches the wire lowercased where
+  Chrome sends `Content-Type`; same for `X-Probe` vs `x-probe`. Only on h1: HPACK
+  requires lowercase field names, so over h2 curl lowercases the whole set and
+  the casing is not ours to pick either way (the same caveat `baselineHeaders`
+  already carries for the client hints). Both arms here were measured over h1 —
+  the harness's API is a bare `node:http` server — so the difference is real, but
+  it is an h1-only one.
+- A custom author header lands last for us; Chrome slots it into the client-hint
+  block, right after `User-Agent`. Field *order* survives h2, so this one is not
+  protocol-limited the way the casing is.
+
+Readings: `b57-cors-chrome.json`, `b57-cors-lp.json`; `--diff` prints the
+per-case comparison, and each request in `requestLog` now carries the full
+`rawHeaders` it arrived with.
 ## Chrome lays out on a 1/64px grid (B79, 2026-08-26)
 
 `33.3%` of 400px is 133.2 in arithmetic and **`133.188px`** in Chrome — 8524/64.
@@ -17115,3 +17247,42 @@ On a 40-row page of fractional percentages, the measure the payload analysis
 uses — total characters of element-geometry readings — is **1790 here against
 Chrome's 1783**, over 280 reads. Before this it was short by an order more than
 that gap, and short in the direction that mattered.
+
+### The regression sweep, and the two stations that were a window rather than a change
+
+`cors-preflight-nonsimple` P3. Both arms ReleaseFast at the same commit
+(`da66d8dd3` = main, against it plus the preflight change), same egress IP
+(108.211.179.124, colo SJC), 34 minutes apart. The patched sweep printed
+**15/29** and the baseline's had printed 18/29; neither number is the reading.
+Both runs hung at station 27 (`ak-kohls`, `timeout: Runtime.enable`, ~56s) and
+both dragged the four stations behind it into `timeout: Page.navigate` — the
+tail is one hang, not four failures, and the trailing `N/29` is void. Re-run
+individually, all four came back the way the baseline has them:
+`ak-expedia` pass, `px-wayfair` pass, `ks-canadagoose` pass (429→200),
+`x-hyatt` refused-429.
+
+Three DataDome stations did read differently — `dd-datadome`, `dd-leboncoin`,
+`dd-hermes` passed for the baseline and drew a challenge here. `dd-leboncoin`
+came back on its own re-run. The other two were settled by alternating the two
+binaries at the same station, three rounds each, six pairs in all:
+
+| round | `dd-datadome` | `dd-hermes` |
+|---|---|---|
+| 1 | baseline challenge / patched challenge | baseline challenge / patched challenge |
+| 2 | baseline challenge / patched challenge | baseline challenge / patched challenge |
+| 3 | baseline challenge / patched challenge | baseline challenge / patched challenge |
+
+The baseline binary that had passed them 34 minutes earlier now fails them too.
+That is the window, not the change — which is why a single-sample A/B at a
+DataDome station cannot be read at all, and why the alternation is the only
+thing that answers it.
+
+`ak-kohls` was alternated the same way: the baseline errored 3 of 3, the patched
+arm 2 of 3. It is the pre-existing intermittent hang (`ak-kohls-evaluate-hang`),
+it bites both arms, and it is not this change's account.
+
+Net: **zero regressions.** Every station compared inside the same window agrees
+between the two arms.
+
+Readings: `b57-sweep-patched.json`, `b57-only-<station>.json`,
+`b57-ab/ab-{base,patch}-<station>-<round>.json`.

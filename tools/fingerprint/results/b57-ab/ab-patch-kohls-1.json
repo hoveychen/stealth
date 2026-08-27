@@ -1,0 +1,152 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T02:26:51.057Z",
+  "egress": {
+    "fl": "988f115",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787797611.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "PDX",
+    "sliver": "010-tier2",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1481+32943c362",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17320/"
+  },
+  "stations": [
+    {
+      "name": "ak-kohls",
+      "vendor": "akamai",
+      "url": "https://www.kohls.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.kohls.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://kohls.demdex.net/dest5.html?d_nsid=0#https%3A%2F%2Fwww.kohls.com",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cm.g.doubleclick.net/partnerpixels?url=https%3A%2F%2Fwww.kohls.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?origin=publishertagids&topUrl=www.kohls.com#{%22bundle%22:{%22origin%22:0},%22optout%22:{%22value%22:false,%22origin%22:0},%22tld%22:%22kohls.com%22,%22topUrl%22:%22www.kohls.com%22,%22version%22:108763,%22origin%22:%22publishertagids%22,%22requestId%22:%220.5500116576063683%22}",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ads.pubmatic.com/AdServer/js/user_sync.html?gdpr=&gdpr_consent=&us_privacy=&predirect=https%3A%2F%2Fow.pubmatic.com%2Fsetuid%3Fbidder%3Dpubmatic%26gdpr%3D%26gdpr_consent%3D%26gpp%3D%26gpp_sid%3D%26f%3Db%26uid%3D",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=8e9bd9e0-8284-4dbd-ab20-145759728098&u_scsid=6ebfe546-c01c-4243-a314-14e71d9b0bb3&u_sclid=e44bfd8c-731d-4453-9ecf-d8ba165c3974",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=99ed79db-3aec-4b85-9a61-ed80a2993b62&u_scsid=6ebfe546-c01c-4243-a314-14e71d9b0bb3&u_sclid=e44bfd8c-731d-4453-9ecf-d8ba165c3974",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Kohl's | Shop Clothing, Shoes, Home, Kitchen, Bedding, Toys & More",
+      "landedOn": "https://www.kohls.com/",
+      "nodes": 4399,
+      "textLength": 15956,
+      "snippet": "Sign In Create Account Close shop by category menu REDWOOD CITY Kohl's Card Baby Registry Coupons and Savings Store Locator Gift Cards Help Sign In My List 0 $0.00 Ask Kohl’s Shop By Category Current ",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26277
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787797611247 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:17320",
+    "$time=1787797612413 $scope=js $level=warn $msg=\"console.warn\" param.0=Geolocation disabled via env flag not set - skipping store selection",
+    "$time=1787797613834 $scope=http $level=warn $msg=\"script fetch error\" err=CouldntResolveHost req=https://6249496.collect.igodigital.com/collect.js extra=frame status=0",
+    "$time=1787797613834 $scope=js $level=warn $msg=\"eval script\" url=https://www.kohls.com/ caught.exception=\"_etmc is not defined\" caught.stack=\"ReferenceError: _etmc is not defined\\n    at https://www.kohls.com/:1:1\\n    at https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:279\\n    at qf.Z (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:228:273)\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:267)\\n    at t.HTMLElement.<computed> [as replaceChild] (https://www.kohls.com/:2:32920)\\n    at e._insertCursor (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5270)\\n    at e._writeScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5923)\\n    at e._handleScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4482)\\n    at e._writeImpl (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:3094)\\n    at e.write (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:2657)\\n    at e._onScriptDone (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5505)\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4516\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5903\\n    at r (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:6341)\\n    at HTMLScriptElement.onerror (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:6792)\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:25:458)\" caught.line=1 caught.caught=true",
+    "$time=1787797613836 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught ReferenceError: _etmc is not defined\" filename= line_number=0 column_number=0",
+    "$time=1787797613839 $scope=js $level=warn $msg=\"console.error\" param.0=Error: Failed to create session param.1=something went wrong creating session",
+    "$time=1787797613839 $scope=js $level=warn $msg=\"console.error\" param.0=Error fetching user info: param.1=Error: Failed to create session",
+    "$time=1787797614165 $scope=js $level=warn $msg=\"console.warn\" param.0=Error: SBC list container not found.",
+    "$time=1787797615596 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] PubAdsService.setTargeting is deprecated, use googletag.setConfig({targeting: ...}) instead.",
+    "https://goo.gle/gpt-message#170",
+    "$time=1787797615600 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] Slot.getTargetingKeys is deprecated, use Slot.getConfig('targeting') instead.",
+    "https://goo.gle/gpt-message#201",
+    "$time=1787797615754 $scope=js $level=warn $msg=\"console.warn\" param.0=[Sales Agent] Fast loading is enabled",
+    "$time=1787797615805 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] Using deprecated googletag.encryptedSignalProviders. Please use googletag.secureSignalProviders instead.",
+    "https://goo.gle/gpt-message#155",
+    "$time=1787797615818 $scope=js $level=warn $msg=\"console.warn\" param.0=Google Deploy of the SharedId library has been deprecated. Please select another option in the GAM UI. If you use Prebid, we suggest the Prebid.js UserId option. If you do not, you may configure GAM to allow Google to share a first party user identifier with OB and AB participants, which is either the publisherProvidedId or the __gads value when that is missing.",
+    "$time=1787797618566 $scope=js $level=warn $msg=\"console.warn\" param.0=Geolocation disabled via env flag not set - skipping store selection",
+    "$time=1787797618569 $scope=js $level=warn $msg=\"console.warn\" param.0=Geolocation disabled via env flag not set - skipping store selection",
+    "$time=1787797620015 $scope=js $level=warn $msg=\"console.warn\" param.0=Play/pause section not found: .pz-btf-kids",
+    "$time=1787797621535 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787797637536 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=POST https://www.kohls.com/cr/v1/ecs/topics/floop?isShopNext=Y",
+    "$time=1787797637536 $scope=js $level=warn $msg=\"console.error\" param.0=Failed to track rec_view event: param.1=TypeError: Failed to fetch param.2=[object Object]",
+    "$time=1787797637588 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=GET https://lbs.eu-1-id5-sync.com/lbs/v1",
+    "$time=1787797637608 $scope=js $level=warn $msg=\"eval script\" url=https://ads.pubmatic.com/AdServer/js/user_sync.html?gdpr=&gdpr_consent=&us_privacy=&predirect=https%3A%2F%2Fow.pubmatic.com%2Fsetuid%3Fbidder%3Dpubmatic%26gdpr%3D%26gdpr_consent%3D%26gpp%3D%26gpp_sid%3D%26f%3Db%26uid%3D caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at get (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:28:424)\" caught.line=28 caught.caught=true",
+    "$time=1787797637608 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787797637612 $scope=js $level=warn $msg=\"console.warn\" param.0=[TikTok Pixel] - Invalid email information",
+    "Issue: The emails shared with your events were invalid.",
+    "Suggestion: Go to your source code to double check shared emails. Leave your string empty when customer information isn't available. Avoid spaces, \"undefined\", or other hardcoded values. See https://ads.tiktok.com/marketing_api/docs?id=1739585700402178 for more information.",
+    "$time=1787797637616 $scope=js $level=warn $msg=\"console.warn\" param.0=[TikTok Pixel] - Invalid email information",
+    "Issue: The emails shared with your events were invalid.",
+    "Suggestion: Go to your source code to double check shared emails. Leave your string empty when customer information isn't available. Avoid spaces, \"undefined\", or other hardcoded values. See https://ads.tiktok.com/marketing_api/docs?id=1739585700402178 for more information.",
+    "$time=1787797637617 $scope=js $level=warn $msg=\"console.warn\" param.0=[TikTok Pixel] - Invalid email information",
+    "Issue: The emails shared with your events were invalid.",
+    "Suggestion: Go to your source code to double check shared emails. Leave your string empty when customer information isn't available. Avoid spaces, \"undefined\", or other hardcoded values. See https://ads.tiktok.com/marketing_api/docs?id=1739585700402178 for more information."
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}
