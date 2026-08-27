@@ -17517,3 +17517,51 @@ in a zsh shell, which does not word-split an unquoted scalar — and ran nine
 comparisons of one binary against itself while the log said "patched" for half of
 them. Print the binary's `version` string on every row, not the label: two
 commits cannot share eight characters, and a label can.
+
+## Every empty element is 5px tall here (B80, 2026-08-26, in progress)
+
+`block-height-from-content` was opened for a narrower thing — an empty `<div>`
+is 0px tall in Chrome and 5px here, the placeholder `dimensionsAt` starts every
+measurement at. Measuring the tag space first (`scratch/expr-empty-intrinsic.js`)
+showed the leak is not about blocks: **eighteen of twenty empty elements report
+5px**, and one expression over any of them separates this engine from a browser.
+
+Chrome's answers are not one number either. They fall into four groups, and a
+blanket 0 would be wrong for eleven of the twenty:
+
+| empty element | Chrome computed / client / offset / rect | here |
+|---|---|---|
+| `div`, `p`, `section`, `ul` | `0px` / 0 / 0 / 0 | 5px throughout |
+| `table` | `0px` / 0 / 0 / 0 | 5px |
+| `img` (no src) | `0px` / 0 / 0 / 0 | 5px |
+| `canvas`, `video`, `object`, `svg` | `150px` / 150 / 150 / 150 | 5px |
+| `iframe` | `150px` / 150 / **154** / 154 | 150 / 150 / 150 — offset misses the border |
+| `input` | `15px` / 17 / **21** / 21 | 5px |
+| `textarea` | `30px` / 34 / **36** / 36 | 5px |
+| `select` | `19px` / 17 / 19 / 19 | 5px |
+| `button` | `6px` / 2 / **6** / 6 | 5px |
+| `progress`, `meter` | `16px` / 16 / 16 / 16 | 5px |
+| `hr` | `0px` / 0 / **2** / 2 | 5px |
+| `br` | `auto` / 0 / 0 / **18** | auto / 0 / 0 / **0** |
+| `span` (inline) | `auto` / 0 / 0 / 0 | already correct |
+
+Three readings worth pulling out, because they are the ones a single constant
+cannot reproduce:
+
+* **the replaced default is 150px**, not 0 — `canvas`, `video`, `object` and
+  `svg` all answer it with no attributes at all, and `iframe` answers 150 of
+  content with 154 of offset because its 2px default border is outside the
+  client box. This engine already has the 300x150 pair for `iframe` and nothing
+  for the other four.
+* **a form control's height is intrinsic and each one is different** — 21, 36,
+  19, 6, 16. `button` is the odd one: 6px of offset off 2px of client, which is
+  padding and border around an empty line.
+* **an `<img>` with no src is 0**, which is the opposite of the broken-image
+  icon this engine already models. The icon is for an `src` that failed, not for
+  an absent one.
+
+The `<div>` case has a failing test (`css/block_height.html`, six of eight
+shapes red). The rest of this table has none yet, and the remaining plan tasks —
+a block's height as the sum of its line boxes, and the stack of its in-flow
+children — are measured but unstarted. Readings for those:
+`scratch/expr-block-height.js`.
