@@ -2282,6 +2282,36 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
         return try self.storeLonghand(normalized, shorthand.system_font_shorthand, null, important, frame) or changed;
     }
 
+    // The rest of the `font` grammar, which the table still calls unmodelled --
+    // the expansion is read off Chrome rather than derived from the table, so it
+    // sits beside the system-keyword branch rather than inside `expand`. Three
+    // outcomes: nineteen longhands, a refusal that stores nothing at all (Chrome
+    // drops an invalid `font` where every other shorthand is kept whole), or
+    // null for a value carrying `var()` / a function / a comment, which falls
+    // through and is kept whole as before.
+    if (try shorthand.fontExpansion(frame.local_arena, normalized, value)) |outcome| switch (outcome) {
+        .refused => return false,
+        .wide => |wide| {
+            var changed = false;
+            for (wide.expansion.names, wide.expansion.values) |name, longhand| {
+                changed = try self.storeLonghand(name, longhand, null, important, frame) or changed;
+            }
+            return changed;
+        },
+        .parsed => |expansion| {
+            var changed = false;
+            for (expansion.names, expansion.values) |name, longhand| {
+                const canonical = try normalizePropertyValue(frame.local_arena, name, longhand);
+                changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), important, frame) or changed;
+            }
+            // No `font` entry beside them, unlike the system-keyword branch
+            // above: `font` joins now (shorthand.isFont), so every read rebuilds
+            // it from the nineteen the way Chrome does, and storing a twentieth
+            // would put `style.length` one past Chrome's nineteen.
+            return changed;
+        },
+    };
+
     if (shorthand.lookup(normalized)) |entry| {
         if (try shorthand.expand(frame.local_arena, entry, value)) |expansion| {
             // Measured: refusing is not a partial write. `border-radius: 10px
@@ -5234,6 +5264,10 @@ test "WebApi: CSSStyleDeclaration computed colours" {
 
 test "WebApi: CSSStyleDeclaration computed system fonts" {
     try testing.htmlRunner("css/computed_system_fonts.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration font shorthand" {
+    try testing.htmlRunner("css/font_shorthand.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration first computed read" {
