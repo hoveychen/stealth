@@ -239,3 +239,40 @@ answers them, each with the plan that owns it:
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<script id=font_shorthand_expands_on_both_paths>
+{
+  // The CSSOM path and the raw stylesheet path are two different pieces of
+  // code, and a shorthand has to expand on both or a page gets it only when it
+  // happens to write the declaration inline. Measured
+  // (probes/expr-b83-sheet-font-layout.js): before this, a rule
+  // `.x{font:13px serif}` left computed font-size at 16px where the same
+  // declaration inline gave 13px.
+  const sheet = document.createElement('style');
+  sheet.textContent = '.b83fs{font:13px serif} .b83sys{font:caption}';
+  document.head.appendChild(sheet);
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const el = document.createElement('div');
+  host.appendChild(el);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  el.className = 'b83fs';
+  eq('rule font-size', String(getComputedStyle(el).fontSize), '13px');
+  eq('rule font-family', String(getComputedStyle(el).fontFamily), 'serif');
+  // The six system keywords take the same route and had the same hole.
+  el.className = 'b83sys';
+  eq('rule system keyword', String(getComputedStyle(el).fontFamily), 'Arial');
+
+  // What a rule still does NOT reach is the layout's font, and that is not this
+  // plan's: a plain `font-size` longhand in a rule does not reach it either, so
+  // the box is 16px wide for both. `resolveFont` walks inline styles rather than
+  // the cascade, which is `Element.zig`'s to fix.
+  el.className = '';
+  sheet.remove();
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
