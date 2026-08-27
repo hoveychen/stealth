@@ -17046,3 +17046,71 @@ guard through several sites, which is every sweep, spends nearly all of its time
 in that second column.
 
 Files: `b56-creep-{chrome,lp}-{cold,warm}*.json`.
+
+### Cross-origin: no preflight, and no check on the answer either
+
+`cors-preflight-nonsimple` P1. B53 found the headline case on x-hyatt — the same
+`POST application/json` to a third-party origin draws an `OPTIONS` from Chrome
+and none from this engine — and the plan asked for the whole shape of it,
+measured on loopback rather than on a station. `cors-preflight-echo.mjs` serves a
+page on `http://localhost:<a>` and an API on `http://127.0.0.1:<b>` (different
+port, therefore a different origin, and both trustworthy), runs eighteen
+cross-origin requests, and reports both halves of each: the methods the API
+origin actually saw, and what the page's promise did.
+
+| case | Chrome 151 (headed) | this engine |
+|---|---|---|
+| `GET`, no author headers | `GET` | `GET` |
+| `POST text/plain` | `POST` | `POST` |
+| `POST application/x-www-form-urlencoded` | `POST` | `POST` |
+| `POST application/json` | **`OPTIONS` → `POST`** | `POST` |
+| `POST application/json;charset=UTF-8` | **`OPTIONS` → `POST`** | `POST` |
+| `GET` with `X-Probe: 1` | **`OPTIONS` → `GET`** | `GET` |
+| `PUT` / `DELETE` / `PATCH` | **`OPTIONS` → the method** | the method alone |
+| XHR `POST application/json` | **`OPTIONS` → `POST`** | `POST` |
+| `credentials: 'include'` + json | **`OPTIONS` → `POST`** | `POST` |
+
+Both engines send `Origin` on every one of them, so that half is already right.
+
+The preflights Chrome sends carry `Access-Control-Request-Method` and, where an
+author header is involved, `Access-Control-Request-Headers: content-type` or
+`x-probe` — the same pair B53 read off x-hyatt.
+
+Chrome also *acts* on the answer, and this is the half the plan's title does not
+say out loud:
+
+| case | Chrome | this engine |
+|---|---|---|
+| preflight allows `GET` only, request is `POST` | `OPTIONS` → `POST`, resolves | same |
+| preflight allows `GET` only, request is `PUT` | `OPTIONS`, then **rejects** | `PUT` goes out, resolves |
+| preflight omits `Access-Control-Allow-Headers` | `OPTIONS`, then **rejects** | `GET` goes out, resolves |
+| preflight names another origin | `OPTIONS`, then **rejects** | `POST` goes out, resolves |
+| simple `GET`, response has no `Access-Control-Allow-Origin` | **rejects** | resolves, body readable |
+| preflight fine, actual response has no ACAO | `OPTIONS` → `POST`, **rejects** | resolves, body readable |
+| same request twice, `Access-Control-Max-Age: 600` | `OPTIONS` → `POST` → `POST` | `POST` → `POST` |
+
+The first row is not a bug in either engine: `POST` is a CORS-safelisted method,
+so leaving it out of `Access-Control-Allow-Methods` does not block it. `PUT` is
+the row that separates them.
+
+So there are two divergences here, not one. The missing `OPTIONS` is the visible
+one. The other is that a page in this engine can read *any* cross-origin
+response — the check that every real browser applies is not applied at all, which
+one expression distinguishes from every browser a guard has ever met.
+
+That is wider than this plan's P2, which is scoped to the preflight and its
+answer, and it is deliberately left to its own decision rather than folded in:
+this engine exists to fetch pages, and refusing cross-origin reads is a change
+with users on the other side of it.
+
+Where an implementation would hook, found while measuring: `Transfer.HeaderSource`
+in `network/HttpClient.zig` already separates `.author` (script-set) headers from
+the ones the engine adds, which is exactly the set that decides
+`Access-Control-Request-Headers`; and `EventSource.corsAllowed` in
+`browser/webapi/net/EventSource.zig` is already a working
+`Access-Control-Allow-Origin` / `-Allow-Credentials` check, written for the
+EventSource WPTs, with a comment saying the general stack does not model CORS.
+`Fetch.zig:215` marks the same gap in one line: `assume CORS passed`.
+
+Readings: `b56-cors-chrome.json`, `b56-cors-lp-baseline.json`; `--diff` prints
+the per-case comparison.
