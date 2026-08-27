@@ -1886,6 +1886,21 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
     // every read of the shorthand from them. A shorthand whose value does not
     // fit its grammar -- and one the tables do not model -- falls through and
     // is kept whole.
+    // `font` is one of the shorthands no model reproduced, so it is kept whole
+    // -- except for the six system keywords, which are a closed set with one
+    // measured expansion and need none of the grammar. Ahead of the table
+    // lookup because that lookup declines an unmodelled shorthand.
+    if (shorthand.systemFontExpansion(normalized, value)) |expansion| {
+        var changed = false;
+        for (expansion.names, expansion.values) |name, longhand| {
+            changed = try self.storeLonghand(name, longhand, null, important, frame) or changed;
+        }
+        // Chrome rebuilds `font` from the longhands on every read; this engine
+        // answers a kept-whole shorthand from storage, so the text it will
+        // answer goes in beside them.
+        return try self.storeLonghand(normalized, shorthand.system_font_shorthand, null, important, frame) or changed;
+    }
+
     if (shorthand.lookup(normalized)) |entry| {
         if (try shorthand.expand(frame.local_arena, entry, value)) |expansion| {
             // Measured: refusing is not a partial write. `border-radius: 10px
@@ -4834,6 +4849,10 @@ test "WebApi: CSSStyleDeclaration inheritance" {
 
 test "WebApi: CSSStyleDeclaration computed colours" {
     try testing.htmlRunner("css/computed_color_values.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed system fonts" {
+    try testing.htmlRunner("css/computed_system_fonts.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration first computed read" {

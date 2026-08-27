@@ -48,6 +48,43 @@ pub fn lookupJoinable(name: []const u8) ?Shorthand {
     return entry;
 }
 
+/// The six CSS system font keywords, and the one expansion Chrome gives all of
+/// them. `font` itself stays `.unmodelled` -- its grammar is the thing no model
+/// reproduced -- but these six are a closed set with a measured answer, so they
+/// do not need the grammar to be handled.
+///
+/// Measured on Chrome 151 (probes/expr-b55-system-fonts.js,
+/// results/b55-sysfont-chrome{,-headed}.json): all six expand identically, and
+/// headed and headless agree exactly. `font-variant` is not in the list because
+/// its longhands' initial values already answer `normal`, which is what Chrome
+/// answers -- storing it would be reaching past what was measured.
+///
+/// Why it matters beyond tidiness: Kasada writes all six in one burst at
+/// x-hyatt, `setAttribute('style', 'font: caption !important')` through
+/// `status-bar`, and reads four numbers back. This engine answered the keyword
+/// itself for `font`, which no browser produces.
+const system_font_keywords = [_][]const u8{ "caption", "icon", "menu", "message-box", "small-caption", "status-bar" };
+const system_font_names = [_][]const u8{ "font-style", "font-weight", "font-stretch", "font-size", "line-height", "font-family" };
+const system_font_values = [_][]const u8{ "normal", "400", "100%", "16px", "normal", "Arial" };
+
+/// What `font` reads back as once a system keyword expanded. Chrome rebuilds the
+/// shorthand from the longhands; this engine keeps an unmodelled shorthand
+/// whole, so the text has to be stored beside them.
+pub const system_font_shorthand = "16px Arial";
+
+/// The expansion for `font: <system keyword>`, or null for anything else --
+/// including every other `font` value, which stays whole as before.
+pub fn systemFontExpansion(name: []const u8, value: []const u8) ?Expansion {
+    if (!std.ascii.eqlIgnoreCase(name, "font")) return null;
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    for (system_font_keywords) |keyword| {
+        if (std.ascii.eqlIgnoreCase(keyword, trimmed)) {
+            return .{ .names = &system_font_names, .values = &system_font_values };
+        }
+    }
+    return null;
+}
+
 /// What Chrome stores for `name: value`, or null when the value does not fit
 /// the shorthand's grammar. Null means "keep it whole": under-expanding leaves
 /// a page working, where a wrong expansion answers values Chrome never had.
