@@ -18675,3 +18675,52 @@ difference between what the two deployments' collectors *read*:
 `results/prop-reads-hyatt.json` exists and its canadagoose counterpart does not,
 and the members x-hyatt reaches that canadagoose does not are a much shorter
 list than everything a browser has.
+
+### The two deployments ask the same questions
+
+If one Kasada deployment tickets this engine and another does not, the cheap
+explanation is that the second one asks something the first does not. It does
+not. `prop-reads.mjs` against both, and the comparison taken inside each
+guard's own realm — the interstitial's origin, before the site's own code gets
+a realm of its own:
+
+| | members read in the guard's realm |
+|---|---|
+| x-hyatt | 505 |
+| ks-canadagoose | 536 |
+| **read by x-hyatt and not by ks-canadagoose** | **4** |
+
+The four are `Document.title`, `HTMLCollection.length`,
+`OffscreenCanvas.getContext` and
+`OffscreenCanvasRenderingContext2D.getContextAttributes`. The last two are the
+interesting-looking pair, and this engine answers both exactly as Chrome does
+(`scratch/expr-offscreen-context.js`: same prototype, same
+`{alpha, colorSpace, desynchronized, willReadFrequently}`, same answer with
+options passed). One unrelated difference turned up beside them —
+`OffscreenCanvas.getContext('bitmaprenderer')` is `null` here and an
+`ImageBitmapRenderingContext` in Chrome — but x-hyatt never asks for that
+context: with `--args`, its only call is `getContext("2d")`.
+
+**So both deployments ask the same questions and one of them accepts the
+answers.** What is left is the answers themselves, on a customer that grades
+them harder.
+
+### What x-hyatt actually does with a canvas
+
+`prop-reads.mjs --args` on x-hyatt, the canvas portion of the guard's own
+realm, which is the largest block of answers this engine is known to get wrong:
+
+* `getContext("2d")` ×4, `getContext("webgl2")` ×3, `getContext("webgl")` ×1,
+  and one `OffscreenCanvas.getContext("2d")`.
+* twelve `save` / `translate(16)` / `rotate(k·2π/10)` / `fillText(…)` /
+  `restore` cycles — a rotated glyph raster, not a flat one.
+* `getImageData` ×3 and `putImageData` ×2.
+* `toDataURL` over **about ninety MIME types**, from `image/png` through
+  `image/vnd.zbrush.pcx` — a support probe, not a pixel probe.
+* `measureText` of `""`, `" "`, `"m"` and `"mm"`.
+
+The rotated `fillText` block is the part with no honest answer here: this engine
+has no glyph outlines to raster (`cfsc-glyph-outline-raster`, still 0/3). Two
+closed stations now point at it — cf-scrapingcourse's remaining gap was already
+canvas rendering — and for the first time there is a way to test a change
+against Kasada in eleven seconds instead of a windowed station sweep.
