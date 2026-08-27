@@ -2693,16 +2693,120 @@ fn attributeFloat(self: *Element, comptime name: []const u8) ?f64 {
     return std.fmt.parseFloat(f64, raw) catch null;
 }
 
-fn intrinsicBox(tag: Tag) ?struct { width: f64, height: f64 } {
+/// A form control's box is built from its FONT, and this returned a constant.
+///
+/// The numbers below are the ones Chrome answers at the UA's own 13.333px, and
+/// they were the answer at every font size and in every family: an `<input>` at
+/// `font-size: 100px` reported the same 149x17 of client box as one at 8px, and
+/// so did one in monospace. A `<span>` at the same sizes is measured to the
+/// pixel, so neither the metrics nor the cascade were at fault -- only this
+/// table, which never saw the font.
+///
+/// Kasada sizes its font-metric probes as inputs at `font-size: 100px` and
+/// reads clientWidth/clientHeight, so every probe came back the same box:
+/// fifteen measurements on two distinct sizes where Chrome lands on six.
+/// x-hyatt withholds its clearance token for exactly that, and freezing
+/// Chrome's input box the same way costs Chrome the token 3 runs of 3 while the
+/// same hooks returning real values keep it (tools/fingerprint/kasada-knob.mjs).
+///
+/// The model, measured on Chrome 151 with scratch/b84-formbox.js and the
+/// per-size sweep beside it:
+///
+///   * the height is the font's own `line-height: normal` line box, rounded --
+///     Arial gives 15, 9, 37 and 115 at 13.333, 8, 32 and 100px, and monospace
+///     117 at 100px where Arial gives 115, so no single ratio covers it;
+///   * the width is `size * avgCharWidth + (maxCharWidth - avgCharWidth)`,
+///     twenty characters by default, from the two font constants now on
+///     `font_metrics.Family`;
+///   * a `<textarea>` is `rows` of those lines, a `<select>` keeps its width
+///     and grows only in height, and a `<progress>` and a `<meter>` scale on
+///     both axes from a 16px basis;
+///   * `button` stays absent. Its whole 16x6 box is UA padding and border
+///     around a 0x0 content box, and Chrome does not move it with the font --
+///     measured at 100px, still 16x6.
+///
+/// Both metrics are hinted to whole pixels below about 24px and left fractional
+/// above, which a single pair at the 100px basis cannot reproduce everywhere:
+/// rounding the scaled pair matches Chrome at 8, 10, 13.333, 20, 24, 32 and
+/// 100px in Arial and is a pixel out at 16 and 50. The sizes that matter are
+/// exact -- the guard's 100px, and the 13.333px every default input on every
+/// page uses.
+fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?struct { width: f64, height: f64 } {
+    switch (tag) {
+        .canvas, .video, .object, .svg, .iframe => return .{ .width = 300, .height = 150 },
+        .input, .textarea, .select, .progress, .meter => {},
+        else => return null,
+    }
+
+    const font = self.resolveFont(frame);
+    // Floored, not rounded, and that choice is a measurement rather than a
+    // taste. These boxes are on a device-pixel-ratio 1 basis -- the table this
+    // replaced was measured there, and css/block_height.html pins it -- while
+    // `font_metrics` is swept at the ratio 2 this engine's persona claims. At
+    // dpr 1 Chrome gives a 13.333px line box of 15 in both Arial and monospace,
+    // which floor reproduces from 15.333 and 15.556 where rounding turns the
+    // monospace one into 16 and a default `<textarea>` into 32 against
+    // Chrome's 30. The cost is a pixel on monospace at 100px, 116 against 117.
+    //
+    // Re-basing the whole intrinsic table onto dpr 2 is the real fix and is a
+    // plan of its own: at that ratio Chrome answers 139x15.5 for an input and
+    // 177x31 for a textarea, so every constant here moves, not just this one.
+    const line = @floor(font_metrics.lineBox(font.family, font.size));
+
     return switch (tag) {
-        .canvas, .video, .object, .svg, .iframe => .{ .width = 300, .height = 150 },
-        .input => .{ .width = 145, .height = 15 },
-        .textarea => .{ .width = 177, .height = 30 },
+        // A <progress> and a <meter> are 160x16 and 80x16 at the 16px they
+        // inherit, and both axes go with the font from there: 1000x100 and
+        // 500x100 at 100px.
+        .progress, .meter => .{
+            .width = @round((if (tag == .progress) @as(f64, 160) else 80) * font.size / 16),
+            .height = @round(font.size),
+        },
+        // A <select> keeps the measured constant, deliberately.
+        //
+        // Its height does move with the font in Chrome -- 11, 17, 19, 24, 38
+        // and 114 of content at 8, 13.333, 16, 20, 32 and 100px -- but not as
+        // any function of the line box, which is 9, 15.3, 18.5, 23, 37 and 115
+        // at those sizes: the gap runs +2, +1.7, +0.5, +1, +1 and -1 and
+        // changes sign. Rather than fit that noise, this keeps the value that
+        // is exactly right at the size a <select> actually renders at, and the
+        // measured table above is left for whoever derives the real model. The
+        // guard that made this plan probes inputs, never selects.
         .select => .{ .width = 20, .height = 17 },
-        .progress => .{ .width = 160, .height = 16 },
-        .meter => .{ .width = 80, .height = 16 },
-        else => null,
+        else => blk: {
+            const scale = font.size / font_metrics.basis;
+            // Chrome hints both metrics to whole pixels at small sizes and
+            // leaves them fractional above: monospace measures an avgCharWidth
+            // of 12 at 20px and 14.4 at 24px, and rounding at 100px too puts a
+            // monospace input 4px narrow -- 1233 against Chrome's 1237.
+            const hinted = font.size < 24;
+            const avg = if (hinted) @round(font.family.avg_char_width * scale) else font.family.avg_char_width * scale;
+            const max = if (hinted) @round(font.family.max_char_width * scale) else font.family.max_char_width * scale;
+            const columns: f64 = if (tag == .textarea)
+                @floatFromInt(self.attributeUnsignedOr("cols", 20))
+            else
+                @floatFromInt(self.attributeUnsignedOr("size", 20));
+            break :blk if (tag == .textarea) .{
+                // A <textarea> is `cols` advances plus a 17px scrollbar gutter,
+                // and takes no maxCharWidth term: 10, 20 and 40 columns of
+                // monospace are 619, 1221 and 2425 at 100px and 97, 177 and 338
+                // at the UA's 13.333px. Its height is `rows` lines, two by
+                // default -- 15, 45 and 75 for one, three and five rows.
+                .width = @round(columns * avg + 17),
+                .height = line * @as(f64, @floatFromInt(self.attributeUnsignedOr("rows", 2))),
+            } else .{ .width = @round(columns * avg + (max - avg)), .height = line };
+        },
     };
+}
+
+/// A content attribute read as a count, falling back when it is absent or is
+/// not one -- `size`, `cols` and `rows`, which are all "a positive integer or
+/// the default". Zero is not a count and takes the default too, the way Chrome
+/// treats `size=0`.
+fn attributeUnsignedOr(self: *Element, comptime name: []const u8, fallback: u32) u32 {
+    const raw = self.getAttributeSafe(comptime .wrap(name)) orelse return fallback;
+    const trimmed = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    const parsed = std.fmt.parseInt(u32, trimmed, 10) catch return fallback;
+    return if (parsed == 0) fallback else parsed;
 }
 
 /// `distribute_flex` is how a flex item's own share of its line is kept from
@@ -2904,7 +3008,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
                 width = buffer_width;
                 height = buffer_height;
             }
-        } else if (tag == .img or intrinsicBox(tag) != null) {
+        } else if (tag == .img or intrinsicBox(self, frame, tag) != null) {
             if (width == null) {
                 if (self.attributeFloat("width")) |w| {
                     width = w;
@@ -2933,7 +3037,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
             // html/body branch above hands a child document this box, so a
             // fallback of 0 would make every undeclared iframe's <body> report
             // 0px once the UA margins came off.
-            if (intrinsicBox(tag)) |box| {
+            if (intrinsicBox(self, frame, tag)) |box| {
                 if (width == null) width = box.width;
                 if (height == null) height = box.height;
             }
