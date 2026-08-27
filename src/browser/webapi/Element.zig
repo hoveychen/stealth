@@ -1831,6 +1831,35 @@ fn resolveFont(self: *Element, frame: *Frame) struct { family: font_metrics.Fami
     };
 }
 
+/// The characters CSS collapses: "document white space characters" are space,
+/// tab, line feed, carriage return and form feed. Deliberately not
+/// `std.ascii.whitespace`, which also holds a vertical tab -- CSS does not
+/// collapse one -- and deliberately byte-wise, because every character CSS
+/// treats as whitespace is ASCII: `&nbsp;` (U+00A0) and a zero-width space
+/// (U+200B) are not collapsible, and their UTF-8 bytes are all >= 0x80, so they
+/// fall out of this on their own. Both measured at a full line in Chrome.
+const css_whitespace = " \t\n\r\x0c";
+
+fn isCollapsibleWhitespace(str: []const u8) bool {
+    for (str) |c| {
+        if (std.mem.indexOfScalar(u8, css_whitespace, c) == null) return false;
+    }
+    return true;
+}
+
+/// Whether `white-space` keeps this element's spaces rather than collapsing
+/// them. Only `pre`, `pre-wrap` and `break-spaces` do: `pre-line` collapses
+/// spaces and tabs (it preserves only newlines, and a newline alone still makes
+/// no line box) and `nowrap` collapses everything `normal` does. Measured, see
+/// textLayout.
+fn preservesWhitespace(self: *Element, frame: *Frame) bool {
+    const declared = CSSStyleDeclaration.cascadedComputedValue(self, "white-space", frame) orelse return false;
+    const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
+    return std.ascii.eqlIgnoreCase(trimmed, "pre") or
+        std.ascii.eqlIgnoreCase(trimmed, "pre-wrap") or
+        std.ascii.eqlIgnoreCase(trimmed, "break-spaces");
+}
+
 /// How an element's own text lays out, or null when the element is not one
 /// whose box its text decides — it has element children of its own, or it
 /// holds no text.
@@ -1851,16 +1880,34 @@ fn resolveFont(self: *Element, frame: *Frame) struct { family: font_metrics.Fami
 /// returned `width` is then 0 and must not be read.
 fn textLayout(self: *Element, frame: *Frame, measure_width: bool) ?struct { width: f64, height: f64 } {
     var total_text: usize = 0;
+    var all_collapsible = true;
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(Element) != null) {
             return null;
         }
         if (node.is(CData.Text)) |text| {
-            total_text += Factory.protoOf(text)._data.str().len;
+            const str = Factory.protoOf(text)._data.str();
+            total_text += str.len;
+            if (all_collapsible and !isCollapsibleWhitespace(str)) all_collapsible = false;
         }
     }
     if (total_text == 0) {
+        return null;
+    }
+    // Whitespace with nothing beside it collapses away entirely, so there is no
+    // line box and the box is 0 tall -- this engine gave `<div> </div>` a full
+    // 18px line, which is the opposite mistake to the 5px placeholder. Unless
+    // `white-space` preserves it, in which case the space is a space.
+    // Measured on Chrome 151 with
+    // tools/fingerprint/scratch/expr-whitespace-linebox.js: a space, a tab and
+    // three newlines are all 0; `pre` and `pre-wrap` are 18 and `pre-line` and
+    // `nowrap` are 0; and `&nbsp;` and a zero-width space are 18, because
+    // neither is collapsible whitespace to begin with.
+    //
+    // Asking for `white-space` costs a cascade, so it is only asked once the
+    // characters have already said the answer could go either way.
+    if (all_collapsible and !self.preservesWhitespace(frame)) {
         return null;
     }
 
@@ -2170,12 +2217,32 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // the span, and neither call's depth ever grew. This counter grows for
     // every measurement in flight whatever route it came in by.
     if (frame._layout_depth >= MAX_LAYOUT_REENTRY) {
-        return .{ .width = 5.0, .height = 5.0 };
+        return .{ .width = 0, .height = 0 };
     }
     frame._layout_depth += 1;
     defer frame._layout_depth -= 1;
 
-    var dims: Dimensions = .{ .width = 5.0, .height = 5.0 };
+    var dims: Dimensions = .{ .width = 0, .height = 0 };
+
+    // Nothing has sized the box yet, and `null` is how that is said. It used to
+    // be said with 5.0 -- the measurement started at {5, 5} and every branch
+    // below asked `dims.height == 5.0` to mean "still undetermined" -- which
+    // made a magic number out of a length an author may write. Measured on
+    // Chrome 151 with tools/fingerprint/scratch/expr-five-sentinel.js: seven
+    // readings across four shapes had their declaration taken for the absence
+    // of one, and `<div style="width:5px">` came out reporting a computed
+    // `width` of 5px beside a clientWidth of 400, because getComputedStyle
+    // reads the declaration and the fill branch had overwritten the box. No
+    // browser produces a 5px-wide box that is 400px wide, and a guard reading
+    // both at once sees it.
+    //
+    // Whatever is still `null` at the end is a box with no size, which is 0 --
+    // an empty `<div>`, an empty `<table>`, an `<img>` with no src, an empty
+    // float or absolute, all measured at 0 in Chrome. Per-tag intrinsic sizes
+    // that are NOT 0 (the 300x150 of a `<canvas>`, a form control's own height)
+    // are the tag branches' to fill in.
+    var width: ?f64 = null;
+    var height: ?f64 = null;
 
     // Width comes from the cascade, so a stylesheet rule reaches the box the
     // way it already reached `getComputedStyle`. It is behind
@@ -2228,7 +2295,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
 
         if (CSSStyleDeclaration.cascadedComputedLength(self, "width", frame)) |declared| {
             const w = layoutUnit(declared);
-            dims.width = if (border_box) @max(0, w - dims.padding_x - dims.border_x) else w;
+            width = if (border_box) @max(0, w - dims.padding_x - dims.border_x) else w;
             dims.explicit_width = true;
         }
 
@@ -2239,7 +2306,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
         // where the measurements are.
         if (distribute_flex) {
             if (CSSStyleDeclaration.flexItemWidth(self, frame, depth, dims.explicit_width, edges)) |w| {
-                dims.width = w;
+                width = w;
                 dims.explicit_width = true;
             }
         }
@@ -2254,11 +2321,11 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // declaration of every rule keyed to the element.
     if (CSSStyleDeclaration.cascadedComputedLength(self, "height", frame)) |declared| {
         const h = layoutUnit(declared);
-        dims.height = if (border_box) @max(0, h - dims.padding_y - dims.border_y) else h;
+        height = if (border_box) @max(0, h - dims.padding_y - dims.border_y) else h;
         dims.explicit_height = true;
     }
 
-    if (dims.width == 5.0 or dims.height == 5.0) {
+    if (width == null or height == null) {
         const tag = self.getTag();
 
         // A document's root containers fill its viewport, and its viewport is
@@ -2295,20 +2362,24 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
                 };
             };
             const inset: f64 = if (tag == .body) 2 * body_ua_margin else 0;
-            if (dims.width == 5.0) dims.width = @max(0, box.width - inset);
-            if (dims.height == 5.0) dims.height = @max(0, box.height - inset);
+            if (width == null) width = @max(0, box.width - inset);
+            if (height == null) height = @max(0, box.height - inset);
         } else if (tag == .img or tag == .iframe) {
-            if (self.getAttributeSafe(comptime .wrap("width"))) |w| {
-                if (std.fmt.parseFloat(f64, w)) |parsed| {
-                    dims.width = parsed;
-                    dims.explicit_width = true;
-                } else |_| {}
+            if (width == null) {
+                if (self.getAttributeSafe(comptime .wrap("width"))) |w| {
+                    if (std.fmt.parseFloat(f64, w)) |parsed| {
+                        width = parsed;
+                        dims.explicit_width = true;
+                    } else |_| {}
+                }
             }
-            if (self.getAttributeSafe(comptime .wrap("height"))) |h| {
-                if (std.fmt.parseFloat(f64, h)) |parsed| {
-                    dims.height = parsed;
-                    dims.explicit_height = true;
-                } else |_| {}
+            if (height == null) {
+                if (self.getAttributeSafe(comptime .wrap("height"))) |h| {
+                    if (std.fmt.parseFloat(f64, h)) |parsed| {
+                        height = parsed;
+                        dims.explicit_height = true;
+                    } else |_| {}
+                }
             }
 
             // Whatever the attributes left undeclared, a broken <img> fills
@@ -2317,8 +2388,8 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
             // value, so clientWidth/clientHeight still take the max with the
             // content extent the way a measured size does.
             if (self.hasBrokenImageBox()) {
-                if (dims.width == 5.0) dims.width = broken_image_icon_size;
-                if (dims.height == 5.0) dims.height = broken_image_icon_size;
+                if (width == null) width = broken_image_icon_size;
+                if (height == null) height = broken_image_icon_size;
             }
 
             // An <iframe> that declares no size is 300x150, which is the UA
@@ -2327,10 +2398,10 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
             // generic 5x5 fallback would make every undeclared iframe's <body>
             // report 0px once the margins came off.
             if (tag == .iframe) {
-                if (dims.width == 5.0) dims.width = 300.0;
-                if (dims.height == 5.0) dims.height = 150.0;
+                if (width == null) width = 300.0;
+                if (height == null) height = 150.0;
             }
-        } else if (measure_text_width and dims.width == 5.0 and depth < MAX_CONTAINING_BLOCK_DEPTH) {
+        } else if (measure_text_width and width == null and depth < MAX_CONTAINING_BLOCK_DEPTH) {
             // A block-level box in normal flow is as wide as its containing
             // block, whatever it holds -- and measuring its text instead is how
             // an ordinary `<div>x</div>` in a 1904px body came out 8px wide,
@@ -2367,7 +2438,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
                     // again: the two branches above reach it by different
                     // routes, and only one of them fills the cache.
                     if (containing == null) containing = available;
-                    dims.width = @max(0, available -
+                    width = @max(0, available -
                         horizontalMargin(self, frame, &containing, depth) - dims.padding_x - dims.border_x);
                     // Not a declared value, but the same thing a declared one
                     // means here: the box has a width of its own, so
@@ -2388,17 +2459,19 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // A declared width already answers the only question the measurement is
     // for, so it also gates the walk over the text -- not just the caller's
     // opt-out above.
-    const wants_text_width = measure_text_width and dims.width == 5.0;
-    if (wants_text_width or dims.height == 5.0) {
+    const wants_text_width = measure_text_width and width == null;
+    if (wants_text_width or height == null) {
         if (self.textLayout(frame, wants_text_width)) |text| {
-            if (wants_text_width) dims.width = text.width;
-            if (dims.height == 5.0) dims.height = text.height;
+            if (wants_text_width) width = text.width;
+            if (height == null) height = text.height;
         }
     }
 
-    // The box is a used length, so it lands on the layout grid.
-    dims.width = layoutUnit(dims.width);
-    dims.height = layoutUnit(dims.height);
+    // The box is a used length, so it lands on the layout grid. Nothing sized
+    // it means it has no size: 0, which is what Chrome reports for every empty
+    // box whose intrinsic size is not spelled out above.
+    dims.width = layoutUnit(width orelse 0);
+    dims.height = layoutUnit(height orelse 0);
     return dims;
 }
 

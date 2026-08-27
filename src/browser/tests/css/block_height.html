@@ -72,3 +72,66 @@ height.
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<!--
+The placeholder is not just a wrong answer for an empty box: it is a magic
+number the layout reads back as a question. `dimensionsAt` starts at
+{width:5, height:5} and then asks `dims.height == 5.0` to mean "nothing has
+sized this yet" -- so an author who writes exactly `5px` has their declaration
+mistaken for the absence of one and overwritten by whatever the fallback for
+that shape is.
+
+Measured on Chrome 151 with tools/fingerprint/scratch/expr-five-sentinel.js.
+Seven readings across four shapes, and one of them is a contradiction no
+browser can produce: `<div style="width:5px">` reported a computed `width` of
+`5px` -- getComputedStyle reads the declaration, not the box -- beside a
+`clientWidth` of 400, because the fill branch had taken the declaration for a
+blank. A guard that reads both at once sees a 5px-wide box that is 400px wide.
+-->
+
+<script id=literal_five_is_a_declaration>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('div');
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const out = [cs.width, cs.height, el.clientWidth, el.clientHeight,
+                 el.offsetWidth, el.offsetHeight, r.width, r.height].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // html, then: computed w/h, client w/h, offset w/h, rect w/h
+  const CASES = [
+    // A 5px height is a 5px height even with a line of text in the box, which
+    // overflows it. This engine answered the text's 18 four times over.
+    ['<div style="height:5px">x</div>', '400px 5px 400 5 400 5 400 5'],
+    // A 5px width is a width, so the box does NOT fill its containing block.
+    ['<div style="width:5px">xxxxxxxx</div>', '5px 18px 5 18 5 18 5 18'],
+    ['<div style="width:5px;height:5px">xxxxxxxx</div>', '5px 5px 5 5 5 5 5 5'],
+    ['<div style="height:5px"></div>', '400px 5px 400 5 400 5 400 5'],
+    // The route in must not matter: a stylesheet rule declares 5px the same
+    // way an inline style does.
+    ['<style>.h5{height:5px}</style><div class=h5>x</div>',
+     '400px 5px 400 5 400 5 400 5'],
+    // The neighbours: 4px and 6px were never ambiguous, and must not move.
+    ['<div style="height:4px">x</div>', '400px 4px 400 4 400 4 400 4'],
+    ['<div style="height:6px">x</div>', '400px 6px 400 6 400 6 400 6'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

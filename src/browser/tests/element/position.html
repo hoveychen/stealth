@@ -282,17 +282,33 @@
   document.body.appendChild(empty);
   testing.expectEqual(empty.clientHeight, empty.scrollHeight);
 
-  // Children stack, so each one strictly increases scrollHeight.
+  // Children stack, so each one that has a height of its own increases
+  // scrollHeight. An EMPTY child does not, and this assertion used to say it
+  // did -- which was only true while every empty element was 5px tall.
+  // Measured on Chrome 151 with tools/fingerprint/scratch/expr-scroll-stack.js:
+  // a box with one empty child and a box with two are both 0 of clientHeight
+  // and 0 of scrollHeight, and a stack of 7px children is 7 then 14.
   const box = document.createElement('div');
   document.body.appendChild(box);
   box.appendChild(document.createElement('div'));
-  const oneChild = box.scrollHeight;
-  testing.expectTrue(oneChild >= box.clientHeight);
-
+  testing.expectEqual(0, box.scrollHeight);
   box.appendChild(document.createElement('div'));
-  testing.expectTrue(box.scrollHeight > oneChild);
+  testing.expectEqual(0, box.scrollHeight);
+  testing.expectEqual(0, box.clientHeight);
+
+  const stack = document.createElement('div');
+  document.body.appendChild(stack);
+  const sized = () => {
+    const d = document.createElement('div');
+    d.style.height = '7px';
+    return d;
+  };
+  stack.appendChild(sized());
+  testing.expectEqual(7, stack.scrollHeight);
+  stack.appendChild(sized());
+  testing.expectEqual(14, stack.scrollHeight);
   // An unsized box shrink-wraps: clientHeight tracks the same content sum.
-  testing.expectEqual(box.scrollHeight, box.clientHeight);
+  testing.expectEqual(stack.scrollHeight, stack.clientHeight);
 
   // Text contributes no height, as it contributes no width: a text child's
   // line box is what the element's own size already stands in for.
@@ -324,13 +340,24 @@
   // The collapse/expand idiom: scrollHeight is read while the panel is
   // collapsed at height:0 to know how far to open it. A zero-height box is
   // not hidden; its content is still measured.
+  // The children have to hold something: two EMPTY children sum to 0, which
+  // this used to assert was more than 0 on the strength of the 5px placeholder.
+  // Measured on Chrome 151 with
+  // tools/fingerprint/scratch/expr-collapsed-panel.js: a collapsed panel holding
+  // two empty divs is 0 of scrollHeight, two lines of text 36, and two 9px
+  // children 18.
   const panel = document.createElement('div');
   panel.style.height = '0';
-  panel.appendChild(document.createElement('div'));
-  panel.appendChild(document.createElement('div'));
+  panel.innerHTML = '<div>a</div><div>b</div>';
   document.body.appendChild(panel);
   testing.expectEqual(0, panel.clientHeight);
-  testing.expectTrue(panel.scrollHeight > 0);
+  testing.expectEqual(36, panel.scrollHeight);
+
+  const emptyPanel = document.createElement('div');
+  emptyPanel.style.height = '0';
+  emptyPanel.innerHTML = '<div></div><div></div>';
+  document.body.appendChild(emptyPanel);
+  testing.expectEqual(0, emptyPanel.scrollHeight);
 
   // The root containers keep their synthetic size rather than summing
   // children. This is what keeps infinite-scroll triggers reading
