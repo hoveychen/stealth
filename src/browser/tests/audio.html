@@ -1234,6 +1234,33 @@
     'Linux x86_64': { fingerprintjs: 124.04347527516074, turnstile: 112.46367831656244 },
   }[navigator.platform] ?? { fingerprintjs: 0, turnstile: 0 };
 
+  // The whole buffer rather than fingerprintjs's window, summed forward from
+  // frame 0 -- the order is part of the double, so it has to be the order the
+  // reference reading used.
+  const whole = (data) => {
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) sum += Math.abs(data[i]);
+    return sum;
+  };
+  // A full second of each graph, which is what Kasada renders. macOS was read
+  // off the Chrome on this machine (scratch/expr-audio-44100.js); Linux comes
+  // from the same recording run that produced the buffers, in the container
+  // linux-chrome.mjs starts. `last` is frame 44099, the one a 5 000-frame
+  // recording could never reach.
+  const expectedSecond = {
+    'MacIntel': {
+      fingerprintjs: { sum: 10748.964784431235, last: -0.21189409494400024 },
+      turnstile: { sum: 9988.088666068505, last: 0.09531436860561371 },
+    },
+    'Linux x86_64': {
+      fingerprintjs: { sum: 10748.964801543829, last: -0.21189410984516144 },
+      turnstile: { sum: 9989.601845444764, last: 0.09532961249351501 },
+    },
+  }[navigator.platform] ?? {
+    fingerprintjs: { sum: 0, last: 0 },
+    turnstile: { sum: 0, last: 0 },
+  };
+
   // `frames` and the graph's own settings are used as they stand unless a case
   // below says otherwise; every deviation is a near-miss that must NOT replay,
   // because a detector that probes the shape instead of hashing one render
@@ -1261,6 +1288,13 @@
   };
 
   const canonical = await render(5000, 44100, null);
+  // What Kasada asks for on x-hyatt: a full second, not the 5 000 frames
+  // fingerprintjs takes. Read off the live station by
+  // tools/fingerprint/probes/inject-b83-audio-render.js
+  // (`render:rate:44100,len:44100`), and off Chrome by
+  // tools/fingerprint/scratch/expr-audio-44100.js.
+  const second = await render(44100, 44100, null);
+  const turnstileSecond = await render(44100, 44100, null, GRAPHS.turnstile);
   // Any length is a prefix of the same render (measured: a 44100-frame render is
   // frame-for-frame identical to a 5000-frame one), so a shorter ask replays a
   // prefix and a longer one replays what was recorded and stops -- 5000 frames
@@ -1439,8 +1473,15 @@
 
     testing.expectEqual(6000, long.length);
     testing.expectEqual(expected.fingerprintjs, tail(long));
-    // The recorded gap: past frame 5000 there is nothing to replay.
-    testing.expectEqual(true, long.slice(5000).every((v) => v === 0));
+    testing.expectEqual(true, long.slice(5000).every((v, i) => v === second[5000 + i]));
+
+    // A full second, which is the length the one station that reads this graph
+    // asks for. Chrome's numbers for it, both graphs, are in `expectedSecond`.
+    testing.expectEqual(44100, second.length);
+    testing.expectEqual(expectedSecond.fingerprintjs.sum, whole(second));
+    testing.expectEqual(expectedSecond.fingerprintjs.last, second[44099]);
+    testing.expectEqual(expectedSecond.turnstile.sum, whole(turnstileSecond));
+    testing.expectEqual(expectedSecond.turnstile.last, turnstileSecond[44099]);
 
     testing.expectEqual(expected.fingerprintjs, tail(harmless));
 
