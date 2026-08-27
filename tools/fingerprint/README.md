@@ -18181,3 +18181,69 @@ an inline flow.
 box-parts 223/223, inline-box 176/176, flex-item-width 61/61, layout-grid 83/84
 unchanged, layout-box-shapes **240/250 → 245/250**. The five that moved are the
 `a<br>b` block and nothing else.
+
+## The /tl payload does not weigh the geometry (B82, 2026-08-27)
+
+B55 measured Kasada's `/tl` payload at x-hyatt as **524 to 607 characters** short
+of Chrome's, and attributed **~169 of them to element geometry** — "202 readings
+answering 985 characters in Chrome against 208 readings answering 816 here,
+because Chrome answers on its 1/64px grid where this engine answers whole
+numbers".
+
+Three plans have since put that geometry on the grid: `text-advance-64th-grid`
+(advances on the 1/128 grid of a dpr-2 device pixel), `font-box-at-device-scale`
+(the line box is 18.5 and not 18), and `inline-content-line-boxes`. On the page
+the attribution was measured from — forty percentage-sized rows, seven readings
+each — the engine now answers **1991 characters against Chrome's 1991, field for
+field** (`scratch/expr-geom-fields.js`, `scratch/b82-geomfields-lp-linebox.json`
+against `results/b81-geomfields-chrome.json`), where it answered 1903 before.
+
+**The real payload did not move.** Same station, same hour, the two binaries
+alternated, the payload string read off the `TextEncoder.encode` funnel:
+
+| binary | payload characters |
+|---|---|
+| base `dev.1543+31216a1e9` | 18811, 18836 |
+| patched `dev.1550+d6ce8a97a` | 18836, 18838, 18804, 18803, 18813 |
+
+Two arms, seven samples, one distribution. The 88 characters of geometry that
+the synthetic page gained are worth **zero** characters of `/tl`.
+
+And the ~140 the payload is below B55's 18945–18990 is not the diff either — the
+**base** binary, byte for byte the code B55 measured plus two unrelated merges,
+posts the same 18811 as the patched one. That is the station or the script
+moving between one day and the next, which is the same lesson the DataDome trio
+teaches about verdicts, now told about payload lengths.
+
+So the byte-count model of the shortfall is finished, and it was the last thing
+holding the geometry line to the goal. B55 said it first — "the byte count is
+the wrong question, since the two loudest divergences found here are worth
+nothing in bytes and everything in value" — and this is the confirming
+experiment: the one family whose bytes were *attributed* was made to match
+exactly, and the payload did not notice.
+
+x-hyatt answers `refused-429` on both arms, as it has for every reading in this
+file. Chrome answered `refused-403` to the injected runs taken in the same
+window, so no same-window Chrome payload is available to compare against; the
+19514–19552 above is B55's, a day older.
+
+### The DataDome trio, a fifth time, and this time with the arms swapped
+
+Two full 29-station sweeps, both ReleaseFast, alternating in one window:
+
+| run order | binary | stations open |
+|---|---|---|
+| first, morning | base `31216a1e9` | 22/29 |
+| second, morning | patched `cef44ea19` | 20/29 |
+| first, afternoon | patched `d6ce8a97a` | 22/29 |
+| second, afternoon | base `31216a1e9` | 19/29 |
+
+The three that move are `dd-datadome`, `dd-leboncoin` and `dd-hermes` every
+time, and **which arm loses them is decided by which arm runs second**, not by
+which binary it is. In the morning that made the patched arm look like a
+regression; in the afternoon the same three stations made the base arm look like
+one. Four `--only dd-` rounds in between, alternating, are identical station for
+station on both binaries.
+
+Every other station is identical across all four sweeps, including the three
+real gaps.
