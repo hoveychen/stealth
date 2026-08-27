@@ -304,9 +304,13 @@ pub fn send(self: *XMLHttpRequest, body_: ?BodyInit, exec_: *const Execution) !v
             self._send_flag = false;
         }
         try self._request_headers.populateRequestHeaders(transfer);
-        if (cookie_support) {
-            try exec.headersForRequest(transfer);
-        }
+        // Unconditionally, like Fetch and EventSource: `headersForRequest` only
+        // writes Referer, and Referer is not credentials. Chrome sends it on a
+        // cross-origin XHR with withCredentials unset -- trimmed to the origin
+        // by the referrer policy, but sent. Gating it on `cookie_support` left
+        // that one square empty while the same request through fetch() carried
+        // it, which is a difference no real browser has.
+        try exec.headersForRequest(transfer);
     }
 
     // Held for abort() / open() / deinit; the error, shutdown and done
@@ -905,4 +909,8 @@ test "WebApi: XHR timeout" {
 
 test "WebApi: XHR in worker" {
     try testing.htmlRunner("net/xhr_worker.html", .{});
+}
+
+test "WebApi: Referer on cross-origin subresources" {
+    try testing.htmlRunner("net/referer.html", .{});
 }
