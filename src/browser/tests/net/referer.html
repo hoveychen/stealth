@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The page is served from http://127.0.0.1:9582; http://localhost:9582 is the
+  same test server behind a different origin. /cors/referer answers with the
+  Referer it was sent, and with an Allow-Origin for this page, so a cross-origin
+  subresource can read back what it carried.
+
+  Referer is not a cookie. Chrome sends it on a cross-origin request whether or
+  not that request carries credentials -- trimmed to the origin by the default
+  strict-origin-when-cross-origin policy, but sent. We used to hang the whole
+  header off the same flag that decides whether the cookie jar is consulted,
+  which left one square empty: a cross-origin XHR with withCredentials unset
+  sent no Referer at all, while the same request through fetch() did.
+-->
+
+<script id=referer_cross_origin_xhr type=module>
+  {
+    const state = await testing.async();
+    const get = (url, credentials) => new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.withCredentials = credentials;
+      xhr.onload = () => resolve(xhr.responseText);
+      xhr.send();
+    });
+
+    const bare = await get('http://localhost:9582/cors/referer', false);
+    const credentialed = await get('http://localhost:9582/cors/referer', true);
+    const same = await get('http://127.0.0.1:9582/cors/referer', false);
+
+    state.resolve();
+    await state.done(() => {
+      // Cross-origin: the origin, with its trailing slash, and nothing else.
+      testing.expectEqual('http://127.0.0.1:9582/', bare);
+      testing.expectEqual('http://127.0.0.1:9582/', credentialed);
+      // Same-origin keeps the full URL of the referring document.
+      testing.expectEqual(window.location.href, same);
+    });
+  }
+</script>
+
+<script id=referer_cross_origin_fetch type=module>
+  {
+    const state = await testing.async();
+    const body = async (url, credentials) =>
+      (await fetch(url, {credentials: credentials})).text();
+
+    const bare = await body('http://localhost:9582/cors/referer', 'omit');
+    const credentialed = await body('http://localhost:9582/cors/referer', 'include');
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual('http://127.0.0.1:9582/', bare);
+      testing.expectEqual('http://127.0.0.1:9582/', credentialed);
+    });
+  }
+</script>

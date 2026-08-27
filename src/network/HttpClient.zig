@@ -32,6 +32,7 @@ const CookieJar = @import("../browser/webapi/storage/Cookie.zig").Jar;
 
 const Config = @import("../Config.zig");
 const http = @import("http.zig");
+const blink_header_order = @import("blink_header_order.zig");
 
 /// Re-exported so the resource-timing recorders — which know HttpClient and not
 /// the curl layer under it — can hold one between a header callback and the
@@ -2316,11 +2317,6 @@ pub const Transfer = struct {
     // notification at delivery.
     _from_cache: bool = false,
 
-    // This request carries at least one negotiated high-entropy client hint,
-    // which changes where a subresource puts User-Agent. Set by
-    // seedClientHints, read by emitHeaders.
-    _high_entropy_hints: bool = false,
-
     // This navigation has already been thrown away and re-sent once for a
     // Critical-CH. Caps it at one: an origin that keeps asking for a hint we
     // don't answer would otherwise loop the navigation forever.
@@ -3304,13 +3300,23 @@ pub const Transfer = struct {
     // Navigations are not in the tables above: a form POST's Content-Length
     // position was not measured, so it keeps falling to the trailing pass
     // rather than being guessed into place.
-    const chrome_subresource_order = [_][]const u8{
+    // A subresource has no fixed table at all, because Chrome does not have one:
+    // the fields the renderer keeps in HTTPHeaderMap come out in that hash
+    // table's bucket order, which is a function of the whole set of names on the
+    // request -- author headers included, so one `fetch(url, {headers})` moves
+    // User-Agent. blink_header_order.zig rebuilds it; these two are only the
+    // fields the network stack appends to an *ordered* vector further down, and
+    // they bracket the map block.
+    //
+    // The two tables this replaced -- the plain one and the nine-hint one, both
+    // measured, and different enough that they could not share a table -- are
+    // exactly what the model reproduces from the name set alone. That is the
+    // regression test in blink_header_order.zig.
+    const chrome_subresource_before_map = [_][]const u8{
         "Content-Length",
-        "sec-ch-ua-platform",
-        "User-Agent",
-        "sec-ch-ua",
-        "content-type",
-        "sec-ch-ua-mobile",
+    };
+
+    const chrome_subresource_after_map = [_][]const u8{
         "Accept",
         "Origin",
         "Sec-Fetch-Site",
@@ -3321,6 +3327,37 @@ pub const Transfer = struct {
         "Accept-Language",
         "Cookie",
         "priority",
+    };
+
+    // The engine's own map-block fields, in the order the renderer inserts them
+    // into the map. Insertion order is invisible unless two names collide, so
+    // most shapes cannot see it -- three do, and between them they pin it: five
+    // author headers alongside the baseline hints (`hold-five` in
+    // results/b59-h1-chrome.json), and the two nine-hint blocks below, where
+    // sec-ch-ua collides with sec-ch-ua-bitness and User-Agent with
+    // sec-ch-ua-full-version.
+    //
+    // What comes out is the hints in the order they are declared -- the same
+    // sequence chrome_navigation_order carries, which is what the browser side
+    // writes too -- and User-Agent behind them. A request carries the three
+    // baseline hints plus whatever its origin asked for via Accept-CH; the
+    // absent names just drop out of the sequence.
+    //
+    // content-type last is the one placement here rather than a measurement: it
+    // collides with nothing in any capture we have, so every shape we can check
+    // comes out the same wherever it sits.
+    const blink_map_insertion = [_][]const u8{
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-full-version",
+        "sec-ch-ua-arch",
+        "sec-ch-ua-platform",
+        "sec-ch-ua-platform-version",
+        "sec-ch-ua-model",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-full-version-list",
+        "User-Agent",
+        "content-type",
     };
 
     // A navigation re-sent for a Critical-CH, which Chrome does not spell like
@@ -3346,44 +3383,6 @@ pub const Transfer = struct {
         "Sec-Fetch-Site",
         "Sec-Fetch-Mode",
         "Sec-Fetch-User",
-        "Sec-Fetch-Dest",
-        "Referer",
-        "Accept-Encoding",
-        "Accept-Language",
-        "Cookie",
-        "priority",
-    };
-
-    // A subresource carrying the negotiated hints, which is NOT the table above
-    // with six names slotted in: Chrome moves User-Agent from second to ninth,
-    // so the two cases cannot share a table the way the navigation ones can.
-    // Measured, the nine-hint subresources (fetch, XHR and favicon, all in
-    // agreement) in tools/fingerprint/results/acceptch-chrome.json. That
-    // capture is of an origin that asked for all nine; an origin asking for a
-    // subset gets this sequence with the missing names skipped, which is a
-    // guess at Chrome's ordering there and not a measurement of it.
-    // The POST names sit differently here than in the unhinted table:
-    // content-type follows User-Agent rather than sec-ch-ua, because the hint
-    // block it is embedded in is a different sequence. Read off the same-origin
-    // `POST /sub/xhr-*` of tools/fingerprint/results/acceptch-chrome.json, not
-    // carried over from the table above.
-    const chrome_subresource_hinted_order = [_][]const u8{
-        "Content-Length",
-        "sec-ch-ua-full-version-list",
-        "sec-ch-ua-platform",
-        "sec-ch-ua",
-        "sec-ch-ua-bitness",
-        "sec-ch-ua-model",
-        "sec-ch-ua-mobile",
-        "sec-ch-ua-arch",
-        "sec-ch-ua-full-version",
-        "User-Agent",
-        "content-type",
-        "sec-ch-ua-platform-version",
-        "Accept",
-        "Origin",
-        "Sec-Fetch-Site",
-        "Sec-Fetch-Mode",
         "Sec-Fetch-Dest",
         "Referer",
         "Accept-Encoding",
@@ -3422,23 +3421,39 @@ pub const Transfer = struct {
     // it from here because the same list is reused for an HTTP/2 attempt, where
     // a connection header is a protocol error.
     fn emitHeaders(self: *Transfer, conn: *http.Connection, arena: Allocator) !void {
-        const order: []const []const u8 = if (self.req.preflight)
-            &chrome_preflight_order
-        else if (self.req.resource_type == .document)
-            if (self._critical_hints_restarted)
+        // Bitset of what an ordered pass already emitted, so the trailing pass
+        // can skip them without a second name comparison per header.
+        var emitted = [_]bool{false} ** 64;
+
+        // A subresource has no fixed table: see chrome_subresource_before_map.
+        if (!self.req.preflight and self.req.resource_type != .document) {
+            try self.emitNamed(conn, arena, &chrome_subresource_before_map, &emitted);
+            try self.emitMapBlock(conn, arena, &emitted);
+            try self.emitNamed(conn, arena, &chrome_subresource_after_map, &emitted);
+        } else {
+            try self.emitNamed(conn, arena, if (self.req.preflight)
+                &chrome_preflight_order
+            else if (self._critical_hints_restarted)
                 &chrome_restarted_navigation_order
             else
-                &chrome_navigation_order
-        else if (self._high_entropy_hints)
-            &chrome_subresource_hinted_order
-        else
-            &chrome_subresource_order;
+                &chrome_navigation_order, &emitted);
+        }
 
-        // Bitset of what the ordered pass already emitted, so the trailing
-        // pass can skip them without a second name comparison per header.
-        var emitted = [_]bool{false} ** 64;
         const tracked = @min(self.req_headers.items.len, emitted.len);
+        for (self.req_headers.items, 0..) |hdr, i| {
+            if (i < tracked and emitted[i]) continue;
+            try conn.addHeader(arena, hdr.name, hdr.value);
+        }
+    }
 
+    fn emitNamed(
+        self: *Transfer,
+        conn: *http.Connection,
+        arena: Allocator,
+        order: []const []const u8,
+        emitted: *[64]bool,
+    ) !void {
+        const tracked = @min(self.req_headers.items.len, emitted.len);
         for (order) |name| {
             for (self.req_headers.items[0..tracked], 0..) |hdr, i| {
                 if (emitted[i]) continue;
@@ -3450,11 +3465,64 @@ pub const Transfer = struct {
                 // its twin is better than stranding it in the trailing pass.
             }
         }
+    }
 
-        for (self.req_headers.items, 0..) |hdr, i| {
-            if (i < tracked and emitted[i]) continue;
-            try conn.addHeader(arena, hdr.name, hdr.value);
+    // The fields the renderer keeps in Blink's HTTPHeaderMap, emitted in that
+    // map's bucket order. Which fields those are is decided by exclusion: this
+    // runs between the two ordered brackets, so anything already emitted or named
+    // in the trailing bracket is out, and what is left is the hint block, the
+    // engine's User-Agent and content-type, and the page's own headers.
+    //
+    // Only `.author` headers are gathered from the page side. A CDP or --http-
+    // header extra is not something any capture covers, and moving it into the
+    // block would be a guess; it keeps falling to the trailing pass as before.
+    fn emitMapBlock(self: *Transfer, conn: *http.Connection, arena: Allocator, emitted: *[64]bool) !void {
+        const items = self.req_headers.items;
+        const tracked = @min(items.len, emitted.len);
+
+        var names: [blink_header_order.max_names][]const u8 = undefined;
+        var slots: [blink_header_order.max_names]usize = undefined;
+        var n: usize = 0;
+
+        // The page's own headers first, in the order it set them: that is the
+        // order they reach the map, and it decides the outcome whenever two of
+        // the names collide.
+        for (items[0..tracked], 0..) |hdr, i| {
+            if (n == names.len) break;
+            if (emitted[i] or hdr.source != .author) continue;
+            if (namedIn(&chrome_subresource_after_map, hdr.name)) continue;
+            names[n] = hdr.name;
+            slots[n] = i;
+            n += 1;
         }
+
+        for (blink_map_insertion) |name| {
+            for (items[0..tracked], 0..) |hdr, i| {
+                if (n == names.len) break;
+                if (emitted[i] or hdr.source == .author) continue;
+                if (std.ascii.eqlIgnoreCase(hdr.name, name) == false) continue;
+                names[n] = hdr.name;
+                slots[n] = i;
+                n += 1;
+            }
+        }
+
+        var order: [blink_header_order.max_names]u8 = undefined;
+        // More names than the model can lay out: leave every one of them to the
+        // trailing pass rather than emit a partial block in the wrong place.
+        const count = blink_header_order.bucketOrder(names[0..n], &order) orelse return;
+        for (order[0..count]) |slot| {
+            const i = slots[slot];
+            try conn.addHeader(arena, items[i].name, items[i].value);
+            emitted[i] = true;
+        }
+    }
+
+    fn namedIn(order: []const []const u8, name: []const u8) bool {
+        for (order) |candidate| {
+            if (std.ascii.eqlIgnoreCase(candidate, name)) return true;
+        }
+        return false;
     }
 
     // The client's baseline headers, added to every request at creation.
@@ -3505,7 +3573,6 @@ pub const Transfer = struct {
         var it = self.client.client_hints.acceptedFor(self.req.url).iterator();
         while (it.next()) |hint| {
             try self.setHeader(hint.header(), self.client.clientHintValue(hint), .{ .source = .cdp });
-            self._high_entropy_hints = true;
         }
     }
 
@@ -4391,13 +4458,40 @@ test "HttpClient: seedFetchMetadata labels a cross-origin image" {
     try testing.expectString("", seededValue(&transfer, "Upgrade-Insecure-Requests"));
 }
 
+// The wire order emitHeaders produces for a subresource carrying `present`:
+// the leading bracket, then the map block the model lays out, then the trailing
+// one. `present` is the map-block set in the renderer's insertion order.
+fn subresourceWire(present: []const []const u8, buf: [][]const u8) []const []const u8 {
+    var n: usize = 0;
+    for (Transfer.chrome_subresource_before_map) |name| {
+        buf[n] = name;
+        n += 1;
+    }
+    var order: [blink_header_order.max_names]u8 = undefined;
+    const count = blink_header_order.bucketOrder(present, &order).?;
+    for (order[0..count]) |slot| {
+        buf[n] = present[slot];
+        n += 1;
+    }
+    for (Transfer.chrome_subresource_after_map) |name| {
+        buf[n] = name;
+        n += 1;
+    }
+    return buf[0..n];
+}
+
 test "HttpClient: a POST's three extra headers sit where Chrome puts them" {
-    // The two subresource tables, whole, against a measured POST each. Chrome
-    // does not append the body-and-cors headers after the set it already sends:
-    // Content-Length goes third on the wire (Host, Connection, then it),
-    // content-type lands inside the hint block, and Origin between Accept and
-    // the Sec-Fetch triple.
+    // Two measured POSTs, whole. Chrome does not append the body-and-cors
+    // headers after the set it already sends: Content-Length goes third on the
+    // wire (Host, Connection, then it), content-type lands inside the hint
+    // block, and Origin between Accept and the Sec-Fetch triple.
     //
+    // Both were captured long before the map model existed, and neither is a
+    // table any more -- the block in the middle of each is derived from the set
+    // of names on the request. That they still come out byte for byte is the
+    // check that the derivation is Chrome's and not a story that fits one page.
+    var buf: [32][]const u8 = undefined;
+
     // Unhinted, measured: the same-origin `POST /sub/xhr-*` of
     // tools/fingerprint/results/xhr-post-nohints-chrome.json -- the same probe
     // page served with an empty `Accept-CH`, so the origin asks for nothing.
@@ -4418,12 +4512,18 @@ test "HttpClient: a POST's three extra headers sit where Chrome puts them" {
         "Accept-Language",
         "Cookie",
         "priority",
-    }, &Transfer.chrome_subresource_order);
+    }, subresourceWire(&.{
+        "sec-ch-ua",
+        "User-Agent",
+        "sec-ch-ua-platform",
+        "sec-ch-ua-mobile",
+        "content-type",
+    }, &buf));
 
     // Hinted, measured: the same-origin `POST /sub/xhr-*` of
     // tools/fingerprint/results/acceptch-chrome.json. content-type follows
-    // User-Agent here rather than sec-ch-ua -- the hint block is a different
-    // sequence, and the position is read off the capture, not carried over.
+    // User-Agent here rather than sec-ch-ua, and User-Agent itself falls from
+    // second to ninth -- six more names in the map, so every bucket moves.
     try testing.expectEqualSlices([]const u8, &.{
         "Content-Length",
         "sec-ch-ua-full-version-list",
@@ -4447,7 +4547,7 @@ test "HttpClient: a POST's three extra headers sit where Chrome puts them" {
         "Accept-Language",
         "Cookie",
         "priority",
-    }, &Transfer.chrome_subresource_hinted_order);
+    }, subresourceWire(&Transfer.blink_map_insertion, &buf));
 }
 
 test "HttpClient: the body's length is a header of ours, not curl's afterthought" {
@@ -4612,7 +4712,7 @@ test "HttpClient: the priority hint goes out last, after Accept-Language" {
     // order comes from these tables rather than from insertion order -- so
     // this asserts the tables, which is the thing emitHeaders actually reads.
     const nav = Transfer.chrome_navigation_order;
-    const sub = Transfer.chrome_subresource_order;
+    const sub = Transfer.chrome_subresource_after_map;
     try testing.expectString("priority", nav[nav.len - 1]);
     try testing.expectString("Cookie", nav[nav.len - 2]);
     try testing.expectString("Accept-Language", nav[nav.len - 3]);
@@ -4635,9 +4735,8 @@ test "HttpClient: Cookie goes out second to last, between Accept-Language and pr
     // header emitHeaders can place.
     inline for (.{
         Transfer.chrome_navigation_order,
-        Transfer.chrome_subresource_order,
+        Transfer.chrome_subresource_after_map,
         Transfer.chrome_restarted_navigation_order,
-        Transfer.chrome_subresource_hinted_order,
     }) |table| {
         try testing.expectString("priority", table[table.len - 1]);
         try testing.expectString("Cookie", table[table.len - 2]);
@@ -4663,26 +4762,19 @@ test "HttpClient: the negotiated hints sit where Chrome puts them" {
         "User-Agent",
     }, Transfer.chrome_navigation_order[0..11]);
 
-    // The one that surprises: with hints, User-Agent falls from second to
-    // ninth. Dropping the six names into the unhinted table would have put it
-    // back at second and been wrong on every subresource. (Both subresource
-    // tables are pinned whole, with the POST names in place, by "a POST's three
-    // extra headers sit where Chrome puts them" -- this is the hint block only.)
-    try testing.expectEqualSlices([]const u8, &.{
-        "sec-ch-ua-full-version-list",
-        "sec-ch-ua-platform",
-        "sec-ch-ua",
-        "sec-ch-ua-bitness",
-        "sec-ch-ua-model",
-        "sec-ch-ua-mobile",
-        "sec-ch-ua-arch",
-        "sec-ch-ua-full-version",
-        "User-Agent",
-    }, Transfer.chrome_subresource_hinted_order[1..10]);
+    // A navigation's order is the one thing the map model does not describe: a
+    // top-level navigation is assembled browser side in an ordered vector, and
+    // the sequence above is simply the order the hints are declared in. Feed the
+    // same names to the map and nothing lines up -- which is why this stays a
+    // table while the subresource ones stopped being tables.
+    var order: [blink_header_order.max_names]u8 = undefined;
+    const count = blink_header_order.bucketOrder(Transfer.chrome_navigation_order[0..11], &order).?;
+    try testing.expect(!std.mem.eql(u8, "sec-ch-ua", Transfer.chrome_navigation_order[order[0]]));
+    try testing.expectEqual(11, count);
 
-    // Which table a subresource uses is decided by whether it carries any.
-    try testing.expectString("sec-ch-ua-platform", Transfer.chrome_subresource_order[1]);
-    try testing.expectString("User-Agent", Transfer.chrome_subresource_order[2]);
+    // Nothing about a subresource's hint block is a table any more; the two
+    // measured captures it has to reproduce are asserted whole by "a POST's
+    // three extra headers sit where Chrome puts them".
 
     // And a navigation re-sent for a Critical-CH is a third shape again: the
     // hints follow Accept instead of leading.

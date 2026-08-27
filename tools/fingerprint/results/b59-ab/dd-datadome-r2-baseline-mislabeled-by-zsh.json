@@ -1,0 +1,107 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T04:32:14.504Z",
+  "egress": {
+    "fl": "465f254",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787805134.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1488+9e1a31366",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17422/"
+  },
+  "stations": [
+    {
+      "name": "dd-datadome",
+      "vendor": "datadome",
+      "url": "https://datadome.co/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://datadome.co/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://api.vector.co/pixel/phoenix/sync-container?duid=0cda9d36aca2--01m10qtyd2brnkatg9mcddrpzr&ds=did-006l&euns=1&s=&version=v3.17.0&cd=.datadome.co&pv=772f8a7b-09c1-4623-ae8e-d0241aaf490a",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "DataDome | Bot Management & Agent Trust Platform",
+      "landedOn": "https://datadome.co/",
+      "nodes": 2042,
+      "textLength": 6039,
+      "snippet": "DataDome named a Leader in The Forrester Wave™: Bot and Agent Trust Management Software, Q2 2026 Get the report Skip to main content Skip to navigation Skip to footer Trust every Trust every Trust eve",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26958
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787805134611 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:17422",
+    "$time=1787805135701 $scope=frame $level=warn $msg=\"cookie parse failed\" raw=\"__cf_bm=0auFL4lYNL1YFZvz.EJKV.iVK6kKndHrv.mLYFRBUIU-1787805134.9860303-1.0.1.1-fToePHW2eIVanqwbJVbkbdaPG6DyLXg.SSafMPwTEv2DVvsiF1udNYcvp5HrCFKXCvnFKrK88ET7NQYWQxZZpsyIGuWpu4Q4SAJ_H2CkzXAqYz8oWm7HQtVwQ4T4uwkG; HttpOnly; SameSite=None; Secure; Path=/; Domain=kinsta.cloud; Expires=Thu, 27 Aug 2026 05:02:15 GMT\" err=InvalidDomain",
+    "$time=1787805136898 $scope=js $level=warn $msg=\"RAF\" name=window.requestAnimationFrame err=TryCatchRethrow",
+    "$time=1787805136899 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught TypeError: Cannot read properties of undefined (reading 'cloneNode')\" filename= line_number=0 column_number=0",
+    "$time=1787805137085 $scope=js $level=warn $msg=\"eval script\" url=https://cdn.cookielaw.org/scripttemplates/202601.1.0/otBannerSdk.js caught.exception=\"Cannot read properties of undefined (reading 'TenantFeatures')\" caught.stack=\"TypeError: Cannot read properties of undefined (reading 'TenantFeatures')\\n    at https://cdn.cookielaw.org/scripttemplates/202601.1.0/otBannerSdk.js:7:525921\\n    at https://cdn.cookielaw.org/scripttemplates/202601.1.0/otBannerSdk.js:7:535477\" caught.line=7 caught.caught=true",
+    "$time=1787805137085 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught TypeError: Cannot read properties of undefined (reading 'TenantFeatures')\" filename= line_number=0 column_number=0",
+    "$time=1787805137429 $scope=js $level=warn $msg=\"console.warn\" param.0=Failed to send web visit event: param.1=TypeError: Failed to fetch",
+    "$time=1787805137637 $scope=js $level=warn $msg=\"console.error\" param.0=Load failed, error in settings",
+    "$time=1787805137637 $scope=js $level=warn $msg=\"console.error\" param.0=No visitor ID available. Load may have failed.",
+    "$time=1787805137637 $scope=js $level=warn $msg=\"console.error\" param.0=identify error: param.1=Error: No visitor ID available. Load may have failed.",
+    "$time=1787805137645 $scope=frame $level=warn $msg=\"cookie parse failed\" raw= err=Empty",
+    "$time=1787805137753 $scope=frame $level=warn $msg=\"cookie parse failed\" raw= err=Empty",
+    "$time=1787805138589 $scope=frame $level=warn $msg=\"cookie parse failed\" raw=\"lidid=019b7cd0-41a3-4af0-8d4e-665d0a7c300f; Domain=.liadm.com; Path=/; Max-Age=63072000; Secure; SameSite=None\" err=InvalidDomain",
+    "$time=1787805155173 $scope=js $level=warn $msg=\"console.warn\" param.0=Failed to send web visit event: param.1=TypeError: Failed to fetch"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}

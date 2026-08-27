@@ -8,6 +8,63 @@ const PIXEL = Buffer.from(
     'base64',
 );
 
+// Where an author header lands is a question neither the Sec-Fetch-* set nor the
+// priority hint can answer, and two cross-origin reads in b57-cors-chrome.json
+// disagreed about it: one header landed after User-Agent, two headers landed
+// ahead of the whole client-hint block. No fixed slot expresses both, so this
+// table varies one axis at a time instead of guessing:
+//
+//   * one-* -- same count, same (single) insertion, different name. A position
+//     that moves here is name-driven.
+//   * two-zeta-alpha vs two-alpha-zeta, and the xhr-two-* pair -- same names,
+//     opposite insertion order, and two different APIs to set them through.
+//   * three / four -- does the block keep sliding as the count grows.
+//   * post-ct -- Content-Type is the other field emitHeaders lumps in with
+//     author headers, and b57 caught it slotted mid-hint-block too.
+//   * hold-* -- a held-out round: predictions from blink-header-order.mjs were
+//     written down before these were ever measured. hold-five is the case that
+//     pins the engine's own insertion order.
+//   * f-* -- a second held-out round, written down after hold-five fixed that
+//     order. The names real guards use are in here on purpose: those are the
+//     sets that being right about actually buys something.
+//
+// Exported so blink-header-order.mjs can score a capture against the model
+// without a second copy of the author names drifting out of step with the page.
+export const AUTHOR_CASES = [
+    { path: '/hdr/one-probe', api: 'fetch', headers: [['X-Probe', '1']] },
+    { path: '/hdr/one-zulu', api: 'fetch', headers: [['X-Zulu', '1']] },
+    { path: '/hdr/one-aaa', api: 'fetch', headers: [['A-Aaa', '1']] },
+    { path: '/hdr/one-long', api: 'fetch', headers: [['X-Probe-Long-Name', '1']] },
+    { path: '/hdr/two-zeta-alpha', api: 'fetch', headers: [['X-Zeta', '1'], ['X-Alpha', '2']] },
+    { path: '/hdr/two-alpha-zeta', api: 'fetch', headers: [['X-Alpha', '2'], ['X-Zeta', '1']] },
+    { path: '/hdr/three', api: 'fetch', headers: [['X-Zeta', '1'], ['X-Alpha', '2'], ['X-Mid', '3']] },
+    { path: '/hdr/four', api: 'fetch', headers: [['X-Zeta', '1'], ['X-Alpha', '2'], ['X-Mid', '3'], ['X-Beta', '4']] },
+    { path: '/hdr/xhr-two-zeta-alpha', api: 'xhr', headers: [['X-Zeta', '1'], ['X-Alpha', '2']] },
+    { path: '/hdr/xhr-two-alpha-zeta', api: 'xhr', headers: [['X-Alpha', '2'], ['X-Zeta', '1']] },
+    { path: '/hdr/post-ct', api: 'post', headers: [['Content-Type', 'text/plain'], ['X-Probe', '1']] },
+    { path: '/hdr/hold-sigma', api: 'fetch', headers: [['X-Sigma', '1']] },
+    { path: '/hdr/hold-q', api: 'fetch', headers: [['X-Q', '1']] },
+    { path: '/hdr/hold-mixed', api: 'fetch', headers: [['X-MiXeD-CaSe', '1']] },
+    { path: '/hdr/hold-kasada', api: 'fetch', headers: [['X-KpSdk-Ct', '1'], ['X-KpSdk-V', '2']] },
+    { path: '/hdr/hold-five', api: 'fetch', headers: [['X-Aa', '1'], ['X-Bb', '2'], ['X-Cc', '3'], ['X-Dd', '4'], ['X-Ee', '5']] },
+    { path: '/hdr/hold-six', api: 'fetch', headers: [['X-Aa', '1'], ['X-Bb', '2'], ['X-Cc', '3'], ['X-Dd', '4'], ['X-Ee', '5'], ['X-Ff', '6']] },
+    { path: '/hdr/hold-auth', api: 'fetch', headers: [['Authorization', 'Bearer t'], ['X-Requested-With', 'XMLHttpRequest']] },
+    { path: '/hdr/f-dd', api: 'fetch', headers: [['X-DataDome-ClientId', '1']] },
+    { path: '/hdr/f-cf', api: 'fetch', headers: [['CF-Challenge', '1'], ['X-CF-Turnstile', '2']] },
+    { path: '/hdr/f-seven', api: 'fetch', headers: [['X-P1', '1'], ['X-P2', '2'], ['X-P3', '3'], ['X-P4', '4'], ['X-P5', '5'], ['X-P6', '6'], ['X-P7', '7']] },
+    { path: '/hdr/f-digits', api: 'fetch', headers: [['X-1', '1'], ['X-22', '2'], ['X-333', '3']] },
+    { path: '/hdr/f-verylong', api: 'fetch', headers: [['X-A-Really-Quite-Long-Header-Name-Here', '1']] },
+    { path: '/hdr/f-akamai', api: 'fetch', headers: [['X-Acf-Sensor-Data', '1']] },
+    { path: '/hdr/f-three-b', api: 'fetch', headers: [['X-Bravo', '1'], ['X-Yankee', '2'], ['X-November', '3']] },
+    { path: '/hdr/f-postct', api: 'xhr', headers: [['Content-Type', 'text/plain'], ['X-Sig', '1'], ['X-Ts', '2']] },
+];
+
+const caseScript = AUTHOR_CASES.map(({ path, api, headers }) => {
+    const pairs = JSON.stringify(headers);
+    if (api === 'fetch') return `f(${JSON.stringify(path)}, ${pairs});`;
+    return `xh(${JSON.stringify(path)}, ${JSON.stringify(api === 'post' ? 'POST' : 'GET')}, ${pairs});`;
+}).join('\n');
+
 // A page that pulls one of every fetch destination, so we can compare the
 // Sec-Fetch-* / Accept / Referer sets per request type against real Chrome.
 const INDEX = `<!DOCTYPE html>
@@ -18,8 +75,27 @@ const INDEX = `<!DOCTYPE html>
 <img src="/asset.png" width="1" height="1">
 <iframe src="/frame.html" width="1" height="1"></iframe>
 <script>
-fetch('/api/fetch').then(r => r.text());
-var x = new XMLHttpRequest(); x.open('GET', '/api/xhr', true); x.send();
+// Both carry a header the page set itself, on the two destinations the rest of
+// this page's comparison already covers.
+fetch('/api/fetch', {headers: {'X-Probe': '1'}}).then(r => r.text());
+var x = new XMLHttpRequest(); x.open('GET', '/api/xhr', true);
+x.setRequestHeader('X-Probe', '1'); x.send();
+
+// The author-header position matrix, generated from AUTHOR_CASES. Object-literal
+// header bags would lose the page's setting order for the fetch cases, so both
+// helpers take ordered pairs.
+function f(p, pairs) {
+    var h = new Headers();
+    for (var i = 0; i < pairs.length; i++) h.append(pairs[i][0], pairs[i][1]);
+    fetch(p, {headers: h}).then(function (r) { return r.text(); });
+}
+function xh(p, method, pairs) {
+    var r = new XMLHttpRequest();
+    r.open(method, p, true);
+    for (var i = 0; i < pairs.length; i++) r.setRequestHeader(pairs[i][0], pairs[i][1]);
+    r.send(method === 'POST' ? 'x' : undefined);
+}
+${caseScript}
 </script>
 </body></html>`;
 
