@@ -528,6 +528,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
                         .name = longhand_name,
                         .value = canonicalValue(self.arena.allocator(), longhand_name, longhand_value),
                         .important = decl.important,
+                        .specified = CSSStyleDeclaration.specifiedNumber(longhand_value),
                     });
                 }
                 continue;
@@ -539,6 +540,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
             .name = lowered,
             .value = canonicalValue(self.arena.allocator(), lowered, val),
             .important = decl.important,
+            .specified = CSSStyleDeclaration.specifiedNumber(val),
         });
     }
     props.custom = custom.items;
@@ -1222,6 +1224,7 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
             .name = try arena.dupe(u8, name),
             .value = try arena.dupe(u8, property._value.str()),
             .important = property._important,
+            .specified = property._specified,
         };
         // This path reads a materialised CSSOM declaration, whose shorthands
         // the declaration's own parser already expanded -- unlike the raw one,
@@ -1320,6 +1323,10 @@ fn matchesSelector(el: *Element, selector: Selector.Selector, frame: *Frame) boo
 pub const Declaration = struct {
     value: []const u8,
     important: bool,
+    /// The number the author wrote, when the whole declaration was one numeric
+    /// token. `value` is its six-significant-figure print, which the layout is
+    /// not allowed to read back -- CSSStyleDeclaration.specifiedNumber says why.
+    specified: ?f64 = null,
 };
 
 const RuleProperties = struct {
@@ -1384,6 +1391,8 @@ pub const NamedDeclaration = struct {
     name: []const u8,
     value: []const u8,
     important: bool,
+    /// As Declaration.specified: the author's number beside its print.
+    specified: ?f64 = null,
 };
 
 const Rule = struct {
@@ -1477,7 +1486,11 @@ pub fn inlineStyleValue(self: *StyleManager, el: *Element, property_name: String
 /// css/important_vs_inline.html).
 pub fn inlineStyleDeclaration(self: *StyleManager, el: *Element, property_name: String) ?Declaration {
     const property = getInlineStyleProperty(el, property_name, self.frame) orelse return null;
-    return .{ .value = property._value.str(), .important = property._important };
+    return .{
+        .value = property._value.str(),
+        .important = property._important,
+        .specified = property._specified,
+    };
 }
 
 /// Bounds computedFontSize's ancestor recursion (the parent walk and
@@ -2063,7 +2076,11 @@ fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8,
                 if (important.* and !declaration.important) continue;
                 if (declaration.important == important.* and p <= priority.*) continue;
                 if (!matchesSelector(elem, selector, frame)) continue;
-                winner.* = .{ .value = declaration.value, .important = declaration.important };
+                winner.* = .{
+                    .value = declaration.value,
+                    .important = declaration.important,
+                    .specified = declaration.specified,
+                };
                 priority.* = p;
                 important.* = declaration.important;
             }
