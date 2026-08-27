@@ -18442,3 +18442,85 @@ created from. Dropping the flag for this one type restores identity.
 `WGSLLanguageFeatures` next door passes `self` to its callback the same way.
 They were left alone: nothing has measured a collector reading that argument,
 and this one only came up because the map stopped being empty.
+
+## The audio fingerprint was silent on the one station that reads it (B83, 2026-08-27)
+
+B82 proved the `/tl` byte count is not the lock. What that leaves is the class
+of readings that weigh nothing and are compared as values — hashes — and the
+audio fingerprint is the largest of them.
+
+First, a check that there was anything else left. `prop-reads-diff.mjs` turns
+`results/prop-reads-hyatt.json` into a probe asking both arms for exactly the
+members Kasada reached on x-hyatt, and `run-expr.mjs` ran it on both against
+the same https page: **322 of the 352 singleton-reachable members are
+identical**. All 30 that differ are the harness rather than the engine — the
+Chrome arm's default 800×600 / dsf 1 / colorDepth 24 against the persona's
+1920×1200 / dsf 2 / 30, `PerformanceTiming`'s absolute epoch stamps, and
+`MemoryInfo`'s heap sizes. **There is no value lever left in what that log can
+reach from a singleton.** The 229 reads it cannot reach need an instance, and
+one group of them is a whole graph.
+
+### One render, and we answered it with silence
+
+Seq 479–494 of that log is a single offline render and it is the canonical
+audio fingerprint: `createOscillator`, `OscillatorNode.frequency`,
+`createDynamicsCompressor` and its five parameters, two `connect`s, `start`,
+`startRendering`, `renderedBuffer`, `getChannelData`. G21 already replays that
+graph — `canonical_render.zig` hands back a buffer recorded off real Chrome —
+and the tail sum matches Chrome to the last digit when the graph is built the
+way fingerprintjs builds it.
+
+Kasada does not build it that way. Seq 482 is **`AudioParam.setValueAtTime`**:
+the oscillator's frequency is scheduled onto the automation timeline, not
+assigned to `frequency.value`. Both arms, same page
+(`scratch/expr-audio-setvalueattime.js`):
+
+| how 10 kHz arrives | `frequency.value` read back | Chrome tail sum | here |
+|---|---|---|---|
+| `osc.frequency.value = 10000` | 10000 / 10000 | 124.04347624466754 | 124.04347624466754 |
+| `osc.frequency.setValueAtTime(10000, 0)` | 440 / 440 | 124.04347624466754 | **0** |
+
+The read-back is the trap. `param.value` does not move for a scheduled event
+until a render has walked the timeline — **Chrome's does not move either**, and
+this engine copies that deliberately, with a measurement in the comment. So the
+getter agreed on both arms while the render disagreed completely, and
+`canonical_render.which()` compared the graph's 10 000 against a `_value` still
+sitting at the oscillator's default 440 and fell through to silence. On the one
+station that has been closed for ten sessions, the guard's audio fingerprint
+read a buffer of zeros.
+
+### Where the timeline stops being a constant
+
+`AudioParam` now carries what a render would hold it at, separately from what
+the getter answers: a `setValueAtTime` landing at the start of the render, and
+a flag for a timeline that does anything else. `param.value = x` and
+`setValueAtTime(x, 0)` are the same event at the same instant, so the last one
+written wins — which is Chrome's answer both ways round.
+
+Everything past the start refuses the replay, and the reason is one reading
+rather than caution (`scratch/expr-audio-scheduled-params.js`, both arms):
+
+| the canonical graph, plus… | Chrome | before | now |
+|---|---|---|---|
+| frequency scheduled at 0 | 124.04347624466754 | 0 | **124.04347624466754** |
+| every parameter scheduled at 0 | 124.04347624466754 | 0 | **124.04347624466754** |
+| scheduled at 0 to 1 kHz | 101.4564685229434 | 0 | 0 |
+| assigned 10 kHz, then scheduled 1 kHz at 0 | 101.4564685229434 | **124.043** | **0** |
+| scheduled 10 kHz at 0, then assigned 1 kHz | 101.4564685229434 | 0 | 0 |
+| scheduled, then a ramp | 101.40662774103566 | 0 | 0 |
+| assigned, then an event mid-render | 101.45745121572327 | **124.043** | **0** |
+| assigned, then an event *past* the render | **124.04346760431508** | **124.043** | **0** |
+
+The last row is why the rule is "any event at all", not "any event inside the
+window". An event a full second past the end of a 0.1134 s render still moves
+Chrome's answer — by 8.6e-9, which is nothing to a listener and a different
+string to a hash. A timeline that exists is walked. And the three rows in bold
+under *before* are the failure this file has always warned about running the
+other way: the engine was handing back a recorded buffer for graphs Chrome
+renders differently, which is louder than silence.
+
+`buffer_render.zig`, the sibling matcher for the widget's buffer-source graph,
+reads its three parameters the same way now. It was not measured failing —
+nothing has been seen scheduling a playback rate — but it is the same matcher
+against the same field, and leaving one of two on the old reading is how a fix
+half-lands.

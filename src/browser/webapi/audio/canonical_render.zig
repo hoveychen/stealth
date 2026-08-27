@@ -51,6 +51,21 @@
 //! that node is that graph's oscillator. Anything else in the context is
 //! ignored, the way Chrome ignores it.
 //!
+//! The numbers are read through `AudioParam.renderValue()` rather than off
+//! `param.value`, because a page can put them on the automation timeline
+//! instead of assigning them and the getter does not move until a render has
+//! run — Chrome's does not either. Kasada does exactly that with the
+//! oscillator's frequency on x-hyatt (`setValueAtTime`, seq 482 of
+//! tools/fingerprint/results/prop-reads-hyatt.json), and Chrome renders the
+//! same buffer both ways, so reading `value` handed that station silence.
+//!
+//! Anything on the timeline past its start says the parameter is not a
+//! constant and no recording applies — including an event scheduled after the
+//! render is over, which sounds harmless and is not: Chrome renders
+//! 124.04346760431508 for the canonical graph with one event a second past the
+//! end of a 0.1134 s render, against 124.04347624466754 with none. A timeline
+//! that exists is walked.
+//!
 //! Known gaps, all of them silence where Chrome renders something:
 //!
 //!   * past frame 5000 there is nothing recorded, so a longer render replays
@@ -137,19 +152,28 @@ fn which(context: *BaseAudioContext) ?chrome_audio.Graph {
         else => return null,
     };
     if (oscillator._type != .triangle) return null;
-    if (oscillator._detune._value != 0) return null;
+    const detune = oscillator._detune.renderValue() orelse return null;
+    if (detune != 0) return null;
 
-    // Assigned through `param.value = x`, so the comparison is against exactly
-    // the doubles the page wrote. Half of one graph and half of another is
-    // neither, and falls through to silence with everything else.
+    // What the render would hold each parameter at, which is what the page
+    // wrote for the start of the render whether it assigned it or scheduled it
+    // there. Half of one graph and half of another is neither, and falls
+    // through to silence with everything else.
+    const frequency = oscillator._frequency.renderValue() orelse return null;
+    const threshold = compressor._threshold.renderValue() orelse return null;
+    const knee = compressor._knee.renderValue() orelse return null;
+    const ratio = compressor._ratio.renderValue() orelse return null;
+    const attack = compressor._attack.renderValue() orelse return null;
+    const release = compressor._release.renderValue() orelse return null;
+
     for (std.enums.values(chrome_audio.Graph)) |graph| {
         const want = chrome_audio.settings(graph);
-        if (oscillator._frequency._value != want.frequency) continue;
-        if (compressor._threshold._value != want.threshold) continue;
-        if (compressor._knee._value != want.knee) continue;
-        if (compressor._ratio._value != want.ratio) continue;
-        if (compressor._attack._value != want.attack) continue;
-        if (compressor._release._value != want.release) continue;
+        if (frequency != want.frequency) continue;
+        if (threshold != want.threshold) continue;
+        if (knee != want.knee) continue;
+        if (ratio != want.ratio) continue;
+        if (attack != want.attack) continue;
+        if (release != want.release) continue;
         return graph;
     }
     return null;
