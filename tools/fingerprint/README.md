@@ -18560,3 +18560,118 @@ The macOS row was measured off this machine's Chrome before the re-record
 (`scratch/expr-audio-44100.js`) and reproduced by summing the recorded bytes
 afterwards, to the last digit — the two arrive by different routes and agree,
 which is what says the recording is the render and not a transcription of it.
+
+## The ticket is `x-kpsdk-r`, and the station was never the question (B83, 2026-08-27)
+
+Ten sessions have measured x-hyatt by asking whether the station served the
+page. That is the *end* of a chain — guard verdict, then rate limit, then the
+widget's reload — and the middle of it moves on its own, which is what the
+alternating-arms section above is about. One step earlier there is an answer
+that does not move.
+
+Both arms POST the collected payload to `/tl` and both get a 200. What comes
+back is not the same thing (`kasada-verdict.mjs`, same route, same sitting,
+three runs each):
+
+| | Chrome | this engine |
+|---|---|---|
+| `/tl` status | 200 | 200 |
+| content type | `application/json; charset=utf-8` | **`text/plain`** |
+| content length | 15 | **0** |
+| `x-kpsdk-cr` | `true` | `true` |
+| **`x-kpsdk-r`** | `1-B1V4Al4` / `1-B1JkT1k` / `1-B1IEBWM` | **absent, 3/3** |
+| `set-cookie` | absent | present |
+| what follows | navigates, 200 | sits on the 429 |
+
+**`x-kpsdk-cr: true` is not clearance.** Both arms get it, on every run, and
+this engine is refused anyway — so ten sessions' worth of "the fingerprint must
+still be wrong somewhere" was being checked against a header that says yes to
+everyone. The ticket is `x-kpsdk-r`, and it is handed out with a fifteen-byte
+JSON body to one arm and not the other, deterministically.
+
+Two explanations died on the way to that table.
+
+**It is not the cookie.** The clearance cookies (`tkrm_alpekz_s1.3` and
+`tkrm_alpekz_s1.3-ssn`, both `HttpOnly`, one of them `Secure; SameSite=None` and
+the other neither) do reach the jar — `Storage.getCookies` lists all four
+cookies with the values the `/tl` response set, not the ones the 429 document
+set. And a second navigation carries all four: a 426-byte `Cookie` header, sent
+on the document request, answered 429.
+
+**It is not that the widget never reloads.** It does not, and that had looked
+like the whole gap: Chrome's wire shows a second `Document` request after the
+POST and ours does not. But navigating a second time by hand is refused too. The
+missing reload is a *consequence* — the widget did not get a ticket, so it has
+nothing to reload with.
+
+### What this buys
+
+A verdict in eleven seconds, per run, with no station window in the way. That
+matters more than any single finding: `antibot-stations-pass-in-windows` exists
+because a station's answer to one binary in one hour is not evidence, so every
+claim has had to be paid for with alternating full sweeps. `x-kpsdk-r` is the
+guard's own answer to "is this a browser", read off the response to the request
+that asks it.
+
+```
+node tools/fingerprint/kasada-verdict.mjs lightpanda --runs 3
+node tools/fingerprint/kasada-verdict.mjs chrome     --runs 3
+```
+
+Nothing is injected and `Runtime.enable` is never sent, so the reading is taken
+under the same conditions the sweep takes its own.
+
+### What the request looks like on each side
+
+From `--trace --trace-headers`, the `/tl` POST. Chrome's list is the renderer's
+own view and omits what the network process adds (`Cookie`, `Accept`,
+`Sec-Fetch-*`), which is the asymmetry the encoded-data-length section warns
+about — so this compares what is *there*, not what is missing:
+
+| header | Chrome | this engine |
+|---|---|---|
+| `x-kpsdk-ct` | 178 chars | 178 chars |
+| `x-kpsdk-im` | 148 chars | 148 chars |
+| `x-kpsdk-dt` | 53 chars | **51 chars** |
+| `content-type` | `application/octet-stream` | `application/octet-stream` |
+| `Referer` | `https://www.hyatt.com/` | `https://www.hyatt.com/` |
+| body | ~19.5 kB (B55) | 18 930 bytes |
+
+The two tokens the widget computes from the collected values are the same
+length on both arms; the device token is not. That is where the next session
+should point the oracle.
+
+### Two controls, and what they leave
+
+The oracle is cheap enough to spend on controls, which is the first thing it was
+spent on.
+
+**The same engine gets a ticket from Kasada — just not from this deployment.**
+Pointed at ks-canadagoose, the station this engine already passes:
+
+```
+lightpanda run 1: doc=429->200->200->200->400->200  tl=200 cr=true r=1-B1NOV3w
+lightpanda run 2: doc=429->200->200->200->400->200  tl=200 cr=true r=1-B1R1UWQ
+chrome     run 1: doc=429->200->200->400->200       tl=200 cr=true r=1-B1NuAQM
+chrome     run 2: doc=429->200->200->400->200->200  tl=200 cr=true r=1-B1J5ZXI
+```
+
+Both arms are ticketed there, and both are served. So the payload this engine
+builds is not categorically unacceptable to Kasada, and `x-kpsdk-r` is not a
+header only real Chrome ever sees. **x-hyatt refuses this engine specifically**,
+while its sibling deployment does not.
+
+**And it is not headlessness.** Chrome with `--headless=new` and the same user
+agent is ticketed on x-hyatt too:
+
+```
+chrome (headless) run 1: doc=429->200  tl=200 application/json len=15 cr=true r=1-B1NFXVM
+chrome (headless) run 2: doc=429->200  tl=200 application/json len=15 cr=true r=1-B1JOf0Q
+```
+
+So the gap is between this engine and Chrome, on this one deployment, with a
+verdict that costs eleven seconds to read. The obvious next move is the
+difference between what the two deployments' collectors *read*:
+`results/prop-reads-hyatt.json` exists and its canadagoose counterpart does not,
+and the members x-hyatt reaches that canadagoose does not are a much shorter
+list than everything a browser has.
