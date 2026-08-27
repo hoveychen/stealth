@@ -27,24 +27,54 @@
 // observable windows right: the one where Chrome answers empty, and the one where
 // it answers the full list.
 //
+// That wait is Chrome's *browser process* enumerating the platform's voices, and
+// it happens once. `voice-warmup-timeline.mjs` drives one headed Chrome through
+// several navigations of a page that touches nothing until its own timer fires:
+// the first document waits ~700ms after it asks, and every document after it —
+// a later navigation, or a child frame created once the parent's list arrived —
+// waits 26ms. Two things survive the warmth: the first synchronous call is still
+// empty (at `--delay 3000` on a warm process, the ask at 3002ms answers 0 and
+// fills at 3028ms), and the ask is still what starts the load (a cold process
+// left alone for three seconds has enumerated nothing). So this is not a race
+// against page load in either direction: it is a per-browser cost, which is why
+// the stamp that remembers it lives on Browser and not here. That run also
+// outlives the document that started it: a page that asked and navigated away
+// immediately still left the next page warm, which is what the stamp models.
+//
+// Reproducing that mattered on a station. `antibot-sweep.mjs` drives 29 sites
+// through one browser, so a real Chrome reaching a Kasada page is warm from
+// whichever earlier site asked first and hands over the list ~26ms in. This
+// engine used to restart the full 665ms for every document, which is how a guard
+// reading at 555ms got an empty array here and a full one from Chrome.
+//
 // CreepJS makes that visible. It reads getVoices(), waits 50ms, then gives up
 // 300ms later if no voice with `localService` has arrived — so its speech row
 // depends on whether anything warmed the TTS service before its own late warm-up
-// call, in Chrome exactly as much as here. With a getVoices() injected at document
-// start, a headed Chrome renders `local (180): a158dc36 / remote (19): 036f6dce /
-// lang (51): c4951b20`, which is byte for byte what this engine renders. With
-// nothing warming it — a plain sweep, headed or headless, cold profile or warm —
-// the same Chrome renders all three blocked. The row is a race in CreepJS, not a
-// property of Chrome, and matching Chrome's latency is what makes this engine sit
-// on the same side of it.
+// call, in Chrome exactly as much as here. The row is a race in CreepJS, not a
+// property of Chrome, and what puts this engine on the same side of it is the
+// *scope* of the wait, not its length. Measured with `creep-speech-row.mjs`,
+// each arm one browser, `--warm` visiting one earlier site that asks:
+//
+//              cold browser            an earlier document asked
+//   Chrome     all three blocked       local (180): a158dc36 / remote (19):
+//                                      036f6dce / lang (51): c4951b20
+//   before     all three blocked       all three blocked
+//   after      all three blocked       the same three hashes, byte for byte,
+//                                      down to the section hash a8c32496
+//
+// The middle row is what a per-document wait costs: warm or cold, this engine
+// answered `blocked` where a warm Chrome answered with its voices.
 //
 // speak() has no synthesiser behind it. Rather than doing nothing — which hangs
 // any page that waits for `onend` — it fires Chrome's success sequence (start
 // then end) on the utterance from a scheduler task, so the page continues.
 
 const std = @import("std");
+const lp = @import("lightpanda");
 
 const js = @import("../../js/js.zig");
+
+const Browser = @import("../../Browser.zig");
 
 const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
@@ -83,6 +113,31 @@ _voices_task_queued: bool = false,
 // there is nothing to tune it against.
 const VOICE_LIST_LATENCY_MS: u32 = 665;
 
+// What the same list costs once the browser already has it: only the round trip
+// to ask. 26ms on documents two and three of one browser, 27ms in a child
+// document — see the header and Browser.voices_asked_at_micros.
+const VOICE_LIST_CACHED_MS: u32 = 26;
+
+// How long this document waits for its list, given what the browser has already
+// done about voices. The first ask starts the browser's one enumeration; a later
+// one either finds it finished (the round trip alone) or waits out the rest of
+// it. Never shorter than the round trip: the list arrives on a task either way.
+//
+// The mid-run case is the one arm that is reasoned rather than measured — the
+// two ends of it are not.
+fn browserLatency(browser: *Browser) u32 {
+    const now = lp.datetime.microTimestamp(.boot);
+    const asked = browser.voices_asked_at_micros orelse {
+        browser.voices_asked_at_micros = now;
+        return VOICE_LIST_LATENCY_MS;
+    };
+    const elapsed_ms = (now -| asked) / std.time.us_per_ms;
+    if (elapsed_ms >= VOICE_LIST_LATENCY_MS) {
+        return VOICE_LIST_CACHED_MS;
+    }
+    return @max(VOICE_LIST_CACHED_MS, VOICE_LIST_LATENCY_MS - @as(u32, @intCast(elapsed_ms)));
+}
+
 pub fn asEventTarget(self: *SpeechSynthesis) *EventTarget {
     return self._proto;
 }
@@ -105,8 +160,9 @@ pub fn getVoices(self: *SpeechSynthesis, exec: *Execution) ![]*SpeechSynthesisVo
     if (self._voices_ready == false) {
         if (self._voices_task_queued == false) {
             self._voices_task_queued = true;
+            const latency = browserLatency(exec.page.session.browser);
             const task = try exec._factory.create(VoicesReadyTask{ .synthesis = self, .exec = exec });
-            try exec.js.scheduler.add(task, VoicesReadyTask.run, VOICE_LIST_LATENCY_MS, .{
+            try exec.js.scheduler.add(task, VoicesReadyTask.run, latency, .{
                 .name = "speechSynthesis.voiceschanged",
                 .finalizer = VoicesReadyTask.cancelled,
             });

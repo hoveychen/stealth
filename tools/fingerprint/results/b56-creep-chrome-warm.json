@@ -1,0 +1,15 @@
+{
+ "engine": "chrome",
+ "headed": true,
+ "warm": "https://bot.sannysoft.com/",
+ "settle": 24000,
+ "warmVoices": 0,
+ "textLength": 4752,
+ "row": "Speecha8c32496 local (180): a158dc36 remote (19): 036f6dce lang (51): c4951b20 default: Samantha [en-US] 0.30ms Mediad0ec3aa6 mimes (10/12): 91101bd8 2.10ms Features: 113-115+ JS/DOM: df08a511 (v114-1",
+ "hashes": [
+  "local (180): a158dc36",
+  "remote (19): 036f6dce",
+  "lang (51): c4951b20"
+ ],
+ "blocked": false
+}
