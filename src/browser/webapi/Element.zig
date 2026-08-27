@@ -2088,8 +2088,21 @@ fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) 
 /// that -- a value genuinely 0.0002 below a step and a printed one 0.0002
 /// below the same step are the same two digits -- so the layout asks
 /// CSSStyleDeclaration.cascadedComputedLength for the number instead.
+///
+/// The number is narrowed to a **32-bit float** before the floor, because that
+/// is the width Blink carries a length in and it decides which side of a step
+/// the value falls on: `width:100.0156249px` is a hair under a step as a double
+/// and floors to 100, and IS the step as a float, which is what Chrome answers.
+/// Measured over twenty-one widths chosen to separate the two
+/// (tools/fingerprint/scratch/expr-precision-model.js): the float matches Chrome
+/// 21 times and the double 15.
+///
+/// This is also what absorbs the last bit of arithmetic drift, which an epsilon
+/// used to be here for -- a product that comes out 1e-13 under an exact step is
+/// that step once it is a float, and the epsilon is a guess at the same thing.
 pub fn layoutUnit(px: f64) f64 {
-    return @floor(px * 64.0 + 1e-9) / 64.0;
+    const narrowed: f64 = @as(f32, @floatCast(px));
+    return @floor(narrowed * 64.0) / 64.0;
 }
 
 /// How many measurements may be in flight at once, counting every route in --
@@ -2129,6 +2142,11 @@ pub fn horizontalMargin(self: *Element, frame: *Frame, containing: *?f64, depth:
     var total: f64 = 0;
     inline for (.{ "margin-left", "margin-right" }) |name| {
         if (CSSStyleDeclaration.marginPercentagePx(self, name, frame, containing, depth)) |px| {
+            total += px;
+        } else if (CSSStyleDeclaration.specifiedPx(self, name, frame)) |px| {
+            // The author's number, for the same reason the percentage above
+            // does not go through the computed text: six significant figures of
+            // `465.5466592px` takes a grid step too much off the line.
             total += px;
         } else if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
             if (CSS.parseDimensionViewport(declared, frame)) |px| {
