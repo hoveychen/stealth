@@ -14,13 +14,10 @@ Measured on Chrome 151 with tools/fingerprint/scratch/expr-percentage-width.js;
 every expected string below is Chrome's own answer, on the 1920x1080 viewport
 this test server serves (a 1904px body).
 
-Not resolved here, and each refused for its own reason:
-
-  * `margin-*` percentages, which the same probe shows resolve against the same
-    width -- `margin-left:10%` of 400px is 40px. They stay refused until they
-    have a test of their own. The paddings no longer are: box_parts.html is
-    that test, and `padding-top:10%` taking its share of the WIDTH rather than
-    the height is asserted there.
+The other two families of percentage that resolve against this same width have
+tests of their own: box_parts.html for the paddings, where `padding-top:10%`
+taking its share of the WIDTH rather than the height is asserted, and
+margin_percentage.html for the margins.
 -->
 
 <script id=percentage_width_resolves>
@@ -73,11 +70,11 @@ Not resolved here, and each refused for its own reason:
 </script>
 
 <!--
-The refusals that stay refused, so a later change to them is a deliberate one
-rather than a side effect of this.
+The neighbouring percentages that resolve against the same width, asserted here
+too so that a change to any one of the three shows up beside the other two.
 -->
 
-<script id=percentage_still_refused>
+<script id=percentage_neighbours_resolve>
 {
   const host = document.createElement('div');
   document.body.appendChild(host);
@@ -90,10 +87,9 @@ rather than a side effect of this.
     return v;
   };
 
-  // Chrome answers 40px for both. The padding is resolved now (box_parts.html
-  // is where the rest of that is asserted); the margin reports the initial
-  // value until it is done properly.
-  testing.expectEqual('0px', probe('margin-left:10%', 'marginLeft'));
+  // Chrome answers 40px for both, and so does this now: box_parts.html carries
+  // the rest of the padding readings and margin_percentage.html the margins.
+  testing.expectEqual('40px', probe('margin-left:10%', 'marginLeft'));
   testing.expectEqual('40px', probe('padding-left:10%', 'paddingLeft'));
 
   host.remove();

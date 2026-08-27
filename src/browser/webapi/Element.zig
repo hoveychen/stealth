@@ -2115,13 +2115,22 @@ pub fn containingBlock(self: *Element, frame: *Frame) ?*Element {
 }
 
 /// The horizontal margin that comes off the containing block before the box
-/// gets what is left. From the cascade, so a stylesheet rule counts -- and it
-/// is only ever asked from inside the fill branch, which is already behind
-/// `measure_text_width`.
-pub fn horizontalMargin(self: *Element, frame: *Frame) f64 {
+/// gets what is left. From the cascade, so a stylesheet rule counts. Asked from
+/// two places, both of which already hold the containing block's width: the fill
+/// branch in dimensionsAt, and the flex line in CSSStyleDeclaration.
+///
+/// `containing` is the caller's own measurement of the containing block, shared
+/// so that a percentage margin costs nothing extra. Both margins go through the
+/// one number: letting each measure the parent for itself is the shape that made
+/// a percentage padding cost 5^n down a chain and took the engine out with a
+/// SIGBUS on www.sony.com, and the computed-value path a percentage would
+/// otherwise take is worse still -- it starts a fresh measurement at depth 0.
+pub fn horizontalMargin(self: *Element, frame: *Frame, containing: *?f64, depth: u8) f64 {
     var total: f64 = 0;
     inline for (.{ "margin-left", "margin-right" }) |name| {
-        if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
+        if (CSSStyleDeclaration.marginPercentagePx(self, name, frame, containing, depth)) |px| {
+            total += px;
+        } else if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
             if (CSS.parseDimensionViewport(declared, frame)) |px| {
                 total += px;
             }
@@ -2335,8 +2344,13 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
                             parent.dimensionsAt(frame, measure_text_width, depth + 1, true).width
                     else
                         parent.dimensionsAt(frame, measure_text_width, depth + 1, true).width;
+                    // The width a percentage margin takes its share of is this
+                    // same one, so it is remembered here rather than measured
+                    // again: the two branches above reach it by different
+                    // routes, and only one of them fills the cache.
+                    if (containing == null) containing = available;
                     dims.width = @max(0, available -
-                        horizontalMargin(self, frame) - dims.padding_x - dims.border_x);
+                        horizontalMargin(self, frame, &containing, depth) - dims.padding_x - dims.border_x);
                     // Not a declared value, but the same thing a declared one
                     // means here: the box has a width of its own, so
                     // clientWidth must not take the max with its content and
