@@ -2070,6 +2070,28 @@ fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) 
     return self.dimensionsAt(frame, measure_text_width, 0, true);
 }
 
+/// A length as the layout holds it. Chrome lays out on a 1/64px grid --
+/// Blink's LayoutUnit -- and reaches it by flooring, not rounding: `33.3%` of
+/// 400px is 133.2 in arithmetic and 8524/64 on the page, because 133.2 x 64 is
+/// 8524.8 and the .8 is dropped. Measured with
+/// tools/fingerprint/scratch/expr-layout-grid.js and expr-grid-props.js.
+///
+/// Only USED lengths pass through here. A computed value that is not one --
+/// `padding-left:10.1px`, `margin-left:10.1px`, `font-size:13.3px`, `0.5em` of
+/// it -- is the length the author wrote and Chrome reports it unchanged, which
+/// the same probes checked one property at a time.
+///
+/// Feed this the number, never a number parsed back out of a computed style: a
+/// computed length is written to six significant figures, and a snapped
+/// `33.328125` comes back as `33.3281`, a hair below its own grid step, which
+/// this would then drop to the step beneath. There is no tolerance that fixes
+/// that -- a value genuinely 0.0002 below a step and a printed one 0.0002
+/// below the same step are the same two digits -- so the layout asks
+/// CSSStyleDeclaration.cascadedComputedLength for the number instead.
+pub fn layoutUnit(px: f64) f64 {
+    return @floor(px * 64.0 + 1e-9) / 64.0;
+}
+
 /// How many measurements may be in flight at once, counting every route in --
 /// including the ones that do not carry `depth`. Well past any real page's
 /// nesting, and small enough that a cycle unwinds long before the stack ends.
@@ -2165,6 +2187,8 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
         dims.height = ink.height;
         dims.explicit_width = true;
         dims.explicit_height = true;
+        dims.width = layoutUnit(dims.width);
+        dims.height = layoutUnit(dims.height);
         return dims;
     }
 
@@ -2175,11 +2199,10 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
         dims.border_x = edges.border_x;
         dims.border_y = edges.border_y;
 
-        if (CSSStyleDeclaration.cascadedComputedValue(self, "width", frame)) |declared| {
-            if (CSS.parseDimensionViewport(declared, frame)) |w| {
-                dims.width = if (border_box) @max(0, w - dims.padding_x - dims.border_x) else w;
-                dims.explicit_width = true;
-            }
+        if (CSSStyleDeclaration.cascadedComputedLength(self, "width", frame)) |declared| {
+            const w = layoutUnit(declared);
+            dims.width = if (border_box) @max(0, w - dims.padding_x - dims.border_x) else w;
+            dims.explicit_width = true;
         }
 
         // A flex item's width is the flex container's to give: it is a share of
@@ -2202,11 +2225,10 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // document declares -- a page that never mentions `height` answers the
     // lookup in one hash probe instead of comparing the name against every
     // declaration of every rule keyed to the element.
-    if (CSSStyleDeclaration.cascadedComputedValue(self, "height", frame)) |declared| {
-        if (CSS.parseDimensionViewport(declared, frame)) |h| {
-            dims.height = if (border_box) @max(0, h - dims.padding_y - dims.border_y) else h;
-            dims.explicit_height = true;
-        }
+    if (CSSStyleDeclaration.cascadedComputedLength(self, "height", frame)) |declared| {
+        const h = layoutUnit(declared);
+        dims.height = if (border_box) @max(0, h - dims.padding_y - dims.border_y) else h;
+        dims.explicit_height = true;
     }
 
     if (dims.width == 5.0 or dims.height == 5.0) {
@@ -2342,6 +2364,9 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
         }
     }
 
+    // The box is a used length, so it lands on the layout grid.
+    dims.width = layoutUnit(dims.width);
+    dims.height = layoutUnit(dims.height);
     return dims;
 }
 

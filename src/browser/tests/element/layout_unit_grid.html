@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Chrome lays out on a 1/64px grid -- Blink's LayoutUnit -- so a used length is
+always a multiple of 0.015625, reached by flooring. `width: 33.3%` of 400px is
+133.2 in arithmetic and `133.188px` in Chrome, which is 8524/64: 133.2 x 64 is
+8524.8, and the .8 is dropped rather than rounded.
+
+What snaps and what does not is the difference between a used value and a
+computed one, measured with tools/fingerprint/scratch/expr-grid-props.js and
+expr-layout-grid.js against Chrome 151:
+
+  * `width` and `height` report the USED value -- the box the layout built --
+    so they always snap, a declared `133.2px` included;
+  * a percentage resolves against a used length, so it snaps too, on padding
+    and margin as well as on width;
+  * everything else reports the COMPUTED value, which is the length the author
+    wrote: `padding-left:10.1px` is `10.1px`, `margin-left:10.1px` is `10.1px`,
+    `font-size:13.3px` is `13.3px`, and `0.5em` of that font is `6.65px`. None
+    of those is on the grid and none of them should be.
+-->
+
+<script id=used_lengths_snap>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const read = (outer, inner, prop) => {
+    const w = document.createElement('div');
+    w.innerHTML = '<div style="' + outer + '"><div data-m style="' + inner + '">x</div></div>';
+    host.appendChild(w);
+    const el = w.querySelector('[data-m]');
+    const v = prop === 'rect' ? el.getBoundingClientRect().width : String(getComputedStyle(el)[prop]);
+    w.remove();
+    return v;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // A percentage of 400: 133.2 arithmetic, 8524/64 laid out.
+  eq('width 33.3%', read('width:400px', 'width:33.3%', 'width'), '133.188px');
+  eq('width 33.3% rect', read('width:400px', 'width:33.3%', 'rect'), 133.1875);
+  // A declared length is a used value too, so it snaps the same way.
+  eq('width 133.2px', read('width:400px', 'width:133.2px', 'width'), '133.188px');
+  eq('width 133.333px', read('width:400px', 'width:133.333px', 'width'), '133.328px');
+  eq('height 33.3px', read('width:400px', 'height:33.3px', 'height'), '33.2969px');
+  // Already on the grid, or so close that the floor lands on it.
+  eq('width 100.0078125px', read('width:400px', 'width:100.0078125px', 'width'), '100px');
+  eq('width 100.001px', read('width:400px', 'width:100.001px', 'width'), '100px');
+  eq('width 7%', read('width:400px', 'width:7%', 'width'), '28px');
+  // A percentage of the viewport-wide line, for a number no 400px box gives.
+  eq('width 10% of 1904', read('', 'width:10%', 'width'), '190.391px');
+
+  // A percentage padding resolves against a used length, so it snaps. (A
+  // percentage MARGIN does too -- Chrome answers the same 133.188px -- but
+  // this engine still refuses those and answers the initial 0px; that is the
+  // `margin-percentage-resolves` plan, not this one.)
+  eq('padding 33.3%', read('width:400px', 'padding-left:33.3%', 'paddingLeft'), '133.188px');
+  // (The content left over is 266.8125, which Chrome writes `266.812px` --
+  // six significant figures rounded half to EVEN. This engine rounds half up
+  // and writes `266.813px`; that is the `css-number-round-half-even` plan, not
+  // this one, so what is asserted here is the padding rather than the
+  // remainder.)
+
+  // ...and a length the author wrote does not: these report a computed value,
+  // not a used one.
+  eq('padding 10.1px', read('width:400px', 'padding-left:10.1px', 'paddingLeft'), '10.1px');
+  eq('margin 10.1px', read('width:400px', 'margin-left:10.1px', 'marginLeft'), '10.1px');
+  eq('font-size 13.3px', read('width:400px', 'font-size:13.3px', 'fontSize'), '13.3px');
+  eq('padding 0.5em', read('width:400px', 'font-size:13.3px;padding-left:0.5em', 'paddingLeft'), '6.65px');
+  eq('letter-spacing', read('width:400px', 'letter-spacing:0.7px', 'letterSpacing'), '0.7px');
+
+  // transform-origin is the centre of a snapped box, so it carries the grid
+  // through without being snapped again.
+  eq('origin of 33.3%', read('width:400px', 'width:33.3%', 'transformOrigin'), '66.5938px 9px');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
