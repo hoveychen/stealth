@@ -48,6 +48,27 @@ _automation_rate: AutomationRate,
 _min_value: f64 = MIN_VALUE,
 _max_value: f64 = MAX_VALUE,
 
+// What a render would hold this parameter at is not `value`: an automation
+// event does not move the getter before the render thread has walked the
+// timeline — Chrome's does not move either, which is why this gap stayed
+// invisible until somebody rendered the graph — but it is exactly what gets
+// rendered. The two fields below carry that, and `renderValue()` reads them.
+//
+// A `setValueAtTime` landing at the very start of the render. `value = x` is
+// the same event at the same instant, so whichever came last wins: assigning
+// clears this, which is Chrome's answer both ways round (measured — scheduling
+// 10 kHz then assigning 1 kHz renders 1 kHz, and the reverse renders 1 kHz
+// too).
+_scheduled_start: ?f64 = null,
+
+// The timeline does something after the start that is not a single constant.
+// Any recorded render is then off the table, and not only for the obvious
+// shapes: Chrome renders 124.04346760431508 for the canonical graph with one
+// event scheduled a full second past the end of a 0.1134 s render, against
+// 124.04347624466754 with no event at all. A timeline that exists is walked,
+// and nearly-right is the one answer worth less than silence.
+_timeline_moves: bool = false,
+
 // A few parameters refuse to have their rate changed at all, and Chrome names
 // them when it refuses: AudioBufferSourceNode's detune and playbackRate are
 // k-rate for good (measured). Null means the rate is free to move.
@@ -89,6 +110,19 @@ pub fn setValue(self: *AudioParam, value: f64, exec: *const Execution) !void {
         exec,
     );
     self._value = std.math.clamp(value, self._min_value, self._max_value);
+    self._scheduled_start = null;
+}
+
+/// The constant a render would hold this parameter at, or null when the
+/// timeline moves it and no recorded render can stand in for the result. Read
+/// by the two graph matchers (canonical_render.zig, buffer_render.zig) and by
+/// nothing else, which is why the handful of places that write `_value`
+/// directly -- constructor options, and the legacy setPosition/setOrientation
+/// setters -- are left alone: none of them touch a parameter either matcher
+/// looks at.
+pub fn renderValue(self: *const AudioParam) ?f64 {
+    if (self._timeline_moves) return null;
+    return self._scheduled_start orelse self._value;
 }
 
 pub fn getDefaultValue(self: *const AudioParam) f64 {
@@ -131,16 +165,28 @@ pub fn setAutomationRate(self: *AudioParam, rate: []const u8, exec: *const Execu
 // currentTime pinned at 0 nothing has been applied yet (measured —
 // `pan.setValueAtTime(5, 0)` leaves `pan.value` at 0). `time` is validated the
 // way Chrome validates it and then dropped.
+//
+// What they do move is the render, and that is what `_scheduled_start` and
+// `_timeline_moves` carry. A single event at the very start of the render is
+// still one constant — it is how Kasada sets the oscillator's frequency on
+// x-hyatt — so it is recorded as the value a recorded render can be matched
+// against. Everything else says the parameter is not a constant and no
+// recording applies.
 
 pub fn setValueAtTime(self: *AudioParam, value: f64, time: f64) !*AudioParam {
-    _ = value;
     try validateTime(time);
+    if (time == 0) {
+        self._scheduled_start = value;
+    } else {
+        self._timeline_moves = true;
+    }
     return self;
 }
 
 pub fn linearRampToValueAtTime(self: *AudioParam, value: f64, time: f64) !*AudioParam {
     _ = value;
     try validateTime(time);
+    self._timeline_moves = true;
     return self;
 }
 
@@ -150,6 +196,7 @@ pub fn exponentialRampToValueAtTime(self: *AudioParam, value: f64, time: f64) !*
     if (value == 0) {
         return error.RangeError;
     }
+    self._timeline_moves = true;
     return self;
 }
 
@@ -159,6 +206,7 @@ pub fn setTargetAtTime(self: *AudioParam, target: f64, start_time: f64, time_con
     if (time_constant < 0) {
         return error.RangeError;
     }
+    self._timeline_moves = true;
     return self;
 }
 
@@ -170,9 +218,15 @@ pub fn setValueCurveAtTime(self: *AudioParam, values: []const f64, start_time: f
     if (values.len < 2) {
         return error.InvalidStateError;
     }
+    self._timeline_moves = true;
     return self;
 }
 
+// The two cancels take events off the timeline rather than putting any on, so
+// they leave `_timeline_moves` alone: a cancel on a parameter that was only
+// ever assigned is a no-op in Chrome, and marking it would turn a graph that
+// renders into silence. A cancel *after* a ramp does not clear the flag, which
+// errs the way the rest of this file errs — towards silence.
 pub fn cancelScheduledValues(self: *AudioParam, time: f64) !*AudioParam {
     try validateTime(time);
     return self;

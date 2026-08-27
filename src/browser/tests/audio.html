@@ -1336,6 +1336,96 @@
     })(),
   };
 
+  // The same graph with its numbers scheduled onto the automation timeline
+  // instead of assigned. Kasada builds it this way on x-hyatt — the oscillator's
+  // frequency arrives through setValueAtTime, results/prop-reads-hyatt.json seq
+  // 482 — and Chrome renders the identical buffer either way, because `value`
+  // and the render thread read the timeline at different moments. Every number
+  // below was read off both arms by
+  // tools/fingerprint/scratch/expr-audio-scheduled-params.js.
+  const scheduled = async (place) => {
+    const ctx = new OfflineAudioContext(1, 5000, 44100);
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    const comp = ctx.createDynamicsCompressor();
+    const g = GRAPHS.fingerprintjs;
+    const rest = () => {
+      comp.threshold.value = g.threshold;
+      comp.knee.value = g.knee;
+      comp.ratio.value = g.ratio;
+      comp.attack.value = g.attack;
+      comp.release.value = g.release;
+    };
+    const read = place(ctx, osc, comp, g, rest) ?? {};
+    osc.connect(comp);
+    comp.connect(ctx.destination);
+    osc.start(0);
+    return { data: (await ctx.startRendering()).getChannelData(0), ...read };
+  };
+
+  // The x-hyatt shape: one scheduled parameter, the rest assigned.
+  const scheduledFrequency = await scheduled((ctx, osc, comp, g, rest) => {
+    osc.frequency.setValueAtTime(g.frequency, ctx.currentTime);
+    rest();
+    // Before the render has run, the getter has not moved -- Chrome's has not
+    // either (440 on both arms), which is why this gap was invisible until
+    // somebody rendered the graph.
+    return { before: osc.frequency.value };
+  });
+  // And with every number of the graph scheduled.
+  const scheduledEverything = await scheduled((ctx, osc, comp, g) => {
+    osc.frequency.setValueAtTime(g.frequency, 0);
+    comp.threshold.setValueAtTime(g.threshold, 0);
+    comp.knee.setValueAtTime(g.knee, 0);
+    comp.ratio.setValueAtTime(g.ratio, 0);
+    comp.attack.setValueAtTime(g.attack, 0);
+    comp.release.setValueAtTime(g.release, 0);
+  });
+
+  // Where the timeline stops being a graph with a recording. Chrome's tail sum
+  // for each is in the comment: none of them is the canonical buffer, so
+  // replaying it would be the loud lie this file exists to avoid.
+  const scheduledMisses = {
+    // 101.4564685229434 -- scheduled to a value this graph does not use.
+    wrongValue: (await scheduled((ctx, osc, comp, g, rest) => {
+      osc.frequency.setValueAtTime(1000, 0);
+      rest();
+    })).data,
+    // 101.4564685229434 -- both land at the start of the render, so the last
+    // one written is what gets rendered, whichever kind it was.
+    assignedOver: (await scheduled((ctx, osc, comp, g, rest) => {
+      osc.frequency.setValueAtTime(g.frequency, 0);
+      osc.frequency.value = 1000;
+      rest();
+    })).data,
+    scheduledOver: (await scheduled((ctx, osc, comp, g, rest) => {
+      osc.frequency.value = g.frequency;
+      osc.frequency.setValueAtTime(1000, 0);
+      rest();
+    })).data,
+    // 101.40662774103566 -- a ramp is not a constant.
+    ramped: (await scheduled((ctx, osc, comp, g, rest) => {
+      osc.frequency.setValueAtTime(g.frequency, 0);
+      osc.frequency.linearRampToValueAtTime(1000, 0.05);
+      rest();
+    })).data,
+    // 101.45745121572327 -- the change lands inside the 0.1134 s render.
+    changesMidRender: (await scheduled((ctx, osc, comp, g, rest) => {
+      osc.frequency.value = g.frequency;
+      osc.frequency.setValueAtTime(1000, 0.05);
+      rest();
+    })).data,
+    // 124.04346760431508 -- the change lands *after* the render ends, and it
+    // still is not the canonical buffer: an event on the timeline makes Blink
+    // walk it instead of holding a constant, and the last digits move. Nearly
+    // right is the one answer worth less than silence.
+    changesAfterRender: (await scheduled((ctx, osc, comp, g, rest) => {
+      osc.frequency.value = g.frequency;
+      osc.frequency.setValueAtTime(1000, 1);
+      rest();
+    })).data,
+  };
+
   state.resolve();
   await state.done(() => {
     testing.expectEqual(5000, canonical.length);
@@ -1373,6 +1463,16 @@
     );
 
     for (const [which, data] of Object.entries(nearMisses)) {
+      testing.expectEqual(`${which}:silent`, `${which}:${data.every((v) => v === 0) ? 'silent' : 'replayed'}`);
+    }
+
+    // A scheduled parameter reaches the render even though it has not reached
+    // the getter yet.
+    testing.expectEqual(440, scheduledFrequency.before);
+    testing.expectEqual(expected.fingerprintjs, tail(scheduledFrequency.data));
+    testing.expectEqual(expected.fingerprintjs, tail(scheduledEverything.data));
+
+    for (const [which, data] of Object.entries(scheduledMisses)) {
       testing.expectEqual(`${which}:silent`, `${which}:${data.every((v) => v === 0) ? 'silent' : 'replayed'}`);
     }
   });

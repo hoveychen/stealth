@@ -183,8 +183,13 @@ const Plan = struct {
         // Any of these three asks Chrome to resample, which is the one thing
         // this cannot reproduce.
         if (buffer._sample_rate != context._sample_rate) return null;
-        if (source._playback_rate._value != 1) return null;
-        if (source._detune._value != 0) return null;
+        // renderValue, not `value`: a parameter that was scheduled onto the
+        // timeline rather than assigned reads back unmoved before the render
+        // has run, in Chrome too, but it is what the render sees.
+        const playback_rate = source._playback_rate.renderValue() orelse return null;
+        if (playback_rate != 1) return null;
+        const detune = source._detune.renderValue() orelse return null;
+        if (detune != 0) return null;
 
         const rate = context._sample_rate;
         const start = frames(scheduled._start_when, rate) orelse return null;
@@ -239,7 +244,8 @@ fn sourceOf(context: *BaseAudioContext, target: *AudioNode) ?*nodes.AudioBufferS
         const node = context.soleSource(at) orelse return null;
         switch (node._type) {
             .gain => |gain| {
-                if (gain._gain._value != 1) return null;
+                const unity = gain._gain.renderValue() orelse return null;
+                if (unity != 1) return null;
                 at = node;
             },
             .scheduled_source => |scheduled| return switch (scheduled._type) {
