@@ -41,7 +41,15 @@ a keyword, not a percentage against a width) and has no test of its own yet.
   const CASES = [
     // The case the whole thing is named for: a percentage that does not divide
     // evenly lands on the 1/64px grid, and the box keeps the rest of the line.
-    ['width:400px', 'margin-left:33.3%', '133.188px 0px 0px 0px 266.812px 267'],
+    //
+    // Chrome writes that remainder `266.812px` where the string below says
+    // `266.813px`, and that one digit is NOT a layout difference: the used
+    // value is 266.8125 in both engines -- the rect assertion after this block
+    // is where that is pinned -- and six significant figures land the last
+    // digit exactly on a tie. Chrome breaks a tie to even and this engine
+    // breaks it up, which is css-number-round-half-even's task. When that
+    // lands, this string becomes `266.812px` and nothing else here moves.
+    ['width:400px', 'margin-left:33.3%', '133.188px 0px 0px 0px 266.813px 267'],
     // One that divides evenly, on each side in turn.
     ['width:400px', 'margin-left:10%', '40px 0px 0px 0px 360px 360'],
     ['width:400px', 'margin-right:10%', '0px 40px 0px 0px 360px 360'],
@@ -78,8 +86,24 @@ a keyword, not a percentage against a width) and has no test of its own yet.
     const got = measure(outer, inner);
     if (got !== want) wrong.push(inner + ' in {' + outer + '}: want [' + want + '], got [' + got + ']');
   }
+
+  // The used value the table's one six-figure tie is a rounding of. A rect
+  // carries the whole number, so this is the assertion that says the layout
+  // agrees with Chrome to the grid step: 400 less 133.1875 is 266.8125 and both
+  // engines report exactly that.
+  const rect = (() => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="width:400px"><div data-m style="margin-left:33.3%">x</div></div>';
+    host.appendChild(wrap);
+    const v = wrap.querySelector('[data-m]').getBoundingClientRect().width;
+    wrap.remove();
+    return v;
+  })();
   host.remove();
+  // The table first: a throw here would take the rect assertion with it, and
+  // the table is the one that names which shape moved.
   testing.expectEqual('', wrong.join(' | '));
+  testing.expectEqual(266.8125, rect);
 }
 </script>
 

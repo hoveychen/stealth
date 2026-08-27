@@ -20,11 +20,6 @@ block.
 
 Deliberately not resolved here, each for a measured reason:
 
-  * **percentages against the containing block.** `margin-left:50%` is `200px`
-    of a 400px block for Chrome; nothing here models a containing block, and the
-    synthetic layout metrics are not it. The two percentages that need no block
-    — `font-size` against the parent's, `line-height` against the element's own
-    — are resolved and asserted below.
   * **`ex` and `ch`.** Measured with expr-ex-ch-ratio.js across five families and
     three sizes: the ratio to the font size is exactly constant per family and
     different for each one — 0.44873 for serif, 0.52295 for sans-serif, 0.54688
@@ -170,9 +165,10 @@ computed style, so falling back is the whole point rather than a shortcoming to
 be papered over.
 
 Chrome's answers here, for the record, are 200px / 200px / 100px / 17.9492px /
-15px. The padding percentage is no longer among them -- box_parts.html resolves
-those against the containing block's width -- so it is asserted at Chrome's own
-100px below, and what is left refused is the margin, the `ex` and the `calc()`.
+15px. The percentages are no longer among the refusals -- box_parts.html resolves
+the paddings against the containing block's width and margin_percentage.html the
+margins -- so the first three are asserted at Chrome's own numbers below, and
+what is left refused is the `ex` and the `calc()`.
 -->
 
 <script id=unresolvable_still_falls_through>
@@ -186,9 +182,10 @@ those against the containing block's width -- so it is asserted at Chrome's own
     return got;
   };
 
-  testing.expectEqual('0px', probe('margin-left:50%', 'marginLeft'));
-  // A <p>'s own initial top margin, which is what falling through means here.
-  testing.expectEqual('16px', probe('margin-top:50%', 'marginTop'));
+  testing.expectEqual('200px', probe('margin-left:50%', 'marginLeft'));
+  // Half of the WIDTH on the vertical side too, which is the reading that says
+  // a percentage margin never looks at a height.
+  testing.expectEqual('200px', probe('margin-top:50%', 'marginTop'));
   testing.expectEqual('100px', probe('padding-top:25%', 'paddingTop'));
   testing.expectEqual('0px', probe('font-size:20px;padding-top:2ex', 'paddingTop'));
   testing.expectEqual('0px', probe('padding-top:calc(10px + 5px)', 'paddingTop'));

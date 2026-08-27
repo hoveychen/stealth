@@ -759,17 +759,17 @@ fn lengthFactor(style_manager: *StyleManager, element: *Element, property_name: 
 
 /// The properties whose percentage is a share of the containing block's width.
 ///
-/// The two spellings of `width`, and all four paddings. Measured with
-/// tools/fingerprint/scratch/expr-percentage-width.js: `width:50%` in a 400px
-/// parent is 200px, in a parent that declares nothing it is half the 1904 that
-/// parent itself took, and in a shrink-to-fit parent it is half of what that
-/// parent's content came to.
+/// The two spellings of `width`, all four paddings and all four margins.
+/// Measured with tools/fingerprint/scratch/expr-percentage-width.js:
+/// `width:50%` in a 400px parent is 200px, in a parent that declares nothing it
+/// is half the 1904 that parent itself took, and in a shrink-to-fit parent it is
+/// half of what that parent's content came to.
 ///
-/// A padding takes its share of the same width on BOTH axes, which is the part
-/// worth writing down: expr-box-parts.js puts `width:400px; padding:10%` in the
-/// 1904px line at 190.391px per side, top and bottom included, so its
-/// clientHeight is 399 and not 18. `margin-left:10%` resolves against the same
-/// width and is still refused, having no test of its own.
+/// A padding and a margin each take their share of the same width on BOTH axes,
+/// which is the part worth writing down: expr-box-parts.js puts `width:400px;
+/// padding:10%` in the 1904px line at 190.391px per side, top and bottom
+/// included, so its clientHeight is 399 and not 18, and expr-margin-pct.js puts
+/// `margin-top:10%` of a 400px line at 40px.
 fn percentageOfContainingBlockWidth(property_name: []const u8) bool {
     const NAMES = [_][]const u8{
         "width",                "inline-size",
@@ -777,6 +777,10 @@ fn percentageOfContainingBlockWidth(property_name: []const u8) bool {
         "padding-top",          "padding-bottom",
         "padding-inline-start", "padding-inline-end",
         "padding-block-start",  "padding-block-end",
+        "margin-left",          "margin-right",
+        "margin-top",           "margin-bottom",
+        "margin-inline-start",  "margin-inline-end",
+        "margin-block-start",   "margin-block-end",
     };
     for (NAMES) |name| {
         if (std.mem.eql(u8, property_name, name)) return true;
@@ -1276,6 +1280,45 @@ fn paddingPx(element: *Element, name: []const u8, frame: *Frame, containing: *?f
     return computedPx(element, name, frame);
 }
 
+/// A margin declared as a percentage, in px against the shared containing-block
+/// width. Null when the declaration is not a percentage, which leaves the
+/// caller to resolve it the ordinary way.
+///
+/// A percentage margin is a share of the containing block's WIDTH on all four
+/// sides, the way a percentage padding is: measured with
+/// tools/fingerprint/scratch/expr-margin-pct.js, `margin-top:10%` of a 400px
+/// line is 40px and not a tenth of any height.
+///
+/// Resolved here rather than through the computed-value machinery for the same
+/// reason paddingPx is: that path measures the containing block from scratch for
+/// every property that asks, and this is called from inside the measurement that
+/// already holds the number. Two margins asking separately would put back on the
+/// chain exactly the multiplier boxEdgesSharing exists to keep off it.
+///
+/// Signed, unlike a padding: `margin-left:-10%` of a 400px line is -40px, and
+/// the box beside it gets 440 rather than 360.
+///
+/// Both spellings are asked for, the way cascadedComputedValue asks: an element
+/// that declared `margin-inline-start` has declared `margin-left`, and the box
+/// has to lose the same 40px either way.
+pub fn marginPercentagePx(element: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) ?f64 {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const declared = declaredEitherSpelling(style_manager, element, name) orelse return null;
+    const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
+    if (!std.mem.endsWith(u8, trimmed, "%")) return null;
+    const parsed = units.parse(trimmed) catch return 0;
+    const width = containingWidth(element, frame, containing, depth) orelse return 0;
+    return Element.layoutUnit(width * parsed.value / 100.0);
+}
+
+/// declaredText for a property under either of its two spellings, physical or
+/// logical.
+fn declaredEitherSpelling(style_manager: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
+    if (declaredText(style_manager, element, name, .wrap(name))) |text| return text;
+    const other = chrome_logical.counterpart(name) orelse return null;
+    return declaredText(style_manager, element, other, .wrap(other));
+}
+
 /// The containing block's content width, measured once and remembered.
 pub fn containingWidth(element: *Element, frame: *Frame, containing: *?f64, depth: u8) ?f64 {
     if (containing.*) |width| return width;
@@ -1495,6 +1538,11 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
     var taken: f64 = 0;
     var own_base: f64 = 0;
 
+    // Every item on this line has the same containing block -- the flex
+    // container, which `container` is already the content width of -- so the
+    // percentage margins below resolve against it without measuring anything.
+    var line_width: ?f64 = container;
+
     var child = parent.firstElementChild();
     while (child) |sibling| : (child = sibling.nextElementSibling()) {
         if (!isFlexItem(sibling, frame)) continue;
@@ -1509,7 +1557,7 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
         // content and 400 of offsetWidth, and beside an unpadded `flex: 1` the
         // two come out 175 of content each.
         taken += base + sibling_edges.padding_x + sibling_edges.border_x +
-            Element.horizontalMargin(sibling, frame);
+            Element.horizontalMargin(sibling, frame, &line_width, depth);
         total_grow += flexFactor(sibling, "flex-grow", frame);
         if (sibling == element) own_base = base;
     }
