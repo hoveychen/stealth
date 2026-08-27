@@ -1,0 +1,8 @@
+{
+  "set Times New Roman": "style=Times New Roman | computed=Times New Roman",
+  "set \"Times New Roman\"": "style=\"Times New Roman\" | computed=\"Times New Roman\"",
+  "set serif": "style=serif | computed=serif",
+  "set Arial, sans-serif": "style=Arial, sans-serif | computed=Arial, sans-serif",
+  "set Times New Roman, serif": "style=Times New Roman, serif | computed=Times New Roman, serif",
+  "set bold serif": "style=bold serif | computed=bold serif"
+}

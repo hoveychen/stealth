@@ -521,6 +521,53 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
         // `margin:11px` has said `margin-top:11px`, and a computed style is
         // asked for the longhand, so the expansion happens here rather than
         // being missing on whichever of the two paths a page happens to take.
+        // `font` is the same story twice over: it expands, but not through
+        // `lookup` -- the table still calls it unmodelled, so the parsing half
+        // lives in `fontExpansion` and the six system keywords in
+        // `systemFontExpansion`. Both have to be asked HERE as well as on the
+        // CSSOM path, or a page that writes `font` in a stylesheet gets none of
+        // it: measured, a rule `.x{font:13px serif}` left computed font-size at
+        // 16px while the same declaration inline gave 13px
+        // (probes/expr-b81-font-shorthand-layout.js, the `sheet` case).
+        if (shorthand.systemFontExpansion(name, val)) |expansion| {
+            for (expansion.names, expansion.values) |longhand_name, longhand_value| {
+                try longhands.append(self.arena.allocator(), .{
+                    .name = longhand_name,
+                    .value = canonicalValue(self.arena.allocator(), longhand_name, longhand_value),
+                    .important = decl.important,
+                    .specified = CSSStyleDeclaration.specifiedNumber(longhand_value),
+                });
+            }
+            continue;
+        }
+        if (shorthand.fontExpansion(self.arena.allocator(), name, val) catch null) |outcome| switch (outcome) {
+            // Chrome drops an invalid `font` rather than keeping it whole, so
+            // the declaration contributes nothing to the cascade either.
+            .refused => continue,
+            .wide => |wide| {
+                for (wide.expansion.names, wide.expansion.values) |longhand_name, longhand_value| {
+                    try longhands.append(self.arena.allocator(), .{
+                        .name = longhand_name,
+                        .value = longhand_value,
+                        .important = decl.important,
+                        .specified = null,
+                    });
+                }
+                continue;
+            },
+            .parsed => |expansion| {
+                for (expansion.names, expansion.values) |longhand_name, longhand_value| {
+                    try longhands.append(self.arena.allocator(), .{
+                        .name = longhand_name,
+                        .value = canonicalValue(self.arena.allocator(), longhand_name, longhand_value),
+                        .important = decl.important,
+                        .specified = CSSStyleDeclaration.specifiedNumber(longhand_value),
+                    });
+                }
+                continue;
+            },
+        };
+
         if (shorthand.lookup(name)) |entry| {
             if (shorthand.expand(self.arena.allocator(), entry, val) catch null) |expansion| {
                 for (expansion.names, expansion.values) |longhand_name, longhand_value| {

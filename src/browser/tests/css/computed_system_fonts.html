@@ -64,14 +64,26 @@ which is a separate defect; these four zeros are expected to survive this fix.
   testing.expectEqual('Arial', String(getComputedStyle(el).fontFamily));
   testing.expectEqual('16px Arial', String(getComputedStyle(el).font));
 
-  // A font shorthand that is not one of the six is untouched by this. `font`'s
-  // grammar is unmodelled, so such a value is still kept whole and the longhands
-  // keep their initial values -- 16px Times, not 20px Georgia. That is
-  // pre-existing and is not what this plan fixes; what matters here is only that
-  // the system-keyword path did not fire and invent Arial for it.
+  // A font shorthand that is not one of the six now reaches the cascade too --
+  // that is `font-shorthand-cascade`, and this block used to assert the gap it
+  // closed ("still kept whole and the longhands keep their initial values --
+  // 16px Times, not 20px Georgia"). Every reading below is Chrome's, read with
+  // probes/expr-b83-system-font-neighbour.js rather than copied out of this
+  // engine. What the block still checks is what it always did: that the
+  // system-keyword path did NOT fire and invent Arial for a value that is not
+  // one of the six.
   el.setAttribute('style', 'font: italic 700 20px/1.5 Georgia');
-  testing.expectEqual('Times', String(getComputedStyle(el).fontFamily));
-  testing.expectEqual('16px', String(getComputedStyle(el).fontSize));
+  testing.expectEqual('Georgia', String(getComputedStyle(el).fontFamily));
+  testing.expectEqual('20px', String(getComputedStyle(el).fontSize));
+  testing.expectEqual('italic', String(getComputedStyle(el).fontStyle));
+  testing.expectEqual('700', String(getComputedStyle(el).fontWeight));
+  // The line height came through the slash, as a number against the size.
+  testing.expectEqual('30px', String(getComputedStyle(el).lineHeight));
+  // Chrome keeps no shorthand in a declaration: nineteen longhands, and `font`
+  // itself rebuilt from them on every read -- in the grammar's order rather than
+  // the author's, and echoing the tokens that were stored.
+  testing.expectEqual(19, el.style.length);
+  testing.expectEqual('italic 700 20px / 1.5 Georgia', String(el.style.font));
 
   // And the six are keywords of the shorthand only. `font-family: caption` is a
   // family name, and keeps its capitals like any other custom ident.

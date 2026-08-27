@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Chrome keeps no shorthand in a declaration, `font` included: it parses the
+grammar, stores nineteen longhands, and rebuilds `font` from them on every read.
+This engine used to keep the declaration whole instead, so the shorthand reached
+the canvas font and never the cascade -- with `style="font:<n>px serif"` over
+eighteen sizes it answered the SAME box width for every one of them, the default
+font's, while its own `measureText` answered each size correctly
+(probes/expr-b81-font-shorthand-layout.js).
+
+Every value below is Chrome 151's, read off `style.length` and the indexed names
+-- which ARE Chrome's expansion, since it stores no shorthand -- with
+probes/expr-b81-font-expansion.js and expr-b83-font-refusals.js.
+
+Two differences from Chrome are deliberate and are asserted as this engine
+answers them, each with the plan that owns it:
+
+  * a multi-identifier family is written back unquoted. Chrome writes
+    `16px "bold serif"`; so does its `font-family` LONGHAND, and this engine's
+    longhand writes `bold serif` there too, so the gap is `font-family`'s
+    serialisation and predates the shorthand entirely
+    (probes/expr-b83-font-family-quoting.js).
+  * a value carrying `var()`, a function or a comment is kept whole rather than
+    expanded. Chrome expands all three -- and reorders the arithmetic inside
+    `calc(1px + 1em)` while it is there -- so declining is the direction that
+    cannot invent a value Chrome never had.
+-->
+
+<script id=font_shorthand_expands_into_the_cascade>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const el = document.createElement('div');
+  host.appendChild(el);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+  const set = (decl) => { el.setAttribute('style', ''); el.style.font = decl; };
+  const computed = (prop) => String(getComputedStyle(el).getPropertyValue(prop));
+
+  // The two-part minimum. Nineteen entries, not one, and the size and family
+  // reach the cascade.
+  set('13px serif');
+  eq('min length', el.style.length, 19);
+  eq('min font-size', computed('font-size'), '13px');
+  eq('min font-family', computed('font-family'), 'serif');
+  eq('min readback', String(el.style.font), '13px serif');
+  // The twelve the grammar never names are reset to their own initials, which
+  // is why these two are not `normal`.
+  eq('min font-size-adjust', String(el.style.getPropertyValue('font-size-adjust')), 'none');
+  eq('min font-kerning', String(el.style.getPropertyValue('font-kerning')), 'auto');
+
+  // The leading parts are a `||` group: any order in, one fixed order out.
+  set('bold italic 16px serif');
+  eq('reordered readback', String(el.style.font), 'italic bold 16px serif');
+  eq('reordered font-style', computed('font-style'), 'italic');
+  set('italic small-caps bold condensed 16px/1.4 serif');
+  eq('all readback', String(el.style.font), 'italic small-caps bold condensed 16px / 1.4 serif');
+  eq('all font-variant-caps', computed('font-variant-caps'), 'small-caps');
+
+  // A line height comes through the slash as the author wrote it, and computes
+  // against the size: 1.4 of 16px is 22.4px.
+  set('16px/1.4 serif');
+  eq('slash stored', String(el.style.getPropertyValue('line-height')), '1.4');
+  eq('slash computed', computed('line-height'), '22.4px');
+  eq('slash readback', String(el.style.font), '16px / 1.4 serif');
+  // ...and a `normal` line height leaves the slash out of the readback.
+  set('16px/normal serif');
+  eq('normal line readback', String(el.style.font), '16px serif');
+
+  // Everything after the size is the family, whatever it looks like.
+  set('16px bold serif');
+  eq('family is the tail', String(el.style.getPropertyValue('font-family')), 'bold serif');
+  // (Chrome writes `16px "bold serif"` here; this engine's `font-family`
+  // longhand does not quote either, which is where that belongs.)
+  eq('family tail readback', String(el.style.font), '16px bold serif');
+
+  // A size of `0` is legal and normalises; a relative keyword is legal too.
+  set('0 serif');
+  eq('zero size', String(el.style.getPropertyValue('font-size')), '0px');
+  set('larger serif');
+  eq('relative size', String(el.style.getPropertyValue('font-size')), 'larger');
+
+  // `normal` may repeat -- every slot's initial is `normal` anyway.
+  set('normal normal normal normal 16px serif');
+  eq('four normals', el.style.length, 19);
+  eq('four normals readback', String(el.style.font), '16px serif');
+
+  // `oblique <angle>` is one part in two tokens, and both are stored.
+  set('oblique 20deg 16px serif');
+  eq('oblique angle', String(el.style.getPropertyValue('font-style')), 'oblique 20deg');
+  eq('oblique readback', String(el.style.font), 'oblique 20deg 16px serif');
+
+  // The weight range is 1 to 1000 inclusive and takes fractions.
+  for (const w of ['1', '1000', '350.5']) {
+    set(w + ' 16px serif');
+    eq('weight ' + w, String(el.style.getPropertyValue('font-weight')), w);
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=font_shorthand_refuses_what_chrome_refuses>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const el = document.createElement('div');
+  host.appendChild(el);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // `font` is the one shorthand Chrome does not keep whole when it is invalid:
+  // it throws the declaration away, leaving nothing at all. This engine used to
+  // leave one entry holding the text.
+  const refuses = {
+    'no family': '13px',
+    'no size': 'serif',
+    'neither': 'bold',
+    'line height but no family': '16px/1.4',
+    'doubled weight': 'bold bold 16px serif',
+    'two styles': 'italic oblique 16px serif',
+    'unknown leader': 'wibble 16px serif',
+    'weight above the range': '1001 16px serif',
+    'weight of zero': '0 16px serif',
+    'negative weight': '-1 16px serif',
+    'negative size': '-5px serif',
+    'dangling slash': '16px/ serif',
+    'slash with no size': '/1.4 serif',
+    'css-wide keyword as a part': 'bold inherit serif',
+  };
+  for (const [what, decl] of Object.entries(refuses)) {
+    el.setAttribute('style', '');
+    el.style.font = decl;
+    eq(what, el.style.length, 0);
+  }
+
+  // `0 16px serif` is in that list for a reason worth naming: taking the `0` as
+  // the size leaves `16px serif` as the family, and `16px` is a dimension rather
+  // than an identifier, so there is nowhere for the declaration to go. The same
+  // `0` IS a size when what follows it can be a family.
+  el.setAttribute('style', '');
+  el.style.font = '0 serif';
+  eq('zero size with a real family', el.style.length, 19);
+
+  // What is declined rather than refused: a value this engine cannot judge stays
+  // whole, one entry, the way every unmodelled shorthand does.
+  for (const [what, decl] of Object.entries({ 'var()': '16px var(--f)', 'a function': 'calc(1px + 1em) serif', 'a comment': '16px /* c */ serif' })) {
+    el.setAttribute('style', '');
+    el.style.font = decl;
+    eq('kept whole: ' + what, el.style.length, 1);
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=font_shorthand_is_inherited>
+{
+  // The reading that says why this matters beyond serialisation: a `font` on a
+  // container had nothing to inherit before, because the shorthand never reached
+  // the cascade. Chrome's answers, read with
+  // probes/expr-b83-wide-keyword-computed.js.
+  const host = document.createElement('div');
+  host.setAttribute('style', 'font: italic 700 20px/2 monospace');
+  document.body.appendChild(host);
+  const child = document.createElement('div');
+  host.appendChild(child);
+
+  const cs = getComputedStyle(child);
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+  eq('inherited style', String(cs.fontStyle), 'italic');
+  eq('inherited weight', String(cs.fontWeight), '700');
+  eq('inherited size', String(cs.fontSize), '20px');
+  eq('inherited line-height', String(cs.lineHeight), '40px');
+  eq('inherited family', String(cs.fontFamily), 'monospace');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=computed_font_is_a_different_join>
+{
+  // `getComputedStyle(el).font` is not `el.style.font`. Chrome resolves the
+  // weight to a number and the line height to px, writes the stretch BACK as a
+  // keyword even though computed `font-stretch` is a percentage, and answers the
+  // empty string when the shorthand cannot say what the element is at all.
+  // 27 cases, read with probes/expr-b83-computed-font-join.js; this engine
+  // agreed on 1 of them before (it answered the recorded initial `16px Times`
+  // for every element on every page) and on all 27 after.
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const el = document.createElement('div');
+  host.appendChild(el);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want [' + want + '], got [' + got + ']'); };
+  const font = (decl) => { el.setAttribute('style', decl); return String(getComputedStyle(el).font); };
+
+  eq('undeclared', font(''), '16px Times');
+  eq('size and family', font('font-size:13px;font-family:serif'), '13px serif');
+  // The weight is a number here, and 400 is left out.
+  eq('bold', font('font-size:16px;font-family:serif;font-weight:bold'), '700 16px serif');
+  eq('400', font('font-size:16px;font-family:serif;font-weight:400'), '16px serif');
+  eq('350', font('font-size:16px;font-family:serif;font-weight:350'), '350 16px serif');
+  eq('oblique angle', font('font-size:16px;font-family:serif;font-style:oblique 20deg'), 'oblique 20deg 16px serif');
+  // The stretch goes back to a keyword: the mapping runs both ways for this one
+  // part, and 100% is left out.
+  eq('stretch 75%', font('font-size:16px;font-family:serif;font-stretch:75%'), 'condensed 16px serif');
+  eq('stretch 87.5%', font('font-size:16px;font-family:serif;font-stretch:87.5%'), 'semi-condensed 16px serif');
+  eq('stretch 100%', font('font-size:16px;font-family:serif;font-stretch:100%'), '16px serif');
+  // The line height is in px, and `normal` leaves the slash out.
+  eq('line 1.4', font('font-size:16px;font-family:serif;line-height:1.4'), '16px / 22.4px serif');
+  eq('line 150%', font('font-size:16px;font-family:serif;line-height:150%'), '16px / 24px serif');
+  eq('line 2em', font('font-size:16px;font-family:serif;line-height:2em'), '16px / 32px serif');
+
+  // Four separate states the shorthand cannot express, each answering "".
+  eq('stretch with no keyword', font('font-size:16px;font-family:serif;font-stretch:60%'), '');
+  eq('variant beyond small-caps', font('font-size:16px;font-family:serif;font-variant-caps:all-small-caps'), '');
+  eq('kerning off its initial', font('font-size:16px;font-family:serif;font-kerning:none'), '');
+  eq('size-adjust off its initial', font('font-size:16px;font-family:serif;font-size-adjust:0.5'), '');
+
+  // The round trip through the shorthand, and through inheritance.
+  eq('shorthand', font('font:italic small-caps bold condensed 16px/1.4 serif'),
+     'italic small-caps 700 condensed 16px / 22.4px serif');
+  host.setAttribute('style', 'font:italic 700 20px/2 monospace');
+  eq('inherited', font(''), 'italic 700 20px / 40px monospace');
+  host.setAttribute('style', '');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=font_shorthand_expands_on_both_paths>
+{
+  // The CSSOM path and the raw stylesheet path are two different pieces of
+  // code, and a shorthand has to expand on both or a page gets it only when it
+  // happens to write the declaration inline. Measured
+  // (probes/expr-b83-sheet-font-layout.js): before this, a rule
+  // `.x{font:13px serif}` left computed font-size at 16px where the same
+  // declaration inline gave 13px.
+  const sheet = document.createElement('style');
+  sheet.textContent = '.b83fs{font:13px serif} .b83sys{font:caption}';
+  document.head.appendChild(sheet);
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const el = document.createElement('div');
+  host.appendChild(el);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  el.className = 'b83fs';
+  eq('rule font-size', String(getComputedStyle(el).fontSize), '13px');
+  eq('rule font-family', String(getComputedStyle(el).fontFamily), 'serif');
+  // The six system keywords take the same route and had the same hole.
+  el.className = 'b83sys';
+  eq('rule system keyword', String(getComputedStyle(el).fontFamily), 'Arial');
+
+  // What a rule still does NOT reach is the layout's font, and that is not this
+  // plan's: a plain `font-size` longhand in a rule does not reach it either, so
+  // the box is 16px wide for both. `resolveFont` walks inline styles rather than
+  // the cascade, which is `Element.zig`'s to fix.
+  el.className = '';
+  sheet.remove();
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

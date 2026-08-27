@@ -44,7 +44,7 @@ pub fn lookup(name: []const u8) ?Shorthand {
 /// wrote is still kept whole rather than expanded.
 pub fn lookupJoinable(name: []const u8) ?Shorthand {
     const entry = table.shorthands.get(name) orelse return null;
-    if (entry.kind == .unmodelled and !isBorderImage(entry)) return null;
+    if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry)) return null;
     return entry;
 }
 
@@ -83,6 +83,370 @@ pub fn systemFontExpansion(name: []const u8, value: []const u8) ?Expansion {
         }
     }
     return null;
+}
+
+/// The nineteen longhands `font` expands to when Chrome PARSES one, in the
+/// order Chrome stores them. Not the table's `longhands` order -- that is what a
+/// CSS-wide keyword gives, measured, and the two differ from the third name on.
+///
+/// Read off Chrome 151 rather than derived: `style.length` and the indexed names
+/// ARE Chrome's expansion, because Chrome keeps no shorthand in a declaration.
+/// Sixteen accepted values give these nineteen names in this order every time
+/// (probes/expr-b81-font-expansion.js, results/b81-fontexp-chrome.json).
+const font_names = [_][]const u8{
+    "font-style",            "font-variant-caps",       "font-variant-ligatures",
+    "font-variant-numeric",  "font-variant-east-asian", "font-variant-alternates",
+    "font-size-adjust",      "font-language-override",  "font-kerning",
+    "font-optical-sizing",   "font-feature-settings",   "font-variation-settings",
+    "font-variant-position", "font-variant-emoji",      "font-weight",
+    "font-stretch",          "font-size",               "line-height",
+    "font-family",
+};
+
+/// What each of the nineteen holds when the shorthand does not name it. The
+/// grammar reaches only seven of them; the other twelve are reset to their own
+/// initial values, which is why `font-size-adjust` is `none` and the two
+/// `auto`s are not `normal`. Same reading.
+const font_initials = [_][]const u8{
+    "normal", "normal", "normal",
+    "normal", "normal", "normal",
+    "none",   "normal", "auto",
+    "auto",   "normal", "normal",
+    "normal", "normal", "normal",
+    "normal", "",       "normal",
+    "",
+};
+
+const font_style_at = 0;
+const font_variant_at = 1;
+const font_weight_at = 14;
+const font_stretch_at = 15;
+const font_size_at = 16;
+const line_height_at = 17;
+const font_family_at = 18;
+
+/// `<font-style>`, `<font-variant-css2>` and `<font-stretch-css3>` as the `font`
+/// grammar takes them -- closed sets, so they are written out rather than asked
+/// of the generated tables. `font-variant-caps` on its own takes more than these
+/// two (`all-small-caps` and four others); the shorthand does not, and using the
+/// longhand's table here would accept values Chrome refuses.
+const font_style_words = [_][]const u8{ "normal", "italic", "oblique" };
+const font_variant_words = [_][]const u8{ "normal", "small-caps" };
+const font_stretch_words = [_][]const u8{
+    "normal",         "ultra-condensed", "extra-condensed", "condensed",
+    "semi-condensed", "semi-expanded",   "expanded",        "extra-expanded",
+    "ultra-expanded",
+};
+const font_weight_words = [_][]const u8{ "normal", "bold", "bolder", "lighter" };
+/// `<absolute-size>` and `<relative-size>`, the two size keyword families.
+const font_size_words = [_][]const u8{
+    "xx-small", "x-small", "small",    "medium",
+    "large",    "x-large", "xx-large", "xxx-large",
+    "larger",   "smaller",
+};
+
+/// Three outcomes, because two of them are not the same thing.
+///
+/// `font` is unlike every other unmodelled shorthand in that Chrome does not
+/// keep an invalid one whole -- it throws the declaration away. `font: 13px`
+/// with no family leaves `style.length` at 0, where this engine used to leave
+/// one entry holding `13px`. So a decline has to say which kind it is, and
+/// `null` is reserved for the third: a value this cannot judge, which stays
+/// whole rather than becoming a guess.
+pub const FontShorthand = union(enum) {
+    /// A parsed `font`: the nineteen longhands, in Chrome's parsed order. What
+    /// `font` itself reads back as is `fontShorthandText` of these values AFTER
+    /// the caller has normalised them -- `font: 0 serif` stores `0px` and reads
+    /// back `0px serif`, so rebuilding from the author's raw token would be one
+    /// character wrong.
+    parsed: Expansion,
+    /// A CSS-wide keyword, which reaches all nineteen as itself -- in the
+    /// table's order, which is not the parsed one. `font` reads back as the
+    /// keyword rather than as nineteen of them joined.
+    wide: struct { expansion: Expansion, keyword: []const u8 },
+    refused,
+};
+
+/// What Chrome stores for a `font` shorthand it parses.
+///
+/// The cost of not doing this was measured: with `style="font:<n>px serif"` over
+/// eighteen sizes this engine answered the SAME box width for every one of them
+/// -- the default font's -- while its own `measureText` answered each size
+/// correctly, because the shorthand reached the canvas font and never the
+/// cascade (probes/expr-b81-font-shorthand-layout.js). Computed `font-size` and
+/// `font-family` were wrong on every page that sets `font`, and Cloudflare reads
+/// 736 computed property names one at a time.
+///
+/// The grammar, and where each boundary came from
+/// (probes/expr-b83-font-refusals.js measured all of it):
+///
+///   * the leading parts are a `||` group, so they may come in any order and any
+///     may be left out. Each may appear once -- `bold bold 16px serif` and
+///     `italic oblique 16px serif` are both refused -- except that `normal`
+///     repeats freely, since `normal normal normal normal 16px serif` is
+///     accepted and every slot's initial is `normal` anyway.
+///   * everything after the size (and its optional `/ <line-height>`) is the
+///     family, whatever it looks like: `16px bold serif` is accepted with a
+///     family of `bold serif`, not a weight of `bold`.
+///   * the weight range is 1 to 1000 INCLUSIVE and takes fractions: 1, 1000 and
+///     350.5 are accepted, 0, -1 and 1001 are refused.
+///   * a size of `0` is accepted and a negative one is refused.
+///   * both halves of the mandatory tail are required: no size, no family, or
+///     neither, and Chrome drops the declaration. So does a dangling `/`.
+///
+/// What this declines to judge, and why declining is the safe direction: a value
+/// carrying `var()`, a function like `calc()`, or a comment. Chrome expands all
+/// three -- and reorders the arithmetic inside `calc(1px + 1em)` to
+/// `calc(1em + 1px)` while it is there, which is exactly the sort of detail a
+/// guess gets wrong. Keeping the declaration whole leaves the page working with
+/// one entry where Chrome has nineteen; inventing nineteen wrong ones does not.
+pub fn fontExpansion(arena: Allocator, name: []const u8, value: []const u8) !?FontShorthand {
+    if (!std.ascii.eqlIgnoreCase(name, "font")) return null;
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    // The six system keywords are their own measured expansion and are handled
+    // ahead of this; a CSS-wide keyword reaches all nineteen as itself, in the
+    // table's order rather than the parsed one.
+    if (systemFontExpansion(name, trimmed) != null) return null;
+    if (cssWide(trimmed)) |keyword| {
+        const entry = table.shorthands.get("font") orelse return null;
+        const values = try arena.alloc([]const u8, entry.longhands.len);
+        @memset(values, keyword);
+        return .{ .wide = .{
+            .expansion = .{ .names = entry.longhands, .values = values },
+            .keyword = keyword,
+        } };
+    }
+    if (!fontJudgeable(trimmed)) return null;
+
+    var slots: [font_names.len][]const u8 = font_initials;
+    var seen_style = false;
+    var seen_variant = false;
+    var seen_weight = false;
+    var seen_stretch = false;
+
+    var parts = Components.init(trimmed);
+    parts.slash = true;
+
+    // The leading `||` group, up to the first token that is a font size.
+    var size: ?[]const u8 = null;
+    while (parts.next()) |token| {
+        if (isFontSize(token)) {
+            size = token;
+            break;
+        }
+        if (cssWide(token) != null) return .refused;
+        if (std.mem.eql(u8, token, "/")) return .refused;
+        if (std.ascii.eqlIgnoreCase(token, "normal")) continue;
+        if (listedIgnoreCase(&font_style_words, token)) {
+            if (seen_style) return .refused;
+            seen_style = true;
+            // `oblique <angle>` is one part in two tokens, and the angle is
+            // stored with it: Chrome answers `font-style: oblique 20deg`.
+            if (std.ascii.eqlIgnoreCase(token, "oblique")) {
+                const save = parts.index;
+                if (parts.next()) |next| {
+                    if (classify(next).angle) {
+                        slots[font_style_at] = try std.fmt.allocPrint(arena, "{s} {s}", .{ token, next });
+                        continue;
+                    }
+                }
+                parts.index = save;
+            }
+            slots[font_style_at] = token;
+            continue;
+        }
+        if (listedIgnoreCase(&font_variant_words, token)) {
+            if (seen_variant) return .refused;
+            seen_variant = true;
+            slots[font_variant_at] = token;
+            continue;
+        }
+        if (isFontWeight(token)) |weight| {
+            if (seen_weight) return .refused;
+            seen_weight = true;
+            slots[font_weight_at] = weight orelse return .refused;
+            continue;
+        }
+        if (listedIgnoreCase(&font_stretch_words, token)) {
+            if (seen_stretch) return .refused;
+            seen_stretch = true;
+            slots[font_stretch_at] = token;
+            continue;
+        }
+        // An identifier the grammar does not name, before the size: Chrome
+        // drops the declaration (`wibble 16px serif`).
+        return .refused;
+    }
+    slots[font_size_at] = size orelse return .refused;
+    if (negative(slots[font_size_at])) return .refused;
+
+    // `/ <line-height>`, if the next token is the slash. `Components` hands the
+    // slash back on its own, so `16px/1.4` and `16px / 1.4` are the same three
+    // tokens.
+    var family_from = parts.index;
+    if (parts.next()) |token| {
+        if (std.mem.eql(u8, token, "/")) {
+            const line = parts.next() orelse return .refused;
+            if (std.mem.eql(u8, line, "/")) return .refused;
+            if (cssWide(line) != null) return .refused;
+            slots[line_height_at] = line;
+            family_from = parts.index;
+        } else {
+            parts.index = family_from;
+        }
+    }
+
+    const family = std.mem.trim(u8, trimmed[family_from..], &std.ascii.whitespace);
+    if (family.len == 0 or !isFontFamily(family)) return .refused;
+    slots[font_family_at] = family;
+
+    const values = try arena.alloc([]const u8, font_names.len);
+    @memcpy(values, &slots);
+    return .{ .parsed = .{ .names = &font_names, .values = values } };
+}
+
+/// Whether `entry` is the `font` shorthand, told from its shape the way
+/// `isBorderImage` is: nineteen longhands opening with `font-style`, which no
+/// other shorthand comes close to. The table still calls it `.unmodelled`,
+/// because only half of it is modelled here -- `expand` still declines it and
+/// `fontExpansion` handles the parsing -- but the JOINING half has to answer,
+/// or a declaration that expanded reads back as nineteen longhands where Chrome
+/// writes `font: 12px MyFont`.
+fn isFont(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 19 and
+        std.mem.eql(u8, entry.longhands[0], "font-style") and
+        std.mem.eql(u8, entry.longhands[12], "font-family");
+}
+
+/// Where the seven longhands the `font` grammar names sit in the TABLE's order,
+/// which is the order `join` and `covering` hand values over in -- not the
+/// parsed order `font_names` has. The two differ from the third name on.
+const font_join_style = 0;
+const font_join_variant = 2;
+const font_join_weight = 8;
+const font_join_stretch = 9;
+const font_join_size = 10;
+const font_join_line_height = 11;
+const font_join_family = 12;
+
+/// `font` as Chrome writes it back, given its nineteen longhands in table order.
+/// The all-CSS-wide case is answered before this is reached, so `font: inherit`
+/// is `inherit` rather than nineteen of them.
+fn fontJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
+    return fontShorthandText(arena, &.{
+        values[font_join_style],  values[font_join_variant],
+        values[font_join_weight], values[font_join_stretch],
+        values[font_join_size],   values[font_join_line_height],
+        values[font_join_family],
+    });
+}
+
+/// Whether what is left after the size can be a family list at all. A
+/// `<family-name>` is a string or a run of IDENTIFIERS, so a token that opens
+/// with a digit is not one -- and that is the whole reason `font: 0 16px serif`
+/// is refused while `font: 0 serif` and `font: 16px bold serif` are both
+/// accepted (measured, expr-b83-font-refusals.js). Taking `0` as the size there
+/// leaves `16px serif` as the family, and `16px` is a dimension rather than an
+/// identifier, so the declaration has nowhere left to go.
+fn isFontFamily(text: []const u8) bool {
+    var rest = text;
+    while (rest.len > 0) {
+        const comma = std.mem.indexOfScalar(u8, rest, ',') orelse rest.len;
+        const entry = std.mem.trim(u8, rest[0..comma], &std.ascii.whitespace);
+        if (entry.len == 0) return false;
+        if (entry[0] != '"' and entry[0] != '\'') {
+            var words = std.mem.tokenizeAny(u8, entry, &std.ascii.whitespace);
+            while (words.next()) |word| {
+                if (!identifierStart(word)) return false;
+            }
+        }
+        if (comma == rest.len) break;
+        rest = rest[comma + 1 ..];
+    }
+    return true;
+}
+
+/// Whether the token opens the way a CSS identifier does. Digits and a sign are
+/// out, and so is a `-` followed by a digit; everything else is left alone,
+/// since an identifier may hold escapes and non-ASCII.
+fn identifierStart(word: []const u8) bool {
+    if (word.len == 0) return false;
+    switch (word[0]) {
+        '0'...'9', '+', '.' => return false,
+        '-' => return word.len > 1 and !std.ascii.isDigit(word[1]),
+        else => return true,
+    }
+}
+
+/// `font` as Chrome rebuilds it, given the seven parts the grammar names in
+/// grammar order: style, variant, weight, stretch, size, line-height, family.
+///
+/// Measured on sixteen values (probes/expr-b81-font-expansion.js): a fixed order
+/// regardless of how the author wrote them, so `bold italic 16px serif` reads
+/// back `italic bold 16px serif`; every part holding `normal` left out; spaces
+/// around the slash (`16px / 1.4 serif`); and no slash at all when the line
+/// height is `normal`, so `16px/normal serif` reads back `16px serif`. The
+/// stored token is echoed rather than a computed one -- `bold` stays `bold` and
+/// `700` stays `700`.
+fn fontShorthandText(arena: Allocator, parts: []const []const u8) ![]const u8 {
+    std.debug.assert(parts.len == 7);
+    var out: std.ArrayList(u8) = .empty;
+    for (parts[0..4]) |part| {
+        if (std.ascii.eqlIgnoreCase(part, "normal")) continue;
+        if (out.items.len > 0) try out.append(arena, ' ');
+        try out.appendSlice(arena, part);
+    }
+    if (out.items.len > 0) try out.append(arena, ' ');
+    try out.appendSlice(arena, parts[4]);
+    if (!std.ascii.eqlIgnoreCase(parts[5], "normal")) {
+        try out.appendSlice(arena, " / ");
+        try out.appendSlice(arena, parts[5]);
+    }
+    try out.append(arena, ' ');
+    try out.appendSlice(arena, parts[6]);
+    return out.items;
+}
+
+/// Whether the value is one this engine will read a `font` grammar out of. Not
+/// `judgeable`: that one refuses a comma, and a family list is commas by
+/// definition. What it refuses instead is what a guess would get wrong -- a
+/// comment, and any function, `var()` and `calc()` included.
+fn fontJudgeable(value: []const u8) bool {
+    if (std.mem.indexOf(u8, value, "/*") != null) return false;
+    if (std.mem.indexOfScalar(u8, value, '(') != null) return false;
+    return true;
+}
+
+fn listedIgnoreCase(words: []const []const u8, token: []const u8) bool {
+    for (words) |word| {
+        if (std.ascii.eqlIgnoreCase(word, token)) return true;
+    }
+    return false;
+}
+
+/// Whether the token sits in the size slot. The two keyword families, or a
+/// number-led length or percentage the `font-size` longhand's own measured
+/// grammar accepts.
+fn isFontSize(token: []const u8) bool {
+    if (listedIgnoreCase(&font_size_words, token)) return true;
+    if (token.len == 0) return false;
+    switch (token[0]) {
+        '0'...'9', '.', '+', '-' => {},
+        else => return false,
+    }
+    return !refusesLonghand("font-size", token);
+}
+
+/// Null when the token is not a weight at all; a null payload when it is one
+/// Chrome refuses. The range is 1 to 1000 inclusive and takes fractions --
+/// measured either side, and `0` is refused rather than clamped.
+fn isFontWeight(token: []const u8) ??[]const u8 {
+    if (listedIgnoreCase(&font_weight_words, token)) return token;
+    const number = std.fmt.parseFloat(f64, token) catch return null;
+    if (number < 1 or number > 1000) return @as(?[]const u8, null);
+    return token;
 }
 
 /// What Chrome stores for `name: value`, or null when the value does not fit
@@ -168,6 +532,7 @@ pub fn joinKeeping(arena: Allocator, entry: Shorthand, values: []const []const u
     if (entry.kind == .corners) return cornersJoin(arena, values);
 
     if (isBorderImage(entry)) return borderImageJoin(arena, values);
+    if (isFont(entry)) return fontJoin(arena, values);
 
     switch (entry.kind) {
         .unmodelled => return "",
@@ -224,7 +589,7 @@ pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
     var found: usize = 0;
     for (table.shorthands.keys(), table.shorthands.values()) |key, entry| {
         if (key[0] == '-') continue;
-        if (entry.kind == .unmodelled and !isBorderImage(entry)) continue;
+        if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry)) continue;
         if (entry.longhands.len == 1 and std.mem.eql(u8, entry.longhands[0], key)) continue;
         for (entry.longhands) |longhand| {
             if (!std.mem.eql(u8, longhand, name)) continue;

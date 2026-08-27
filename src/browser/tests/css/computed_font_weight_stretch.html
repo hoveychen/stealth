@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`font-weight` and `font-stretch` compute to a number and a percentage; the
+keyword is what the SPECIFIED value keeps. This engine echoed the keyword on
+both sides, so `getComputedStyle(el).fontWeight` answered `bold` and
+`fontStretch` answered `condensed` -- values no browser computes.
+
+Found while checking the `font` shorthand's expansion against Chrome, which is
+why it lives under `font-shorthand-cascade`: with `font: 13px serif` stored,
+Chrome's computed weight is `400` and its computed stretch `100%`, and this
+engine answered `normal` for both. Over the two probes below the arms agreed on
+7 of 31 readings before this and 31 of 31 after.
+
+Measured with probes/expr-b83-weight-stretch-computed.js and
+expr-b83-relative-weight.js. Two things in there are worth naming because a
+spec-from-memory implementation gets them wrong:
+
+  * `bolder` / `lighter` are RANGES, not the nine-step table CSS 2.1 wrote. An
+    inherited `1000` gives `bolder` = 1000 rather than 900, and an inherited
+    `350` -- not a step at all -- gives 700. All eleven measured rows fit the
+    ranges and none fits the step table.
+  * `<b>` gets its 700 from the UA stylesheet with no author declaration in
+    sight, so a resolver that walks straight from "nothing declared here" to the
+    parent answers 400 and is wrong. That regression is what this block caught.
+-->
+
+<script id=computed_font_weight_is_a_number>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const el = document.createElement('div');
+  host.appendChild(el);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  const weights = { normal: '400', bold: '700', '100': '100', '400': '400', '700': '700', '900': '900', '1000': '1000', '350.5': '350.5' };
+  for (const [decl, want] of Object.entries(weights)) {
+    el.setAttribute('style', 'font-weight:' + decl);
+    eq('computed ' + decl, String(getComputedStyle(el).fontWeight), want);
+    // The specified value keeps the keyword; only the computed side resolves.
+    eq('specified ' + decl, String(el.style.fontWeight), decl);
+  }
+
+  // `bolder` and `lighter` against the inherited weight, every measured row.
+  const relative = {
+    '100': ['400', '100'], '200': ['400', '100'], '300': ['400', '100'],
+    '350': ['700', '100'], '400': ['700', '100'], '500': ['700', '100'],
+    '600': ['900', '400'], '700': ['900', '400'], '800': ['900', '700'],
+    '900': ['900', '700'], '1000': ['1000', '700'],
+  };
+  for (const [inherited, [bolder, lighter]] of Object.entries(relative)) {
+    host.setAttribute('style', 'font-weight:' + inherited);
+    el.setAttribute('style', 'font-weight:bolder');
+    eq('bolder under ' + inherited, String(getComputedStyle(el).fontWeight), bolder);
+    el.setAttribute('style', 'font-weight:lighter');
+    eq('lighter under ' + inherited, String(getComputedStyle(el).fontWeight), lighter);
+  }
+  host.setAttribute('style', '');
+
+  // The UA stylesheet's own bold, which no author declaration sets.
+  const b = document.createElement('b');
+  host.appendChild(b);
+  eq('b element', String(getComputedStyle(b).fontWeight), '700');
+
+  // And through the shorthand, which is where this turned up.
+  el.setAttribute('style', 'font:bold 16px serif');
+  eq('shorthand bold', String(getComputedStyle(el).fontWeight), '700');
+  el.setAttribute('style', 'font:16px serif');
+  eq('shorthand plain', String(getComputedStyle(el).fontWeight), '400');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=computed_font_stretch_is_a_percentage>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const el = document.createElement('div');
+  host.appendChild(el);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  const stretches = {
+    normal: '100%', 'ultra-condensed': '50%', 'extra-condensed': '62.5%',
+    condensed: '75%', 'semi-condensed': '87.5%', 'semi-expanded': '112.5%',
+    expanded: '125%', 'extra-expanded': '150%', 'ultra-expanded': '200%',
+    // A percentage computes to itself -- it is not a length against a box, so
+    // it is not one of the percentages this engine refuses.
+    '50%': '50%', '87.5%': '87.5%', '200%': '200%',
+  };
+  for (const [decl, want] of Object.entries(stretches)) {
+    el.setAttribute('style', 'font-stretch:' + decl);
+    eq('computed ' + decl, String(getComputedStyle(el).fontStretch), want);
+    eq('specified ' + decl, String(el.style.fontStretch), decl);
+  }
+
+  // Undeclared, and through the shorthand.
+  el.setAttribute('style', '');
+  eq('undeclared', String(getComputedStyle(el).fontStretch), '100%');
+  el.setAttribute('style', 'font:condensed 16px serif');
+  eq('shorthand condensed', String(getComputedStyle(el).fontStretch), '75%');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
