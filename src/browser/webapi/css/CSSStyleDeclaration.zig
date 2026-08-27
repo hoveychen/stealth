@@ -5260,6 +5260,10 @@ test "WebApi: CSSStyleDeclaration block height" {
     try testing.htmlRunner("css/block_height.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration inline content lines" {
+    try testing.htmlRunner("css/inline_content_lines.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration default display" {
     try testing.htmlRunner("css/default_display.html", .{});
 }

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A block whose children are inline gets line boxes, and this engine got none:
+`textLayout` returned null the moment it saw an element child, so
+`<div>a<br>b</div>` — two lines in every browser — had no text height at all and
+fell back to the stack of its children, which for a `<br>` is nothing. Zero,
+where Chrome says 37.
+
+A `<br>` is a hard line break and behaves exactly like a preserved newline does
+in `lineBoxCount`: one more line than there are breaks, less one when the
+content ends with one. Six readings say so, all measured on Chrome 151 at
+`--force-device-scale-factor=2` with
+tools/fingerprint/scratch/expr-inline-content-lines.js (readings in
+scratch/b82-inlinelines-ch-dsf2.json):
+
+  | content        | lines | height |
+  |----------------|-------|--------|
+  | `<br>`         | 1     | 18.5   |
+  | `a<br>`        | 1     | 18.5   |
+  | `a<br>b`       | 2     | 37     |
+  | `<br>a`        | 2     | 37     |
+  | `<br><br>`     | 2     | 37     |
+  | `a<br>b<br>c`  | 3     | 55.5   |
+  | `<br><br><br>` | 3     | 55.5   |
+
+18.5 and not 18 because a line box is worth its measured layout box at the
+device pixel ratio this engine claims — the `font-box-at-device-scale` plan.
+-->
+
+<script id=br_is_a_hard_line_break>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const read = (inner) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div data-m>' + inner + '</div>';
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [cs.height, el.clientHeight, el.offsetHeight,
+                 el.getBoundingClientRect().height, cs.transformOrigin].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // content, then: computed height, clientHeight, offsetHeight, rect, origin
+  const CASES = [
+    ['a<br>b', '37px 37 37 37 200px 18.5px'],
+    ['a<br>b<br>c', '55.5px 56 56 55.5 200px 27.75px'],
+    ['<br>a', '37px 37 37 37 200px 18.5px'],
+    // A trailing break does not open a line, the same way a trailing newline
+    // does not.
+    ['a<br>', '18.5px 19 19 18.5 200px 9.25px'],
+    ['<br>', '18.5px 19 19 18.5 200px 9.25px'],
+    ['<br><br>', '37px 37 37 37 200px 18.5px'],
+    ['<br><br><br>', '55.5px 56 56 55.5 200px 27.75px'],
+  ];
+
+  const wrong = [];
+  for (const [inner, want] of CASES) {
+    const got = read(inner);
+    if (got !== want) wrong.push(inner + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
