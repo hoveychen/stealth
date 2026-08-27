@@ -24,8 +24,8 @@
 //
 // Fitted against measured Chrome 151 orders (b59-*.json) and it reproduces
 // every one of them under a single rule: author headers enter the map first in
-// the order the page set them, then the engine's own four fields in the fixed
-// order in ENGINE_FIELDS.
+// the order the page set them, then the engine's own fields in the fixed order
+// in ENGINE_FIELDS.
 const M64 = (1n << 64n) - 1n;
 const M128 = (1n << 128n) - 1n;
 const SECRET = [0x2d358dccaa6c78a5n, 0x8bb84b93962eacc9n, 0x4b33a62ed433d4a3n];
@@ -109,11 +109,29 @@ export function nameHash(name) {
 // ordered vector and always trails this block, in a fixed order, whatever the
 // map does.
 //
-// The insertion order matters only where two names collide, so most of the
-// measured cases cannot see it. `hold-five` can: it is the one case where
-// putting sec-ch-ua-mobile ahead of sec-ch-ua-platform moves
-// sec-ch-ua-platform, and Chrome does not move it.
-export const ENGINE_FIELDS = ['sec-ch-ua', 'user-agent', 'sec-ch-ua-platform', 'sec-ch-ua-mobile'];
+// The insertion order matters only where two names collide, so most measured
+// cases cannot see it. Three can, and together they pin it: `hold-five` (x-ee
+// against the hint block), and the two blocks in HttpClient.zig for an origin
+// that asked for all nine hints, where sec-ch-ua collides with
+// sec-ch-ua-bitness and user-agent with sec-ch-ua-full-version.
+//
+// What comes out is the hints in their declaration order -- the same sequence
+// chrome_navigation_order has, which is the order the browser side writes them
+// in too -- and User-Agent after them. Full nine below; a request carries the
+// three baseline ones plus whatever its origin asked for via Accept-CH, and the
+// absent names simply drop out of the sequence.
+export const ENGINE_FIELDS = [
+    'sec-ch-ua',
+    'sec-ch-ua-mobile',
+    'sec-ch-ua-full-version',
+    'sec-ch-ua-arch',
+    'sec-ch-ua-platform',
+    'sec-ch-ua-platform-version',
+    'sec-ch-ua-model',
+    'sec-ch-ua-bitness',
+    'sec-ch-ua-full-version-list',
+    'user-agent',
+];
 
 // WTF::HashTable bucket order for a set of names inserted in the given order.
 export function bucketOrder(names) {
@@ -139,11 +157,17 @@ export function bucketOrder(names) {
     return table.filter(Boolean);
 }
 
+// The three hints every request carries. The other six ride only on a request
+// to an origin that asked for them via Accept-CH, which the local echo servers
+// never do -- so this, not the whole list, is what a capture of them shows.
+export const BASELINE_ENGINE_FIELDS =
+    ENGINE_FIELDS.filter((n) => !n.startsWith('sec-ch-ua-') || n === 'sec-ch-ua-mobile' || n === 'sec-ch-ua-platform');
+
 // The wire order of the scrambled block, for a page that set `authorNames` (in
-// the order it set them) on a request that also carries `extra` engine fields
-// (content-type when there is a body).
-export function order(authorNames, extra = []) {
-    return bucketOrder([...authorNames, ...extra, ...ENGINE_FIELDS]);
+// the order it set them). `engineFields` is the engine's own share of the map,
+// in insertion order -- widen it for an origin that negotiated more hints.
+export function order(authorNames, engineFields = BASELINE_ENGINE_FIELDS) {
+    return bucketOrder([...authorNames, ...engineFields]);
 }
 
 // Fields the network stack appends to an ordered vector rather than the map, so
@@ -197,7 +221,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         console.error('       blink-header-order.mjs --verify <capture.json>');
         process.exit(2);
     }
-    for (const n of [...names, ...ENGINE_FIELDS]) {
+    for (const n of [...names, ...BASELINE_ENGINE_FIELDS]) {
         const h = nameHash(n);
         console.log(`  ${n.padEnd(24)} ${h.toString(16).padStart(6, '0')}  &7=${h & 7} &15=${h & 15} &31=${h & 31}`);
     }
