@@ -1,0 +1,150 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T04:41:34.320Z",
+  "egress": {
+    "fl": "4f826",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787805694.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1488+9e1a31366",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17442/"
+  },
+  "stations": [
+    {
+      "name": "ak-kohls",
+      "vendor": "akamai",
+      "url": "https://www.kohls.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "error": "timeout: Runtime.evaluate",
+      "documents": [
+        {
+          "url": "https://www.kohls.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://kohls.demdex.net/dest5.html?d_nsid=0#https%3A%2F%2Fwww.kohls.com",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cm.g.doubleclick.net/partnerpixels?url=https%3A%2F%2Fwww.kohls.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ads.pubmatic.com/AdServer/js/user_sync.html?gdpr=&gdpr_consent=&us_privacy=&predirect=https%3A%2F%2Fow.pubmatic.com%2Fsetuid%3Fbidder%3Dpubmatic%26gdpr%3D%26gdpr_consent%3D%26gpp%3D%26gpp_sid%3D%26f%3Db%26uid%3D",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?origin=publishertagids&topUrl=www.kohls.com#{%22bundle%22:{%22origin%22:0},%22optout%22:{%22value%22:false,%22origin%22:0},%22tld%22:%22kohls.com%22,%22topUrl%22:%22www.kohls.com%22,%22version%22:108763,%22origin%22:%22publishertagids%22,%22requestId%22:%220.6161387539016284%22}",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ads.pubmatic.com/AdServer/js/user_sync.html?kdntuid=1&p=0",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://apps.smartadserver.com/diff/templates/asset/csync.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=8e9bd9e0-8284-4dbd-ab20-145759728098&u_scsid=51502ecd-eb7f-4289-a9ac-401370237fed&u_sclid=945128ab-ea29-4e6a-acba-c7ad0f9d54e0",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=99ed79db-3aec-4b85-9a61-ed80a2993b62&u_scsid=51502ecd-eb7f-4289-a9ac-401370237fed&u_sclid=945128ab-ea29-4e6a-acba-c7ad0f9d54e0",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://servedby.flashtalking.com/container/1638;12462;1480;iframe/?spotName=Homepage&U3=21530575152637405380349087847521555395&U7=154a6fc5-e98d-43d2-ac44-3875247dd2bb&U10=94301&cachebuster=920043.6315915701",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://11577892.fls.doubleclick.net/activityi;dc_pre=CPry_6b_v5YDFdOeAwgdWSky3w;src=11577892;type=pagev0;cat=kmnun0;rcb=14;ord=8830471537568;npa=0;auiddc=1755072136.1787805714;u1=not%20set;u10=https%3A%2F%2Fwww.kohls.com%2F;u11=Kohl's%20%7C%20Shop%20Clothing%2C%20Shoes%2C%20Home%2C%20Kitchen%2C%20Bedding%2C%20Toys%20%26%20More;u13=n%2Fa;u2=not%20set;u23=New%20Customer;u24=21530575152637405380349087847521555395;u25=154a6fc5-e98d-43d2-ac44-3875247dd2bb;u5=not%20set;gdid=dYzZiYj.dNWVlNT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IFA;gtm=45c92e68p1v9135077764za204zd9135077764xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938466~115938469~118897920~118897930~119367802~119367810~120385422;epver=2;gap.gtb=2;dc_random=1787805719_941sBruxfW9GlzPRdUm3idTjiw5Kr9gL6g;_dc_test=1;~oref=https%3A%2F%2Fwww.kohls.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "error",
+      "first": 200,
+      "last": 200,
+      "ms": 57805
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787805694436 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:17442",
+    "$time=1787805696330 $scope=js $level=warn $msg=\"console.warn\" param.0=Geolocation disabled via env flag not set - skipping store selection",
+    "$time=1787805697764 $scope=http $level=warn $msg=\"script fetch error\" err=CouldntResolveHost req=https://6249496.collect.igodigital.com/collect.js extra=frame status=0",
+    "$time=1787805697764 $scope=js $level=warn $msg=\"eval script\" url=https://www.kohls.com/ caught.exception=\"_etmc is not defined\" caught.stack=\"ReferenceError: _etmc is not defined\\n    at https://www.kohls.com/:1:1\\n    at https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:279\\n    at qf.Z (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:228:273)\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:267)\\n    at t.HTMLElement.<computed> [as replaceChild] (https://www.kohls.com/:2:32920)\\n    at e._insertCursor (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5270)\\n    at e._writeScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5923)\\n    at e._handleScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4482)\\n    at e._writeImpl (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:3094)\\n    at e.write (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:2657)\\n    at e._onScriptDone (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5505)\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4516\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5903\\n    at r (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:6341)\\n    at HTMLScriptElement.onerror (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:6792)\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:25:458)\" caught.line=1 caught.caught=true",
+    "$time=1787805697766 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught ReferenceError: _etmc is not defined\" filename= line_number=0 column_number=0",
+    "$time=1787805697770 $scope=js $level=warn $msg=\"console.warn\" param.0=Geolocation disabled via env flag not set - skipping store selection",
+    "$time=1787805697771 $scope=js $level=warn $msg=\"console.error\" param.0=Error: Failed to create session param.1=something went wrong creating session",
+    "$time=1787805697771 $scope=js $level=warn $msg=\"console.error\" param.0=Error fetching user info: param.1=Error: Failed to create session",
+    "$time=1787805698113 $scope=js $level=warn $msg=\"console.warn\" param.0=Error: SBC list container not found.",
+    "$time=1787805700056 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] PubAdsService.setTargeting is deprecated, use googletag.setConfig({targeting: ...}) instead.",
+    "https://goo.gle/gpt-message#170",
+    "$time=1787805700059 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] Slot.getTargetingKeys is deprecated, use Slot.getConfig('targeting') instead.",
+    "https://goo.gle/gpt-message#201",
+    "$time=1787805700172 $scope=js $level=warn $msg=\"console.warn\" param.0=[Sales Agent] Fast loading is enabled",
+    "$time=1787805703659 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] Using deprecated googletag.encryptedSignalProviders. Please use googletag.secureSignalProviders instead.",
+    "https://goo.gle/gpt-message#155",
+    "$time=1787805704117 $scope=js $level=warn $msg=\"console.warn\" param.0=Play/pause section not found: .pz-btf-kids",
+    "$time=1787805704232 $scope=js $level=warn $msg=\"console.warn\" param.0=Google Deploy of the SharedId library has been deprecated. Please select another option in the GAM UI. If you use Prebid, we suggest the Prebid.js UserId option. If you do not, you may configure GAM to allow Google to share a first party user identifier with OB and AB participants, which is either the publisherProvidedId or the __gads value when that is missing.",
+    "$time=1787805706277 $scope=js $level=warn $msg=\"eval script\" url=https://ads.pubmatic.com/AdServer/js/user_sync.html?gdpr=&gdpr_consent=&us_privacy=&predirect=https%3A%2F%2Fow.pubmatic.com%2Fsetuid%3Fbidder%3Dpubmatic%26gdpr%3D%26gdpr_consent%3D%26gpp%3D%26gpp_sid%3D%26f%3Db%26uid%3D caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at get (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:28:424)\" caught.line=28 caught.caught=true",
+    "$time=1787805706277 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787805718145 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787805719619 $scope=js $level=warn $msg=\"eval script\" url=https://ads.pubmatic.com/AdServer/js/user_sync.html?kdntuid=1&p=0 caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at get (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:28:424)\" caught.line=28 caught.caught=true",
+    "$time=1787805719619 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787805719689 $scope=js $level=warn $msg=\"eval script\" url=https://apps.smartadserver.com/diff/templates/ts/dist/csync/csync.js caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:33:84)\" caught.line=33 caught.caught=true",
+    "$time=1787805719689 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787805720020 $scope=js $level=warn $msg=\"eval script\" url=https://sc-static.net/scevent.min.js caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:33:84)\\n    at K (https://sc-static.net/scevent.min.js:2:4411)\\n    at tt (https://sc-static.net/scevent.min.js:2:4929)\" caught.line=33 caught.caught=true",
+    "$time=1787805720020 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787805720020 $scope=js $level=warn $msg=\"eval script\" url=https://sc-static.net/scevent.min.js caught.exception=\"no access\" caught.stack=\"TypeError: no access\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:33:84)\\n    at K (https://sc-static.net/scevent.min.js:2:4411)\\n    at tt (https://sc-static.net/scevent.min.js:2:4929)\" caught.line=33 caught.caught=true",
+    "$time=1787805720020 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: no access\"",
+    "$time=1787805720210 $scope=js $level=warn $msg=\"eval script\" url=https://www.kohls.com/ caught.exception=\"_etmc is not defined\" caught.stack=\"ReferenceError: _etmc is not defined\\n    at https://www.kohls.com/:2:3\\n    at https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:279\\n    at qf.Z (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:228:273)\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:23:267)\\n    at t.HTMLElement.<computed> [as replaceChild] (https://www.kohls.com/:2:32920)\\n    at e._insertCursor (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5270)\\n    at e._writeScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:5923)\\n    at e._handleScriptToken (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:4482)\\n    at e._writeImpl (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:3094)\\n    at e.write (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:2657)\\n    at s (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:325)\\n    at a (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:32423)\\n    at c (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:10:701)\\n    at i (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:23754)\\n    at s (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:24095)\\n    at g (https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:24153)\\n    at https://assets.adobedtm.com/6d2e783bbfe3/d69bd83cb70d/launch-18241a323147.min.js:9:24440\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=2 caught.caught=true",
+    "$time=1787805720211 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught ReferenceError: _etmc is not defined\" filename= line_number=0 column_number=0",
+    "$time=1787805722501 $scope=frame $level=error $msg=\"PerfObserver.dispatch\" err=JsException caught.exception=TooManyTimeout caught.stack=\"Error: TooManyTimeout\\n    at Object.apply (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:480)\\n    at e.setTimeout (https://www.kohls.com/:2:27828)\\n    at Ua (https://js-cdn.dynatrace.com/jstag/1740040f04f/bf27853irn/cf6a6b14e494e621_complete.js:16:280)\\n    at Og.Yb (https://js-cdn.dynatrace.com/jstag/1740040f04f/bf27853irn/cf6a6b14e494e621_complete.js:244:5)\\n    at Object.$k [as lta] (https://js-cdn.dynatrace.com/jstag/1740040f04f/bf27853irn/cf6a6b14e494e621_complete.js:180:471)\\n    at https://js-cdn.dynatrace.com/jstag/1740040f04f/bf27853irn/cf6a6b14e494e621_complete.js:747:200\\n    at s.debouncedFlush (https://cdnssl.clicktale.net/www47/ptc/d82d7432-724c-4af9-8884-ffab4841f0a1.js:15:1469)\\n    at s.count (https://cdnssl.clicktale.net/www47/ptc/d82d7432-724c-4af9-8884-ffab4841f0a1.js:15:3171)\\n    at s.SM (https://cdnssl.clicktale.net/www47/ptc/d82d7432-724c-4af9-8884-ffab4841f0a1.js:39:48492)\\n    at https://cdnssl.clicktale.net/www47/ptc/d82d7432-724c-4af9-8884-ffab4841f0a1.js:39:48215\\n    at Array.map (<anonymous>)\\n    at a.c (https://cdnssl.clicktale.net/www47/ptc/d82d7432-724c-4af9-8884-ffab4841f0a1.js:13:50960)\\n    at h (https://cdnssl.clicktale.net/www47/ptc/d82d7432-724c-4af9-8884-ffab4841f0a1.js:13:51145)\\n    at s.vM (https://cdnssl.clicktale.net/www47/ptc/d82d7432-724c-4af9-8884-ffab4841f0a1.js:39:48200)\\n    at https://cdnssl.clicktale.net/www47/ptc/d82d7432-724c-4af9-8884-ffab4841f0a1.js:39:48153\\n    at Object.g [as apply] (https://www.kohls.com/public/8f3b206479d4347948c85e668a2ed087f723b7604ced:36:55)\" caught.line=36 caught.caught=true",
+    "$time=1787805722501 $scope=scheduler $level=warn $msg=\"task.callback\" name=Performance.deliverObservers err=JsException",
+    "$time=1787805722501 $scope=js $level=warn $msg=\"timer\" name=window.setTimeout err=TryCatchRethrow",
+    "$time=1787805722505 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught Error: TooManyTimeout\" filename= line_number=0 column_number=0",
+    "$time=1787805722505 $scope=js $level=warn $msg=\"timer\" name=window.setTimeout err=TryCatchRethrow",
+    "$time=1787805722507 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught Error: TooManyTimeout\" filename= line_number=0 column_number=0"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}
