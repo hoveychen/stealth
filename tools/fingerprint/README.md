@@ -18358,3 +18358,46 @@ engine left one entry. That is a third outcome no other shorthand needs.
 
 Across six probes the arms agree on **340 of 371** readings, and every one of the
 31 that remain is named above.
+
+## A stylesheet's font never reached the box (B82, 2026-08-27)
+
+`Element.resolveFont` walked the ancestors itself and read each one's
+`getStyle`, which is that element's **inline declaration** and nothing else. So
+a font declared by a stylesheet rule never got near the layout, while the
+cascade beside it knew all about it. Ten routes to the same 13px, box and
+computed value read together so "the cascade knows" and "the layout knows"
+separate (`scratch/expr-sheet-font-layout.js`, at dpr 2):
+
+| how the 13px arrives | Chrome box | computed | before | now |
+|---|---|---|---|---|
+| a rule's longhands | 171.148 | 13px ✓ | 210.64 | **171.148** |
+| a rule on the parent | 171.148 | 13px ✓ | 210.64 | **171.148** |
+| a rule's `font` shorthand | 171.148 | 13px ✓ | 210.64 | **171.148** |
+| the style attribute | 171.148 | 13px ✓ | 171.148 | 171.148 |
+| an inline `font` shorthand | 171.148 | 13px ✓ | 210.64 | **171.148** |
+| `font-family:monospace` alone | 234.805 | **13px** | 210.64 | 288.98 |
+| `<font size=1>` | 131.656 | **10px** | 210.64 | 210.64 |
+| nothing declared | 210.640 | 16px ✓ | 210.64 | 210.64 |
+
+**Real pages do not write inline fonts.** So this was every text box on every
+real page measured at the default 16px Times, whatever the page declared — and
+it is invisible in every geometry reading in this file, because the probes here
+all write inline styles. It was found from the other end, by
+`font-shorthand-cascade` fixing the computed value and noticing that the box did
+not move.
+
+`StyleManager` already answers both properties properly — rule against inline
+declaration with the `!important` ordering, the legacy presentational
+attributes, inheritance up the chain with the same depth cap the hand-rolled
+walk had. Asking it is the whole fix.
+
+The `font` shorthand needed the second half of the same bug fixed one collection
+further along: its expansion filled the longhand list a *computed style* is
+answered from and not `RuleProperties`, which is what `cascadedDeclaration`
+answers the *layout* from.
+
+Two routes still differ and neither is about reaching the box: Chrome's default
+size for `font-family: monospace` is **13px** (this engine says 16 — the family
+does reach the box now, and 288.98 is monospace at 16px, exactly 16/13 of
+Chrome's 234.80), and `<font size="1">` is a legacy presentational attribute
+this engine does not map at all.
