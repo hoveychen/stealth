@@ -1,0 +1,10 @@
+{
+ "engine": "chrome",
+ "headed": true,
+ "warm": null,
+ "settle": 24000,
+ "textLength": 4719,
+ "row": "Speech local (0): blocked remote (0): blocked lang (0): blocked default: blocked 1.50ms Mediad0ec3aa6 mimes (10/12): 91101bd8 3.60ms Features: 113-115+ JS/DOM: df08a511 (v114-115) CSS: 379baeb6 (v114-",
+ "hashes": [],
+ "blocked": true
+}

@@ -17006,3 +17006,43 @@ this engine hands it an empty array for the first 665ms of the page.
 It does not resolve the CreepJS trade-off by fiat, it relocates it: the row
 depends on whether anything warmed the browser earlier, in this engine exactly
 as much as in Chrome. P2 is where that gets checked rather than assumed.
+
+### What the per-browser wait changed, and what it did not
+
+`Browser.voices_asked_at_micros` replaces the per-document countdown: the first
+`getVoices()` anywhere in a browser stamps it and waits the measured 665ms, and
+every ask after that either finds the stamp older than 665ms (26ms, the round
+trip) or waits out the rest of that one run. A stamp rather than a flag, because
+Chrome's enumeration runs in the *browser* process and finishes whether or not
+the document that asked is still there — measured below, by accident: the
+`--warm` arm asks and navigates away within milliseconds, and Chrome still
+reaches CreepJS warm. A flag set when the list arrived did not, which is what
+the first attempt at this did and why it is not what shipped.
+
+Patched engine against the same page, `--delay 200`
+(`b56-voice-lp-d200-patched.json`): 867 / 252 / 251ms complete, i.e. 666ms after
+the first document's ask and ~51ms after each later one. Chrome's numbers are
+702 / 26 / 27. The residual is a sampling artifact, not a difference: the poll
+ticks every 25ms, so a 26ms fill is first seen at 51ms unless the tick lands
+past it, as Chrome's did. The iframe arm agrees — 51ms here, 27ms there
+(`b56-voice-lp-iframe-patched.json`).
+
+Then the check the plan was written for: does the CreepJS reasoning in
+`SpeechSynthesis.zig`'s header survive? It does, but it moves. `creep-speech-row.mjs`
+loads creepjs in one browser, optionally after one earlier site (`--warm`), and
+reports the speech row:
+
+| | cold browser | an earlier document asked |
+|---|---|---|
+| headed Chrome 151 | all three `blocked` | `local (180): a158dc36 / remote (19): 036f6dce / lang (51): c4951b20` |
+| this engine, before | all three `blocked` | **all three `blocked`** |
+| this engine, after | all three `blocked` | the same three hashes, byte for byte, down to the section hash `a8c32496` and `default: Samantha [en-US]` |
+
+So the header's claim — with nothing warming it, a headed Chrome renders the row
+blocked and so does this engine — still holds, and is still measured, both rows
+of the cold column above. What was wrong was the other column, and the reason it
+was wrong is that the wait was scoped to the document. A run that reaches a
+guard through several sites, which is every sweep, spends nearly all of its time
+in that second column.
+
+Files: `b56-creep-{chrome,lp}-{cold,warm}*.json`.

@@ -97,6 +97,45 @@
 }
 </script>
 
+<script id=speech_voices_warm_child type=module>
+{
+  // The wait is per browser, not per document. Measured on headed Chrome 151
+  // (tools/fingerprint/voice-warmup-timeline.mjs): the first ask in a process
+  // costs ~700ms, and a child document created once that list had arrived
+  // answered empty on its own first synchronous read and had all 199 voices
+  // 27ms later — b56-voice-chrome-iframe.json. Three navigations of one browser
+  // agree: 727/751ms for the first document, 26/27ms for every one after.
+  const state = await testing.async();
+  // Past the parent's own fill, so the browser is warm before the child asks.
+  await new Promise((r) => setTimeout(r, 800));
+
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+  const doc = iframe.contentDocument;
+  doc.write(
+    '<!DOCTYPE html><body><script>' +
+    'window.__first = speechSynthesis.getVoices().length;' +
+    'setTimeout(() => { window.__later = speechSynthesis.getVoices().length; }, 100);' +
+    '<\/script></body>'
+  );
+  doc.close();
+  // A separate window means a separate SpeechSynthesis; without that this block
+  // would just be re-reading the parent's already-filled list.
+  const ownSynthesis = iframe.contentWindow.speechSynthesis !== window.speechSynthesis;
+
+  await new Promise((r) => setTimeout(r, 250));
+  const first = iframe.contentWindow.__first;
+  const later = iframe.contentWindow.__later;
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual(true, ownSynthesis);
+    testing.expectEqual(0, first);
+    testing.expectEqual(199, later);
+  });
+}
+</script>
+
 <script id=speech_utterance type=module>
 {
   const state = await testing.async();

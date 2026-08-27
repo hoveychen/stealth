@@ -8,7 +8,8 @@
 //      a browser where nothing has touched speechSynthesis. A list that is already
 //      there means the load was never the page's to start.
 //   2. Is the list per page or per browser?  Ask on a second navigation
-//      (--navs 2) in the same process.
+//      (--navs 2) in the same process, or in a child document (--iframe) of a
+//      window that has already been handed the list.
 //
 // Every arm answers from a page load, not from Runtime.evaluate: this engine does
 // not run scheduled tasks while an awaitPromise evaluate is outstanding, and the
@@ -40,6 +41,7 @@ const arg = (name, dflt) => {
 };
 const headed = process.argv.includes('--headed');
 const listen = process.argv.includes('--listen');
+const iframe = process.argv.includes('--iframe');
 const delay = Number(arg('--delay', 0));
 const navs = Number(arg('--navs', 1));
 const PORT = Number(arg('--port', 0)) || Number(process.env.PORT) || (engine === 'chrome' ? 17210 : 17211);
@@ -49,13 +51,30 @@ const LIGHTPANDA = process.env.LP_BIN || process.env.LIGHTPANDA || path.join(REP
 // The measurement page. Nothing here touches `speechSynthesis` before the delay
 // elapses -- not even to attach a listener -- so the --delay arm really is a
 // browser in which the page has never asked.
-const page = (d, withListener) => `<!DOCTYPE html><html><head><script>
+const page = (d, withListener, withIframe) => `<!DOCTYPE html><html><head><script>
 var t0 = performance.now();
 var res = { delay: ${d}, timeOriginMs: Math.round(performance.timeOrigin), first: null, filledAt: null, voiceschangedAt: null, samples: [] };
+var wantSub = ${withIframe ? 'true' : 'false'};
 function finish() {
+  if (window.parent !== window) { window.parent.postMessage({ voiceSub: res }, '*'); return; }
+  if (wantSub && !res.sub) { addSub(); return; }
   var out = document.getElementById('out');
   if (out) out.textContent = '@@' + JSON.stringify(res) + '@@';
   else document.addEventListener('DOMContentLoaded', finish);
+}
+// A same-origin child document in an already-warm browser: the browser process
+// has the list, but this window's SpeechSynthesis has never asked for it.
+function addSub() {
+  window.addEventListener('message', function (e) {
+    if (!e.data || !e.data.voiceSub) return;
+    res.sub = e.data.voiceSub;
+    res.sub.createdAt = Math.round(subAt);
+    finish();
+  });
+  var subAt = performance.now() - t0;
+  var f = document.createElement('iframe');
+  f.src = '?delay=0&sub=1';
+  (document.body || document.documentElement).appendChild(f);
 }
 ${withListener ? `speechSynthesis.addEventListener('voiceschanged', function () { res.voiceschangedAt = Math.round(performance.now() - t0); });` : ''}
 setTimeout(function () {
@@ -80,7 +99,11 @@ setInterval(function () {}, 50);
 const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://127.0.0.1');
     res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' });
-    res.end(page(Number(u.searchParams.get('delay') || 0), u.searchParams.get('listen') === '1'));
+    res.end(page(
+        Number(u.searchParams.get('delay') || 0),
+        u.searchParams.get('listen') === '1',
+        u.searchParams.get('iframe') === '1',
+    ));
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const pagePort = server.address().port;
@@ -118,7 +141,7 @@ await cdp.send('Page.enable', {}, sessionId).catch(() => {});
 
 const out = [];
 for (let n = 0; n < navs; n++) {
-    const url = `http://127.0.0.1:${pagePort}/?delay=${delay}&listen=${listen ? 1 : 0}&n=${n}`;
+    const url = `http://127.0.0.1:${pagePort}/?delay=${delay}&listen=${listen ? 1 : 0}&iframe=${iframe ? 1 : 0}&n=${n}`;
     const browserAgeMs = Date.now() - spawnedAt;
     await cdp.send('Page.navigate', { url }, sessionId);
     let text = '';
@@ -141,7 +164,7 @@ for (let n = 0; n < navs; n++) {
     out.push({ nav: n, browserAgeMs, ...JSON.parse(text.slice(2, -2)) });
 }
 
-console.log(JSON.stringify({ engine, headed, delay, navs, listen, runs: out }, null, 1));
+console.log(JSON.stringify({ engine, headed, delay, navs, listen, iframe, runs: out }, null, 1));
 
 cdp.close();
 proc.kill('SIGKILL');
