@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A percentage margin is a share of the containing block's WIDTH -- on all four
+sides, the way a percentage padding is. `margin-top:10%` of a 400px line is 40px
+and not a tenth of any height, which is the part worth writing down.
+
+What is left of the line after the margins come off is the box's width, so the
+same declaration moves two readings: `margin-left:33.3%` of 400px reports
+133.188px and the box beside it reports 266.812px.
+
+Measured on Chrome 151 with tools/fingerprint/scratch/expr-margin-pct.js, on the
+1920x1080 viewport this test server serves (a 1904px body). Every expected value
+below is Chrome's own answer.
+
+Not resolved here: `margin: auto`, which centres the box. Chrome reports the used
+value it computed -- 150px a side for a 100px box on a 400px line -- and this
+engine reports the `auto` keyword. That is a different question (a used value for
+a keyword, not a percentage against a width) and has no test of its own yet.
+-->
+
+<script id=margin_percentage_resolves>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (outer, inner) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="' + outer + '"><div data-m style="' + inner + '">x</div></div>';
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [cs.marginLeft, cs.marginRight, cs.marginTop, cs.marginBottom, cs.width, el.offsetWidth].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // outer, inner, then: margin-left right top bottom, computed width, offsetWidth
+  const CASES = [
+    // The case the whole thing is named for: a percentage that does not divide
+    // evenly lands on the 1/64px grid, and the box keeps the rest of the line.
+    ['width:400px', 'margin-left:33.3%', '133.188px 0px 0px 0px 266.812px 267'],
+    // One that divides evenly, on each side in turn.
+    ['width:400px', 'margin-left:10%', '40px 0px 0px 0px 360px 360'],
+    ['width:400px', 'margin-right:10%', '0px 40px 0px 0px 360px 360'],
+    // Both sides come off the same line.
+    ['width:400px', 'margin-left:10%;margin-right:10%', '40px 40px 0px 0px 320px 320'],
+    // The vertical pair takes its share of the WIDTH, and takes nothing off it.
+    ['width:400px', 'margin-top:10%', '0px 0px 40px 0px 400px 400'],
+    ['width:400px', 'margin-bottom:10%', '0px 0px 0px 40px 400px 400'],
+    // The shorthand, all four sides at once.
+    ['width:400px', 'margin:10%', '40px 40px 40px 40px 320px 320'],
+    // A negative margin is legal on a margin and gives the box MORE than the
+    // line: 400 - (-40) is 440.
+    ['width:400px', 'margin-left:-10%', '-40px 0px 0px 0px 440px 440'],
+    ['width:400px', 'margin-left:0%', '0px 0px 0px 0px 400px 400'],
+    // A declared width answers the width; the margin still reports its px.
+    ['width:400px', 'width:100px;margin-left:10%', '40px 0px 0px 0px 100px 100'],
+    // The logical spellings are the same properties.
+    ['width:400px', 'margin-inline-start:10%', '40px 0px 0px 0px 360px 360'],
+    ['width:400px', 'margin-block-start:10%', '0px 0px 40px 0px 400px 400'],
+    // Against the 1904px body rather than a declared line, which is where the
+    // grid shows up again: a tenth of 1904 is 190.4 and Chrome says 190.391.
+    ['', 'margin-left:10%', '190.391px 0px 0px 0px 1713.61px 1714'],
+    // The parent's own padding is outside its content box, so 400 is still 400.
+    ['width:400px;padding:0 25px', 'margin-left:10%', '40px 0px 0px 0px 360px 360'],
+    // ...unless `box-sizing` put the padding inside the 400, leaving 350.
+    ['width:400px;box-sizing:border-box;padding:0 25px', 'margin-left:10%', '35px 0px 0px 0px 315px 315'],
+    // The box's own padding and its margin both come off the line, and both
+    // percentages resolve against the same width.
+    ['width:400px', 'margin-left:10%;padding-left:10%', '40px 0px 0px 0px 320px 360'],
+  ];
+
+  const wrong = [];
+  for (const [outer, inner, want] of CASES) {
+    const got = measure(outer, inner);
+    if (got !== want) wrong.push(inner + ' in {' + outer + '}: want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The shapes the three assertions that used to say "still refused" ask about, kept
+here so the numbers that replaced them stay pinned to their own probe:
+tools/fingerprint/scratch/expr-margin-pct-tests.js.
+-->
+
+<script id=margin_percentage_in_paragraph>
+{
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;font-size:20px"><p style="' + decl + '">x</p></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+
+  // A <p> carries an initial top margin of its own; the declaration replaces it
+  // with half the WIDTH, so both halves come to the same 200px.
+  testing.expectEqual('200px', probe('margin-left:50%', 'marginLeft'));
+  testing.expectEqual('200px', probe('margin-top:50%', 'marginTop'));
+  // Nothing is asserted about the initial margin an undeclared side keeps:
+  // measured, a <p>'s is `1em` of its own font, so Chrome says 20px here and
+  // this engine's fixed 16px is wrong for a reason that has nothing to do with
+  // percentages. Its own task.
+}
+</script>
