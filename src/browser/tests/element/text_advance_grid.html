@@ -8,9 +8,12 @@ does -- 1/64 of a DEVICE pixel, which is 1/128 CSS pixel at this engine's
 devicePixelRatio of 2 -- but it reaches the grid by CEILING, not by flooring,
 and it does so once per text node rather than once per box.
 
-Measured against a HEADED Chrome 151 (headless resolves `serif` to different
-metrics and every number below moves), with tools/fingerprint/probes
-/expr-b81-advance-snap.js, expr-b81-grid-128.js and expr-b81-grid-vs-dpr.js:
+Measured against Chrome 151 at `--force-device-scale-factor=2`, which is the
+factor this engine claims. Naming the factor is the part that matters: headless
+and headed answer byte-identically at the same factor
+(results/b81-2x2-{headless,headed}-dsf{1,2}.json), and every number below moves
+at factor 1. Probes: tools/fingerprint/probes/expr-b81-advance-snap.js,
+expr-b81-grid-128.js and expr-b81-grid-vs-dpr.js.
 
   * the grid is the device pixel's. The same 30-case probe answers
     ceil(advance*64)/64 under --force-device-scale-factor=1 and
@@ -23,10 +26,10 @@ metrics and every number below moves), with tools/fingerprint/probes
   * and the integer readings are unaffected: offsetWidth, clientWidth and
     scrollWidth are round() of the box and were already right.
 
-The model reproduces 100 of 107 headed-Chrome readings. All seven residuals are
-the advance itself rather than the grid -- `AV` is kerned in Chrome and not here,
-and 8.4px and 9.9px have an advance Chrome does not derive linearly -- so they
-are text_measure gaps, and none is asserted here.
+The model reproduces 100 of 107 Chrome readings taken at factor 2. All seven
+residuals are the advance itself rather than the grid -- `AV` is kerned in Chrome
+and not here, and 8.4px and 9.9px have an advance Chrome does not derive
+linearly -- so they are text_measure gaps, and none is asserted here.
 -->
 
 <script id=text_advance_ceils_onto_the_device_grid>

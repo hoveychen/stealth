@@ -17559,17 +17559,32 @@ and then spends 314 media queries binary-searching it to twenty bits.
 ### A text advance ceils onto the same grid, once per text node
 
 The plan that found this was named for the wrong rule. Its first reading — seven
-strings, all seven on the 1/64 grid — came from a **headless** Chrome, and the
-README's own instruction is that a font reading needs `--headed`, because which
-face `serif` resolves to is the window system's answer. Headed, four of the same
-seven are not on the 1/64 grid at all:
+strings, all seven on the 1/64 grid — was taken at a device scale factor of 1,
+and four of the same seven are not on the 1/64 grid at the factor this engine
+claims:
 
-| string at 16px serif | headless | headed | on 1/64? |
+| string at 16px serif | dsf 1 | dsf 2 | on 1/64? |
 |---|---|---|---|
 | `aaa` | 21.3125 | **21.3046875** | no |
 | `word` | 32.890625 | **32.8828125** | no |
 | `aaa bbb` | 49.3125 | **49.3046875** | no |
 | `aaa bbb ccc` | 74.609375 | 74.609375 | yes |
+
+**Say `--force-device-scale-factor` explicitly; do not infer it from
+`--headed`.** The first version of this section blamed headlessness, because the
+original reading was headless and the reading that corrected it was headed. That
+was a coincidence of this host: run the 2x2 and the factor is the whole story
+(`results/b81-2x2-{headless,headed}-dsf{1,2}.json`) —
+
+- `headless/dsf1` and `headed/dsf1` are **byte-identical** over all ten strings,
+- so are `headless/dsf2` and `headed/dsf2`,
+- and headed with no factor named equals `dsf2` here, because this display is 2x
+  while headless defaults to 1x.
+
+So `serif` resolved to the same metrics either way, and `--headed` fixed the
+reading by accident. It may still be the right flag for a question about which
+family a name resolves to; it is not what this one turned on, and a machine whose
+display is 1x would reproduce none of this from `--headed` alone.
 
 Every headed reading is a multiple of 1/128, and the rule that fits all of them
 is `ceil(advance * 64 * dpr) / (64 * dpr)`:
