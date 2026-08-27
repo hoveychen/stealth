@@ -5552,6 +5552,10 @@ test "WebApi: CSSStyleDeclaration inline content lines" {
     try testing.htmlRunner("css/inline_content_lines.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration stylesheet font layout" {
+    try testing.htmlRunner("css/stylesheet_font_layout.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration default display" {
     try testing.htmlRunner("css/default_display.html", .{});
 }
