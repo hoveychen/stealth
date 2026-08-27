@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Some properties' computed value keeps the percentage. A percentage `width`
+resolves at computed-value time, so `width: 50%` in a 400px parent is `200px`
+everywhere -- but a percentage `background-position` resolves at PAINT time
+against the image, and a percentage `top` at layout time against the containing
+block, so Chrome's computed style reports both as written.
+
+`percentageIsComputedValue` listed exactly one name, `flex-basis`, so the other
+twelve properties fell through the "a percentage this engine cannot resolve is
+not reported" guard and answered their initial value instead: `0% 0%` for
+`background-position`, `auto` for `background-size`, `none` for `translate`,
+`baseline` for `vertical-align`, `0px` for `text-indent` and the radii.
+
+Measured on Chrome 151 with
+tools/fingerprint/scratch/expr-percentage-is-the-value.js and
+expr-display-none-percentages.js. `background-position` is one of the 736
+property names the Cloudflare challenge sweeps.
+
+Two things the readings pin down that the name list alone would miss:
+
+  * the guard is per-VALUE while the unit conversion is per-TOKEN, so a value
+    mixing the two has to keep the percentage AND resolve the length:
+    `background-position: 30% 2em` is `30% 32px` in Chrome.
+  * an unrendered element answers the same thing. These properties never had a
+    box to resolve against, so `display: none` changes nothing about them --
+    which is what separates this from the rule in
+    computed_unrendered_percentages.html, where the box is exactly what went
+    missing.
+
+One measured neighbour deliberately left out, because it is a different rule: a
+POSITION keyword is a percentage too. `background-position: left 30%` is
+`0% 30%` in Chrome and `left 30%` here, `center` is `50% 50%`, `right`/`bottom`
+are `100%`, the single-value form still prints two, and `top 10px` is rejected
+outright and comes back as the initial `0% 0%`. Twenty-three readings over
+background-position, object-position and their longhands; recorded in its own
+plan rather than folded in here.
+-->
+
+<script id=percentage_is_the_computed_value>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'width:400px;font-size:16px';
+  document.body.appendChild(host);
+
+  const read = (decl, name) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div data-m style="' + decl + '">x</div>';
+    host.appendChild(wrap);
+    const got = getComputedStyle(wrap.querySelector('[data-m]')).getPropertyValue(name);
+    wrap.remove();
+    return got;
+  };
+
+  // declaration, property to read, Chrome's answer
+  const CASES = [
+    // Pure percentages, kept as written.
+    ['background-position:30% 40%', 'background-position', '30% 40%'],
+    ['background-position:30% 40%', 'background-position-x', '30%'],
+    ['background-position:30% 40%', 'background-position-y', '40%'],
+    ['background-size:50% 60%', 'background-size', '50% 60%'],
+    ['object-position:20% 80%', 'object-position', '20% 80%'],
+    ['border-top-left-radius:10% 20%', 'border-top-left-radius', '10% 20%'],
+    ['border-radius:10%', 'border-top-left-radius', '10%'],
+    ['translate:5% 15%', 'translate', '5% 15%'],
+    ['top:10%;left:20%', 'top', '10%'],
+    ['top:10%;left:20%', 'left', '20%'],
+    ['vertical-align:20%', 'vertical-align', '20%'],
+    ['text-indent:10%', 'text-indent', '10%'],
+    ['flex-basis:30%', 'flex-basis', '30%'],
+    // Negative and zero.
+    ['text-indent:-10%', 'text-indent', '-10%'],
+    ['translate:-5% -15%', 'translate', '-5% -15%'],
+    ['background-position:0% 0%', 'background-position', '0% 0%'],
+    // Mixed with a length: the percentage stays and the em resolves.
+    ['background-position:30% 2em', 'background-position', '30% 32px'],
+    ['background-position:30% 10px', 'background-position', '30% 10px'],
+    ['border-top-left-radius:10% 2em', 'border-top-left-radius', '10% 32px'],
+    ['translate:5% 2em', 'translate', '5% 32px'],
+    ['background-size:50% 2em', 'background-size', '50% 32px'],
+    // No percentage at all: unchanged, and the control for the token walk.
+    ['text-indent:2em', 'text-indent', '32px'],
+    // An unrendered element answers the same: these never had a box.
+    ['display:none;background-position:30% 40%', 'background-position', '30% 40%'],
+    ['display:none;border-top-left-radius:10% 20%', 'border-top-left-radius', '10% 20%'],
+    ['display:none;background-position:30% 2em', 'background-position', '30% 32px'],
+    // The properties that must NOT start keeping percentages, because theirs
+    // really do resolve at computed-value time.
+    ['width:50%', 'width', '200px'],
+    ['padding-left:10%', 'padding-left', '40px'],
+    ['margin-left:10%', 'margin-left', '40px'],
+    ['line-height:150%', 'line-height', '24px'],
+    ['font-size:150%', 'font-size', '24px'],
+  ];
+
+  const wrong = [];
+  for (const [decl, name, want] of CASES) {
+    const got = read(decl, name);
+    if (got !== want) {
+      wrong.push(decl + ' -> ' + name + ': want [' + want + '], got [' + got + ']');
+    }
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
