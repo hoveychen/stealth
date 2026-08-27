@@ -110,8 +110,10 @@ digits `{d}` used to print.
   testing.expectEqual(1653, leaf.clientWidth);
   testing.expectEqual(1653, leaf.offsetWidth);
   testing.expectEqual(1653, leaf.scrollWidth);
-  // Six significant figures, and a fraction rather than the rounded box.
-  testing.expectEqual('1619.85px', String(getComputedStyle(leaf).width));
+  // Six significant figures, and a fraction rather than the rounded box --
+  // `1619.97px` and not the `1619.85px` this answered before the box landed on
+  // the 1/64px layout grid. Chrome's own answer for the same page.
+  testing.expectEqual('1619.97px', String(getComputedStyle(leaf).width));
 
   host.remove();
 }
