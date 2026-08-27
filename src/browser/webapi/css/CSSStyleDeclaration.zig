@@ -259,6 +259,20 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     StyleManager.Visibility.visible;
                 return value.keyword();
             }
+            // Two font longhands whose computed value is not the keyword the
+            // author wrote. Measured on Chrome 151
+            // (probes/expr-b83-weight-stretch-computed.js and
+            // expr-b83-relative-weight.js): `font-weight: bold` computes to
+            // `700` and an undeclared one to `400`, and every `font-stretch`
+            // keyword computes to a percentage. The SPECIFIED value stays the
+            // keyword in both engines, so this is a computed-value mapping and
+            // not a parsing difference -- which is why it sits here rather than
+            // in the store.
+            if (wrapped.eql(comptime .wrap("font-weight"))) {
+                return computedFontWeight(style_manager, element, frame, depth);
+            } else if (wrapped.eql(comptime .wrap("font-stretch"))) {
+                return computedFontStretch(style_manager, element, wrapped);
+            }
             // The used surface only. The CSS Typed OM reports the computed
             // width, which `border-style: none` does not collapse -- see
             // `borderWidth`, and typedom_computed_initial_values, where the two
@@ -641,6 +655,12 @@ fn percentageIsComputedValue(property_name: []const u8) bool {
         .{ "background-size", {} },
         .{ "object-position", {} },
         .{ "mask-position", {} },
+        // Not a length against anything at all: `font-stretch` IS a percentage,
+        // and every one of its nine keywords computes to one. Measured
+        // (probes/expr-b83-weight-stretch-computed.js): `50%` computes to `50%`,
+        // where this engine reported the initial `100%` because a percentage it
+        // could not resolve against a box was refused.
+        .{ "font-stretch", {} },
         // Resolved against the box at LAYOUT time, which is later than computed
         // value: a percentage radius, translate or inset is reported as written.
         .{ "border-top-left-radius", {} },
@@ -1146,6 +1166,107 @@ fn borderStyleFor(name: []const u8) ?[]const u8 {
 /// One known miss: `calc(2px + 3px)` computes to `5px` in Chrome and takes the
 /// rejected-declaration path here, so it answers `3px`. There is no calc
 /// evaluator to ask; `3px` is at least a shape Chrome prints.
+/// `font-weight` as the cascade computes it: a number, always.
+///
+/// Chrome answers `400` for an undeclared weight and `700` for `bold`; the
+/// keyword is what `el.style.font-weight` keeps, and only the computed side
+/// resolves. `bolder` and `lighter` are not values at all -- each resolves
+/// against the INHERITED computed weight -- so they walk up, with `depth`
+/// stopping a tree that somehow made a cycle.
+///
+/// The relative pair is a set of RANGES rather than the nine-step table CSS 2.1
+/// wrote, which two of the eleven measured rows show outright: an inherited
+/// `1000` gives `bolder` = 1000 rather than 900, and an inherited `350` -- not a
+/// step at all -- gives 700. Measured with probes/expr-b83-relative-weight.js;
+/// all eleven rows fit the ranges below and none fits the step table.
+fn computedFontWeight(style_manager: *StyleManager, element: *Element, frame: *Frame, depth: u8) []const u8 {
+    const weight = resolvedFontWeight(style_manager, element, depth);
+    return std.fmt.allocPrint(frame.local_arena, "{d}", .{weight}) catch "400";
+}
+
+/// The initial `font-weight`, and what every path here falls back to.
+const initial_font_weight: f64 = 400;
+
+fn resolvedFontWeight(style_manager: *StyleManager, element: *Element, depth: u8) f64 {
+    if (depth >= MAX_COMPUTED_DEPTH) return initial_font_weight;
+    const wrapped = comptime String.wrap("font-weight");
+    const declared = found: {
+        switch (declaredValue(style_manager, element, "font-weight", wrapped)) {
+            .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
+            .unreportable, .none => {},
+        }
+        // The UA stylesheet, which is where `<b>` and `<th>` get theirs -- no
+        // author declaration sets those and Chrome still computes 700. Walking
+        // straight past it to the parent was a regression this caught.
+        if (uaValue(element, "font-weight")) |value| {
+            break :found std.mem.trim(u8, value, &std.ascii.whitespace);
+        }
+        // Nothing here under either: `font-weight` inherits, so the answer is
+        // the parent's -- and the initial when there is no parent left.
+        const parent = element.parentElement() orelse return initial_font_weight;
+        return resolvedFontWeight(style_manager, parent, depth + 1);
+    };
+    if (std.ascii.eqlIgnoreCase(declared, "normal")) return initial_font_weight;
+    if (std.ascii.eqlIgnoreCase(declared, "bold")) return 700;
+    const bolder = std.ascii.eqlIgnoreCase(declared, "bolder");
+    if (bolder or std.ascii.eqlIgnoreCase(declared, "lighter")) {
+        const parent = element.parentElement();
+        const inherited = if (parent) |current|
+            resolvedFontWeight(style_manager, current, depth + 1)
+        else
+            initial_font_weight;
+        return relativeFontWeight(inherited, bolder);
+    }
+    return std.fmt.parseFloat(f64, declared) catch initial_font_weight;
+}
+
+/// `bolder` and `lighter` against an inherited weight, as css-fonts-4 states it
+/// and as all eleven measured rows answer.
+fn relativeFontWeight(inherited: f64, bolder: bool) f64 {
+    if (bolder) {
+        if (inherited < 350) return 400;
+        if (inherited < 550) return 700;
+        if (inherited < 900) return 900;
+        return inherited;
+    }
+    if (inherited < 100) return inherited;
+    if (inherited < 550) return 100;
+    if (inherited < 750) return 400;
+    return 700;
+}
+
+/// How far the weight walk may climb. Well past any real nesting; the cap is
+/// there so a tree that somehow made a cycle stops rather than recursing.
+const MAX_COMPUTED_DEPTH: u8 = 64;
+
+/// Every `font-stretch` keyword and the percentage it computes to, measured one
+/// keyword at a time (probes/expr-b83-weight-stretch-computed.js). A percentage
+/// computes to itself, and an undeclared stretch is `100%`.
+const font_stretch_percentages = std.StaticStringMap([]const u8).initComptime(.{
+    .{ "normal", "100%" },
+    .{ "ultra-condensed", "50%" },
+    .{ "extra-condensed", "62.5%" },
+    .{ "condensed", "75%" },
+    .{ "semi-condensed", "87.5%" },
+    .{ "semi-expanded", "112.5%" },
+    .{ "expanded", "125%" },
+    .{ "extra-expanded", "150%" },
+    .{ "ultra-expanded", "200%" },
+});
+
+fn computedFontStretch(style_manager: *StyleManager, element: *Element, wrapped: String) []const u8 {
+    const declared = switch (cascadedValue(style_manager, element, "font-stretch", wrapped)) {
+        .value => |value| std.mem.trim(u8, value, &std.ascii.whitespace),
+        .unreportable, .none => return "100%",
+    };
+    var lower: [32]u8 = undefined;
+    if (declared.len <= lower.len) {
+        const key = std.ascii.lowerString(lower[0..declared.len], declared);
+        if (font_stretch_percentages.get(key)) |percentage| return percentage;
+    }
+    return declared;
+}
+
 fn computedBorderWidth(
     self: *const CSSStyleDeclaration,
     element: *Element,
@@ -5268,6 +5389,10 @@ test "WebApi: CSSStyleDeclaration computed system fonts" {
 
 test "WebApi: CSSStyleDeclaration font shorthand" {
     try testing.htmlRunner("css/font_shorthand.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed font weight and stretch" {
+    try testing.htmlRunner("css/computed_font_weight_stretch.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration first computed read" {
