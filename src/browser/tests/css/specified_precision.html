@@ -5,22 +5,35 @@
 <!--
 A computed style prints six significant figures, but the layout is not allowed
 to read its own numbers back out of that print. `width:465.5466592px` is
-465.53125 of box in Chrome; six figures of it (465.547) floors to 465.546875,
+465.5390625 of box in Chrome; six figures of it (465.547) floors to 465.546875,
 one grid step high. The same rounding goes the other way just as easily:
 `width:465.53125px` is already exactly on the grid, and 465.531 floors to
-465.515625, one step LOW.
+465.5234375, one step LOW.
 
 What Chrome keeps is not the double the author wrote either -- it is that value
 in a **32-bit float**, which is what Blink parses a CSS length into. Over the
-twenty-one widths below, chosen because their 1/64 floors separate the three
+twenty-one widths below, chosen because their floors separate the three
 candidates, the f32 model matches Chrome 21 times, the f64 one 15 and the
 six-figure text 14. `100.0156249px` is the clearest of them: as a double it is
-a hair under a grid step and floors to 100, as a float it IS the step.
+a hair under a grid step and floors to 100.015625, as a float it IS the step.
+
+The grid these floor onto is 1/64 of a **device** pixel, so at this engine's
+devicePixelRatio of 2 the step is 1/128 CSS pixel and six of the twenty-one rows
+answer a step finer than they used to. Re-read at that factor with
+probes/expr-b81-precision-test-cases.js, which builds the same markup this file
+does; the same probe under `--force-device-scale-factor=1` reproduces every
+assertion this file held before, which is what says the two agree on everything
+except the step. Run it HEADLESS -- `--headed` is not a substitute for naming the
+factor, it merely defaults to the display's.
+
+The f32 conclusion survived the step changing: twelve widths chosen to separate
+the models at 1/128 give the float 11/11 and the double 0/11
+(probes/expr-b81-precision-at-128.js).
 
 Measured with tools/fingerprint/scratch/expr-precision-model.js on Chrome 151.
 The readback is asserted beside the geometry on purpose: `el.style.width` must
 keep printing six figures, so what changes is only the number behind it. Two
-rows say that loudest -- `1.9999999px` reads back `2px` and lays out 1.984375,
+rows say that loudest -- `1.9999999px` reads back `2px` and lays out 1.9921875,
 and `0.0156249px` reads back all of itself because six figures reach that far.
 -->
 
@@ -45,7 +58,7 @@ and `0.0156249px` reads back all of itself because six figures reach that far.
 
   // author, computed width, rect width, el.style.width
   const CASES = [
-    ['465.5466592', '465.531px', 465.53125, '465.547px'],
+    ['465.5466592', '465.539px', 465.5390625, '465.547px'],
     ['100.0156249', '100.016px', 100.015625, '100.016px'],
     ['100.0156251', '100.016px', 100.015625, '100.016px'],
     ['33.33333333333333', '33.3281px', 33.328125, '33.3333px'],
@@ -57,16 +70,16 @@ and `0.0156249px` reads back all of itself because six figures reach that far.
     // breaks up. css-number-round-half-even is that task; the geometry beside
     // it is this one's.
     ['7.0156249', '7.01563px', 7.015625, '7.01562px'],
-    ['250.0078124', '250px', 250, '250.008px'],
-    ['250.0078126', '250px', 250, '250.008px'],
+    ['250.0078124', '250.008px', 250.0078125, '250.008px'],
+    ['250.0078126', '250.008px', 250.0078125, '250.008px'],
     ['3.9999999', '4px', 4, '4px'],
     ['64.0156249', '64.0156px', 64.015625, '64.0156px'],
     ['199.9843751', '199.984px', 199.984375, '199.984px'],
-    ['0.0156249', '0px', 0, '0.0156249px'],
+    ['0.0156249', '0.0078125px', 0.0078125, '0.0156249px'],
     ['1000.0156249', '1000.02px', 1000.015625, '1000.02px'],
-    ['77.7777777', '77.7656px', 77.765625, '77.7778px'],
+    ['77.7777777', '77.7734px', 77.7734375, '77.7778px'],
     ['1.0000001', '1px', 1, '1px'],
-    ['1.9999999', '1.98438px', 1.984375, '2px'],
+    ['1.9999999', '1.99219px', 1.9921875, '2px'],
     ['300.0000001', '300px', 300, '300px'],
     ['0.30000001', '0.296875px', 0.296875, '0.3px'],
     ['511.9843751', '511.984px', 511.984375, '511.984px'],
@@ -117,18 +130,18 @@ one rather than a used one, and a length that is converted before it lands.
 
   // rect, computed width, margin-left, padding-left
   // A rule and a style attribute answer the same, which is the point.
-  check('rule width', read('pw', ''), '465.53125 465.531px 0px 0px');
-  check('attr width', read('', 'width:465.5466592px'), '465.53125 465.531px 0px 0px');
+  check('rule width', read('pw', ''), '465.5390625 465.539px 0px 0px');
+  check('attr width', read('', 'width:465.5466592px'), '465.5390625 465.539px 0px 0px');
   // A margin is not a used length, so it PRINTS the six figures -- and still
   // takes the full 465.53125 off the line the box gets.
-  check('rule margin', read('pm', ''), '534.46875 534.469px 465.547px 0px');
-  check('attr margin', read('', 'margin-left:465.5466592px'), '534.46875 534.469px 465.547px 0px');
+  check('rule margin', read('pm', ''), '534.4609375 534.461px 465.547px 0px');
+  check('attr margin', read('', 'margin-left:465.5466592px'), '534.4609375 534.461px 465.547px 0px');
   // A padding likewise, and the border box it leaves is exactly the 1000 it
   // started from -- which it is not when the two halves round apart.
-  check('rule padding', read('pp', ''), '1000 534.469px 0px 465.547px');
-  check('attr padding', read('', 'padding-left:465.5466592px'), '1000 534.469px 0px 465.547px');
+  check('rule padding', read('pp', ''), '1000 534.461px 0px 465.547px');
+  check('attr padding', read('', 'padding-left:465.5466592px'), '1000 534.461px 0px 465.547px');
   // An `em` is converted before it reaches the box and lands on the same value.
-  check('em', read('', 'font-size:10px;width:46.55466592em'), '465.53125 465.531px 0px 0px');
+  check('em', read('', 'font-size:10px;width:46.55466592em'), '465.5390625 465.539px 0px 0px');
 
   style.remove();
   host.remove();

@@ -1909,7 +1909,9 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
         child = self.asNode().firstChild();
         while (child) |node| : (child = node.nextSibling()) {
             if (node.is(CData.Text)) |text| {
-                width += text_measure.measure(font.family, Factory.protoOf(text)._data.str(), font.size).width;
+                // Each text node meets the grid on its own -- see
+                // textAdvanceUnit, where the two-node cases that say so are.
+                width += textAdvanceUnit(text_measure.measure(font.family, Factory.protoOf(text)._data.str(), font.size).width);
             }
         }
     }
@@ -1929,9 +1931,12 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
         break :blk self.lineBoxCount(frame, font.family, font.size, available);
     };
 
-    // offsetWidth is an integer; getBoundingClientRect keeps the fraction, but
-    // this engine has one dimension model behind both.
-    return .{ .width = @round(width), .height = line * lines };
+    // The width is on the grid already -- each text node met it as it was
+    // measured. It is NOT rounded to a whole pixel here: offsetWidth is an
+    // integer and getBoundingClientRect is not, and the one dimension model
+    // behind both serves them by keeping the fraction and letting the integer
+    // readings round it, which is what Chrome does too.
+    return .{ .width = width, .height = line * lines };
 }
 
 /// How many line boxes this element's own text takes, given `available` px of
@@ -2150,7 +2155,9 @@ fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) struct
             const str = Factory.protoOf(text)._data.str();
             if (str.len == 0) continue;
             has_text = true;
-            text_width += text_measure.measure(font.family, str, font.size).width;
+            // Per text node, the same as textLayout's walk -- see
+            // textAdvanceUnit.
+            text_width += textAdvanceUnit(text_measure.measure(font.family, str, font.size).width);
             continue;
         }
         if (node.is(Element)) |el| {
@@ -2179,7 +2186,7 @@ fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) struct
         }
     }
 
-    width += @round(text_width);
+    width += text_width;
     if (has_text) {
         const box = font_metrics.boundingBox(font.family, font.size);
         height = @max(height, @round(box.ascent + box.descent));
@@ -2273,11 +2280,32 @@ fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) 
     return self.dimensionsAt(frame, measure_text_width, 0, true);
 }
 
-/// A length as the layout holds it. Chrome lays out on a 1/64px grid --
-/// Blink's LayoutUnit -- and reaches it by flooring, not rounding: `33.3%` of
-/// 400px is 133.2 in arithmetic and 8524/64 on the page, because 133.2 x 64 is
-/// 8524.8 and the .8 is dropped. Measured with
-/// tools/fingerprint/scratch/expr-layout-grid.js and expr-grid-props.js.
+/// devicePixelRatio, mirroring Window's own property -- change one and the other
+/// has to move, because the grid below is a device pixel's and a page can read
+/// both. Held as a float for the same reason MediaQuery.zig's copy is: it is
+/// divided by rather than compared against.
+const DEVICE_PIXEL_RATIO: f64 = 2;
+
+/// Steps per CSS pixel on the layout grid. The grid is 1/64 of a **device**
+/// pixel, not of a CSS one, so at devicePixelRatio 2 the step is 1/128 CSS px.
+///
+/// Measured by running one probe at each scale factor rather than inferred:
+/// `--chrome-arg --force-device-scale-factor=1` and `=2` over the same thirty
+/// cases give `ceil(x*64)/64` and `ceil(x*128)/128`, and fourteen of the thirty
+/// differ (tools/fingerprint/probes/expr-b81-grid-128.js,
+/// expr-b81-specified-grid-dpr.js, expr-b81-grid-test-cases.js). Say the factor
+/// explicitly when re-measuring: `--headed` is NOT a substitute -- headless and
+/// headed answer byte-identically at the same factor, and headed merely happens
+/// to default to the display's, which was 2x on the host this was read on
+/// (results/b81-2x2-{headless,headed}-dsf{1,2}.json).
+const LAYOUT_GRID_STEPS: f64 = 64 * DEVICE_PIXEL_RATIO;
+
+/// A length as the layout holds it. Chrome lays out on the grid above and
+/// reaches it by flooring, not rounding: `33.3%` of 400px is 133.2 in arithmetic
+/// and 17049/128 on the page, because 133.2 x 128 is 17049.6 and the .6 is
+/// dropped. Measured with tools/fingerprint/scratch/expr-layout-grid.js and
+/// expr-grid-props.js, and re-read at both scale factors by the probes named on
+/// LAYOUT_GRID_STEPS.
 ///
 /// Only USED lengths pass through here. A computed value that is not one --
 /// `padding-left:10.1px`, `margin-left:10.1px`, `font-size:13.3px`, `0.5em` of
@@ -2297,15 +2325,52 @@ fn dimensions(self: *Element, frame: *Frame, comptime measure_text_width: bool) 
 /// the value falls on: `width:100.0156249px` is a hair under a step as a double
 /// and floors to 100, and IS the step as a float, which is what Chrome answers.
 /// Measured over twenty-one widths chosen to separate the two
-/// (tools/fingerprint/scratch/expr-precision-model.js): the float matches Chrome
-/// 21 times and the double 15.
+/// (tools/fingerprint/scratch/expr-precision-model.js), and again on twelve
+/// chosen to separate them at the finer step, where the float model answers 11
+/// of 11 and the double 0 of 11 (probes/expr-b81-precision-at-128.js). The
+/// narrowing survived the grid changing size; only the step did.
 ///
 /// This is also what absorbs the last bit of arithmetic drift, which an epsilon
 /// used to be here for -- a product that comes out 1e-13 under an exact step is
 /// that step once it is a float, and the epsilon is a guess at the same thing.
 pub fn layoutUnit(px: f64) f64 {
     const narrowed: f64 = @as(f32, @floatCast(px));
-    return @floor(narrowed * 64.0) / 64.0;
+    return @floor(narrowed * LAYOUT_GRID_STEPS) / LAYOUT_GRID_STEPS;
+}
+
+/// A length that came from MEASURING TEXT, on the same grid, reached from the
+/// other side: a text advance **ceils** where a specified length floors.
+///
+/// Measured over 107 readings across four probes; the model
+/// `sum over text nodes of ceil(f32(advance) * steps) / steps` reproduces 100 of
+/// them. The three parts each have their own discriminating case:
+///
+///   * the ceil. `aaa bbb ccc` at 12px is 55.95703125, whose steps either side
+///     are 55.953125 and 55.9609375; flooring and rounding both answer the one
+///     below and Chrome answers the one above. 14px and `aaa` at 13.25px are the
+///     same shape.
+///   * once per TEXT NODE, not once per box. Three text nodes holding one `a`
+///     each are 17.3203125 at 13px where one node holding `aaa` is 17.3125 --
+///     three ceils against one -- and `aa` + `aaa` is 28.859375 where `aaaaa` is
+///     28.8515625. Both hold at either scale factor, which is what says it is
+///     the node count and not the arithmetic.
+///   * the 32-bit narrowing, worth two readings of the 107: over a 200-glyph run
+///     at 26 sizes it answers 25 where the double answers 23. Accumulating per
+///     glyph in a float instead -- which is what Blink looks like it does --
+///     scores 17 and is wrong.
+///
+/// The seven readings the model misses are the advance rather than the grid:
+/// `AV` is kerned in Chrome and not here, and 8.4px and 9.9px have a per-glyph
+/// advance 0.00444px under the linear one while the 24 other sizes swept are
+/// linear to within float noise.
+///
+/// What does NOT pass through here is the integer readings. `offsetWidth`,
+/// `clientWidth` and `scrollWidth` are `round()` of the box in Chrome too, and
+/// they already were here, so keeping the fraction in the box is what makes both
+/// halves right at once -- 693.28125 rounds to 693 and 7101.5625 to 7102.
+pub fn textAdvanceUnit(px: f64) f64 {
+    const narrowed: f64 = @as(f32, @floatCast(px));
+    return @ceil(narrowed * LAYOUT_GRID_STEPS) / LAYOUT_GRID_STEPS;
 }
 
 /// How many measurements may be in flight at once, counting every route in --

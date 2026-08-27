@@ -110,10 +110,15 @@ digits `{d}` used to print.
   testing.expectEqual(1653, leaf.clientWidth);
   testing.expectEqual(1653, leaf.offsetWidth);
   testing.expectEqual(1653, leaf.scrollWidth);
-  // Six significant figures, and a fraction rather than the rounded box --
-  // `1619.97px` and not the `1619.85px` this answered before the box landed on
-  // the 1/64px layout grid. Chrome's own answer for the same page.
-  testing.expectEqual('1619.97px', String(getComputedStyle(leaf).width));
+  // Six significant figures, and a fraction rather than the rounded box.
+  // Chrome's own answer for the same page, read at the device scale factor this
+  // engine claims: eight percentage resolutions each snapped in turn is where a
+  // grid step compounds, so this is `1619.92px` on the 1/128 step and
+  // `1619.97px` on the 1/64 one -- both measured, with
+  // probes/expr-b81-precision-test-cases.js run at each factor. (It was
+  // `1619.85px` before the box landed on a grid at all.) The three integer
+  // readings above are 1653 at either factor.
+  testing.expectEqual('1619.92px', String(getComputedStyle(leaf).width));
 
   host.remove();
 }
