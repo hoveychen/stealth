@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A position keyword is a percentage. `background-position: left 30%` computes to
+`0% 30%` in Chrome, not to `left 30%`: the keywords are shorthand for the three
+percentages, `left`/`top` for 0%, `center` for 50%, `right`/`bottom` for 100%.
+
+The computed value also always carries BOTH axes, so the one-value form gains a
+`50%` for the axis it left out -- `left` is `0% 50%` and `top` is `50% 0%`.
+
+Measured on Chrome 151, twenty-three readings over background-position, its two
+longhands, and object-position.
+
+Which axis a value takes is the part a naive left-to-right map gets wrong. A
+keyword that names an axis takes that axis wherever it sits, so `30% center` is
+`30% 50%` and `center 30%` is `50% 30%` -- the `center` in the first is vertical
+and in the second horizontal, off the same word. Only a length or a percentage
+takes its axis from its position.
+
+Two controls, because the rule is about POSITION keywords and not about keywords:
+`vertical-align: top` stays `top` and `background-size: cover` stays `cover`. An
+implementation that mapped every `top` to `0%` would pass the table above and
+break both.
+-->
+
+<script id=position_keyword_is_a_percentage>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'width:400px;font-size:16px';
+  document.body.appendChild(host);
+
+  const read = (decl, name) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div data-m style="' + decl + '">x</div>';
+    host.appendChild(wrap);
+    const got = getComputedStyle(wrap.querySelector('[data-m]')).getPropertyValue(name);
+    wrap.remove();
+    return got;
+  };
+
+  const bg = (v) => 'background-position:' + v;
+
+  // declaration, property, Chrome's answer
+  const CASES = [
+    // The one-value form gains the other axis as 50%.
+    [bg('left'), 'background-position', '0% 50%'],
+    [bg('right'), 'background-position', '100% 50%'],
+    [bg('center'), 'background-position', '50% 50%'],
+    [bg('top'), 'background-position', '50% 0%'],
+    [bg('bottom'), 'background-position', '50% 100%'],
+    // Two keywords.
+    [bg('left top'), 'background-position', '0% 0%'],
+    [bg('right bottom'), 'background-position', '100% 100%'],
+    [bg('center center'), 'background-position', '50% 50%'],
+    [bg('left center'), 'background-position', '0% 50%'],
+    [bg('center bottom'), 'background-position', '50% 100%'],
+    // A keyword beside a length or percentage. `center` is vertical in the
+    // first and horizontal in the second, off the same word.
+    [bg('left 30%'), 'background-position', '0% 30%'],
+    [bg('center 30%'), 'background-position', '50% 30%'],
+    [bg('30% center'), 'background-position', '30% 50%'],
+    [bg('right 2em'), 'background-position', '100% 32px'],
+    // The longhands take the one axis.
+    [bg('left'), 'background-position-x', '0%'],
+    [bg('left'), 'background-position-y', '50%'],
+    [bg('center bottom'), 'background-position-x', '50%'],
+    [bg('center bottom'), 'background-position-y', '100%'],
+    // object-position follows the same rule.
+    ['object-position:left', 'object-position', '0% 50%'],
+    ['object-position:top', 'object-position', '50% 0%'],
+    ['object-position:center 30%', 'object-position', '50% 30%'],
+    // The controls: not every keyword is a percentage.
+    ['vertical-align:top', 'vertical-align', 'top'],
+    ['vertical-align:middle', 'vertical-align', 'middle'],
+    ['background-size:cover', 'background-size', 'cover'],
+    ['background-size:auto 50%', 'background-size', 'auto 50%'],
+    // And the percentages this plan's parent already made work must not move.
+    [bg('30% 40%'), 'background-position', '30% 40%'],
+    [bg('30% 2em'), 'background-position', '30% 32px'],
+  ];
+
+  const wrong = [];
+  for (const [decl, name, want] of CASES) {
+    const got = read(decl, name);
+    if (got !== want) {
+      wrong.push(decl + ' -> ' + name + ': want [' + want + '], got [' + got + ']');
+    }
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
