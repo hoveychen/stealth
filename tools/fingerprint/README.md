@@ -17165,10 +17165,16 @@ in play), so the preflight faithfully copies a header that is not there.
 Two more pre-existing gaps the wire dump surfaced, both on the *actual* request
 and both outside this plan:
 
-- A script-set `Content-Type` reaches the wire lowercased; Chrome sends
-  `Content-Type`. Same for `X-Probe` vs `x-probe`.
+- **On HTTP/1.1**, a script-set `Content-Type` reaches the wire lowercased where
+  Chrome sends `Content-Type`; same for `X-Probe` vs `x-probe`. Only on h1: HPACK
+  requires lowercase field names, so over h2 curl lowercases the whole set and
+  the casing is not ours to pick either way (the same caveat `baselineHeaders`
+  already carries for the client hints). Both arms here were measured over h1 —
+  the harness's API is a bare `node:http` server — so the difference is real, but
+  it is an h1-only one.
 - A custom author header lands last for us; Chrome slots it into the client-hint
-  block, right after `User-Agent`.
+  block, right after `User-Agent`. Field *order* survives h2, so this one is not
+  protocol-limited the way the casing is.
 
 Readings: `b57-cors-chrome.json`, `b57-cors-lp.json`; `--diff` prints the
 per-case comparison, and each request in `requestLog` now carries the full
