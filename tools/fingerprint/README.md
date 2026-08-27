@@ -17483,3 +17483,37 @@ reads was 1790 here against Chrome's 1783. It is now **1783**, and all 40 rows
 read identically — 4 of them differed before, each by one grid step in a width
 whose percentage had eight significant figures. That was the last named item in
 the `/tl` payload deficit.
+
+### The sweep pair, read the way the last one had to be
+
+Both arms ReleaseFast, both based on `9e1a31366`, same egress address, run
+back to back: `1.0.0-dev.1488+9e1a31366` as the control and
+`1.0.0-dev.1491+23d22093e` as the patched one. Zero `CRASHED` on either.
+
+The two full sweeps printed **17/29 patched against the control's own count**,
+with two verdict differences — and the differences pointed in **opposite
+directions**, which is the shape noise has and a change does not:
+`dd-datadome` challenged the control and passed the patched arm, `dd-leboncoin`
+did the reverse. Neither survived contact with an alternation whose order flips
+between rounds: twelve runs, three rounds, both stations, **both arms
+challenged every single time**.
+
+The four-station `timeout: Page.navigate` tail was on both arms in the same
+place. Re-run one station at a time against both binaries: `ak-expedia`
+pass/pass, `px-wayfair` pass/pass, `ks-canadagoose` pass/pass, `x-hyatt`
+refused-429 on both. One hung process, as it was last time.
+
+Resolved, with every `error` and every noisy DataDome verdict replaced by its
+paired per-station reading: **base 19/29, patched 19/29, and zero
+station-by-station differences across all 29.** The ten that stay shut are
+identical on both arms — the three Cloudflare challenges, five DataDome, the
+Cloudflare block at `dd-allopneus`, and `x-hyatt`'s refused-429.
+
+**Two discipline notes, both earned tonight and both of the same family:** the
+`N/29` summary line is never the reading (17/29 became 19/29 twice this evening),
+and a log that prints an arm's *label* can claim a comparison it never made. A
+sibling session wrote `arms="patched baseline"; for arm in $arms` — bash reflex
+in a zsh shell, which does not word-split an unquoted scalar — and ran nine
+comparisons of one binary against itself while the log said "patched" for half of
+them. Print the binary's `version` string on every row, not the label: two
+commits cannot share eight characters, and a label can.
