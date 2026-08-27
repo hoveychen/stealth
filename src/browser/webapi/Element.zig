@@ -1869,9 +1869,18 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
     var total_text: usize = 0;
     var all_collapsible = true;
     var has_newline = false;
+    var has_break = false;
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
-        if (node.is(Element) != null) {
+        if (node.is(Element)) |el| {
+            // A <br> is content this box lays out, not a child box to stack:
+            // it is a hard line break, and the block that holds one has a line
+            // even when it holds nothing else. Every other element still hands
+            // the box back to the child stack.
+            if (el.getTag() == .br) {
+                has_break = true;
+                continue;
+            }
             return null;
         }
         if (node.is(CData.Text)) |text| {
@@ -1881,7 +1890,7 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
             if (!has_newline and std.mem.indexOfAny(u8, str, "\n\r") != null) has_newline = true;
         }
     }
-    if (total_text == 0) {
+    if (total_text == 0 and !has_break) {
         return null;
     }
     // Whitespace with nothing beside it collapses away entirely, so there is no
@@ -1899,7 +1908,13 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
     // `white-space-collapse` and not `white-space` -- see
     // CSSStyleDeclaration.preservesWhitespace, which is where that went wrong
     // the first time.
-    if (all_collapsible and !CSSStyleDeclaration.preservesWhitespace(self, frame)) {
+    //
+    // A <br> is not whitespace, so a box holding one has a line however its
+    // text collapses: `<div> <br> </div>` is ONE line in Chrome -- measured --
+    // where `<div> </div>` is none. One and not two because the spaces either
+    // side collapse away and what is left ends with the break, which is the
+    // same rule a trailing newline follows.
+    if (all_collapsible and !has_break and !CSSStyleDeclaration.preservesWhitespace(self, frame)) {
         return null;
     }
 
@@ -1925,7 +1940,9 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
     // element that could actually take more than one line. This sits under
     // `offsetWidth`, which pages read in loops.
     const lines: f64 = blk: {
-        if (has_newline) break :blk self.lineBoxCount(frame, font.family, font.size, available);
+        // A <br> breaks whatever `white-space` says, so unlike a newline it does
+        // not have to be asked about -- it is already a second line.
+        if (has_newline or has_break) break :blk self.lineBoxCount(frame, font.family, font.size, available);
         const box = available orelse break :blk 1;
         if (width <= box) break :blk 1;
         break :blk self.lineBoxCount(frame, font.family, font.size, available);
@@ -1971,6 +1988,15 @@ fn lineBoxCount(self: *Element, frame: *Frame, family: font_metrics.Family, size
 
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
+        // A <br> ends the line it is on, whatever `white-space` says about
+        // newlines -- the only element textLayout lets through to here.
+        if (node.is(Element)) |el| {
+            if (el.getTag() == .br) {
+                counter.placeWord();
+                counter.endSegment();
+            }
+            continue;
+        }
         const text = node.is(CData.Text) orelse continue;
         const str = Factory.protoOf(text)._data.str();
         var i: usize = 0;

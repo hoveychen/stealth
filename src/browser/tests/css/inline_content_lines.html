@@ -59,6 +59,15 @@ device pixel ratio this engine claims — the `font-box-at-device-scale` plan.
     ['<br>', '18.5px 19 19 18.5 200px 9.25px'],
     ['<br><br>', '37px 37 37 37 200px 18.5px'],
     ['<br><br><br>', '55.5px 56 56 55.5 200px 27.75px'],
+    // Collapsible whitespace either side of a break collapses away, so what is
+    // left ends with the break and is one line -- where the same box without
+    // the break has no line box at all.
+    [' <br> ', '18.5px 19 19 18.5 200px 9.25px'],
+    ['<br> ', '18.5px 19 19 18.5 200px 9.25px'],
+    [' <br>', '18.5px 19 19 18.5 200px 9.25px'],
+    ['a <br> b', '37px 37 37 37 200px 18.5px'],
+    ['<!-- c --><br>', '18.5px 19 19 18.5 200px 9.25px'],
+    [' ', '0px 0 0 0 200px 0px'],
   ];
 
   const wrong = [];
