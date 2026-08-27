@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A width that comes from measuring text lands on the same grid a specified length
+does -- 1/64 of a DEVICE pixel, which is 1/128 CSS pixel at this engine's
+devicePixelRatio of 2 -- but it reaches the grid by CEILING, not by flooring,
+and it does so once per text node rather than once per box.
+
+Measured against Chrome 151 at `--force-device-scale-factor=2`, which is the
+factor this engine claims. Naming the factor is the part that matters: headless
+and headed answer byte-identically at the same factor
+(results/b81-2x2-{headless,headed}-dsf{1,2}.json), and every number below moves
+at factor 1. Probes: tools/fingerprint/probes/expr-b81-advance-snap.js,
+expr-b81-grid-128.js and expr-b81-grid-vs-dpr.js.
+
+  * the grid is the device pixel's. The same 30-case probe answers
+    ceil(advance*64)/64 under --force-device-scale-factor=1 and
+    ceil(advance*128)/128 under =2, and 14 of the 30 differ, so `aaa` is
+    21.3046875 here and not the 21.3125 a 1/64 CSS-pixel grid would give;
+  * it is a ceil. 12px and 14px below are cases where round and floor both land
+    a step low and only ceil lands on Chrome's answer;
+  * once per text node. Three text nodes holding one `a` each are 1/128 wider
+    than one node holding `aaa`, at both scale factors;
+  * and the integer readings are unaffected: offsetWidth, clientWidth and
+    scrollWidth are round() of the box and were already right.
+
+The model reproduces 100 of 107 Chrome readings taken at factor 2. All seven
+residuals are the advance itself rather than the grid -- `AV` is kerned in Chrome
+and not here, and 8.4px and 9.9px have an advance Chrome does not derive
+linearly -- so they are text_measure gaps, and none is asserted here.
+-->
+
+<script id=text_advance_ceils_onto_the_device_grid>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  // Absolutely positioned and shrink-to-fit, so the box is the advance and
+  // nothing else; a block would fill its container and measure nothing.
+  const shrink = 'position:absolute;left:0;top:0;white-space:pre;';
+  const box = (style, build) => {
+    const el = document.createElement('div');
+    el.setAttribute('style', shrink + style);
+    build(el);
+    host.appendChild(el);
+    return el;
+  };
+  const text = (s) => (el) => el.appendChild(document.createTextNode(s));
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // One box, four readings: the rect keeps the fraction, computed width prints
+  // it to six significant figures, and the three integer readings round it.
+  const four = (what, style, content, rect, computed, integer) => {
+    const el = box(style, text(content));
+    eq(what + ' rect', el.getBoundingClientRect().width, rect);
+    eq(what + ' computed', getComputedStyle(el).width, computed);
+    eq(what + ' offsetWidth', el.offsetWidth, integer);
+    eq(what + ' clientWidth', el.clientWidth, integer);
+    eq(what + ' scrollWidth', el.scrollWidth, integer);
+    el.remove();
+  };
+
+  // 16px serif, the initial font. Note what these are NOT: 21.3046875 times 64
+  // is 1363.5, so `aaa` is not on the 1/64 grid at all.
+  four('aaa', '', 'aaa', 21.3046875, '21.3047px', 21);
+  four('word', '', 'word', 32.8828125, '32.8828px', 33);
+  four('aaa bbb', '', 'aaa bbb', 49.3046875, '49.3047px', 49);
+  four('aaa bbb ccc', '', 'aaa bbb ccc', 74.609375, '74.6094px', 75);
+  four('ten words', '', 'long word '.repeat(10), 693.28125, '693.281px', 693);
+  four('a x1000', '', 'a'.repeat(1000), 7101.5625, '7101.56px', 7102);
+
+  // Ceil, not round and not floor. The advance for `aaa bbb ccc` at 12px is
+  // 55.95703125, whose 1/128 steps are 55.953125 below and 55.9609375 above:
+  // flooring and rounding both answer the step below, and Chrome answers the
+  // step above. 14px is the same shape.
+  four('12px ceils up', 'font-size:12px', 'aaa bbb ccc', 55.9609375, '55.9609px', 56);
+  four('14px ceils up', 'font-size:14px', 'aaa bbb ccc', 65.2890625, '65.2891px', 65);
+  // ...and where the advance is already on the grid, the ceil leaves it alone:
+  // 24px `aaa bbb ccc` is exactly 111.9140625.
+  four('24px on the grid', 'font-size:24px', 'aaa bbb ccc', 111.9140625, '111.914px', 112);
+
+  // Once per text node. Same three characters either way.
+  {
+    const one = box('font-size:13px', text('aaa'));
+    const three = box('font-size:13px', (el) => {
+      el.appendChild(document.createTextNode('a'));
+      el.appendChild(document.createTextNode('a'));
+      el.appendChild(document.createTextNode('a'));
+    });
+    eq('one node', one.getBoundingClientRect().width, 17.3125);
+    eq('three nodes', three.getBoundingClientRect().width, 17.3203125);
+    one.remove();
+    three.remove();
+  }
+
+  // An inline box's ink is the same advance, reached through inlineInk rather
+  // than textLayout.
+  {
+    const holder = box('', (el) => { el.innerHTML = '<span data-s>aaa</span>'; });
+    const span = holder.querySelector('[data-s]');
+    eq('inline span rect', span.getBoundingClientRect().width, 21.3046875);
+    eq('inline span offsetWidth', span.offsetWidth, 21);
+    holder.remove();
+  }
+
+  // A flex item's automatic minimum size is a text-derived length too, and this
+  // one is here to stay put rather than to move: both engines already answer 24
+  // for it, so `minContentWidth`'s round to a whole pixel is NOT changed and
+  // this pins that. (Chrome answers 74.609375 when the wrapper's
+  // `white-space: pre` is inherited, because a line that cannot break has the
+  // whole string as its min-content, and this engine answers 24 there too --
+  // that gap is line breaking, not the grid, so it is not asserted.)
+  {
+    const row = box('display:flex;width:10px', (el) => {
+      const item = document.createElement('div');
+      item.setAttribute('style', 'flex:1;white-space:normal');
+      item.textContent = 'aaa bbb ccc';
+      el.appendChild(item);
+    });
+    eq('flex min-content', row.firstChild.getBoundingClientRect().width, 24);
+    row.remove();
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

@@ -17816,3 +17816,189 @@ No station opened. Six of the seven closed doors on the base column are ones
 headed Chrome cannot open either; the three that are real gaps were unmoved. This
 plan closed 33 of 34 readings on the empty-element probe, took layout-box-shapes
 from 221 of 257 to 243, and left the door count where it found it.
+## The layout grid is a device pixel's, and text reaches it by ceiling (B81, 2026-08-27)
+
+Two rules, measured together because the first one is why the second was
+findable. The grid this engine floors onto is **half the size Chrome's is** on
+the display this engine claims to have, and a width that comes from measuring
+text does not floor at all.
+
+### The grid is 1/64 of a *device* pixel, not of a CSS pixel
+
+`Chrome lays out on a 1/64px grid` above is a reading of a **1x** Chrome. Run
+the same cases under `--chrome-arg --force-device-scale-factor=2` and every step
+halves:
+
+| declared | Chrome at dsf 1 | Chrome at dsf 2 | this engine |
+|---|---|---|---|
+| `width: 33.3%` of 400px | 133.1875 | **133.1953125** | 133.1875 |
+| `width: 133.2px` | 133.1875 | **133.1953125** | 133.1875 |
+| `width: 100.0078125px` | 100 | **100.0078125** | 100 |
+| `width: 100.012px` | 100 | **100.0078125** | 100 |
+| `width: 33.35%` of 400px | 133.390625 | **133.3984375** | 133.390625 |
+| `padding-left: 33.3%` | `133.188px` | **`133.195px`** | `133.188px` |
+| `transform-origin` of that box | `66.5938px 9px` | **`66.5977px 9.25px`** | `66.5938px 9px` |
+
+Read with `probes/expr-b81-specified-grid-dpr.js` and
+`expr-b81-grid-test-cases.js`, the second of which builds the markup
+`tests/element/layout_unit_grid.html` asserts rather than a paraphrase of it, so
+the dsf-1 column reproduces the assertions in the file today and the dsf-2 column
+is what they become. The floor and the 32-bit narrowing are both unchanged —
+twelve widths chosen to sit a hair under a 1/128 step by less than half a float
+step give the float model **11/11** and the double model **0/11**
+(`expr-b81-precision-at-128.js`). Only the step size moves.
+
+**This engine answers the dsf-1 column while telling every page its
+`devicePixelRatio` is 2.** That is not a rounding difference, it is the persona
+disagreeing with itself, and `Window.zig`'s own note on why the ratio is 2 says
+what reads it: Kasada takes eight reads of `devicePixelRatio` on one x-hyatt load
+and then spends 314 media queries binary-searching it to twenty bits.
+
+### A text advance ceils onto the same grid, once per text node
+
+The plan that found this was named for the wrong rule. Its first reading — seven
+strings, all seven on the 1/64 grid — was taken at a device scale factor of 1,
+and four of the same seven are not on the 1/64 grid at the factor this engine
+claims:
+
+| string at 16px serif | dsf 1 | dsf 2 | on 1/64? |
+|---|---|---|---|
+| `aaa` | 21.3125 | **21.3046875** | no |
+| `word` | 32.890625 | **32.8828125** | no |
+| `aaa bbb` | 49.3125 | **49.3046875** | no |
+| `aaa bbb ccc` | 74.609375 | 74.609375 | yes |
+
+**Say `--force-device-scale-factor` explicitly; do not infer it from
+`--headed`.** The first version of this section blamed headlessness, because the
+original reading was headless and the reading that corrected it was headed. That
+was a coincidence of this host: run the 2x2 and the factor is the whole story
+(`results/b81-2x2-{headless,headed}-dsf{1,2}.json`) —
+
+- `headless/dsf1` and `headed/dsf1` are **byte-identical** over all ten strings,
+- so are `headless/dsf2` and `headed/dsf2`,
+- and headed with no factor named equals `dsf2` here, because this display is 2x
+  while headless defaults to 1x.
+
+So `serif` resolved to the same metrics either way, and `--headed` fixed the
+reading by accident. It may still be the right flag for a question about which
+family a name resolves to; it is not what this one turned on, and a machine whose
+display is 1x would reproduce none of this from `--headed` alone.
+
+Every headed reading is a multiple of 1/128, and the rule that fits all of them
+is `ceil(advance * 64 * dpr) / (64 * dpr)`:
+
+- **the grid is the device pixel's**, same as above. One 30-case probe answers
+  `ceil(x*64)/64` at dsf 1 and `ceil(x*128)/128` at dsf 2, and 14 of the 30
+  differ, so it is not a coincidence of 16px (`expr-b81-grid-128.js`,
+  `expr-b81-grid-vs-dpr.js`);
+- **it is a ceil.** At dsf 2, `aaa bbb ccc` at 12px, at 14px and `aaa` at
+  13.25px are cases where floor and round both land one step low and only ceil
+  lands on Chrome's answer;
+- **once per text node, not once per box.** Three text nodes holding one `a`
+  each are 17.3203125 at 13px where one node holding `aaa` is 17.3125 — three
+  ceils against one. `aa` + `aaa` in two nodes is 28.859375 where `aaaaa` in one
+  is 28.8515625. Both hold at both scale factors.
+
+Where 16px hid it: a 2048-unit font at 16px puts every advance on a multiple of
+`16/2048` = 1/128 already, so the ceil has nothing to do and the grid is
+invisible. 13px, 19.5px and 11px separate them.
+
+The advance itself is already right. Over 30 strings and sizes this engine's
+`measureText` matches headed Chrome's to the last bit 29 times, and the one miss
+(21.3px, differing in the 11th digit) ceils onto the same step. **What is wrong
+is only the last step**: this engine rounds the advance to a whole pixel and then
+reports that integer as the length, so `getBoundingClientRect().width` and
+computed `width` lose the fraction while `offsetWidth` — which is `round()` of
+the box in Chrome too — was right all along.
+
+### Scoring the model, and what is left over
+
+`sum over text nodes of ceil(f32(advance) * 128) / 128` reproduces **100 of 107**
+headed-Chrome readings across four probes. Narrowing the sum to a 32-bit float
+before the ceil is worth 2 of those (25/26 against 23/26 on a 200-glyph run over
+26 sizes); accumulating per glyph in a float instead, which is what Blink looks
+like it does, scores 17/26 and is wrong.
+
+All seven residuals are the advance, not the grid, and none of them is this
+plan's:
+
+- `AV` is 21.046875 in Chrome and 23.109375 here — **no kerning**. `five words
+  in a row` misses for the same reason.
+- 8.4px and 9.9px have a per-glyph advance **0.00444px under** the linear one,
+  the same absolute offset at both sizes, while the 24 other sizes swept are
+  linear to within float noise (`expr-b81-small-sizes.js`,
+  `expr-b81-nondyadic-sizes.js`). Whatever Chrome does there, it is not
+  `units * size / upem`.
+
+### Found on the way: the `font` shorthand never reaches the box
+
+The size sweep only worked once it stopped using the `font` shorthand. With
+`style="font:<n>px serif"` this engine answers **the same width for every size** —
+the default font's — while its own `measureText` answers each size correctly, so
+the shorthand reaches the canvas and not the cascade. `font` is `.unmodelled` in
+`chrome_shorthands.zig`, so the declaration is kept whole and the nineteen
+longhands are never set:
+
+| declared | read | Chrome | this engine |
+|---|---|---|---|
+| `font:13px serif` | computed `font-size` | 13px | **16px** |
+| `font:13px serif` | computed `font-family` | serif | **Times** |
+| `font:13px serif` | rect width | 60.625 | **75** |
+| `font:13px monospace` | rect width | 86.09375 | **75** |
+| `font-weight:bold` | computed `font-weight` | 700 | **bold** |
+| `font-stretch:condensed` | computed `font-stretch` | 75% | **100%** |
+| `font-family:monospace` | computed `font-size` | **13px** | 16px |
+| `<b>aa</b>` | rect width | 16 | **14** |
+
+The longhands are fine — `font-size:13px` gives 61 here against Chrome's 60.625,
+which is this section's grid and nothing else. Chrome's own expansion is read
+directly off `style.length` and the indexed names in
+`probes/expr-b81-font-expansion.js`: nineteen entries, in an order that is **not**
+the one a CSS-wide keyword produces, holding the specified tokens (`font-weight`
+is stored as `bold`, not 700) with the twelve the grammar never names reset to
+their initials. `font: 13px`, `font: 1001 16px serif` and `font: bold inherit
+serif` all leave **zero** entries — an invalid `font` is refused outright, where
+this engine keeps one. That is the `font-shorthand-cascade` plan.
+
+### The sweep says 22 against 19, and the baseline says why not to believe it
+
+One sweep per arm, both ReleaseFast off the same base, separate ports, the
+engine's `version` recorded in each reading rather than a label: base
+(`dev.1526+7b3d9b485`) 22/29, patched (`dev.1533+8cad43eda`) 19/29. Three
+stations differ and all three are DataDome — dd-datadome, dd-leboncoin,
+dd-hermes, each `pass` on base and `datadome-challenge` on patched.
+
+That is the shape a regression makes, and it is not one. Eight more runs at
+`--only dd-`, alternating the arms in both orders:
+
+| run | arm (by version) | dd-datadome | dd-leboncoin | dd-hermes |
+|---|---|---|---|---|
+| first sweep | base | pass | pass | pass |
+| r1 | base | challenge | challenge | challenge |
+| r1 | patched | challenge | empty-document | challenge |
+| r1b | patched | challenge | challenge | challenge |
+| r1b | base | challenge | challenge | challenge |
+| r2 | base | challenge | challenge | challenge |
+| r2 | patched | challenge | **pass** | challenge |
+| r2b | patched | challenge | challenge | challenge |
+| r2b | base | challenge | challenge | challenge |
+
+Two readings settle it. **The base binary — byte-identical, unchanged code —
+passed all three in the first sweep and then failed all three in four
+consecutive later runs.** And the patched binary *passed* dd-leboncoin in a
+later round, which a regression cannot do. The window closed between the first
+sweep and the second, and it closed on both arms.
+
+This is the third independent confirmation of the same station behaviour: the
+session working on `block-height-from-content` measured base 22/29 and patched
+19/29 for a completely unrelated change (vertical line boxes) at a different
+hour, and lost the same three stations in the same direction. Two unrelated
+changes cannot both break exactly dd-datadome, dd-leboncoin and dd-hermes and
+nothing else.
+
+So the discipline that matters is the one that produced the table, not the
+verdict: a single-sample A/B across these three stations will manufacture a
+regression or a win on demand, and the only reading that means anything is the
+one where **the control arm is re-run inside the same window**. Print the
+binary's `version` on every row — a label will happily say "base" while running
+the other binary.

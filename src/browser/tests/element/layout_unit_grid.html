@@ -3,10 +3,29 @@
 <div id=anchor></div>
 
 <!--
-Chrome lays out on a 1/64px grid -- Blink's LayoutUnit -- so a used length is
-always a multiple of 0.015625, reached by flooring. `width: 33.3%` of 400px is
-133.2 in arithmetic and `133.188px` in Chrome, which is 8524/64: 133.2 x 64 is
-8524.8, and the .8 is dropped rather than rounded.
+Chrome lays out on a grid of 1/64 of a DEVICE pixel, reached by flooring. This
+engine's devicePixelRatio is 2, so its step is 1/128 CSS pixel: `width: 33.3%`
+of 400px is 133.2 in arithmetic and `133.195px` here, which is 17049/128 --
+133.2 x 128 is 17049.6, and the .6 is dropped rather than rounded.
+
+The device pixel is the correction. These same cases were first measured at a
+device scale factor of 1, where the step is 1/64 and the answer is `133.188px`,
+and that is what this file used to assert -- while the engine told every page
+its devicePixelRatio was 2. Run headed Chrome twice, `--chrome-arg
+--force-device-scale-factor=1` and `=2` (probes/expr-b81-grid-test-cases.js
+builds exactly the markup below), and each step halves:
+
+  | declared                | dsf 1       | dsf 2         |
+  |-------------------------|-------------|---------------|
+  | `width: 33.3%` of 400px | `133.188px` | `133.195px`   |
+  | `width: 100.0078125px`  | `100px`     | `100.008px`   |
+  | `padding-left: 33.3%`   | `133.188px` | `133.195px`   |
+  | `transform-origin`      | `66.5938px` | `66.5977px`   |
+
+What does NOT move is the floor or the 32-bit narrowing the value goes through
+first. Twelve widths chosen to sit a hair under a 1/128 step by less than half a
+float step (probes/expr-b81-precision-at-128.js) give the float model 11/11 at
+dsf 2 and the double model 0/11, the same answer the 1/64 grid gave.
 
 What snaps and what does not is the difference between a used value and a
 computed one, measured with tools/fingerprint/scratch/expr-grid-props.js and
@@ -40,30 +59,39 @@ expr-layout-grid.js against Chrome 151:
   const wrong = [];
   const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
 
-  // A percentage of 400: 133.2 arithmetic, 8524/64 laid out.
-  eq('width 33.3%', read('width:400px', 'width:33.3%', 'width'), '133.188px');
-  eq('width 33.3% rect', read('width:400px', 'width:33.3%', 'rect'), 133.1875);
+  // A percentage of 400: 133.2 arithmetic, 17049/128 laid out.
+  eq('width 33.3%', read('width:400px', 'width:33.3%', 'width'), '133.195px');
+  eq('width 33.3% rect', read('width:400px', 'width:33.3%', 'rect'), 133.1953125);
   // A declared length is a used value too, so it snaps the same way.
-  eq('width 133.2px', read('width:400px', 'width:133.2px', 'width'), '133.188px');
+  eq('width 133.2px', read('width:400px', 'width:133.2px', 'width'), '133.195px');
+  // Two the finer grid leaves alone: 133.333 x 128 is 17066.6 and floors to the
+  // same step 133.333 x 64 did, and 100.001 x 128 is 12800.1.
   eq('width 133.333px', read('width:400px', 'width:133.333px', 'width'), '133.328px');
   eq('height 33.3px', read('width:400px', 'height:33.3px', 'height'), '33.2969px');
-  // Already on the grid, or so close that the floor lands on it.
-  eq('width 100.0078125px', read('width:400px', 'width:100.0078125px', 'width'), '100px');
   eq('width 100.001px', read('width:400px', 'width:100.001px', 'width'), '100px');
+  // ...and one it does not: 100.0078125 IS a 1/128 step, and was a step the
+  // 1/64 floor dropped to 100.
+  eq('width 100.0078125px', read('width:400px', 'width:100.0078125px', 'width'), '100.008px');
   eq('width 7%', read('width:400px', 'width:7%', 'width'), '28px');
   // A percentage of the viewport-wide line, for a number no 400px box gives.
-  eq('width 10% of 1904', read('', 'width:10%', 'width'), '190.391px');
+  // Derived rather than transcribed: Chrome's own window here is not 1904 wide,
+  // so what the probe confirms is the step -- its answer moves by exactly one
+  // 1/128 between the two scale factors -- and 10% of 1904 is 190.4, whose
+  // floor onto 1/128 is 24371/128.
+  eq('width 10% of 1904', read('', 'width:10%', 'width'), '190.398px');
 
   // A percentage padding resolves against a used length, so it snaps. (A
-  // percentage MARGIN does too -- Chrome answers the same 133.188px -- but
+  // percentage MARGIN does too -- Chrome answers the same 133.195px -- but
   // this engine still refuses those and answers the initial 0px; that is the
   // `margin-percentage-resolves` plan, not this one.)
-  eq('padding 33.3%', read('width:400px', 'padding-left:33.3%', 'paddingLeft'), '133.188px');
-  // (The content left over is 266.8125, which Chrome writes `266.812px` --
-  // six significant figures rounded half to EVEN. This engine rounds half up
-  // and writes `266.813px`; that is the `css-number-round-half-even` plan, not
-  // this one, so what is asserted here is the padding rather than the
-  // remainder.)
+  eq('padding 33.3%', read('width:400px', 'padding-left:33.3%', 'paddingLeft'), '133.195px');
+  // The content left over is 266.8046875, and the finer grid takes the
+  // half-to-even argument off the table: at 1/64 the remainder was 266.8125
+  // exactly, which Chrome wrote `266.812px` rounding half to EVEN where this
+  // engine rounds half up and wrote `266.813px` (the
+  // `css-number-round-half-even` plan). At 1/128 there is no tie, both write
+  // `266.805px`, and it can be asserted here.
+  eq('padding 33.3% width', read('width:400px', 'padding-left:33.3%', 'width'), '266.805px');
 
   // ...and a length the author wrote does not: these report a computed value,
   // not a used one.
@@ -74,8 +102,11 @@ expr-layout-grid.js against Chrome 151:
   eq('letter-spacing', read('width:400px', 'letter-spacing:0.7px', 'letterSpacing'), '0.7px');
 
   // transform-origin is the centre of a snapped box, so it carries the grid
-  // through without being snapped again.
-  eq('origin of 33.3%', read('width:400px', 'width:33.3%', 'transformOrigin'), '66.5938px 9px');
+  // through without being snapped again. Chrome answers `66.5977px 9.25px` here;
+  // the y half is half its line box, which is 18.5 there and 18 here -- a
+  // font-metrics gap that belongs to `block-height-from-content`, not to the
+  // grid. What this asserts is the x half moving with the grid.
+  eq('origin of 33.3%', read('width:400px', 'width:33.3%', 'transformOrigin'), '66.5977px 9px');
 
   host.remove();
   testing.expectEqual('', wrong.join(' | '));
