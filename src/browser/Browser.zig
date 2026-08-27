@@ -63,6 +63,21 @@ last_reported_js_bytes: usize = 0,
 // browser context. Keys are owned by `allocator`; values are enum tags.
 permissions: std.StringHashMapUnmanaged(PermissionState) = .empty,
 
+// When the first getVoices() in this browser asked for the voice list, on the
+// boot-relative clock. Chrome enumerates the platform's voices in its browser
+// process, once: the first ask anywhere costs ~700ms and every document after
+// it gets the list one task tick later. Measured on headed Chrome 151 over
+// three runs of three navigations — 727/751ms then 26/27ms — and again in a
+// child document created after its parent's list arrived, which answered 27ms
+// after asking. The run also outlives the document that started it: a page that
+// asked and navigated away immediately still left the next page warm.
+// A timestamp rather than a flag, so a document that asks while the first one's
+// list is still in flight waits out the rest of that run instead of restarting
+// it. See webapi/speech/SpeechSynthesis.zig and tools/fingerprint/README.md.
+// Scoped here rather than to the Frame for the same reason `permissions` is:
+// the state belongs to the browser and survives navigation.
+voices_asked_at_micros: ?u64 = null,
+
 // Runtime viewport override set via Emulation.setDeviceMetricsOverride and
 // cleared via clearDeviceMetricsOverride. Null means use the compile-time
 // Viewport.default. Scoped to the Browser so it persists across page
