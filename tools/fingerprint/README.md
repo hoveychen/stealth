@@ -18743,3 +18743,114 @@ What is left is quantitative: the same questions, the same kinds of wrong
 answers, and one customer grading them harder. Finding the weight means
 pointing the oracle at differences one at a time, which is now cheap enough to
 do — eleven seconds a verdict, deterministic, no station window.
+
+## The station weighs one answer, and it is the input's box (B84, 2026-08-27)
+
+B83 handed over a verdict oracle and three leads. Two of the three are now dead
+and the third was never on the list.
+
+**`x-kpsdk-dt` is a random token, not a measurement.** The lead was a length
+difference, Chrome's 53 characters against our 51. Taken across stations it does
+not survive: this engine sent a 50-character `dt` to x-hyatt and was refused,
+sent a 52-character one to ks-canadagoose and was ticketed, and Chrome's own
+runs range over 53 and 54. The value carries no structure that lines up across
+runs. Nothing to fix here.
+
+**An injected script does reach the challenge document, on both arms.** B83
+recorded the opposite -- that Chrome's `--inject` cannot enter the 429 -- and
+built the oracle around never injecting. The blocker was ordering, not policy:
+`Page.enable`, then `Page.addScriptToEvaluateOnNewDocument`, then
+`Page.navigate`, and the script runs in the 429 itself and in every
+`about:blank` iframe the guard opens under it. Chrome keeps its ticket while
+hooked, so the injection costs nothing to use. That is the whole instrument
+below: `kasada-knob.mjs` with `kasada-knobs.mjs`.
+
+### The knob, and the two controls it needs
+
+A knob rewrites one payload section on its way into `TextEncoder.encode`, which
+is where the guard hands each section over as plaintext. Two controls make a
+"still ticketed" reading mean anything:
+
+  * `break-encoder` removes `TextEncoder` and the POST disappears entirely. The
+    hook is on the payload's critical path.
+  * `webdriver-true` sets `navigator.webdriver` and Chrome **posts and is
+    refused** -- `postLen` 19634, `x-kpsdk-cr: true`, no `x-kpsdk-r`, stuck on
+    429, 3 for 3. That is the zero point. Without it every negative below would
+    only say the oracle cannot read a refusal. (This engine reports
+    `webdriver: false` from a native-looking getter on `Navigator.prototype`, so
+    it is not our tell.)
+
+### What the payload's content turned out not to decide
+
+Reading the funnels on both arms, at last with each section tagged by the
+document it was read in, gave two real content gaps:
+
+| section | Chrome | this engine |
+|---|---|---|
+| four lengths | `100075px,155556px,165464px,305134px` | `0px,0px,0px,0px` |
+| speech voices | 9619 characters | the empty string |
+
+Both are genuine defects. Neither is what x-hyatt is judging. Chrome sending
+ours for either keeps its ticket, and so does `all-ours`, which at once gives
+Chrome the zeroed lengths, the empty voice list, an empty codec list and a
+timezone of `Olympus Mons Time` -- ticketed twice out of twice. The tamper
+control `px-nudge` (same rewrite path, values one larger) is also ticketed, so
+the rewrites are not being caught as rewrites.
+
+**Section content does not even set the body's size.** `px-inflate` appends
+twenty thousand characters to a section and `postLen` stays inside its baseline
+range. The guard folds each section to a fixed width, which is why our body is
+short by a flat ~750 bytes no matter what is in it. Both arms emit exactly 449
+tokens. The B55 note that content and body are 1:1 does not hold.
+
+### The one answer it does weigh
+
+With content ruled out, the structure is where the arms part, and they part in
+one place. The payload carries tokens keyed by an element size. Chrome's eight
+land on six distinct sizes; ours land on two, `153x21` and `149x17`, and the two
+sets do not overlap at all. Fifteen measurements collapsing into two buckets is
+a measurement that cannot tell its inputs apart.
+
+Tracing the boxes the guard asks for (`--knob dims`) names it: the guard sizes
+font-metric probes as `<input>` elements at `font-size: 100px` and reads
+`clientWidth`/`clientHeight`. Off the station, same page, both arms:
+
+| probe | this engine | Chrome |
+|---|---|---|
+| `input` default | 153x21 | 153x21 |
+| `input` `font-size:100px` | **153x21** | 1049x121 |
+| `input` `font-size:100px` monospace | **153x21** | 1245x123 |
+| `input` `font-size:100px` serif | **153x21** | 1048x121 |
+| `input` `font-size:8px` | **153x21** | 91x15 |
+| `span` `font-size:100px` (control) | 803x118 | 803x118 |
+
+The span control matches Chrome exactly, so the font metrics and the font-size
+cascade are both fine. `intrinsicBox` in `src/browser/webapi/Element.zig` simply
+returns a constant `145x15` of content for `.input`, measured once at the
+default font, and every form control in that table has the same shape.
+
+**And x-hyatt withholds the ticket for exactly this.** `input-box-frozen` gives
+Chrome our frozen box:
+
+| knob | runs | ticket |
+|---|---|---|
+| none | many | yes |
+| `input-box-passthru` -- same five accessors replaced, real values returned | 2/2 | yes |
+| `input-box-frozen` -- our values | 3/3 | **no** |
+
+The pass-through control matters: it replaces the same four size getters and
+`getBoundingClientRect` through the same `defineProperty` calls and hands back a
+script-built `DOMRect`, and it is ticketed. So the refusal is about the sizes,
+not about the hooking.
+
+The asymmetry ten sessions have been chasing falls out of the same knob:
+frozen-box Chrome is **refused by x-hyatt and ticketed by ks-canadagoose**. Same
+defect, weighed by one deployment and shrugged off by the other -- which is why
+this engine passes canadagoose while x-hyatt holds it on the 429.
+
+Chrome's own numbers give the model to fix it against. The height is the line
+box of the computed font, `round(font-size x 1.15)` -- 13.333px is Chrome's UA
+font-size for `input`, and 13.333, 100 and 8 give 15, 115 and 9 of content
+against measured 15, 115 and 9. The width goes with the font's advance and the
+`size` attribute rather than staying constant: 1041 of content at 100px in the
+default font, 1237 in monospace.
