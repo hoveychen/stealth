@@ -18524,3 +18524,39 @@ reads its three parameters the same way now. It was not measured failing —
 nothing has been seen scheduling a playback rate — but it is the same matcher
 against the same field, and leaving one of two on the old reading is how a fix
 half-lands.
+
+### The recording was shorter than the render
+
+Fixing the scheduled parameter turned the guard's buffer from zeros into a real
+render, and the live trace showed the next thing wrong with it in the same
+line:
+
+```
+setValueAtTime:10000|0
+render:rate:44100,len:44100
+len:44100,rate:44100,ch:1,first:265,tail:0,all:1085.3711197695307
+```
+
+`first:265` is the compressor's pre-delay, so the replay fired. `all` is
+1085.3711197695307 — the whole of the recorded 5 000 frames, and nothing after
+them. **Kasada renders 44 100 frames, a full second.** fingerprintjs takes
+5 000 and the Turnstile widget 1 000, so 5 000 was what G21 recorded, and every
+frame past it came back zero. `tail:0` in that line is the last 500 frames of
+the second, 39 100 frames into the silence.
+
+`dump-audio-buffer.mjs` was already parameterised by length, so the fix is the
+constant and a re-record on both platforms. 176 400 bytes per graph per
+platform, and the generator's own prefix check still holds — a 1 000-frame
+render is frame-for-frame identical to the 44 100-frame one.
+
+| graph | platform | whole-buffer sum | frame 44099 |
+|---|---|---|---|
+| fingerprintjs | macos | 10748.964784431235 | -0.21189409494400024 |
+| fingerprintjs | linux | 10748.964801543829 | -0.21189410984516144 |
+| turnstile | macos | 9988.088666068505 | 0.09531436860561371 |
+| turnstile | linux | 9989.601845444764 | 0.09532961249351501 |
+
+The macOS row was measured off this machine's Chrome before the re-record
+(`scratch/expr-audio-44100.js`) and reproduced by summing the recorded bytes
+afterwards, to the last digit — the two arrive by different routes and agree,
+which is what says the recording is the render and not a transcription of it.

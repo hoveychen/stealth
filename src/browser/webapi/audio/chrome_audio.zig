@@ -14,20 +14,20 @@
 //     OscillatorNode  type=triangle  frequency=10000  start(0)
 //       -> DynamicsCompressorNode  threshold=-50 knee=40 ratio=12 attack=0 release=0.25
 //         -> destination
-//     macos  tail sum over the last 500 frames = 124.04347624466754, 265 leading zeros
-//     linux  tail sum over the last 500 frames = 124.04347527516074, 265 leading zeros
+//     macos  tail sum over the last 500 frames = 122.91859038412804, 265 leading zeros
+//     linux  tail sum over the last 500 frames = 122.91859095380642, 265 leading zeros
 //
 //   the Cloudflare Turnstile widget's:
 //     OfflineAudioContext(1, frames, 44100)
 //     OscillatorNode  type=triangle  frequency=9998.123456  start(0)
 //       -> DynamicsCompressorNode  threshold=-52 knee=40 ratio=12 attack=0.0001 release=0.25
 //         -> destination
-//     macos  tail sum over the last 500 frames = 112.4458671315806, 265 leading zeros
-//     linux  tail sum over the last 500 frames = 112.46367831656244, 265 leading zeros
+//     macos  tail sum over the last 500 frames = 114.63016292481916, 265 leading zeros
+//     linux  tail sum over the last 500 frames = 114.64782158966409, 265 leading zeros
 //
 // Two facts measured alongside the buffers make one stored table per graph
 // enough:
-//   * a 1000-frame render is frame-for-frame identical to a 5000-frame one over
+//   * a 1000-frame render is frame-for-frame identical to a 44100-frame one over
 //     the frames they share -- checked on every run of the generator, for every
 //     graph -- so any length a detector picks is a prefix;
 //   * the leading zeros above are the compressor's 6 ms pre-delay at 44100 Hz.
@@ -64,7 +64,7 @@ pub fn settings(graph: Graph) Settings {
 }
 
 pub const sample_rate: f64 = 44100;
-pub const frames: usize = 5000;
+pub const frames: usize = 44100;
 
 const fingerprintjs_macos_bytes align(4) = @embedFile("chrome_audio_fingerprintjs_macos.bin").*;
 const fingerprintjs_linux_bytes align(4) = @embedFile("chrome_audio_fingerprintjs_linux.bin").*;

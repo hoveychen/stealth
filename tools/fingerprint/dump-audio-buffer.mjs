@@ -36,7 +36,13 @@ const repo = path.resolve(here, '../..');
 const outDir = path.join(repo, 'src/browser/webapi/audio');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const headed = process.argv.includes('--headed');
-const FRAMES = 5000;
+// One second. fingerprintjs reads 5 000 frames and the Turnstile widget 1 000,
+// but Kasada renders the whole second on x-hyatt -- traced live by
+// probes/inject-b83-audio-render.js -- and a recording shorter than the render
+// is answered with zeros past its end, which is a buffer no Chrome produces.
+// Recording the longest length any station has been seen asking for costs
+// 176 400 bytes per graph per platform and removes the whole class.
+const FRAMES = 44100;
 const SAMPLE_RATE = 44100;
 
 // The graphs worth recording. `zig` is the enum tag the generated file uses;
