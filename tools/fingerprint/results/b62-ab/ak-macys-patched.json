@@ -1,0 +1,163 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T07:45:04.890Z",
+  "egress": {
+    "fl": "1232f19",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787816704.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1508+f63d301ae",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17511/"
+  },
+  "stations": [
+    {
+      "name": "ak-macys",
+      "vendor": "akamai",
+      "url": "https://www.macys.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ep2.adtrafficquality.google/sodar/sodar2/255/runner.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.google.com/recaptcha/api2/aframe",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://servedby.flashtalking.com/container/12518;131342;14478;iframe/?ns=https%3A%2F%2Fwww.macys.com%2F&ft_referrer=https%3A%2F%2Fwww.macys.com%2F&cachebuster=842705.347237249",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=243d8345-f682-4dc3-8ef8-f38bef12bd39&u_scsid=718a6bc1-c432-4cd3-90a4-6641a46f69a6&u_sclid=9c7bef55-0018-4e53-a842-426c5abb4163",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cdn.pbbl.co/i/pp.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=1746695c-6813-4174-87a6-d774871422bd&u_scsid=718a6bc1-c432-4cd3-90a4-6641a46f69a6&u_sclid=9c7bef55-0018-4e53-a842-426c5abb4163",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?topUrl=www.macys.com&origin=onetag#{%22bundle%22:{%22identifierExtractor%22:{%22origin%22:0},%22value%22:null},%22cw%22:true,%22optout%22:{%22identifierExtractor%22:{%22origin%22:0},%22value%22:null},%22origin%22:%22onetag%22,%22tld%22:%22macys.com%22,%22topUrl%22:%22www.macys.com%22,%22version%22:%225_48_0%22,%22ifa%22:{%22identifierExtractor%22:{%22origin%22:0},%22value%22:null},%22lsw%22:true,%22pm%22:0,%22requestId%22:%227e3b4b03-5f0e-4568-861d-5c83533b12aa%22}",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ct.pinterest.com/ct.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CJ2WiqOowJYDFQC30QQdmdgegw;src=3856256;type=global;cat=landing;rcb=15;ord=1787816712006;npa=0;auiddc=1352767529.1787816716;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68p1v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616986~115938466~115938469~118897920~118897930~119367802~119367810~120385423;epver=2;dc_random=1787816716_wnPmvUy07unkNlssxj7IHgMyIscyDxYSiQ;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CIGPiqOowJYDFZMHTwgdeO8QyQ;src=3856256;type=global;cat=landing;rcb=15;npa=0;auiddc=1352767529.1787816716;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;user_data_mode=c;_tu=IAAB;gtm=45fe68p1v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616986~115938466~115938469~118897920~118897930~119367802~119367810~120385423;epver=2;em=tv.1~pc0.94304~co0.US;dc_random=1787816716_tqMVlp8HFnO_qt1ZwDKlVbv2FfmeUmo8lw;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Macy's - Shop Fashion Clothing & Accessories - Official Site - Macys.com",
+      "landedOn": "https://www.macys.com/",
+      "nodes": 10141,
+      "textLength": 4067,
+      "snippet": "Skip to main content TODAY'S DEALS Up to 30% off buy more, save more Up to 50% off activewear Up to 60% off furniture & more 20-70% off women's shoes See All Ask Macy's Sign In See more of what you lo",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25464
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787816705070 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:17511",
+    "$time=1787816707585 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: Cannot read properties of null (reading 'querySelector')\"",
+    "$time=1787816709639 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] Slot.setTargeting is deprecated, use Slot.setConfig({targeting: ...}) instead.",
+    "https://goo.gle/gpt-message#171",
+    "$time=1787816709641 $scope=js $level=warn $msg=\"console.warn\" param.0=[GPT] PubAdsService.enableLazyLoad is deprecated, use googletag.setConfig({lazyLoad: ...}) instead.",
+    "https://goo.gle/gpt-message#170",
+    "$time=1787816709680 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787816709811 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787816709818 $scope=js $level=warn $msg=\"console.error\" param.0=TypeError",
+    "$time=1787816709855 $scope=event $level=warn $msg=\"inline handler\" err=JsException caught.exception=\"Cannot read properties of undefined (reading '0')\" caught.stack=\"TypeError: Cannot read properties of undefined (reading '0')\\n    at S.getLocation (https://cdn.cookielaw.org/scripttemplates/otSDKStub.js:1:11120)\\n    at r.onload (https://cdn.cookielaw.org/scripttemplates/otSDKStub.js:1:13462)\" caught.line=1 caught.caught=true",
+    "$time=1787816712165 $scope=js $level=warn $msg=\"console.warn\" param.0=[TSV scrub] Removed unsafe characters from 1 field(s): param.1=[object Object]",
+    "$time=1787816715749 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught Error: MAI SDK has not been configured. Call conf() first.\" filename= line_number=0 column_number=0",
+    "$time=1787816716081 $scope=http $level=warn $msg=\"script fetch error\" err=CouldntResolveHost req=https://d1n00d49gkbray.cloudfront.net/js/macys.js extra=frame status=0",
+    "$time=1787816716396 $scope=js $level=warn $msg=\"console.warn\" param.0=[TSV scrub] Removed unsafe characters from 1 field(s): param.1=[object Object]",
+    "$time=1787816716865 $scope=js $level=warn $msg=\"console.warn\" param.0=KAMPYLE_UTILS will be deprecated! Please, use in future KAMPYLE_ONSITE_SDK instead!",
+    "$time=1787816716908 $scope=frame $level=warn $msg=\"cookie parse failed\" raw= err=Empty",
+    "$time=1787816716961 $scope=app $level=error $msg=\"dispatch error\" err=Invalid event=http_response_header_done source=notification listener=cdp.CDP.BrowserContext",
+    "$time=1787816718520 $scope=http $level=error $msg=\"delivery callback\" err=CorsResponseBlocked req=POST https://tr6.snapchat.com/p",
+    "$time=1787816718520 $scope=http $level=error $msg=\"error\" url=https://tr6.snapchat.com/p err=CorsResponseBlocked source=xhr.handleError",
+    "$time=1787816721069 $scope=http $level=error $msg=\"process_messages\" err=TooManyRedirects req=GET https://partner.mediawallahscript.com/?account_id=2006&partner_id=2131&custom=&tag_format=img&tag_action=sync&puid=41442ed0-a1eb-11f1-9ba9-c7f7d88fd143"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}
