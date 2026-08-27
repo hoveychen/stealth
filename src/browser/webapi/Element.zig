@@ -2233,6 +2233,15 @@ pub fn horizontalMargin(self: *Element, frame: *Frame, containing: *?f64, depth:
 /// have no such ratio -- each keeps its 300 or its 150 when the other axis is
 /// declared, and an `<svg viewBox="0 0 40 10">` at 600px wide is still 150 tall.
 /// All four measured (expr-replaced-intrinsic.js and the ratio probe beside it).
+/// A `width` or `height` content attribute as a number, or null when the element
+/// has none or wrote something that is not one. Two shapes read these: <img> and
+/// <iframe>, where they are presentational hints for the CSS properties, and
+/// <canvas>, where they are the buffer's own size.
+fn attributeFloat(self: *Element, comptime name: []const u8) ?f64 {
+    const raw = self.getAttributeSafe(comptime .wrap(name)) orelse return null;
+    return std.fmt.parseFloat(f64, raw) catch null;
+}
+
 fn intrinsicBox(tag: Tag) ?struct { width: f64, height: f64 } {
     return switch (tag) {
         .canvas, .video, .object, .svg, .iframe => .{ .width = 300, .height = 150 },
@@ -2405,21 +2414,56 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
             const inset: f64 = if (tag == .body) 2 * body_ua_margin else 0;
             if (width == null) width = @max(0, box.width - inset);
             if (height == null) height = @max(0, box.height - inset);
+        } else if (tag == .canvas) {
+            // A canvas is the one replaced element here with an intrinsic
+            // RATIO, and it comes from the BUFFER: the width/height content
+            // attributes are the buffer's size, not presentational CSS hints
+            // the way <img> and <iframe> take them. So a declared width scales
+            // the other axis and does not leave the height attribute standing --
+            // `<canvas width=400 height=100 style="width:600px">` is 600x150 in
+            // Chrome and not 600x100, and a bare one at `height:5px` is 10px
+            // wide and not 300. Measured over two ratios,
+            // tools/fingerprint/scratch/expr-replaced-intrinsic.js.
+            //
+            // video, object and svg have no ratio: each keeps its 300 or its 150
+            // when the other axis is declared, and an `<svg viewBox="0 0 40 10">`
+            // at 600px wide is still 150 tall. Measured too, which is why this is
+            // a canvas branch and not a replaced-element one.
+            const buffer_width = self.attributeFloat("width") orelse 300.0;
+            const buffer_height = self.attributeFloat("height") orelse 150.0;
+
+            // The declared width, asked for even on the height-only path: a
+            // canvas is the one shape whose height DEPENDS on its width, so
+            // skipping the cascade there would answer 150 for a `width:600px`
+            // canvas that is 300 tall. One lookup, and only for a <canvas>.
+            if (width == null) {
+                if (CSSStyleDeclaration.cascadedComputedLength(self, "width", frame)) |declared| {
+                    width = layoutUnit(declared);
+                    dims.explicit_width = true;
+                }
+            }
+
+            if (width) |w| {
+                if (height == null and buffer_width > 0) {
+                    height = w * buffer_height / buffer_width;
+                }
+            } else if (height) |h| {
+                if (buffer_height > 0) width = h * buffer_width / buffer_height;
+            } else {
+                width = buffer_width;
+                height = buffer_height;
+            }
         } else if (tag == .img or intrinsicBox(tag) != null) {
             if (width == null) {
-                if (self.getAttributeSafe(comptime .wrap("width"))) |w| {
-                    if (std.fmt.parseFloat(f64, w)) |parsed| {
-                        width = parsed;
-                        dims.explicit_width = true;
-                    } else |_| {}
+                if (self.attributeFloat("width")) |w| {
+                    width = w;
+                    dims.explicit_width = true;
                 }
             }
             if (height == null) {
-                if (self.getAttributeSafe(comptime .wrap("height"))) |h| {
-                    if (std.fmt.parseFloat(f64, h)) |parsed| {
-                        height = parsed;
-                        dims.explicit_height = true;
-                    } else |_| {}
+                if (self.attributeFloat("height")) |h| {
+                    height = h;
+                    dims.explicit_height = true;
                 }
             }
 

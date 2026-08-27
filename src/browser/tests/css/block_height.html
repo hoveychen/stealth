@@ -267,3 +267,66 @@ sees it. Both measured, scratch/expr-five-sentinel.js.
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<!--
+A <canvas> is the one replaced element here with an intrinsic RATIO, and it comes
+from the canvas BUFFER rather than from CSS: the width/height content attributes
+are the buffer's size, not presentational hints the way <img> and <iframe> take
+them. So a declared width scales the other axis and does NOT leave the height
+attribute standing.
+
+Measured on Chrome 151, tools/fingerprint/scratch/expr-replaced-intrinsic.js and
+the ratio probe beside it. video, object, svg and iframe are the controls: none
+of them has a ratio, so each keeps its 300 or its 150 when the other axis is
+declared -- an <svg viewBox="0 0 40 10"> at 600px wide is still 150 tall.
+-->
+
+<script id=canvas_intrinsic_ratio>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const cs = getComputedStyle(wrap.firstElementChild);
+    const out = cs.width + ' ' + cs.height;
+    wrap.remove();
+    return out;
+  };
+
+  const CASES = [
+    // No buffer declared, so the buffer is 300x150 and the ratio is 2.
+    ['<canvas></canvas>', '300px 150px'],
+    ['<canvas style="width:600px"></canvas>', '600px 300px'],
+    ['<canvas style="height:60px"></canvas>', '120px 60px'],
+    ['<canvas style="height:5px"></canvas>', '10px 5px'],
+    // A declared buffer is the intrinsic size AND the ratio: 4 to 1 here.
+    ['<canvas width=400 height=100></canvas>', '400px 100px'],
+    ['<canvas width=400 height=100 style="width:600px"></canvas>', '600px 150px'],
+    ['<canvas width=400 height=100 style="height:50px"></canvas>', '200px 50px'],
+    // Both axes declared: no ratio to apply, and the buffer is ignored.
+    ['<canvas style="width:250px;height:120px"></canvas>', '250px 120px'],
+    ['<canvas width=200 height=100 style="width:250px;height:120px"></canvas>',
+     '250px 120px'],
+    // The controls: no ratio anywhere else.
+    ['<video style="width:600px"></video>', '600px 150px'],
+    ['<video style="height:60px"></video>', '300px 60px'],
+    ['<object style="width:600px"></object>', '600px 150px'],
+    ['<svg style="width:600px"></svg>', '600px 150px'],
+    ['<svg viewBox="0 0 40 10" style="width:600px"></svg>', '600px 150px'],
+    ['<iframe style="width:600px"></iframe>', '600px 150px'],
+    ['<iframe style="height:60px"></iframe>', '300px 60px'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
