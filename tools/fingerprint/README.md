@@ -17773,3 +17773,46 @@ Four smaller ones, each measured and each needing its own decision:
 * **an `<img>` whose src 404s** is 0 in this build of Chrome, where this engine
   draws the 16px broken-image icon that bot.sannysoft.com's "Broken Image
   Dimensions" row reads. Left alone rather than traded for the other.
+
+### The sweep, and the three-station drop that was not one
+
+Both arms ReleaseFast, 29 stations, same route, thirteen minutes apart:
+
+| | base `dev.1502+6d316fafb` | patched `dev.1513+4e519df7e` |
+|---|---|---|
+| stations open | 22 | 19 |
+
+The three that differ are all DataDome — `dd-datadome`, `dd-leboncoin`,
+`dd-hermes`, each `pass` on the base column and `datadome-challenge` on the
+patched one. The other 26 are identical station by station, including the three
+real gaps (`cf-scrapingcourse`, `dd-saks`, `x-hyatt`), which stayed shut on both.
+
+That is the shape a regression has, and it is also the shape this station group's
+hourly window has, so the two were separated with a symmetric control rather than
+an argument: **six alternating rounds over the eight `dd-` stations, both arms,
+sharing the same hour, printing each binary's version string on every row.**
+
+Every one of the six came out 2 of 8, station for station. `dd-datadome`,
+`dd-leboncoin` and `dd-hermes` were challenged on the **base** binary in all
+three of its rounds — the same binary that had served all three forty minutes
+earlier — while `dd-etsy` and `dd-seloger` passed on both arms throughout. So the
+drop is the hour and not the diff.
+
+Three things about the apparatus that are the reusable part:
+
+* the log prints each binary's `version`, never the arm's label. A previous baton
+  wrote `for arm in $arms` in **zsh**, which does not word-split an unquoted
+  scalar, and ran nine "comparisons" on one binary while the log said "patched"
+  for half of them. A label can lie; `dev.1502+6d316fafb` cannot.
+* the alternation is what makes the control symmetric. Running base then patched
+  once each cannot distinguish the engine from the hour, however many stations it
+  covers, because the two columns are never in the same hour.
+* the patched binary's version changed between round 1 and round 2 (a rebuild
+  landed mid-run: `dev.1513+4e519df7e` then `dev.1514+82a1875c9`). Both are the
+  patched arm and both read 2 of 8, so it costs nothing here — but it is visible
+  in the log precisely because the version is printed, which is the point.
+
+No station opened. Six of the seven closed doors on the base column are ones
+headed Chrome cannot open either; the three that are real gaps were unmoved. This
+plan closed 33 of 34 readings on the empty-element probe, took layout-box-shapes
+from 221 of 257 to 243, and left the door count where it found it.
