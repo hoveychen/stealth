@@ -146,10 +146,14 @@ axes -- `padding-top` takes its share of the WIDTH, which is why the box below
 is 970 tall. Measured: 25% of the 1904px line is 476px per side, so clientWidth
 is 400 + 952 and clientHeight 18 + 952.
 
-25% and not the 10% the probe used first: 10% of 1904 is 190.4, and Chrome
-answers `190.391px` because it lays out on a 1/64px grid (190.390625, printed
-to six figures). That quantisation is the `layout-unit-64th-grid` plan's, not
-this one's, so the assertion here uses a percentage that lands on the grid.
+25% and not the 10% the probe used first: 10% of 1904 is 190.4, and the layout
+answers `190.398px` because it lays out on a grid of 1/64 of a DEVICE pixel --
+1/128 CSS pixel at devicePixelRatio 2 -- so 190.4 x 128 is 24371.2 and the .2 is
+dropped. That quantisation is the `layout-unit-64th-grid` plan's, not this
+one's, so the assertion here uses a percentage that lands on the grid: 25% of
+1904 is 476 exactly, which is a whole pixel and therefore on the grid whatever
+the device scale factor is (measured at both, probes/expr-b81-margin-grid-dsf2.js
+-- none of the numbers below moves between them).
 -->
 
 <script id=box_parts_percentage>

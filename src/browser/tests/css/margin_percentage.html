@@ -9,7 +9,13 @@ and not a tenth of any height, which is the part worth writing down.
 
 What is left of the line after the margins come off is the box's width, so the
 same declaration moves two readings: `margin-left:33.3%` of 400px reports
-133.188px and the box beside it reports 266.812px.
+133.195px and the box beside it reports 266.805px.
+
+Those two are on the layout grid, which is 1/64 of a DEVICE pixel -- 1/128 CSS
+pixel at this engine's devicePixelRatio of 2. Read at that scale factor with
+probes/expr-b81-margin-grid-dsf2.js; the same probe under
+`--force-device-scale-factor=1` gives the 1/64 answers (133.188px and
+266.812px) this file used to hold.
 
 Measured on Chrome 151 with tools/fingerprint/scratch/expr-margin-pct.js, on the
 1920x1080 viewport this test server serves (a 1904px body). Every expected value
@@ -40,16 +46,19 @@ a keyword, not a percentage against a width) and has no test of its own yet.
   // outer, inner, then: margin-left right top bottom, computed width, offsetWidth
   const CASES = [
     // The case the whole thing is named for: a percentage that does not divide
-    // evenly lands on the 1/64px grid, and the box keeps the rest of the line.
+    // evenly lands on the grid, and the box keeps the rest of the line. The
+    // grid is 1/64 of a DEVICE pixel, and this engine's devicePixelRatio is 2,
+    // so the step is 1/128 and 33.3% of 400 is 17049/128. Read off headed
+    // Chrome at --force-device-scale-factor=2 with
+    // probes/expr-b81-margin-grid-dsf2.js; the same probe at =1 gives the
+    // `133.188px ... 266.813px` this line used to hold.
     //
-    // Chrome writes that remainder `266.812px` where the string below says
-    // `266.813px`, and that one digit is NOT a layout difference: the used
-    // value is 266.8125 in both engines -- the rect assertion below the loop
-    // is where that is pinned -- and six significant figures land the last
-    // digit exactly on a tie. Chrome breaks a tie to even and this engine
-    // breaks it up, which is css-number-round-half-even's task. When that
-    // lands, this string becomes `266.812px` and nothing else here moves.
-    ['width:400px', 'margin-left:33.3%', '133.188px 0px 0px 0px 266.813px 267'],
+    // The six-figure tie that kept the remainder out of this string is gone
+    // with it: at 1/64 the remainder was 266.8125 exactly, whose last digit
+    // landed on a tie that Chrome breaks to even and this engine breaks up
+    // (css-number-round-half-even). At 1/128 it is 266.8046875, there is no
+    // tie, and both engines write `266.805px`.
+    ['width:400px', 'margin-left:33.3%', '133.195px 0px 0px 0px 266.805px 267'],
     // One that divides evenly, on each side in turn.
     ['width:400px', 'margin-left:10%', '40px 0px 0px 0px 360px 360'],
     ['width:400px', 'margin-right:10%', '0px 40px 0px 0px 360px 360'],
@@ -70,8 +79,12 @@ a keyword, not a percentage against a width) and has no test of its own yet.
     ['width:400px', 'margin-inline-start:10%', '40px 0px 0px 0px 360px 360'],
     ['width:400px', 'margin-block-start:10%', '0px 0px 40px 0px 400px 400'],
     // Against the 1904px body rather than a declared line, which is where the
-    // grid shows up again: a tenth of 1904 is 190.4 and Chrome says 190.391.
-    ['', 'margin-left:10%', '190.391px 0px 0px 0px 1713.61px 1714'],
+    // grid shows up again: a tenth of 1904 is 190.4, and 190.4 x 128 is 24371.2,
+    // so the used value is 24371/128. Derived rather than transcribed -- Chrome's
+    // own window on this host is not 1904 wide, so what the probe confirms is
+    // the step and not this number. The remainder is 1713.6015625, which six
+    // significant figures write with the trailing zero dropped.
+    ['', 'margin-left:10%', '190.398px 0px 0px 0px 1713.6px 1714'],
     // The parent's own padding is outside its content box, so 400 is still 400.
     ['width:400px;padding:0 25px', 'margin-left:10%', '40px 0px 0px 0px 360px 360'],
     // ...unless `box-sizing` put the padding inside the 400, leaving 350.
@@ -87,9 +100,9 @@ a keyword, not a percentage against a width) and has no test of its own yet.
     if (got !== want) wrong.push(inner + ' in {' + outer + '}: want [' + want + '], got [' + got + ']');
   }
 
-  // The used value the table's one six-figure tie is a rounding of. A rect
-  // carries the whole number, so this is the assertion that says the layout
-  // agrees with Chrome to the grid step: 400 less 133.1875 is 266.8125 and both
+  // The used value the table's remainder is a rounding of. A rect carries the
+  // whole number, so this is the assertion that says the layout agrees with
+  // Chrome to the grid step: 400 less 133.1953125 is 266.8046875 and both
   // engines report exactly that.
   const rect = (() => {
     const wrap = document.createElement('div');
@@ -103,7 +116,7 @@ a keyword, not a percentage against a width) and has no test of its own yet.
   // The table first: a throw here would take the rect assertion with it, and
   // the table is the one that names which shape moved.
   testing.expectEqual('', wrong.join(' | '));
-  testing.expectEqual(266.8125, rect);
+  testing.expectEqual(266.8046875, rect);
 }
 </script>
 
