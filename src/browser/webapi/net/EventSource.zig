@@ -334,29 +334,13 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
     return .proceed;
 }
 
-// fetch()/XHR still assume a cross-origin response passed CORS, but the
-// EventSource WPTs require enforcement: the response must echo an acceptable
-// Access-Control-Allow-Origin (plus Allow-Credentials for credentialed
-// requests). The reading of that pair is shared with PreflightGate, which asks
-// the same question of a preflight's answer.
+// The response must echo an acceptable Access-Control-Allow-Origin (plus
+// Allow-Credentials for a credentialed request). Shared with fetch() and XHR,
+// which enforce the same thing, and with PreflightGate, which asks it of a
+// preflight's answer instead.
 fn corsAllowed(self: *const EventSource, transfer: *Transfer) bool {
-    var allow_origin: ?[]const u8 = null;
-    var allow_credentials: ?[]const u8 = null;
     var it = transfer.responseHeaderIterator();
-    while (it.next()) |hdr| {
-        if (std.ascii.eqlIgnoreCase(hdr.name, "access-control-allow-origin")) {
-            allow_origin = hdr.value;
-        } else if (std.ascii.eqlIgnoreCase(hdr.name, "access-control-allow-credentials")) {
-            allow_credentials = hdr.value;
-        }
-    }
-
-    return cors.originAllowed(
-        allow_origin,
-        allow_credentials,
-        self._exec.origin() orelse "null",
-        self._with_credentials,
-    );
+    return cors.responseAllowed(&it, self._exec.origin() orelse "null", self._with_credentials);
 }
 
 fn httpDataCallback(transfer: *Transfer, data: []const u8) !void {

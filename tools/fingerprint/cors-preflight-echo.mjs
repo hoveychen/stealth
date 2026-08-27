@@ -130,6 +130,13 @@ const CASES = [
     // gets bundled in.
     { name: 'expose-headers-default', expect: 'x-custom not readable', policy: 'expose-none', js: `fetch(U, {}).then(function (r) { return { status: r.status, text: 'x-custom=' + r.headers.get('x-custom') }; })` },
     { name: 'expose-headers-named', expect: 'x-custom readable', policy: 'expose-named', js: `fetch(U, {}).then(function (r) { return { status: r.status, text: 'x-custom=' + r.headers.get('x-custom') }; })` },
+    // A same-origin request that redirects cross-origin. The CORS check applies
+    // to the *final* response, so the second hop needs an Allow-Origin even
+    // though the page asked for a URL on its own origin -- and the page's own
+    // fetch.html asserts the opposite, which is why this is measured rather
+    // than reasoned about.
+    { name: 'redirect-cross-no-acao', expect: 'follows the hop, read blocked', policy: 'no-acao', js: `fetch('/redirect/redirect-cross-no-acao')` },
+    { name: 'redirect-cross-allowed', expect: 'follows the hop, readable', js: `fetch('/redirect/redirect-cross-allowed')` },
     // The two regression guards. A parser-pulled subresource is no-cors, so no
     // Allow-Origin is needed and none of this may stop it loading. If refusing
     // responses ever breaks these, it has broken page loading itself.
@@ -242,7 +249,14 @@ ${CASES.map((c) => `  await run(${JSON.stringify(c.name)}, function (U) { return
 setInterval(function () {}, 50);
 </script></body></html>`;
 
-const pageServer = http.createServer((_, res) => {
+const pageServer = http.createServer((req, res) => {
+    // A same-origin URL that hands the request to the API origin, so a cross
+    // origin *redirect* is reachable from a fetch the page believes is local.
+    if ((req.url || '').startsWith('/redirect/')) {
+        res.writeHead(302, { location: API_ORIGIN + '/case/' + req.url.slice('/redirect/'.length) });
+        res.end();
+        return;
+    }
     res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' });
     res.end(pageHtml());
 });

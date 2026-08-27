@@ -133,6 +133,53 @@ pub fn listAllows(
     return false;
 }
 
+// Does this cross-origin response say the page may read it? Takes the header
+// iterator rather than the transfer so this file stays independent of
+// HttpClient, which reaches PreflightGate and would close a cycle.
+//
+// Pass the iterator by pointer: `anytype` here is
+// `HttpClient.Transfer.ResponseHeaderIterator`, which advances as it is read.
+pub fn responseAllowed(header_iterator: anytype, origin: []const u8, with_credentials: bool) bool {
+    var allow_origin: ?[]const u8 = null;
+    var allow_credentials: ?[]const u8 = null;
+    while (header_iterator.next()) |hdr| {
+        if (std.ascii.eqlIgnoreCase(hdr.name, "access-control-allow-origin")) {
+            allow_origin = hdr.value;
+        } else if (std.ascii.eqlIgnoreCase(hdr.name, "access-control-allow-credentials")) {
+            allow_credentials = hdr.value;
+        }
+    }
+    return originAllowed(allow_origin, allow_credentials, origin, with_credentials);
+}
+
+// https://fetch.spec.whatwg.org/#cors-safelisted-response-header-name -- the
+// seven names an allowed cross-origin response shows without being asked. Every
+// other name needs Access-Control-Expose-Headers, which is why a page that can
+// read a cross-origin body still cannot read its `x-request-id`.
+pub const safelisted_response_headers = [_][]const u8{
+    "cache-control",
+    "content-language",
+    "content-length",
+    "content-type",
+    "expires",
+    "last-modified",
+    "pragma",
+};
+
+// May the page see this header on an allowed cross-origin response? Measured on
+// Chrome 151: `x-custom` reads back null without Expose-Headers and "1" with it,
+// while `content-type` reads back either way (the `expose-headers-*` pair of
+// tools/fingerprint/results/b60-cors-chrome.json).
+//
+// The wildcard stands for every name, and -- like the one in Allow-Origin --
+// only for an uncredentialed request.
+pub fn responseHeaderExposed(name: []const u8, expose_headers: ?[]const u8, with_credentials: bool) bool {
+    for (safelisted_response_headers) |safe| {
+        if (std.ascii.eqlIgnoreCase(name, safe)) return true;
+    }
+    return listAllows(expose_headers, name, with_credentials);
+}
+
 // https://fetch.spec.whatwg.org/#cors-safelisted-method -- these three never
 // need to appear in Access-Control-Allow-Methods. Measured on Chrome 151: a
 // preflight answering `Access-Control-Allow-Methods: GET` still lets the POST
@@ -145,6 +192,13 @@ pub fn isSafelistedMethod(method: []const u8) bool {
 }
 
 const testing = @import("../testing.zig");
+
+// The request half lives with PreflightGate, which owns the preflight. This is
+// the response half: what a cross-origin response has to say before the page may
+// read it, and which of its headers show through when it does.
+test "WebApi: CORS response check" {
+    try testing.htmlRunner("net/cors_response.html", .{});
+}
 
 test "cors: safelisted request headers" {
     try testing.expect(isSafelistedRequestHeader("Accept", "*/*"));
@@ -181,6 +235,25 @@ test "cors: Allow-Origin, with and without credentials" {
     try testing.expect(originAllowed("http://a.com", "true", "http://a.com", true));
     try testing.expect(!originAllowed("http://a.com", null, "http://a.com", true));
     try testing.expect(!originAllowed(null, "true", "http://a.com", false));
+}
+
+test "cors: which response headers an allowed cross-origin response shows" {
+    // The seven safelisted names, whatever the response says.
+    try testing.expect(responseHeaderExposed("Content-Type", null, false));
+    try testing.expect(responseHeaderExposed("content-length", null, false));
+    try testing.expect(responseHeaderExposed("Last-Modified", null, true));
+    // Anything else needs naming. Case-insensitively, both ways.
+    try testing.expect(!responseHeaderExposed("X-Custom", null, false));
+    try testing.expect(responseHeaderExposed("X-Custom", "x-custom", false));
+    try testing.expect(responseHeaderExposed("x-custom", "X-Custom", false));
+    try testing.expect(responseHeaderExposed("X-Custom", "x-other, x-custom", false));
+    try testing.expect(!responseHeaderExposed("X-Custom", "x-other", false));
+    // The wildcard, and its one restriction.
+    try testing.expect(responseHeaderExposed("X-Custom", "*", false));
+    try testing.expect(!responseHeaderExposed("X-Custom", "*", true));
+    // Allow-Origin is itself not safelisted, so a page cannot read back the
+    // header that let it read the body.
+    try testing.expect(!responseHeaderExposed("Access-Control-Allow-Origin", null, false));
 }
 
 test "cors: Allow-Methods / Allow-Headers list membership" {

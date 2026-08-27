@@ -22,6 +22,7 @@ const js = @import("../../js/js.zig");
 
 const http = @import("../../../network/http.zig");
 const HttpClient = @import("../../../network/HttpClient.zig");
+const cors = @import("../../../network/cors.zig");
 const Transfer = HttpClient.Transfer;
 
 const URL = @import("../../URL.zig");
@@ -572,6 +573,31 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
         });
     }
 
+    // Before anything is recorded. XHR has no no-cors mode, so a cross-origin
+    // response that does not permit this origin is refused outright -- and the
+    // error event has to find `status` still 0 and the header list still empty,
+    // which is what Chrome reports (the `xhr-no-acao` case of
+    // tools/fingerprint/results/b60-cors-chrome.json). Recording first and
+    // failing after would leave a readable 200 hanging off a failed request.
+    // Compared against the transfer's url, not the one open() was given: after a
+    // redirect the check belongs to the hop that actually answered. And a
+    // response whose origin cannot be worked out at all -- a blob: URL, whose
+    // origin is the page that minted it -- is not cross-origin, so it must not
+    // be dragged through a protocol that has nothing to say about it.
+    const page_origin = self._exec.origin();
+    const response_origin = URL.getOrigin(self._arena.allocator(), transfer.req.url) catch null;
+    const cross_origin = if (page_origin) |po|
+        if (response_origin) |ro| !std.mem.eql(u8, po, ro) else false
+    else
+        false;
+
+    if (cross_origin) {
+        var check = transfer.responseHeaderIterator();
+        if (!cors.responseAllowed(&check, page_origin.?, self._with_credentials)) {
+            return error.CorsResponseBlocked;
+        }
+    }
+
     if (transfer.contentType()) |ct| {
         self._response_mime = Mime.parse(ct) catch |e| {
             log.info(.http, "invalid content type", .{
@@ -583,8 +609,24 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
         };
     }
 
+    // Same filtering fetch() does: an allowed cross-origin response only shows
+    // the safelisted names plus whatever Access-Control-Expose-Headers names, so
+    // getAllResponseHeaders() cannot report more than fetch's Headers would.
+    var expose_headers: ?[]const u8 = null;
+    if (cross_origin) {
+        var scan = transfer.responseHeaderIterator();
+        while (scan.next()) |hdr| {
+            if (std.ascii.eqlIgnoreCase(hdr.name, "access-control-expose-headers")) {
+                expose_headers = hdr.value;
+            }
+        }
+    }
+
     var it = transfer.responseHeaderIterator();
     while (it.next()) |hdr| {
+        if (cross_origin and !cors.responseHeaderExposed(hdr.name, expose_headers, self._with_credentials)) {
+            continue;
+        }
         const joined = try std.fmt.allocPrint(self._arena.allocator(), "{s}: {s}", .{ hdr.name, hdr.value });
         try self._response_headers.append(self._arena.allocator(), joined);
     }

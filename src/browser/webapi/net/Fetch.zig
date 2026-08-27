@@ -28,6 +28,7 @@ const DOMException = @import("../DOMException.zig");
 
 const Request = @import("Request.zig");
 const Response = @import("Response.zig");
+const cors = @import("../../../network/cors.zig");
 
 const log = lp.log;
 const Execution = js.Execution;
@@ -60,6 +61,18 @@ _perf_encoded_body_size: u64 = 0,
 
 // contentType / contentEncoding for the entry, copied off the headers.
 _perf_labels: HttpClient.ResponseLabels = .{},
+
+// The request's CORS mode, and whether it carries credentials. Both are needed
+// once the response arrives: `no-cors` turns a cross-origin answer opaque
+// instead of refusing it, and a credentialed request cannot be satisfied by a
+// wildcard Allow-Origin.
+_mode: Request.Mode,
+_credentialed: bool,
+
+// Set when the response turned out to be opaque, so the body is dropped as it
+// arrives rather than being buffered and then hidden. An opaque response has no
+// body at all, not an unread one.
+_discard_body: bool = false,
 
 pub const Input = Request.Input;
 pub const InitOpts = Request.InitOpts;
@@ -98,6 +111,16 @@ pub fn init(input: Input, options: ?InitOpts, exec: *const Execution) !js.Promis
         ._owns_response = true,
         ._signal = request._signal,
         ._manual_redirect = request._redirect == .manual,
+        ._mode = request._mode,
+        // The CORS check asks whether the credentials *mode* is `include`, not
+        // whether this particular URL ended up carrying a cookie. `same-origin`
+        // sends no credentials cross-origin, so a wildcard Allow-Origin is a
+        // perfectly good answer for it -- measured on Chrome 151, where
+        // `wildcard-plain` (the default, `same-origin`) is allowed and only
+        // `wildcard-with-credentials` is refused. Reading it off the URL instead
+        // would refuse a same-origin fetch the moment it redirected across an
+        // origin, which is a shape fetch.html covers.
+        ._credentialed = request._credentials == .include,
         ._perf_fetch_start = exec.performance().now(),
     };
 
@@ -207,22 +230,62 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
     const requesting_origin = URL.getOrigin(arena.allocator(), exec.url.*) catch null;
     const response_origin = URL.getOrigin(arena.allocator(), res._url) catch null;
 
-    if (requesting_origin) |fo| {
-        if (response_origin) |ro| {
-            if (std.mem.eql(u8, fo, ro)) {
-                res._type = .basic; // Same-origin
-            } else {
-                res._type = .cors; // Cross-origin (for simplicity, assume CORS passed)
-            }
-        } else {
-            res._type = .basic;
-        }
-    } else {
+    const cross_origin = if (requesting_origin) |fo|
+        if (response_origin) |ro| !std.mem.eql(u8, fo, ro) else false
+    else
+        false;
+
+    if (!cross_origin) {
         res._type = .basic;
+        var it = transfer.responseHeaderIterator();
+        while (it.next()) |hdr| {
+            try res._headers.append(hdr.name, hdr.value, exec);
+        }
+        return .proceed;
+    }
+
+    // A no-cors request is not subject to the check and is not refused by it:
+    // the request went out, the promise resolves, and what comes back is opaque.
+    // Status 0, no status text, no url, no headers, no body -- measured on
+    // Chrome 151, the `no-cors-mode` case of
+    // tools/fingerprint/results/b60-cors-chrome.json.
+    if (self._mode == .@"no-cors") {
+        res._type = .@"opaque";
+        res._status = 0;
+        res._status_text = "";
+        res._url = "";
+        res._is_redirected = false;
+        self._discard_body = true;
+        return .proceed;
+    }
+
+    // The response has to say we may read it. Chrome does not cancel the
+    // request over this -- it has already been sent, and the server has already
+    // acted on it -- it refuses the *response*, which surfaces as the same
+    // `TypeError: Failed to fetch` a connection failure gives.
+    {
+        var it = transfer.responseHeaderIterator();
+        if (!cors.responseAllowed(&it, requesting_origin orelse "null", self._credentialed)) {
+            return error.CorsResponseBlocked;
+        }
+    }
+
+    res._type = .cors;
+
+    // An allowed cross-origin response is a CORS-filtered response: only the
+    // safelisted names show through, plus whatever Access-Control-Expose-Headers
+    // names. A page that can read the body still cannot read every header.
+    var expose_headers: ?[]const u8 = null;
+    var scan = transfer.responseHeaderIterator();
+    while (scan.next()) |hdr| {
+        if (std.ascii.eqlIgnoreCase(hdr.name, "access-control-expose-headers")) {
+            expose_headers = hdr.value;
+        }
     }
 
     var it = transfer.responseHeaderIterator();
     while (it.next()) |hdr| {
+        if (!cors.responseHeaderExposed(hdr.name, expose_headers, self._credentialed)) continue;
         try res._headers.append(hdr.name, hdr.value, exec);
     }
 
@@ -240,6 +303,11 @@ fn httpDataCallback(transfer: *Transfer, data: []const u8) !void {
     }
 
     self._perf_encoded_body_size = transfer.encodedBodySize();
+    // An opaque response has no body. Dropping the chunks here rather than
+    // hiding a buffered body keeps the bytes out of the arena as well.
+    if (self._discard_body) {
+        return;
+    }
     try self._buf.appendSlice(self._response._arena.allocator(), data);
 }
 

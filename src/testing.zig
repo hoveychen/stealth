@@ -844,13 +844,44 @@ fn corsHandler(req: *std.http.Server.Request, path: []const u8) !bool {
     else
         "ok";
 
-    try req.respond(body, .{
-        .extra_headers = &.{
-            .{ .name = "Content-Type", .value = "text/plain" },
-            .{ .name = "Access-Control-Allow-Origin", .value = CORS_PAGE_ORIGIN },
-            .{ .name = "Access-Control-Allow-Credentials", .value = "true" },
-        },
-    });
+    // The response half. Every route above answers with an Allow-Origin that
+    // permits the page, which is what makes "the request went through" a
+    // statement about the preflight. These five answer the *actual* request in
+    // ways that must stop the page reading it -- or, for the last two, that
+    // decide which response headers it may see.
+    var response_headers: [5]std.http.Header = undefined;
+    var n: usize = 0;
+    response_headers[n] = .{ .name = "Content-Type", .value = "text/plain" };
+    n += 1;
+
+    if (std.mem.eql(u8, route, "/cors/bare")) {
+        // Nothing at all: no Allow-Origin is a refusal, not a default.
+    } else if (std.mem.eql(u8, route, "/cors/wrong-origin")) {
+        response_headers[n] = .{ .name = "Access-Control-Allow-Origin", .value = "https://example.invalid" };
+        n += 1;
+    } else if (std.mem.eql(u8, route, "/cors/wildcard")) {
+        // No Allow-Credentials beside it: `*` is valid uncredentialed and
+        // invalid credentialed, and sending both would hide the difference.
+        response_headers[n] = .{ .name = "Access-Control-Allow-Origin", .value = "*" };
+        n += 1;
+    } else {
+        response_headers[n] = .{ .name = "Access-Control-Allow-Origin", .value = CORS_PAGE_ORIGIN };
+        n += 1;
+        response_headers[n] = .{ .name = "Access-Control-Allow-Credentials", .value = "true" };
+        n += 1;
+        // A response header outside the CORS-safelisted seven, so "can the page
+        // read it" has a visible answer either way.
+        if (std.mem.startsWith(u8, route, "/cors/expose")) {
+            response_headers[n] = .{ .name = "X-Custom", .value = "1" };
+            n += 1;
+            if (std.mem.eql(u8, route, "/cors/expose-named")) {
+                response_headers[n] = .{ .name = "Access-Control-Expose-Headers", .value = "x-custom" };
+                n += 1;
+            }
+        }
+    }
+
+    try req.respond(body, .{ .extra_headers = response_headers[0..n] });
     return true;
 }
 
@@ -1309,6 +1340,14 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         return req.respond(html, .{
             .extra_headers = &.{
                 .{ .name = "Content-Type", .value = "text/html; charset=utf-8" },
+                // Readable cross-origin. `/redirect_cross_echo_referer` sends a
+                // same-origin fetch here across an origin boundary, and the CORS
+                // check applies to whichever hop answers -- measured on Chrome
+                // 151, the `redirect-cross-*` pair of
+                // tools/fingerprint/results/b60-cors-chrome.json, where the hop
+                // without an Allow-Origin is refused and the one with it is not.
+                // Navigations to this route are unaffected either way.
+                .{ .name = "Access-Control-Allow-Origin", .value = "*" },
             },
         });
     }
@@ -1408,6 +1447,18 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
             .status = .found,
             .extra_headers = &.{
                 .{ .name = "Location", .value = "http://localhost:9582/echo_referer" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/redirect_cross_bare")) {
+        // The same hop with nothing permitting it at the other end. A page that
+        // fetches this same-origin URL still has to be refused, because the CORS
+        // check belongs to the response that answered, not to the URL asked for.
+        return req.respond("", .{
+            .status = .found,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "http://localhost:9582/cors/bare" },
             },
         });
     }
