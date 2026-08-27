@@ -336,8 +336,9 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // there. Asked after the two above, which decide that the
                 // declaration is not the answer at all.
                 if ((on_width or on_height) and declaredInPixels(style_manager, element, normalized, wrapped)) {
+                    const specified = if (declaredDeclaration(style_manager, element, normalized, wrapped)) |d| d.specified else null;
                     switch (cascadedValue(style_manager, element, normalized, wrapped)) {
-                        .value => |value| if (usedLengthText(value, frame)) |snapped| return snapped,
+                        .value => |value| if (usedLengthText(value, specified, frame)) |snapped| return snapped,
                         .unreportable, .none => {},
                     }
                 }
@@ -457,8 +458,9 @@ const Declared = union(enum) {
 /// `var()` is substituted at computed-value time either way; the specified value
 /// `el.style` hands out keeps its var() text.
 fn declaredValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) Declared {
-    const substituted = declaredText(style_manager, element, property_name, wrapped) orelse
+    const declaration = declaredDeclaration(style_manager, element, property_name, wrapped) orelse
         return flexShorthandDeclared(style_manager, element, property_name);
+    const substituted = declaration.value;
     const frame = element.ownerFrame(style_manager.frame);
 
     // `transform` computes to one matrix rather than to the list the author
@@ -476,7 +478,7 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
     // A length resolves at computed-value time, so the unit the author wrote is
     // one a computed style never carries: `padding-top:2em` on a 20px element
     // is `40px` in every browser, and so is `12pt`.
-    if (computedLengthText(style_manager, element, property_name, substituted)) |px| {
+    if (computedLengthText(style_manager, element, property_name, substituted, declaration.specified)) |px| {
         return .{ .value = px };
     }
 
@@ -502,6 +504,16 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
 /// substituted and before anything a computed style does to it. Null when
 /// neither a rule nor the style attribute declares it.
 fn declaredText(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) ?[]const u8 {
+    const declaration = declaredDeclaration(style_manager, element, property_name, wrapped) orelse return null;
+    return declaration.value;
+}
+
+/// declaredText with the author's number still attached, for the callers that
+/// want the value rather than its print. `value` has already had `var()`
+/// substituted; `specified` is null whenever the substitution changed anything,
+/// because the number belongs to the text that was stored and not to what came
+/// out of a custom property.
+fn declaredDeclaration(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) ?StyleManager.Declaration {
     const rule = style_manager.cascadedLonghand(element, property_name);
     const inline_declaration = style_manager.inlineStyleDeclaration(element, wrapped);
     const rule_wins = if (rule) |declaration| declaration.important and
@@ -515,7 +527,12 @@ fn declaredText(style_manager: *StyleManager, element: *Element, property_name: 
         rule;
 
     const declaration = winner orelse return null;
-    return style_manager.substituteVars(element, declaration.value) orelse "";
+    const substituted = style_manager.substituteVars(element, declaration.value) orelse "";
+    return .{
+        .value = substituted,
+        .important = declaration.important,
+        .specified = if (std.mem.eql(u8, substituted, declaration.value)) declaration.specified else null,
+    };
 }
 
 /// What `flex-grow`, `flex-shrink` and `flex-basis` read when nothing declared
@@ -631,7 +648,7 @@ fn percentageIsComputedValue(property_name: []const u8) bool {
 /// a number. The two percentages that need no containing block are resolved:
 /// `font-size` against the parent's size and `line-height` against the element's
 /// own.
-fn computedLengthText(style_manager: *StyleManager, element: *Element, property_name: []const u8, value: []const u8) ?[]const u8 {
+fn computedLengthText(style_manager: *StyleManager, element: *Element, property_name: []const u8, value: []const u8, specified: ?f64) ?[]const u8 {
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
     if (trimmed.len == 0) return null;
 
@@ -647,6 +664,8 @@ fn computedLengthText(style_manager: *StyleManager, element: *Element, property_
     const writer = &buf.writer;
     var converted = false;
     var first = true;
+    // Whether the whole value is the one token `specified` was taken from.
+    const single_token = std.mem.indexOfAny(u8, trimmed, &std.ascii.whitespace) == null;
     var it = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
     while (it.next()) |token| {
         if (!first) writer.writeByte(' ') catch return null;
@@ -663,11 +682,16 @@ fn computedLengthText(style_manager: *StyleManager, element: *Element, property_
         }
 
         const parsed = units.parse(token) catch return null;
+        // `specified` belongs to the value as a whole, which is why it is only
+        // ever the first token's: specifiedNumber refuses anything with a
+        // second one in it, so this branch and that refusal describe the same
+        // shape from either end.
+        const number = if (single_token) specified orelse parsed.value else parsed.value;
         switch (lengthFactor(style_manager, element, property_name, parsed.unit)) {
             .unresolvable => return null,
             .verbatim => writer.writeAll(token) catch return null,
             .pixels => |factor| {
-                const product = parsed.value * factor;
+                const product = number * factor;
                 // A percentage resolves against a used length, so its answer is
                 // one too and lands on the layout grid: `33.3%` of 400px is
                 // `133.188px` in Chrome and not 133.2. So does anything at all
@@ -1269,12 +1293,13 @@ pub fn boxEdgesSharing(element: *Element, frame: *Frame, containing: *?f64, dept
 /// that path measures the parent from scratch for every property that asks.
 fn paddingPx(element: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) f64 {
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    if (declaredText(style_manager, element, name, .wrap(name))) |declared| {
-        const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
+    if (declaredDeclaration(style_manager, element, name, .wrap(name))) |declaration| {
+        const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
         if (std.mem.endsWith(u8, trimmed, "%")) {
             const parsed = units.parse(trimmed) catch return 0;
+            const percent = declaration.specified orelse parsed.value;
             const width = containingWidth(element, frame, containing, depth) orelse return 0;
-            return @max(0, Element.layoutUnit(width * parsed.value / 100.0));
+            return @max(0, Element.layoutUnit(width * percent / 100.0));
         }
     }
     return computedPx(element, name, frame);
@@ -1303,20 +1328,21 @@ fn paddingPx(element: *Element, name: []const u8, frame: *Frame, containing: *?f
 /// has to lose the same 40px either way.
 pub fn marginPercentagePx(element: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) ?f64 {
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    const declared = declaredEitherSpelling(style_manager, element, name) orelse return null;
-    const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
+    const declaration = declaredEitherSpelling(style_manager, element, name) orelse return null;
+    const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
     if (!std.mem.endsWith(u8, trimmed, "%")) return null;
     const parsed = units.parse(trimmed) catch return 0;
+    const percent = declaration.specified orelse parsed.value;
     const width = containingWidth(element, frame, containing, depth) orelse return 0;
-    return Element.layoutUnit(width * parsed.value / 100.0);
+    return Element.layoutUnit(width * percent / 100.0);
 }
 
-/// declaredText for a property under either of its two spellings, physical or
-/// logical.
-fn declaredEitherSpelling(style_manager: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
-    if (declaredText(style_manager, element, name, .wrap(name))) |text| return text;
+/// declaredDeclaration for a property under either of its two spellings,
+/// physical or logical.
+fn declaredEitherSpelling(style_manager: *StyleManager, element: *Element, name: []const u8) ?StyleManager.Declaration {
+    if (declaredDeclaration(style_manager, element, name, .wrap(name))) |declaration| return declaration;
     const other = chrome_logical.counterpart(name) orelse return null;
-    return declaredText(style_manager, element, other, .wrap(other));
+    return declaredDeclaration(style_manager, element, other, .wrap(other));
 }
 
 /// The containing block's content width, measured once and remembered.
@@ -1390,15 +1416,16 @@ pub fn cascadedComputedLength(element: *Element, name: []const u8, frame: *Frame
 }
 
 fn cascadedLengthToken(style_manager: *StyleManager, element: *Element, name: []const u8) ?f64 {
-    const value = switch (cascadedValueRaw(style_manager, element, name)) {
-        .value => |v| v,
-        .unreportable, .none => return null,
-    };
-    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    const declaration = cascadedRawDeclaration(style_manager, element, name) orelse return null;
+    const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
     const parsed = units.parse(trimmed) catch return null;
+    // The author's number when there is one, and the print only when there is
+    // not: this is the path a used `width` reaches the layout by, and six
+    // significant figures of it lands a grid step off.
+    const number = declaration.specified orelse parsed.value;
     return switch (lengthFactor(style_manager, element, name, parsed.unit)) {
-        .verbatim => parsed.value,
-        .pixels => |factor| parsed.value * factor,
+        .verbatim => number,
+        .pixels => |factor| number * factor,
         .unresolvable => null,
     };
 }
@@ -1406,17 +1433,23 @@ fn cascadedLengthToken(style_manager: *StyleManager, element: *Element, name: []
 /// The cascade's answer before anything a computed style does to it: the
 /// specified text, with `var()` substituted and inheritance followed.
 fn cascadedValueRaw(style_manager: *StyleManager, element: *Element, name: []const u8) Declared {
-    if (declaredText(style_manager, element, name, .wrap(name))) |text| {
-        return .{ .value = text };
+    const declaration = cascadedRawDeclaration(style_manager, element, name) orelse return .none;
+    return .{ .value = declaration.value };
+}
+
+/// cascadedValueRaw with the author's number still on it.
+fn cascadedRawDeclaration(style_manager: *StyleManager, element: *Element, name: []const u8) ?StyleManager.Declaration {
+    if (declaredDeclaration(style_manager, element, name, .wrap(name))) |declaration| {
+        return declaration;
     }
-    if (!chrome_inherited.inherits(name)) return .none;
+    if (!chrome_inherited.inherits(name)) return null;
     var ancestor = element.parentElement();
     while (ancestor) |current| : (ancestor = current.parentElement()) {
-        if (declaredText(style_manager, current, name, .wrap(name))) |text| {
-            return .{ .value = text };
+        if (declaredDeclaration(style_manager, current, name, .wrap(name))) |declaration| {
+            return declaration;
         }
     }
-    return .none;
+    return null;
 }
 
 /// The properties whose computed value is the USED one, so it lands on the
@@ -1443,13 +1476,16 @@ fn declaredInPixels(style_manager: *StyleManager, element: *Element, name: []con
 /// written the way every other computed length is. Null for anything that is
 /// not a plain px length -- `auto`, `min-content`, a keyword -- which goes
 /// through untouched.
-fn usedLengthText(value: []const u8, frame: *Frame) ?[]const u8 {
+fn usedLengthText(value: []const u8, specified: ?f64, frame: *Frame) ?[]const u8 {
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
     const parsed = units.parse(trimmed) catch return null;
     if (parsed.unit != .px) return null;
 
     var buf = std.Io.Writer.Allocating.init(frame.local_arena);
-    units.writeNumber(&buf.writer, Element.layoutUnit(parsed.value)) catch return null;
+    // The author's number when there is one. Snapping `value` would snap the
+    // six figures it was printed to, which is the grid step this whole path
+    // exists to get right.
+    units.writeNumber(&buf.writer, Element.layoutUnit(specified orelse parsed.value)) catch return null;
     buf.writer.writeAll("px") catch return null;
     return buf.written();
 }
@@ -1461,9 +1497,30 @@ fn computedPx(element: *Element, name: []const u8, frame: *Frame) f64 {
     const declared = cascadedComputedValue(element, name, frame) orelse return 0;
     const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return 0;
     return switch (parsed.unit) {
-        .px, .none => @max(0, parsed.value),
+        // The author's number rather than the six figures it printed to, when
+        // the page wrote one this path can still recognise: a padding of
+        // `465.5466592px` takes 465.53125 off the box in Chrome, and the print
+        // would take 465.546875.
+        .px, .none => @max(0, specifiedPx(element, name, frame) orelse parsed.value),
         else => 0,
     };
+}
+
+/// The author's number for a length declared directly in px, or null when the
+/// declaration was in some other unit and the computed text is the resolved
+/// answer rather than a print of the specified one.
+pub fn specifiedPx(element: *Element, name: []const u8, frame: *Frame) ?f64 {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const declaration = declaredEitherSpelling(style_manager, element, name) orelse return null;
+    const specified = declaration.specified orelse return null;
+    const parsed = units.parse(std.mem.trim(u8, declaration.value, &std.ascii.whitespace)) catch return null;
+    if (parsed.unit != .px and parsed.unit != .none) return null;
+    // On the grid before it is used, not after: a box's parts are added and
+    // subtracted as grid units, so each one snaps on the way in. Measured --
+    // `padding-left:465.5466592px` inside a 1000px line leaves 534.46875 of
+    // content and a border box of exactly 1000, where subtracting the unsnapped
+    // 465.546646 leaves 534.453125 and a border box that misses 1000 entirely.
+    return Element.layoutUnit(specified);
 }
 
 /// How wide a flex item comes out, or null when nothing about the flex layout
@@ -1840,7 +1897,7 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
             var changed = false;
             for (expansion.names, expansion.values) |name, longhand| {
                 const canonical = try normalizePropertyValue(frame.local_arena, name, longhand);
-                changed = try self.storeLonghand(name, canonical, important, frame) or changed;
+                changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), important, frame) or changed;
             }
             return changed;
         }
@@ -1853,10 +1910,10 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
 
     // Normalize the value for canonical serialization
     const normalized_value = try normalizePropertyValue(frame.local_arena, normalized, value);
-    return self.storeLonghand(normalized, normalized_value, important, frame);
+    return self.storeLonghand(normalized, normalized_value, specifiedNumber(value), important, frame);
 }
 
-fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_value: []const u8, important: bool, frame: *Frame) !bool {
+fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_value: []const u8, specified: ?f64, important: bool, frame: *Frame) !bool {
 
     // Find existing property
     if (self.findProperty(.wrap(normalized))) |existing| {
@@ -1867,6 +1924,7 @@ fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_
             return false;
         }
         existing._value = try String.init(frame.arena, normalized_value, .{});
+        existing._specified = specified;
         existing._important = important;
         return true;
     }
@@ -1876,6 +1934,7 @@ fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_
         ._node = .{},
         ._name = try String.init(frame.arena, normalized, .{}),
         ._value = try String.init(frame.arena, normalized_value, .{}),
+        ._specified = specified,
         ._important = important,
     });
     self._properties.append(&prop._node);
@@ -2810,6 +2869,37 @@ fn stringEnd(value: []const u8, start: usize) usize {
 /// `width: 1e100px` answers `3.40282e+38px` (FLT_MAX), while `width: 1e-40px`
 /// keeps all six digits no float could hold, so the clamp is to the range and
 /// not to float precision.
+/// The number a whole declaration is, when it is one numeric token, kept beside
+/// the six-significant-figure text writeCssNumber prints.
+///
+/// The two cannot be one string. `width:465.5466592px` reads back `465.547px`
+/// in Chrome as it does here -- that print is measured and must not change --
+/// but the box Chrome lays out is 465.53125, which is what the AUTHOR's number
+/// floors to on the 1/64 grid. Parsing the print back gives 465.546875, a step
+/// high; the same rounding runs the other way on `width:465.53125px`, where the
+/// print floors a step LOW. So the print is stored for reading and this number
+/// for laying out.
+///
+/// It is a **32-bit float**, because that is the width Blink parses a CSS length
+/// into and the difference is visible: `width:100.0156249px` is a hair under a
+/// grid step as a double and floors to 100, and IS the step as a float, which is
+/// what Chrome answers. Over the twenty-one widths in
+/// tools/fingerprint/scratch/expr-precision-model.js the float model matches
+/// Chrome 21 times, the double 15 and the printed text 14.
+///
+/// Null for anything that is not a single number with an optional unit -- a
+/// keyword, a list, a function, a shorthand's leftovers -- which leaves every
+/// caller on the text path it was already on.
+pub fn specifiedNumber(raw_value: []const u8) ?f64 {
+    const trimmed = std.mem.trim(u8, raw_value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    for (trimmed) |c| {
+        if (std.ascii.isWhitespace(c) or c == ',' or c == '(' or c == '/') return null;
+    }
+    const parsed = units.parse(trimmed) catch return null;
+    return @as(f32, @floatCast(parsed.value));
+}
+
 fn writeCssNumber(writer: *std.Io.Writer, text: []const u8) !void {
     const v = std.fmt.parseFloat(f64, text) catch return writer.writeAll(text);
     const limit: f64 = std.math.floatMax(f32);
@@ -4124,6 +4214,10 @@ pub const Property = struct {
     _name: String,
     _value: String,
     _important: bool = false,
+    /// The number the author wrote, when the whole declaration was one numeric
+    /// token. `_value` is the six-significant-figure print of it and cannot be
+    /// parsed back into it -- see specifiedNumber.
+    _specified: ?f64 = null,
     _node: std.DoublyLinkedList.Node,
 
     pub fn fromNodeLink(n: *std.DoublyLinkedList.Node) *Property {
@@ -4756,6 +4850,10 @@ test "WebApi: CSSStyleDeclaration percentage width" {
 
 test "WebApi: CSSStyleDeclaration percentage margin" {
     try testing.htmlRunner("css/margin_percentage.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration specified precision" {
+    try testing.htmlRunner("css/specified_precision.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration default display" {

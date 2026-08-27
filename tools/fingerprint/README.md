@@ -17404,3 +17404,116 @@ only reading that can is an alternation whose order is flipped, and the claim it
 supports is deliberately narrow: **the two arms are indistinguishable at every
 station**, which is all a fidelity change should be asked to show. No door opened
 here, the same as every layout task before it on this line.
+
+## The layout was reading its own print back (B80, 2026-08-26)
+
+A computed length is written to six significant figures. That print is measured
+and correct — Chrome answers `465.547px` for `width:465.5466592px` and so does
+this engine — but it was also the only copy of the number the layout had, and
+six figures is not enough to lay a box out with.
+
+| declared width | Chrome lays out | this engine laid out |
+|---|---|---|
+| `465.5466592px` | 465.53125 | 465.546875 (a step high) |
+| `465.53125px` — already on the grid | 465.53125 | 465.515625 (a step **low**) |
+| `1.9999999px` | 1.984375 | 2 |
+| `199.9843751px` | 199.984375 | 199.96875 |
+
+The second row is the one that says this is not a rounding preference. An author
+value sitting exactly on the grid came out a step below it, because `465.531` —
+its own print — floors to the step beneath. The rounding runs both ways and
+neither direction is recoverable from the text.
+
+### What Chrome keeps is a float, not the double the author wrote
+
+Three models were put to twenty-one widths chosen because their 1/64 floors
+separate them (`scratch/expr-precision-model.js`): the author's double, that
+value narrowed to a **32-bit float**, and the six-figure print.
+
+| model | matches Chrome |
+|---|---|
+| f32 of the author's number | **21 / 21** |
+| the author's f64 | 15 / 21 |
+| the six-figure print | 14 / 21 |
+
+`width:100.0156249px` is the cleanest of them: as a double it is a hair under a
+grid step and floors to 100, and as a float it **is** the step — 100.015625,
+which is Chrome's answer. So keeping full f64 precision would have been the
+wrong fix twice over: it fails six rows, and it fails rows this engine was
+getting right by accident.
+
+That is Blink's own shape — a CSS length is parsed into a float and LayoutUnit
+floors it — and `Element.layoutUnit` narrows there now. It is also what the
+`1e-9` epsilon that used to sit in that expression was standing in for: a product
+that lands 1e-13 under an exact step is that step once it is a float, and the
+epsilon was a guess at the same thing.
+
+### One string cannot be both
+
+The print has to stay six figures and the layout needs more, so the number is
+carried beside the text: `Declaration.specified` and `NamedDeclaration.specified`,
+filled from the RAW value at both routes into the cascade — a stylesheet rule and
+the style attribute — and null whenever `var()` substitution changed the text,
+because then the number belongs to what was stored rather than to what came out.
+It costs nothing at read time, which matters: a Cloudflare challenge sweeps 736
+property names off one element, and re-serialising at every read would have paid
+for this on the hottest path in the engine.
+
+### A box's parts are grid units before they are added
+
+Found on the way, and measured: `padding-left:465.5466592px` inside a 1000px line
+leaves 534.46875 of content and a border box of exactly **1000**. Subtracting the
+unsnapped 465.546646 leaves 534.453125 and a border box of 999.99978 — a number
+no browser reports, and a tell on its own. Each part snaps on the way in, not
+after the arithmetic.
+
+### Acceptance
+
+`expr-precision-model.js` goes from 14/21 rows to **21/21** on geometry, and
+62/63 field readings; the one left is `7.015625` printed to six figures, a tie
+Chrome breaks to even and this engine breaks up — `css-number-round-half-even`'s
+task, not this one. Nothing else moved: `expr-box-parts.js` holds 223/223,
+`expr-inline-box.js` 176/176, `expr-flex-item-width.js` 60/60,
+`expr-margin-pct.js` 133/136, `expr-layout-grid.js` 86/88,
+`expr-layout-box-shapes.js` 221/257. 1518/1518.
+
+**And the byte gap the payload analysis was left with closes exactly.** On the
+40-row fractional-percentage page, the element-geometry character count over 280
+reads was 1790 here against Chrome's 1783. It is now **1783**, and all 40 rows
+read identically — 4 of them differed before, each by one grid step in a width
+whose percentage had eight significant figures. That was the last named item in
+the `/tl` payload deficit.
+
+### The sweep pair, read the way the last one had to be
+
+Both arms ReleaseFast, both based on `9e1a31366`, same egress address, run
+back to back: `1.0.0-dev.1488+9e1a31366` as the control and
+`1.0.0-dev.1491+23d22093e` as the patched one. Zero `CRASHED` on either.
+
+The two full sweeps printed **17/29 patched against the control's own count**,
+with two verdict differences — and the differences pointed in **opposite
+directions**, which is the shape noise has and a change does not:
+`dd-datadome` challenged the control and passed the patched arm, `dd-leboncoin`
+did the reverse. Neither survived contact with an alternation whose order flips
+between rounds: twelve runs, three rounds, both stations, **both arms
+challenged every single time**.
+
+The four-station `timeout: Page.navigate` tail was on both arms in the same
+place. Re-run one station at a time against both binaries: `ak-expedia`
+pass/pass, `px-wayfair` pass/pass, `ks-canadagoose` pass/pass, `x-hyatt`
+refused-429 on both. One hung process, as it was last time.
+
+Resolved, with every `error` and every noisy DataDome verdict replaced by its
+paired per-station reading: **base 19/29, patched 19/29, and zero
+station-by-station differences across all 29.** The ten that stay shut are
+identical on both arms — the three Cloudflare challenges, five DataDome, the
+Cloudflare block at `dd-allopneus`, and `x-hyatt`'s refused-429.
+
+**Two discipline notes, both earned tonight and both of the same family:** the
+`N/29` summary line is never the reading (17/29 became 19/29 twice this evening),
+and a log that prints an arm's *label* can claim a comparison it never made. A
+sibling session wrote `arms="patched baseline"; for arm in $arms` — bash reflex
+in a zsh shell, which does not word-split an unquoted scalar — and ran nine
+comparisons of one binary against itself while the log said "patched" for half of
+them. Print the binary's `version` string on every row, not the label: two
+commits cannot share eight characters, and a label can.
