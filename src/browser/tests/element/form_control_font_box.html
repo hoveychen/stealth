@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A form control's box is built from its font, and this engine built it from a
+constant.
+
+`intrinsicBox` answered 145x15 of content for every `<input>` there has ever
+been -- the size measured once at the UA's own 13.333px Arial -- so an input at
+`font-size: 100px` reported the same 149x17 of client box as one at 8px, and so
+did one in monospace. A `<span>` at the same font sizes is measured correctly to
+the pixel, so neither the font metrics nor the font-size cascade were at fault:
+only the control's box ignored them.
+
+That is not a cosmetic gap. Kasada sizes its font-metric probes as inputs at
+`font-size: 100px` and reads clientWidth/clientHeight, so every probe came back
+the same box -- fifteen measurements landing on two distinct sizes where Chrome
+lands on six. x-hyatt withholds its clearance token for exactly this: freezing
+Chrome's input box the same way costs Chrome the token three times out of three,
+while the same hooks returning the real values keep it
+(tools/fingerprint/kasada-knob.mjs, and the chapter in its README).
+
+Measured on Chrome 151 with tools/fingerprint/scratch/b84-formbox.js. Content
+box, then client, then offset:
+
+  * the height is the font's line box: 13.333px -> 15, 8px -> 9, 32px -> 37 and
+    100px -> 115 in Arial, and 117 at 100px in monospace, which is why a single
+    ratio is not enough;
+  * the width goes with the `size` attribute, twenty characters by default:
+    at 13.333px Arial it is `7 * size + 5` (10, 20 and 40 give 75, 145 and 285)
+    and at 100px it is `50 * size + 41`;
+  * the UA font family is Arial for `input`, `select` and `button` and
+    monospace for `textarea` -- this engine answered `system-ui, sans-serif` for
+    all of them, and the family picks the advances the width is built from.
+-->
+
+<script id=form_control_font_box>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const read = (tag, style, attrs) => {
+    const wrap = document.createElement('div');
+    host.appendChild(wrap);
+    const el = document.createElement(tag);
+    if (style) el.style.cssText = style;
+    for (const k in (attrs || {})) el.setAttribute(k, attrs[k]);
+    wrap.appendChild(el);
+    const cs = getComputedStyle(el);
+    const out = cs.width + '/' + cs.height + '/' +
+                el.clientWidth + 'x' + el.clientHeight + '/' +
+                el.offsetWidth + 'x' + el.offsetHeight;
+    wrap.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // The UA font, which is the box's starting point.
+  const fontOf = (tag) => {
+    const wrap = document.createElement('div');
+    host.appendChild(wrap);
+    const el = document.createElement(tag);
+    wrap.appendChild(el);
+    const cs = getComputedStyle(el);
+    const out = cs.fontSize + ' ' + cs.fontFamily;
+    wrap.remove();
+    return out;
+  };
+  eq('input font', fontOf('input'), '13.3333px Arial');
+  eq('textarea font', fontOf('textarea'), '13.3333px monospace');
+  eq('select font', fontOf('select'), '13.3333px Arial');
+
+  // An input's box tracks its font size. The default is the UA's 13.333px.
+  eq('input default', read('input', ''), '145px/15px/149x17/153x21');
+  eq('input 100px', read('input', 'font-size:100px'), '1041px/115px/1045x117/1049x121');
+  eq('input 8px', read('input', 'font-size:8px'), '83px/9px/87x11/91x15');
+  eq('input 32px', read('input', 'font-size:32px'), '333px/37px/337x39/341x43');
+
+  // ...and its font family, which is why the height at one size is not one
+  // ratio: monospace stands taller than Arial at 100px.
+  //
+  // Chrome answers 117px of height here and this answers 116. These boxes sit
+  // on a device-pixel-ratio 1 basis while the font tables are swept at the 2
+  // this engine claims, and monospace's line box is 116.5 -- the one size where
+  // flooring it costs a pixel. Flooring is still right: rounding would make a
+  // default <textarea> 32 against Chrome's 30, which css/block_height.html
+  // pins. Re-basing the whole table onto dpr 2 is its own plan.
+  eq('input 100px monospace', read('input', 'font-size:100px;font-family:monospace'),
+     '1237px/116px/1241x118/1245x122');
+  eq('input 100px serif', read('input', 'font-size:100px;font-family:serif'),
+     '1040px/115px/1044x117/1048x121');
+
+  // One pixel narrow, and asserted as what this engine answers rather than as
+  // Chrome's 165px. Chrome hints avgCharWidth to whole pixels at small sizes and
+  // 13.333px is not a size the swept tables hold, so it is scaled from the top
+  // of the table: monospace comes out 8.027 where Chrome charges a width a pixel
+  // wider. Arial and serif land exactly at the same size, so this is per-family
+  // hinting rather than a wrong model, and closing it needs avgCharWidth swept
+  // per size the way ascents and descents already are.
+  eq('input monospace', read('input', 'font-family:monospace'), '164px/15px/168x17/172x21');
+
+  // The `size` attribute is a count of characters, and the width is that many
+  // advances plus one constant -- not a proportion of anything.
+  eq('input size 10', read('input', '', { size: '10' }), '75px/15px/79x17/83x21');
+  eq('input size 40', read('input', '', { size: '40' }), '285px/15px/289x17/293x21');
+  eq('input size 10 at 100px', read('input', 'font-size:100px', { size: '10' }),
+     '541px/115px/545x117/549x121');
+
+  // A <textarea> is `cols` advances plus a 17px scrollbar gutter and `rows`
+  // lines: 10, 20 and 40 columns of monospace are 619, 1221 and 2425 at 100px
+  // and 97, 177 and 338 at the UA's 13.333px, and one, three and five rows are
+  // 15, 45 and 75 tall. Its height carries the same 116.5 flooring as above, so
+  // 100px rows are 116 where Chrome's are 117.
+  eq('textarea default', read('textarea', ''), '177px/30px/181x34/183x36');
+  eq('textarea 100px', read('textarea', 'font-size:100px'), '1221px/232px/1225x236/1227x238');
+  eq('textarea cols rows', read('textarea', 'font-size:100px', { cols: '40', rows: '3' }),
+     '2425px/348px/2429x352/2431x354');
+
+  // A <select>'s height does move with the font in Chrome -- 11, 17, 19, 24, 38
+  // and 114 of content at 8, 13.333, 16, 20, 32 and 100px -- but against line
+  // boxes of 9, 15.3, 18.5, 23, 37 and 115 the gap runs +2, +1.7, +0.5, +1, +1
+  // and -1 and changes sign, so no line-box model fits it. It keeps the
+  // constant that is right at the size a <select> renders at, and this asserts
+  // that: at 100px Chrome says 22px/116px/20x114/22x116 and this does not.
+  eq('select default', read('select', ''), '22px/19px/20x17/22x19');
+  eq('select 100px', read('select', 'font-size:100px'), '22px/19px/20x17/22x19');
+  eq('progress default', read('progress', ''), '160px/16px/160x16/160x16');
+  eq('progress 100px', read('progress', 'font-size:100px'), '1000px/100px/1000x100/1000x100');
+  eq('meter default', read('meter', ''), '80px/16px/80x16/80x16');
+  eq('meter 100px', read('meter', 'font-size:100px'), '500px/100px/500x100/500x100');
+
+  // A <button> is the exception and stays put: its whole box is the UA padding
+  // and border around a 0x0 content box, so the font moves nothing.
+  eq('button default', read('button', ''), '16px/6px/12x2/16x6');
+  eq('button 100px', read('button', 'font-size:100px'), '16px/6px/12x2/16x6');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

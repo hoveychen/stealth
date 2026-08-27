@@ -32,6 +32,7 @@ const SelectorList = @import("webapi/selector/List.zig");
 
 const CSSStyleRule = @import("webapi/css/CSSStyleRule.zig");
 const CSSStyleSheet = @import("webapi/css/CSSStyleSheet.zig");
+const chrome_per_tag_values = @import("webapi/css/chrome_per_tag_values.zig");
 const CSSStyleDeclaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const CSSStyleProperty = @import("webapi/css/CSSStyleDeclaration.zig").Property;
 const shorthand = @import("webapi/css/shorthand.zig");
@@ -1590,7 +1591,25 @@ fn computedFontSizeAt(self: *StyleManager, element: ?*Element, depth: u8) f64 {
             return size;
         }
     }
+    // The UA stylesheet, which declares a font on the element ITSELF and so
+    // outranks anything inherited from an ancestor. Leaving it out is why a
+    // bare `<input>` laid out at the inherited 16px while `getComputedStyle`
+    // read it back as the UA's 13.3333px -- the two surfaces disagreed, and the
+    // layout was the one that was wrong.
+    if (userAgentFontProperty(current, "font-size")) |raw| {
+        if (self.parseFontSize(raw, parent, depth + 1)) |size| {
+            return size;
+        }
+    }
     return self.computedFontSizeAt(parent, depth + 1);
+}
+
+/// A font declaration the UA stylesheet makes on this tag, or null where it
+/// makes none. The same table `getComputedStyle` answers from, so the layout
+/// and the computed-style surface cannot drift apart again.
+fn userAgentFontProperty(element: *Element, comptime property: []const u8) ?[]const u8 {
+    const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse return null;
+    return rows.get(property);
 }
 
 /// Cascaded `text-transform` keyword, or null when nothing declares one
@@ -1818,6 +1837,9 @@ fn computedFontFamilyAt(self: *StyleManager, element: ?*Element, depth: u8) ?[]c
         return declaration.value;
     }
     if (current.getAttributeSafe(comptime .wrap("font-family"))) |raw| {
+        return raw;
+    }
+    if (userAgentFontProperty(current, "font-family")) |raw| {
         return raw;
     }
     return self.computedFontFamilyAt(current.parentElement(), depth + 1);
