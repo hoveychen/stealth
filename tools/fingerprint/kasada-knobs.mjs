@@ -256,6 +256,18 @@ export const KNOBS = {
           if (el && el.nodeName) {
             tag = el.nodeName.toLowerCase();
             if (el.className && typeof el.className === 'string') tag += '.' + el.className.slice(0, 20);
+            // The COMPUTED font, not the inline one. The guard's probes carry an
+            // inline font-size and no inline font-family at all, yet Chrome
+            // answers four different heights for them -- so the family arrives
+            // by some other route, and reading the inline style reports nothing
+            // for every probe alike.
+            // The INLINE font only. Reading the computed style from inside a
+            // size getter costs the report: guarded against re-entry and
+            // restricted to inputs it still came back with two beacons where
+            // this returns fifteen, so whatever the guard's probes take their
+            // family from is still an open question -- and the answer is worth
+            // having, because Chrome gives them four different heights while
+            // this engine gives them one.
             if (el.style && el.style.fontFamily) tag += '|ff=' + el.style.fontFamily.slice(0, 40);
             if (el.style && el.style.fontSize) tag += '|fs=' + el.style.fontSize;
           }
