@@ -18,8 +18,15 @@ const INDEX = `<!DOCTYPE html>
 <img src="/asset.png" width="1" height="1">
 <iframe src="/frame.html" width="1" height="1"></iframe>
 <script>
-fetch('/api/fetch').then(r => r.text());
-var x = new XMLHttpRequest(); x.open('GET', '/api/xhr', true); x.send();
+// Both carry a header the page set itself. Where an author header lands is a
+// question neither the Sec-Fetch-* set nor the priority hint can answer: all
+// this engine adds has a measured slot, and an author header currently falls
+// to the trailing pass in emitHeaders, i.e. last. Chrome puts it inside the
+// client-hint block -- measured over h1 in b57-cors-chrome.json -- and whether
+// that survives HPACK is exactly what the h2 arm is for.
+fetch('/api/fetch', {headers: {'X-Probe': '1'}}).then(r => r.text());
+var x = new XMLHttpRequest(); x.open('GET', '/api/xhr', true);
+x.setRequestHeader('X-Probe', '1'); x.send();
 </script>
 </body></html>`;
 
