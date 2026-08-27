@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<style>
+  .sheet-longhand { font-size: 13px; font-family: serif }
+  .sheet-size-only { font-size: 13px }
+</style>
+
+<!--
+A font declared by a STYLESHEET reaches the box, and here it did not. The
+cascade knew — `getComputedStyle` answered `13px` to every route — while
+`resolveFont` walked the ancestors reading each one's INLINE style attribute,
+so a rule's font-size never got near the layout and every box was measured at
+the default 16px Times.
+
+Which matters because real pages do not write inline fonts. Measured at dpr 2
+against Chrome 151 (tools/fingerprint/scratch/expr-sheet-font-layout.js,
+readings in scratch/b82-sheetfont-{ch-dsf2,lp}.json), a span of
+`Cwm fjordbank glyphs vext quiz`:
+
+  | how the 13px arrives | Chrome box | before |
+  |----------------------|------------|--------|
+  | a rule on the span   | 171.148    | 210.64 |
+  | a rule on its parent | 171.148    | 210.64 |
+  | the style attribute  | 171.148    | 171.148|
+
+Three more routes in that probe are somebody else's, and all three are about
+what the CASCADE holds rather than about what reaches the box:
+
+  * `font: 13px serif` as a shorthand, inline or by rule — the cascade does not
+    hold it either way, which is the `font-shorthand-cascade` plan;
+  * `font-family: monospace` alone computes to **13px** in Chrome, its default
+    monospace size, where this engine says 16 — so the family reaches the box
+    now (288.98 is monospace at 16px, exactly 16/13 of Chrome's 234.80) and the
+    size does not;
+  * `<font size="1">` computes to 10px in Chrome and 16 here: the legacy
+    presentational attribute is not mapped.
+
+Six of the probe's ten routes match Chrome now, against two before.
+-->
+
+<script id=a_stylesheet_font_reaches_the_box>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:1000px';
+  document.body.appendChild(host);
+
+  const read = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const out = [cs.fontSize, r.width, r.height].join(' | ');
+    wrap.remove();
+    return out;
+  };
+
+  const TEXT = 'Cwm fjordbank glyphs vext quiz';
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want [' + want + '], got [' + got + ']'); };
+
+  // A rule on the element itself.
+  eq('rule on the span', read('<span data-m class=sheet-longhand>' + TEXT + '</span>'),
+     '13px | 171.1484375 | 15.5');
+  // ...and inherited from a rule on an ancestor, which is the shape a page has.
+  eq('rule on the parent', read('<div class=sheet-longhand><span data-m>' + TEXT + '</span></div>'),
+     '13px | 171.1484375 | 15.5');
+  // A block, where the height is a line box rather than inline ink.
+  eq('block with a rule', read('<div data-m class=sheet-longhand>' + TEXT + '</div>'),
+     '13px | 1000 | 15.5');
+  // Size from a rule with the family left alone: still a 13px line.
+  eq('block, size only', read('<div data-m class=sheet-size-only>' + TEXT + '</div>'),
+     '13px | 1000 | 15.5');
+
+  // The controls. The style attribute was the one route that already worked,
+  // and an element with nothing declared keeps the 16px default.
+  eq('style attribute', read('<span data-m style="font-size:13px;font-family:serif">' + TEXT + '</span>'),
+     '13px | 171.1484375 | 15.5');
+  eq('nothing declared', read('<span data-m>' + TEXT + '</span>'),
+     '16px | 210.640625 | 18.5');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

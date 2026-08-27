@@ -1794,40 +1794,28 @@ const default_font_size = 16.0;
 
 /// The font an element's text is laid out in.
 ///
-/// There is no cascade in this engine — `getStyle` hands back the element's
-/// own inline declaration and nothing else — so inheritance is done here, by
-/// walking to the nearest ancestor that names each property. That covers the
-/// pages that set a font at all; anything relying on a stylesheet's cascade
-/// gets the default, which is what it got before this existed too.
+/// This walked the ancestors itself and read each one's `getStyle`, which is
+/// the element's own **inline declaration** and nothing else — so a font
+/// declared by a stylesheet rule never reached the box. The cascade knew:
+/// `getComputedStyle` answered `13px` to a `.x{font-size:13px}` span while the
+/// layout measured it at the default 16px Times, 210.64 wide against Chrome's
+/// 171.148. Real pages do not write inline fonts, so that was **every** text
+/// box on **every** real page, whatever the page declared
+/// (tools/fingerprint/scratch/expr-sheet-font-layout.js, ten routes, at dpr 2).
+///
+/// The StyleManager already answers both properly — rule against inline
+/// declaration with `!important` ordering, the legacy presentational
+/// attributes, and inheritance up the chain with the same depth cap this walk
+/// had. Asking it is the whole fix.
 fn resolveFont(self: *Element, frame: *Frame) struct { family: font_metrics.Family, size: f64 } {
-    var size: ?f64 = null;
-    var family: ?font_metrics.Family = null;
-
-    var node: ?*Node = self.asNode();
-    while (node) |current| : (node = current._parent) {
-        const el = current.is(Element) orelse continue;
-        const style = el.getStyle(frame) orelse continue;
-
-        if (size == null) {
-            const declared = style.getPropertyValue("font-size", frame);
-            if (declared.len != 0) {
-                size = CSS.parseDimensionViewport(declared, frame);
-            }
-        }
-        if (family == null) {
-            const declared = style.getPropertyValue("font-family", frame);
-            if (declared.len != 0) {
-                family = font_metrics.findInList(declared);
-            }
-        }
-        if (size != null and family != null) {
-            break;
-        }
-    }
-
+    const style_manager = &self.ownerFrame(frame)._style_manager;
+    const family = if (style_manager.computedFontFamily(self)) |declared|
+        font_metrics.findInList(declared)
+    else
+        null;
     return .{
         .family = family orelse font_metrics.fallback,
-        .size = size orelse default_font_size,
+        .size = style_manager.computedFontSize(self),
     };
 }
 
