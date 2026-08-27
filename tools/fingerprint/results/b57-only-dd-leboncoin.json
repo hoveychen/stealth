@@ -1,0 +1,114 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T02:16:32.665Z",
+  "egress": {
+    "fl": "1231f90",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787796992.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1481+32943c362",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17320/"
+  },
+  "stations": [
+    {
+      "name": "dd-leboncoin",
+      "vendor": "datadome",
+      "url": "https://www.leboncoin.fr/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.leboncoin.fr/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://auth.leboncoin.fr/api/authorizer/v2/authorize?client_id=lbc-front-web&redirect_uri=https%3A%2F%2Fwww.leboncoin.fr%2Foauth2callback&response_type=code&state=3a2dc13a-5e07-4612-a2e0-082e32939f9d&prompt=none&force_redirect=true&scope=*+offline",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAcD2_sXt6uM4AbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=I3zBzGRg_8VS3CLhGlPJXit~AmajcwsyuOHbiizdZxW~3MiYkX_5ux4w1FtKHaVYguonoRArZX8sBjwrc3IiaSUWfDU5eNzFZX4jd~PSJLzBaKZjtwviLWvTE1q_~Doy&t=bv&referer=https%3A%2F%2Fauth.leboncoin.fr%2Fapi%2Fauthorizer%2Fv2%2Fauthorize%3Fclient_id%3Dlbc-front-web%26redirect_uri%3Dhttps%253A%252F%252Fwww.leboncoin.fr%252Foauth2callback%26response_type%3Dcode%26state%3D3a2dc13a-5e07-4612-a2e0-082e32939f9d%26prompt%3Dnone%26force_redirect%3Dtrue%26scope%3D*%2Boffline&s=18203&e=5a6c0d59351ec5cb7ce69b2d0efe9a4c2b927c0df27241e334f37149b4df3ff79f4b85730c2078462584e79af47880bf&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://auth.leboncoin.fr/api/authorizer/v2/authorize?client_id=lbc-front-web&redirect_uri=https%3A%2F%2Fwww.leboncoin.fr%2Foauth2callback&response_type=code&state=1cc822eb-6e30-400f-8e5f-3b829dc7f005&prompt=none&force_redirect=true&scope=*+offline",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAcD2_sXt6uM4AbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=Ww5yi~aZHRaJbAA87tQNbqeB8l8aBeReFM24zgKJ~W3TSVYW9G79Jao61uUOlM77dpzv231DD2_Gm9w6VH4KmQ14MxElaT6HLu2nXcQtBg4w28xGoY7Te9WvpuVcqbt4&t=fe&referer=https%3A%2F%2Fauth.leboncoin.fr%2Fapi%2Fauthorizer%2Fv2%2Fauthorize%3Fclient_id%3Dlbc-front-web%26redirect_uri%3Dhttps%253A%252F%252Fwww.leboncoin.fr%252Foauth2callback%26response_type%3Dcode%26state%3D1cc822eb-6e30-400f-8e5f-3b829dc7f005%26prompt%3Dnone%26force_redirect%3Dtrue%26scope%3D*%2Boffline&s=18203&e=e8872f4aa75e2c71e873b34f63201f9162fb67ac0734bd31b40b1ee7877d7357237727fa65a53cc911e25d9c4fb43419&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAcD2_sXt6uM4AbNOzfA==&cid=qdvrN_rm032oAIC0MRGOAPT9jfG_Zh1hnS2gN2EmfcTdi7DYXAu3~PZCp6pooH6F0QhF7rvdmhOVpAs8TDS6NiyN1okF7p4cJBvLZQUQ3er8rzfKfr5FQ9TbGOSPrb6q&referer=https%3A%2F%2Fapi.leboncoin.fr%2Fapi%2Fdelivery-configurator-api%2Fv1%2Fconfigs&hash=05B30BD9055986BD2EE8F5A199D973&t=fe&s=285&e=d5c0c4f35e3baf49ac1151e84c3e2b6043f31ba2124954fb59aaf6dca1e7c278a0edb142c57d82be06e6842d9583b451&b=32395&dm=jd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "leboncoin, site de petites annonces gratuites",
+      "landedOn": "https://www.leboncoin.fr/",
+      "nodes": 1489,
+      "textLength": 5826,
+      "snippet": "aller au contenu aller au pied de page Renforcer les contrastes Déposer une annonce Mes recherches Favoris Messages Se connecter Immobilier Véhicules Matériel pro Emploi Mode Maison & Jardin Famille É",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25952
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787796992790 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:17320"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}
