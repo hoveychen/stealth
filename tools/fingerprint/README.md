@@ -17114,3 +17114,62 @@ EventSource WPTs, with a comment saying the general stack does not model CORS.
 
 Readings: `b56-cors-chrome.json`, `b56-cors-lp-baseline.json`; `--diff` prints
 the per-case comparison.
+
+### The preflight, sent — and what the OPTIONS itself has to look like
+
+`cors-preflight-nonsimple` P2. The gap above is closed: `network/PreflightGate.zig`
+sits at the end of the request pipeline, one step behind the robots gate and
+shaped like it — a cross-origin `fetch()`/XHR outside the CORS safelist parks,
+an internal `OPTIONS` goes out, and the parked transfer either resumes or fails
+with the `TypeError: Failed to fetch` that Chrome rejects with. Concurrent
+requests behind the same question share one preflight through `SingleFlight`,
+and a successful answer is cached for its `Access-Control-Max-Age` (capped at
+600s, as Chrome caps it).
+
+Re-measured with the same tool, two cases added: 18 of 20 now agree with Chrome
+151. The two that do not are the *other* divergence above — `no-acao-simple` and
+`no-acao-after-preflight`, where the preflight half is byte-identical and only
+the unapplied check on the actual response separates them.
+
+Sending an `OPTIONS` is not enough on its own: a preflight of the wrong shape is
+a fingerprint as surely as no preflight at all. Chrome's, read off the wire:
+
+```
+Host | Connection | Accept | Access-Control-Request-Method |
+Access-Control-Request-Headers | Origin | User-Agent | Sec-Fetch-Mode |
+Sec-Fetch-Site | Sec-Fetch-Dest | Referer | Accept-Encoding | Accept-Language
+```
+
+Three things in there are not carried over from any other request shape:
+
+- **No client hints at all.** The `POST` behind the preflight carries
+  `sec-ch-ua`, `sec-ch-ua-mobile` and `sec-ch-ua-platform`; the `OPTIONS` carries
+  none of the three, and none of the negotiated high-entropy ones either.
+- **`Sec-Fetch-Mode` before `Sec-Fetch-Site`.** Every other shape in
+  `emitHeaders` writes Site first. The preflight is the one that inverts them.
+- **Never credentialed.** `credentials: 'include'` still sends the `OPTIONS`
+  without a `Cookie`; only the answer is read more strictly (no `*` wildcard).
+
+`Access-Control-Request-Headers` is lowercased, sorted and joined with a bare
+comma — a page setting `X-Zeta` then `X-Alpha` announces `x-alpha,x-zeta` — and
+a safelisted `Content-Type` beside an unsafe header does *not* join the list.
+`Access-Control-Request-Headers` is omitted entirely when the preflight is
+caused by the method alone.
+
+15 of our 16 `OPTIONS` now match Chrome's field order byte for byte. The
+sixteenth is XHR's, and it differs for a reason that has nothing to do with
+preflight: an uncredentialed cross-origin XHR in this engine sends no `Referer`
+at all (`XMLHttpRequest.zig:308` only calls `headersForRequest` when cookies are
+in play), so the preflight faithfully copies a header that is not there.
+
+Two more pre-existing gaps the wire dump surfaced, both on the *actual* request
+and both outside this plan:
+
+- A script-set `Content-Type` reaches the wire lowercased; Chrome sends
+  `Content-Type`. Same for `X-Probe` vs `x-probe`.
+- A custom author header lands last for us; Chrome slots it into the client-hint
+  block, right after `User-Agent`.
+
+Readings: `b57-cors-chrome.json`, `b57-cors-lp.json`; `--diff` prints the
+per-case comparison, and each request in `requestLog` now carries the full
+`rawHeaders` it arrived with.

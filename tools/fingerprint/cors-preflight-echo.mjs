@@ -77,6 +77,13 @@ const CASES = [
     { name: 'post-json', expect: 'preflight', js: `fetch(U, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })` },
     { name: 'post-json-charset', expect: 'preflight', js: `fetch(U, { method: 'POST', headers: { 'Content-Type': 'application/json;charset=UTF-8' }, body: '{}' })` },
     { name: 'get-custom-header', expect: 'preflight', js: `fetch(U, { headers: { 'X-Probe': '1' } })` },
+    // Two unsafe headers, deliberately not in alphabetical order: how the engine
+    // serializes Access-Control-Request-Headers (sorted? what separator?) is only
+    // visible with more than one name in it.
+    { name: 'two-custom-headers', expect: 'preflight, both names listed', js: `fetch(U, { headers: { 'X-Zeta': '1', 'X-Alpha': '2' } })` },
+    // A CORS-safelisted Content-Type alongside an unsafe header: the preflight is
+    // caused by the header, and content-type must *not* join the ACRH list.
+    { name: 'custom-header-text-plain', expect: 'preflight, content-type not listed', js: `fetch(U, { method: 'POST', headers: { 'X-Probe': '1', 'Content-Type': 'text/plain' }, body: 'x' })` },
     { name: 'put', expect: 'preflight', js: `fetch(U, { method: 'PUT', body: 'x' })` },
     { name: 'delete', expect: 'preflight', js: `fetch(U, { method: 'DELETE' })` },
     { name: 'patch', expect: 'preflight', js: `fetch(U, { method: 'PATCH', body: 'x' })` },
@@ -110,6 +117,10 @@ const api = http.createServer((req, res) => {
         contentType: req.headers['content-type'] ?? null,
         cookie: req.headers.cookie ?? null,
         probe: req.headers['x-probe'] ?? null,
+        // Every header the request actually carried, in wire order. The
+        // preflight's whole shape is a fingerprint of its own: an OPTIONS that
+        // arrives carrying the wrong set is no better than no OPTIONS at all.
+        rawHeaders: req.rawHeaders.slice(),
     });
     const policy = (CASES.find((c) => c.name === name) || {}).policy || null;
     const h = { 'content-type': 'application/json' };
@@ -118,7 +129,7 @@ const api = http.createServer((req, res) => {
     if (req.method === 'OPTIONS') {
         if (policy !== 'no-acao') h['access-control-allow-origin'] = allowOrigin;
         h['access-control-allow-methods'] = policy === 'deny-method' ? 'GET' : 'GET, POST, PUT, DELETE, PATCH';
-        if (policy !== 'deny-header') h['access-control-allow-headers'] = 'content-type, x-probe';
+        if (policy !== 'deny-header') h['access-control-allow-headers'] = 'content-type, x-probe, x-alpha, x-zeta';
         h['access-control-allow-credentials'] = 'true';
         if (policy === 'max-age') h['access-control-max-age'] = '600';
         res.writeHead(204, h);
