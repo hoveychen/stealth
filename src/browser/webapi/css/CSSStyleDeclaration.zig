@@ -404,7 +404,7 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 if (wrapped.eqlSlice("transform-origin") or wrapped.eqlSlice("perspective-origin") or
                     wrapped.eqlSlice("-webkit-transform-origin") or wrapped.eqlSlice("-webkit-perspective-origin"))
                 {
-                    return boxCentre(element, frame);
+                    return boxCentre(element, frame, wrapped.str());
                 }
             }
             return getDefaultPropertyValue(self, wrapped, surface);
@@ -494,7 +494,7 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
     // The guard runs on the substituted text rather than the declaration's, so a
     // `var()` holding a relative length is caught too -- it used to pass, having
     // no unit of its own to see, and leak the substituted `2em` straight out.
-    if (!resolvesHere(property_name, substituted)) {
+    if (!resolvesHere(element, frame, property_name, substituted)) {
         return .unreportable;
     }
     return .{ .value = substituted };
@@ -632,7 +632,81 @@ fn isFlexBasis(token: []const u8) bool {
 /// computes to `1 1 50%`, so the basis is one of them. Every other percentage
 /// this engine cannot resolve is still refused rather than reported as written.
 fn percentageIsComputedValue(property_name: []const u8) bool {
-    return std.mem.eql(u8, property_name, "flex-basis");
+    const NAMES = std.StaticStringMap(void).initComptime(.{
+        // Resolved against the image at paint time, so the computed value keeps
+        // the percentage.
+        .{ "background-position", {} },
+        .{ "background-position-x", {} },
+        .{ "background-position-y", {} },
+        .{ "background-size", {} },
+        .{ "object-position", {} },
+        .{ "mask-position", {} },
+        // Resolved against the box at LAYOUT time, which is later than computed
+        // value: a percentage radius, translate or inset is reported as written.
+        .{ "border-top-left-radius", {} },
+        .{ "border-top-right-radius", {} },
+        .{ "border-bottom-left-radius", {} },
+        .{ "border-bottom-right-radius", {} },
+        .{ "border-start-start-radius", {} },
+        .{ "border-start-end-radius", {} },
+        .{ "border-end-start-radius", {} },
+        .{ "border-end-end-radius", {} },
+        .{ "translate", {} },
+        .{ "top", {} },
+        .{ "right", {} },
+        .{ "bottom", {} },
+        .{ "left", {} },
+        .{ "inset-block-start", {} },
+        .{ "inset-block-end", {} },
+        .{ "inset-inline-start", {} },
+        .{ "inset-inline-end", {} },
+        // Resolved against the line box, likewise later.
+        .{ "vertical-align", {} },
+        .{ "text-indent", {} },
+        // Resolved against the flex line by the flex container.
+        .{ "flex-basis", {} },
+    });
+    return NAMES.has(property_name);
+}
+
+/// Whether a percentage on this property stays a percentage for THIS element,
+/// as opposed to for every element (which is percentageIsComputedValue).
+///
+/// One case, and it is about the element rather than the property: a
+/// `display: none` element has no box, so a percentage that would be a share of
+/// its containing block has nothing to be a share of -- and Chrome reports it as
+/// written rather than inventing a box. `width: 50%` stays `50%`, and so do
+/// `padding-left: 10%` and `margin-left: 10%`.
+///
+/// Measured on Chrome 151 with
+/// tools/fingerprint/scratch/expr-display-none-percentages.js over 36 longhands
+/// in seven states. Two of those states are what makes this "no box" rather than
+/// "a zero box", and both are assertions in
+/// css/computed_unrendered_percentages.html: `visibility: hidden` still has a box
+/// and still resolves, and a rendered `width:0;height:0` element resolves to 0 --
+/// which is the answer this engine used to give the unrendered one.
+fn percentageStaysHere(element: *Element, frame: *Frame, property_name: []const u8) bool {
+    if (!percentageOfTheBox(property_name)) return false;
+    return !element.checkVisibilityCached(null, frame);
+}
+
+/// The properties whose percentage is a share of the element's own containing
+/// block, on either axis. `percentageOfContainingBlockWidth` is the subset that
+/// takes the WIDTH -- which is all of them except the block axis of `height`, and
+/// the reason the two lists are not one: a percentage padding is a share of the
+/// width top and bottom included, measured, while a percentage height is a share
+/// of the height.
+///
+/// Only asked about an element with no box, where the axis no longer matters
+/// because neither is being measured. `top`/`left`/`right`/`bottom` are
+/// deliberately absent: Chrome reports a percentage there verbatim whether the
+/// element is rendered or not -- `top: 10%` is `10%` on a rendered element too,
+/// measured -- so they are `percentageIsComputedValue`'s business and not this
+/// one, and this engine answers `auto` for them in both states.
+fn percentageOfTheBox(property_name: []const u8) bool {
+    if (percentageOfContainingBlockWidth(property_name)) return true;
+    return std.mem.eql(u8, property_name, "height") or
+        std.mem.eql(u8, property_name, "block-size");
 }
 
 /// The px a computed style reports for a declaration written in some other
@@ -765,6 +839,24 @@ fn lengthFactor(style_manager: *StyleManager, element: *Element, property_name: 
             .verbatim
         else if (percentageOfContainingBlockWidth(property_name)) blk: {
             const frame = element.ownerFrame(style_manager.frame);
+            // A `display: none` element has no box, so there is nothing for the
+            // percentage to be a share of -- and Chrome does not invent one. It
+            // reports the percentage as written: `width: 50%` stays `50%`, and
+            // so do `padding-left: 10%` and `margin-left: 10%`. This engine
+            // resolved against the containing block regardless and answered
+            // `200px` and `40px`, which are the numbers a RENDERED element with
+            // that declaration gets.
+            //
+            // Measured on Chrome 151 with
+            // tools/fingerprint/scratch/expr-display-none-percentages.js over 36
+            // longhands in seven states. Two of those states are what makes this
+            // "no box" rather than "a zero box": `visibility: hidden` still has a
+            // box and still resolves, and a rendered `width:0;height:0` element
+            // resolves to 0 -- which is the answer this used to give the
+            // unrendered one. And a percentage `line-height` is `24px` in both
+            // states, because it resolves against the font size and not a box, so
+            // this sits inside the containing-block branch and not above it.
+            if (!element.checkVisibilityCached(null, frame)) break :blk .verbatim;
             // The containing block, which is not always the parent: an inline
             // box is not one, so `<span><div style="width:50%">x</div></span>`
             // takes its half from the block the span sits in. Chrome answers
@@ -827,13 +919,14 @@ fn rootElement(element: *Element) ?*Element {
 /// the viewport; and a percentage, which resolves against the containing block.
 /// A bare number counts for `line-height`, where it means a multiple of the
 /// font size and Chrome reports the product in px.
-fn resolvesHere(property_name: []const u8, value: []const u8) bool {
+fn resolvesHere(element: *Element, frame: *Frame, property_name: []const u8, value: []const u8) bool {
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
     if (trimmed.len == 0) return true;
 
     if (std.ascii.indexOfIgnoreCase(trimmed, "calc(") != null) return false;
     if (std.mem.indexOfScalar(u8, trimmed, '%') != null and
-        !percentageIsComputedValue(property_name)) return false;
+        !percentageIsComputedValue(property_name) and
+        !percentageStaysHere(element, frame, property_name)) return false;
 
     if (std.mem.eql(u8, property_name, "line-height")) {
         // `normal` and a length are reportable; a bare multiplier is not, and a
@@ -1945,10 +2038,41 @@ fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame
 /// `transform-origin` and `perspective-origin` both compute to the centre of the
 /// border box, which Chrome serialises as two lengths. An element with no box
 /// answers from a zero-sized one, the way the dimension path answers "auto".
-fn boxCentre(element: *Element, frame: *Frame) []const u8 {
+fn boxCentre(element: *Element, frame: *Frame, property_name: []const u8) []const u8 {
     var visibility_cache: Element.VisibilityCache = .{};
     if (!element.checkVisibilityCached(&visibility_cache, frame)) {
-        return "0px 0px";
+        // No box, so there is no centre to report -- and Chrome does not report
+        // a zero one. It answers the SPECIFIED value: `50% 50%` with nothing
+        // declared, and the declaration verbatim when there is one. Measured on
+        // Chrome 151 with
+        // tools/fingerprint/scratch/expr-display-none-percentages.js, beside the
+        // two states that make this "no box" and not "a zero box": a rendered
+        // `width:0;height:0` element really does answer `0px 0px`, which is what
+        // this used to say to both, and `visibility: hidden` still has a box and
+        // still reports its centre.
+        //
+        // The declaration is read under the unprefixed spelling, because the
+        // `-webkit-` pair are aliases and a page declares one of them: measured,
+        // `-webkit-transform-origin` reports whatever `transform-origin` was set
+        // to.
+        const unprefixed = if (std.mem.startsWith(u8, property_name, "-webkit-"))
+            property_name["-webkit-".len..]
+        else
+            property_name;
+        // The RAW cascade, not cascadedComputedValue: that path runs the computed
+        // conversion first and reports `unreportable` for exactly the percentage
+        // this branch exists to hand back, so asking it returns nothing. What is
+        // wanted here is the specified text.
+        const style_manager = &element.ownerFrame(frame)._style_manager;
+        switch (cascadedValueRaw(style_manager, element, unprefixed)) {
+            .value => |declared| return std.mem.trim(u8, declared, &std.ascii.whitespace),
+            .unreportable, .none => {},
+        }
+        // The initial value, whose own percentages are what Chrome prints here.
+        // Deliberately not from chrome_initial_values: both origins are absent
+        // from that table on purpose, because a rendered element answers them
+        // from the box rather than from a stored string.
+        return "50% 50%";
     }
     // The BORDER box, so the border counts: measured, a `border:5px solid`
     // block on the 1904px line has its origin at 952px, the centre of the 1904
@@ -5049,4 +5173,12 @@ test "WebApi: CSSStyleDeclaration computed logical properties" {
 
 test "WebApi: CSSStyleDeclaration computed relative units" {
     try testing.htmlRunner("css/computed_relative_units.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration unrendered percentages" {
+    try testing.htmlRunner("css/computed_unrendered_percentages.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration percentage kept" {
+    try testing.htmlRunner("css/computed_percentage_kept.html", .{});
 }
