@@ -18854,3 +18854,49 @@ font-size for `input`, and 13.333, 100 and 8 give 15, 115 and 9 of content
 against measured 15, 115 and 9. The width goes with the font's advance and the
 `size` attribute rather than staying constant: 1041 of content at 100px in the
 default font, 1237 in monospace.
+
+## The input box is fixed, the door is still shut, and the next tell is named (B84, 2026-08-27)
+
+The box now tracks the font, and Chrome's own numbers are reproduced almost
+exactly off the station -- `input` at 100px is 1045x117 of client box against
+Chrome's 1045x117, at 8px 87x11 against 87x11, in serif 1044x117 against
+1044x117, with the `<span>` control matching as it always did. The full suite is
+green at 1535 and `zig fmt` is clean.
+
+**x-hyatt still withholds the ticket, 3 runs of 3.** That is not a
+contradiction: the frozen box is enough to be refused -- Chrome loses its token
+for it -- without being the only thing we are refused for.
+
+The fix did reach the guard, and the payload says so:
+
+| | Chrome | before | after |
+|---|---|---|---|
+| tokens keyed `149x17` | none | 5 | **none** |
+| unkeyed tokens | 415 | 410 | **415** |
+| tokens keyed `153x21` | none | 10 | 10 |
+
+Our token count now matches Chrome's exactly, and one of the two degenerate
+buckets is gone. So the remaining refusal is downstream of this, not evidence
+against it.
+
+**What is still collapsed, precisely.** Tracing the boxes the guard asks for
+(`kasada-knob.mjs --knob dims`) shows what its font probe actually is: an
+`<input>` at `font-size: 100px` per font family, whose **width it holds constant
+at 112** while the **height carries the fingerprint** -- Chrome answers 134, 152,
+117 and 124 across the families it probes. This engine answers `1045x117` ten
+times over, identically.
+
+So two things are left, and they are both about the font rather than the box:
+
+  * every probe resolves to the same family here, where Chrome resolves ten
+    different faces. The 100px content heights in `font_metrics` already span 52
+    distinct values, so the tables have the variety -- `findInList` is not
+    reaching it, either because the guard names faces the table does not hold or
+    because the list falls through to the fallback;
+  * Chrome's probe is 112 wide where ours is 1045, so the guard constrains the
+    width by something -- a `size` attribute, or a declared width -- that this
+    engine is not honouring on the element.
+
+Neither is a guess about what the station weighs: both are readings off the
+guard's own calls, and the knob harness can test either against `x-kpsdk-r` in
+about twenty-five seconds.
