@@ -1,0 +1,95 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T06:46:21.287Z",
+  "egress": {
+    "fl": "466f118",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787813181.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1502+6d316fafb",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17472/"
+  },
+  "stations": [
+    {
+      "name": "dd-datadome",
+      "vendor": "datadome",
+      "url": "https://datadome.co/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://datadome.co/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAT9wIq6oir0cAbNOzfA%3D%3D&hash=14D062F60A4BDE8CE8647DFC720349&cid=SxYUEp3Hlsx2SSrEdT~8ZF28SqZA1R0bVc87SJTma2VbPZs7M55FVxTK0C~4271iBlmB1HTpPuxpM0lSYpld97PJKSmQaNZjQ1Qye_z~amlf8Hihb9_F9SEfORSQnrHS&t=fe&referer=https%3A%2F%2Fdatadome.co%2F&s=44330&e=8cbc760dc5814629502ee5421baeee200dfa170005dfd477b0007a981789f7e6aac261be757eeb865ab7a0566d762431&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "datadome.co",
+      "landedOn": "https://datadome.co/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25172
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787813181471 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:17472",
+    "$time=1787813183324 $scope=frame $level=warn $msg=\"cookie parse failed\" raw=\"__cf_bm=mHZGmEL7OXi14hHirSxFZTT0JXUe756HPYg3CQ.b8Kk-1787813182.7995195-1.0.1.1-wT0WNeO33NVcRXZp_uXPpQj5tUp5pWvuZlPW9Icyw41h4DLZTEhFzD5OWAbaCvwjuTWQcG0q8jNnAHA3J4JFvnGn0WqmWMzCQ4HCtJriGwZf6_dRZuFtZFLqWKPo1z0q; HttpOnly; SameSite=None; Secure; Path=/; Domain=kinsta.cloud; Expires=Thu, 27 Aug 2026 07:16:23 GMT\" err=InvalidDomain"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T06:51:12.843Z",
+  "egress": {
+    "fl": "1232f8",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787813472.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1505+a42a3e8b8",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17471/"
+  },
+  "stations": [
+    {
+      "name": "dd-hermes",
+      "vendor": "datadome",
+      "url": "https://www.hermes.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hermes.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAEIaXzPCqthwAbNOzfA%3D%3D&hash=2211F522B61E269B869FA6EAFFB5E1&cid=ff1lT0CGJKwgCk79mAgih1ccTXymjbeo8FHHXm_hD9KIkRk_r8EgCprpZEoD1EAMYuF7GHpAna39BxhRHdLLCtVjkt2hPIRKRxaEYjPZgDMRVlqm14oiYDgA7vD8d_dD&t=fe&referer=https%3A%2F%2Fwww.hermes.com%2F&s=13461&e=cfb869feb30d9bfcac4dfec7a8a2e53408a662601c7820dc49d298cb5db46877e9bc108acfa641bdbc234ec0a82145dc&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "hermes.com",
+      "landedOn": "https://www.hermes.com/",
+      "nodes": 10,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25274
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787813473014 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:17471"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

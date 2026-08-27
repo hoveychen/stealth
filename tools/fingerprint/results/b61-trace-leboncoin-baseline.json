@@ -1,0 +1,569 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-27T06:54:25.772Z",
+  "egress": {
+    "fl": "1232f109",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787813665.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1502+6d316fafb",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:17480/"
+  },
+  "stations": [
+    {
+      "name": "dd-leboncoin",
+      "vendor": "datadome",
+      "url": "https://www.leboncoin.fr/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.leboncoin.fr/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMABiPCi3ze7mgAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=Zt9irDGiMmQpKj0XqGZ8Wcl6mL~sbEpvYuq~eQHLw5KK36YBd3_0QTIFI~GpcoMLg0Kfoxa6fOyOha0sG4lbkVMdE1MqqNBDujrVdX6a5bxdXuHc60aSB9DN6qoo_HpQ&t=fe&referer=https%3A%2F%2Fwww.leboncoin.fr%2F&s=2089&e=175cca3b9d5e91d5984773a15170a50ccdbe5ee66e3da58ae415f39e59a0b3343e815c8145bdfe42861f4ed993817ed1&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "id": "LID-0000000001",
+          "method": "GET",
+          "url": "https://www.leboncoin.fr/",
+          "type": "Document",
+          "headers": {
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-User": "?1",
+            "priority": "u=0, i"
+          },
+          "ms": 1
+        },
+        {
+          "ev": "res",
+          "id": "LID-0000000001",
+          "status": 403,
+          "url": "https://www.leboncoin.fr/",
+          "type": "Document",
+          "headers": {
+            "content-type": "text/html;charset=utf-8",
+            "content-length": "771",
+            "date": "Thu, 27 Aug 2026 06:54:26 GMT",
+            "set-cookie": "datadome=Zt9irDGiMmQpKj0XqGZ8Wcl6mL~sbEpvYuq~eQHLw5KK36YBd3_0QTIFI~GpcoMLg0Kfoxa6fOyOha0sG4lbkVMdE1MqqNBDujrVdX6a5bxdXuHc60aSB9DN6qoo_HpQ; Max-Age=31536000; Domain=.leboncoin.fr; Path=/; Secure; SameSite=Lax",
+            "strict-transport-security": "max-age=15768000",
+            "referrer-policy": "no-referrer-when-downgrade",
+            "content-security-policy": "frame-ancestors *.leboncoin.fr *.leboncoin.io *.leboncoin.ci; report-uri https://api.leboncoin.fr/api/csp-report/v1/report/;",
+            "content-security-policy-report-only": "object-src *.leboncoin.fr *.leboncoin.io *.leboncoin.ci; frame-ancestors *.leboncoin.fr *.leboncoin.io *.leboncoin.ci; report-uri https://api.leboncoin.fr/api/csp-report/v1/report/;",
+            "x-datadome": "protected",
+            "accept-ch": "Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory",
+            "charset": "utf-8",
+            "cache-control": "max-age=0, private, no-cache, no-store, must-revalidate",
+            "pragma": "no-cache",
+            "access-control-allow-credentials": "true",
+            "access-control-expose-headers": "x-dd-b, x-set-cookie",
+            "access-control-allow-origin": "*",
+            "x-datadome-cid": "AHrlqAAAAAMABiPCi3ze7mgAbNOzfA==",
+            "x-dd-b": "1",
+            "x-cache": "Error from cloudfront",
+            "via": "1.1 b87f331d1f443f860f37b9531835ed6e.cloudfront.net (CloudFront)",
+            "x-amz-cf-pop": "LAX54-P1",
+            "x-amz-cf-id": "vjRRuoagkhFZ11l2_ov4l_w6-j0EaJ5LkfVB6ZIGmHwV9Hy2C8huAA=="
+          },
+          "resProto": null,
+          "ms": 631
+        },
+        {
+          "ev": "done",
+          "id": "LID-0000000001",
+          "len": 2216,
+          "ms": 631
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000002",
+          "method": "GET",
+          "url": "https://ct.captcha-delivery.com/c.js",
+          "type": "Script",
+          "headers": {
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "*/*",
+            "Sec-Fetch-Dest": "script",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "cross-site",
+            "priority": "u=1",
+            "Referer": "https://www.leboncoin.fr/"
+          },
+          "ms": 631
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000002",
+          "status": 200,
+          "url": "https://ct.captcha-delivery.com/c.js",
+          "type": "Script",
+          "headers": {
+            "content-type": "text/javascript",
+            "last-modified": "Tue, 12 May 2026 07:34:52 GMT",
+            "server": "AmazonS3",
+            "x-amz-server-side-encryption": "AES256",
+            "x-amz-version-id": "null",
+            "content-encoding": "gzip",
+            "date": "Wed, 26 Aug 2026 08:39:51 GMT",
+            "etag": "W/\"950420e38f60e6dc7a3ff17dae2f1db2\"",
+            "vary": "Accept-Encoding",
+            "x-cache": "Hit from cloudfront",
+            "via": "1.1 c7dfd67238d1ff87126b6f8ba9129f66.cloudfront.net (CloudFront)",
+            "x-amz-cf-pop": "LAX54-P7",
+            "x-amz-cf-id": "j5eRs0HbqzXkWXJ7bympP4DD5FRDJAP64NefSqQZYpqOtEnixzg5Sw==",
+            "age": "80076"
+          },
+          "resProto": null,
+          "ms": 746
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000002",
+          "len": 4328,
+          "ms": 746
+        },
+        {
+          "ev": "req",
+          "id": "LID-0000000002",
+          "method": "GET",
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMABiPCi3ze7mgAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=Zt9irDGiMmQpKj0XqGZ8Wcl6mL~sbEpvYuq~eQHLw5KK36YBd3_0QTIFI~GpcoMLg0Kfoxa6fOyOha0sG4lbkVMdE1MqqNBDujrVdX6a5bxdXuHc60aSB9DN6qoo_HpQ&t=fe&referer=https%3A%2F%2Fwww.leboncoin.fr%2F&s=2089&e=175cca3b9d5e91d5984773a15170a50ccdbe5ee66e3da58ae415f39e59a0b3343e815c8145bdfe42861f4ed993817ed1&dm=cd",
+          "type": "Document",
+          "headers": {
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Sec-Fetch-Dest": "iframe",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "cross-site",
+            "Upgrade-Insecure-Requests": "1",
+            "priority": "u=0, i",
+            "Referer": "https://www.leboncoin.fr/"
+          },
+          "ms": 751
+        },
+        {
+          "ev": "res",
+          "id": "LID-0000000002",
+          "status": 200,
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMABiPCi3ze7mgAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=Zt9irDGiMmQpKj0XqGZ8Wcl6mL~sbEpvYuq~eQHLw5KK36YBd3_0QTIFI~GpcoMLg0Kfoxa6fOyOha0sG4lbkVMdE1MqqNBDujrVdX6a5bxdXuHc60aSB9DN6qoo_HpQ&t=fe&referer=https%3A%2F%2Fwww.leboncoin.fr%2F&s=2089&e=175cca3b9d5e91d5984773a15170a50ccdbe5ee66e3da58ae415f39e59a0b3343e815c8145bdfe42861f4ed993817ed1&dm=cd",
+          "type": "Document",
+          "headers": {
+            "Date": "Thu, 27 Aug 2026 06:54:27 GMT",
+            "Content-Type": "text/html;charset=utf-8",
+            "Transfer-Encoding": "chunked",
+            "Connection": "keep-alive",
+            "Content-Encoding": "gzip"
+          },
+          "resProto": null,
+          "ms": 1455
+        },
+        {
+          "ev": "done",
+          "id": "LID-0000000002",
+          "len": 252338,
+          "ms": 1455
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000004",
+          "method": "GET",
+          "url": "https://static.captcha-delivery.com/captcha/assets/tpl/6dc485c0c428c35b53577b146dc6f9179f55ef9ad41b327a2a179998839364bf/index.css",
+          "type": "Stylesheet",
+          "headers": {
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "text/css,*/*;q=0.1",
+            "Sec-Fetch-Dest": "style",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "cross-site",
+            "priority": "u=0",
+            "Referer": "https://geo.captcha-delivery.com/"
+          },
+          "ms": 1456
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000004",
+          "status": 200,
+          "url": "https://static.captcha-delivery.com/captcha/assets/tpl/6dc485c0c428c35b53577b146dc6f9179f55ef9ad41b327a2a179998839364bf/index.css",
+          "type": "Stylesheet",
+          "headers": {
+            "content-type": "text/css",
+            "last-modified": "Thu, 21 May 2026 07:51:29 GMT",
+            "server": "AmazonS3",
+            "x-amz-server-side-encryption": "AES256",
+            "x-amz-version-id": "null",
+            "content-encoding": "gzip",
+            "date": "Wed, 26 Aug 2026 14:25:00 GMT",
+            "etag": "W/\"c370814a6c7b7bd31cdc5f01964a6553\"",
+            "vary": "Accept-Encoding",
+            "x-cache": "Hit from cloudfront",
+            "via": "1.1 7ba725b1f93cb9bf1959e3aeadbb3380.cloudfront.net (CloudFront)",
+            "x-amz-cf-pop": "LAX54-P9",
+            "x-amz-cf-id": "UCNvW2ZLZyccUKi_2NKYnpFXAGNLW6uw_HTdVXvaCTVgDv2LdYffMA==",
+            "age": "59367"
+          },
+          "resProto": null,
+          "ms": 1742
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000004",
+          "len": 1961,
+          "ms": 1742
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000005",
+          "method": "GET",
+          "url": "https://static.captcha-delivery.com/common/fonts/roboto/font-face.css",
+          "type": "Stylesheet",
+          "headers": {
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "text/css,*/*;q=0.1",
+            "Sec-Fetch-Dest": "style",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "cross-site",
+            "priority": "u=0",
+            "Referer": "https://geo.captcha-delivery.com/"
+          },
+          "ms": 1742
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000005",
+          "status": 200,
+          "url": "https://static.captcha-delivery.com/common/fonts/roboto/font-face.css",
+          "type": "Stylesheet",
+          "headers": {
+            "content-type": "text/css",
+            "content-length": "519",
+            "last-modified": "Fri, 19 Jul 2024 12:42:09 GMT",
+            "x-amz-server-side-encryption": "AES256",
+            "x-amz-version-id": "null",
+            "accept-ranges": "bytes",
+            "server": "AmazonS3",
+            "date": "Wed, 26 Aug 2026 10:20:09 GMT",
+            "etag": "\"e4f77074c0ffbfab377011e19283eb13\"",
+            "vary": "Accept-Encoding\nOrigin",
+            "x-cache": "Hit from cloudfront",
+            "via": "1.1 7ba725b1f93cb9bf1959e3aeadbb3380.cloudfront.net (CloudFront)",
+            "x-amz-cf-pop": "LAX54-P9",
+            "x-amz-cf-id": "r-W1f-bI46GQJxiTofXxlmW-H6L6j6Q1Ss811HuCc8vjnlv7g0YkRQ==",
+            "age": "74059"
+          },
+          "resProto": null,
+          "ms": 1764
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000005",
+          "len": 1051,
+          "ms": 1764
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000006",
+          "method": "GET",
+          "url": "https://static.captcha-delivery.com/captcha/assets/set/26e53713afb2da82d031f045066fa4b2a47b0733/logo.png?update_cache=1903697142150435233",
+          "type": "Image",
+          "headers": {
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Sec-Fetch-Dest": "image",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "cross-site",
+            "priority": "u=1, i",
+            "Referer": "https://geo.captcha-delivery.com/"
+          },
+          "ms": 1764
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000007",
+          "method": "GET",
+          "url": "https://static.captcha-delivery.com/captcha/assets/tpl/6dc485c0c428c35b53577b146dc6f9179f55ef9ad41b327a2a179998839364bf/loading_spinner.gif",
+          "type": "Image",
+          "headers": {
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Sec-Fetch-Dest": "image",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "cross-site",
+            "priority": "u=1, i",
+            "Referer": "https://geo.captcha-delivery.com/"
+          },
+          "ms": 1764
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000009",
+          "method": "GET",
+          "url": "blob:https://geo.captcha-delivery.com/b86340b2-93a5-4df2-926a-68cf5097d8cf",
+          "type": "Script",
+          "headers": {
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "*/*",
+            "Sec-Fetch-Dest": "script",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "same-origin",
+            "priority": "u=1"
+          },
+          "ms": 1788
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000010",
+          "method": "GET",
+          "url": "https://www.leboncoin.fr/favicon.ico",
+          "type": "Image",
+          "headers": {
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"macOS\"",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Sec-Fetch-Dest": "image",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "same-origin",
+            "priority": "u=1, i",
+            "Referer": "https://www.leboncoin.fr/",
+            "Cookie": "datadome=Zt9irDGiMmQpKj0XqGZ8Wcl6mL~sbEpvYuq~eQHLw5KK36YBd3_0QTIFI~GpcoMLg0Kfoxa6fOyOha0sG4lbkVMdE1MqqNBDujrVdX6a5bxdXuHc60aSB9DN6qoo_Hp"
+          },
+          "ms": 1978
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000009",
+          "status": 200,
+          "url": "blob:https://geo.captcha-delivery.com/b86340b2-93a5-4df2-926a-68cf5097d8cf",
+          "type": "Script",
+          "headers": {
+            "content-type": "text/javascript"
+          },
+          "resProto": null,
+          "ms": 1978
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000009",
+          "len": 2388,
+          "ms": 1978
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000007",
+          "status": 200,
+          "url": "https://static.captcha-delivery.com/captcha/assets/tpl/6dc485c0c428c35b53577b146dc6f9179f55ef9ad41b327a2a179998839364bf/loading_spinner.gif",
+          "type": "Image",
+          "headers": {
+            "content-type": "image/gif",
+            "content-length": "44663",
+            "last-modified": "Tue, 31 Jul 2018 12:27:34 GMT",
+            "x-amz-version-id": "null",
+            "accept-ranges": "bytes",
+            "server": "AmazonS3",
+            "date": "Wed, 26 Aug 2026 17:02:11 GMT",
+            "etag": "\"18be94cf37fa0da67af3c46ddebca50a\"",
+            "vary": "Accept-Encoding",
+            "x-cache": "Hit from cloudfront",
+            "via": "1.1 7ba725b1f93cb9bf1959e3aeadbb3380.cloudfront.net (CloudFront)",
+            "x-amz-cf-pop": "LAX54-P9",
+            "x-amz-cf-id": "VaK7q7JqpCEzIuQIFhDhw8hNkgBD-QsWiLayANbP9i3Qy0kbnwy_cA==",
+            "age": "49937"
+          },
+          "resProto": null,
+          "ms": 2069
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000007",
+          "len": 45146,
+          "ms": 2069
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000006",
+          "status": 200,
+          "url": "https://static.captcha-delivery.com/captcha/assets/set/26e53713afb2da82d031f045066fa4b2a47b0733/logo.png?update_cache=1903697142150435233",
+          "type": "Image",
+          "headers": {
+            "content-type": "image/png",
+            "content-length": "70873",
+            "date": "Thu, 27 Aug 2026 06:54:29 GMT",
+            "last-modified": "Tue, 29 Nov 2022 08:10:24 GMT",
+            "etag": "\"07a1273ee2857babe0bf19de467622db\"",
+            "cache-control": "public",
+            "x-amz-version-id": "null",
+            "accept-ranges": "bytes",
+            "server": "AmazonS3",
+            "x-cache": "Miss from cloudfront",
+            "via": "1.1 7ba725b1f93cb9bf1959e3aeadbb3380.cloudfront.net (CloudFront)",
+            "x-amz-cf-pop": "LAX54-P9",
+            "x-amz-cf-id": "RG5Wym4aeJiMuDAl6UIk9i_hiGBKEnm3IYMSqdoxtRnatqcwTTMscg=="
+          },
+          "resProto": null,
+          "ms": 2103
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000006",
+          "len": 71345,
+          "ms": 2103
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000010",
+          "status": 200,
+          "url": "https://www.leboncoin.fr/favicon.ico",
+          "type": "Image",
+          "headers": {
+            "content-type": "image/x-icon",
+            "date": "Thu, 27 Aug 2026 06:54:28 GMT",
+            "content-security-policy": "frame-ancestors *.leboncoin.fr *.leboncoin.io *.leboncoin.ci; report-uri https://api.leboncoin.fr/api/csp-report/v1/report/;",
+            "content-security-policy-report-only": "object-src *.leboncoin.fr *.leboncoin.io *.leboncoin.ci; frame-ancestors *.leboncoin.fr *.leboncoin.io *.leboncoin.ci; report-uri https://api.leboncoin.fr/api/csp-report/v1/report/;",
+            "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+            "x-nextjs-cache": "HIT",
+            "cache-control": "public, max-age=0, must-revalidate",
+            "strict-transport-security": "max-age=15768000",
+            "referrer-policy": "no-referrer-when-downgrade",
+            "x-cache": "Miss from cloudfront",
+            "via": "1.1 b87f331d1f443f860f37b9531835ed6e.cloudfront.net (CloudFront)",
+            "x-amz-cf-pop": "LAX54-P1",
+            "x-amz-cf-id": "FSwY2CmBvyJGQFvNCtCNz7_8bpJaYbQS8ABrYRGsetUO9MB5GQ8LEw=="
+          },
+          "resProto": null,
+          "ms": 2617
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000010",
+          "len": 15983,
+          "ms": 2617
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "leboncoin.fr",
+      "landedOn": "https://www.leboncoin.fr/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25637
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787813665964 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:17480"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

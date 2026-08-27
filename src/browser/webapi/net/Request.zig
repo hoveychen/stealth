@@ -84,7 +84,7 @@ pub const InitOpts = struct {
     keepalive: ?bool = null,
 };
 
-const Mode = enum {
+pub const Mode = enum {
     @"same-origin",
     @"no-cors",
     cors,

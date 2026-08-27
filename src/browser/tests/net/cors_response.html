@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The response half of the CORS protocol. The page is served from
+  http://127.0.0.1:9582 and http://localhost:9582 is the same test server behind
+  a different origin.
+
+  Every expectation here is a measured Chrome 151 reading, from the `cors-*` and
+  `no-acao-*` cases of tools/fingerprint/results/b60-cors-chrome.json. The shape
+  worth keeping in mind: Chrome always *sends* these requests and refuses the
+  *response*. Refusing the request instead would be a different fingerprint.
+
+  Blocks run concurrently and share nothing, so each one names its own routes.
+-->
+
+<script id=cors_response_no_allow_origin_rejects type=module>
+  {
+    const API = 'http://localhost:9582';
+    const state = await testing.async();
+
+    // No Access-Control-Allow-Origin at all: a refusal, not a default.
+    let bare = 'resolved';
+    try {
+      await fetch(API + '/cors/bare');
+    } catch (e) {
+      bare = String(e);
+    }
+
+    // Allow-Origin naming someone else, on a simple GET that gets no preflight.
+    let wrong = 'resolved';
+    try {
+      await fetch(API + '/cors/wrong-origin');
+    } catch (e) {
+      wrong = String(e);
+    }
+
+    // Same-origin is not subject to any of this.
+    const same = await (await fetch('http://127.0.0.1:9582/cors/bare')).text();
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual('TypeError: Failed to fetch', bare);
+      testing.expectEqual('TypeError: Failed to fetch', wrong);
+      testing.expectEqual('ok', same);
+    });
+  }
+</script>
+
+<script id=cors_response_wildcard_and_credentials type=module>
+  {
+    const API = 'http://localhost:9582';
+    const state = await testing.async();
+
+    // `*` is valid for an uncredentialed request.
+    const plain = await (await fetch(API + '/cors/wildcard')).text();
+
+    // And invalid for a credentialed one -- that pair is the whole point of
+    // Access-Control-Allow-Credentials.
+    let credentialed = 'resolved';
+    try {
+      await fetch(API + '/cors/wildcard', {credentials: 'include'});
+    } catch (e) {
+      credentialed = String(e);
+    }
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual('ok', plain);
+      testing.expectEqual('TypeError: Failed to fetch', credentialed);
+    });
+  }
+</script>
+
+<script id=cors_response_no_cors_mode_is_opaque type=module>
+  {
+    const API = 'http://localhost:9582';
+    const state = await testing.async();
+
+    // mode: 'no-cors' is not a refusal, it is an opaque response: the request
+    // goes out, the promise resolves, and nothing about the answer is readable.
+    const res = await fetch(API + '/cors/bare', {mode: 'no-cors'});
+    const body = await res.text();
+    const names = [...res.headers.keys()];
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual('opaque', res.type);
+      testing.expectEqual(0, res.status);
+      testing.expectEqual('', res.statusText);
+      testing.expectEqual('', body);
+      testing.expectEqual(0, names.length);
+      testing.expectEqual(false, res.ok);
+    });
+  }
+</script>
+
+<script id=cors_response_exposed_headers type=module>
+  {
+    const API = 'http://localhost:9582';
+    const state = await testing.async();
+
+    // An allowed cross-origin response is a CORS-filtered response: only the
+    // safelisted header names show through unless Expose-Headers says otherwise.
+    const hidden = await fetch(API + '/cors/expose');
+    const shown = await fetch(API + '/cors/expose-named');
+    // Same header on a same-origin response, which is not filtered at all.
+    const same = await fetch('http://127.0.0.1:9582/cors/expose');
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(null, hidden.headers.get('x-custom'));
+      // content-type is one of the seven safelisted names, so it survives.
+      testing.expectEqual('text/plain', hidden.headers.get('content-type'));
+      testing.expectEqual('1', shown.headers.get('x-custom'));
+      testing.expectEqual('1', same.headers.get('x-custom'));
+    });
+  }
+</script>
+
+<script id=cors_response_applies_to_the_hop_that_answered type=module>
+  {
+    const state = await testing.async();
+
+    // Both of these are fetches for a URL on the page's *own* origin. The
+    // redirect takes them across an origin boundary, and the check belongs to
+    // whichever response came back -- so one is refused and one is not, and the
+    // URL the page asked for says nothing about which.
+    let bare = 'resolved';
+    try {
+      await fetch('/redirect_cross_bare');
+    } catch (e) {
+      bare = String(e);
+    }
+    const allowed = await (await fetch('/redirect_cross_echo_referer')).text();
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual('TypeError: Failed to fetch', bare);
+      // Credentials mode `same-origin` sends none across the hop, so the
+      // wildcard on the other side is a good answer for it.
+      testing.expectEqual(true, allowed.startsWith('<html><body>referer='));
+    });
+  }
+</script>
+
+<script id=cors_response_xhr_reports_nothing type=module>
+  {
+    const API = 'http://localhost:9582';
+    const state = await testing.async();
+    const get = (url) => new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.onload = () => resolve({
+        how: 'load',
+        status: xhr.status,
+        text: xhr.responseText,
+        headers: xhr.getAllResponseHeaders(),
+      });
+      xhr.onerror = () => resolve({
+        how: 'error',
+        status: xhr.status,
+        text: xhr.responseText,
+        headers: xhr.getAllResponseHeaders(),
+      });
+      xhr.send();
+    });
+
+    const blocked = await get(API + '/cors/bare');
+    const allowed = await get(API + '/cors/echo');
+    const filtered = await get(API + '/cors/expose');
+
+    state.resolve();
+    await state.done(() => {
+      // A refused response surfaces as an error event with nothing on it: no
+      // status, no body, no headers.
+      testing.expectEqual('error', blocked.how);
+      testing.expectEqual(0, blocked.status);
+      testing.expectEqual('', blocked.text);
+      testing.expectEqual('', blocked.headers);
+      // An allowed one is ordinary.
+      testing.expectEqual('load', allowed.how);
+      testing.expectEqual(200, allowed.status);
+      // And is header-filtered the same way fetch's is.
+      testing.expectEqual('load', filtered.how);
+      testing.expectEqual(null, filtered.headers.match(/x-custom/i));
+    });
+  }
+</script>

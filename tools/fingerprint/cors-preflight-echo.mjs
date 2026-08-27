@@ -102,6 +102,46 @@ const CASES = [
     { name: 'no-acao-after-preflight', expect: 'preflight, read blocked', policy: 'no-acao-actual', js: `fetch(U, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })` },
     // Max-Age: two identical requests. A cache that works sends one preflight.
     { name: 'max-age-twice', expect: 'one preflight for two requests', policy: 'max-age', js: `fetch(U, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(() => fetch(U, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }))` },
+
+    // --- The response half. `cors-response-check` P1. ------------------------
+    //
+    // The two no-acao cases above are the whole reason this plan exists: Chrome
+    // throws on them and we resolve with a readable 200. Refusing a response is
+    // a bigger hammer than refusing a preflight, though, so the shapes that must
+    // KEEP working are measured here beside the ones that must start failing.
+    //
+    // A no-cors fetch does not get refused, it gets an opaque response: the
+    // request goes out, the body is unreadable, and the promise still resolves.
+    { name: 'no-cors-mode', expect: 'resolves opaque, status 0, body unreadable', policy: 'no-acao', js: `fetch(U, { mode: 'no-cors' })` },
+    // Same refusal through XHR, where it surfaces as an error event rather than
+    // a rejected promise. Which of status / responseText survive is the part an
+    // implementation has to get right.
+    { name: 'xhr-no-acao', expect: 'error event, status 0', policy: 'no-acao', js: `xhr('GET', U, {}, null)` },
+    // A wildcard Allow-Origin is fine uncredentialed and invalid credentialed --
+    // the pair is the whole point of Allow-Credentials.
+    { name: 'wildcard-plain', expect: 'allowed', policy: 'wildcard', js: `fetch(U, {})` },
+    { name: 'wildcard-with-credentials', expect: 'blocked: * is invalid with credentials', policy: 'wildcard', js: `fetch(U, { credentials: 'include' })` },
+    // Allow-Origin naming someone else, with no preflight in the way: the simple
+    // GET reaches the server and the read is still refused.
+    { name: 'wrong-origin-simple', expect: 'no preflight, read blocked', policy: 'deny-origin-actual', js: `fetch(U, {})` },
+    // Expose-Headers. An allowed CORS response only shows the safelisted
+    // response headers unless it names more. This is a SEPARATE gap from the one
+    // this plan fixes -- measured here so the decision is informed, not so it
+    // gets bundled in.
+    { name: 'expose-headers-default', expect: 'x-custom not readable', policy: 'expose-none', js: `fetch(U, {}).then(function (r) { return { status: r.status, text: 'x-custom=' + r.headers.get('x-custom') }; })` },
+    { name: 'expose-headers-named', expect: 'x-custom readable', policy: 'expose-named', js: `fetch(U, {}).then(function (r) { return { status: r.status, text: 'x-custom=' + r.headers.get('x-custom') }; })` },
+    // A same-origin request that redirects cross-origin. The CORS check applies
+    // to the *final* response, so the second hop needs an Allow-Origin even
+    // though the page asked for a URL on its own origin -- and the page's own
+    // fetch.html asserts the opposite, which is why this is measured rather
+    // than reasoned about.
+    { name: 'redirect-cross-no-acao', expect: 'follows the hop, read blocked', policy: 'no-acao', js: `fetch('/redirect/redirect-cross-no-acao')` },
+    { name: 'redirect-cross-allowed', expect: 'follows the hop, readable', js: `fetch('/redirect/redirect-cross-allowed')` },
+    // The two regression guards. A parser-pulled subresource is no-cors, so no
+    // Allow-Origin is needed and none of this may stop it loading. If refusing
+    // responses ever breaks these, it has broken page loading itself.
+    { name: 'img-no-acao', expect: 'loads anyway (no-cors)', policy: 'no-acao', js: `new Promise(function (res) { var i = new Image(); i.onload = function () { res({ status: 200, text: 'loaded w=' + i.naturalWidth }); }; i.onerror = function () { res({ status: 0, text: 'errored' }); }; i.src = U; })` },
+    { name: 'script-no-acao', expect: 'executes anyway (no-cors)', policy: 'no-acao', js: `new Promise(function (res) { var s = document.createElement('script'); s.onload = function () { res({ status: 200, text: 'ran=' + String(window.__scriptRan) }); }; s.onerror = function () { res({ status: 0, text: 'errored' }); }; s.src = U; document.head.appendChild(s); })` },
 ];
 
 const log = [];   // every request the API origin saw, in order
@@ -124,7 +164,9 @@ const api = http.createServer((req, res) => {
     });
     const policy = (CASES.find((c) => c.name === name) || {}).policy || null;
     const h = { 'content-type': 'application/json' };
-    const allowOrigin = policy === 'deny-origin' ? 'https://example.invalid' : PAGE_ORIGIN;
+    const allowOrigin = policy === 'deny-origin' || policy === 'deny-origin-actual'
+        ? 'https://example.invalid'
+        : policy === 'wildcard' ? '*' : PAGE_ORIGIN;
 
     if (req.method === 'OPTIONS') {
         if (policy !== 'no-acao') h['access-control-allow-origin'] = allowOrigin;
@@ -138,11 +180,36 @@ const api = http.createServer((req, res) => {
     }
     if (policy !== 'no-acao' && policy !== 'no-acao-actual') {
         h['access-control-allow-origin'] = allowOrigin;
-        h['access-control-allow-credentials'] = 'true';
+        // Not for the wildcard cases: `*` plus Allow-Credentials is exactly the
+        // combination that must be refused, and sending both would let a lenient
+        // engine look correct.
+        if (policy !== 'wildcard') h['access-control-allow-credentials'] = 'true';
+    }
+    // A response header outside the CORS-safelisted set, so "can the page read
+    // it" is a question with a visible answer.
+    if (policy === 'expose-none' || policy === 'expose-named') {
+        h['x-custom'] = '1';
+        if (policy === 'expose-named') h['access-control-expose-headers'] = 'x-custom';
+    }
+    // The two no-cors guards need real subresource bodies rather than JSON.
+    if (name.startsWith('img-')) {
+        res.writeHead(200, { ...h, 'content-type': 'image/png' });
+        res.end(PIXEL);
+        return;
+    }
+    if (name.startsWith('script-')) {
+        res.writeHead(200, { ...h, 'content-type': 'application/javascript' });
+        res.end('window.__scriptRan = 1;');
+        return;
     }
     res.writeHead(200, h);
     res.end(JSON.stringify({ ok: true, name }));
 });
+
+const PIXEL = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+    'base64',
+);
 await new Promise((r) => api.listen(0, '127.0.0.1', r));
 const API_ORIGIN = `http://127.0.0.1:${api.address().port}`;
 
@@ -170,7 +237,7 @@ async function run(name, fn) {
   try {
     var r = await fn(U);
     var text = r && typeof r.text === 'function' ? await r.text() : (r && r.text) || '';
-    out.push({ name: name, outcome: 'ok', status: r && r.status, body: String(text).slice(0, 60) });
+    out.push({ name: name, outcome: 'ok', status: r && r.status, type: (r && r.type) || null, body: String(text).slice(0, 60) });
   } catch (e) {
     out.push({ name: name, outcome: 'threw', error: String((e && e.message) || e).slice(0, 120) });
   }
@@ -182,7 +249,14 @@ ${CASES.map((c) => `  await run(${JSON.stringify(c.name)}, function (U) { return
 setInterval(function () {}, 50);
 </script></body></html>`;
 
-const pageServer = http.createServer((_, res) => {
+const pageServer = http.createServer((req, res) => {
+    // A same-origin URL that hands the request to the API origin, so a cross
+    // origin *redirect* is reachable from a fetch the page believes is local.
+    if ((req.url || '').startsWith('/redirect/')) {
+        res.writeHead(302, { location: API_ORIGIN + '/case/' + req.url.slice('/redirect/'.length) });
+        res.end();
+        return;
+    }
     res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' });
     res.end(pageHtml());
 });
@@ -254,6 +328,10 @@ const report = {
             origin: hits[0]?.origin ?? null,
             outcome: seen.outcome,
             status: seen.status ?? null,
+            // `type` separates a refusal from an opaque response: both have an
+            // unreadable body, only one of them rejected.
+            type: seen.type ?? null,
+            body: seen.body ?? null,
             error: seen.error ?? null,
         };
     }),
