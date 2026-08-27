@@ -4758,6 +4758,10 @@ test "WebApi: CSSStyleDeclaration percentage margin" {
     try testing.htmlRunner("css/margin_percentage.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration specified precision" {
+    try testing.htmlRunner("css/specified_precision.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration default display" {
     try testing.htmlRunner("css/default_display.html", .{});
 }

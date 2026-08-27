@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A computed style prints six significant figures, but the layout is not allowed
+to read its own numbers back out of that print. `width:465.5466592px` is
+465.53125 of box in Chrome; six figures of it (465.547) floors to 465.546875,
+one grid step high. The same rounding goes the other way just as easily:
+`width:465.53125px` is already exactly on the grid, and 465.531 floors to
+465.515625, one step LOW.
+
+What Chrome keeps is not the double the author wrote either -- it is that value
+in a **32-bit float**, which is what Blink parses a CSS length into. Over the
+twenty-one widths below, chosen because their 1/64 floors separate the three
+candidates, the f32 model matches Chrome 21 times, the f64 one 15 and the
+six-figure text 14. `100.0156249px` is the clearest of them: as a double it is
+a hair under a grid step and floors to 100, as a float it IS the step.
+
+Measured with tools/fingerprint/scratch/expr-precision-model.js on Chrome 151.
+The readback is asserted beside the geometry on purpose: `el.style.width` must
+keep printing six figures, so what changes is only the number behind it. Two
+rows say that loudest -- `1.9999999px` reads back `2px` and lays out 1.984375,
+and `0.0156249px` reads back all of itself because six figures reach that far.
+-->
+
+<script id=specified_value_keeps_precision>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (decl) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="width:1000px"><div data-m style="width:' + decl + 'px">x</div></div>';
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const out = {
+      css: String(getComputedStyle(el).width),
+      rect: el.getBoundingClientRect().width,
+      style: String(el.style.width),
+    };
+    wrap.remove();
+    return out;
+  };
+
+  // author, computed width, rect width, el.style.width
+  const CASES = [
+    ['465.5466592', '465.531px', 465.53125, '465.547px'],
+    ['100.0156249', '100.016px', 100.015625, '100.016px'],
+    ['100.0156251', '100.016px', 100.015625, '100.016px'],
+    ['33.33333333333333', '33.3281px', 33.328125, '33.3333px'],
+    ['465.53125', '465.531px', 465.53125, '465.531px'],
+    ['12.3456789', '12.3438px', 12.34375, '12.3457px'],
+    ['7.0156249', '7.01562px', 7.015625, '7.01562px'],
+    ['250.0078124', '250px', 250, '250.008px'],
+    ['250.0078126', '250px', 250, '250.008px'],
+    ['3.9999999', '4px', 4, '4px'],
+    ['64.0156249', '64.0156px', 64.015625, '64.0156px'],
+    ['199.9843751', '199.984px', 199.984375, '199.984px'],
+    ['0.0156249', '0px', 0, '0.0156249px'],
+    ['1000.0156249', '1000.02px', 1000.015625, '1000.02px'],
+    ['77.7777777', '77.7656px', 77.765625, '77.7778px'],
+    ['1.0000001', '1px', 1, '1px'],
+    ['1.9999999', '1.98438px', 1.984375, '2px'],
+    ['300.0000001', '300px', 300, '300px'],
+    ['0.30000001', '0.296875px', 0.296875, '0.3px'],
+    ['511.9843751', '511.984px', 511.984375, '511.984px'],
+    ['512.0156249', '512.016px', 512.015625, '512.016px'],
+  ];
+
+  const wrong = [];
+  for (const [decl, css, rect, style] of CASES) {
+    const got = measure(decl);
+    if (got.css !== css) wrong.push(decl + ' computed: want ' + css + ', got ' + got.css);
+    if (got.rect !== rect) wrong.push(decl + ' rect: want ' + rect + ', got ' + got.rect);
+    if (got.style !== style) wrong.push(decl + ' style.width: want ' + style + ', got ' + got.style);
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The same number has to survive every route into the cascade, not just the style
+attribute: a stylesheet rule, a property whose computed value is the specified
+one rather than a used one, and a length that is converted before it lands.
+-->
+
+<script id=specified_precision_reaches_every_route>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const style = document.createElement('style');
+  style.textContent = '.pw{width:465.5466592px} .pm{margin-left:465.5466592px} .pp{padding-left:465.5466592px}';
+  document.head.appendChild(style);
+
+  const read = (cls, decl) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="width:1000px"><div data-m class="' + cls + '" style="' + decl + '">x</div></div>';
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [el.getBoundingClientRect().width, cs.width, cs.marginLeft, cs.paddingLeft].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const check = (label, got, want) => {
+    if (got !== want) wrong.push(label + ': want [' + want + '], got [' + got + ']');
+  };
+
+  // rect, computed width, margin-left, padding-left
+  // A rule and a style attribute answer the same, which is the point.
+  check('rule width', read('pw', ''), '465.53125 465.531px 0px 0px');
+  check('attr width', read('', 'width:465.5466592px'), '465.53125 465.531px 0px 0px');
+  // A margin is not a used length, so it PRINTS the six figures -- and still
+  // takes the full 465.53125 off the line the box gets.
+  check('rule margin', read('pm', ''), '534.46875 534.469px 465.547px 0px');
+  check('attr margin', read('', 'margin-left:465.5466592px'), '534.46875 534.469px 465.547px 0px');
+  // A padding likewise, and the border box it leaves is exactly the 1000 it
+  // started from -- which it is not when the two halves round apart.
+  check('rule padding', read('pp', ''), '1000 534.469px 0px 465.547px');
+  check('attr padding', read('', 'padding-left:465.5466592px'), '1000 534.469px 0px 465.547px');
+  // An `em` is converted before it reaches the box and lands on the same value.
+  check('em', read('', 'font-size:10px;width:46.55466592em'), '465.53125 465.531px 0px 0px');
+
+  style.remove();
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
