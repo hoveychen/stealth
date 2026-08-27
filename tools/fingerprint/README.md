@@ -17517,3 +17517,302 @@ in a zsh shell, which does not word-split an unquoted scalar — and ran nine
 comparisons of one binary against itself while the log said "patched" for half of
 them. Print the binary's `version` string on every row, not the label: two
 commits cannot share eight characters, and a label can.
+
+## Every empty element is 5px tall here (B80, 2026-08-26, in progress)
+
+`block-height-from-content` was opened for a narrower thing — an empty `<div>`
+is 0px tall in Chrome and 5px here, the placeholder `dimensionsAt` starts every
+measurement at. Measuring the tag space first (`scratch/expr-empty-intrinsic.js`)
+showed the leak is not about blocks: **eighteen of twenty empty elements report
+5px**, and one expression over any of them separates this engine from a browser.
+
+Chrome's answers are not one number either. They fall into four groups, and a
+blanket 0 would be wrong for eleven of the twenty:
+
+| empty element | Chrome computed / client / offset / rect | here |
+|---|---|---|
+| `div`, `p`, `section`, `ul` | `0px` / 0 / 0 / 0 | 5px throughout |
+| `table` | `0px` / 0 / 0 / 0 | 5px |
+| `img` (no src) | `0px` / 0 / 0 / 0 | 5px |
+| `canvas`, `video`, `object`, `svg` | `150px` / 150 / 150 / 150 | 5px |
+| `iframe` | `150px` / 150 / **154** / 154 | 150 / 150 / 150 — offset misses the border |
+| `input` | `15px` / 17 / **21** / 21 | 5px |
+| `textarea` | `30px` / 34 / **36** / 36 | 5px |
+| `select` | `19px` / 17 / 19 / 19 | 5px |
+| `button` | `6px` / 2 / **6** / 6 | 5px |
+| `progress`, `meter` | `16px` / 16 / 16 / 16 | 5px |
+| `hr` | `0px` / 0 / **2** / 2 | 5px |
+| `br` | `auto` / 0 / 0 / **18** | auto / 0 / 0 / **0** |
+| `span` (inline) | `auto` / 0 / 0 / 0 | already correct |
+
+Three readings worth pulling out, because they are the ones a single constant
+cannot reproduce:
+
+* **the replaced default is 150px**, not 0 — `canvas`, `video`, `object` and
+  `svg` all answer it with no attributes at all, and `iframe` answers 150 of
+  content with 154 of offset because its 2px default border is outside the
+  client box. This engine already has the 300x150 pair for `iframe` and nothing
+  for the other four.
+* **a form control's height is intrinsic and each one is different** — 21, 36,
+  19, 6, 16. `button` is the odd one: 6px of offset off 2px of client, which is
+  padding and border around an empty line.
+* **an `<img>` with no src is 0**, which is the opposite of the broken-image
+  icon this engine already models. The icon is for an `src` that failed, not for
+  an absent one.
+
+The `<div>` case has a failing test (`css/block_height.html`, six of eight
+shapes red). The rest of this table has none yet, and the remaining plan tasks —
+a block's height as the sum of its line boxes, and the stack of its in-flow
+children — are measured but unstarted. Readings for those:
+`scratch/expr-block-height.js`.
+
+*Closed in B81: that table is now 33 of 34 readings against Chrome, from 3. The
+chapter below is what it took.*
+
+## The placeholder was a question the layout asked itself (B81, 2026-08-27)
+
+`dimensionsAt` started every measurement at `{width: 5, height: 5}` and then
+asked `dims.height == 5.0` to mean "nothing has sized this yet". That is two
+defects wearing one number, and only the first was known.
+
+The known one: 5px leaked out of eighteen of twenty empty elements, and 5px is
+not a number a browser reports for an empty box.
+
+The other one: **a length an author may write was a magic value.** Seven readings
+across four shapes had their declaration mistaken for the absence of one
+(`scratch/expr-five-sentinel.js`). `<div style="height:5px">x</div>` answered the
+text's 18 four times over. And `<div style="width:5px">` came out reporting a
+computed `width` of **5px beside a clientWidth of 400** — getComputedStyle reads
+the declaration, and the fill branch had overwritten the box. No browser produces
+a 5px-wide box that is 400px wide, and a guard reading both at once sees it.
+
+"Undetermined" is `null` now, and whatever is still null at the end is 0.
+
+### One rule found three defects
+
+The placeholder fix turned up a pattern that then explained two more, and it is
+worth stating on its own because it is a way of looking rather than a fact:
+
+> **When one half of a pair consults a table and the other half does not, the
+> wrong half is invisible for exactly as long as nobody compares them.**
+
+* `usedBorderWidth` asked the AUTHOR cascade for `border-top-width` and answered
+  `medium` — 3px — when it found nothing. The `border-top-style` read two lines
+  away *did* consult the per-tag UA table and came back `inset`. Six tags
+  reported a border they draw at 1px or 2px as 3px, and the style half looking
+  right is why nobody noticed. Measured: input, button, iframe and fieldset draw
+  2px; textarea, select and hr 1px.
+* the same asymmetry ran through `paddingPx`, `borderPx` and `usesBorderBox`:
+  **the layout box had never seen the UA stylesheet at all**, while the computed
+  style beside it always had, through `getDefaultPropertyValue`. A `<ul>` kept
+  its 40px `padding-inline-start` inside the content box. An `<iframe>` and an
+  `<hr>` drew no default border. A `<button>`, whose entire 16x6 box *is* UA
+  padding and border around a 0x0 content box, came out 0 by 0. A `<select>`
+  declared `width:100px` reported a clientWidth of 100 against Chrome's 98.
+* and the first commit of this plan did it to itself. Collapsible whitespace
+  correctly stopped making a line box, with an escape hatch for
+  `white-space: pre` beside it — which asked the cascade for a longhand called
+  `white-space`. There is no such longhand: `white-space` is a **shorthand**,
+  expanded to `white-space-collapse` and `text-wrap-mode`, and
+  `chrome_shorthands.zig` had carried that measured table all along. So the
+  hatch never fired, `<div style="white-space:pre"> </div>` was 0 tall against
+  Chrome's 18, and a lone space measured 0 where Chrome makes it 4. The commit's
+  own test asserted only the collapsing cases and went green over the half that
+  did not work.
+
+### The empty-element table, and why a blanket 0 is wrong for eleven of twenty
+
+| what | Chrome | how it is reached here now |
+|---|---|---|
+| `div`, `p`, `section`, `table`, `img` (no src), empty float / absolute / inline-block | 0 | nothing sized it |
+| `ul` | 360 of content, 400 of client | UA `padding-inline-start: 40px`, now visible to the layout |
+| `canvas`, `video`, `object`, `svg`, `iframe` | 300x150 | intrinsic content box |
+| `iframe` offset | 304x154 | UA 2px border, now visible |
+| `input` | 145x15 / 149x17 / 153x21 | intrinsic 145x15 + UA `1px 2px` padding + 2px border |
+| `textarea` | 177x30 / 181x34 / 183x36 | intrinsic 177x30 + 2px padding + 1px border |
+| `select` | 22x19 computed, 20x17 client | intrinsic 20x17 + 1px border, reported as the BORDER box |
+| `button` | 16x6 / 12x2 | **no** intrinsic box — the whole thing is UA padding and border |
+| `progress`, `meter` | 160x16, 80x16 | intrinsic content box |
+| `hr` | 398 of content, 400x2 of offset | fills the line as a border box, less its UA 1px border |
+| `br` | rect 0x18, offset 0 | the one element whose rect is not offsetHeight's box |
+| `svg` offsetWidth | `undefined` | SVGElement has none; already correct |
+
+Two of those a rule would get backwards:
+
+* **`select` and `button` report the BORDER box as their computed width**, which
+  is not the content box the spec names. Checked against a plain div rather than
+  assumed: `<div style="box-sizing:border-box;width:100px;padding:3px;border:5px
+  solid">` computes `100px` beside a clientWidth of 90 in Chrome, and this engine
+  already agreed. So an empty `<select>` reporting 22px of computed width beside
+  20 of clientWidth is one box read two ways, not a contradiction. Forcing either
+  tag back to `content-box` gives the intrinsic content box directly — 20x17 for
+  select and **0x0** for button (`scratch/expr-border-box-resolved.js`).
+* **a `<canvas>` has an intrinsic ratio and it comes from the buffer.** Its
+  width/height attributes are the buffer's size, not presentational hints for the
+  CSS properties the way `<img>` and `<iframe>` take them — so a declared width
+  scales the other axis and does *not* leave the height attribute standing.
+  `<canvas width=400 height=100 style="width:600px">` is 600x150 in Chrome, the
+  4-to-1 buffer applied to the declared width, not the 600x100 an
+  attribute-as-hint model gives. `video`, `object` and `svg` have no ratio at
+  all: each keeps its 300 or its 150, and an `<svg viewBox="0 0 40 10">` at 600px
+  wide is still 150 tall.
+
+### A line box is worth its line-height, and text wraps
+
+The computed `line-height` was already right — `30px`, `32px`, `24px` for every
+form. Only the layout was not asking, so a block holding one character was always
+the font's own box. Thirteen forms measured (`scratch/expr-line-box.js`): a
+length, a bare number, a percentage and an em, each against two font sizes, and
+inherited from a wrapper.
+
+A fractional line-height lands on the layout grid like any other used length:
+`line-height:1.1` at 16px is 17.6 in arithmetic and **17.59375** on the page,
+printing as `17.5938px`, rounding to 18 for clientHeight while the rect keeps the
+fraction. Two lines of it are 35.1875 — each line snapped and then summed, the
+same "parts snap on the way in" the box edges follow.
+
+And `line-height` does **not** reach a non-replaced inline box's offsetHeight: a
+`<span style="line-height:30px">` is 18 tall where an `inline-block` with the
+same declaration is 30.
+
+Wrapping is greedy, and the useful finding is that this engine's advances are
+already within half a pixel of Chrome's — enough to land on the same line *count*
+rather than merely close. Forty `word`s in a 100px box are twenty lines in both,
+in 200px eight, in 400px four. A word wider than the box overflows instead of
+breaking (twenty-four `a` in 50px is one line), which falls out of never
+splitting one.
+
+Two axes decide it and they are separate longhands:
+
+* `text-wrap-mode: nowrap`, which `white-space: pre` expands to — those same
+  forty words are one line.
+* `white-space-collapse` anything but `collapse` keeps a newline as a break, and
+  the count there is measured rather than derived: **one more line than there are
+  newlines, less one when the text ends with one.** A lone newline is one line,
+  `\na` is two, `a\nb\n` is two, `a\n\n` is two, `a\n\nb` is three,
+  `a\n\n\nb` is four.
+
+### The line COUNT is right at either device scale; the line's height is not
+
+Worth separating, because it decides which plan owns which half. Re-measured on
+headed Chrome at `--force-device-scale-factor=1` and `=2`:
+
+| reading | dsf1 | dsf2 | here |
+|---|---|---|---|
+| `line-height: normal` at 16px | 18 | **18.5** | 18 |
+| forty words in 100px | 360 | **370** | 360 |
+| forty words in 200px | 144 | **148** | 144 |
+| `line-height:30px` | 30 | 30 | 30 |
+| `line-height:1.1` | 17.59375 | 17.59375 | 17.59375 |
+
+370 / 18.5 is twenty and 148 / 18.5 is eight, so **the wrap counts are identical
+at both scales** — what moves is the value of one line, which is
+`font_metrics.boundingBox` and not this plan. Every explicit line-height is
+identical at both scales, because those are not font metrics. Headed at dsf1 is
+byte-identical to headless over all 29 readings, so "headed changes it" is really
+"dsf2 changes it".
+
+### The rect was not the box offsetHeight is
+
+`offsetHeight` goes through `clientHeight`, which falls back to the sum of the
+children when the box has no height of its own. `getBoundingClientRect` used the
+raw dimensions and skipped that fallback, so a div holding three lines of text
+reported **54 of computed height, 54 of clientHeight, 54 of offsetHeight and 0 of
+rect height**. With padding and a border, 66 against 30. Another pair no browser
+produces.
+
+And every visible child counted toward the stack, including the ones that are not
+in it. A floated, `absolute` or `fixed` child does not contribute — a block
+holding only one of those is 0 tall — while `relative`, `sticky`, `inline` and
+`inline-block` children do, which is the half a "position is not static" test
+would get wrong.
+
+The float is why that is three states and not two: **a float is out of its
+parent's height and still inside the parent's scrollable overflow**, so a block
+holding one reads 0 of clientHeight and 18 of scrollHeight. An `absolute` child is
+out of both (`scratch/expr-out-of-flow-stack.js`).
+
+### What this did not close
+
+The verification pass measured a block whose children are *inline*, and that is a
+whole formatting context rather than a loose end — **fourteen of twenty shapes
+disagree** (`scratch/expr-inline-content-lines.js`), so it is recorded here as
+the next thing to build rather than folded in:
+
+| shape | Chrome | here |
+|---|---|---|
+| `a<br>b` | 36 | 0 |
+| `a<br>b<br>c` | 54 | 0 |
+| `<br>` alone | 18 | 0 |
+| `<span>a</span><span>b</span>` | 18 (one line) | 36 (stacked) |
+| `<span style="line-height:30px">a</span>` | 30 | 18 |
+| `a<div>b</div>` | 36 | 18 |
+| `a<div>b</div>c` | 54 | 18 |
+| a `<span>` of forty words in 100px | 360 | 18 |
+| `a<img width=40 height=30>b` | 34 | 30 |
+
+`textLayout` bails on any element child, so a `<br>` — two lines in every browser
+— had no text height at all and fell back to the child stack, which for a `<br>`
+is nothing. The two directions in that table are the point: we stack two spans
+that Chrome puts on one line, and we put on one line the wrapped span Chrome
+gives 360. Neither is a patch to the other.
+
+Four smaller ones, each measured and each needing its own decision:
+
+* **scrollWidth sums the children as a ROW.** `contentWidth` says so in its own
+  comment, so a stack of three 400px children answers 1200 where Chrome answers
+  400 (and 760 against 390 for a padded one). The row sum is what lets a page
+  that appends nodes until a width threshold terminate, so changing it needs
+  measurements of what that sum is actually for.
+* **adjacent sibling margins collapse.** Two 18px children with `margin:10px 0`
+  put their parent at 46 in Chrome and 36 here: 36 of content plus the one
+  collapsed 10 between them, the outer two collapsing out of the parent.
+* **`display:none` keeps `transform-origin: 50% 50%`** rather than resolving
+  against a box. Chrome answers the percentages verbatim; this engine answers
+  `0px 0px`.
+* **an `<img>` whose src 404s** is 0 in this build of Chrome, where this engine
+  draws the 16px broken-image icon that bot.sannysoft.com's "Broken Image
+  Dimensions" row reads. Left alone rather than traded for the other.
+
+### The sweep, and the three-station drop that was not one
+
+Both arms ReleaseFast, 29 stations, same route, thirteen minutes apart:
+
+| | base `dev.1502+6d316fafb` | patched `dev.1513+4e519df7e` |
+|---|---|---|
+| stations open | 22 | 19 |
+
+The three that differ are all DataDome — `dd-datadome`, `dd-leboncoin`,
+`dd-hermes`, each `pass` on the base column and `datadome-challenge` on the
+patched one. The other 26 are identical station by station, including the three
+real gaps (`cf-scrapingcourse`, `dd-saks`, `x-hyatt`), which stayed shut on both.
+
+That is the shape a regression has, and it is also the shape this station group's
+hourly window has, so the two were separated with a symmetric control rather than
+an argument: **six alternating rounds over the eight `dd-` stations, both arms,
+sharing the same hour, printing each binary's version string on every row.**
+
+Every one of the six came out 2 of 8, station for station. `dd-datadome`,
+`dd-leboncoin` and `dd-hermes` were challenged on the **base** binary in all
+three of its rounds — the same binary that had served all three forty minutes
+earlier — while `dd-etsy` and `dd-seloger` passed on both arms throughout. So the
+drop is the hour and not the diff.
+
+Three things about the apparatus that are the reusable part:
+
+* the log prints each binary's `version`, never the arm's label. A previous baton
+  wrote `for arm in $arms` in **zsh**, which does not word-split an unquoted
+  scalar, and ran nine "comparisons" on one binary while the log said "patched"
+  for half of them. A label can lie; `dev.1502+6d316fafb` cannot.
+* the alternation is what makes the control symmetric. Running base then patched
+  once each cannot distinguish the engine from the hour, however many stations it
+  covers, because the two columns are never in the same hour.
+* the patched binary's version changed between round 1 and round 2 (a rebuild
+  landed mid-run: `dev.1513+4e519df7e` then `dev.1514+82a1875c9`). Both are the
+  patched arm and both read 2 of 8, so it costs nothing here — but it is visible
+  in the log precisely because the version is printed, which is the point.
+
+No station opened. Six of the seven closed doors on the base column are ones
+headed Chrome cannot open either; the three that are real gaps were unmoved. This
+plan closed 33 of 34 readings on the empty-element probe, took layout-box-shapes
+from 221 of 257 to 243, and left the door count where it found it.
