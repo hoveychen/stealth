@@ -4856,6 +4856,10 @@ test "WebApi: CSSStyleDeclaration specified precision" {
     try testing.htmlRunner("css/specified_precision.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration block height" {
+    try testing.htmlRunner("css/block_height.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration default display" {
     try testing.htmlRunner("css/default_display.html", .{});
 }

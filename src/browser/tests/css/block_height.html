@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A block-level box with nothing in it is 0px tall. This engine answered 5px --
+the placeholder `dimensionsAt` starts every measurement at, leaking straight out
+through getComputedStyle, clientHeight, offsetHeight and getBoundingClientRect.
+5px is not a number a browser ever reports for an empty <div>, so one reading
+separated the engine from every real one.
+
+"Nothing in it" includes three shapes, all measured on Chrome 151 with
+tools/fingerprint/scratch/expr-block-height.js:
+
+  * no children at all, and a comment-only child, which is not content;
+  * a child that is only whitespace -- there is no line box, because collapsible
+    whitespace with nothing beside it collapses away entirely. This engine gave
+    it a full 18px line, which is the opposite mistake to the placeholder;
+  * a child block that is itself empty, which contributes its own 0.
+
+`transform-origin` is asserted beside each height because it is the reading that
+carries the mistake at half strength -- `952px 2.5px` for a box the page can see
+is 0 tall -- and it is read by the Cloudflare challenge in the same sweep as the
+height.
+-->
+
+<script id=empty_block_is_zero_tall>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (inner) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="width:400px">' + inner + '</div>';
+    host.appendChild(wrap);
+    const el = wrap.firstElementChild.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [cs.height, el.clientHeight, el.offsetHeight,
+                 el.getBoundingClientRect().height, cs.transformOrigin].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // inner html, then: computed height, clientHeight, offsetHeight, rect, origin
+  const CASES = [
+    ['<div data-m></div>', '0px 0 0 0 200px 0px'],
+    ['<div data-m><!-- c --></div>', '0px 0 0 0 200px 0px'],
+    // Collapsible whitespace with nothing beside it makes no line box.
+    ['<div data-m> </div>', '0px 0 0 0 200px 0px'],
+    // An empty child block contributes its own nothing.
+    ['<div data-m><div></div></div>', '0px 0 0 0 200px 0px'],
+    // The neighbours that must NOT become 0 on the way: one line of text is a
+    // line box, and a declared height is the declaration.
+    ['<div data-m>x</div>', '18px 18 18 18 200px 9px'],
+    ['<div data-m style="height:77px">x</div>', '77px 77 77 77 200px 38.5px'],
+    // ...including a declared zero, which was already right and stays right.
+    ['<div data-m style="height:0">x</div>', '0px 0 0 0 200px 0px'],
+    // Padding is outside the content height, so an empty padded box is 0 of
+    // content and 20 of client. A border is outside the CLIENT box too, which
+    // is why the bordered one answers 0 of content, 0 of client and 10 of
+    // offset -- three different numbers off one empty element.
+    ['<div data-m style="padding:10px"></div>', '0px 20 20 20 200px 10px'],
+    ['<div data-m style="border:5px solid"></div>', '0px 0 10 10 200px 5px'],
+  ];
+
+  const wrong = [];
+  for (const [inner, want] of CASES) {
+    const got = measure(inner);
+    if (got !== want) wrong.push(inner + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
