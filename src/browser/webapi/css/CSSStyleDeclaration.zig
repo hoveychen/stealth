@@ -709,6 +709,71 @@ fn percentageOfTheBox(property_name: []const u8) bool {
         std.mem.eql(u8, property_name, "block-size");
 }
 
+/// What a position keyword computes to, or null when this property has no
+/// position keywords or the token is not one.
+///
+/// A position keyword is shorthand for one of three percentages -- `left` and
+/// `top` for 0%, `center` for 50%, `right` and `bottom` for 100% -- and Chrome's
+/// computed style prints the percentage: `background-position: left 30%` is
+/// `0% 30%` and not `left 30%`. Measured on Chrome 151, twenty-three readings
+/// over background-position, its two longhands and object-position
+/// (css/computed_position_keywords.html asserts all of them).
+///
+/// Which axis a keyword takes is NOT decided here for the two-token form, and
+/// does not need to be: this engine's `background-position` expansion already
+/// assigns them, so `30% center` arrives as `30%` then `center` and `center 30%`
+/// as `center` then `30%`. The same word is vertical in the first and horizontal
+/// in the second, and both come out right because the percentage is the same
+/// either way. That is what makes this a token map rather than a grammar.
+///
+/// The ONE-token form does need the axis, and only `object-position` reaches
+/// here with one: `background-position` has already grown its second axis by
+/// then. See twoAxisPosition.
+///
+/// Gated on the property, because the rule is about POSITION keywords and not
+/// about keywords: `vertical-align: top` stays `top` and `background-size: cover`
+/// stays `cover`. Both are assertions, so a later widening of this list cannot
+/// take them with it.
+///
+/// `mask-position` is deliberately absent even though the same rule applies to
+/// it: measured, it never reaches this path -- `mask-position: left` still comes
+/// out `left center` with this map in place, and `mask-position: 30%` comes out
+/// `0% center`, wrong in the first slot too. It has an expansion of its own with
+/// a defect of its own, recorded rather than papered over by a name here that
+/// would do nothing.
+fn positionKeywordPercentage(property_name: []const u8, token: []const u8) ?[]const u8 {
+    const PROPERTIES = std.StaticStringMap(void).initComptime(.{
+        .{ "background-position", {} },
+        .{ "background-position-x", {} },
+        .{ "background-position-y", {} },
+        .{ "object-position", {} },
+    });
+    if (!PROPERTIES.has(property_name)) return null;
+
+    if (std.ascii.eqlIgnoreCase(token, "left") or std.ascii.eqlIgnoreCase(token, "top")) {
+        return "0%";
+    }
+    if (std.ascii.eqlIgnoreCase(token, "center")) return "50%";
+    if (std.ascii.eqlIgnoreCase(token, "right") or std.ascii.eqlIgnoreCase(token, "bottom")) {
+        return "100%";
+    }
+    return null;
+}
+
+/// The position properties that always print BOTH axes, so a one-value
+/// declaration grows the axis it left out. Measured on Chrome 151:
+/// `object-position: left` is `0% 50%`, `top` is `50% 0%`, `30%` is `30% 50%`,
+/// `2em` is `32px 50%` and `10px` is `10px 50%` -- the missing axis is always
+/// 50%, and only `top` and `bottom` take the second slot, being the two keywords
+/// that name the vertical axis and nothing else.
+///
+/// `background-position` is not in the list because it never arrives here with
+/// one token: its own expansion has already made the pair, and all three of the
+/// length forms above were measured coming out right through it.
+fn twoAxisPosition(property_name: []const u8) bool {
+    return std.mem.eql(u8, property_name, "object-position");
+}
+
 /// The px a computed style reports for a declaration written in some other
 /// length unit, or null when nothing here needed converting and the value can go
 /// through as it stands.
@@ -740,6 +805,18 @@ fn computedLengthText(style_manager: *StyleManager, element: *Element, property_
     var first = true;
     // Whether the whole value is the one token `specified` was taken from.
     const single_token = std.mem.indexOfAny(u8, trimmed, &std.ascii.whitespace) == null;
+    // One or two tokens, which is the only shape the position keyword map is
+    // measured for: `background-position` also takes a three- and four-value
+    // form (`left 10px top 20px`) whose computed value nobody has measured here,
+    // and mapping its keywords word by word would turn it into a four-value list
+    // of percentages that Chrome does not print. Those go through untouched, the
+    // same as before.
+    const single_or_pair = blk: {
+        var count: usize = 0;
+        var walk = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
+        while (walk.next()) |_| count += 1;
+        break :blk count <= 2;
+    };
     var it = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
     while (it.next()) |token| {
         if (!first) writer.writeByte(' ') catch return null;
@@ -751,6 +828,15 @@ fn computedLengthText(style_manager: *StyleManager, element: *Element, property_
             if (std.ascii.isDigit(c)) break true;
         } else false;
         if (!numeric) {
+            // A position keyword IS a percentage, so it converts here rather
+            // than going through untouched. See positionKeywordPercentage.
+            if (single_or_pair) {
+                if (positionKeywordPercentage(property_name, token)) |pct| {
+                    writer.writeAll(pct) catch return null;
+                    converted = true;
+                    continue;
+                }
+            }
             writer.writeAll(token) catch return null;
             continue;
         }
@@ -783,6 +869,25 @@ fn computedLengthText(style_manager: *StyleManager, element: *Element, property_
             },
         }
     }
+    // A one-value `object-position` prints both axes, with the one it left out
+    // as 50%. `top` and `bottom` are the two keywords that name the vertical
+    // axis and nothing else, so they take the second slot; everything else --
+    // keyword, percentage or length -- takes the first. See twoAxisPosition.
+    if (single_token and twoAxisPosition(property_name)) {
+        const one = buf.written();
+        var pair = std.Io.Writer.Allocating.init(frame.call_arena);
+        const vertical_only = std.ascii.eqlIgnoreCase(trimmed, "top") or
+            std.ascii.eqlIgnoreCase(trimmed, "bottom");
+        if (vertical_only) {
+            pair.writer.writeAll("50% ") catch return null;
+            pair.writer.writeAll(one) catch return null;
+        } else {
+            pair.writer.writeAll(one) catch return null;
+            pair.writer.writeAll(" 50%") catch return null;
+        }
+        return pair.written();
+    }
+
     if (!converted) return null;
     return buf.written();
 }
@@ -5181,4 +5286,8 @@ test "WebApi: CSSStyleDeclaration unrendered percentages" {
 
 test "WebApi: CSSStyleDeclaration percentage kept" {
     try testing.htmlRunner("css/computed_percentage_kept.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration position keywords" {
+    try testing.htmlRunner("css/computed_position_keywords.html", .{});
 }
