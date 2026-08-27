@@ -1004,9 +1004,7 @@ fn usedBorderWidth(
         // on Chrome 151 (tools/fingerprint/scratch/expr-empty-edges.js): input
         // and button and iframe and fieldset 2px, textarea and select and hr
         // 1px.
-        const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse
-            chrome_per_tag_values.unknown_tag;
-        if (rows.get(name)) |value| break :found value;
+        if (uaValue(element, name)) |value| break :found value;
 
         // Nothing written and no UA rule: `medium`.
         return "3px";
@@ -1393,10 +1391,36 @@ pub fn isInlineBox(element: *Element, frame: *Frame) bool {
     };
 }
 
+/// What Chrome's UA stylesheet gives this element for a property the page did
+/// not declare, or null when the sheet says nothing about it either.
+///
+/// The layout's own readers -- paddingPx, borderPx, usesBorderBox, the used
+/// border width -- asked the cascade and stopped, and the cascade is the AUTHOR's
+/// only. So the box the layout built never saw the UA sheet, while the computed
+/// style beside it did (through getDefaultPropertyValue, which reaches this same
+/// table). Measured on Chrome 151 with
+/// tools/fingerprint/scratch/expr-empty-edges.js, what that cost:
+///
+///   * a <ul> kept its 40px padding-inline-start inside the content box, so its
+///     computed width was the whole 400px line and not 360;
+///   * an <iframe> and an <hr> drew no default border, so an iframe's offsetWidth
+///     was 300 against Chrome's 304 and an <hr> was 0 tall where Chrome is 2;
+///   * a <button>, whose entire 16x6 box IS padding and border around a 0x0
+///     content box, came out 0 by 0;
+///   * a <select> declared `width:100px` reported a clientWidth of 100 against
+///     Chrome's 98, because `box-sizing: border-box` is a UA rule for it and the
+///     1px border it takes off was invisible here too.
+fn uaValue(element: *Element, name: []const u8) ?[]const u8 {
+    const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse
+        chrome_per_tag_values.unknown_tag;
+    return rows.get(name);
+}
+
 pub fn usesBorderBox(element: *Element, frame: *Frame) bool {
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    const declared = cascadedKeyword(style_manager, element, "box-sizing") orelse return false;
-    return std.ascii.eqlIgnoreCase(declared, "border-box");
+    const declared = cascadedKeyword(style_manager, element, "box-sizing") orelse
+        uaValue(element, "box-sizing") orelse return false;
+    return std.ascii.eqlIgnoreCase(std.mem.trim(u8, declared, &std.ascii.whitespace), "border-box");
 }
 
 /// One border's used width in px. `side` is the stem, so `border-left` reads
@@ -1405,7 +1429,11 @@ pub fn usesBorderBox(element: *Element, frame: *Frame) bool {
 /// (3px), and the keywords resolve to 1, 3 and 5.
 fn borderPx(element: *Element, comptime side: []const u8, frame: *Frame) f64 {
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    const style = cascadedKeyword(style_manager, element, side ++ "-style") orelse "none";
+    // The UA sheet before `none`: an <iframe> draws a 2px inset border and an
+    // <hr> a 1px one with nothing declared, and this asked the author cascade
+    // only -- so the layout saw no border on either. See uaValue.
+    const style = cascadedKeyword(style_manager, element, side ++ "-style") orelse
+        uaValue(element, side ++ "-style") orelse "none";
     const width_name = side ++ "-width";
     const used = usedBorderWidth(element, width_name, .wrap(width_name), style, frame);
     const parsed = units.parse(used) catch return 0;
@@ -1508,7 +1536,10 @@ fn usedLengthText(value: []const u8, specified: ?f64, frame: *Frame) ?[]const u8
 /// engine cannot finish resolving what it did declare. Percentages are already
 /// px by here for the properties that resolve them.
 fn computedPx(element: *Element, name: []const u8, frame: *Frame) f64 {
-    const declared = cascadedComputedValue(element, name, frame) orelse return 0;
+    // The UA sheet counts here too, which is what a <ul>'s 40px
+    // padding-inline-start and an <input>'s `1px 2px` ride in on. See uaValue.
+    const declared = cascadedComputedValue(element, name, frame) orelse
+        uaValue(element, name) orelse return 0;
     const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return 0;
     return switch (parsed.unit) {
         // The author's number rather than the six figures it printed to, when

@@ -135,3 +135,135 @@ blank. A guard that reads both at once sees a 5px-wide box that is 400px wide.
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<!--
+An empty element's size is not one number. Chrome's answers fall into groups and
+a blanket 0 is wrong for eleven of the twenty tags measured, so this is the table
+rather than a rule. Measured on Chrome 151 with
+tools/fingerprint/scratch/expr-five-sentinel.js and expr-empty-edges.js, inside
+a 400px-wide block.
+
+Three separate things decide a row:
+
+  * an intrinsic CONTENT box -- 300x150 for the replaced elements, and one
+    number per form control (`<input>` is 145x15, `<textarea>` 177x30);
+  * the UA stylesheet's padding and border, which this engine's layout could not
+    see at all: `paddingPx` and `borderPx` asked the author cascade and stopped,
+    so <ul> lost its 40px padding-inline-start, <iframe> and <hr> their default
+    borders, and <button> -- whose whole 16x6 box is padding and border around a
+    0x0 content box -- came out 0;
+  * `box-sizing: border-box`, which <select> and <button> carry from the UA
+    sheet, and which makes the resolved `width` the BORDER box: an empty select
+    reports 22px of computed width beside 20 of clientWidth, and both are right.
+    Measured against a plain div declared border-box, which answers the same way
+    (scratch/expr-border-box-resolved.js).
+-->
+
+<script id=empty_element_intrinsic_box>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (tag) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<' + tag + '></' + tag + '>';
+    host.appendChild(wrap);
+    const el = wrap.firstElementChild;
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const out = [cs.width, cs.height, el.clientWidth, el.clientHeight,
+                 el.offsetWidth, el.offsetHeight, r.width, r.height].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // tag, then: computed w/h, client w/h, offset w/h, rect w/h
+  const CASES = [
+    // A block that fills its line and holds nothing is 0 tall.
+    ['div', '400px 0px 400 0 400 0 400 0'],
+    ['p', '400px 0px 400 0 400 0 400 0'],
+    ['section', '400px 0px 400 0 400 0 400 0'],
+    // ...less its own UA padding, which comes off the content and stays in the
+    // client box: 40px of padding-inline-start on a <ul>.
+    ['ul', '360px 0px 400 0 400 0 400 0'],
+    // Shrink-to-fit and empty: nothing at all.
+    ['table', '0px 0px 0 0 0 0 0 0'],
+    // An <img> with NO src is 0, which is the opposite of the broken-image icon
+    // this engine models -- that icon is for an src that failed to load.
+    ['img', '0px 0px 0 0 0 0 0 0'],
+    // The replaced default is 300x150 with no attributes at all.
+    ['canvas', '300px 150px 300 150 300 150 300 150'],
+    ['video', '300px 150px 300 150 300 150 300 150'],
+    ['object', '300px 150px 300 150 300 150 300 150'],
+    // ...and an <iframe> adds its 2px default border, which is outside the
+    // client box: 300 of content and 304 of offset.
+    ['iframe', '300px 150px 300 150 304 154 304 154'],
+    // A form control's size is its own, and no two are alike.
+    ['input', '145px 15px 149 17 153 21 153 21'],
+    ['textarea', '177px 30px 181 34 183 36 183 36'],
+    ['select', '22px 19px 20 17 22 19 22 19'],
+    ['button', '16px 6px 12 2 16 6 16 6'],
+    ['progress', '160px 16px 160 16 160 16 160 16'],
+    ['meter', '80px 16px 80 16 80 16 80 16'],
+    // An <hr> fills the line as a BORDER box, so its 1px border comes off the
+    // content: 398 of content and 400 of offset, 0 tall and 2 of offset.
+    ['hr', '398px 0px 398 0 400 2 400 2'],
+    // A non-replaced inline box has no CSS box: `auto`, and 0 everywhere.
+    ['span', 'auto auto 0 0 0 0 0 0'],
+  ];
+
+  const wrong = [];
+  for (const [tag, want] of CASES) {
+    const got = measure(tag);
+    if (got !== want) wrong.push(tag + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+Two shapes an offsetWidth cannot express, kept apart from the table above.
+
+`<svg>` is 300x150 like the other replaced elements, but SVGElement has no
+offsetWidth or offsetHeight at all in Chrome -- reading one is `undefined`, and
+an engine that answers a number there is telling on itself.
+
+`<br>` has no box: 0 of client and 0 of offset. Its getBoundingClientRect is the
+LINE it breaks, though -- 0 wide and 18 tall -- which is the one reading that
+sees it. Both measured, scratch/expr-five-sentinel.js.
+-->
+
+<script id=empty_element_without_offset_box>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const wrong = [];
+
+  host.innerHTML = '<svg></svg>';
+  const svg = host.firstElementChild;
+  const svgCs = getComputedStyle(svg);
+  const svgGot = [svgCs.width, svgCs.height, svg.clientWidth, svg.clientHeight,
+                  svg.getBoundingClientRect().width,
+                  svg.getBoundingClientRect().height,
+                  typeof svg.offsetWidth].join(' ');
+  if (svgGot !== '300px 150px 300 150 300 150 undefined') {
+    wrong.push('svg: got [' + svgGot + ']');
+  }
+
+  host.innerHTML = '<br>';
+  const br = host.firstElementChild;
+  const brCs = getComputedStyle(br);
+  const brRect = br.getBoundingClientRect();
+  const brGot = [brCs.width, brCs.height, br.clientWidth, br.clientHeight,
+                 br.offsetWidth, br.offsetHeight,
+                 brRect.width, brRect.height].join(' ');
+  if (brGot !== 'auto auto 0 0 0 0 0 18') wrong.push('br: got [' + brGot + ']');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
