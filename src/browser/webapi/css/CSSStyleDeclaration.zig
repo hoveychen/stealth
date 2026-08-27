@@ -632,7 +632,41 @@ fn isFlexBasis(token: []const u8) bool {
 /// computes to `1 1 50%`, so the basis is one of them. Every other percentage
 /// this engine cannot resolve is still refused rather than reported as written.
 fn percentageIsComputedValue(property_name: []const u8) bool {
-    return std.mem.eql(u8, property_name, "flex-basis");
+    const NAMES = std.StaticStringMap(void).initComptime(.{
+        // Resolved against the image at paint time, so the computed value keeps
+        // the percentage.
+        .{ "background-position", {} },
+        .{ "background-position-x", {} },
+        .{ "background-position-y", {} },
+        .{ "background-size", {} },
+        .{ "object-position", {} },
+        .{ "mask-position", {} },
+        // Resolved against the box at LAYOUT time, which is later than computed
+        // value: a percentage radius, translate or inset is reported as written.
+        .{ "border-top-left-radius", {} },
+        .{ "border-top-right-radius", {} },
+        .{ "border-bottom-left-radius", {} },
+        .{ "border-bottom-right-radius", {} },
+        .{ "border-start-start-radius", {} },
+        .{ "border-start-end-radius", {} },
+        .{ "border-end-start-radius", {} },
+        .{ "border-end-end-radius", {} },
+        .{ "translate", {} },
+        .{ "top", {} },
+        .{ "right", {} },
+        .{ "bottom", {} },
+        .{ "left", {} },
+        .{ "inset-block-start", {} },
+        .{ "inset-block-end", {} },
+        .{ "inset-inline-start", {} },
+        .{ "inset-inline-end", {} },
+        // Resolved against the line box, likewise later.
+        .{ "vertical-align", {} },
+        .{ "text-indent", {} },
+        // Resolved against the flex line by the flex container.
+        .{ "flex-basis", {} },
+    });
+    return NAMES.has(property_name);
 }
 
 /// Whether a percentage on this property stays a percentage for THIS element,
@@ -5143,4 +5177,8 @@ test "WebApi: CSSStyleDeclaration computed relative units" {
 
 test "WebApi: CSSStyleDeclaration unrendered percentages" {
     try testing.htmlRunner("css/computed_unrendered_percentages.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration percentage kept" {
+    try testing.htmlRunner("css/computed_percentage_kept.html", .{});
 }
