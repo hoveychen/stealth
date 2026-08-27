@@ -17959,3 +17959,46 @@ is stored as `bold`, not 700) with the twelve the grammar never names reset to
 their initials. `font: 13px`, `font: 1001 16px serif` and `font: bold inherit
 serif` all leave **zero** entries — an invalid `font` is refused outright, where
 this engine keeps one. That is the `font-shorthand-cascade` plan.
+
+### The sweep says 22 against 19, and the baseline says why not to believe it
+
+One sweep per arm, both ReleaseFast off the same base, separate ports, the
+engine's `version` recorded in each reading rather than a label: base
+(`dev.1526+7b3d9b485`) 22/29, patched (`dev.1533+8cad43eda`) 19/29. Three
+stations differ and all three are DataDome — dd-datadome, dd-leboncoin,
+dd-hermes, each `pass` on base and `datadome-challenge` on patched.
+
+That is the shape a regression makes, and it is not one. Eight more runs at
+`--only dd-`, alternating the arms in both orders:
+
+| run | arm (by version) | dd-datadome | dd-leboncoin | dd-hermes |
+|---|---|---|---|---|
+| first sweep | base | pass | pass | pass |
+| r1 | base | challenge | challenge | challenge |
+| r1 | patched | challenge | empty-document | challenge |
+| r1b | patched | challenge | challenge | challenge |
+| r1b | base | challenge | challenge | challenge |
+| r2 | base | challenge | challenge | challenge |
+| r2 | patched | challenge | **pass** | challenge |
+| r2b | patched | challenge | challenge | challenge |
+| r2b | base | challenge | challenge | challenge |
+
+Two readings settle it. **The base binary — byte-identical, unchanged code —
+passed all three in the first sweep and then failed all three in four
+consecutive later runs.** And the patched binary *passed* dd-leboncoin in a
+later round, which a regression cannot do. The window closed between the first
+sweep and the second, and it closed on both arms.
+
+This is the third independent confirmation of the same station behaviour: the
+session working on `block-height-from-content` measured base 22/29 and patched
+19/29 for a completely unrelated change (vertical line boxes) at a different
+hour, and lost the same three stations in the same direction. Two unrelated
+changes cannot both break exactly dd-datadome, dd-leboncoin and dd-hermes and
+nothing else.
+
+So the discipline that matters is the one that produced the table, not the
+verdict: a single-sample A/B across these three stations will manufacture a
+regression or a win on demand, and the only reading that means anything is the
+one where **the control arm is re-run inside the same window**. Print the
+binary's `version` on every row — a label will happily say "base" while running
+the other binary.
