@@ -2204,6 +2204,47 @@ pub fn horizontalMargin(self: *Element, frame: *Frame, containing: *?f64, depth:
     return total;
 }
 
+/// The CONTENT box an element has because of what it is rather than what it
+/// holds, for one that declares no size. Null for a tag whose empty box is
+/// nothing at all -- a div, a table, an <img> with no src -- which is the
+/// majority and which `null` at the end of dimensionsAt already answers as 0.
+///
+/// Measured on Chrome 151 with tools/fingerprint/scratch/expr-empty-intrinsic.js,
+/// expr-five-sentinel.js and expr-replaced-intrinsic.js, in a 400px line. Not a
+/// rule with exceptions -- twenty tags fell into four groups and a blanket 0
+/// would be wrong for eleven of them -- so it is the table:
+///
+///   * `canvas`, `video`, `object`, `svg` and `iframe` are 300x150, the replaced
+///     default, with no attributes and no rules at all;
+///   * a form control's size is its own and no two are alike. These are content
+///     boxes, so the UA padding and border add on top: an `<input>` is 145x15 of
+///     content, 149x17 of client and 153x21 of offset, and a `<select>` is
+///     20x17, 20x17 and 22x19 -- and 22x19 of computed size too, because
+///     `box-sizing: border-box` is a UA rule for it;
+///   * `button` is deliberately absent. Its whole 16x6 box is the UA padding and
+///     border around a 0x0 content box -- forcing it to content-box computes
+///     `0px` of width in Chrome, measured -- so it needs no entry, only the UA
+///     edges the layout can now see.
+///
+/// One measured gap left out on purpose, because it is a different feature: a
+/// `<canvas>` has an intrinsic RATIO from its buffer, so `width:600px` on a bare
+/// one makes it 300 tall in Chrome and 150 here, and `<canvas width=400
+/// height=100 style="height:50px">` is 200 wide. `video`, `object` and `svg`
+/// have no such ratio -- each keeps its 300 or its 150 when the other axis is
+/// declared, and an `<svg viewBox="0 0 40 10">` at 600px wide is still 150 tall.
+/// All four measured (expr-replaced-intrinsic.js and the ratio probe beside it).
+fn intrinsicBox(tag: Tag) ?struct { width: f64, height: f64 } {
+    return switch (tag) {
+        .canvas, .video, .object, .svg, .iframe => .{ .width = 300, .height = 150 },
+        .input => .{ .width = 145, .height = 15 },
+        .textarea => .{ .width = 177, .height = 30 },
+        .select => .{ .width = 20, .height = 17 },
+        .progress => .{ .width = 160, .height = 16 },
+        .meter => .{ .width = 80, .height = 16 },
+        else => null,
+    };
+}
+
 /// `distribute_flex` is how a flex item's own share of its line is kept from
 /// recursing: measuring one item's flex base size asks its siblings for theirs,
 /// and a sibling asked with the distribution still on would ask back.
@@ -2364,7 +2405,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
             const inset: f64 = if (tag == .body) 2 * body_ua_margin else 0;
             if (width == null) width = @max(0, box.width - inset);
             if (height == null) height = @max(0, box.height - inset);
-        } else if (tag == .img or tag == .iframe) {
+        } else if (tag == .img or intrinsicBox(tag) != null) {
             if (width == null) {
                 if (self.getAttributeSafe(comptime .wrap("width"))) |w| {
                     if (std.fmt.parseFloat(f64, w)) |parsed| {
@@ -2392,14 +2433,14 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
                 if (height == null) height = broken_image_icon_size;
             }
 
-            // An <iframe> that declares no size is 300x150, which is the UA
-            // stylesheet's rule and not a placeholder. It matters more than it
-            // looks: the branch above hands a child document this box, so the
-            // generic 5x5 fallback would make every undeclared iframe's <body>
-            // report 0px once the margins came off.
-            if (tag == .iframe) {
-                if (width == null) width = 300.0;
-                if (height == null) height = 150.0;
+            // Whatever is still open is the box this element has because of what
+            // it IS. It matters more than it looks for an <iframe>: the
+            // html/body branch above hands a child document this box, so a
+            // fallback of 0 would make every undeclared iframe's <body> report
+            // 0px once the UA margins came off.
+            if (intrinsicBox(tag)) |box| {
+                if (width == null) width = box.width;
+                if (height == null) height = box.height;
             }
         } else if (measure_text_width and width == null and depth < MAX_CONTAINING_BLOCK_DEPTH) {
             // A block-level box in normal flow is as wide as its containing
@@ -2556,7 +2597,19 @@ fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.
     // reports: measured, a `padding:10px;border:5px solid` float is 8px of
     // content, 28 of clientWidth and 38 of both offsetWidth and rect width.
     const width = dims.width + dims.padding_x + dims.border_x;
-    const height = dims.height + dims.padding_y + dims.border_y;
+    var height = dims.height + dims.padding_y + dims.border_y;
+
+    // A <br> is the one element whose rect is not the box offsetHeight reports.
+    // It has no box at all -- 0 of clientHeight and 0 of offsetHeight, measured
+    // -- but its rect is the LINE it breaks: 0 wide and 18 tall on the default
+    // font, which is the only reading that sees it. Chrome 151, measured with
+    // tools/fingerprint/scratch/expr-five-sentinel.js, beside an empty <span>
+    // whose rect IS 0 by 0 -- so this is a <br> and not inline boxes in general.
+    if (self.getTag() == .br) {
+        const font = self.resolveFont(frame);
+        const box = font_metrics.boundingBox(font.family, font.size);
+        height = @round(box.ascent + box.descent);
+    }
 
     // An out-of-flow box is placed by its own declaration, which is the half of
     // positioning this engine can compute exactly.
