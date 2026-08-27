@@ -406,3 +406,84 @@ page that sets `white-space: pre` on a wrapper means it for the children.
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<!--
+A line box is worth its `line-height`, and this engine was always worth the
+font's own box: `line-height:30px` on a block holding one character read 18.
+
+The computed VALUE was already right -- getComputedStyle reported `30px`, `32px`,
+`24px` for every form -- so this is only the layout not asking. Measured on
+Chrome 151 with tools/fingerprint/scratch/expr-line-box.js.
+
+Two things the numbers pin down that a rule would not:
+
+  * a fractional line-height lands on the 1/64 layout grid like any other used
+    length: `line-height:1.1` at 16px is 17.6 in arithmetic and 17.59375 on the
+    page, which prints as `17.5938px` and rounds to 18 for clientHeight while
+    getBoundingClientRect keeps the fraction. Two lines of it are 35.1875 -- each
+    line snapped and then summed, not the sum snapped.
+  * `line-height` does NOT reach a non-replaced inline box's offsetHeight: a
+    `<span style="line-height:30px">` is still 18 tall in Chrome, where an
+    `inline-block` with the same declaration is 30. So this belongs to the block
+    path and not to the inline ink.
+-->
+
+<script id=line_box_is_worth_its_line_height>
+{
+  const host = document.createElement('div');
+  host.style.width = '400px';
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const cs = getComputedStyle(el);
+    const out = [cs.height, el.clientHeight, el.offsetHeight,
+                 el.getBoundingClientRect().height].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const CASES = [
+    // A length is the length.
+    ['<div data-m style="line-height:30px">x</div>', '30px 30 30 30'],
+    ['<div data-m style="line-height:10px">x</div>', '10px 10 10 10'],
+    ['<div data-m style="line-height:0">x</div>', '0px 0 0 0'],
+    // A bare number multiplies the font size, and so do a percentage and an em.
+    ['<div data-m style="line-height:2">x</div>', '32px 32 32 32'],
+    ['<div data-m style="line-height:1.5">x</div>', '24px 24 24 24'],
+    ['<div data-m style="line-height:200%">x</div>', '32px 32 32 32'],
+    ['<div data-m style="line-height:2em">x</div>', '32px 32 32 32'],
+    // `normal` is the font's own box, which is what this always answered.
+    ['<div data-m>x</div>', '18px 18 18 18'],
+    ['<div data-m style="line-height:normal">x</div>', '18px 18 18 18'],
+    // The font size and the line-height are separate inputs.
+    ['<div data-m style="font-size:32px">x</div>', '37px 37 37 37'],
+    ['<div data-m style="font-size:32px;line-height:1">x</div>', '32px 32 32 32'],
+    ['<div data-m style="font-size:32px;line-height:40px">x</div>', '40px 40 40 40'],
+    // Inherited from the wrapper, which is where a page usually sets it.
+    ['<div style="line-height:30px"><div data-m>x</div></div>', '30px 30 30 30'],
+    // On the 1/64 grid, and rounded only where clientHeight rounds.
+    ['<div data-m style="line-height:1.1">x</div>', '17.5938px 18 18 17.59375'],
+    ['<div data-m style="line-height:17.3px">x</div>', '17.2969px 17 17 17.296875'],
+    ['<div data-m style="line-height:17.5px">x</div>', '17.5px 18 18 17.5'],
+    // A declared height still wins over any of it.
+    ['<div data-m style="line-height:30px;height:7px">x</div>', '7px 7 7 7'],
+    // The inline controls: an inline box keeps the font box, an inline-block
+    // does not.
+    ['<span data-m style="line-height:30px">x</span>', 'auto 0 18 18'],
+    ['<div data-m style="display:inline-block;line-height:30px">x</div>',
+     '30px 30 30 30'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

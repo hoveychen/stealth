@@ -1912,11 +1912,41 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool) ?struct { widt
         }
     }
 
-    const box = font_metrics.boundingBox(font.family, font.size);
-
     // offsetWidth is an integer; getBoundingClientRect keeps the fraction, but
     // this engine has one dimension model behind both.
-    return .{ .width = @round(width), .height = @round(box.ascent + box.descent) };
+    return .{ .width = @round(width), .height = self.lineBoxHeight(frame, font.family, font.size) };
+}
+
+/// What one line box is worth: the computed `line-height` when the cascade or the
+/// UA sheet gives one, and the font's own box when it is `normal`.
+///
+/// This engine was always worth the font box, so `line-height:30px` on a block
+/// holding one character read 18 -- while the computed VALUE beside it already
+/// said `30px`, because the computed path has resolved line-height for as long
+/// as it has existed. Only the layout was not asking. Measured on Chrome 151
+/// with tools/fingerprint/scratch/expr-line-box.js over thirteen forms: a
+/// length, a bare number, a percentage and an em, each against two font sizes,
+/// and inherited from a wrapper.
+///
+/// cascadedComputedLength answers all of those as one number because
+/// `lengthFactor` already knows line-height is the one property where a bare
+/// number is a multiple of the font size, and because `normal` is not a length
+/// token and so falls through as null.
+///
+/// On the grid, like any other used length: `line-height:1.1` at 16px is 17.6 in
+/// arithmetic and 17.59375 on the page, and two lines of it are 35.1875 -- each
+/// line snapped and then summed, not the sum snapped. Measured.
+///
+/// Not asked for a non-replaced inline box, which keeps the font box: a `<span
+/// style="line-height:30px">` is 18 tall in Chrome where an `inline-block` with
+/// the same declaration is 30. That is why this sits under textLayout and not
+/// under inlineInk.
+fn lineBoxHeight(self: *Element, frame: *Frame, family: font_metrics.Family, size: f64) f64 {
+    if (CSSStyleDeclaration.cascadedComputedLength(self, "line-height", frame)) |px| {
+        return layoutUnit(@max(0, px));
+    }
+    const box = font_metrics.boundingBox(family, size);
+    return @round(box.ascent + box.descent);
 }
 
 /// The narrowest box this element's text can be laid out in: its longest
