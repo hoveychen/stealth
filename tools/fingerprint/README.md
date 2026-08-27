@@ -18640,3 +18640,38 @@ about — so this compares what is *there*, not what is missing:
 The two tokens the widget computes from the collected values are the same
 length on both arms; the device token is not. That is where the next session
 should point the oracle.
+
+### Two controls, and what they leave
+
+The oracle is cheap enough to spend on controls, which is the first thing it was
+spent on.
+
+**The same engine gets a ticket from Kasada — just not from this deployment.**
+Pointed at ks-canadagoose, the station this engine already passes:
+
+```
+lightpanda run 1: doc=429->200->200->200->400->200  tl=200 cr=true r=1-B1NOV3w
+lightpanda run 2: doc=429->200->200->200->400->200  tl=200 cr=true r=1-B1R1UWQ
+chrome     run 1: doc=429->200->200->400->200       tl=200 cr=true r=1-B1NuAQM
+chrome     run 2: doc=429->200->200->400->200->200  tl=200 cr=true r=1-B1J5ZXI
+```
+
+Both arms are ticketed there, and both are served. So the payload this engine
+builds is not categorically unacceptable to Kasada, and `x-kpsdk-r` is not a
+header only real Chrome ever sees. **x-hyatt refuses this engine specifically**,
+while its sibling deployment does not.
+
+**And it is not headlessness.** Chrome with `--headless=new` and the same user
+agent is ticketed on x-hyatt too:
+
+```
+chrome (headless) run 1: doc=429->200  tl=200 application/json len=15 cr=true r=1-B1NFXVM
+chrome (headless) run 2: doc=429->200  tl=200 application/json len=15 cr=true r=1-B1JOf0Q
+```
+
+So the gap is between this engine and Chrome, on this one deployment, with a
+verdict that costs eleven seconds to read. The obvious next move is the
+difference between what the two deployments' collectors *read*:
+`results/prop-reads-hyatt.json` exists and its canadagoose counterpart does not,
+and the members x-hyatt reaches that canadagoose does not are a much shorter
+list than everything a browser has.

@@ -46,6 +46,11 @@ const runs = Number(arg('--runs', 3));
 const basePort = Number(arg('--port', 9350));
 const target = arg('--url', 'https://www.hyatt.com/');
 const settle = Number(arg('--settle', 11000));
+// Chrome runs headed by default here, because that is the arm the station
+// passes. --headless asks the other question: whether the ticket survives
+// headless, which separates "this engine is missing something" from "anything
+// without a window is missing it".
+const headless = process.argv.includes('--headless');
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const LP = process.env.LP_BIN || path.join(repo, 'zig-out/bin/lightpanda');
@@ -60,7 +65,8 @@ async function once(port) {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'kasada-verdict-'));
     const proc = engine === 'chrome'
         ? spawn(CHROME, [`--remote-debugging-port=${port}`, `--user-data-dir=${tmp}`,
-            '--no-first-run', '--no-default-browser-check', `--user-agent=${UA}`],
+            '--no-first-run', '--no-default-browser-check', `--user-agent=${UA}`,
+            ...(headless ? ['--headless=new'] : [])],
         { stdio: ['ignore', 'pipe', 'pipe'] })
         : spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(port)],
             { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -111,7 +117,7 @@ for (let i = 0; i < runs; i++) {
     const out = await once(basePort + i);
     const tl = out.tl[0];
     const docs = out.documents.map((d) => d.status).join('->') || '(none)';
-    console.log(`${engine} run ${i + 1}: doc=${docs} ` +
+    console.log(`${engine}${headless ? ' (headless)' : ''} run ${i + 1}: doc=${docs} ` +
         (tl
             ? `tl=${tl.status} ${tl.contentType} len=${tl.contentLength} cr=${tl.cr} r=${tl.r ?? '(absent)'}`
             : 'tl=(no POST)'));
