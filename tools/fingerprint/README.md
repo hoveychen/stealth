@@ -18002,3 +18002,98 @@ regression or a win on demand, and the only reading that means anything is the
 one where **the control arm is re-run inside the same window**. Print the
 binary's `version` on every row — a label will happily say "base" while running
 the other binary.
+
+## A line box is not the canvas font box
+
+`line-height: normal` was worth `round(fontBoundingBoxAscent +
+fontBoundingBoxDescent)` from the generated canvas table. Re-measured against
+headed Chrome at `--force-device-scale-factor=1` and `=2` over six families and
+ten sizes (`scratch/expr-font-box-dsf.js`, readings in
+`scratch/b82-fontbox-ch-dsf{1,2}.json`), that sum is exactly the laid-out line at
+scale 1 — sixty of sixty — and it is the line at scale 2 for twenty-six of the
+same sixty:
+
+| family, size | ascent + descent | line box at dpr 2 |
+|---|---|---|
+| serif 16px | 18 | **18.5** |
+| serif 10px | 13 | **11.5** |
+| monospace 20px | 24 | **23** |
+| monospace 8px | 9 | **9.5** |
+| system-ui 12px | 15 | **14** |
+| fantasy 32px | 49 | **49.5** |
+
+The `serif 10px` row is why this is measured rather than modelled. Half-pixel
+rounding of each half onto the device pixel can move a sum by at most one; that
+row moves by one and a half.
+
+**The canvas font box does not move with the device scale at all, and neither
+does anything else in `font_metrics.zig`.** That is not an inference from the
+sixty pairs — the whole file was regenerated at scale 1 and at scale 2 and the
+two outputs are byte-identical, 182 faces of glyph advances, ink bearings,
+ascents, descents, last-resort seeds and fallback overrides. So the canvas half
+was right where it is read, and only the layout half was wrong.
+
+### Three boxes, not two
+
+`dump-fonts.mjs` now measures three per family, and the third exists because the
+second was still wrong for faces with a line gap:
+
+* `ascents` / `descents` — what the canvas reports. Unchanged.
+* `layout_ascents` / `layout_descents` — what a line box is built from. Read off
+  a laid-out block with a zero-height `display:inline-block` marking the
+  baseline: a box 0 tall cannot raise the line, so the distance from the block's
+  top to that mark's bottom edge is the ascent and the rest of the block is the
+  descent. Checked at every size of every family against a plain block beside it.
+* `svg_ascents` / `svg_descents` — what an SVG `<text>` stands on, which is the
+  layout box **less the face's leading**. Arial at 16px lays a line out 18 tall
+  and draws its `<text>` box 17; Times, Menlo and the rest have no gap and answer
+  the same two numbers twice.
+
+An SVG `<text>` shows the split in one reading, which is why it was the first
+thing tried for the layout pair — and it is the wrong reading for that pair
+twice over. `getBBox` is the union of the font box and the glyph **ink**, so
+`Hxg` in Arial answers a descent of 3.3671875, which is the tail of the `g`.
+Measuring it with a full stop is clean for 181 of the 182 faces and not for
+Webdings, whose `.` is a symbol reaching 3.203125 past a descent of 3. U+00A0 is
+the character with an advance and no ink; a plain space collapses and `getBBox`
+comes back empty.
+
+Two faces of 182 keep an SVG box **wider** than their line box at every size —
+Myanmar Sangam MN (14.5 / 10.5 against 12.5 / 9 at 16px) and Tamil Sangam MN.
+That is Chrome's answer, not contamination: it survives the switch from `.` to
+U+00A0.
+
+### What reads the line box
+
+Four readings, each measured at both scales before it was moved
+(`scratch/expr-inline-ink-line-box.js`, `scratch/expr-br-and-svg-text-dsf.js`):
+
+* a block's `line-height: normal` line;
+* a non-replaced inline box's ink — a `<span>` in 20px monospace is 24 tall at
+  scale 1 and 23 at scale 2, and a declared `line-height` does not reach it in
+  either;
+* a `<br>`'s rect, which is the line it breaks and the only reading that sees it;
+* the SVG text extents, on the third table.
+
+And one that had been quietly truncating. `DOM.getBoxModel` answers an integer
+`width` and `height` beside a quad that keeps its fraction, and Chrome **rounds**
+where this engine cast: 19 for a rect 18.5 tall, 41 for one 40.6953125 tall, 40
+for one 40.1953125 tall (`scratch/cdp-box-model.mjs`, one CDP round trip against
+real Chrome). While every box was a whole pixel that cast was invisible; a
+fractional line box makes it a reading no browser produces — a box model a pixel
+shorter than its own content quad.
+
+### The gap it was opened to close
+
+The Kasada `/tl` payload's element geometry over forty percentage-sized rows,
+field by field, against Chrome at dpr 2:
+
+| field | Chrome | before | after |
+|---|---|---|---|
+| computed height | 240 chars | 160 | **240** |
+| rect height | 328 chars | 320 | **328** |
+| everything else | 1423 | 1423 | 1423 |
+| **total** | **1991** | 1903 | **1991** |
+
+Every field matches now, and the 88 characters the previous session attributed
+to the line's height were the whole of the residual.
