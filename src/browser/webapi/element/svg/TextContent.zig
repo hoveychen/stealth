@@ -132,13 +132,25 @@ fn origin(self: *TextContent, frame: *Frame) !struct { x: f64, y: f64 } {
 /// standing on the font's ascent and descent at the text's own origin. Chrome
 /// grows this by the ink a colour-emoji bitmap spills past its advance —
 /// under a pixel at 20px, a few at 200px — which we do not model.
+///
+/// The ascent and descent are the LAYOUT pair and not the canvas one: measured
+/// at both device scales with tools/fingerprint/scratch/expr-br-and-svg-text-dsf.js,
+/// a 20px monospace `<text>` has a bbox 24 tall at scale 1 and 23 at the 2 this
+/// engine claims, and 10px serif 13 then 11.5 — the same numbers the block line
+/// box takes, not the canvas sum. The split between the two halves moves too,
+/// which is why font_metrics keeps both rather than a height.
+///
+/// Chrome also unions this with the INK, which we do not model: Arial's `g`
+/// descends 3.3671875 at 16px where the font descent is 4 — inside it, so no
+/// difference there — but a family whose tail goes further would read wider
+/// than we answer (scratch/expr-svg-ascent-split.js).
 pub fn getBounds(self: *TextContent, frame: *Frame) !PathData.Bounds {
     const size = self.fontSize(frame);
     const width = text_measure.svgWidth(self.fontFamily(frame), self.text(frame), size);
     if (!std.math.isFinite(width) or width <= 0) {
         return .{};
     }
-    const box = font_metrics.boundingBox(self.fontFamily(frame), size);
+    const box = font_metrics.layoutBox(self.fontFamily(frame), size);
     const at = try self.origin(frame);
     return .{
         .min_x = at.x,
@@ -175,7 +187,7 @@ pub fn getExtentOfChar(self: *TextContent, charnum: u32, frame: *Frame) !*SvgRec
     const size = self.fontSize(frame);
     const family = self.fontFamily(frame);
     const extent = try text_measure.svgCharExtent(family, self.text(frame), charnum, size);
-    const box = font_metrics.boundingBox(family, size);
+    const box = font_metrics.layoutBox(family, size);
     const at = try self.origin(frame);
     return SvgRect.create(.{
         .x = at.x + extent.offset,
@@ -257,7 +269,7 @@ pub fn getCharNumAtPosition(self: *TextContent, point_: ?*const SvgPoint, frame:
     const size = self.fontSize(frame);
     const family = self.fontFamily(frame);
     const text_content = self.text(frame);
-    const box = font_metrics.boundingBox(family, size);
+    const box = font_metrics.layoutBox(family, size);
     const at = try self.origin(frame);
 
     if (point.getY() < at.y - box.ascent or point.getY() > at.y + box.descent) {

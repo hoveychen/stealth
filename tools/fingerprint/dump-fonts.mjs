@@ -3,6 +3,7 @@
 //
 //   node tools/fingerprint/dump-fonts.mjs --survey   # what resolves, and how many
 //   node tools/fingerprint/dump-fonts.mjs [--headed] # measure + write the table
+//   node tools/fingerprint/dump-fonts.mjs --chrome-arg --force-device-scale-factor=2
 //
 // Font enumeration is the one fingerprint surface that is pure arithmetic: a
 // probe sets `font = '100px "Candidate", monospace'`, measures a string, and
@@ -29,6 +30,11 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 9463;
 const headed = process.argv.includes('--headed');
 const surveyOnly = process.argv.includes('--survey');
+// Extra Chrome switches, repeatable, the way run-expr.mjs takes them. The one
+// this exists for is `--force-device-scale-factor`: the line box a font builds
+// is measured at the device scale, and this engine's persona is a dpr-2 screen.
+const chromeArgs = process.argv.reduce((acc, a, i) => (
+    a === '--chrome-arg' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc), []);
 const outPath = path.join(repo, 'src/browser/font_metrics.zig');
 const jsonPath = path.join(repo, 'tools/fingerprint/results/reference-chrome-fonts.json');
 
@@ -183,7 +189,78 @@ const measure = (family, quoted) => `(() => {
     ascents.push(m.fontBoundingBoxAscent);
     descents.push(m.fontBoundingBoxDescent);
   }
-  return JSON.stringify({ family: ${JSON.stringify(family)}, resolved, glyphs, probed, ascents, descents, leader, witness, behind, seeds });
+  // The ascent and descent LAYOUT uses, which are not the two the canvas
+  // reports. They are the same numbers at devicePixelRatio 1 -- and every other
+  // table on this page is the same at 1 and 2, 182 faces byte for byte -- but at
+  // the 2 this engine claims they part company: 16px serif lays out on 14.5 and
+  // 4 where the canvas says 14 and 4, and 10px serif on 9 and 2.5 where the
+  // canvas says 10 and 3. Both halves move, in half pixels, and neither is
+  // derivable from the canvas pair.
+  //
+  // The whole box is the height of a one-line block, and the split is where its
+  // baseline sits: a zero-height \`display:inline-block\` puts its bottom edge on
+  // the baseline, so the distance from the block's top to that edge is the
+  // ascent and the rest is the descent. The mark costs nothing -- a box 0 tall
+  // cannot raise the line -- and that is checked here rather than assumed, by
+  // measuring a plain block beside the marked one at every size.
+  //
+  // An SVG <text> would show the split in one reading, and it is the wrong
+  // reading: getBBox is the union of the font box and the INK, so Arial at 16px
+  // answers a descent of 3.3671875, which is the tail of the 'g' and not a font
+  // metric.
+  //
+  // getBoundingClientRect and not offsetHeight: the half pixel is real and
+  // offsetHeight rounds it away (19 for a box that is 18.5 tall).
+  const marked = document.createElement('div');
+  marked.style.cssText = 'position:absolute;left:0;top:0;width:1000px;line-height:normal;font-family:${quoted}';
+  marked.innerHTML = '<span data-b style="display:inline-block;width:0;height:0"></span>Hxg';
+  document.body.appendChild(marked);
+  const strut = document.createElement('div');
+  strut.style.cssText = 'position:absolute;left:0;top:0;width:1000px;line-height:normal;font-family:${quoted}';
+  strut.textContent = 'Hxg';
+  document.body.appendChild(strut);
+  const mark = marked.querySelector('[data-b]');
+  // The third box, and the last one: what an SVG <text> stands on. It is the
+  // line box less the font's leading, so for a face with no line gap the two are
+  // the same and for one with a gap they are not -- Arial at 16px lays a line
+  // out 18 tall and draws its <text> box 17.
+  //
+  // Read with a NO-BREAK SPACE, because getBBox is the union of the font box and
+  // the glyph INK and U+00A0 is the one character with an advance and no ink at
+  // all. 'Hxg' in Arial answers a descent of 3.3671875, which is the tail of the
+  // 'g'; a full stop is clean for 181 of the 182 faces and not for Webdings,
+  // whose '.' is a symbol that reaches 3.203125 past a descent of 3. A plain
+  // space is not usable -- it collapses, and getBBox comes back empty.
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNs, 'svg');
+  svg.setAttribute('width', '900');
+  svg.setAttribute('height', '600');
+  const svgText = document.createElementNS(svgNs, 'text');
+  svgText.setAttribute('x', '10');
+  svgText.setAttribute('y', '400');
+  svgText.style.fontFamily = '${quoted}';
+  svgText.textContent = '\\u00A0';
+  svg.appendChild(svgText);
+  document.body.appendChild(svg);
+  const layoutAscents = [], layoutDescents = [], svgAscents = [], svgDescents = [], lineBoxMismatch = [];
+  for (let size = 1; size <= ${SWEPT_SIZES}; size++) {
+    marked.style.fontSize = size + 'px';
+    strut.style.fontSize = size + 'px';
+    svgText.style.fontSize = size + 'px';
+    const line = strut.getBoundingClientRect().height;
+    const markedBox = marked.getBoundingClientRect();
+    const ascent = mark.getBoundingClientRect().bottom - markedBox.top;
+    layoutAscents.push(ascent);
+    layoutDescents.push(line - ascent);
+    const b = svgText.getBBox();
+    svgAscents.push(400 - b.y);
+    svgDescents.push(b.y + b.height - 400);
+    if (markedBox.height !== line) lineBoxMismatch.push([size, markedBox.height, line]);
+  }
+  svg.remove();
+  strut.remove();
+  marked.remove();
+  return JSON.stringify({ family: ${JSON.stringify(family)}, resolved, glyphs, probed, ascents, descents, layoutAscents, layoutDescents, svgAscents, svgDescents, lineBoxMismatch, dpr: devicePixelRatio, leader, witness, behind, seeds });
 })()`;
 
 // A CSS family name needs quoting unless it is a keyword. Quoting a keyword
@@ -195,6 +272,18 @@ const quote = (family) => (KEYWORDS.has(family) ? family : `\\"${family}\\"`);
 const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-fonts-'));
 const flags = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check'];
 if (!headed) flags.push('--headless=new');
+// The device scale is part of what is being measured, so it is pinned here
+// rather than left to whichever display the run happens to land on. Two is what
+// this engine's persona claims (Viewport.default, and window.devicePixelRatio
+// with it), and a headed Chrome with no switch answers whatever monitor it
+// opened on -- which is how a reading gets attributed to "headed" when it was
+// really the scale. Everything else this file writes is identical at 1 and 2,
+// verified by regenerating at both; `line_boxes_*` is not, so a run at the
+// wrong scale would rewrite that one table and nothing else.
+if (!chromeArgs.some((a) => a.startsWith('--force-device-scale-factor'))) {
+    flags.push('--force-device-scale-factor=2');
+}
+flags.push(...chromeArgs);
 const ENDPOINT = process.env.CDP_ENDPOINT ?? null;
 // No pipe we do not read -- see dump-graphics.mjs.
 const proc = ENDPOINT ? null : spawn(CHROME, flags, { stdio: 'ignore' });
@@ -226,7 +315,25 @@ try {
             process.stderr.write(`  skip ${family}: ${r.exceptionDetails.text}\n`);
             continue;
         }
-        tables.push(JSON.parse(r.result.value));
+        const table = JSON.parse(r.result.value);
+        // The scale the line boxes were measured at, read back off the page
+        // rather than assumed from the switch. A `--force-device-scale-factor`
+        // Chrome declined to honour would rewrite `line_boxes_*` alone and
+        // leave every other table byte-identical, which is exactly the shape of
+        // a regression nobody notices.
+        if (table.dpr !== 2) {
+            throw new Error(`devicePixelRatio is ${table.dpr}, not 2 — the layout box would be measured at the wrong scale`);
+        }
+        // The baseline mark is supposed to be free. A size where the marked
+        // block is taller than the plain one means it was not, and the split
+        // taken there is a split of the wrong box.
+        if (table.lineBoxMismatch.length) {
+            throw new Error(
+                `${family}: the baseline mark changed the line box at ${table.lineBoxMismatch.length} sizes, ` +
+                    `first ${JSON.stringify(table.lineBoxMismatch[0])}`,
+            );
+        }
+        tables.push(table);
     }
     cdp.close();
 } finally {
@@ -490,15 +597,41 @@ pub const last_ascii_codepoint = ${ASCII_LAST};
 /// The size every table below is measured at.
 pub const basis = 100.0;
 
-/// The swept range of \`ascents_*\` / \`descents_*\`. Larger sizes scale from
-/// the last entry, which is close but not exact — CoreText's quantisation is
-/// not a ratio.
+/// The swept range of \`ascents_*\` / \`descents_*\` / \`line_boxes_*\`. Larger
+/// sizes scale from the last entry, which is close but not exact — CoreText's
+/// quantisation is not a ratio.
 pub const swept_sizes = ${SWEPT_SIZES};
+
+/// The device pixel ratio every \`layout_ascents_*\` / \`layout_descents_*\` below
+/// was measured at, which is the one this engine's persona claims. Nothing else
+/// in this file depends on it: regenerating the whole table at scale 1 and at
+/// scale 2 produced two byte-identical files apart from those arrays.
+pub const layout_device_pixel_ratio = 2.0;
 
 pub const Family = struct {
     glyphs: []const Glyph,
     ascents: []const f64,
     descents: []const f64,
+    /// The ascent and descent LAYOUT stands text on, per size, which are not
+    /// \`ascents\` and \`descents\` — those are what the canvas reports. The two
+    /// pairs are the same numbers at device pixel ratio 1 and different at the 2
+    /// this engine claims: 16px serif lays out on 14.5 and 4 where the canvas
+    /// says 14 and 4, and 10px serif on 9 and 2.5 where the canvas says 10 and
+    /// 3. Both halves move, in half pixels, and neither is derivable from the
+    /// canvas pair — so they are measured, off an SVG \`<text>\`, which is the
+    /// one box that shows the split rather than the sum.
+    ///
+    /// Their sum is the \`line-height: normal\` line box, checked against a
+    /// laid-out block at every size of every family while measuring.
+    layout_ascents: []const f64,
+    layout_descents: []const f64,
+    /// The ascent and descent an SVG \`<text>\` stands on, which is the layout
+    /// pair less the face's leading: a face with no line gap answers the same
+    /// two numbers, and Arial at 16px lays a line out 18 tall while drawing its
+    /// \`<text>\` box 17. Chrome unions this with the glyph ink, which we do not
+    /// model — measured with a full stop precisely so the ink is not in the way.
+    svg_ascents: []const f64,
+    svg_descents: []const f64,
     /// Blink chooses one fallback font per run, seeded by the first character
     /// the primary font cannot draw, and keeps it for the whole run. These two
     /// fields are what that costs, both measured rather than reasoned about.
@@ -543,6 +676,18 @@ ${rows(t.ascents)}
 };
 const descents_${bare} = [_]f64{
 ${rows(t.descents)}
+};
+const layout_ascents_${bare} = [_]f64{
+${rows(t.layoutAscents)}
+};
+const layout_descents_${bare} = [_]f64{
+${rows(t.layoutDescents)}
+};
+const svg_ascents_${bare} = [_]f64{
+${rows(t.svgAscents)}
+};
+const svg_descents_${bare} = [_]f64{
+${rows(t.svgDescents)}
 };`);
     const seeds = seedsOf(t);
     parts.push(
@@ -564,7 +709,10 @@ for (const [name, t] of names) {
     const bare = name.replace(/^glyphs_/, '');
     parts.push(
         `pub const ${bare}: Family = .{ .glyphs = &${name}, .ascents = &ascents_${bare}, ` +
-            `.descents = &descents_${bare}, .seeds_last_resort = &seeds_${bare}, .after_fallback = &after_${bare} };`,
+            `.descents = &descents_${bare}, .layout_ascents = &layout_ascents_${bare}, ` +
+            `.layout_descents = &layout_descents_${bare}, .svg_ascents = &svg_ascents_${bare}, ` +
+            `.svg_descents = &svg_descents_${bare}, ` +
+            `.seeds_last_resort = &seeds_${bare}, .after_fallback = &after_${bare} };`,
     );
 }
 
@@ -661,6 +809,50 @@ pub fn boundingBox(family: Family, size: f64) struct { ascent: f64, descent: f64
     return .{
         .ascent = family.ascents[family.ascents.len - 1] * scale,
         .descent = family.descents[family.descents.len - 1] * scale,
+    };
+}
+
+/// The ascent and descent LAYOUT stands this family's text on at this size, from
+/// the swept table where there is one and scaled from its last entry above that.
+/// See \`Family.layout_ascents\`: this is a separate measurement from
+/// \`boundingBox\`, because at the device pixel ratio this engine claims the two
+/// pairs disagree for most sizes.
+pub fn layoutBox(family: Family, size: f64) struct { ascent: f64, descent: f64 } {
+    const rounded = @round(size);
+    if (rounded >= 1 and rounded <= @as(f64, @floatFromInt(family.layout_ascents.len)) and rounded == size) {
+        const index: usize = @intFromFloat(rounded - 1);
+        return .{ .ascent = family.layout_ascents[index], .descent = family.layout_descents[index] };
+    }
+    // Multiplied before it is divided, the way text_measure carries the pen:
+    // scaling by \`size / last\` first costs an ulp, and the ulp is visible --
+    // a 200px sans-serif SVG box comes out 230.00000000000003 that way and
+    // exactly 230 this way, against Chrome's 230.
+    const last: f64 = @floatFromInt(family.layout_ascents.len);
+    return .{
+        .ascent = family.layout_ascents[family.layout_ascents.len - 1] * size / last,
+        .descent = family.layout_descents[family.layout_descents.len - 1] * size / last,
+    };
+}
+
+/// The height of one \`line-height: normal\` line: the layout box, top to bottom.
+pub fn lineBox(family: Family, size: f64) f64 {
+    const box = layoutBox(family, size);
+    return box.ascent + box.descent;
+}
+
+/// The ascent and descent an SVG \`<text>\` stands on. See \`Family.svg_ascents\`:
+/// the layout box less the face's leading, and a third measurement again from
+/// \`boundingBox\`.
+pub fn svgBox(family: Family, size: f64) struct { ascent: f64, descent: f64 } {
+    const rounded = @round(size);
+    if (rounded >= 1 and rounded <= @as(f64, @floatFromInt(family.svg_ascents.len)) and rounded == size) {
+        const index: usize = @intFromFloat(rounded - 1);
+        return .{ .ascent = family.svg_ascents[index], .descent = family.svg_descents[index] };
+    }
+    const last: f64 = @floatFromInt(family.svg_ascents.len);
+    return .{
+        .ascent = family.svg_ascents[family.svg_ascents.len - 1] * size / last,
+        .descent = family.svg_descents[family.svg_descents.len - 1] * size / last,
     };
 }`);
 

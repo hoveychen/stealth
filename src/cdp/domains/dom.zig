@@ -532,14 +532,22 @@ fn getBoxModel(cmd: *CDP.Command) !void {
     const quad = rectToQuad(rect);
     const zero = [_]f64{0.0} ** 8;
 
-    return cmd.sendResult(.{ .model = BoxModel{
-        .content = quad,
-        .padding = zero,
-        .border = zero,
-        .margin = zero,
-        .width = @intFromFloat(rect.width),
-        .height = @intFromFloat(rect.height),
-    } }, .{});
+    return cmd.sendResult(.{
+        .model = BoxModel{
+            .content = quad,
+            .padding = zero,
+            .border = zero,
+            .margin = zero,
+            // Rounded, not truncated: Chrome answers 19 for a rect 18.5 tall, 41
+            // for one 40.6953125 tall and 40 for one 40.1953125 tall, measured over
+            // this domain with tools/fingerprint/scratch/cdp-box-model.mjs. The quad
+            // beside it keeps the fraction, which is what makes the pair readable --
+            // a height a pixel under its own content box is a reading no browser
+            // produces.
+            .width = @intFromFloat(@round(rect.width)),
+            .height = @intFromFloat(@round(rect.height)),
+        },
+    }, .{});
 }
 
 fn requestChildNodes(cmd: *CDP.Command) !void {
@@ -1132,16 +1140,23 @@ test "cdp.dom: getBoxModel" {
     // The <p> holds the single character "2". Its width is its containing
     // block's -- a block-level box in normal flow is as wide as the line it
     // sits on, which on the default 1920 viewport is a 1904px body -- and its
-    // height is the one line the digit makes, 18 tall for a 16px serif. This
-    // used to read 8 wide, the width of the digit itself, from the days when
-    // an unsized box measured its own text; Chrome reports the body's width
-    // for a <p> like this one, not the glyph's.
+    // height is the one line the digit makes, 18.5 tall for a 16px serif at
+    // devicePixelRatio 2. This used to read 8 wide, the width of the digit
+    // itself, from the days when an unsized box measured its own text; Chrome
+    // reports the body's width for a <p> like this one, not the glyph's.
+    //
+    // `height` is an integer beside a quad that is not, and it is the ROUNDED
+    // one: measured against real Chrome over this same markup with
+    // tools/fingerprint/scratch/cdp-box-model.mjs, a rect 18.5 tall answers 19,
+    // one 40.6953125 tall answers 41 and one 40.1953125 tall answers 40. This
+    // truncated, so every fractional box was a pixel short -- and now that a
+    // line box is 18.5 rather than 18, that is every box holding text.
     try ctx.expectSentResult(.{ .model = BoxModel{
-        .content = Quad{ 25.0, 25.0, 1929.0, 25.0, 1929.0, 43.0, 25.0, 43.0 },
+        .content = Quad{ 25.0, 25.0, 1929.0, 25.0, 1929.0, 43.5, 25.0, 43.5 },
         .padding = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
         .border = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
         .margin = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
         .width = 1904,
-        .height = 18,
+        .height = 19,
     } }, .{ .id = 5 });
 }

@@ -102,11 +102,11 @@ expr-layout-grid.js against Chrome 151:
   eq('letter-spacing', read('width:400px', 'letter-spacing:0.7px', 'letterSpacing'), '0.7px');
 
   // transform-origin is the centre of a snapped box, so it carries the grid
-  // through without being snapped again. Chrome answers `66.5977px 9.25px` here;
-  // the y half is half its line box, which is 18.5 there and 18 here -- a
-  // font-metrics gap that belongs to `block-height-from-content`, not to the
-  // grid. What this asserts is the x half moving with the grid.
-  eq('origin of 33.3%', read('width:400px', 'width:33.3%', 'transformOrigin'), '66.5977px 9px');
+  // through without being snapped again. Chrome answers `66.5977px 9.25px` here,
+  // and so does this engine now: the y half is half its line box, which is 18.5
+  // at devicePixelRatio 2 (the `font-box-at-device-scale` plan closed that half;
+  // this file's own claim is the x).
+  eq('origin of 33.3%', read('width:400px', 'width:33.3%', 'transformOrigin'), '66.5977px 9.25px');
 
   host.remove();
   testing.expectEqual('', wrong.join(' | '));

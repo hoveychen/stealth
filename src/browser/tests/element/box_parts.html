@@ -127,12 +127,12 @@ containing block's WIDTH on both axes -- `padding:10%` in a 400px box is
   const wrong = [];
   const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
 
-  eq('plain', read(''), '18px/18/18');
-  eq('padding', read('padding:10px'), '18px/38/38');
-  eq('border', read('border:5px solid'), '18px/18/28');
-  eq('padding and border', read('padding:10px;border:5px solid'), '18px/38/48');
-  eq('border-box auto', read('box-sizing:border-box;padding:10px;border:5px solid'), '48px/38/48');
-  eq('border thin', read('width:400px;border:thin solid'), '18px/18/20');
+  eq('plain', read(''), '18.5px/19/19');
+  eq('padding', read('padding:10px'), '18.5px/39/39');
+  eq('border', read('border:5px solid'), '18.5px/19/29');
+  eq('padding and border', read('padding:10px;border:5px solid'), '18.5px/39/49');
+  eq('border-box auto', read('box-sizing:border-box;padding:10px;border:5px solid'), '48.5px/39/49');
+  eq('border thin', read('width:400px;border:thin solid'), '18.5px/19/21');
   eq('padding em', read('width:400px;font-size:20px;padding:0.5em'), '23px/43/43');
 
   host.remove();
@@ -144,7 +144,7 @@ containing block's WIDTH on both axes -- `padding:10%` in a 400px box is
 A percentage padding resolves against the containing block's width, on both
 axes -- `padding-top` takes its share of the WIDTH, which is why the box below
 is 970 tall. Measured: 25% of the 1904px line is 476px per side, so clientWidth
-is 400 + 952 and clientHeight 18 + 952.
+is 400 + 952 and clientHeight 18.5 + 952, rounded to 971.
 
 25% and not the 10% the probe used first: 10% of 1904 is 190.4, and the layout
 answers `190.398px` because it lays out on a grid of 1/64 of a DEVICE pixel --
@@ -171,7 +171,12 @@ the device scale factor is (measured at both, probes/expr-b81-margin-grid-dsf2.j
   testing.expectEqual('400px', String(cs.width));
   testing.expectEqual(1352, el.clientWidth);
   testing.expectEqual(1352, el.offsetWidth);
-  testing.expectEqual(970, el.clientHeight);
+  // 971 and not 970: the two 476px paddings are exact, and the one line
+  // between them is 18.5 rather than 18, so the content box is 970.5 and
+  // clientHeight rounds it. Chrome answers 971 beside a rect height of 970.5
+  // (tools/fingerprint/scratch/expr-b82-box-parts-cases.js).
+  testing.expectEqual(971, el.clientHeight);
+  testing.expectEqual(970.5, el.getBoundingClientRect().height);
 
   host.remove();
 }

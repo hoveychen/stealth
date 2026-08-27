@@ -2082,12 +2082,23 @@ const LineCounter = struct {
 /// style="line-height:30px">` is 18 tall in Chrome where an `inline-block` with
 /// the same declaration is 30. That is why this sits under textLayout and not
 /// under inlineInk.
+///
+/// The `normal` half asks font_metrics for a measured line box and NOT for
+/// `boundingBox().ascent + .descent`, which is what it used to sum. Those two
+/// are the same number at a device pixel ratio of 1 -- sixty of sixty (family,
+/// size) pairs -- and different at the 2 this engine claims, for thirty-four of
+/// the same sixty: 16px serif is 18 by the canvas metrics and 18.5 on the page,
+/// 20px monospace is 24 and 23, and 10px serif is 13 and 11.5. That last one is
+/// why the line box is measured rather than derived -- one and a half pixels is
+/// more than re-rounding the two halves onto the device pixel can move a sum.
+/// The canvas box itself does not move with the scale, so `boundingBox` is
+/// unchanged and correct where it is read (src/browser/tests/element/
+/// line_box_height.html).
 fn lineBoxHeight(self: *Element, frame: *Frame, family: font_metrics.Family, size: f64) f64 {
     if (CSSStyleDeclaration.cascadedComputedLength(self, "line-height", frame)) |px| {
         return layoutUnit(@max(0, px));
     }
-    const box = font_metrics.boundingBox(family, size);
-    return @round(box.ascent + box.descent);
+    return font_metrics.lineBox(family, size);
 }
 
 /// The narrowest box this element's text can be laid out in: its longest
@@ -2188,8 +2199,15 @@ fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) struct
 
     width += text_width;
     if (has_text) {
-        const box = font_metrics.boundingBox(font.family, font.size);
-        height = @max(height, @round(box.ascent + box.descent));
+        // The same measured line box the block path takes, and not the canvas
+        // font box this used to round: a `<span>` is 18.5 tall in 16px serif
+        // where ascent plus descent is 18, and 23 in 20px monospace where the
+        // sum is 24. Seven forms measured with
+        // tools/fingerprint/scratch/expr-inline-ink-line-box.js, including two
+        // that declare a line-height -- an inline box ignores the declaration
+        // and keeps the font's own line either way, which is why this asks
+        // font_metrics directly rather than going through lineBoxHeight.
+        height = @max(height, font_metrics.lineBox(font.family, font.size));
     }
     return .{ .width = width, .height = height };
 }
@@ -2904,14 +2922,19 @@ fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.
 
     // A <br> is the one element whose rect is not the box offsetHeight reports.
     // It has no box at all -- 0 of clientHeight and 0 of offsetHeight, measured
-    // -- but its rect is the LINE it breaks: 0 wide and 18 tall on the default
+    // -- but its rect is the LINE it breaks: 0 wide and 18.5 tall on the default
     // font, which is the only reading that sees it. Chrome 151, measured with
     // tools/fingerprint/scratch/expr-five-sentinel.js, beside an empty <span>
     // whose rect IS 0 by 0 -- so this is a <br> and not inline boxes in general.
+    //
+    // The line it breaks is the same measured line box the block path uses, and
+    // not the canvas font box: re-measured at both device scales with
+    // scratch/expr-br-and-svg-text-dsf.js, a <br> in 20px monospace is 24 tall
+    // at scale 1 and 23 at the 2 this engine claims, which is the line box in
+    // both and the canvas sum in neither.
     if (self.getTag() == .br) {
         const font = self.resolveFont(frame);
-        const box = font_metrics.boundingBox(font.family, font.size);
-        height = @round(box.ascent + box.descent);
+        height = font_metrics.lineBox(font.family, font.size);
     }
 
     // An out-of-flow box is placed by its own declaration, which is the half of

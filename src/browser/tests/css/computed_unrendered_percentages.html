@@ -84,15 +84,15 @@ as the heights, and `50% 50%` against `0px 0px` is one string.
   // The controls. A rendered element resolves, and so does a hidden one -- and a
   // rendered 0x0 box is the answer this engine used to give the unrendered one.
   check('rendered origins', read('', ORIGINS),
-        '200px 9px | 200px 9px | 200px 9px | 200px 9px');
+        '200px 9.25px | 200px 9.25px | 200px 9.25px | 200px 9.25px');
   check('hidden origins', read('visibility:hidden', ORIGINS),
-        '200px 9px | 200px 9px | 200px 9px | 200px 9px');
+        '200px 9.25px | 200px 9.25px | 200px 9.25px | 200px 9.25px');
   check('zero box origins', read('width:0;height:0', ORIGINS),
         '0px 0px | 0px 0px | 0px 0px | 0px 0px');
   check('rendered boxes', read('', BOXES),
-        '400px | 18px | 400px | 18px | 0px | 0px');
+        '400px | 18.5px | 400px | 18.5px | 0px | 0px');
   check('hidden boxes', read('visibility:hidden', BOXES),
-        '400px | 18px | 400px | 18px | 0px | 0px');
+        '400px | 18.5px | 400px | 18.5px | 0px | 0px');
 
   // A LENGTH under display:none is still that length -- the rule is about
   // percentages having nothing to resolve against, not about the property going

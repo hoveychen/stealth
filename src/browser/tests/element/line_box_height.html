@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+What one `line-height: normal` line costs is NOT the font's ascent plus its
+descent. The two agree at a device pixel ratio of 1 -- sixty of sixty (family,
+size) pairs measured -- and part company at 2, which is the ratio this engine
+claims. Twenty-two of the twenty-seven pairs asserted below differ from the sum,
+by half a pixel, by a whole one, and once by one and a half.
+
+Measured twice, by two paths that share no code:
+tools/fingerprint/scratch/expr-font-box-dsf.js read them off headed Chrome with
+`--chrome-arg --force-device-scale-factor=2`, and dump-fonts.mjs read them again
+while regenerating font_metrics.zig. Every value here is in both.
+
+  | family, size    | ascent + descent | line box at dpr 2 |
+  |-----------------|------------------|-------------------|
+  | serif 10px      | 13               | 11.5              |
+  | serif 16px      | 18               | 18.5              |
+  | monospace 20px  | 24               | 23                |
+  | system-ui 12px  | 15               | 14                |
+
+The canvas font box does not move with the scale -- `fontBoundingBoxAscent` and
+`Descent` are identical at 1 and 2 for all sixty pairs, and so is every other
+table in font_metrics.zig, verified by regenerating the whole file at both
+scales and diffing. Only the laid-out line moves, so it is measured on its own
+and `boundingBox` is left alone.
+
+The line COUNT is not what this file is about -- it is the same at either scale,
+and forty words in 100px is twenty lines in both. What moves is what a line is
+worth: twenty of them are 360 at dpr 1 and 370 at dpr 2.
+-->
+
+<script id=normal_line_box_per_family_and_size>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:1000px';
+  document.body.appendChild(host);
+
+  const line = (css, text) => {
+    const d = document.createElement('div');
+    d.style.cssText = css;
+    d.textContent = text === undefined ? 'Hxg' : text;
+    host.appendChild(d);
+    const h = d.getBoundingClientRect().height;
+    d.remove();
+    return h;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+  // Longhands, not the `font` shorthand: this engine does not cascade the
+  // shorthand into font-size and font-family yet (the `font-shorthand-cascade`
+  // plan), so a `font: 8px serif` box lays out at the default 16px serif and
+  // would measure the same thing twenty-seven times.
+  const one = (family, size, want) =>
+    eq(family + ' ' + size + 'px', line('font-size:' + size + 'px;font-family:' + family + ';line-height:normal'), want);
+
+  // A generic serif, over the swept range. 8 and 32 are the two that happen to
+  // agree with the ascent-plus-descent sum; the rest do not.
+  one('serif', 8, 9);
+  one('serif', 10, 11.5);
+  one('serif', 13, 15.5);
+  one('serif', 16, 18.5);
+  one('serif', 24, 27.5);
+  one('serif', 32, 37);
+  one('serif', 48, 55);
+  one('serif', 64, 73.5);
+
+  one('sans-serif', 10, 11.5);
+  one('sans-serif', 16, 18.5);
+  one('sans-serif', 24, 27.5);
+  one('sans-serif', 64, 73.5);
+
+  // Monospace moves in both directions from the sum: +0.5 at 8px, -1 at 20.
+  one('monospace', 8, 9.5);
+  one('monospace', 10, 12);
+  one('monospace', 20, 23);
+  one('monospace', 32, 37);
+  one('monospace', 64, 74.5);
+
+  one('system-ui', 8, 9);
+  one('system-ui', 12, 14);
+  one('system-ui', 13, 15);
+  one('system-ui', 16, 19);
+  one('system-ui', 20, 23.5);
+  one('system-ui', 48, 56.5);
+
+  one('cursive', 16, 25.5);
+  one('cursive', 20, 32);
+  one('fantasy', 12, 18.5);
+  one('fantasy', 32, 49.5);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=lines_stack_and_explicit_line_heights_do_not_move>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:1000px';
+  document.body.appendChild(host);
+
+  const box = (css, text) => {
+    const d = document.createElement('div');
+    d.style.cssText = css;
+    d.textContent = text;
+    host.appendChild(d);
+    const h = d.getBoundingClientRect().height;
+    d.remove();
+    return h;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // Each line is snapped and then summed, so n lines are n x 18.5 exactly.
+  const words = Array.from({ length: 40 }, () => 'word').join(' ');
+  eq('40 words in 100px', box('font-size:16px;font-family:serif;line-height:normal;width:100px', words), 370);
+  eq('40 words in 200px', box('font-size:16px;font-family:serif;line-height:normal;width:200px', words), 148);
+  eq('40 words in 400px', box('font-size:16px;font-family:serif;line-height:normal;width:400px', words), 74);
+
+  // An explicit line-height is not a font metric, so the device scale leaves it
+  // alone: these five are identical at dpr 1 and dpr 2 in Chrome, `1.1` and its
+  // 1/64 step included.
+  eq('line-height 30px', box('font-size:16px;font-family:serif;line-height:30px;width:400px', 'Hxg'), 30);
+  eq('line-height 1.1', box('font-size:16px;font-family:serif;line-height:1.1;width:400px', 'Hxg'), 17.59375);
+  eq('line-height 150%', box('font-size:16px;font-family:serif;line-height:150%;width:400px', 'Hxg'), 24);
+  eq('line-height 2em', box('font-size:16px;font-family:serif;line-height:2em;width:400px', 'Hxg'), 32);
+  eq('line-height 0.5', box('font-size:16px;font-family:serif;line-height:0.5;width:400px', 'Hxg'), 8);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
