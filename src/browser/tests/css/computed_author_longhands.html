@@ -118,14 +118,12 @@ reported: a browser never prints `2em`, `50%` or `calc(10px + 5px)` from
 getComputedStyle, because font-relative lengths resolve at computed-value time
 and percentages at used-value time.
 
-The font-relative ones are resolved now (computed-style-relative-units), so they
-answer the same px Chrome does. The two that are not are the ones this engine has
-nothing to resolve *against*: a percentage needs a containing block and a
-`calc()` needs an evaluator. Those still fall through to the initial value, which
-is what was reported before the cascade was consulted at all -- `0px` is a value
-Chrome does print here and `50%` is one it never prints.
-
-Chrome's answers to the two that fall through are 952px and 15px.
+The font-relative ones are resolved now (computed-style-relative-units), and so
+are the percentages: the containing block a percentage needs is the width a
+block-level box already takes, and half of the undeclared div on the 1904px body
+line is Chrome's own 952px. What is left is the `calc()`, which needs an
+evaluator -- it falls through to what a `width` with no declaration answers,
+which is at least a px number and not the author's text.
 -->
 
 <script id=relative_values_resolve_or_fall_through>
@@ -147,8 +145,9 @@ Chrome's answers to the two that fall through are 952px and 15px.
   testing.expectEqual('30px', probe('font-size:1.5em', 'fontSize', 'font-size:20px'));
   testing.expectEqual('30px', probe('font-size:20px;line-height:1.5', 'lineHeight'));
   testing.expectEqual('40px', probe('font-size:20px;padding-top:2em', 'paddingTop'));
-  // Not resolved: no containing block to take a percentage of.
-  testing.expectEqual('0px', probe('margin-left:50%', 'marginLeft'));
+  // Half of the containing block, which here is the undeclared div filling the
+  // 1904px body. margin_percentage.html carries the rest of these.
+  testing.expectEqual('952px', probe('margin-left:50%', 'marginLeft'));
   // `width` has its own branch below the cascade -- the synthetic layout
   // metrics -- so an unresolvable width lands there rather than on the initial
   // value, and what that branch answers for a block in normal flow is its
