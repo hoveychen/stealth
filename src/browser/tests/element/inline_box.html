@@ -36,41 +36,41 @@ on the 1904px line this test server serves.
   const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
 
   // computed width/height, client w/h, offset w/h, scroll w/h, rect w/h
-  eq('span', read('<span data-m>x</span>'), 'auto/auto/0/0/8/18/0/0/8/18');
-  eq('a', read('<a data-m href="#">x</a>'), 'auto/auto/0/0/8/18/0/0/8/18');
+  eq('span', read('<span data-m>x</span>'), 'auto/auto/0/0/8/19/0/0/8/19');
+  eq('a', read('<a data-m href="#">x</a>'), 'auto/auto/0/0/8/19/0/0/8/19');
   eq('div made inline', read('<div data-m style="display:inline">x</div>'),
-     'auto/auto/0/0/8/18/0/0/8/18');
+     'auto/auto/0/0/8/19/0/0/8/19');
 
   // No content at all: no line box, so even the ink is 0.
   eq('empty', read('<span data-m></span>'), 'auto/auto/0/0/0/0/0/0/0/0');
-  eq('wide', read('<span data-m>xxxxxxxxxxxxxxxxxxxx</span>'), 'auto/auto/0/0/160/18/0/0/160/18');
+  eq('wide', read('<span data-m>xxxxxxxxxxxxxxxxxxxx</span>'), 'auto/auto/0/0/160/19/0/0/160/19');
 
   // A declared width or height is reported by the computed style and ignored by
   // the box: the ink is still the text.
   eq('width declared', read('<span data-m style="width:300px">x</span>'),
-     '300px/auto/0/0/8/18/0/0/8/18');
+     '300px/auto/0/0/8/19/0/0/8/19');
   eq('height declared', read('<span data-m style="height:200px">x</span>'),
-     'auto/200px/0/0/8/18/0/0/8/18');
+     'auto/200px/0/0/8/19/0/0/8/19');
   eq('both declared', read('<span data-m style="width:300px;height:200px;padding:10px">x</span>'),
-     '300px/200px/0/0/28/38/0/0/28/38');
+     '300px/200px/0/0/28/39/0/0/28/39');
 
   // Padding and border do apply, and are outside the ink.
   eq('padding', read('<span data-m style="padding:10px">x</span>'),
-     'auto/auto/0/0/28/38/0/0/28/38');
+     'auto/auto/0/0/28/39/0/0/28/39');
   eq('border', read('<span data-m style="border:5px solid">x</span>'),
-     'auto/auto/0/0/18/28/0/0/18/28');
+     'auto/auto/0/0/18/29/0/0/18/29');
 
   // The ink is everything on the line: this element's own text plus whatever
   // its children take.
-  eq('text and child', read('<span data-m>xx<b>yy</b></span>'), 'auto/auto/0/0/32/18/0/0/32/18');
+  eq('text and child', read('<span data-m>xx<b>yy</b></span>'), 'auto/auto/0/0/32/19/0/0/32/19');
   eq('block inside', read('<span data-m><div>x</div></span>'),
-     'auto/auto/0/0/1904/18/0/0/1904/18');
+     'auto/auto/0/0/1904/19/0/0/1904/19');
 
   // The neighbours that DO have a box, asserted unchanged.
   eq('inline-block', read('<span data-m style="display:inline-block">x</span>'),
-     '8px/18px/8/18/8/18/8/18/8/18');
+     '8px/18.5px/8/19/8/19/8/19/8/19');
   eq('inline-flex', read('<span data-m style="display:inline-flex">x</span>'),
-     '8px/18px/8/18/8/18/8/18/8/18');
+     '8px/18.5px/8/19/8/19/8/19/8/19');
   // display:contents generates no box at all, which this engine already had.
   eq('contents', read('<span data-m style="display:contents">x</span>'),
      'auto/auto/0/0/0/0/0/0/0/0');

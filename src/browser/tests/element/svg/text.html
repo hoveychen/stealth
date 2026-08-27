@@ -150,7 +150,13 @@
   testing.expectEqual(32, box.x);
   testing.expectEqual(200, box.width);
   testing.expectEqual(230, box.height);
-  testing.expectEqual(true, box.y < -151 && box.y > -152);
+  // Within a quarter pixel of Chrome's -152, which is as close as a 200px box
+  // gets: font_metrics sweeps sizes 1..120 and scales the last entry above
+  // that, so a 200px ascent is 110.5 x 200 / 120 = 184.1666 against the 184
+  // Chrome draws. Re-measured at both device scales with
+  // tools/fingerprint/scratch/expr-svg-group-bbox.js -- Chrome answers y -152
+  // and height 230 at either, and moves only the x and the width.
+  testing.expectEqual(true, Math.abs(box.y + 152) < 0.25);
 
   host.remove();
   style.remove();

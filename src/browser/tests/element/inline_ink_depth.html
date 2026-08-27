@@ -39,7 +39,12 @@ the one character at the bottom of the chain.
   testing.expectEqual('auto', String(getComputedStyle(span).width));
   testing.expectEqual(0, span.clientWidth);
   testing.expectEqual(8, span.offsetWidth);
-  testing.expectEqual(18, span.offsetHeight);
+  // 19 and not 18: an inline box's ink is the font's line box, which is 18.5 at
+  // the device pixel ratio this engine claims, and offsetHeight rounds it.
+  // Chrome answers 19 beside a rect height of 18.5 to this same page
+  // (tools/fingerprint/scratch/expr-inline-ink-line-box.js).
+  testing.expectEqual(19, span.offsetHeight);
+  testing.expectEqual(18.5, span.getBoundingClientRect().height);
 
   host.remove();
 }

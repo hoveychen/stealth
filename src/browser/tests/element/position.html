@@ -344,14 +344,16 @@
   // this used to assert was more than 0 on the strength of the 5px placeholder.
   // Measured on Chrome 151 with
   // tools/fingerprint/scratch/expr-collapsed-panel.js: a collapsed panel holding
-  // two empty divs is 0 of scrollHeight, two lines of text 36, and two 9px
-  // children 18.
+  // two empty divs is 0 of scrollHeight, two lines of text 37, and two 9px
+  // children 18. Two lines are 37 and not 36 because a line is 18.5 at the
+  // device pixel ratio this engine claims, re-measured with
+  // scratch/expr-fractional-line-consumers.js.
   const panel = document.createElement('div');
   panel.style.height = '0';
   panel.innerHTML = '<div>a</div><div>b</div>';
   document.body.appendChild(panel);
   testing.expectEqual(0, panel.clientHeight);
-  testing.expectEqual(36, panel.scrollHeight);
+  testing.expectEqual(37, panel.scrollHeight);
 
   const emptyPanel = document.createElement('div');
   emptyPanel.style.height = '0';
@@ -381,10 +383,15 @@
   track.appendChild(lane);
   document.body.appendChild(track);
 
-  // Doubling the markup doubles the measured content height.
+  // Doubling the markup doubles the measured content height -- but scrollHeight
+  // is an integer and a line is 18.5, so the doubled box is 37 where twice the
+  // rounded single line is 38. Chrome answers 19 and 37 to the same pair
+  // (scratch/expr-fractional-line-consumers.js), so `before * 2` is the wrong
+  // assertion to make: the two lines are asserted directly instead.
   const before = lane.scrollHeight;
+  testing.expectEqual(19, before);
   lane.innerHTML += lane.innerHTML;
-  testing.expectEqual(before * 2, lane.scrollHeight);
+  testing.expectEqual(37, lane.scrollHeight);
 
   let guard = 0;
   while (lane.scrollHeight < track.offsetHeight * 2 && guard < 50) {
@@ -521,7 +528,13 @@
   testing.expectEqual(rect.y, test1.offsetTop);
   testing.expectEqual(rect.x, test1.offsetLeft);
   testing.expectEqual(rect.width, test1.offsetWidth);
-  testing.expectEqual(rect.height, test1.offsetHeight);
+  // ...and offsetHeight is the ROUNDED rect height, which for one line of text
+  // is 19 against 18.5. They were the same number only while a line box was a
+  // whole pixel; Chrome answers 18.5 and 19 to this same pair
+  // (scratch/expr-fractional-line-consumers.js).
+  testing.expectEqual(18.5, rect.height);
+  testing.expectEqual(19, test1.offsetHeight);
+  testing.expectEqual(Math.round(rect.height), test1.offsetHeight);
 }
 </script>
 

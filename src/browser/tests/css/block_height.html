@@ -51,7 +51,7 @@ height.
     ['<div data-m><div></div></div>', '0px 0 0 0 200px 0px'],
     // The neighbours that must NOT become 0 on the way: one line of text is a
     // line box, and a declared height is the declaration.
-    ['<div data-m>x</div>', '18px 18 18 18 200px 9px'],
+    ['<div data-m>x</div>', '18.5px 19 19 18.5 200px 9.25px'],
     ['<div data-m style="height:77px">x</div>', '77px 77 77 77 200px 38.5px'],
     // ...including a declared zero, which was already right and stays right.
     ['<div data-m style="height:0">x</div>', '0px 0 0 0 200px 0px'],
@@ -114,7 +114,7 @@ blank. A guard that reads both at once sees a 5px-wide box that is 400px wide.
     // overflows it. This engine answered the text's 18 four times over.
     ['<div style="height:5px">x</div>', '400px 5px 400 5 400 5 400 5'],
     // A 5px width is a width, so the box does NOT fill its containing block.
-    ['<div style="width:5px">xxxxxxxx</div>', '5px 18px 5 18 5 18 5 18'],
+    ['<div style="width:5px">xxxxxxxx</div>', '5px 18.5px 5 19 5 19 5 18.5'],
     ['<div style="width:5px;height:5px">xxxxxxxx</div>', '5px 5px 5 5 5 5 5 5'],
     ['<div style="height:5px"></div>', '400px 5px 400 5 400 5 400 5'],
     // The route in must not matter: a stylesheet rule declares 5px the same
@@ -261,7 +261,7 @@ sees it. Both measured, scratch/expr-five-sentinel.js.
   const brGot = [brCs.width, brCs.height, br.clientWidth, br.clientHeight,
                  br.offsetWidth, br.offsetHeight,
                  brRect.width, brRect.height].join(' ');
-  if (brGot !== 'auto auto 0 0 0 0 0 18') wrong.push('br: got [' + brGot + ']');
+  if (brGot !== 'auto auto 0 0 0 0 0 18.5') wrong.push('br: got [' + brGot + ']');
 
   host.remove();
   testing.expectEqual('', wrong.join(' | '));
@@ -371,18 +371,18 @@ page that sets `white-space: pre` on a wrapper means it for the children.
 
   const CASES = [
     // Preserved: the space is a space, and a space is a line.
-    ['<div data-m style="white-space:pre"> </div>', '18px 18'],
-    ['<div data-m style="white-space:pre-wrap"> </div>', '18px 18'],
-    ['<div data-m style="white-space:break-spaces"> </div>', '18px 18'],
+    ['<div data-m style="white-space:pre"> </div>', '18.5px 19'],
+    ['<div data-m style="white-space:pre-wrap"> </div>', '18.5px 19'],
+    ['<div data-m style="white-space:break-spaces"> </div>', '18.5px 19'],
     // The longhand on its own says the same thing.
-    ['<div data-m style="white-space-collapse:preserve"> </div>', '18px 18'],
+    ['<div data-m style="white-space-collapse:preserve"> </div>', '18.5px 19'],
     // Collapsed: no line box.
     ['<div data-m style="white-space:pre-line"> </div>', '0px 0'],
     ['<div data-m style="white-space:nowrap"> </div>', '0px 0'],
     ['<div data-m style="white-space:normal"> </div>', '0px 0'],
     ['<div data-m style="white-space-collapse:collapse"> </div>', '0px 0'],
     // Inherited from the wrapper that declared it.
-    ['<div style="white-space:pre"><div data-m> </div></div>', '18px 18'],
+    ['<div style="white-space:pre"><div data-m> </div></div>', '18.5px 19'],
     // Preserving nothing is still nothing: no text, no line.
     ['<div data-m style="white-space:pre"></div>', '0px 0'],
   ];
@@ -457,8 +457,8 @@ Two things the numbers pin down that a rule would not:
     ['<div data-m style="line-height:200%">x</div>', '32px 32 32 32'],
     ['<div data-m style="line-height:2em">x</div>', '32px 32 32 32'],
     // `normal` is the font's own box, which is what this always answered.
-    ['<div data-m>x</div>', '18px 18 18 18'],
-    ['<div data-m style="line-height:normal">x</div>', '18px 18 18 18'],
+    ['<div data-m>x</div>', '18.5px 19 19 18.5'],
+    ['<div data-m style="line-height:normal">x</div>', '18.5px 19 19 18.5'],
     // The font size and the line-height are separate inputs.
     ['<div data-m style="font-size:32px">x</div>', '37px 37 37 37'],
     ['<div data-m style="font-size:32px;line-height:1">x</div>', '32px 32 32 32'],
@@ -473,7 +473,7 @@ Two things the numbers pin down that a rule would not:
     ['<div data-m style="line-height:30px;height:7px">x</div>', '7px 7 7 7'],
     // The inline controls: an inline box keeps the font box, an inline-block
     // does not.
-    ['<span data-m style="line-height:30px">x</span>', 'auto 0 18 18'],
+    ['<span data-m style="line-height:30px">x</span>', 'auto 0 19 18.5'],
     ['<div data-m style="display:inline-block;line-height:30px">x</div>',
      '30px 30 30 30'],
   ];
@@ -537,41 +537,41 @@ side wraps in 100 and gives the same 360.
 
   const CASES = [
     // The line count follows the box it has to fit in.
-    ['width:100px', FIVE, '36px 36 36'],
-    ['width:100px', FORTY, '360px 360 360'],
-    ['width:200px', FORTY, '144px 144 144'],
-    ['width:400px', FORTY, '72px 72 72'],
-    ['width:100px', 'aaa', '18px 18 18'],
+    ['width:100px', FIVE, '37px 37 37'],
+    ['width:100px', FORTY, '370px 370 370'],
+    ['width:200px', FORTY, '148px 148 148'],
+    ['width:400px', FORTY, '74px 74 74'],
+    ['width:100px', 'aaa', '18.5px 19 19'],
     // A word wider than the box overflows rather than breaking.
-    ['width:50px', 'aaaaaaaaaaaaaaaaaaaaaaaa', '18px 18 18'],
+    ['width:50px', 'aaaaaaaaaaaaaaaaaaaaaaaa', '18.5px 19 19'],
     // Each line is worth the line-height, so the two multiply.
     ['width:100px;line-height:30px', FIVE, '60px 60 60'],
     ['width:100px;line-height:30px', FORTY, '600px 600 600'],
     // Leading and trailing collapsible space changes nothing.
-    ['width:100px', '   ' + FIVE + '   ', '36px 36 36'],
+    ['width:100px', '   ' + FIVE + '   ', '37px 37 37'],
     // nowrap and pre do not break on width.
-    ['width:100px;white-space:nowrap', FORTY, '18px 18 18'],
-    ['width:100px;white-space:pre', FORTY, '18px 18 18'],
-    ['width:100px;white-space:pre-wrap', FORTY, '360px 360 360'],
+    ['width:100px;white-space:nowrap', FORTY, '18.5px 19 19'],
+    ['width:100px;white-space:pre', FORTY, '18.5px 19 19'],
+    ['width:100px;white-space:pre-wrap', FORTY, '370px 370 370'],
     // The wrap width is the CONTENT width: padding and border come off first.
-    ['width:100px;padding:0 20px', FORTY, '360px 360 360'],
+    ['width:100px;padding:0 20px', FORTY, '370px 370 370'],
     // ...and the border is outside the CLIENT box as well, so an offsetHeight
     // of 380 beside a content height of 360 is the border, not a wrong count.
-    ['width:100px;border:10px solid', FORTY, '360px 360 380'],
-    ['width:100px;padding:10px 20px', FORTY, '360px 380 380'],
-    ['box-sizing:border-box;width:140px;padding:0 20px', FORTY, '360px 360 360'],
+    ['width:100px;border:10px solid', FORTY, '370px 370 390'],
+    ['width:100px;padding:10px 20px', FORTY, '370px 390 390'],
+    ['box-sizing:border-box;width:140px;padding:0 20px', FORTY, '370px 370 370'],
     // A newline is a break where white-space keeps it, and one line more than
     // there are newlines -- less one when the text ends with one.
-    ['width:100px;white-space:pre', 'a\nb\nc', '54px 54 54'],
-    ['width:100px;white-space:pre-line', 'a\nb\nc', '54px 54 54'],
-    ['width:100px', 'a\nb\nc', '18px 18 18'],
-    ['width:100px;white-space:pre', 'a\n\nb', '54px 54 54'],
-    ['width:100px;white-space:pre', 'a\n\n\nb', '72px 72 72'],
-    ['width:100px;white-space:pre', '\na', '36px 36 36'],
-    ['width:100px;white-space:pre', 'a\nb\n', '36px 36 36'],
-    ['width:100px;white-space:pre', 'a\n\n', '36px 36 36'],
-    ['width:100px;white-space:pre', '\n', '18px 18 18'],
-    ['width:100px;white-space:pre', '\t', '18px 18 18'],
+    ['width:100px;white-space:pre', 'a\nb\nc', '55.5px 56 56'],
+    ['width:100px;white-space:pre-line', 'a\nb\nc', '55.5px 56 56'],
+    ['width:100px', 'a\nb\nc', '18.5px 19 19'],
+    ['width:100px;white-space:pre', 'a\n\nb', '55.5px 56 56'],
+    ['width:100px;white-space:pre', 'a\n\n\nb', '74px 74 74'],
+    ['width:100px;white-space:pre', '\na', '37px 37 37'],
+    ['width:100px;white-space:pre', 'a\nb\n', '37px 37 37'],
+    ['width:100px;white-space:pre', 'a\n\n', '37px 37 37'],
+    ['width:100px;white-space:pre', '\n', '18.5px 19 19'],
+    ['width:100px;white-space:pre', '\t', '18.5px 19 19'],
     // A declared height still wins outright.
     ['width:100px;height:7px', FORTY, '7px 7 7'],
   ];
@@ -597,7 +597,7 @@ side wraps in 100 and gives the same 360.
     wrap.appendChild(el);
     host.appendChild(wrap);
     const got = [getComputedStyle(el).height, el.clientHeight].join(' ');
-    if (got !== '36px 36') wrong.push('split word: want [36px 36], got [' + got + ']');
+    if (got !== '37px 37') wrong.push('split word: want [37px 37], got [' + got + ']');
     wrap.remove();
   }
 
@@ -662,29 +662,29 @@ and 18 of scrollHeight. An `absolute` child is out of both. Measured on Chrome
 
   // html, then: computed w/h, client w/h, offset w/h, rect w/h, scrollHeight
   const CASES = [
-    [one(''), '400px 18px 400 18 400 18 400 18 18'],
+    [one(''), '400px 18.5px 400 19 400 19 400 18.5 19'],
     // Out of flow: not in the stack. A float stays in the scrollable overflow.
     [one('position:absolute'), '400px 0px 400 0 400 0 400 0 0'],
     [one('position:fixed'), '400px 0px 400 0 400 0 400 0 0'],
-    [one('float:left'), '400px 0px 400 0 400 0 400 0 18'],
-    [one('float:right'), '400px 0px 400 0 400 0 400 0 18'],
+    [one('float:left'), '400px 0px 400 0 400 0 400 0 19'],
+    [one('float:right'), '400px 0px 400 0 400 0 400 0 19'],
     // In flow, and this is the half that must not move.
-    [one('position:relative'), '400px 18px 400 18 400 18 400 18 18'],
-    [one('position:sticky'), '400px 18px 400 18 400 18 400 18 18'],
-    [one('display:inline'), '400px 18px 400 18 400 18 400 18 18'],
-    [one('display:inline-block'), '400px 18px 400 18 400 18 400 18 18'],
+    [one('position:relative'), '400px 18.5px 400 19 400 19 400 18.5 19'],
+    [one('position:sticky'), '400px 18.5px 400 19 400 19 400 18.5 19'],
+    [one('display:inline'), '400px 18.5px 400 19 400 19 400 18.5 19'],
+    [one('display:inline-block'), '400px 18.5px 400 19 400 19 400 18.5 19'],
     // display:none was already out of everything.
     [one('display:none'), '400px 0px 400 0 400 0 400 0 0'],
     // One of each: the in-flow child still counts and the absolute one does not.
     ['<div data-m><div>a</div><div style="position:absolute">b</div></div>',
-     '400px 18px 400 18 400 18 400 18 18'],
+     '400px 18.5px 400 19 400 19 400 18.5 19'],
     // The stack itself, and the rect that used to answer 0 beside it.
     ['<div data-m><div>a</div><div>b</div><div>c</div></div>',
-     '400px 54px 400 54 400 54 400 54 54'],
+     '400px 55.5px 400 56 400 56 400 55.5 56'],
     // ...and with padding and a border, so all three boxes differ: 36 of
     // content, 56 of client, 66 of offset and rect.
     ['<div data-m style="padding:10px;border:5px solid"><div>a</div><div>b</div></div>',
-     '370px 36px 390 56 400 66 400 66 56'],
+     '370px 37px 390 57 400 67 400 67 57'],
   ];
 
   const wrong = [];
