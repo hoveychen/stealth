@@ -836,7 +836,15 @@ fn corsHandler(req: *std.http.Server.Request, path: []const u8) !bool {
         return true;
     }
 
-    try req.respond("ok", .{
+    // Same idea as /echo_referer, but readable cross-origin: the Allow-Origin
+    // below is what lets a page on CORS_PAGE_ORIGIN see the body, so a test can
+    // assert what Referer a cross-origin subresource carried.
+    const body = if (std.mem.eql(u8, route, "/cors/referer"))
+        corsRequestHeader(req, "referer") orelse "NONE"
+    else
+        "ok";
+
+    try req.respond(body, .{
         .extra_headers = &.{
             .{ .name = "Content-Type", .value = "text/plain" },
             .{ .name = "Access-Control-Allow-Origin", .value = CORS_PAGE_ORIGIN },
