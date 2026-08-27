@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+The six CSS system font keywords.
+
+Kasada writes all six in one burst at x-hyatt --
+`setAttribute('style', 'font: caption !important')` through `status-bar`,
+recorded on both arms in tools/fingerprint/results/b55-voices-{lp,chrome}.json --
+and reads four numbers back off the element it applied them to.
+
+Chrome expands every one of them to the same thing, and headed and headless agree
+exactly (tools/fingerprint/probes/expr-b55-system-fonts.js,
+results/b55-sysfont-chrome{,-headed}.json). This engine kept the keyword: it
+answered `getComputedStyle(el).font === 'caption'`, which no browser produces,
+and left font-family at its `system-ui, sans-serif` default.
+
+The values are Chrome 151 on macOS. Like the system colours next door they are a
+platform's, not a constant -- but unlike the colours, all six keywords collapse
+to one expansion, so there is no per-keyword table to get wrong.
+
+Worth knowing before reading anything into this: the station's own readback is
+`0px,0px,0px,0px` here against `100075px,155556px,165464px,305134px` in Chrome,
+and that gap is NOT this. The element Kasada measures is laid out with no width,
+which is a separate defect; these four zeros are expected to survive this fix.
+-->
+
+<script id=system_font_keywords_expand>
+{
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    host.innerHTML = '<p style="' + decl + '">x</p>';
+    document.body.appendChild(host);
+    const got = String(getComputedStyle(host.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+
+  for (const keyword of ['caption', 'icon', 'menu', 'message-box', 'small-caption', 'status-bar']) {
+    const decl = 'font:' + keyword;
+    testing.expectEqual('normal', probe(decl, 'fontStyle'));
+    testing.expectEqual('normal', probe(decl, 'fontVariant'));
+    testing.expectEqual('400', probe(decl, 'fontWeight'));
+    testing.expectEqual('100%', probe(decl, 'fontStretch'));
+    testing.expectEqual('16px', probe(decl, 'fontSize'));
+    testing.expectEqual('normal', probe(decl, 'lineHeight'));
+    testing.expectEqual('Arial', probe(decl, 'fontFamily'));
+    // The shorthand reads back as the expansion, never as the keyword.
+    testing.expectEqual('16px Arial', probe(decl, 'font'));
+  }
+}
+</script>
+
+<script id=system_font_keywords_are_not_families>
+{
+  // `!important` is how Kasada writes them, so the same expansion has to
+  // survive that path.
+  const host = document.createElement('div');
+  host.innerHTML = '<p>x</p>';
+  document.body.appendChild(host);
+  const el = host.firstChild;
+  el.setAttribute('style', 'font: caption !important');
+  testing.expectEqual('Arial', String(getComputedStyle(el).fontFamily));
+  testing.expectEqual('16px Arial', String(getComputedStyle(el).font));
+
+  // A font shorthand that is not one of the six is untouched by this. `font`'s
+  // grammar is unmodelled, so such a value is still kept whole and the longhands
+  // keep their initial values -- 16px Times, not 20px Georgia. That is
+  // pre-existing and is not what this plan fixes; what matters here is only that
+  // the system-keyword path did not fire and invent Arial for it.
+  el.setAttribute('style', 'font: italic 700 20px/1.5 Georgia');
+  testing.expectEqual('Times', String(getComputedStyle(el).fontFamily));
+  testing.expectEqual('16px', String(getComputedStyle(el).fontSize));
+
+  // And the six are keywords of the shorthand only. `font-family: caption` is a
+  // family name, and keeps its capitals like any other custom ident.
+  el.setAttribute('style', 'font-family: Caption');
+  testing.expectEqual('Caption', String(getComputedStyle(el).fontFamily));
+  host.remove();
+}
+</script>

@@ -1,0 +1,20 @@
+{
+  "caption": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=Arial",
+  "caption.font": "16px Arial",
+  "caption.width": "13328",
+  "icon": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=Arial",
+  "icon.font": "16px Arial",
+  "icon.width": "13328",
+  "menu": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=Arial",
+  "menu.font": "16px Arial",
+  "menu.width": "13328",
+  "message-box": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=Arial",
+  "message-box.font": "16px Arial",
+  "message-box.width": "13328",
+  "small-caption": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=Arial",
+  "small-caption.font": "16px Arial",
+  "small-caption.width": "13328",
+  "status-bar": "font-style=normal|font-variant=normal|font-weight=400|font-stretch=100%|font-size=16px|line-height=normal|font-family=Arial",
+  "status-bar.font": "16px Arial",
+  "status-bar.width": "13328"
+}
