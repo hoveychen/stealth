@@ -2743,9 +2743,17 @@ pub fn getClientWidthWithCache(self: *Element, frame: *Frame, visibility_cache: 
     if (!self.checkVisibilityCached(visibility_cache, frame)) {
         return 0.0;
     }
+    return self.clientWidthOf(frame, self.getElementDimensions(frame), visibility_cache);
+}
 
-    const dims = self.getElementDimensions(frame);
-
+/// clientWidth off a box already measured. Split out so the rect path, which has
+/// its own `dims` in hand, does not measure the same element twice: it used to
+/// build the rect from the raw dimensions, and going through clientWidth for the
+/// content fallback would otherwise have cost a second full measurement per rect
+/// -- plus, since getElementDimensions restarts at depth 0, a second walk over
+/// the children on every level of the positioned-ancestor chain the rect recurses
+/// up. Guards read the rect in loops.
+fn clientWidthOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_cache: *VisibilityCache) f64 {
     // clientWidth is the PADDING box: content plus the padding, with the border
     // left out. Measured -- `border:5px solid` on the 1904px line answers 1894
     // here and 1904 for offsetWidth.
@@ -2768,9 +2776,11 @@ pub fn getClientHeightWithCache(self: *Element, frame: *Frame, visibility_cache:
     if (!self.checkVisibilityCached(visibility_cache, frame)) {
         return 0.0;
     }
+    return self.clientHeightOf(frame, self.getElementDimensions(frame), visibility_cache);
+}
 
-    const dims = self.getElementDimensions(frame);
-
+/// clientHeight off a box already measured. See clientWidthOf.
+fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_cache: *VisibilityCache) f64 {
     if (dims.inline_box) return 0;
 
     const tag = self.getTag();
@@ -2821,11 +2831,11 @@ fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.
     const width = if (dims.inline_box)
         dims.width + dims.padding_x + dims.border_x
     else
-        self.getClientWidthWithCache(frame, &visibility_cache) + dims.border_x;
+        self.clientWidthOf(frame, dims, &visibility_cache) + dims.border_x;
     var height = if (dims.inline_box)
         dims.height + dims.padding_y + dims.border_y
     else
-        self.getClientHeightWithCache(frame, &visibility_cache) + dims.border_y;
+        self.clientHeightOf(frame, dims, &visibility_cache) + dims.border_y;
 
     // A <br> is the one element whose rect is not the box offsetHeight reports.
     // It has no box at all -- 0 of clientHeight and 0 of offsetHeight, measured
