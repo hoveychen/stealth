@@ -18181,3 +18181,105 @@ an inline flow.
 box-parts 223/223, inline-box 176/176, flex-item-width 61/61, layout-grid 83/84
 unchanged, layout-box-shapes **240/250 → 245/250**. The five that moved are the
 `a<br>b` block and nothing else.
+
+## The font shorthand never reached the cascade (B83, 2026-08-27)
+
+`font` was one of the shorthands `chrome_shorthands.zig` calls `.unmodelled`, so
+the declaration was kept whole and its nineteen longhands were never set. What
+that cost is one reading: over eighteen sizes with `style="font:<n>px serif"`
+this engine answered **the same box width for every one of them** — the default
+font's — while its own `measureText` answered each size correctly. The shorthand
+reached the canvas font and nothing else.
+
+| declared | read | Chrome | this engine, before |
+|---|---|---|---|
+| `font:13px serif` | computed `font-size` | 13px | **16px** |
+| `font:13px serif` | computed `font-family` | serif | **Times** |
+| `font:13px serif` | box width | 60.625 | **75** |
+| `font:13px monospace` | box width | 86.09375 | **75** |
+| a parent's `font`, on the child | everything | inherited | **nothing to inherit** |
+
+### The expansion is read off the browser, not derived from the grammar
+
+Chrome keeps no shorthand in a declaration, so `style.length` and the indexed
+names ARE its expansion (`probes/expr-b81-font-expansion.js`). Nineteen names, in
+an order that is **not** the one a CSS-wide keyword produces — the two differ
+from the third name on — holding the specified tokens, with the twelve the
+grammar never names reset to their own initials, which is why `font-size-adjust`
+is `none` and two others are `auto`.
+
+### The refusal boundary, one shape at a time
+
+Refusing what Chrome accepts loses a page a style it was written with, so the
+grammar's edges were measured rather than recalled
+(`probes/expr-b83-font-refusals.js`, 29 cases):
+
+- the leading parts are a `||` group; each may appear once — `bold bold 16px
+  serif` and `italic oblique 16px serif` are both refused — except that `normal`
+  repeats freely, since four of them in a row is accepted;
+- **everything after the size is the family, whatever it looks like.**
+  `16px bold serif` is accepted with a family of `bold serif`;
+- the weight range is 1 to 1000 **inclusive** and takes fractions: 1, 1000 and
+  350.5 in, 0 and -1 and 1001 out;
+- a size of `0` is legal and a negative one is not;
+- `oblique 20deg` is one part in two tokens, and both are stored.
+
+`0 16px serif` is refused where `0 serif` is accepted, which looks arbitrary
+until the family explains it: taking the `0` as the size leaves `16px serif` as
+the family, and `16px` is a dimension rather than an identifier.
+
+**`font` is also the one shorthand Chrome does not keep whole when it is
+invalid** — it drops the declaration, leaving `style.length` at 0 where this
+engine left one entry. That is a third outcome no other shorthand needs.
+
+### Three more gaps the same reading turned up
+
+- **computed `font-weight` is a number and `font-stretch` a percentage.** This
+  engine echoed the keyword on both sides, so `getComputedStyle` answered `bold`
+  and `condensed` — values no browser computes. The arms agreed on 7 of 31
+  readings before and 31 of 31 after. Two things a spec-from-memory version gets
+  wrong: `bolder`/`lighter` are **ranges**, not CSS 2.1's nine-step table (an
+  inherited 1000 gives `bolder` = 1000, and an inherited 350 gives 700 — eleven
+  rows read, all eleven fit the ranges); and `<b>` takes its 700 from the UA
+  stylesheet, so a resolver that walks from "nothing declared here" straight to
+  the parent answers 400 for every `<b>` on every page.
+- **the computed `font` is a different join from the specified one**: weight
+  numeric with 400 left out, line height in px, and the stretch written **back**
+  as a keyword even though computed `font-stretch` is a percentage — so that one
+  part maps both ways. It answers `""` in four measured states the shorthand
+  cannot express. 1 of 27 before, 27 of 27 after.
+- **both paths have to expand.** `StyleManager`'s own comment says why — "the
+  expansion happens here rather than being missing on whichever of the two paths
+  a page happens to take" — and `font` was expanding on one of them. A rule
+  `.x{font:13px serif}` left computed font-size at 16px. The six system keywords
+  had the same hole and predate this.
+
+### Left alone, with the reading that says whose it is
+
+- a value carrying `var()`, a function or a comment is **kept whole** rather than
+  expanded. Chrome expands all three, and reorders the arithmetic inside
+  `calc(1px + 1em)` to `calc(1em + 1px)` while it is there — exactly the detail a
+  guess gets wrong.
+- a multi-identifier family reads back **unquoted**. Chrome writes
+  `16px "bold serif"`; so does its `font-family` longhand, and this engine's
+  longhand writes `bold serif` there too, so the gap is `font-family`'s
+  serialisation (`probes/expr-b83-font-family-quoting.js`).
+- `font: inherit` now stores nineteen `inherit`s, and this engine's computed path
+  answers the literal keyword for them. That gap is **general and predates
+  this**: `margin: inherit` computes to `inherit` here too, and so does the
+  `font-size: inherit` longhand (`probes/expr-b83-wide-keyword-computed.js`).
+  Expanding is what every modelled shorthand already does, so `font` is
+  consistent rather than special-cased; resolving CSS-wide keywords in computed
+  styles is its own plan and a wider win than this one.
+- **the layout's font still ignores stylesheets.** A rule `.x{font-size:13px}`
+  computes 13px and leaves the box 16px wide — and so does the plain longhand,
+  measured side by side, so it is not the shorthand's
+  (`probes/expr-b83-sheet-font-layout.js`). `Element.resolveFont` walks inline
+  style declarations instead of the cascade. Real pages put their fonts in
+  stylesheets, so on a real page **every text width is computed at the default
+  16px serif whatever the page declared** — which is why this is filed as
+  `resolve-font-ignores-stylesheets` and is probably larger than everything
+  above it.
+
+Across six probes the arms agree on **340 of 371** readings, and every one of the
+31 that remain is named above.
