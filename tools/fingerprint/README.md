@@ -16949,3 +16949,72 @@ Which leaves a real trade-off rather than a defect, and it is the whole of
 Do not decide this from the desk. It wants a station measurement, and x-hyatt
 was refusing every client by the time this was found — so it waits for a window
 where a headed Chrome control passes.
+
+## Chrome lays out on a 1/64px grid (B79, 2026-08-26)
+
+`33.3%` of 400px is 133.2 in arithmetic and **`133.188px`** in Chrome — 8524/64.
+Blink's LayoutUnit is a fixed-point number with six fractional bits, and it is
+reached by **flooring**: 133.2 x 64 is 8524.8 and the .8 is dropped, not rounded.
+This engine answered the arithmetic, and that is worth more than tidiness:
+element geometry is the largest attributable block of the `/tl` payload deficit
+at x-hyatt, and what the other arm's byte-level read showed missing was
+*decimal places* — 202 geometry readings coming to 985 characters in Chrome and
+816 here.
+
+### What snaps is a used value, not every length
+
+Measured property by property with `scratch/expr-grid-props.js`, every case
+declaring a value deliberately off the grid:
+
+| declared | Chrome computes | on the grid? |
+|---|---|---|
+| `width: 133.2px` | `133.188px` | **yes** |
+| `width: 33.3%` | `133.188px` | **yes** |
+| `height: 33.3px` | `33.2969px` | **yes** |
+| `padding-left: 33.3%` | `133.188px` | **yes** |
+| `padding-left: 10.1px` | `10.1px` | no |
+| `margin-left: 10.1px` | `10.1px` | no |
+| `font-size: 13.3px` | `13.3px` | no |
+| `padding-left: 0.5em` of it | `6.65px` | no |
+| `letter-spacing: 0.7px` | `0.7px` | no |
+| `border-left: 2.7px solid` | `2px` | whole px, not 1/64 |
+
+`width` and `height` report the **used** value — the box the layout built — so
+they snap whatever unit was written. A percentage resolves against a used
+length, so it snaps too, wherever it appears. Everything else reports the
+**computed** value, which is the length the author wrote.
+
+### The layout had to stop reading its own numbers back out of text
+
+A computed length is written to six significant figures. Snap `33.328125`, write
+it, parse it back as `33.3281`, and it is now a hair BELOW its own grid step —
+the next floor drops it to the step beneath, and `33.3333%` of 100px comes out
+`33.3125` where Chrome says `33.3281`. **No tolerance fixes that**: a value
+genuinely 0.0002 below a step and a printed one 0.0002 below the same step are
+the same two digits. (Two tolerances were tried before this was understood; both
+fixed some rows and broke others, which is what a guess looks like.)
+`cascadedComputedLength` hands the layout the number instead of the text.
+
+### The residue, with its diagnosis
+
+An author value with **more than six significant figures** still comes out one
+grid step high: `width:465.5466592px` computes `465.546875` here and
+`465.53125` in Chrome. Both engines serialise `el.style.width` to `465.547px`
+— the difference is that Chrome keeps the number behind it and this engine
+keeps only what it serialised. That is a storage defect, not a grid one, and it
+has its own plan.
+
+### Acceptance
+
+`expr-layout-grid.js` goes from 2/12 cases to **10/12**; the two that stay
+belong to the two neighbouring plans (`266.812` vs `266.813` is six figures
+rounded half to **even**, and a percentage margin still reads the initial
+`0px`). `expr-box-parts.js` reaches **223 of 223 field readings** — all of it.
+`expr-inline-box.js` holds 16/16, `expr-flex-item-width.js` 10/10,
+`expr-box-parts-flex.js` 8/8, `expr-abs-inline-display.js` 9/9,
+`expr-layout-box-shapes.js` 217/250. 1510/1510.
+
+On a 40-row page of fractional percentages, the measure the payload analysis
+uses — total characters of element-geometry readings — is **1790 here against
+Chrome's 1783**, over 280 reads. Before this it was short by an order more than
+that gap, and short in the direction that mattered.
