@@ -19042,3 +19042,52 @@ sent here because r3 never gave the go-ahead.
 So the target is named and it is narrow: **the ~90KB body of the widget's third
 POST**, and what in it makes Cloudflare answer `chl-gen` rather than `chl-out`.
 That is what a knob bisection should now be pointed at, on the arm that passes.
+
+## The dpr-2 ground truth for the intrinsic boxes (B84, 2026-08-27)
+
+Measured with `--chrome-arg --force-device-scale-factor=2`, which is the switch
+that decides these numbers -- not `--headed`, which only coincides with scale 2
+on a Retina machine.
+
+**The height is the line box, exactly, with no rounding at all.** Checked across
+three families and five sizes, the input's content height and a plain block's
+`line-height: normal` box are the same number every time: Arial 9, 15.5, 18.5,
+37, 115; monospace 9.5, 15.5, 19, 37, 116.5; serif 9, 15.5, 18.5, 37, 115. That
+is cleaner than the scale-1 basis, where the same table needs a floor to land.
+
+**The width ceils onto the device pixel**, which is the convention this engine
+already states for text-derived lengths -- a text advance ceils where a
+specified length floors. With Arial's scale-2 basis (avgCharWidth 50,
+maxCharWidth **90.5**, against 91 at scale 1), `size * avg + (max - avg)` at the
+UA's 13.333px predicts and Chrome answers:
+
+| `size` | predicted | Chrome | | `size` | predicted | Chrome |
+|---|---|---|---|---|---|---|
+| 1 | 12.000 | 12 | | 10 | 72.000 | 72 |
+| 2 | 18.667 | 19 | | 20 | 138.667 | 139 |
+| 3 | 25.333 | 25.5 | | 40 | 272.000 | 272 |
+| 5 | 38.667 | 39 | | | | |
+
+Seven of seven under `ceil(w * 2) / 2`. At 100px the basis is already on the
+half-pixel grid -- `50 * size + 40.5` gives 90.5, 540.5, 1040.5, 2040.5 -- so
+the ceil is the identity there and the model is exact at both ends.
+
+The whole 204-family basis has been re-measured at scale 2 into
+`scratch/b84-charwidth-dpr2.json`. Two traps cost a pass each and are worth
+knowing: `offsetWidth` is an integer and cannot see a half pixel, so a sweep
+reading it comes back with the scale-1 numbers unchanged; and the sweep
+evaluates before its navigation settles, so the document is still `about:blank`,
+where `box-sizing` reads border-box and `cs.width` is the border box. Take the
+content box from the rect less the computed edges and neither applies.
+
+The rest of the table at scale 2, for whoever does the re-basing: `textarea`
+177x31 of content (181x35 client, 183x37 offset), `select` 22x19 computed with a
+20x17 client, `progress` 160x16 and `meter` 80x16 unchanged, `button` 16x6
+unchanged, and the replaced elements still 300x150.
+
+One thing that does NOT fall out of this and needs its own measurement: the
+swept line-box table holds integer sizes only, and 13.333px is not one, so it is
+scaled from the top of the table. That gives monospace 15.556 where Chrome's is
+15.5, while Arial's 15.333 rounds to the right answer by luck. Chrome answers
+15.5 at 13.333px for Arial, monospace and serif alike, so the UA's own size
+wants to be a swept entry rather than an extrapolation.
