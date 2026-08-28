@@ -19647,3 +19647,136 @@ input boxes now match Chrome on nine of the guard's ten readings, which
 0 of 20 against Chrome's 10 of 10. Something else is being checked, it behaves
 like the two known tells rather than like a score, and no knob written so far
 reproduces it.
+
+## cf-scrapingcourse: the poll was lying, and the split happens at r1
+
+The previous chapter left one unexplained quantity -- the widget's first POST is
+larger here than in Chrome -- and a list of four payload spans that disagree.
+This one closes the list, corrects three readings that were instrument
+artefacts, and moves the open question a long way upstream.
+
+### Two instrument bugs, both of which had produced findings
+
+**The stash was polled every two seconds, and the widget outlives the poll by
+less than that.** On a passing run the challenge tears its own frame down the
+moment the ticket arrives, and `Runtime.evaluate` against a detached frame
+returns nothing, so everything still in that frame's global is lost. Chrome's
+frame reported 8 spans; this engine's, which reports over the wire, reported 26.
+The gap was read as "the arms collect different things". At a 250ms cadence
+Chrome's frame reports 23 spans and the two lists line up.
+
+**Identical lines were deduplicated on one arm and not on the other.** The
+harness drops a line it has already seen -- it re-reads a growing array, so it
+must -- while the wire channel used by the lightpanda arm keeps every repeat.
+"We encode the 8624-byte buffer three times and Chrome encodes it once" was that
+asymmetry: with a sequence number in front of every line, both arms encode it
+three times. `report-payload`'s spans now carry `n=`, and that is what makes the
+order and the multiplicity comparable at all.
+
+Two further readings from the previous chapter fall with these. The 85-byte
+shadow-root probe -- `[null,"closed","<body></body>","",4,4,N,...]` -- was read
+as `N=37` in Chrome and `N=33` here; on a `ReleaseFast` binary both arms answer
+37, every run. And the first widget POST does not jitter by 416 bytes here: on
+`ReleaseFast` it is the same length in every run of a batch, against Chrome's
+±22. The 416 was a Debug build, as the harness's default `zig-out/bin` still is.
+
+### The one structural absence, attributed and tested
+
+With the poll fixed, the arms differ in exactly one span rather than in a list of
+them: Chrome encodes 4096 bytes of opaque black that this engine never encodes.
+`report-pixels` accounts for every other buffer -- 9216 is an offscreen 2D
+`getImageData` at 48x48, 1024 is a WebGL `readPixels` at 16x16, 8624 is 49x44 --
+and none of them produces 4096.
+
+`report-gpu` finds it. The widget takes a WebGPU adapter and device, configures
+a canvas context, renders into a texture, copies the texture into a buffer, maps
+it, and reads it. This engine walks the whole pipeline and then hands back
+nothing from `GPUBuffer.getMappedRange()`, so 32x32 pixels never reach the
+payload. It is a real defect and it is not the door: `gpu-mapped-undefined`,
+which makes Chrome's `getMappedRange` return `undefined` exactly as this engine
+does, is **3 / 3 ticketed**, against `gpu-mapped-passthru` 3 / 3 and `none` 3 / 3.
+
+### The same question from the other side, which is new
+
+Every knob before this one perturbs Chrome. That method can only test
+differences Chrome can be made to imitate, and after sixteen negatives it was
+worth asking the question in the direction that would matter: repair this
+engine's answers and see whether it is ticketed.
+
+`lp-chrome-values` does three repairs at once -- rejects `FontFace.load` for
+families Chrome does not have, reports every permission as `denied`, and filters
+the closed-shadow-root style element out of `document.styleSheets`. All three
+land: paired with `report-payload` the font span is 69 bytes hashing to `mt6m58`
+and the permission span is 167 bytes hashing to `1xcv2yu`, both byte-identical
+to Chrome's, and the stylesheet span drops from 41393 to 20696. The arm is still
+refused, twice. The collected values are closed from the productive side too.
+
+### r2, and why it is not the question
+
+`report-plain` shows the body of r2 leaving as `join("")` over 4716 single
+characters, so it is assembled character by character and no encoder hook can
+see the plaintext. `report-charsrc` gets it anyway, by recording the receiver of
+`charCodeAt` once per distinct long string. What goes into the payload includes
+an `Error` stack, a DOM description, and -- the largest single content
+difference on this door -- a `createOffer` SDP: 8398 characters in Chrome, 7186
+here.
+
+`probes/expr-sdp-offer.js` reproduces both numbers off-site. The gap is a codec
+list: this engine's canned offer predates H265 and the High-profile H264 payload
+types, so nine payload numbers and all their `rtpmap`, `fmtp` and `rtcp-fb`
+lines are missing. The same probe turns up a second defect on the way --
+`addTransceiver()` throws `InvalidStateError` here unconditionally, which is why
+the widget's offer has to come through the legacy `offerToReceiveAudio` route.
+
+Neither is the door. `sdp-stale-codecs`, which cuts those nine payload types out
+of Chrome's offer (8398 -> 7454), is **3 / 3 ticketed**; `sdp-passthru` is 2 / 3
+and `none` 3 / 3 in the same window.
+
+One more correction belongs here. `run-expr --headed-ua` and `cf-knob`'s
+`--user-agent` switch do not only replace the header: Chrome empties the
+high-entropy client-hint metadata that goes with it, so `getHighEntropyValues()`
+answers `""` for architecture, bitness, platformVersion and uaFullVersion and
+`[]` for fullVersionList and formFactors. Measured that way the Chrome arm looks
+179 bytes shorter than this engine on exactly the fields the widget reads. With
+the switch off -- `cf-knob --real-ua` -- Chrome's answer is 477 bytes, the same
+length as ours. It did not change r2's size, which is how we know r2 does not
+carry it, but it would have poisoned any comparison of those fields.
+
+### Where the arms actually split
+
+Capturing the response bodies of the `/fo/` posts moves the question upstream of
+everything above. The exchange is the same shape on both arms; the sizes are
+not.
+
+| round | request | Chrome response | this engine's response |
+|---|---|---|---|
+| r1 (page) | 2306 B both arms | **113 584 B** | **151 440 B** |
+| r2 (widget) | 4716-4738 / 4898-4919 | 823 040 B | 1 097 448 B |
+| r3 (widget) | ~88 000 both arms | 6936 B + **ticket** | 170 296 B + another `cf-chl-gen` |
+
+The r1 request is the same size on both arms, its headers agree on everything
+except a client-hint patch version, and the response to it is 37 856 bytes
+bigger here -- stably, run after run, with no overlap between the arms. The
+server is already handing this engine a different program before the widget has
+run a line.
+
+And that difference is not the suspicion branch. `webdriver-true`, which is
+refused, gets r1 = 113 580 and r2 = 846 204: the ordinary sizes. A Chrome that
+the door rejects is still served the small program. So the two things are
+separable, the size split is not a verdict, and whatever selects it is decided
+by r1's content or by the transport rather than by anything the widget collects.
+
+The third row says something else worth keeping: this engine's r3 is not
+refused. It answers with a fresh `cf-chl-gen` and 170 KB of body -- the server
+asking for a fourth round -- and no fourth round is ever posted. `report-errors`
+finds no uncaught exception and no rejection in any document when that happens.
+
+### The tally so far
+
+Knobs that keep Chrome's ticket, and so name something this door does not weigh:
+canvas readback, WebGL, `Error.prototype.stack`, timezone, detached computed
+style, the cross-origin boundary, the two newer globals, voices, the first
+worker, the font list, the stylesheet rule count, the permission states, the
+WebGPU readback, the SDP codec list. Knobs that cost it: `webdriver-true`, and
+the two hooks whose own machinery is judged (`report-reads`, and anything that
+touches `performance.memory`).

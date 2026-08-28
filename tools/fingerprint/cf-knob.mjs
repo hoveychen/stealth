@@ -51,8 +51,16 @@ if (engine !== 'lightpanda' && engine !== 'chrome') {
     process.exit(2);
 }
 const knobName = arg('--knob', 'none');
-if (!(knobName in CF_KNOBS)) {
-    console.error(`unknown knob '${knobName}'. --list to see them.`);
+// `--knob a+b` runs both, each in its own function scope. Two knobs pasted
+// together share a script scope and both start with the same `let` declarations,
+// which is a syntax error and installs neither -- and a knob that never ran
+// looks exactly like a knob that changed nothing. The main use is pairing a
+// repair with a reporter, so that "the arm is still refused" can be told apart
+// from "the repair never landed in the payload".
+const parts = knobName.split('+');
+for (const p of parts) {
+    if (p in CF_KNOBS) continue;
+    console.error(`unknown knob '${p}'. --list to see them.`);
     process.exit(2);
 }
 // Report over the wire as well as into the stash. Costs the ticket on Chrome
@@ -60,9 +68,10 @@ if (!(knobName in CF_KNOBS)) {
 // it is for the arm that has no ticket: this engine keeps every document in one
 // target, and the per-session stash read cannot reach the widget's global there.
 const wire = process.argv.includes('--beacon');
-const knobSrc = CF_KNOBS[knobName]
-    ? (wire ? 'globalThis.__CFK_WIRE = true;\n' : '') + CF_KNOBS[knobName]
-    : CF_KNOBS[knobName];
+const body = parts.length === 1
+    ? CF_KNOBS[knobName]
+    : parts.map((p) => (CF_KNOBS[p] ? `(function () {\n${CF_KNOBS[p]}\n})();` : '')).join('\n');
+const knobSrc = body ? (wire ? 'globalThis.__CFK_WIRE = true;\n' : '') + body : body;
 const runs = Number(arg('--runs', 2));
 const basePort = Number(arg('--port', 9470));
 const target = arg('--url', 'https://www.scrapingcourse.com/antibot-challenge');
@@ -74,6 +83,14 @@ const headless = process.argv.includes('--headless');
 // way scripting a document is. Turn it on deliberately, and read the round count
 // before reading anything else.
 const intoWorkers = process.argv.includes('--workers');
+// Chrome's --user-agent switch does not only replace the header: it empties the
+// high-entropy client-hint metadata that goes with it, so
+// getHighEntropyValues() answers "" for architecture, bitness, platformVersion
+// and uaFullVersion and [] for fullVersionList and formFactors. The widget reads
+// exactly those, which made the Chrome arm's first widget POST 179 bytes shorter
+// than this engine's -- a gap that belonged to the harness. Pass --real-ua to
+// leave the switch off and compare against a Chrome whose hints are populated.
+const realUa = process.argv.includes('--real-ua');
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const LP = process.env.LP_BIN || path.join(repo, 'zig-out/bin/lightpanda');
@@ -87,7 +104,8 @@ async function once(port) {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-knob-'));
     const proc = engine === 'chrome'
         ? spawn(CHROME, [`--remote-debugging-port=${port}`, `--user-data-dir=${tmp}`,
-            '--no-first-run', '--no-default-browser-check', `--user-agent=${UA}`,
+            '--no-first-run', '--no-default-browser-check',
+            ...(realUa ? [] : [`--user-agent=${UA}`]),
             ...(headless ? ['--headless=new'] : [])],
         { stdio: ['ignore', 'pipe', 'pipe'] })
         : spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(port)],
@@ -201,7 +219,17 @@ async function once(port) {
                     method: m.params.request.method,
                     postLen: (m.params.request.postData || '').length,
                     postUnknown: !m.params.request.postData && !!m.params.request.hasPostData,
+                    reqHeaders: m.params.request.headers || {},
                 });
+                return;
+            }
+            // Chrome's requestWillBeSent carries only what the renderer knows;
+            // the cookie, the Sec-Fetch-* set and the client hints are added
+            // downstream and only appear here. Comparing the two arms on the
+            // renderer's view alone has produced false differences before.
+            if (m.method === 'Network.requestWillBeSentExtraInfo') {
+                const p = posted.get(m.params.requestId);
+                if (p) p.extraHeaders = m.params.headers || {};
                 return;
             }
             if (m.method !== 'Network.responseReceived') return;
@@ -221,9 +249,33 @@ async function once(port) {
                 postLen: sent.postLen || 0,
                 postUnknown: !!sent.postUnknown,
                 status: r.status,
+                protocol: r.protocol ?? null,
                 chlGen: h['cf-chl-gen'] ?? null,
                 chlOut: h['cf-chl-out'] ?? null,
+                // The whole header block and the body, because the refusal is
+                // the server's own account of what it made of the payload and
+                // reading two named headers off it throws the rest away.
+                headers: h,
+                reqHeaders: sent.reqHeaders || {},
+                extraHeaders: sent.extraHeaders || {},
+                requestId: m.params.requestId,
+                sessionId: m.sessionId,
             });
+        });
+        // Bodies arrive later than the headers, so they are attached on the
+        // finish event to the row the header event already made.
+        cdp.on((m) => {
+            if (m.method !== 'Network.loadingFinished') return;
+            const row = out.challenge.find((c) => c.requestId === m.params.requestId);
+            if (!row || row.body !== undefined) return;
+            row.body = '(pending)';
+            cdp.send('Network.getResponseBody', { requestId: m.params.requestId }, m.sessionId || row.sessionId)
+                .then((b) => {
+                    const s = String(b?.body ?? '');
+                    row.bodyLen = s.length;
+                    row.body = s.slice(0, 4000);
+                })
+                .catch(() => { row.body = '(unavailable)'; });
         });
 
         // Browser-level auto-attach, on top of the per-session one.
@@ -266,8 +318,13 @@ async function once(port) {
 
         await install(sessionId);
         await cdp.send('Page.navigate', { url: target }, sessionId);
-        for (let waited = 0; waited < settle; waited += 2000) {
-            await sleep(2000);
+        // Fast, because on the Chrome arm the widget's frame is gone a moment
+        // after the ticket arrives, and every report still in its global goes
+        // with it. At a two-second cadence Chrome's frame reported eight spans
+        // and this engine's reported twenty-six -- a difference that was the
+        // poll, not the challenge.
+        for (let waited = 0; waited < settle; waited += 250) {
+            await sleep(250);
             await collect();
         }
         await collect();

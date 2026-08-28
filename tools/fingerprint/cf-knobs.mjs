@@ -18,10 +18,19 @@
 // window. One unexplained 404 inside its own frame is apparently enough. So
 // nothing is sent; the harness reads this array off every session with
 // Runtime.evaluate after the verdict is already on the wire.
+// Every line carries its own sequence number, and that is not cosmetic. The
+// harness drops a line it has already seen -- it re-reads a growing array, so
+// it has to -- which silently collapsed a span the widget encoded three times
+// into one. The wire channel used by the lightpanda arm keeps the repeats, so
+// the two arms were being compared on their duplicate counts through two
+// channels with opposite behaviour. With a counter in front, a repeat is a
+// distinct line on both.
 const beacon = `
-  const __send = (q) => {
+  let __seq = 0;
+  const __send = (q0) => {
     try {
       const g = globalThis;
+      const q = 'n=' + (++__seq) + '&' + q0;
       (g.__cfk || (g.__cfk = [])).push(q);
       // --beacon. The stash is read back per SESSION, and this engine puts the
       // whole page in one target -- so the widget's frame, which has its own
@@ -655,6 +664,579 @@ export const CF_KNOBS = {
           });
         } catch (e) { rec('join:hook-failed:' + e.name); }
         __send('report-font-probe=installed&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // Which call produces each pixel buffer, and which one produces nothing?
+    //
+    // With the poll fixed, the widget's span list is comparable for the first
+    // time, and the arms differ in exactly one structural way: Chrome encodes a
+    // 4096-byte buffer (1024 opaque-black pixels, so 32x32 RGBA) that this
+    // engine never encodes at all. Every other span is present on both sides,
+    // in the same multiplicity. A span whose value differs has been shown four
+    // times over not to matter; a span that is absent is a different claim --
+    // it says a measurement did not happen. This records every call that can
+    // hand back pixels, with its size and the shape of what came back, so the
+    // missing 4096 can be attributed to a call rather than guessed at.
+    'report-pixels': beacon + `
+      (() => {
+        const hash = (s) => {
+          let h = 5381;
+          for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+          return h.toString(36);
+        };
+        const shape = (v) => {
+          try {
+            if (!v) return String(v);
+            if (typeof v.length === 'number') {
+              let s = '';
+              const n = Math.min(v.length, 4096);
+              for (let i = 0; i < n; i++) s += String.fromCharCode(v[i] & 255);
+              return 'len=' + v.length + ' h=' + hash(s);
+            }
+            return typeof v;
+          } catch (e) { return 'shape-threw'; }
+        };
+        const rec = (s) => __send('px=' + encodeURIComponent(String(s).slice(0, 300)) +
+                                  '&at=' + encodeURIComponent(__where()));
+        const wrap = (proto, name, label, describe) => {
+          try {
+            if (!proto || !proto[name]) { rec(label + ':absent'); return; }
+            const real = proto[name];
+            Object.defineProperty(proto, name, {
+              configurable: true, writable: true, enumerable: false,
+              value: function (...a) {
+                let r, err = null;
+                try { r = real.apply(this, a); } catch (e) { err = e; }
+                try { rec(label + ' ' + describe(this, a, r, err)); } catch (e) {}
+                if (err) throw err;
+                return r;
+              },
+            });
+          } catch (e) { rec(label + ':hook-failed:' + e.name); }
+        };
+        const cv = (c) => { try { return (c.width || '?') + 'x' + (c.height || '?'); } catch (e) { return '?'; } };
+
+        wrap(HTMLCanvasElement.prototype, 'getContext', 'canvas.getContext',
+             (t, a, r, e) => a[0] + ' canvas=' + cv(t) + ' => ' + (e ? 'THREW:' + e.name : r ? 'ok' : String(r)));
+        wrap(HTMLCanvasElement.prototype, 'toDataURL', 'canvas.toDataURL',
+             (t, a, r, e) => 'canvas=' + cv(t) + ' => ' + (e ? 'THREW:' + e.name : 'len=' + String(r).length + ' h=' + hash(String(r))));
+        wrap(CanvasRenderingContext2D.prototype, 'getImageData', 'ctx.getImageData',
+             (t, a, r, e) => a.slice(0, 4).join(',') + ' canvas=' + cv(t.canvas || {}) +
+                             ' => ' + (e ? 'THREW:' + e.name : shape(r && r.data)));
+        if (typeof WebGLRenderingContext === 'function') {
+          wrap(WebGLRenderingContext.prototype, 'readPixels', 'gl.readPixels',
+               (t, a, r, e) => a.slice(0, 4).join(',') + ' => ' + (e ? 'THREW:' + e.name : shape(a[6])));
+        } else { rec('WebGLRenderingContext:absent'); }
+        if (typeof WebGL2RenderingContext === 'function') {
+          wrap(WebGL2RenderingContext.prototype, 'readPixels', 'gl2.readPixels',
+               (t, a, r, e) => a.slice(0, 4).join(',') + ' => ' + (e ? 'THREW:' + e.name : shape(a[6])));
+        } else { rec('WebGL2RenderingContext:absent'); }
+        if (typeof OffscreenCanvas === 'function') {
+          wrap(OffscreenCanvas.prototype, 'getContext', 'offscreen.getContext',
+               (t, a, r, e) => a[0] + ' canvas=' + cv(t) + ' => ' + (e ? 'THREW:' + e.name : r ? 'ok' : String(r)));
+          wrap(OffscreenCanvas.prototype, 'convertToBlob', 'offscreen.convertToBlob',
+               (t, a, r, e) => 'canvas=' + cv(t) + ' => ' + (e ? 'THREW:' + e.name : 'promise'));
+          wrap(OffscreenCanvas.prototype, 'transferToImageBitmap', 'offscreen.transferToImageBitmap',
+               (t, a, r, e) => 'canvas=' + cv(t) + ' => ' + (e ? 'THREW:' + e.name : r ? r.width + 'x' + r.height : String(r)));
+        } else { rec('OffscreenCanvas:absent'); }
+        // An offscreen 2d context is NOT a CanvasRenderingContext2D, so the
+        // readback that produced the 8624-byte span went unrecorded until this.
+        if (typeof OffscreenCanvasRenderingContext2D === 'function') {
+          wrap(OffscreenCanvasRenderingContext2D.prototype, 'getImageData', 'offctx.getImageData',
+               (t, a, r, e) => a.slice(0, 4).join(',') + ' canvas=' + cv(t.canvas || {}) +
+                               ' => ' + (e ? 'THREW:' + e.name : shape(r && r.data)));
+          wrap(OffscreenCanvasRenderingContext2D.prototype, 'drawImage', 'offctx.drawImage',
+               (t, a, r, e) => (a[0] && a[0].constructor ? a[0].constructor.name : typeof a[0]) +
+                               ' args=' + (a.length - 1) + ' canvas=' + cv(t.canvas || {}) +
+                               ' => ' + (e ? 'THREW:' + e.name : 'ok'));
+        } else { rec('OffscreenCanvasRenderingContext2D:absent'); }
+        try {
+          if (typeof ImageData === 'function') {
+            const RealImageData = ImageData;
+            const Shim = function (...a) {
+              const r = new RealImageData(...a);
+              try { rec('new ImageData ' + a.map((x) => (x && x.length) || x).join(',') + ' => ' + r.width + 'x' + r.height); } catch (e) {}
+              return r;
+            };
+            Shim.prototype = RealImageData.prototype;
+            globalThis.ImageData = Shim;
+          } else { rec('ImageData:absent'); }
+        } catch (e) { rec('ImageData:hook-failed:' + e.name); }
+        try {
+          if (typeof createImageBitmap === 'function') {
+            const real = createImageBitmap;
+            globalThis.createImageBitmap = function (...a) {
+              const label = 'createImageBitmap ' + (a[0] && a[0].constructor ? a[0].constructor.name : typeof a[0]);
+              let p;
+              try { p = real.apply(globalThis, a); } catch (e) { rec(label + ' => THREW:' + e.name); throw e; }
+              return p.then((b) => { rec(label + ' => ' + (b ? b.width + 'x' + b.height : String(b))); return b; },
+                            (e) => { rec(label + ' => REJECTED:' + (e && e.name)); throw e; });
+            };
+          } else { rec('createImageBitmap:absent'); }
+        } catch (e) { rec('createImageBitmap:hook-failed:' + e.name); }
+        __send('report-pixels=installed&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // Does the widget get pixels out of WebGPU, and do we?
+    //
+    // report-pixels accounts for every buffer the widget encodes except one:
+    // Chrome encodes 4096 bytes of opaque black -- 1024 pixels, so 32x32 RGBA --
+    // and no canvas or WebGL call in the recording produces it. The one pixel
+    // source left in the list is getContext('webgpu'), which BOTH arms answer
+    // with a live object. If the readback happens through WebGPU on Chrome and
+    // dies somewhere in the middle here, the arms differ by a measurement that
+    // did not happen rather than by a value, which is the one shape of
+    // difference this door has not been tested against.
+    'report-gpu': beacon + `
+      (() => {
+        const rec = (s) => __send('gpu=' + encodeURIComponent(String(s).slice(0, 300)) +
+                                  '&at=' + encodeURIComponent(__where()));
+        const wrap = (proto, name, label, describe) => {
+          try {
+            if (!proto) { rec(label + ':no-proto'); return; }
+            if (!proto[name]) { rec(label + ':absent'); return; }
+            const real = proto[name];
+            Object.defineProperty(proto, name, {
+              configurable: true, writable: true, enumerable: false,
+              value: function (...a) {
+                let r, err = null;
+                try { r = real.apply(this, a); } catch (e) { err = e; }
+                try { rec(label + ' ' + describe(a, r, err)); } catch (e) {}
+                if (err) throw err;
+                if (r && typeof r.then === 'function') {
+                  return r.then((v) => { rec(label + ' resolved ' + (v ? (v.constructor && v.constructor.name) : String(v))); return v; },
+                                (e) => { rec(label + ' REJECTED ' + (e && e.name) + ':' + String(e && e.message).slice(0, 80)); throw e; });
+                }
+                return r;
+              },
+            });
+          } catch (e) { rec(label + ':hook-failed:' + e.name); }
+        };
+        const nm = (r, e) => e ? 'THREW:' + e.name + ':' + String(e.message).slice(0, 80)
+                               : (r && r.constructor ? r.constructor.name : String(r));
+        rec('navigator.gpu=' + (navigator.gpu ? (navigator.gpu.constructor && navigator.gpu.constructor.name) : String(navigator.gpu)));
+        for (const n of ['GPU', 'GPUAdapter', 'GPUDevice', 'GPUCanvasContext', 'GPUBuffer', 'GPUQueue',
+                         'GPUTexture', 'GPUCommandEncoder', 'GPUCommandBuffer', 'GPUAdapterInfo']) {
+          rec('global ' + n + '=' + typeof globalThis[n]);
+        }
+        if (navigator.gpu) {
+          wrap(Object.getPrototypeOf(navigator.gpu), 'requestAdapter', 'gpu.requestAdapter', (a, r, e) => nm(r, e));
+          wrap(Object.getPrototypeOf(navigator.gpu), 'getPreferredCanvasFormat', 'gpu.getPreferredCanvasFormat', (a, r, e) => e ? 'THREW:' + e.name : String(r));
+        }
+        if (typeof GPUAdapter === 'function') {
+          wrap(GPUAdapter.prototype, 'requestDevice', 'adapter.requestDevice', (a, r, e) => nm(r, e));
+        }
+        if (typeof GPUDevice === 'function') {
+          for (const m of ['createBuffer', 'createTexture', 'createCommandEncoder', 'createShaderModule',
+                           'createRenderPipeline', 'createComputePipeline', 'createBindGroup']) {
+            wrap(GPUDevice.prototype, m, 'device.' + m, (a, r, e) => nm(r, e));
+          }
+        }
+        if (typeof GPUCanvasContext === 'function') {
+          wrap(GPUCanvasContext.prototype, 'configure', 'ctx.configure', (a, r, e) => e ? 'THREW:' + e.name : 'ok');
+          wrap(GPUCanvasContext.prototype, 'getCurrentTexture', 'ctx.getCurrentTexture', (a, r, e) => nm(r, e));
+        }
+        if (typeof GPUBuffer === 'function') {
+          wrap(GPUBuffer.prototype, 'mapAsync', 'buffer.mapAsync', (a, r, e) => nm(r, e));
+          wrap(GPUBuffer.prototype, 'getMappedRange', 'buffer.getMappedRange',
+               (a, r, e) => e ? 'THREW:' + e.name : 'byteLength=' + (r && r.byteLength));
+        }
+        if (typeof GPUQueue === 'function') {
+          wrap(GPUQueue.prototype, 'submit', 'queue.submit', (a, r, e) => e ? 'THREW:' + e.name : 'n=' + (a[0] && a[0].length));
+          wrap(GPUQueue.prototype, 'onSubmittedWorkDone', 'queue.onSubmittedWorkDone', (a, r, e) => nm(r, e));
+        }
+        if (typeof GPUCommandEncoder === 'function') {
+          for (const m of ['beginRenderPass', 'beginComputePass', 'copyTextureToBuffer', 'copyBufferToBuffer', 'finish']) {
+            wrap(GPUCommandEncoder.prototype, m, 'enc.' + m, (a, r, e) => nm(r, e));
+          }
+        }
+        __send('report-gpu=installed&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // Is the missing WebGPU readback weighed?
+    //
+    // report-gpu found the 4096 bytes. The widget takes a WebGPU adapter and
+    // device, renders into a texture, copies it into a buffer, maps the buffer
+    // and reads it -- and on this engine the last step, getMappedRange, hands
+    // back no ArrayBuffer at all, so 32x32 pixels never reach the payload.
+    // Chrome's readback is 4096 bytes of opaque black.
+    //
+    // Three knobs, because "absent" and "wrong" are different claims:
+    // -undefined reproduces this engine exactly, -zeroes keeps the span but
+    // fills it with the wrong pixels, and -passthru is the control that says
+    // whether merely redefining the method is what costs the ticket.
+    'gpu-mapped-undefined': beacon + `
+      (() => {
+        try {
+          if (typeof GPUBuffer !== 'function') { __send('gpu-mapped-undefined=no-GPUBuffer'); return; }
+          const real = GPUBuffer.prototype.getMappedRange;
+          Object.defineProperty(GPUBuffer.prototype, 'getMappedRange', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (...a) { try { real.apply(this, a); } catch (e) {} return undefined; },
+          });
+          __send('gpu-mapped-undefined=wrapped&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('gpu-mapped-undefined=cannot-wrap:' + e.name); }
+      })();
+    `,
+
+    'gpu-mapped-zeroes': beacon + `
+      (() => {
+        try {
+          if (typeof GPUBuffer !== 'function') { __send('gpu-mapped-zeroes=no-GPUBuffer'); return; }
+          const real = GPUBuffer.prototype.getMappedRange;
+          Object.defineProperty(GPUBuffer.prototype, 'getMappedRange', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (...a) {
+              const r = real.apply(this, a);
+              return new ArrayBuffer(r && r.byteLength ? r.byteLength : 0);
+            },
+          });
+          __send('gpu-mapped-zeroes=wrapped&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('gpu-mapped-zeroes=cannot-wrap:' + e.name); }
+      })();
+    `,
+
+    'gpu-mapped-passthru': beacon + `
+      (() => {
+        try {
+          if (typeof GPUBuffer !== 'function') { __send('gpu-mapped-passthru=no-GPUBuffer'); return; }
+          const real = GPUBuffer.prototype.getMappedRange;
+          Object.defineProperty(GPUBuffer.prototype, 'getMappedRange', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (...a) { return real.apply(this, a); },
+          });
+          __send('gpu-mapped-passthru=wrapped&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('gpu-mapped-passthru=cannot-wrap:' + e.name); }
+      })();
+    `,
+
+    // The same question asked from the other side: this arm, made to answer
+    // the way Chrome answers.
+    //
+    // Every knob before this one perturbs Chrome and asks whether the ticket
+    // survives, and sixteen families in a row have survived. That method has a
+    // ceiling: it can only test differences Chrome can be made to imitate. This
+    // one runs on THIS engine and repairs, at the JS level, the three payload
+    // spans that are known to disagree -- the font list (54 names here, 6 in
+    // Chrome), the permission states (prompt here, denied in Chrome) and the
+    // duplicated stylesheet rules (41393 bytes here, 20696 in Chrome). If the
+    // arm is ticketed with these three repaired, the door is a value after all
+    // and the engine work is named. If it is refused with all three repaired,
+    // the collected values are closed from the productive side too.
+    'lp-chrome-values': beacon + `
+      (() => {
+        const KEEP = ['Apple Symbols', 'Galvji', 'Geneva', 'InaiMathi Bold', 'Luminari', 'PingFang HK Light'];
+        // The list Chrome reports on this machine, in the order the widget
+        // joins them, read off report-payload's 69-byte span.
+        try {
+          const real = FontFace.prototype.load;
+          Object.defineProperty(FontFace.prototype, 'load', {
+            configurable: true, writable: true, enumerable: false,
+            value: function () {
+              const fam = String(this.family || '').replace(/^["']|["']$/g, '');
+              if (KEEP.indexOf(fam) === -1) {
+                const e = new DOMException('A network error occurred.', 'NetworkError');
+                return Promise.reject(e);
+              }
+              return real.call(this);
+            },
+          });
+          __send('lp-chrome-values=font-wrapped');
+        } catch (e) { __send('lp-chrome-values=font-cannot-wrap:' + e.name); }
+
+        try {
+          const perms = navigator.permissions;
+          const proto = Object.getPrototypeOf(perms);
+          const real = proto.query;
+          Object.defineProperty(proto, 'query', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (d) {
+              return real.call(this, d).then((s) => {
+                try {
+                  Object.defineProperty(s, 'state', { configurable: true, get() { return 'denied'; } });
+                } catch (e) {}
+                return s;
+              });
+            },
+          });
+          __send('lp-chrome-values=perm-wrapped');
+        } catch (e) { __send('lp-chrome-values=perm-cannot-wrap:' + e.name); }
+
+        // A style element inside a closed shadow root leaks into
+        // document.styleSheets here and does not in Chrome, which is why the
+        // rule text comes out at exactly twice the length plus one separator.
+        // Filtering on the owner node's root is the rule the spec already
+        // states, so this is the repair rather than a trick.
+        try {
+          const d = Object.getOwnPropertyDescriptor(Document.prototype, 'styleSheets');
+          if (!d || !d.get) { __send('lp-chrome-values=sheets-no-getter'); }
+          else {
+            const g = d.get;
+            Object.defineProperty(Document.prototype, 'styleSheets', {
+              configurable: true, enumerable: d.enumerable,
+              get() {
+                const list = g.call(this);
+                const kept = [];
+                for (let i = 0; i < list.length; i++) {
+                  const s = list[i];
+                  let owner = null;
+                  try { owner = s.ownerNode; } catch (e) {}
+                  if (owner && typeof owner.getRootNode === 'function' && owner.getRootNode() !== this) continue;
+                  kept.push(s);
+                }
+                kept.item = (i) => kept[i] || null;
+                return kept;
+              },
+            });
+            __send('lp-chrome-values=sheets-wrapped');
+          }
+        } catch (e) { __send('lp-chrome-values=sheets-cannot-wrap:' + e.name); }
+        __send('lp-chrome-values=installed&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // What goes into the widget's FIRST post?
+    //
+    // report-payload hooks JSON.stringify, TextEncoder.encode and XHR.send, and
+    // in the widget's frame the first of those to fire is the send itself: the
+    // 4700-byte body of r2 is assembled without passing through any of them.
+    // This engine's r2 is 180 bytes longer than Chrome's on every run, with r1
+    // the same size to the byte, so the excess is widget-side and it is in
+    // whatever builds that string. These are the other ways a long string gets
+    // built: a join, a btoa, an encodeURIComponent, a big replace.
+    'report-plain': beacon + `
+      (() => {
+        const hash = (s) => {
+          let h = 5381;
+          for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+          return h.toString(36);
+        };
+        const MIN = 200;
+        const note = (what, s) => {
+          try {
+            const str = String(s);
+            if (str.length < MIN) return;
+            __send('plain=' + encodeURIComponent(what) + '&len=' + str.length + '&h=' + hash(str) +
+                   '&head=' + encodeURIComponent(str.slice(0, 120)) +
+                   '&at=' + encodeURIComponent(__where()));
+          } catch (e) {}
+        };
+        try {
+          const real = Array.prototype.join;
+          Object.defineProperty(Array.prototype, 'join', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (sep) {
+              const r = real.call(this, sep);
+              note('join(' + JSON.stringify(sep === undefined ? ',' : String(sep)) + ') n=' + this.length, r);
+              return r;
+            },
+          });
+        } catch (e) { __send('plain=join-failed:' + e.name); }
+        for (const fn of ['btoa', 'encodeURIComponent', 'escape', 'encodeURI']) {
+          try {
+            if (typeof globalThis[fn] !== 'function') continue;
+            const real = globalThis[fn];
+            globalThis[fn] = function (s) { const r = real.call(globalThis, s); note(fn + '.in', s); note(fn + '.out', r); return r; };
+          } catch (e) { __send('plain=' + fn + '-failed:' + e.name); }
+        }
+        try {
+          const real = String.prototype.replace;
+          Object.defineProperty(String.prototype, 'replace', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (...a) { const r = real.apply(this, a); note('replace.out', r); return r; },
+          });
+        } catch (e) { __send('plain=replace-failed:' + e.name); }
+        // The body of r2 comes out of join("") over 4716 single characters, so
+        // the interesting string is whatever was cut into those characters.
+        try {
+          const real = String.prototype.split;
+          Object.defineProperty(String.prototype, 'split', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (...a) { note('split.in(' + JSON.stringify(String(a[0])) + ')', this); return real.apply(this, a); },
+          });
+        } catch (e) { __send('plain=split-failed:' + e.name); }
+        try {
+          const real = Array.from;
+          Array.from = function (src, ...rest) {
+            if (typeof src === 'string') note('Array.from.in', src);
+            return real.call(Array, src, ...rest);
+          };
+        } catch (e) { __send('plain=from-failed:' + e.name); }
+        __send('report-plain=installed&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // The plaintext behind r2.
+    //
+    // report-plain showed the body of r2 leaving as join("") over 4716 single
+    // characters, and no split or Array.from produced that array -- so it was
+    // pushed one character at a time in a loop, and the loop reads its source
+    // with charCodeAt or charAt. This records the RECEIVER of those calls, once
+    // per distinct long string, which is the plaintext itself. Both methods are
+    // hot, so the hook removes itself after a handful of distinct strings.
+    'report-charsrc': beacon + `
+      (() => {
+        const hash = (s) => {
+          let h = 5381;
+          for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+          return h.toString(36);
+        };
+        const MIN = 1000;
+        const CAP = 14;
+        const seen = Object.create(null);
+        let noted = 0;
+        const hook = (name) => {
+          try {
+            const real = String.prototype[name];
+            const restore = () => {
+              Object.defineProperty(String.prototype, name, {
+                configurable: true, writable: true, enumerable: false, value: real,
+              });
+            };
+            Object.defineProperty(String.prototype, name, {
+              configurable: true, writable: true, enumerable: false,
+              value: function (i) {
+                if (this.length >= MIN) {
+                  const k = name + ':' + this.length;
+                  if (!seen[k]) {
+                    seen[k] = 1;
+                    noted += 1;
+                    const s = String(this);
+                    __send('src=' + name + '&len=' + s.length + '&h=' + hash(s) +
+                           '&head=' + encodeURIComponent(s.slice(0, 300)) +
+                           '&tail=' + encodeURIComponent(s.slice(-120)) +
+                           '&at=' + encodeURIComponent(__where()));
+                    if (noted >= CAP) restore();
+                  }
+                }
+                return real.call(this, i);
+              },
+            });
+          } catch (e) { __send('src=' + name + '-failed:' + e.name); }
+        };
+        hook('charCodeAt');
+        hook('charAt');
+        __send('report-charsrc=installed&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // Is the offer SDP weighed?
+    //
+    // report-charsrc caught the widget reading a createOffer SDP straight into
+    // the payload: 8398 characters in Chrome, 7186 here. The gap is a codec
+    // list -- this engine's canned offer predates H265 and the High-profile
+    // H264 payload types, so nine payload numbers and their rtpmap, fmtp and
+    // rtcp-fb lines are missing. That is 1212 characters, the largest single
+    // content difference on this door. These two knobs cut the same nine
+    // payload types out of Chrome's offer and, for the control, rewrite the
+    // offer without changing it.
+    'sdp-stale-codecs': beacon + `
+      (() => {
+        const DROP = { '121': 1, '49': 1, '50': 1, '51': 1, '52': 1, '53': 1, '122': 1, '123': 1, '124': 1 };
+        const strip = (sdp) => {
+          const lines = String(sdp).split(/\\r\\n|\\n/);
+          const kept = [];
+          for (const l of lines) {
+            const m = /^a=(?:rtpmap|fmtp|rtcp-fb):(\\d+)/.exec(l);
+            if (m && DROP[m[1]]) continue;
+            if (l.indexOf('m=video ') === 0) {
+              const p = l.split(' ');
+              kept.push(p.filter((x, i) => i < 3 || !DROP[x]).join(' '));
+              continue;
+            }
+            kept.push(l);
+          }
+          return kept.join('\\r\\n');
+        };
+        try {
+          const real = RTCPeerConnection.prototype.createOffer;
+          Object.defineProperty(RTCPeerConnection.prototype, 'createOffer', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (...a) {
+              const r = real.apply(this, a);
+              if (!r || typeof r.then !== 'function') return r;
+              return r.then((d) => {
+                try {
+                  const before = d.sdp.length;
+                  const after = strip(d.sdp);
+                  __send('sdp-stale-codecs=stripped&from=' + before + '&to=' + after.length +
+                         '&at=' + encodeURIComponent(__where()));
+                  return { type: d.type, sdp: after };
+                } catch (e) { __send('sdp-stale-codecs=strip-threw:' + e.name); return d; }
+              });
+            },
+          });
+          __send('sdp-stale-codecs=wrapped&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('sdp-stale-codecs=cannot-wrap:' + e.name); }
+      })();
+    `,
+
+    'sdp-passthru': beacon + `
+      (() => {
+        try {
+          const real = RTCPeerConnection.prototype.createOffer;
+          Object.defineProperty(RTCPeerConnection.prototype, 'createOffer', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (...a) {
+              const r = real.apply(this, a);
+              if (!r || typeof r.then !== 'function') return r;
+              return r.then((d) => {
+                __send('sdp-passthru=seen&len=' + d.sdp.length + '&at=' + encodeURIComponent(__where()));
+                return { type: d.type, sdp: d.sdp };
+              });
+            },
+          });
+          __send('sdp-passthru=wrapped&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('sdp-passthru=cannot-wrap:' + e.name); }
+      })();
+    `,
+
+    // Does the exchange stop because something threw?
+    //
+    // The response to r3 on this engine is not a refusal: it carries a fresh
+    // cf-chl-gen and 170KB of body, which is the server asking for another
+    // round. Chrome is ticketed at r3 and never needs one. So the arms differ
+    // not only in the verdict but in what happens next -- this engine is handed
+    // a fourth challenge and never posts it. This records every uncaught error
+    // and rejection in every document, which is the cheapest way to ask whether
+    // the fourth round dies on the way out.
+    'report-errors': beacon + `
+      (() => {
+        const cut = (s) => String(s == null ? s : s).slice(0, 300);
+        try {
+          addEventListener('error', (e) => {
+            __send('err=' + encodeURIComponent(cut(e.message)) +
+                   '&src=' + encodeURIComponent(cut(e.filename) + ':' + e.lineno + ':' + e.colno) +
+                   '&stack=' + encodeURIComponent(cut(e.error && e.error.stack)) +
+                   '&at=' + encodeURIComponent(__where()));
+          }, true);
+          addEventListener('unhandledrejection', (e) => {
+            const r = e.reason;
+            __send('rej=' + encodeURIComponent(cut(r && (r.message || r))) +
+                   '&name=' + encodeURIComponent(cut(r && r.name)) +
+                   '&stack=' + encodeURIComponent(cut(r && r.stack)) +
+                   '&at=' + encodeURIComponent(__where()));
+          }, true);
+        } catch (e) { __send('report-errors=listen-failed:' + e.name); }
+        // console.error is where a library reports the failure it did catch --
+        // the Turnstile interstitial's own "Unhandled error" line comes out
+        // here, not through the error event.
+        try {
+          for (const level of ['error', 'warn']) {
+            const real = console[level];
+            console[level] = function (...a) {
+              try {
+                __send('con=' + level + '&msg=' + encodeURIComponent(a.map(cut).join(' ').slice(0, 300)) +
+                       '&at=' + encodeURIComponent(__where()));
+              } catch (e) {}
+              return real.apply(console, a);
+            };
+          }
+        } catch (e) { __send('report-errors=console-failed:' + e.name); }
+        __send('report-errors=installed&at=' + encodeURIComponent(__where()));
       })();
     `,
 
