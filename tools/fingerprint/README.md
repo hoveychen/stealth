@@ -19780,3 +19780,40 @@ worker, the font list, the stylesheet rule count, the permission states, the
 WebGPU readback, the SDP codec list. Knobs that cost it: `webdriver-true`, and
 the two hooks whose own machinery is judged (`report-reads`, and anything that
 touches `performance.memory`).
+
+## The degeneracy scan comes back nearly clean (B84, 2026-08-27)
+
+`input-box-frozen` fails at 0 of 10 by making a probe family *degenerate* --
+many measurements landing on one value -- so the way to hunt the third tell is
+to scan for families where this engine collapses and Chrome spreads, rather than
+for values that are merely wrong.
+
+Run over the guard's own geometry reads on x-hyatt, counting distinct values per
+family:
+
+| family | Chrome (reads, distinct) | ours |
+|---|---|---|
+| `rect @div` | 16, 5 | **16, 5** |
+| `offsetW @div` | 15, 4 | **15, 4** |
+| `offsetH @div` | 17, 5 | **17, 5** |
+| `clientW @input` | 20, 11 | 20, 10 |
+| `clientH @input` | 20, 10 | 20, 7 |
+
+Nothing collapses any more -- the old family that landed on a single value is
+gone. The one remaining deficit is three missing distinct input *heights*, and
+it traces to exactly the part `intrinsicBox` deliberately does not model: the
+date family and the file picker keep their measured default box here and do not
+follow the font, so at the guard's `font-size: 100px` probe they stay at 18, 18,
+18, 18, 20 and 22 while Chrome's move to 119 and 121.
+
+`freeze-date-file` gives Chrome that same deficit and nothing else -- and it is
+**10 of 10**. So the missing variance is not what is judged either.
+
+The payload has moved a long way in the meantime, which is worth recording
+because it is the sum of this session's fixes: the four-length section is now 35
+characters here as in Chrome (it was 15), the voice list is 9619 as in Chrome
+(it was 0), and the posted body is 19578 against Chrome's 19618 -- the ~750-byte
+deficit that opened this session is essentially closed.
+
+None of which has moved the verdict. The geometry-shaped search is now as
+exhausted as the value-shaped one.

@@ -765,6 +765,54 @@ export const KNOBS = {
       });
     `,
 
+    // Freeze the date family and the file picker the way this engine does.
+    //
+    // The degeneracy scan says the fully-collapsed families are gone, but our
+    // input HEIGHTS still land on 7 distinct values where Chrome lands on 10.
+    // The three missing ones are the part intrinsicBox deliberately does not
+    // model: `date`, `datetime-local`, `month`, `week`, `time` and `file` keep
+    // their measured default box here and do not follow the font, so at the
+    // guard's `font-size: 100px` probe they stay at 18/18/18/18/20 and 22 while
+    // Chrome's move to 119 and 121.
+    //
+    // `input-box-frozen` is 0/10 because it flattens this family completely.
+    // This flattens only the six types we actually get wrong. If it is also
+    // 0/10, that is the third tell and the fix is already scoped.
+    'freeze-date-file': beacon + `
+      __send('knob=freeze-date-file');
+      const DEF = {
+        date: [121, 18, 125, 22], 'datetime-local': [207, 18, 211, 22],
+        month: [151, 18, 155, 22], week: [143, 18, 147, 22],
+        time: [100, 20, 104, 24], file: [253, 22, 253, 22],
+      };
+      const boxOf = (el) => {
+        try {
+          if (!el || el.nodeName !== 'INPUT') return null;
+          return DEF[String(el.type).toLowerCase()] || null;
+        } catch (e) { return null; }
+      };
+      const SLOT = { clientWidth: 0, clientHeight: 1, offsetWidth: 2, offsetHeight: 3 };
+      for (const [proto, name] of [
+        [Element.prototype, 'clientWidth'], [Element.prototype, 'clientHeight'],
+        [HTMLElement.prototype, 'offsetWidth'], [HTMLElement.prototype, 'offsetHeight'],
+      ]) {
+        const d = Object.getOwnPropertyDescriptor(proto, name);
+        if (!d || !d.get) continue;
+        Object.defineProperty(proto, name, {
+          configurable: true, enumerable: d.enumerable,
+          get() { const b = boxOf(this); return b ? b[SLOT[name]] : d.get.call(this); },
+        });
+      }
+      const rect = Element.prototype.getBoundingClientRect;
+      Object.defineProperty(Element.prototype, 'getBoundingClientRect', {
+        configurable: true, writable: true, enumerable: false,
+        value: function () {
+          const r = rect.call(this); const b = boxOf(this);
+          return b ? new DOMRect(r.x, r.y, b[2], b[3]) : r;
+        },
+      });
+    `,
+
     // Read every section the guard feeds into its payload, whole, on either arm.
     // Descended from probes/inject-b55-funnels.js, which captured the same
     // funnels but only ever compared *lengths* -- the sections' own text was
