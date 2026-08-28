@@ -19015,3 +19015,43 @@ So the next question is not "which value is wrong" — the knob-per-value approa
 that x-hyatt needed — but "why is there a second challenge instance". That is a
 control-flow question about which challenge the widget attaches to, and it is
 where `cfsc-widget-solve-declined` should now be aimed.
+
+## Four of the guard's ten readings are now exact, and the other six are one thing (B84, 2026-08-27)
+
+The type table is in. Off the station every one of the twenty-two types answers
+Chrome's box at the size it renders at, and on the station the guard's second
+group of ten reads went from nought right to four right:
+
+| # | Chrome | before | after |
+|---|---|---|---|
+| 0 | 48x25 | 149x17 | **48x25** |
+| 1 | 13x13 | 149x17 | **13x13** |
+| 2 | 129x16 | 149x17 | **129x16** |
+| 3 | 253x22 | 149x17 | 253x21 |
+| 4 | 100x20 | 149x17 | **100x20** |
+| 5 | 53x18 | 149x17 | 54x17 |
+| 6 | 47x18 | 149x17 | 47x17 |
+| 7-9 | 143x18 | 149x17 | 149x17 |
+
+**x-hyatt still withholds the ticket, 3 of 3.**
+
+The six that are still out are not six problems. They are one: every one of them
+is a height of 17 against Chrome's 18, or the text field's 149 against Chrome's
+143, and both are the **device-pixel-ratio basis**. These boxes are measured at
+dpr 1 -- the table that preceded them was, and `css/block_height.html` pins it
+at 145x15 and 177x30 -- while `font_metrics` is swept at the dpr 2 this engine's
+persona claims and the station reads them at dpr 2. At that scale Chrome answers
+139x15.5 for a text field and 177x31 for a textarea, so the whole intrinsic
+table moves, not one row of it.
+
+That makes re-basing the intrinsic boxes onto dpr 2 the next lever, and it is a
+bounded one: it is the only thing standing between these six readings and
+Chrome's. It is not a fidelity nicety any more -- it is six of the ten numbers
+the guard actually reads.
+
+One caveat recorded rather than chased: the guard's FIRST group of ten, the ones
+at `font-size: 100px`, come back `62x117`, `112x134`, `112x152` and `81x124` on
+the station, and those heights are in no off-station table -- Chrome's own date
+family is 119 there and its text field 117. Something on the challenge page
+constrains that group, so it is not a clean target. The second group is, and
+that is the one this chapter is scored against.
