@@ -18886,17 +18886,63 @@ at 112** while the **height carries the fingerprint** -- Chrome answers 134, 152
 117 and 124 across the families it probes. This engine answers `1045x117` ten
 times over, identically.
 
-So two things are left, and they are both about the font rather than the box:
+What is left is not about the font at all -- see the next chapter, which read
+the probes' own attributes and found they never name a family.
 
-  * every probe resolves to the same family here, where Chrome resolves ten
-    different faces. The 100px content heights in `font_metrics` already span 52
-    distinct values, so the tables have the variety -- `findInList` is not
-    reaching it, either because the guard names faces the table does not hold or
-    because the list falls through to the fallback;
-  * Chrome's probe is 112 wide where ours is 1045, so the guard constrains the
-    width by something -- a `size` attribute, or a declared width -- that this
-    engine is not honouring on the element.
+## The probe is not a font probe, it is an input-type probe (B84, 2026-08-27)
 
-Neither is a guess about what the station weighs: both are readings off the
-guard's own calls, and the knob harness can test either against `x-kpsdk-r` in
-about twenty-five seconds.
+The previous chapter guessed the remaining collapse was font-family resolution.
+It is not. Reading the probes' own attributes -- `getAttribute('style')`, which
+touches no layout, unlike the `getComputedStyle` call that cost the report --
+shows every one of them carrying the same declaration and nothing else:
+
+```
+clientW:62x0 @input|style=font-size: 100px; margin: -9999px;
+clientH:0x117@input|style=font-size: 100px; margin: -9999px;
+clientW:112x0@input|style=font-size: 100px; margin: -9999px;
+clientH:0x134@input|style=font-size: 100px; margin: -9999px;
+```
+
+Ten inputs, one identical style, no `font-family`, no `size`, no width -- and
+Chrome answers four different boxes for them. Hooking every path that can
+declare a font (the `font-family`, `font` and `cssText` accessors,
+`setProperty`, `setAttribute`, `insertRule`, a `<style>`'s `textContent`,
+`innerHTML`, `outerHTML`, `insertAdjacentHTML` and `document.write`) caught 22
+writes on the whole page, and the only ones the guard makes are six system-font
+keywords, one `-apple-system-body` and one `font-family: monospace`. **It never
+names a font face.**
+
+The thing that varies is the `type` attribute. Measured on Chrome 151, headed at
+the dpr 2 this engine's persona claims:
+
+| type | @100px | default | | type | @100px | default |
+|---|---|---|---|---|---|---|
+| text / search / tel / url / email / password / number | 1045x117 | 143x18 | | color | 48x25 | 48x25 |
+| date | 834x119 | 121x18 | | checkbox / radio | 13x13 | 13x13 |
+| datetime-local | 1442x119 | 207x18 | | range | 129x16 | 129x16 |
+| month | 1073x119 | 151x18 | | file | 1891x121 | 253x22 |
+| week | 1013x119 | 143x18 | | submit | 323x117 | 53x18 |
+| time | 608x119 | 100x20 | | reset | 273x117 | 47x18 |
+| image / hidden | 0x0 | 0x0 | | button | 12x117 | 12x18 |
+
+**Fourteen distinct shapes. This engine has one**, because `intrinsicBox` keys
+on the tag and never looks at `type` -- every input is the text box, and only
+`hidden` comes out right, by accident, because `display: none` gets there first.
+
+That the guard is enumerating types rather than fonts is not an inference. Its
+second group of ten reads on x-hyatt is, in order, `48x25`, `13x13`, `129x16`,
+`253x22`, `100x20`, `53x18`, `47x18`, `143x18`, `143x18`, `143x18` -- **ten for
+ten** the colour, checkbox, range, file, time, submit, reset and text boxes from
+the table above. This engine answers `149x17` to all ten.
+
+Three notes for whoever implements it:
+
+  * `color`, `checkbox`, `radio` and `range` do **not** move with the font --
+    they are the same box at 100px as at the default. The others do.
+  * the widths of `date` and its relatives are not the text-box formula: they
+    are the rendered width of the field's segments, so each needs its own
+    measurement rather than a shared model.
+  * the first group of ten reads, the ones at `font-size: 100px`, come back
+    `62x117`, `112x134`, `112x152` and `81x124` on the station and do not match
+    the table above, so something on the challenge page constrains them. The
+    second group is unambiguous, and that is the one worth implementing against.

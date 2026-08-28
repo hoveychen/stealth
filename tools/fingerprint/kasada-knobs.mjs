@@ -256,11 +256,6 @@ export const KNOBS = {
           if (el && el.nodeName) {
             tag = el.nodeName.toLowerCase();
             if (el.className && typeof el.className === 'string') tag += '.' + el.className.slice(0, 20);
-            // The COMPUTED font, not the inline one. The guard's probes carry an
-            // inline font-size and no inline font-family at all, yet Chrome
-            // answers four different heights for them -- so the family arrives
-            // by some other route, and reading the inline style reports nothing
-            // for every probe alike.
             // The INLINE font only. Reading the computed style from inside a
             // size getter costs the report: guarded against re-entry and
             // restricted to inputs it still came back with two beacons where
@@ -268,8 +263,17 @@ export const KNOBS = {
             // family from is still an open question -- and the answer is worth
             // having, because Chrome gives them four different heights while
             // this engine gives them one.
-            if (el.style && el.style.fontFamily) tag += '|ff=' + el.style.fontFamily.slice(0, 40);
-            if (el.style && el.style.fontSize) tag += '|fs=' + el.style.fontSize;
+            // The raw style attribute and the sizing attributes, which is what
+            // finally names the probe. getAttribute touches no layout, so unlike
+            // getComputedStyle it costs nothing here -- and the inline style
+            // object alone was not enough: it showed a font-size of 100px on
+            // every probe while Chrome answered four different boxes for them.
+            const raw = el.getAttribute && el.getAttribute('style');
+            if (raw) tag += '|style=' + String(raw).replace(/\\s+/g, ' ').slice(0, 90);
+            for (const a of ['size', 'width', 'class']) {
+              const v = el.getAttribute && el.getAttribute(a);
+              if (v) tag += '|' + a + '=' + String(v).slice(0, 24);
+            }
           }
           seen.push(src + ':' + Math.round(w) + 'x' + Math.round(h) + '@' + tag);
         } catch (e) {}
@@ -370,6 +374,121 @@ export const KNOBS = {
           return new DOMRect(r.x, r.y, r.width, r.height);
         },
       });
+    `,
+
+    // Which font families the guard names, read off the WRITE path.
+    //
+    // `dims` reports the guard's probes as `<input>` at font-size 100px with no
+    // inline font-family at all, yet Chrome answers four different heights for
+    // them and this engine answers one -- so the family arrives some other way.
+    // Reading it back is what failed: `getComputedStyle` from inside a size
+    // getter re-enters the same hooks and costs the report, guarded or not.
+    //
+    // So hook the setters instead. A font can only be declared through one of
+    // these five, none of which touches layout, so recording them is free:
+    // the `font-family` and `font` accessors on CSSStyleDeclaration, `cssText`,
+    // `setProperty`, and `setAttribute('style', ...)`. Whatever the guard uses,
+    // one of these sees the literal string it asked for.
+    fontset: beacon + `
+      // Reported as it happens, one beacon per write, rather than batched behind
+      // a timer. Batching lost most of them twice over: the first dump latched
+      // on the earliest write and locked out everything after it, and the
+      // passing arm navigates into the site and kills the pending timers anyway.
+      // Newlines are stripped so one write stays one line on the way out.
+      let nth = 0;
+      const note = (how, value) => {
+        try {
+          // Truncate, never drop. Dropping anything over 200 characters threw
+          // away exactly the writes worth having: a font-family list naming a
+          // dozen faces is longer than that.
+          const s = String(value).replace(/\\s+/g, ' ');
+          const body = s.length > 700 ? s.slice(0, 700) + '<TRUNC:' + s.length + '>' : s;
+          __send('fw=' + (nth++) + '&how=' + encodeURIComponent(how) + '&v=' + encodeURIComponent(body));
+        } catch (e) {}
+      };
+      const decl = window.CSSStyleDeclaration && CSSStyleDeclaration.prototype;
+      for (const name of ['fontFamily', 'font']) {
+        const d = decl && Object.getOwnPropertyDescriptor(decl, name);
+        if (!d || !d.set) continue;
+        Object.defineProperty(decl, name, {
+          configurable: true, enumerable: d.enumerable,
+          get() { return d.get.call(this); },
+          set(v) { note(name, v); return d.set.call(this, v); },
+        });
+      }
+      const cssTextDesc = decl && Object.getOwnPropertyDescriptor(decl, 'cssText');
+      if (cssTextDesc && cssTextDesc.set) {
+        Object.defineProperty(decl, 'cssText', {
+          configurable: true, enumerable: cssTextDesc.enumerable,
+          get() { return cssTextDesc.get.call(this); },
+          set(v) { if (String(v).indexOf('font') !== -1) note('cssText', v); return cssTextDesc.set.call(this, v); },
+        });
+      }
+      if (decl && typeof decl.setProperty === 'function') {
+        const real = decl.setProperty;
+        decl.setProperty = function (prop, value, prio) {
+          try { if (String(prop).indexOf('font') !== -1) note('setProperty:' + prop, value); } catch (e) {}
+          return real.call(this, prop, value, prio);
+        };
+      }
+      const setAttr = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function (name, value) {
+        try { if (String(name) === 'style' && String(value).indexOf('font') !== -1) note('attr', value); } catch (e) {}
+        return setAttr.call(this, name, value);
+      };
+      // A rule in a stylesheet is the sixth way, and the only one left that can
+      // give a dozen probes a dozen different families without touching any
+      // element's own style.
+      if (window.CSSStyleSheet && CSSStyleSheet.prototype.insertRule) {
+        const real = CSSStyleSheet.prototype.insertRule;
+        CSSStyleSheet.prototype.insertRule = function (rule, index) {
+          try { if (String(rule).indexOf('font') !== -1) note('insertRule', rule); } catch (e) {}
+          return real.call(this, rule, index);
+        };
+      }
+      // Markup is the path none of the setters above can see: an element built
+      // from an HTML string carries its style attribute without setAttribute
+      // ever being called, and a <style> filled by innerHTML never touches
+      // textContent. Chrome's probes come out with four different line boxes
+      // and none of the setter hooks explain it, so this is where to look.
+      for (const [proto, name] of [[Element.prototype, 'innerHTML'], [Element.prototype, 'outerHTML']]) {
+        const d = Object.getOwnPropertyDescriptor(proto, name);
+        if (!d || !d.set) continue;
+        Object.defineProperty(proto, name, {
+          configurable: true, enumerable: d.enumerable,
+          get() { return d.get.call(this); },
+          set(v) { try { if (String(v).indexOf('font') !== -1) note(name, v); } catch (e) {} return d.set.call(this, v); },
+        });
+      }
+      if (Element.prototype.insertAdjacentHTML) {
+        const real = Element.prototype.insertAdjacentHTML;
+        Element.prototype.insertAdjacentHTML = function (pos, html) {
+          try { if (String(html).indexOf('font') !== -1) note('insertAdjacentHTML', html); } catch (e) {}
+          return real.call(this, pos, html);
+        };
+      }
+      if (document.write) {
+        const real = document.write;
+        document.write = function (...a) {
+          try { const s = a.join(''); if (s.indexOf('font') !== -1) note('document.write', s); } catch (e) {}
+          return real.apply(this, a);
+        };
+      }
+      // ...and a <style> element's own text is the seventh.
+      const textDesc = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent');
+      if (textDesc && textDesc.set) {
+        Object.defineProperty(Node.prototype, 'textContent', {
+          configurable: true, enumerable: textDesc.enumerable,
+          get() { return textDesc.get.call(this); },
+          set(v) {
+            try {
+              if (this && this.nodeName === 'STYLE' && String(v).indexOf('font') !== -1) note('styleText', v);
+            } catch (e) {}
+            return textDesc.set.call(this, v);
+          },
+        });
+      }
+
     `,
 
     // Read every section the guard feeds into its payload, whole, on either arm.
