@@ -4719,6 +4719,14 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surfa
     // either -- a div carries UA rules of its own -- so a miss falls to the
     // recorded unknown-tag row rather than straight through.
     if (self._element) |element| {
+        // Per TYPE before per tag for an <input>, the same order uaValue uses.
+        // Both lookups have to agree: the layout reads uaValue and this is what
+        // getComputedStyle reports, and when only the first knew about types a
+        // `submit` laid out on the button's 6px of padding while reporting the
+        // text field's 2px.
+        if (element.inputTypeForBox()) |input_type| {
+            if (chrome_input_type_values.get(input_type, name.str())) |value| return value;
+        }
         const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse
             chrome_per_tag_values.unknown_tag;
         if (rows.get(name.str())) |value| {

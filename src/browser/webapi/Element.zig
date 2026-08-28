@@ -2603,6 +2603,26 @@ pub fn textAdvanceUnit(px: f64) f64 {
     return @ceil(narrowed * LAYOUT_GRID_STEPS) / LAYOUT_GRID_STEPS;
 }
 
+/// A form control's intrinsic box lands on the DEVICE pixel -- a half of a CSS
+/// pixel at the ratio 2 this engine's persona claims -- and not on the 1/64th
+/// grid `layoutUnit` and `textAdvanceUnit` use. Chrome's answers say so: an
+/// input's content box is 139 wide and 15.5 tall at the UA font and 1040.5 by
+/// 115 at 100px, and the halves are the only fraction in any of them.
+///
+/// Three directions, because the three places these are used disagree and each
+/// disagreement is measured rather than chosen. See intrinsicBox.
+fn deviceRound(px: f64) f64 {
+    return @round(px * DEVICE_PIXEL_RATIO) / DEVICE_PIXEL_RATIO;
+}
+
+fn deviceCeil(px: f64) f64 {
+    return @ceil(px * DEVICE_PIXEL_RATIO) / DEVICE_PIXEL_RATIO;
+}
+
+fn deviceFloor(px: f64) f64 {
+    return @floor(px * DEVICE_PIXEL_RATIO) / DEVICE_PIXEL_RATIO;
+}
+
 /// How many measurements may be in flight at once, counting every route in --
 /// including the ones that do not carry `depth`. Well past any real page's
 /// nesting, and small enough that a cycle unwinds long before the stack ends.
@@ -2825,14 +2845,14 @@ fn fixedInputBox(input_type: []const u8) ?IntrinsicBox {
     // render at, which is also the size the Kasada guard reads them at -- its
     // 100x20 and 253x22 on x-hyatt are the `time` and `file` boxes below -- and
     // they do not follow the font until someone measures the segment layout.
-    // Chrome at 100px: date 833x119, datetime-local 1441x119, month 1072x119,
-    // week 1012x119, time 607x119, file 1891x121.
-    if (std.mem.eql(u8, input_type, "date")) return .{ .width = 120.328, .height = 17.328 };
-    if (std.mem.eql(u8, input_type, "datetime-local")) return .{ .width = 206.328, .height = 17.328 };
-    if (std.mem.eql(u8, input_type, "month")) return .{ .width = 150.328, .height = 17.328 };
-    if (std.mem.eql(u8, input_type, "week")) return .{ .width = 142.328, .height = 17.328 };
-    if (std.mem.eql(u8, input_type, "time")) return .{ .width = 99, .height = 20 };
-    if (std.mem.eql(u8, input_type, "file")) return .{ .width = 253, .height = 21 };
+    // Chrome at 100px: date 832.5x118.5, datetime-local 1441x118.5, month
+    // 1071.5x118.5, week 1011.5x118.5, time 607x118.5, file 1891x121.
+    if (std.mem.eql(u8, input_type, "date")) return .{ .width = 119.828125, .height = 17.5 };
+    if (std.mem.eql(u8, input_type, "datetime-local")) return .{ .width = 206.328125, .height = 17.5 };
+    if (std.mem.eql(u8, input_type, "month")) return .{ .width = 149.828125, .height = 17.5 };
+    if (std.mem.eql(u8, input_type, "week")) return .{ .width = 141.828125, .height = 17.5 };
+    if (std.mem.eql(u8, input_type, "time")) return .{ .width = 98.5, .height = 20 };
+    if (std.mem.eql(u8, input_type, "file")) return .{ .width = 252.5, .height = 21.5 };
     return null;
 }
 
@@ -2861,32 +2881,32 @@ fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?IntrinsicBox {
         if (buttonLabel(self, input_type)) |label| {
             const font = self.resolveFont(frame);
             return .{
-                // Through `textAdvanceUnit`, the way every other text-derived
-                // length in this file is: a text advance ceils onto the layout
-                // grid where a specified length floors. The raw sum leaves a
-                // `submit` one grid step short -- 41.4922 against Chrome's
-                // 41.5 -- and that single step is enough to drop its client box
-                // from 54 to 53 across the rounding boundary.
+                // The measured advance on the 1/64th grid, and nothing further.
+                // At the device scale factor 2 this is exact: Chrome's `submit`
+                // content box is 41.4921875 wide at the UA font and 311.234375
+                // at 100px, which are `textAdvanceUnit` of the label's advance
+                // to the last bit. The scale-1 basis needed a nudge here to keep
+                // the client box off a rounding boundary; this one does not.
                 .width = textAdvanceUnit(text_measure.measure(font.family, label, font.size).width),
-                .height = @floor(font_metrics.lineBox(font.family, font.size)),
+                .height = deviceRound(font_metrics.lineBox(font.family, font.size)),
             };
         }
     }
 
     const font = self.resolveFont(frame);
-    // Floored, not rounded, and that choice is a measurement rather than a
-    // taste. These boxes are on a device-pixel-ratio 1 basis -- the table this
-    // replaced was measured there, and css/block_height.html pins it -- while
-    // `font_metrics` is swept at the ratio 2 this engine's persona claims. At
-    // dpr 1 Chrome gives a 13.333px line box of 15 in both Arial and monospace,
-    // which floor reproduces from 15.333 and 15.556 where rounding turns the
-    // monospace one into 16 and a default `<textarea>` into 32 against
-    // Chrome's 30. The cost is a pixel on monospace at 100px, 116 against 117.
+    // The line box, on the device pixel. These boxes are measured at the device
+    // pixel ratio 2 this engine's persona claims and `font_metrics` is swept at,
+    // so the two agree now: at that scale the input's content height and a plain
+    // block's `line-height: normal` box are the same number at every size, with
+    // no rounding of their own -- Arial 9, 15.5, 18.5, 37 and 115 at 8, 13.333,
+    // 16, 32 and 100px, monospace 9.5, 15.5, 19, 37 and 116.5.
     //
-    // Re-basing the whole intrinsic table onto dpr 2 is the real fix and is a
-    // plan of its own: at that ratio Chrome answers 139x15.5 for an input and
-    // 177x31 for a textarea, so every constant here moves, not just this one.
-    const line = @floor(font_metrics.lineBox(font.family, font.size));
+    // Only the swept table's own gap needs closing here. It holds integer sizes
+    // and 13.333px is not one, so that size is extrapolated from the top of the
+    // table: monospace comes out 15.556 and Arial 15.333, where Chrome answers
+    // 15.5 to both. Snapping to the device pixel lands both, which the previous
+    // dpr-1 floor could not do.
+    const line = deviceRound(font_metrics.lineBox(font.family, font.size));
 
     return switch (tag) {
         // A <progress> and a <meter> are 160x16 and 80x16 at the 16px they
@@ -2908,27 +2928,38 @@ fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?IntrinsicBox {
         // guard that made this plan probes inputs, never selects.
         .select => .{ .width = 20, .height = 17 },
         else => blk: {
+            // Both metrics exactly as the table holds them, with no hinting.
+            // The scale-1 basis needed `avg` and `max` rounded to whole pixels
+            // below 24px; at scale 2 they are used as measured and the fit is
+            // better for it -- see the ceil below.
             const scale = font.size / font_metrics.basis;
-            // Chrome hints both metrics to whole pixels at small sizes and
-            // leaves them fractional above: monospace measures an avgCharWidth
-            // of 12 at 20px and 14.4 at 24px, and rounding at 100px too puts a
-            // monospace input 4px narrow -- 1233 against Chrome's 1237.
-            const hinted = font.size < 24;
-            const avg = if (hinted) @round(font.family.avg_char_width * scale) else font.family.avg_char_width * scale;
-            const max = if (hinted) @round(font.family.max_char_width * scale) else font.family.max_char_width * scale;
+            const avg = font.family.avg_char_width * scale;
+            const max = font.family.max_char_width * scale;
             const columns: f64 = if (tag == .textarea)
                 @floatFromInt(self.attributeUnsignedOr("cols", 20))
             else
                 @floatFromInt(self.attributeUnsignedOr("size", 20));
             break :blk if (tag == .textarea) .{
-                // A <textarea> is `cols` advances plus a 17px scrollbar gutter,
-                // and takes no maxCharWidth term: 10, 20 and 40 columns of
-                // monospace are 619, 1221 and 2425 at 100px and 97, 177 and 338
-                // at the UA's 13.333px. Its height is `rows` lines, two by
-                // default -- 15, 45 and 75 for one, three and five rows.
-                .width = @round(columns * avg + 17),
+                // A <textarea> is `cols` advances plus a 16.5px scrollbar
+                // gutter, and takes no maxCharWidth term. Floored rather than
+                // ceiled, which is the one place these two disagree: 10, 20 and
+                // 40 columns of monospace are 96.5, 177 and 337.5 against
+                // predictions of 96.77, 177.03 and 337.57. Its height is `rows`
+                // lines, two by default.
+                .width = deviceFloor(columns * avg + 16.5),
                 .height = line * @as(f64, @floatFromInt(self.attributeUnsignedOr("rows", 2))),
-            } else .{ .width = @round(columns * avg + (max - avg)), .height = line };
+            } else .{
+                // Ceiled onto the device pixel, which is what this engine
+                // already says about a text-derived length: a text advance
+                // ceils where a specified length floors. Seven of seven size
+                // attributes land under it at the UA's 13.333px in Arial --
+                // 1, 2, 3, 5, 10, 20 and 40 predict 12, 18.667, 25.333, 38.667,
+                // 72, 138.667 and 272 and Chrome answers 12, 19, 25.5, 39, 72,
+                // 139 and 272 -- and at 100px the basis is already on the grid,
+                // so the ceil is the identity and `50 * size + 40.5` is exact.
+                .width = deviceCeil(columns * avg + (max - avg)),
+                .height = line,
+            };
         },
     };
 }

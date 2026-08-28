@@ -145,8 +145,13 @@ a 400px-wide block.
 
 Three separate things decide a row:
 
-  * an intrinsic CONTENT box -- 300x150 for the replaced elements, and one
-    number per form control (`<input>` is 145x15, `<textarea>` 177x30);
+  * an intrinsic CONTENT box -- 300x150 for the replaced elements, and one per
+    form control, built from its font: an `<input>` is 139x15.5 and a
+    `<textarea>` 177x31 at the UA's own 13.333px. These were 145x15 and 177x30
+    while the boxes were on a device-pixel-ratio 1 basis; they are measured at
+    the ratio 2 this engine's persona claims now, which is also what
+    `font_metrics` is swept at, and Chrome answers the same at that scale
+    (tools/fingerprint/scratch/b84-blockrow.js);
   * the UA stylesheet's padding and border, which this engine's layout could not
     see at all: `paddingPx` and `borderPx` asked the author cascade and stopped,
     so <ul> lost its 40px padding-inline-start, <iframe> and <hr> their default
@@ -200,8 +205,8 @@ Three separate things decide a row:
     // client box: 300 of content and 304 of offset.
     ['iframe', '300px 150px 300 150 304 154 304 154'],
     // A form control's size is its own, and no two are alike.
-    ['input', '145px 15px 149 17 153 21 153 21'],
-    ['textarea', '177px 30px 181 34 183 36 183 36'],
+    ['input', '139px 15.5px 143 18 147 22 147 21.5'],
+    ['textarea', '177px 31px 181 35 183 37 183 37'],
     ['select', '22px 19px 20 17 22 19 22 19'],
     ['button', '16px 6px 12 2 16 6 16 6'],
     ['progress', '160px 16px 160 16 160 16 160 16'],

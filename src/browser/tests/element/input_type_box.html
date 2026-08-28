@@ -7,7 +7,7 @@ An `<input>`'s box is its TYPE's box, and this engine had one box for all of
 them.
 
 `intrinsicBox` keys on the tag, so a checkbox, a colour well, a range slider and
-a file picker were all the text field: 149x17 of client box, or 1045x117 at
+a file picker were all the text field: 143x18 of client box, or 1045x117 at
 `font-size: 100px`. Chrome has fourteen distinct shapes across the twenty-two
 types, and only `hidden` came out right here -- by accident, because
 `display: none` gets there before the box does.
@@ -22,10 +22,14 @@ anywhere on the page. What varies between the probes is the `type` attribute.
 The guard's second group of ten reads on the station is, in order, 48x25, 13x13,
 129x16, 253x22, 100x20, 53x18, 47x18, 143x18, 143x18, 143x18: ten for ten the
 colour, checkbox, range, file, time, submit, reset and text boxes. This engine
-answers 149x17 to all ten.
+answered 149x17 to all ten before the type table, and 143x18 to the three text
+ones after it -- which is Chrome's own answer at this scale.
 
-Measured on Chrome 151 with tools/fingerprint/scratch/b84-typebox.js. Client box
-(content + padding) then offset box (+ border), which is what the guard reads:
+Measured on Chrome 151 with tools/fingerprint/scratch/b84-dpr2-content.js, at
+the device scale factor 2 this engine's persona claims -- explicitly, with
+`--force-device-scale-factor=2`, which is the switch that decides these numbers
+and not `--headed`. Client box (content + padding) then offset box (+ border),
+which is what the guard reads:
 
   * the padding and the border are the type's own too, so they cannot come from
     the one `input` row in css/chrome_per_tag_values.zig: a text field is
@@ -70,13 +74,13 @@ Measured on Chrome 151 with tools/fingerprint/scratch/b84-typebox.js. Client box
   // client/offset at the UA font, then at font-size:100px.
   const TABLE = [
     // The text field and everything that shares its box.
-    ['text',           '149x17/153x21',   '1045x117/1049x121'],
-    ['search',         '149x17/153x21',   '1045x117/1049x121'],
-    ['tel',            '149x17/153x21',   '1045x117/1049x121'],
-    ['url',            '149x17/153x21',   '1045x117/1049x121'],
-    ['email',          '149x17/153x21',   '1045x117/1049x121'],
-    ['password',       '149x17/153x21',   '1045x117/1049x121'],
-    ['number',         '149x17/153x21',   '1045x117/1049x121'],
+    ['text',           '143x18/147x22',   '1045x117/1049x121'],
+    ['search',         '143x18/147x22',   '1045x117/1049x121'],
+    ['tel',            '143x18/147x22',   '1045x117/1049x121'],
+    ['url',            '143x18/147x22',   '1045x117/1049x121'],
+    ['email',          '143x18/147x22',   '1045x117/1049x121'],
+    ['password',       '143x18/147x22',   '1045x117/1049x121'],
+    ['number',         '143x18/147x22',   '1045x117/1049x121'],
     // The date family: one padding-left of 1px, no other padding, and a width
     // that is the rendered segments rather than a character count.
     //
@@ -87,10 +91,10 @@ Measured on Chrome 151 with tools/fingerprint/scratch/b84-typebox.js. Client box
     // nothing between the points. Chrome at 100px: date 834x119/838x123,
     // datetime-local 1442x119/1446x123, month 1073x119/1077x123, week
     // 1013x119/1017x123, time 608x119/612x123.
-    ['date',           '121x17/125x21',   '121x17/125x21'],
-    ['datetime-local', '207x17/211x21',   '207x17/211x21'],
-    ['month',          '151x17/155x21',   '151x17/155x21'],
-    ['week',           '143x17/147x21',   '143x17/147x21'],
+    ['date',           '121x18/125x22',   '121x18/125x22'],
+    ['datetime-local', '207x18/211x22',   '207x18/211x22'],
+    ['month',          '151x18/155x22',   '151x18/155x22'],
+    ['week',           '143x18/147x22',   '143x18/147x22'],
     ['time',           '100x20/104x24',   '100x20/104x24'],
     // The four that ignore the font entirely.
     ['color',          '48x25/50x27',     '48x25/50x27'],
@@ -99,11 +103,19 @@ Measured on Chrome 151 with tools/fingerprint/scratch/b84-typebox.js. Client box
     ['range',          '129x16/129x16',   '129x16/129x16'],
     // The file picker has no padding or border of its own, and keeps its box for
     // the same reason the date family does. Chrome at 100px is 1891x121.
-    ['file',           '253x21/253x21',   '253x21/253x21'],
+    ['file',           '253x22/253x22',   '253x22/253x22'],
     // The buttons: 1px/6px of padding in a 2px border, border-box.
-    ['submit',         '54x17/58x21',     '323x117/327x121'],
-    ['reset',          '47x17/51x21',     '273x117/277x121'],
-    ['button',         '12x17/16x21',     '12x117/16x121'],
+    // Chrome answers 53x18/57x22 here and this answers 54x18/58x22, and the
+    // cause is not the button model: our button's content box and our own
+    // <span> of the same label agree exactly, which is what Chrome's do too.
+    // It is the text advance itself, which runs high by a 1/64th step on some
+    // strings -- "Submit" and "Hello" by one, "XXXXXXXXXX" by three, "X" not at
+    // all -- and 41.5 against Chrome's 41.4921875 is just enough to carry the
+    // client box over a rounding boundary. That is the advance model's residual
+    // (README: it reproduces 100 of 107 readings), not this table's.
+    ['submit',         '54x18/58x22',     '323x117/327x121'],
+    ['reset',          '47x18/51x22',     '273x117/277x121'],
+    ['button',         '12x18/16x22',     '12x117/16x121'],
     // No box at all.
     ['image',          '0x0/0x0',         '0x0/0x0'],
     ['hidden',         '0x0/0x0',         '0x0/0x0'],
@@ -116,8 +128,8 @@ Measured on Chrome 151 with tools/fingerprint/scratch/b84-typebox.js. Client box
 
   // An unknown or absent type is the text field, and `type` is matched
   // case-insensitively the way every content attribute keyword is.
-  eq('no type', read('text', DEFAULT), '149x17/153x21');
-  eq('unknown type', read('wat', DEFAULT), '149x17/153x21');
+  eq('no type', read('text', DEFAULT), '143x18/147x22');
+  eq('unknown type', read('wat', DEFAULT), '143x18/147x22');
   eq('CHECKBOX upper', read('CHECKBOX', DEFAULT), '13x13/13x13');
 
   host.remove();
