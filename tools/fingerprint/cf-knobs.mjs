@@ -255,6 +255,59 @@ export const CF_KNOBS = {
       } catch (e) { __send('fail=' + e.name); }
     `,
 
+    // no-plugins hands back Object.create(PluginArray.prototype), and every
+    // accessor on that prototype throws "Illegal invocation" on a receiver that
+    // is not a real PluginArray -- so it does not present an empty plugin list,
+    // it presents a navigator.plugins whose .length throws. These two separate
+    // the claim: -empty is a well-formed empty list (own length 0, own methods
+    // shadowing the ones that would throw) and -passthru only reinstalls the
+    // getter. This engine's plugin surface is byte-identical to Chrome's across
+    // 26 readings, so neither models a difference we have; they say what the
+    // door weighs, which is what a knob is for.
+    'plugins-empty': beacon + `
+      (() => {
+        try {
+          const mk = (proto) => {
+            const o = Object.create(proto);
+            Object.defineProperty(o, 'length', { value: 0, enumerable: true, configurable: true });
+            Object.defineProperty(o, 'item', { value: () => null, configurable: true, writable: true });
+            Object.defineProperty(o, 'namedItem', { value: () => null, configurable: true, writable: true });
+            Object.defineProperty(o, 'refresh', { value: () => undefined, configurable: true, writable: true });
+            return o;
+          };
+          const p = mk(PluginArray.prototype);
+          const m = mk(MimeTypeArray.prototype);
+          Object.defineProperty(Navigator.prototype, 'plugins', {
+            configurable: true, enumerable: true, get() { return p; },
+          });
+          Object.defineProperty(Navigator.prototype, 'mimeTypes', {
+            configurable: true, enumerable: true, get() { return m; },
+          });
+          __send('plugins-empty=wrapped&len=' + navigator.plugins.length +
+                 '&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('plugins-empty=cannot-wrap:' + e.name); }
+      })();
+    `,
+
+    'plugins-passthru': beacon + `
+      (() => {
+        try {
+          const d = Object.getOwnPropertyDescriptor(Navigator.prototype, 'plugins');
+          const g = d.get;
+          Object.defineProperty(Navigator.prototype, 'plugins', {
+            configurable: true, enumerable: d.enumerable, get() { return g.call(this); },
+          });
+          const d2 = Object.getOwnPropertyDescriptor(Navigator.prototype, 'mimeTypes');
+          const g2 = d2.get;
+          Object.defineProperty(Navigator.prototype, 'mimeTypes', {
+            configurable: true, enumerable: d2.enumerable, get() { return g2.call(this); },
+          });
+          __send('plugins-passthru=wrapped&len=' + navigator.plugins.length +
+                 '&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('plugins-passthru=cannot-wrap:' + e.name); }
+      })();
+    `,
+
     'no-timezone': beacon + `
       __send('no-timezone=' + encodeURIComponent(__where()));
       try {

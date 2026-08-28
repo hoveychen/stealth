@@ -19779,15 +19779,56 @@ send one either.
 beyond the console format-specifier probe. The exchange does not break; it is
 turned away.
 
+### The two edge readings, retested, and what they turned out to be
+
+B58 left `no-plugins` and `coarse-performance` at 1 of 2 -- "edge, not a
+conclusion" -- and both were measured before the widget's frame was reachable.
+Retested with widget coverage, three runs each against `none` 3 of 3 in the same
+window: `coarse-performance` is 3 of 3 and `no-plugins` is **0 of 3**, with the
+same three-round, no-r4 signature as `webdriver-true`.
+
+It is not the plugin list. `no-plugins` hands back
+`Object.create(PluginArray.prototype)`, and every accessor on that prototype
+throws `Illegal invocation` on a receiver that is not a real `PluginArray` --
+so it does not present an empty plugin list, it presents a `navigator.plugins`
+whose `.length` throws. Two knobs separate the claim, and the second settles it:
+
+| knob | what it does | result |
+|---|---|---|
+| `no-plugins` | `.length` throws | 0 / 3 |
+| `plugins-empty` | well-formed empty list, own `length` 0 | 0 / 3 |
+| `plugins-passthru` | **reinstalls the getter, returns the real value** | **0 / 3** |
+| `none` | -- | 3 / 3 |
+
+A getter that changes nothing costs the ticket. What is judged is the accessor,
+not the plugins behind it -- the same shape as `performance.memory`, where
+`heap-passthru` also cost it. The family cannot be knob-tested at all, and
+`no-plugins` was never a finding.
+
+It is also not a gap here. `probes/expr-plugin-array.js` walks the whole surface
+-- the array object, indexed and named access, `item`/`namedItem`/`refresh`, the
+five plugins, their mime types, and the four prototypes behind them -- and the
+two arms agree on **26 readings out of 26**. `probes/expr-accessor-nativeness.js`
+then asks the question that check implies, dumping the descriptor flags, name,
+arity and source text of the 95 native accessors and methods the widget reads:
+**95 of 95 identical**, including `Function.prototype.toString` on a bound
+function and on a `Proxy`.
+
 ### The tally so far
 
 Knobs that keep Chrome's ticket, and so name something this door does not weigh:
 canvas readback, WebGL, `Error.prototype.stack`, timezone, detached computed
 style, the cross-origin boundary, the two newer globals, voices, the first
 worker, the font list, the stylesheet rule count, the permission states, the
-WebGPU readback, the SDP codec list. Knobs that cost it: `webdriver-true`, and
-the two hooks whose own machinery is judged (`report-reads`, and anything that
-touches `performance.memory`).
+WebGPU readback, the SDP codec list, a 100ms `performance.now`.
+
+Knobs that cost it, all of which are the knob's own machinery being seen rather
+than a reading being judged: anything that redefines `navigator.plugins` or
+`navigator.mimeTypes`, anything that touches `performance.memory`, and
+`report-reads`, which wraps about two hundred accessors at once.
+
+Knobs that cost it and are not artefacts: `webdriver-true`. Still one, after
+twenty-odd families.
 
 ## The degeneracy scan comes back nearly clean (B84, 2026-08-27)
 
