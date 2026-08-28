@@ -19825,3 +19825,48 @@ deficit that opened this session is essentially closed.
 
 None of which has moved the verdict. The geometry-shaped search is now as
 exhausted as the value-shaped one.
+
+## The guard does the same things on both arms (B84, 2026-08-27)
+
+Seven candidate-shaped searches were spent guessing a difference and then
+testing it. This one inverts that: record what the guard actually *calls* on
+each arm and let the divergence name the candidate.
+
+`kasada-knobs.mjs --knob calls` wraps about sixty APIs -- canvas 2D, WebGL,
+audio, subtle crypto, the encoders, geometry accessors, navigator and screen
+getters, `getComputedStyle` -- and beacons the call sequence out. Counted per
+name:
+
+```
+canvas.toDataURL        80 / 80      crypto.getRandomValues  30 / 30
+css.getPropertyValue    93 / 93      geo.clientWidth         22 / 22
+getComputedStyle       128 / 128     geo.clientHeight        22 / 22
+ctx.fillText            12 / 12      rect                    18 / 18
+ctx.rotate              12 / 12      subtle.digest            3 / 3
+ctx.translate           12 / 12      audio.startRendering     1 / 1
+ctx.getImageData         3 / 3       speech.getVoices         1 / 1
+nav.plugins             12 / 12      screen.colorDepth        4 / 4
+```
+
+Equal, name for name, count for count, across everything the guard touches.
+
+Two apparent exceptions came up and **both were artifacts**:
+
+  * `xhr.send` looked like 0 in Chrome against 2 here, which would have meant
+    the guard picked a different transport. Hooking `open`/`send` and `fetch`
+    directly shows **both arms POST `/tl` over XHR**, and both report the same
+    capabilities (`fetch`, `sendBeacon` and `Request.keepalive` all present);
+  * `gl.getParameter` looked like 160 against 136, and the whole difference sat
+    on one enum, 37446 -- `UNMASKED_RENDERER_WEBGL`. Both arms return the *same
+    66-character string* for it, both expose the `WebGL2RenderingContext` global
+    and neither returns a `webgl2` context. Repeated, the count is simply
+    unstable: **104, 173, 178 here and 152, 226, 125 in Chrome** -- overlapping
+    ranges, no signal.
+
+The rest of the gap -- `perf.now`, `Date.now`, `createElement` -- is Chrome
+loading the real page after it clears, which this engine never gets to do.
+
+So the guard makes the same calls, in the same numbers, and gets the same
+answers to everything reachable from script -- and still tickets one arm and not
+the other. That is worth stating as a finding rather than a failure: it says the
+remaining tell is not something the page can observe about itself.

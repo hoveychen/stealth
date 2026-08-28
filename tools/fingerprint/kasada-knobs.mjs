@@ -813,6 +813,159 @@ export const KNOBS = {
       });
     `,
 
+    // The guard's call sequence, in order, for diffing against the other arm.
+    //
+    // Seven candidate-shaped searches are spent -- values, boxes, the trap log,
+    // capabilities, the envelope, exceptions, timing -- and each one guessed a
+    // candidate and then tested it. This inverts that: record what the guard
+    // actually DOES on each arm, line the two up, and let the first divergence
+    // name the candidate instead of naming it in advance.
+    //
+    // Names only, no arguments: the sequence is thousands long and the beacon
+    // channel is a query string. Arguments can come later for whichever index
+    // the diff points at.
+    calls: beacon + `
+      const seq = [];
+      const CAP = 4000;
+      const note = (name) => { if (seq.length < CAP) seq.push(name); };
+      const wrapFn = (obj, name, label) => {
+        try {
+          if (!obj || typeof obj[name] !== 'function') return;
+          const real = obj[name];
+          Object.defineProperty(obj, name, {
+            configurable: true, writable: true, enumerable: false,
+            value: function (...a) { note(label); return real.apply(this, a); },
+          });
+        } catch (e) {}
+      };
+      const wrapGet = (obj, name, label) => {
+        try {
+          const d = Object.getOwnPropertyDescriptor(obj, name);
+          if (!d || !d.get) return;
+          Object.defineProperty(obj, name, {
+            configurable: true, enumerable: d.enumerable,
+            get() { note(label); return d.get.call(this); },
+          });
+        } catch (e) {}
+      };
+      const P = (n) => (window[n] && window[n].prototype) || null;
+
+      for (const m of ['getContext','toDataURL','toBlob'])
+        wrapFn(P('HTMLCanvasElement'), m, 'canvas.' + m);
+      for (const m of ['fillText','strokeText','measureText','getImageData','putImageData',
+                       'createLinearGradient','createRadialGradient','arc','rect','fill','stroke',
+                       'drawImage','isPointInPath','setTransform','rotate','translate','scale'])
+        wrapFn(P('CanvasRenderingContext2D'), m, 'ctx.' + m);
+      for (const m of ['getParameter','getExtension','getSupportedExtensions','getShaderPrecisionFormat',
+                       'createShader','shaderSource','compileShader','readPixels'])
+        for (const g of ['WebGLRenderingContext','WebGL2RenderingContext']) wrapFn(P(g), m, 'gl.' + m);
+      for (const m of ['createOscillator','createAnalyser','createGain','createDynamicsCompressor',
+                       'startRendering','createBuffer','decodeAudioData'])
+        for (const g of ['OfflineAudioContext','AudioContext','BaseAudioContext']) wrapFn(P(g), m, 'audio.' + m);
+      wrapFn(P('AudioBuffer'), 'getChannelData', 'audio.getChannelData');
+      for (const m of ['digest','importKey','sign'])
+        if (window.crypto && crypto.subtle) wrapFn(crypto.subtle, m, 'subtle.' + m);
+      wrapFn(window.crypto || {}, 'getRandomValues', 'crypto.getRandomValues');
+      wrapFn(Math, 'random', 'Math.random');
+      wrapFn(P('Performance'), 'now', 'perf.now');
+      wrapFn(Date, 'now', 'Date.now');
+      wrapFn(P('TextEncoder'), 'encode', 'enc');
+      wrapFn(window, 'btoa', 'btoa');
+      wrapFn(P('XMLHttpRequest'), 'send', 'xhr.send');
+      wrapFn(P('Element'), 'getBoundingClientRect', 'rect');
+      wrapFn(P('Document'), 'createElement', 'createElement');
+      wrapFn(P('Node'), 'appendChild', 'appendChild');
+      for (const m of ['getVoices']) wrapFn(P('SpeechSynthesis'), m, 'speech.' + m);
+      for (const m of ['check','load']) if (document.fonts) wrapFn(Object.getPrototypeOf(document.fonts), m, 'fonts.' + m);
+      wrapFn(window, 'getComputedStyle', 'getComputedStyle');
+      wrapFn(P('CSSStyleDeclaration'), 'getPropertyValue', 'css.getPropertyValue');
+      for (const n of ['clientWidth','clientHeight','offsetWidth','offsetHeight'])
+        wrapGet(n[0] === 'c' ? P('Element') : P('HTMLElement'), n, 'geo.' + n);
+      for (const n of ['userAgent','platform','languages','hardwareConcurrency','deviceMemory','plugins','mimeTypes'])
+        wrapGet(P('Navigator'), n, 'nav.' + n);
+      for (const n of ['width','height','colorDepth','pixelDepth','availWidth','availHeight'])
+        wrapGet(P('Screen'), n, 'screen.' + n);
+
+      let sent = false;
+      const dump = () => {
+        if (sent || !seq.length) return;
+        sent = true;
+        __send('calls=' + seq.length);
+        for (let i = 0; i < seq.length; i += 50) {
+          const chunk = seq.slice(i, i + 50).join(',');
+          setTimeout(() => __send('ck=' + i + '&v=' + encodeURIComponent(chunk)), 8 * (i / 50));
+        }
+      };
+      for (const t of [2600, 5200, 9000, 13000]) setTimeout(dump, t);
+    `,
+
+    // Which transport carries the /tl POST, and which WebGL parameters get asked
+    // for.
+    //
+    // The call histogram is nearly identical between the arms -- canvas.toDataURL
+    // 80/80, css.getPropertyValue 93/93, getComputedStyle 128/128, every ctx.*
+    // and audio.* equal -- with two exceptions that the page load cannot
+    // explain: `xhr.send` fires twice here and never in Chrome, and
+    // `gl.getParameter` is asked 160 times there against 136 here.
+    //
+    // The first says the guard picks a different transport on each arm, which
+    // it would do by feature-detecting one and falling back. The second says 24
+    // parameters are asked for in Chrome and not here. Both are recorded whole.
+    'tl-transport': beacon + `
+      const seen = [];
+      const openReal = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (m, u, ...r) {
+        try { this.__u = String(u); } catch (e) {}
+        return openReal.call(this, m, u, ...r);
+      };
+      const sendReal = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (...a) {
+        try { __send('xhr=' + encodeURIComponent(String(this.__u || '').slice(0, 120))); } catch (e) {}
+        return sendReal.apply(this, a);
+      };
+      const fetchReal = window.fetch;
+      if (typeof fetchReal === 'function') {
+        window.fetch = function (input, init) {
+          try {
+            const u = String(typeof input === 'string' ? input : (input && input.url) || '');
+            __send('fetch=' + encodeURIComponent(u.slice(0, 120)));
+          } catch (e) {}
+          return fetchReal.call(this, input, init);
+        };
+      }
+      try { __send('hasFetch=' + (typeof window.fetch) + '&hasBeacon=' + (typeof navigator.sendBeacon) +
+                   '&hasKeepalive=' + ('keepalive' in new Request('/', {}))); } catch (e) {
+        __send('reqCtorThrew=1');
+      }
+      // Every WebGL parameter the guard asks for, in order, with the ones that
+      // came back null called out -- a null is what an unsupported enum looks
+      // like from script.
+      const gp = [];
+      for (const g of ['WebGLRenderingContext', 'WebGL2RenderingContext']) {
+        const proto = window[g] && window[g].prototype;
+        if (!proto || typeof proto.getParameter !== 'function') continue;
+        const real = proto.getParameter;
+        Object.defineProperty(proto, 'getParameter', {
+          configurable: true, writable: true, enumerable: false,
+          value: function (p) {
+            let v;
+            try { v = real.call(this, p); } catch (e) { v = 'THREW'; }
+            try { gp.push(String(p) + (v === null ? ':null' : v === 'THREW' ? ':threw' : '')); } catch (e) {}
+            return v === 'THREW' ? null : v;
+          },
+        });
+      }
+      let sent = false;
+      const dump = () => {
+        if (sent || !gp.length) return;
+        sent = true;
+        __send('gp=' + gp.length);
+        for (let i = 0; i < gp.length; i += 40)
+          setTimeout(() => __send('gk=' + i + '&v=' + encodeURIComponent(gp.slice(i, i + 40).join(','))), 8 * (i / 40));
+      };
+      for (const t of [3000, 6000, 10000]) setTimeout(dump, t);
+    `,
+
     // Read every section the guard feeds into its payload, whole, on either arm.
     // Descended from probes/inject-b55-funnels.js, which captured the same
     // funnels but only ever compared *lengths* -- the sections' own text was
