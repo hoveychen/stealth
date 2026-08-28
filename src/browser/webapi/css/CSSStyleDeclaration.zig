@@ -39,6 +39,7 @@ const chrome_inherited = @import("chrome_inherited.zig");
 const chrome_initial_values = @import("chrome_initial_values.zig");
 const chrome_logical = @import("chrome_logical.zig");
 const chrome_per_tag_values = @import("chrome_per_tag_values.zig");
+const chrome_input_type_values = @import("chrome_input_type_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
 const shorthand = @import("shorthand.zig");
@@ -1874,6 +1875,14 @@ pub fn isReplacedTag(element: *Element) bool {
 ///     Chrome's 98, because `box-sizing: border-box` is a UA rule for it and the
 ///     1px border it takes off was invisible here too.
 fn uaValue(element: *Element, name: []const u8) ?[]const u8 {
+    // Chrome's UA sheet for <input> is per TYPE, and the generated table is per
+    // tag: its `input` row is the text field's, so before this a checkbox
+    // carried the text field's padding inside its 2px inset border and measured
+    // 149x17 against Chrome's 13x13. The type's own overrides come first and
+    // fall through to that row for every name they do not mention.
+    if (element.inputTypeForBox()) |input_type| {
+        if (chrome_input_type_values.get(input_type, name)) |value| return value;
+    }
     const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse
         chrome_per_tag_values.unknown_tag;
     return rows.get(name);

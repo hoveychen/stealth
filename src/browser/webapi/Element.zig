@@ -2731,11 +2731,83 @@ fn attributeFloat(self: *Element, comptime name: []const u8) ?f64 {
 /// 100px in Arial and is a pixel out at 16 and 50. The sizes that matter are
 /// exact -- the guard's 100px, and the 13.333px every default input on every
 /// page uses.
-fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?struct { width: f64, height: f64 } {
+/// This element's `type` in lowercase when it is an `<input>`, for the two
+/// places a form control's box depends on it: the UA edges in
+/// css/chrome_input_type_values.zig and `intrinsicBox` below. Null for every
+/// other tag, so neither caller pays a lookup it cannot use.
+///
+/// The keyword is matched case-insensitively, the way every content-attribute
+/// keyword is -- `type=CHECKBOX` is a checkbox -- and an unknown or absent type
+/// answers `text`, which is what a browser falls back to.
+pub fn inputTypeForBox(self: *Element) ?[]const u8 {
+    if (self.getTag() != .input) return null;
+    const raw = self.getAttributeSafe(comptime .wrap("type")) orelse return "text";
+    const trimmed = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (trimmed.len == 0 or trimmed.len > input_type_max) return "text";
+    var buf: [input_type_max]u8 = undefined;
+    const lowered = std.ascii.lowerString(buf[0..trimmed.len], trimmed);
+    return input_type_names.get(lowered) orelse "text";
+}
+
+/// The longest name in `input_type_names`, which bounds the lowercasing buffer.
+const input_type_max = "datetime-local".len;
+
+/// Interned so `inputTypeForBox` can return a slice that outlives its stack
+/// buffer. A name that is not here is not a type Chrome knows, and Chrome
+/// renders those as a text field.
+const input_type_names = std.StaticStringMap([]const u8).initComptime(.{
+    .{ "text", "text" },                     .{ "search", "search" },
+    .{ "tel", "tel" },                       .{ "url", "url" },
+    .{ "email", "email" },                   .{ "password", "password" },
+    .{ "number", "number" },                 .{ "date", "date" },
+    .{ "datetime-local", "datetime-local" }, .{ "month", "month" },
+    .{ "week", "week" },                     .{ "time", "time" },
+    .{ "color", "color" },                   .{ "checkbox", "checkbox" },
+    .{ "radio", "radio" },                   .{ "range", "range" },
+    .{ "file", "file" },                     .{ "submit", "submit" },
+    .{ "reset", "reset" },                   .{ "button", "button" },
+    .{ "image", "image" },                   .{ "hidden", "hidden" },
+});
+
+/// The CONTENT box of an input type that does not build its box from text.
+///
+/// Four of them do not move with the font at all -- the same box at
+/// `font-size: 100px` as at the UA's 13.333px -- because what they draw is a
+/// widget rather than a field of characters. Measured on Chrome 151 with
+/// tools/fingerprint/scratch/b84-typebox.js, as content boxes:
+///
+///   * `checkbox` and `radio` are 13x13 with no padding, no border and
+///     `box-sizing: border-box`, so all three of their boxes read 13x13;
+///   * `range` is 129x16, also edgeless;
+///   * `color` is 44x23 of content inside 1px/2px of padding and a 1px solid
+///     border, which is the 48x25 of client box and 50x27 of offset box the
+///     guard reads;
+///   * `image` with no `src` has no box at all, and `hidden` never had one.
+fn fixedInputBox(input_type: []const u8) ?IntrinsicBox {
+    if (std.mem.eql(u8, input_type, "checkbox") or std.mem.eql(u8, input_type, "radio")) {
+        return .{ .width = 13, .height = 13 };
+    }
+    if (std.mem.eql(u8, input_type, "range")) return .{ .width = 129, .height = 16 };
+    if (std.mem.eql(u8, input_type, "color")) return .{ .width = 44, .height = 23 };
+    if (std.mem.eql(u8, input_type, "image")) return .{ .width = 0, .height = 0 };
+    return null;
+}
+
+/// Named rather than anonymous because `fixedInputBox` returns one too, and two
+/// anonymous struct literals with the same fields are two different types.
+const IntrinsicBox = struct { width: f64, height: f64 };
+
+fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?IntrinsicBox {
     switch (tag) {
         .canvas, .video, .object, .svg, .iframe => return .{ .width = 300, .height = 150 },
         .input, .textarea, .select, .progress, .meter => {},
         else => return null,
+    }
+
+    // An input's box is its type's box. Only the text family is the field this
+    // function used to assume for all of them.
+    if (self.inputTypeForBox()) |input_type| {
+        if (fixedInputBox(input_type)) |box| return box;
     }
 
     const font = self.resolveFont(frame);

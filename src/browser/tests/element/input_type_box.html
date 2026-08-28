@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+An `<input>`'s box is its TYPE's box, and this engine had one box for all of
+them.
+
+`intrinsicBox` keys on the tag, so a checkbox, a colour well, a range slider and
+a file picker were all the text field: 149x17 of client box, or 1045x117 at
+`font-size: 100px`. Chrome has fourteen distinct shapes across the twenty-two
+types, and only `hidden` came out right here -- by accident, because
+`display: none` gets there before the box does.
+
+This is what the Kasada guard on x-hyatt is actually enumerating. The previous
+reading of it guessed the probes were font probes; they are not. Every one of
+them carries the same declaration and nothing else --
+`style="font-size: 100px; margin: -9999px;"`, no font-family, no size, no width
+-- and hooking all ten paths that can declare a font caught no named face
+anywhere on the page. What varies between the probes is the `type` attribute.
+
+The guard's second group of ten reads on the station is, in order, 48x25, 13x13,
+129x16, 253x22, 100x20, 53x18, 47x18, 143x18, 143x18, 143x18: ten for ten the
+colour, checkbox, range, file, time, submit, reset and text boxes. This engine
+answers 149x17 to all ten.
+
+Measured on Chrome 151 with tools/fingerprint/scratch/b84-typebox.js. Client box
+(content + padding) then offset box (+ border), which is what the guard reads:
+
+  * the padding and the border are the type's own too, so they cannot come from
+    the one `input` row in css/chrome_per_tag_values.zig: a text field is
+    1px/2px of padding inside a 2px border, a checkbox has neither, a button has
+    1px/6px, and a colour well has a 1px border. `box-sizing: border-box` is a
+    UA rule for the colour well, the checkbox, the radio and the three buttons,
+    and not for the rest;
+  * `color`, `checkbox`, `radio` and `range` do NOT move with the font -- the
+    same box at 100px as at the default. Every other type does;
+  * the date family's width is the rendered width of its segments, not the text
+    field's `size * avgCharWidth` formula, so each is its own measurement.
+-->
+
+<script id=input_type_box>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const read = (type, style) => {
+    const el = document.createElement('input');
+    el.setAttribute('type', type);
+    el.setAttribute('style', style);
+    host.appendChild(el);
+    const out = el.clientWidth + 'x' + el.clientHeight + '/' + el.offsetWidth + 'x' + el.offsetHeight;
+    el.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  const DEFAULT = 'margin: -9999px;';
+  const BIG = 'font-size: 100px; margin: -9999px;';
+
+  // client/offset at the UA font, then at font-size:100px.
+  const TABLE = [
+    // The text field and everything that shares its box.
+    ['text',           '149x17/153x21',   '1045x117/1049x121'],
+    ['search',         '149x17/153x21',   '1045x117/1049x121'],
+    ['tel',            '149x17/153x21',   '1045x117/1049x121'],
+    ['url',            '149x17/153x21',   '1045x117/1049x121'],
+    ['email',          '149x17/153x21',   '1045x117/1049x121'],
+    ['password',       '149x17/153x21',   '1045x117/1049x121'],
+    ['number',         '149x17/153x21',   '1045x117/1049x121'],
+    // The date family: one padding-left of 1px, no other padding, and a width
+    // that is the segments rather than a character count.
+    ['date',           '121x17/125x21',   '834x119/838x123'],
+    ['datetime-local', '207x17/211x21',   '1442x119/1446x123'],
+    ['month',          '151x17/155x21',   '1073x119/1077x123'],
+    ['week',           '143x17/147x21',   '1013x119/1017x123'],
+    ['time',           '100x20/104x24',   '608x119/612x123'],
+    // The four that ignore the font entirely.
+    ['color',          '48x25/50x27',     '48x25/50x27'],
+    ['checkbox',       '13x13/13x13',     '13x13/13x13'],
+    ['radio',          '13x13/13x13',     '13x13/13x13'],
+    ['range',          '129x16/129x16',   '129x16/129x16'],
+    // The file picker has no padding or border of its own.
+    ['file',           '253x21/253x21',   '1891x121/1891x121'],
+    // The buttons: 1px/6px of padding in a 2px border, border-box.
+    ['submit',         '54x17/58x21',     '323x117/327x121'],
+    ['reset',          '47x17/51x21',     '273x117/277x121'],
+    ['button',         '12x17/16x21',     '12x117/16x121'],
+    // No box at all.
+    ['image',          '0x0/0x0',         '0x0/0x0'],
+    ['hidden',         '0x0/0x0',         '0x0/0x0'],
+  ];
+
+  for (const [type, atDefault, atBig] of TABLE) {
+    eq(type, read(type, DEFAULT), atDefault);
+    eq(type + ' 100px', read(type, BIG), atBig);
+  }
+
+  // An unknown or absent type is the text field, and `type` is matched
+  // case-insensitively the way every content attribute keyword is.
+  eq('no type', read('text', DEFAULT), '149x17/153x21');
+  eq('unknown type', read('wat', DEFAULT), '149x17/153x21');
+  eq('CHECKBOX upper', read('CHECKBOX', DEFAULT), '13x13/13x13');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
