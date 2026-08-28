@@ -1,0 +1,9 @@
+{
+  "log %d": "threw:boom",
+  "log %s": "threw:boom",
+  "log %o": "returned",
+  "log plain": "returned",
+  "error %d": "threw:boom",
+  "group %d": "threw:boom",
+  "valueOf throws": "returned"
+}

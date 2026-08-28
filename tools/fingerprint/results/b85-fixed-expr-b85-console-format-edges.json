@@ -1,0 +1,19 @@
+{
+  "percentC style": "first=[] second=[]",
+  "percentC then d": "first=[] second=[toPrimitive|toString]",
+  "double percent": "first=[toPrimitive|toString] second=[]",
+  "excess arg": "first=[] second=[]",
+  "excess after one": "first=[toPrimitive|toString] second=[]",
+  "missing arg": "first=[] second=[]",
+  "unknown specifier": "first=[] second=[]",
+  "mid-string": "first=[toPrimitive|toString] second=[]",
+  "non-string first": "first=[] second=[]",
+  "percent j": "first=[] second=[]",
+  "capital S": "first=[] second=[]",
+  "dir": "first=[] second=[]",
+  "table": "first=[] second=[]",
+  "group": "first=[toPrimitive|toString] second=[]",
+  "assert": "first=[toPrimitive|toString] second=[]",
+  "count label": "first=[toPrimitive|toString] second=[]",
+  "time label": "first=[toPrimitive|toString] second=[]"
+}

@@ -1,0 +1,21 @@
+{
+  "methods.present": "log,debug,info,warn,error,trace,dir,dirxml,table,count,group,groupCollapsed,groupEnd,assert,time,timeEnd",
+  "methods.missing": "",
+  "methods.count": "25",
+  "coerce.log": "%d=[] %i=[] %f=[] %s=[] %o=[] %O=[] %c%d=[]",
+  "coerce.debug": "%d=[] %i=[] %f=[] %s=[] %o=[] %O=[] %c%d=[]",
+  "coerce.info": "%d=[] %i=[] %f=[] %s=[] %o=[] %O=[] %c%d=[]",
+  "coerce.warn": "%d=[] %i=[] %f=[] %s=[] %o=[] %O=[] %c%d=[]",
+  "coerce.error": "%d=[] %i=[] %f=[] %s=[] %o=[] %O=[] %c%d=[]",
+  "coerce.trace": "%d=[] %i=[] %f=[] %s=[] %o=[] %O=[] %c%d=[]",
+  "error.percentD": "none",
+  "returns": "log=undefined debug=undefined info=undefined warn=undefined error=undefined trace=undefined dir=undefined dirxml=undefined table=undefined count=undefined group=undefined groupCollapsed=undefined groupEnd=undefined assert=undefined time=undefined timeEnd=undefined",
+  "count.ok": "called twice",
+  "console.type": "object",
+  "console.toString": "[object console]",
+  "console.proto": "other",
+  "console.log.descriptor": "writable=true enumerable=true configurable=true",
+  "console.log.length": "0",
+  "console.log.name": "log",
+  "console.log.toString": "function log() { [native code] }"
+}

@@ -32,6 +32,87 @@ _counts: std.StringHashMapUnmanaged(u64) = .{},
 
 pub const init: Console = .{};
 
+/// Chrome's console formatter, run for its SIDE EFFECTS.
+///
+/// `console.log('%d', obj)` prints somewhere a page cannot read, but `%d` has to
+/// turn its argument into a number, and that conversion calls the object's own
+/// `Symbol.toPrimitive` and `toString`. So an object with recording accessors
+/// learns whether the conversion happened -- which makes this a fingerprint the
+/// page collects without devtools ever being open, and Cloudflare's
+/// cf-scrapingcourse challenge collects exactly it: a sweep of `%c%d` across
+/// every console method, twice each.
+///
+/// This engine coerced nothing, so the sweep came back untouched 30 times over
+/// (six methods x five specifiers, probes/expr-b85-console-probe.js).
+///
+/// Every rule below is measured against Chrome 151, not taken from the Console
+/// Standard, and four of them are things a from-the-spec version gets wrong
+/// (probes/expr-b85-console-format-edges.js, 17 cases):
+///
+///   * `%s` `%d` `%i` `%f` convert their argument. The footprint is
+///     `Symbol.toPrimitive` then `toString` -- a STRING hint, so `%d` does not
+///     reach `valueOf` the way `Number(x)` would.
+///   * `%o` `%O` consume an argument and convert nothing.
+///   * **`%c` consumes its style argument and does NOT convert it.** The obvious
+///     implementation stringifies a style, and Chrome does not.
+///   * `%%` is a literal and consumes nothing, and a specifier after it still
+///     converts -- so the scan cannot stop at the first `%`.
+///   * an unknown specifier (`%q`, `%j`, `%S`) consumes nothing, and neither
+///     does a specifier with no argument left.
+///   * a first argument that is not a string means no formatting at all, so
+///     nothing is converted -- including that argument.
+///
+/// And which methods format at all is measured rather than assumed: `group` and
+/// `assert` do, and **`dir` and `table` do not**.
+///
+/// A `toString` that throws PROPAGATES, and only out of the specifiers that
+/// convert -- measured, and the opposite of the intuitive choice. The `catch`
+/// below takes the Zig error and leaves v8's pending exception scheduled, which
+/// is what carries it out to the caller; `%o` and a plain argument never convert
+/// and so never raise. Chrome: `console.log('%d', {toString(){throw}})` throws,
+/// `console.log('%o', same)` does not, and a throwing `valueOf` is never reached
+/// at all (probes/expr-b85-console-throwing-arg.js).
+/// Returns true when a conversion raised, in which case v8 has an exception
+/// scheduled and the caller must return at once. That matters for `error` and
+/// `trace` specifically: both capture a stack trace, and capturing one CLEARS
+/// the pending exception -- which swallowed the throw that Chrome propagates.
+fn applyFormat(values: []js.Value) bool {
+    if (values.len < 2) return false;
+    const first = values[0].isString() orelse return false;
+    const fmt = first.toSlice() catch return false;
+
+    var arg: usize = 1;
+    var i: usize = 0;
+    while (i + 1 < fmt.len) {
+        if (fmt[i] != '%') {
+            i += 1;
+            continue;
+        }
+        const specifier = fmt[i + 1];
+        i += 2;
+        switch (specifier) {
+            // A literal percent. Consumes nothing, and the scan continues --
+            // `100%% %d` still converts the `%d` argument.
+            '%' => {},
+            // Converted, which is the whole point of this function.
+            's', 'd', 'i', 'f' => {
+                if (arg == values.len) return false;
+                _ = values[arg].toString() catch return true;
+                arg += 1;
+            },
+            // Consumed, not converted. `%c` is here because Chrome measurably
+            // leaves the style argument alone.
+            'o', 'O', 'c' => {
+                if (arg == values.len) return false;
+                arg += 1;
+            },
+            // Not a specifier: consumes nothing.
+            else => {},
+        }
+    }
+    return false;
+}
+
 fn dispatchConsoleMessage(values: []js.Value, console_type: Notification.ConsoleMessageType, exec: *js.Execution) void {
     const notification = exec.session.notification;
     const ts = lp.datetime.timestamp(.boot);
@@ -54,6 +135,7 @@ fn dispatchConsoleMessage(values: []js.Value, console_type: Notification.Console
 }
 
 pub fn trace(values: []js.Value, exec: *js.Execution) !void {
+    if (applyFormat(values)) return;
     logger.debug(.js, "console.trace", .{
         .stack = exec.js.local.?.stackTrace() catch "???",
         .args = ValueWriter{ .values = values },
@@ -62,21 +144,25 @@ pub fn trace(values: []js.Value, exec: *js.Execution) !void {
 }
 
 pub fn debug(values: []js.Value, exec: *js.Execution) void {
+    if (applyFormat(values)) return;
     logger.debug(.js, "console.debug", .{ValueWriter{ .values = values }});
     dispatchConsoleMessage(values, .debug, exec);
 }
 
 pub fn info(values: []js.Value, exec: *js.Execution) void {
+    if (applyFormat(values)) return;
     logger.info(.js, "console.info", .{ValueWriter{ .values = values }});
     dispatchConsoleMessage(values, .info, exec);
 }
 
 pub fn log(values: []js.Value, exec: *js.Execution) void {
+    if (applyFormat(values)) return;
     logger.info(.js, "console.log", .{ValueWriter{ .values = values }});
     dispatchConsoleMessage(values, .log, exec);
 }
 
 pub fn warn(values: []js.Value, exec: *js.Execution) void {
+    if (applyFormat(values)) return;
     logger.warn(.js, "console.warn", .{ValueWriter{ .values = values }});
     dispatchConsoleMessage(values, .warning, exec);
 }
@@ -89,11 +175,15 @@ pub fn assert(assertion_: ?js.Value, values: []js.Value, exec: *js.Execution) vo
             return;
         }
     }
+    // `assert`'s format string is its SECOND argument, so `values` -- which
+    // already excludes the assertion -- is exactly what the formatter takes.
+    if (applyFormat(values)) return;
     logger.warn(.js, "console.assert", .{ValueWriter{ .values = values }});
     dispatchConsoleMessage(values, .warning, exec);
 }
 
 pub fn @"error"(values: []js.Value, exec: *js.Execution) void {
+    if (applyFormat(values)) return;
     logger.warn(.js, "console.error", .{ValueWriter{ .values = values, .stack = exec.js.local.?.stackTrace() catch |err| @errorName(err) orelse "???" }});
     dispatchConsoleMessage(values, .@"error", exec);
 }
@@ -195,10 +285,15 @@ pub fn timeEnd(label_: ?[]const u8, exec: *js.Execution) void {
 }
 
 pub fn group(values: []js.Value) void {
+    if (applyFormat(values)) return;
     logger.info(.js, "console.group", .{ValueWriter{ .values = values }});
 }
 
 pub fn groupCollapsed(values: []js.Value) void {
+    // Measured for `group`; `groupCollapsed` is assumed to match it rather than
+    // measured on its own, which is the one rule here that is not read off
+    // Chrome.
+    if (applyFormat(values)) return;
     logger.info(.js, "console.groupCollapsed", .{ValueWriter{ .values = values }});
 }
 
