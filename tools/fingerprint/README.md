@@ -19127,3 +19127,66 @@ boxes it measures, and the next session should look somewhere other than
 layout -- `webdriver-true` remains the only knob ever seen to cost Chrome the
 ticket, so a capability-shaped tell rather than a value-shaped one is still the
 best-supported theory.
+## console's formatter is a fingerprint, and it was worth 80% of the payload gap (B85, 2026-08-27)
+
+`console.log('%d', obj)` prints somewhere a page cannot read. But `%d` has to
+turn its argument into a number, and that conversion calls the object's own
+`Symbol.toPrimitive` and `toString` — so an object with recording accessors
+learns whether the conversion happened. **The formatter is observable with no
+devtools open at all**, and this engine performed no conversion anywhere.
+
+Cloudflare's cf-scrapingcourse challenge collects exactly it: a sweep of `%c%d`
+across every console method, twice each. It showed up in the guard's own debug
+output, captured by `cfsc-fo-diff.mjs`, where Chrome logged `a` and `NaN` for the
+probes this engine logged `object` and `Error` for — one defect behind four of
+the five console divergences on that station. (The fifth was the instrument:
+Chrome emits `groupCollapsed` / `count` / `table` CDP events this engine does
+not, and off-station both arms have all 25 console methods with identical
+descriptors, so that one is invisible to a page and is not a tell.)
+
+### The rules, measured rather than read off the standard
+
+Four of these are what a from-the-spec implementation gets wrong
+(`probes/expr-b85-console-probe.js`, `expr-b85-console-format-edges.js`,
+`expr-b85-console-throwing-arg.js` — 43 readings):
+
+| | Chrome |
+|---|---|
+| `%s` `%d` `%i` `%f` | convert, footprint `toPrimitive` → `toString` |
+| the hint | **string**, so `%d` never reaches `valueOf` the way `Number(x)` would |
+| `%o` `%O` | consume, convert nothing |
+| **`%c`** | consumes its style argument and **does not convert it** |
+| `%%` | literal, consumes nothing — and a specifier after it still converts |
+| `%q` `%j` `%S`, or no argument left | convert nothing |
+| a non-string first argument | no formatting at all, that argument not converted either |
+| `group`, `assert` | **format** |
+| **`dir`, `table`** | **do not format** |
+| a `toString` that throws | **propagates**, out of the converting specifiers only |
+
+That last one is the one only a live reading could settle — swallowing it is the
+intuitive choice and is wrong. It also dictated the shape of the fix: capturing a
+stack trace *clears* v8's pending exception, so `console.error` and
+`console.trace` were swallowing the throw Chrome propagates until the formatter
+started reporting the failure and its callers started returning on it.
+
+All 43 readings match now, against 24 before.
+
+### It reached the guard, and it did not open the door
+
+Both halves are worth stating, because the first is the evidence the change is
+real and the second is the evidence it is not the lock:
+
+| | Chrome | before | after |
+|---|---|---|---|
+| r3 payload (the widget's big POST) | 90988B | 88695B | **90540B** |
+| `cf-chl-out` | present | absent | **absent, 3/3** |
+
+**The payload shortfall closed by 80%** — 1845 of the 2293 bytes — which says the
+guard does record the console sweep and that our answers now largely match its
+expectations. The verdict did not move.
+
+That is the same shape the input box had on x-hyatt: a real defect, fixed, the
+payload demonstrably moved, and the station still refusing. Being refused *for*
+something does not make it the only thing being refused for. What it does mean is
+that the ~448 bytes left in r3 are now a much smaller haystack than the 2293 that
+were there this morning.

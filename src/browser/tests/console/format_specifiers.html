@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`console.log('%d', obj)` prints somewhere a page cannot read -- but `%d` has to
+turn its argument into a number, and that conversion calls the object's own
+`Symbol.toPrimitive` and `toString`. So an object with recording accessors learns
+whether the conversion happened, which makes console's formatter a fingerprint
+collected with no devtools open at all.
+
+Cloudflare's cf-scrapingcourse challenge collects exactly it: a sweep of `%c%d`
+across every console method, twice each. This engine converted nothing, so the
+sweep came back untouched 30 times over -- six methods times five specifiers.
+
+Every expectation here is Chrome 151's, measured with
+tools/fingerprint/probes/expr-b85-console-probe.js and
+expr-b85-console-format-edges.js. Four of them are things a from-the-spec
+implementation gets wrong, and they are called out where they sit.
+
+Nothing in here asserts what console PRINTS. What is asserted is which arguments
+were converted, because that is the only part a page can see and therefore the
+only part a guard can weigh.
+-->
+
+<script id=format_specifiers_convert_their_argument>
+{
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want [' + want + '], got [' + got + ']'); };
+
+  // An argument that records how it was converted. `Symbol.toPrimitive` is a
+  // getter returning undefined, so the conversion falls through to the ordinary
+  // path and the hint becomes visible: a STRING hint reaches toString, a number
+  // hint would reach valueOf first.
+  const spy = () => {
+    const seen = [];
+    return {
+      seen,
+      value: {
+        valueOf() { seen.push('valueOf'); return 41; },
+        toString() { seen.push('toString'); return 'a'; },
+        get [Symbol.toPrimitive]() { seen.push('toPrimitive'); return undefined; },
+      },
+    };
+  };
+  const footprint = (run) => { const s = spy(); run(s.value); return s.seen.join('|'); };
+
+  // The six methods that format, and the specifiers that convert. The footprint
+  // is `toPrimitive|toString` and NOT `toPrimitive|valueOf`: `%d` takes a string
+  // hint, so it does not reach valueOf the way `Number(x)` would.
+  for (const method of ['log', 'debug', 'info', 'warn', 'error', 'trace']) {
+    for (const fmt of ['%s', '%d', '%i', '%f']) {
+      eq(method + ' ' + fmt, footprint((v) => console[method](fmt, v)), 'toPrimitive|toString');
+    }
+    // ...and the two that consume without converting.
+    for (const fmt of ['%o', '%O']) {
+      eq(method + ' ' + fmt, footprint((v) => console[method](fmt, v)), '');
+    }
+    // The shape the challenge actually uses.
+    eq(method + ' %c%d', footprint((v) => console[method]('%c%d', 'font-size:0;color:transparent', v)),
+       'toPrimitive|toString');
+  }
+
+  // `%c` consumes its style argument and does NOT convert it. The obvious
+  // implementation stringifies a style; Chrome measurably does not.
+  eq('%c style', footprint((v) => console.log('%c', v)), '');
+  // ...and the argument after it still converts.
+  {
+    const style = spy();
+    const value = spy();
+    console.log('%c%d', style.value, value.value);
+    eq('%c%d style untouched', style.seen.join('|'), '');
+    eq('%c%d value converted', value.seen.join('|'), 'toPrimitive|toString');
+  }
+
+  // `%%` is a literal and consumes nothing, so a specifier after it still
+  // converts -- the scan cannot stop at the first `%`.
+  eq('%% then %d', footprint((v) => console.log('100%% %d', v)), 'toPrimitive|toString');
+  // A specifier is not required to be first in the string.
+  eq('mid-string %s', footprint((v) => console.log('x %s y', v)), 'toPrimitive|toString');
+
+  // What converts nothing.
+  eq('no specifier', footprint((v) => console.log('plain text', v)), '');
+  eq('excess argument', footprint((v) => console.log('%d', 1, v)), '');
+  eq('unknown %q', footprint((v) => console.log('%q', v)), '');
+  eq('node-only %j', footprint((v) => console.log('%j', v)), '');
+  eq('capital %S', footprint((v) => console.log('%S', v)), '');
+  // A first argument that is not a string means no formatting at all, so that
+  // argument is not converted either.
+  {
+    const first = spy();
+    const second = spy();
+    console.log(first.value, second.value);
+    eq('non-string first', first.seen.join('|'), '');
+    eq('non-string second', second.seen.join('|'), '');
+  }
+
+  // Which methods format at all, measured rather than assumed.
+  eq('group formats', footprint((v) => console.group('%d', v)), 'toPrimitive|toString');
+  eq('assert formats', footprint((v) => console.assert(false, '%d', v)), 'toPrimitive|toString');
+  eq('dir does not', footprint((v) => console.dir('%d', v)), '');
+  eq('table does not', footprint((v) => console.table('%d', v)), '');
+
+  // A passing assertion consumes nothing, because assert returns before it
+  // formats at all.
+  eq('assert passing', footprint((v) => console.assert(true, '%d', v)), '');
+
+  // console returns undefined.
+  eq('log returns', String(console.log('%d', 1)), 'undefined');
+
+  // A `toString` that throws PROPAGATES, and only from the specifiers that
+  // convert. Measured (probes/expr-b85-console-throwing-arg.js) rather than
+  // decided: swallowing it would have been the intuitive choice and is wrong.
+  const boom = { toString() { throw new Error('boom'); } };
+  const raised = (run) => { try { run(); return 'returned'; } catch (e) { return 'threw:' + e.message; } };
+  eq('%d throwing toString', raised(() => console.log('%d', boom)), 'threw:boom');
+  eq('%s throwing toString', raised(() => console.log('%s', boom)), 'threw:boom');
+  eq('error %d throwing', raised(() => console.error('%d', boom)), 'threw:boom');
+  eq('group %d throwing', raised(() => console.group('%d', boom)), 'threw:boom');
+  // ...and not from the ones that do not convert.
+  eq('%o throwing toString', raised(() => console.log('%o', boom)), 'returned');
+  eq('plain throwing toString', raised(() => console.log(boom)), 'returned');
+  // A throwing `valueOf` is never reached, which is the string hint showing up
+  // one more time.
+  eq('throwing valueOf', raised(() => console.log('%d', { valueOf() { throw new Error('v'); }, toString() { return 'ok'; } })), 'returned');
+
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
