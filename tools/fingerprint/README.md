@@ -19948,3 +19948,159 @@ So the guard makes the same calls, in the same numbers, and gets the same
 answers to everything reachable from script -- and still tickets one arm and not
 the other. That is worth stating as a finding rather than a failure: it says the
 remaining tell is not something the page can observe about itself.
+
+## The guard's own source, and what it turns out to check
+
+The previous chapter ended on "the remaining tell is not something the page can
+observe about itself". That is a statement about the page. It is not a statement
+about the guard, and the guard ships its source to us on every request.
+
+### The program is the same program on both arms
+
+`kasada-fetch-guard.mjs` pulls every script the challenge document loads, on
+either arm, grabbing bodies at `Network.loadingFinished` rather than after the
+run: the 429 document and the program it inlines live in the navigation the
+ticket then replaces, and asking afterwards answers `No resource with given
+identifier found` -- which reads as a station that served nothing rather than a
+harness that asked too late.
+
+The 429 document is 690 bytes and identical in shape on both arms: a `KPSDK`
+clock, then one `<script src=".../ips.js?tkrm_alpekz_s1.3=...&x-kpsdk-im=...">`.
+`ips.js` came back **578106 bytes for Chrome, 581496 for this engine**, with
+different SHA-256s -- which looks like the station serving us a different
+program until Chrome is asked twice and answers **572729 bytes**, different
+again. The program is re-obfuscated per request: constants, variable names and
+length all move.
+
+`kasada-program-shape.mjs` normalises to a token-kind stream (identifiers,
+numbers, strings and keywords, in order) and compares 8-gram sets, so the only
+baseline that means anything -- the same browser twice -- is on the table:
+
+```
+pairwise 8-gram Jaccard over token kinds
+  0.9616   chrome #1  vs  chrome #2
+  0.9676   chrome #1  vs  lightpanda
+  0.9715   chrome #2  vs  lightpanda
+```
+
+**Cross-arm similarity is not lower than same-arm similarity.** Both arms get
+the same program template. The verdict is not the station handing us a stricter
+script.
+
+### The constant pool decodes without running the guard
+
+576KB of `ips.js` is 4746 tokens and **zero string literals**. The mass is one
+base-44 string assigned to `H`, and a prelude that turns it into an integer
+array: `var t=A(H,"TV9|3Z~USIds8...",44)`. That prelude is pure -- `Math`, `Map`,
+`TextEncoder`, `Date` and nothing else -- so `kasada-decode-pool.mjs` lifts it
+out and runs it here. **282567 integers.**
+
+Almost no string is stored inline. The operand decoder `g(u,f,a,h)` takes an
+accessor whose `.x(len, off)` slices out of one packed heap, so a string operand
+is the triple `[tag, len, off]` and the interpreter never holds a table of
+names. The heap is built a few statements further down and is equally
+DOM-free, so extending the lifted region through it yields **the heap itself:
+32705 characters, 3087 distinct string operands, 1078 of them identifier-shaped.**
+
+The prelude self-checks against `Math.round(+new Date/18000081)` and bails on a
+CRC mismatch, so a pool decodes only within roughly five hours of the fetch that
+produced it. An empty result on an old file is that window closing, not a broken
+decoder.
+
+### What the heap says the guard looks for
+
+Named outright: `webdriver`, `^__playwright`, `__pw_recorderRecordAction`,
+`PhantomJS/`, `HeadlessChrome/`, `runHeadlessFixes`, `SwiftShader`,
+`fakeShadowRoot`, `Automation`, `masking-agent`, `Lite Browser`, `Mint Browser`,
+`HAL-9000`, `dragon://`, `AppleSetupDone`, `procursus_strapped`, `Sileo`. One
+string is XOR-0x2a: `uuZ_ZZO^OOXuO\KF_K^CEDuYIXCZ^uu` is
+`__puppeteer_evaluation_script__`. **Neither `lightpanda` nor `Panda` appears
+anywhere in the heap.**
+
+A whole family checks whether functions have been patched: `\[native code\]`,
+`\[native code\]|\[Command Line API\]`, `Function.__proto__.toString.call()`,
+`^[a-z]+\s*\(\)\s*\{\s*[a-z]+\s*'?[a-zA-Z0-9]+'?;?\s*\}`, `patchedFuncStringErrMsg`,
+`patchedErrStringErrMsg`, and three class-extension probes -- `class kekko
+extends Function.toString {}`, `class kek extends JSON.stringify {}`, `class lel
+extends navigator.plugins {}` -- whose value is the exact `TypeError` text. Next
+to them sit the source texts of common stealth patches, which only make sense as
+`toString` comparands: `() => ['en-US', 'en']`, `() => [language]`,
+`()=>['en-GB','en-US','en']`, `() => languages || ['en-US', 'en']`,
+`()=>o.preferences[e]`, `opts.languages`, `e.srcdoc = v;`. And CDP binding
+leaks: `const me = window[bindingName]`, `const me = globalThis[bindingName]`,
+`Object.ErrorInInvocation`, `Object.getDetails`.
+
+### Every one of those checks, run on both arms
+
+`probes/expr-b85-guard-strings.js` quotes the recovered literals and applies the
+guard's own regexes to the results. Over twelve native functions by kind
+(plain builtins, DOM methods, prototype accessors), fourteen error texts, ten
+plain tells and nine forbidden global names, **both arms agree on every single
+reading**. Every native `toString` is `function name() { [native code] }` on
+both; no forbidden global exists on either.
+
+The only family that differed was unit conversion:
+
+| declared | Chrome | this engine |
+|---|---|---|
+| `1pt` | 1.32812px | 1.32813px |
+| `1cm` | 37.7812px | 37.7891px |
+| `1mm` | 3.76562px | 3.77344px |
+| `1ex` | 7.17188px | **0px** |
+| `1ch` | 8px | **0px** |
+
+which looked decisive, because the heap carries thirteen absolute-unit
+constants -- `1.0521in`, `1.03in`, `0.9948in`, `1.0050in` through `1.0054in`,
+`1.0078in`, `1.0104in`, `74.16pt`, `2.6162cm` -- and `1.03in`, `74.16pt` and
+`2.6162cm` are all the same 98.88px, i.e. one length in three unit systems.
+
+### It is not the units either
+
+`units-scan` shows no absolute-unit string reaches the wire, so the constants
+can only be a set-then-read-back. `units-set-log` logs style writes on the live
+station, read-only, and the guard writes exactly three:
+
+```
+position:absolute;width:1.03in;height:1.03in
+position:absolute;width:2.6162cm;height:2.6162cm
+position:absolute;width:74.16pt;height:74.16pt
+```
+
+`probes/expr-b85-unit-triple.js` runs those three verbatim. **Both arms answer
+98.875px to all three.** The `cm`/`mm` grid difference is real but does not
+reach the inputs the guard actually uses; `ex` and `ch` are a real defect but the
+guard never writes them here.
+
+### Nor the OPFS timer
+
+Five heap fragments reassemble into a worker body: `(async()=>{try{`, `const
+d=await navigator.storage.getDirectory(),`, `b=new Uint8Array(1);let
+m=1/0,s,i=0;`, `f.close();postMessage(m<.1)`, `}catch{postMessage(false)}})()`.
+So: open the origin-private file system, take a sync access handle, time the
+tightest write, report whether the floor is under 0.1ms -- and an engine without
+OPFS takes the catch and answers `false`, a *different* answer rather than a
+missing one. This is the first check found so far that a page-realm knob cannot
+see at all.
+
+`probes/expr-b85-opfs-worker.js` runs it where the guard runs it. On the page
+thread both arms lack `createSyncAccessHandle`, which is correct -- it is
+worker-only by spec. Inside a worker:
+
+```
+chrome      {"hasCreateSyncAccessHandle":"function","minWriteMs":0,"verdict":true}
+lightpanda  {"hasCreateSyncAccessHandle":"function","minWriteMs":0,"verdict":true}
+```
+
+Identical.
+
+### Where that leaves it
+
+Ten families now have a causal reading behind them, and the two added here are
+the first taken from the guard's own source rather than from a guess. The static
+route did not close x-hyatt, but it changed what the next attempt costs: the
+question is no longer "what might it check" but "which of these 1078 names does
+it weigh", and that is a list rather than an imagination. What is still missing
+is the instruction dispatch -- the pool, the heap, the type tags and the operand
+decoder are all in hand, so a disassembler over the same integer array would
+give the payload's field construction directly, and that is the one thing this
+chapter could not read off the strings alone.

@@ -1027,4 +1027,139 @@ export const KNOBS = {
       // with it. Report early and repeatedly.
       for (const t of [2000, 3500, 6000, 10000]) setTimeout(report, t);
     `,
+
+    // Is the guard's unit table live on this station?
+    //
+    // The decoded string heap carries thirteen length constants written in
+    // absolute units -- 1.0521in, 1.03in, 0.9948in, 1.0050in through 1.0054in,
+    // 1.0078in, 1.0104in, 74.16pt, 2.6162cm -- and 74.16pt, 2.6162cm and 1.03in
+    // are all the same 98.88px, so it holds one length in three unit systems.
+    // A two-arm probe over every check the heap names came back identical
+    // except for unit conversion, where this engine quantises cm and mm on a
+    // different grid than Chrome and computes ex and ch as a flat 0px.
+    //
+    // Before spending a plan on that, this asks whether any of it reaches the
+    // wire: it reports every encoded section that carries a number with an
+    // absolute-unit suffix. Nothing reported means the heap's unit constants
+    // are dead code on x-hyatt and the difference costs nothing here.
+    'units-scan': beacon + `
+      __send('knob=units-scan');
+      const UNITS = ['in', 'pt', 'cm', 'mm', 'pc', 'ex', 'ch', 'em', 'rem', 'vh', 'vw'];
+      const isDigit = (c) => c >= '0' && c <= '9';
+      const hits = (s) => {
+        const found = [];
+        for (const u of UNITS) {
+          let i = s.indexOf(u);
+          while (i > 0) {
+            const before = s[i - 1];
+            const after = s[i + u.length];
+            // A number immediately before, and no identifier character after,
+            // so 'point' and 'width' do not read as 'pt' and 'in'.
+            if ((isDigit(before) || before === '.') &&
+                (after === undefined || !(after >= 'a' && after <= 'z'))) {
+              let j = i - 1;
+              while (j > 0 && (isDigit(s[j - 1]) || s[j - 1] === '.' || s[j - 1] === '-')) j--;
+              found.push(s.slice(j, i + u.length));
+              if (found.length > 24) return found;
+            }
+            i = s.indexOf(u, i + 1);
+          }
+        }
+        return found;
+      };
+      let n = 0;
+      const seen = new Set();
+      const grab = (s) => {
+        if (typeof s !== 'string' || s.length < 2 || n > 40) return;
+        const f = hits(s);
+        if (!f.length) return;
+        const key = f.join(',').slice(0, 200);
+        if (seen.has(key)) return;
+        seen.add(key);
+        const i = n++;
+        setTimeout(() => __send('u=' + i + '&len=' + s.length +
+          '&head=' + encodeURIComponent(s.slice(0, 40)) +
+          '&hits=' + encodeURIComponent(key)), 10 * i);
+      };
+      (() => {
+        const real = TextEncoder.prototype.encode;
+        Object.defineProperty(TextEncoder.prototype, 'encode', {
+          configurable: true, writable: true, enumerable: false,
+          value: function (input) {
+            try { grab(String(input === undefined ? '' : input)); } catch (e) {}
+            return real.call(this, input);
+          },
+        });
+      })();
+    `,
+
+    // Which units does the guard actually write into an element?
+    //
+    // units-scan showed no absolute-unit string reaches the wire, so the heap's
+    // 1.03in / 74.16pt / 2.6162cm triple -- one 98.88px length in three unit
+    // systems -- can only be a set-then-read-back: the guard writes the length
+    // and hashes the px it gets. This logs every style write, read-only, so
+    // "the unit table is live" and "the unit table is dead code on x-hyatt"
+    // stop being the same reading.
+    'units-set-log': beacon + `
+      __send('knob=units-set-log');
+      const UNITS = ['in', 'pt', 'cm', 'mm', 'pc', 'ex', 'ch', 'q'];
+      const isDigit = (c) => c >= '0' && c <= '9';
+      const interesting = (v) => {
+        const s = String(v).toLowerCase();
+        for (const u of UNITS) {
+          let i = s.indexOf(u);
+          while (i > 0) {
+            const after = s[i + u.length];
+            if ((isDigit(s[i - 1]) || s[i - 1] === '.') &&
+                (after === undefined || !(after >= 'a' && after <= 'z'))) return true;
+            i = s.indexOf(u, i + 1);
+          }
+        }
+        return false;
+      };
+      let n = 0;
+      const seen = new Set();
+      const note = (how, v) => {
+        try {
+          if (n > 30 || !interesting(v)) return;
+          const s = String(v).slice(0, 120);
+          if (seen.has(s)) return;
+          seen.add(s);
+          const i = n++;
+          setTimeout(() => __send('set=' + i + '&how=' + how + '&v=' + encodeURIComponent(s)), 10 * i);
+        } catch (e) {}
+      };
+      (() => {
+        const D = CSSStyleDeclaration.prototype;
+        const realSet = D.setProperty;
+        Object.defineProperty(D, 'setProperty', {
+          configurable: true, writable: true, enumerable: false,
+          value: function (p, v, pr) { note('setProperty:' + p, v); return realSet.call(this, p, v, pr); },
+        });
+        const ct = Object.getOwnPropertyDescriptor(D, 'cssText');
+        if (ct && ct.set) {
+          Object.defineProperty(D, 'cssText', {
+            configurable: true, enumerable: ct.enumerable, get: ct.get,
+            set: function (v) { note('cssText', v); return ct.set.call(this, v); },
+          });
+        }
+        for (const p of ['width', 'height', 'font', 'fontSize', 'margin', 'padding', 'top', 'left']) {
+          const d = Object.getOwnPropertyDescriptor(D, p);
+          if (!d || !d.set) continue;
+          Object.defineProperty(D, p, {
+            configurable: true, enumerable: d.enumerable, get: d.get,
+            set: function (v) { note(p, v); return d.set.call(this, v); },
+          });
+        }
+        const realSA = Element.prototype.setAttribute;
+        Object.defineProperty(Element.prototype, 'setAttribute', {
+          configurable: true, writable: true, enumerable: false,
+          value: function (name, value) {
+            if (String(name).toLowerCase() === 'style') note('attr', value);
+            return realSA.call(this, name, value);
+          },
+        });
+      })();
+    `,
 };
