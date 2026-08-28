@@ -19488,3 +19488,43 @@ header order on the wire. The verdict is issued by the server on that response,
 and a page-side knob cannot reach any of it. `collect-tls.mjs` and `h2-arms.mjs`
 already exist for exactly this comparison, and B53's "the protocol layer is
 clean" was measured thirty sessions and one fork of work ago.
+
+## The envelope is clean too (B84, 2026-08-27)
+
+The last surface a page-side knob cannot reach: the `/tl` request's own wire
+shape. Measured on both arms, and it is the same shape.
+
+**TLS and the HTTP/2 preface**, off tls.peet.ws, three connections each:
+
+| | Chrome | this engine |
+|---|---|---|
+| JA4 | `t13d1517h2_8daaf6152771_a87ad97598a9` | **identical** |
+| Akamai h2 | `1:65536;2:0;4:6291456;6:262144\|15663105\|0\|m,a,s,p` | **identical** |
+| SETTINGS | table 65536, push 0, window 6291456, list 262144 | **identical** |
+| pseudo-header order | `method,authority,scheme,path` | **identical** |
+| ciphers / extensions / groups / versions / sigalgs / alpn | 16 / 18 / 5 / 3 / 11 / 2 | **same sets** |
+
+The raw JA3 hash differs and the cipher, extension, group and version *orders*
+differ between single samples -- both arms permute their ClientHello per
+connection and randomise GREASE, which is why JA4 exists and why it matches.
+Comparing one sample's order here is comparing the noise; the sets are what
+survive, and they are equal.
+
+**Header order and values on the wire**, over a local h2 echo, 68 requests per
+arm: 37 reported differences, 36 of which are the instrument -- 35 are
+`HeadlessChrome` against `Chrome` in the user agent because the Chrome arm was
+not given `--headed-ua`, and one is the echo's own ephemeral port in `origin`.
+
+That leaves exactly one real difference in 35 paths:
+
+```
+GET /asset.png    chrome  priority: i
+                  ours    priority: u=1, i
+```
+
+An image asks for the default urgency in Chrome, which omits `u=`, and urgency 1
+here. **The POSTs match** -- `POST /hdr/post-ct` shows no priority difference --
+and the verdict rides on a POST, so this is not on the path that matters. Worth
+fixing as fidelity; not a candidate for the lock.
+
+So B53's reading still holds thirty sessions later: the protocol layer is clean.
