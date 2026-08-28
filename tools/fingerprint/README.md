@@ -19556,3 +19556,56 @@ The original note was not careless so much as under-powered -- it reasoned "both
 of our runs are 429 anyway, so the errors are not the gate", which is true of
 *our* runs and says nothing about the comparison with Chrome. Counting both arms
 is what closed it.
+
+## The verdict is a RATE, not a decision, and that weakens several readings above (B84, 2026-08-27)
+
+The timing question answered itself and then took a much bigger claim down with it.
+
+**The timing gap is real.** On x-hyatt the `/tl` POST goes out at 916, 1093 and
+1478ms after the navigation here, and at 1932, 2000 and 3016ms in Chrome. The
+ranges do not overlap. The 429 document arrives at the same moment on both arms
+(~300-440ms), so it is the guard's own work that runs twice as fast here.
+
+**Delaying the POST is not what earns a ticket.** A knob holding the send back
+by 1100ms lands it at 1980-4437ms, inside Chrome's window, and the first such run
+came back with `r=1-B1VncEQ` -- the first ticket this engine has ever taken from
+x-hyatt. Alternating A/B is what stopped that from being reported as a win:
+
+```
+pair 1  BASE  840ms  (absent)     DELAY 2614ms  (absent)
+pair 2  BASE  894ms  1-B1N5BgI    DELAY 1980ms  (absent)     <-- the BASE arm
+pair 3  BASE  803ms  (absent)     DELAY 2537ms  (absent)
+pair 4  BASE  958ms  (absent)     DELAY 2098ms  (absent)
+pair 5  BASE  1110ms (absent)     DELAY 3458ms  (absent)
+```
+
+A ticket at 894ms on the **undelayed** arm. Across everything: roughly one
+ticket in nine baseline runs and one in eight delayed ones. The delay does
+nothing; x-hyatt simply issues a ticket now and then.
+
+**So the oracle is not deterministic.** Counted directly, ten runs each:
+
+| | tickets |
+|---|---|
+| Chrome | **9 / 10** |
+| this engine | 0 / 10, and 0 / 10 again -- but 2 seen across ~17 runs earlier |
+
+Chrome is about 90%, this engine about 5%. Not 100 and 0. B83 recorded the
+oracle as deterministic on three runs per arm, and three runs at a 90% base rate
+agree with each other 73% of the time by luck alone.
+
+### What that does to the negatives in this file
+
+Every "Chrome kept its ticket" above -- the falsified values, the `[[Has]]`
+signature, the 36 dropped globals -- was one or two runs against a base rate of
+90%. A knob that **halved** Chrome's ticket rate would still show two of two
+about one time in five. Those readings are therefore **weak evidence, not
+proof**: they rule out a knob that destroys the ticket outright, the way
+`navigator.webdriver` does at 3 of 3, and they do not rule out one that merely
+shifts the odds.
+
+The webdriver zero point survives -- 0 of 3 against a 90% base is a real signal.
+So does the direction of travel: this engine passes rarely and Chrome passes
+usually. But anything measured here from now on needs a run count chosen against
+a 90% base rate, and the cheap two-run knob reading that this file leaned on for
+four chapters is not strong enough to close a question.

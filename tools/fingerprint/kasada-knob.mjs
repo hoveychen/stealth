@@ -84,14 +84,20 @@ async function once(port) {
                 // threw at all.
                 if (/cdndex|\/error/i.test(url)) rec.errorReports = (rec.errorReports || []).concat(url.slice(0, 160));
                 if (url.endsWith('/tl')) {
-                    rec.tl.push({ postLen: m.params.request.postData ? m.params.request.postData.length : null });
+                    // When the POST goes out, relative to the navigation. The
+                    // guard's own clock is not reachable from here, and this is
+                    // the only part of its schedule the server also sees.
+                    rec.tl.push({
+                        postLen: m.params.request.postData ? m.params.request.postData.length : null,
+                        atMs: rec.t0 ? Date.now() - rec.t0 : null,
+                    });
                 }
                 return;
             }
             if (m.method !== 'Network.responseReceived') return;
             const r = m.params.response;
             const url = String(r.url || '');
-            if (m.params.type === 'Document') rec.documents.push(r.status);
+            if (m.params.type === 'Document') rec.documents.push(r.status + '@' + (rec.t0 ? Date.now() - rec.t0 : '?'));
             if (url.endsWith('/tl')) {
                 const h = r.headers || {};
                 const last = rec.tl[rec.tl.length - 1] || {};
@@ -108,6 +114,7 @@ async function once(port) {
         if (knobSrc) {
             await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: knobSrc }, sessionId);
         }
+        rec.t0 = Date.now();
         await cdp.send('Page.navigate', { url: target }, sessionId);
         await sleep(settle);
     } finally {
@@ -126,7 +133,7 @@ for (let i = 0; i < runs; i++) {
     const tl = rec.tl.find((t) => t.status !== undefined) || rec.tl[0];
     console.log(`${engine} ${station} knob=${knobName} run ${i + 1}: ` +
         `docs=${rec.documents.join('->') || '(none)'} ` +
-        (tl ? `tl=${tl.status} postLen=${tl.postLen} cr=${tl.cr} r=${tl.r ?? '(absent)'}` : 'tl=(no POST)') +
+        (tl ? `tl=${tl.status}@${tl.atMs}ms postLen=${tl.postLen} cr=${tl.cr} r=${tl.r ?? '(absent)'}` : 'tl=(no POST)') +
         ` beacons=${rec.beacons.length}` +
         ` errorReports=${(rec.errorReports || []).length}`);
     for (const e of (rec.errorReports || []).slice(0, 2)) console.log('    ERR ->', e);

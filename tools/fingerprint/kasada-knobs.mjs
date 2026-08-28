@@ -679,6 +679,49 @@ export const KNOBS = {
       __send('errors=armed');
     `,
 
+    // Hold the /tl POST back until Chrome's moment.
+    //
+    // Measured on x-hyatt, three runs each: this engine posts at 916, 1093 and
+    // 1478ms after the navigation, Chrome at 1932, 2000 and 3016ms. The ranges
+    // do not overlap, and the 429 document arrives at the same time on both --
+    // ~300-440ms -- so it is the guard's own work that is twice as fast here.
+    //
+    // Kasada weighs timing, and this is the one thing the server sees that has
+    // never been tested. Delaying the send moves ARRIVAL only: whatever the
+    // payload says about its own schedule is already sealed by then. So a
+    // ticket here means the server timed the request, and no ticket leaves the
+    // stronger question -- the guard's internal clock -- for `slow-clock`.
+    'delay-tl': beacon + `
+      const DELAY = 1100;
+      const openReal = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+        try { this.__b84url = String(url); } catch (e) {}
+        return openReal.call(this, method, url, ...rest);
+      };
+      const sendReal = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (...args) {
+        let isTl = false;
+        try { const u = String(this.__b84url || '').split('?')[0]; isTl = u.slice(-3) === '/tl'; } catch (e) {}
+        if (!isTl) return sendReal.apply(this, args);
+        __send('delaying=' + DELAY);
+        setTimeout(() => { try { sendReal.apply(this, args); } catch (e) {} }, DELAY);
+        return undefined;
+      };
+      const fetchReal = window.fetch;
+      if (typeof fetchReal === 'function') {
+        window.fetch = function (input, init) {
+          let u = '';
+          try { u = String(typeof input === 'string' ? input : (input && input.url) || ''); } catch (e) {}
+          if (u.split('?')[0].slice(-3) !== '/tl') return fetchReal.call(this, input, init);
+          __send('delaying-fetch=' + DELAY);
+          return new Promise((res, rej) => setTimeout(() => {
+            try { fetchReal.call(window, input, init).then(res, rej); } catch (e) { rej(e); }
+          }, DELAY));
+        };
+      }
+      __send('knob=delay-tl');
+    `,
+
     // Read every section the guard feeds into its payload, whole, on either arm.
     // Descended from probes/inject-b55-funnels.js, which captured the same
     // funnels but only ever compared *lengths* -- the sections' own text was
