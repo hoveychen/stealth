@@ -18912,8 +18912,12 @@ writes on the whole page, and the only ones the guard makes are six system-font
 keywords, one `-apple-system-body` and one `font-family: monospace`. **It never
 names a font face.**
 
-The thing that varies is the `type` attribute. Measured on Chrome 151, headed at
-the dpr 2 this engine's persona claims:
+The thing that varies is the `type` attribute. Measured on Chrome 151 at the
+device scale factor 2 this engine's persona claims -- explicitly, with
+`--chrome-arg --force-device-scale-factor=2`, which is the switch that decides
+these numbers. Not `--headed`: a 2x2 of headed against headless at each scale
+came out byte-identical per scale, so on a Retina machine `--headed` only
+happens to coincide with scale 2 and would not reproduce on a 1x display:
 
 | type | @100px | default | | type | @100px | default |
 |---|---|---|---|---|---|---|
