@@ -272,7 +272,13 @@ async function once(port) {
             cdp.send('Network.getResponseBody', { requestId: m.params.requestId }, m.sessionId || row.sessionId)
                 .then((b) => {
                     const s = String(b?.body ?? '');
-                    row.bodyLen = s.length;
+                    // The flag is not decoration. One arm can hand back the
+                    // same bytes base64-encoded and the other as text, and then
+                    // the two lengths stand in a 4:3 ratio that reads exactly
+                    // like the server having sent a bigger program.
+                    row.base64 = !!b?.base64Encoded;
+                    row.bodyLen = row.base64 ? Math.floor(s.replace(/=+$/, '').length * 3 / 4) : s.length;
+                    row.rawLen = s.length;
                     row.body = s.slice(0, 4000);
                 })
                 .catch(() => { row.body = '(unavailable)'; });

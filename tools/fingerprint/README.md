@@ -19742,34 +19742,42 @@ the switch off -- `cf-knob --real-ua` -- Chrome's answer is 477 bytes, the same
 length as ours. It did not change r2's size, which is how we know r2 does not
 carry it, but it would have poisoned any comparison of those fields.
 
-### Where the arms actually split
+### A fourth artefact, caught before it became a lead
 
-Capturing the response bodies of the `/fo/` posts moves the question upstream of
-everything above. The exchange is the same shape on both arms; the sizes are
-not.
-
-| round | request | Chrome response | this engine's response |
-|---|---|---|---|
-| r1 (page) | 2306 B both arms | **113 584 B** | **151 440 B** |
-| r2 (widget) | 4716-4738 / 4898-4919 | 823 040 B | 1 097 448 B |
-| r3 (widget) | ~88 000 both arms | 6936 B + **ticket** | 170 296 B + another `cf-chl-gen` |
-
-The r1 request is the same size on both arms, its headers agree on everything
-except a client-hint patch version, and the response to it is 37 856 bytes
-bigger here -- stably, run after run, with no overlap between the arms. The
-server is already handing this engine a different program before the widget has
+Capturing the response bodies of the `/fo/` posts looked at first like the
+finding of the session. The r1 request is 2306 bytes on both arms and its
+headers agree on everything but a client-hint patch version, and yet
+`Network.getResponseBody` handed back 113 584 bytes for Chrome and 151 440 for
+this engine, stably, with no overlap. A different program, before the widget has
 run a line.
 
-And that difference is not the suspicion branch. `webdriver-true`, which is
-refused, gets r1 = 113 580 and r2 = 846 204: the ordinary sizes. A Chrome that
-the door rejects is still served the small program. So the two things are
-separable, the size split is not a verdict, and whatever selects it is decided
-by r1's content or by the transport rather than by anything the widget collects.
+It is the same program. `getResponseBody` also returns `base64Encoded`, and this
+engine sets it where Chrome does not, so the two lengths stand in a 4:3 ratio:
+`4 * ceil(113584 / 3)` is 151 448, which is the number the first run produced to
+the byte. Decoded, r1 is 113 580 here against 113 584 there and r2 is 846 192
+against 846 284 -- run-to-run noise. The harness now decodes before it measures,
+and records the flag, because the same trap is waiting for anyone who compares a
+length across these two arms.
 
-The third row says something else worth keeping: this engine's r3 is not
-refused. It answers with a fresh `cf-chl-gen` and 170 KB of body -- the server
-asking for a fourth round -- and no fourth round is ever posted. `report-errors`
-finds no uncaught exception and no rejection in any document when that happens.
+What survives the correction is the last row of the exchange:
+
+| round | request | Chrome | this engine |
+|---|---|---|---|
+| r1 (page) | 2306 B both | 113 584 B | 113 580 B |
+| r2 (widget) | 4716-4738 / 4898-4951 | 846 284 B | 846 192 B |
+| r3 (widget) | ~90 000 both | 6936 B + **ticket** | 127 720 B + another `cf-chl-gen` |
+
+That 127 720 is worth writing down: `webdriver-true`, the one knob that costs
+Chrome its ticket, is answered with 127 724 bytes. The refusal this engine
+receives is byte-for-byte the shape of the refusal a `navigator.webdriver`
+browser receives, down to the follow-up challenge neither of them ever posts.
+So "we never send an r4" is not a separate defect -- a refused Chrome does not
+send one either.
+
+`report-errors`, which listens for uncaught errors, rejections and
+`console.error` in every document, finds nothing at that moment on this arm
+beyond the console format-specifier probe. The exchange does not break; it is
+turned away.
 
 ### The tally so far
 
