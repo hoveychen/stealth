@@ -19250,3 +19250,53 @@ r3 is now 448 bytes short of Chrome rather than 2293, and one of the two probes
 known to live in it is answered correctly. The instrument is built and
 calibrated, so the next family costs two runs to test rather than a session to
 argue about.
+
+### The family map, against a 7/7 baseline
+
+Every row is two runs of `cf-knob.mjs chrome`, and the baseline was re-run
+between the batches: `none` is ticketed **7 for 7**, so the station was not
+wobbling and a lost ticket below means something.
+
+| family removed from Chrome | ticket | reading |
+|---|---|---|
+| `none` (baseline) | **7/7** | the station is stable in this window |
+| `webdriver-true` | 0/2 | **fatal** — the zero point |
+| `console-no-format` | 0/2 | **fatal**, and controlled: `console-passthru` is 2/2 |
+| `no-plugins` | 1/2 | marginal |
+| `coarse-performance` | 1/2 | marginal |
+| `no-error-stack` | 2/2 | **not weighed** |
+| `no-canvas-readback` | 2/2 | **not weighed** |
+| `no-webgl` | 2/2 | **not weighed** |
+| `no-timezone` | 2/2 | **not weighed** |
+| `detached-computed-values` | 2/2 | **not weighed** |
+| `native-tostring` | 0/2 | **invalid** — see below |
+
+`native-tostring` is not a result. It came back with **one round instead of four**
+— the challenge never got past r1 — so the knob broke the guard's own code rather
+than being judged by it. A knob that stops the exchange is not a knob that failed
+it, and the round count is what tells the two apart.
+
+**What this buys is mostly negative, and that is the point.** Five families are
+ruled out for this door, and each of them is a direction someone could have spent
+a session on:
+
+- **canvas readback and WebGL are not weighed.** That is the second independent
+  confirmation, after ks-canadagoose's guard running the whole canvas surface and
+  ticketing this engine anyway — and it rules out `cfsc-glyph-outline-raster`,
+  the most expensive plan in the queue, for this door.
+- **a detached element's computed style is not weighed**, so the 36-of-36 gap in
+  `detached-computed-style-empty` will not open it either.
+- **the timezone is not weighed**, matching x-hyatt exactly.
+- **`Error.prototype.stack` is not weighed.**
+
+The two marginal rows are worth exactly what they say: `plugins` and a coarsened
+`performance.now` each cost the ticket once in two. Cloudflare appears to score
+them rather than gate on them, and neither is a place to spend a session on the
+strength of one run in two.
+
+Which leaves the honest summary. The only family this sweep found that Cloudflare
+hard-gates on, apart from a declared automation flag, is the console formatter —
+and this engine now implements it, 43 readings out of 43, with the r3 payload gap
+closed by 80%. **The ticket is still withheld**, so what refuses us is something
+this sweep did not cover. The instrument is the deliverable: the next family is
+two runs, and a family ruled out stays ruled out.

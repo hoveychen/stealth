@@ -1,0 +1,236 @@
+{
+  "engine": "chrome",
+  "knob": "no-timezone",
+  "headless": false,
+  "target": "https://www.scrapingcourse.com/antibot-challenge",
+  "runs": [
+    {
+      "documents": [
+        403,
+        200,
+        200
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/2044622385:1787886615:MRDuqyZ6DEAacYNvzI60TgA6LNTJlO5IQLKl7fJFXpw/a3204a2c6ccf64b6/aTq82Az9nh0rfnfKq2HbQuLls52BeKfiPYCRB7NAxrI-1787888375-1.2.1.1-EzQiJoyqnhZ6mdj4sLPb14Yq7PlOJS65Nhoxx5k2XhjO9ncgSa9DwWLY1W4S52S4",
+          "method": "POST",
+          "postLen": 2306,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "n4b6j5hVDgzt2XhK06Bcpyc1DSirPnjxYsk3E7MI1v4=$x1GjCTenLsZXkwrt6O8/WQ==",
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/vdioo/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/22349905:1787886616:XdspDPBek3tmUMoWv5Ljui1jXfdsV_70imN2gFqgv6I/a3204a2f1feddc9b/fyiJWMt35_CzuL2i6DUc6vBEZEoALNiEBSR0B1mWbcQ-1787888376-1.2.1.1-_YUCbNchaZdQR9fXo3hgdSY3c8.rXemnMyWcyWwQZJ64seLif.G7eYR0MSsE9eTr",
+          "method": "POST",
+          "postLen": 4727,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "5WE69BX431JOeSr7kmnr+VpxYk+KcjC32cyxpbklKRjvXsNZ1w/tRu///Do4NJMbIxuJrKBj0y1vQBVfYPfs0yni2xdsEhxqvp1t6+jo3y8Fn8cJJBFRw3IcxqYU4AxplNhckiF7/470yZP/Sdv6nn3BfMjqh01RQ1SMP+A2bITbqCN8NKGmbcYqN3Fj0oYHLzFjK5ausSO5GDCPf7WV4VPjJgY9cHjfNLlN1myAA9xnOjW5gcyE36BHQZu67mBpSyGxioGOwTd5e07gbKtWUCXKB0dAUQZMqM6mrRSSnzvT7b9WZR9MX5/5pqsdydWIfvg3xwKCv8aeIE3yp4gQkSfThS1xnNJA/w55Nr3gmr+nq2Wf4Oi3A4BO1PUsv7xxNRfdR9BGROI5qGTyXfJA5yFL3jP1nAYLWsdNzuQP9fq0k14CJBELcu3QGJmJR8u6fW82iqUqvglSfJqkChgN2pHOmjGhBKVbSbMGbZSazLfUOpYqkQpqm6Cobx4MnS9m2hxQ+Fn0DfQlytSNp0xVb72a6vSIlHzacOSv0LUaano+MXylHKVjd6IeXdRApyFuLNKkHn5Y1fQSTDlKlzjQkR+3/tV8O34N72zRLzvdG6xGwdMwWingGEuAV+9+uCj7PrmGzWX5fWqVsiTXEWzcRHKjA/J6kQRBKSMZruC+I82kqrxvAECjRl2yNEVuy3NVGpsI9680CHwTWfUaCMqY5b6VHJRNV3w+6A4F7/QCVA1wpBrSenU2aWv0mmHhhI2UagNXgTh3fhDmZQRTZ23jPIuhGwbJ4BzWiWnN5krRNbX9CbpTs1r5g7/JQH0dUuDuZkTT6H5knOe0Yd2M/4sMTGJDyT+eRaZmG2dRIw0wswiYSmfaYqwO8/7coQvMJ6E4dxVTyLdf53tp3TW7ZqHlU2HVib/bCaDmODKDW7fQTLg=$lPao1Y36VKYH2Ib8CR000Q==",
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/pat/a3204a2f1feddc9b/1787888377129/01db84e19459a85d198d9adf80b08663965a019739fc14a0b44ee0f74125152d/4NYxfr76KMIWyIcqeRDSFp_we94Da3ykNTVVCjmjPcI-1787888377-1.3.1.1-azVblEIV52EX3rSQuiu4ZhIKL8d02_kvNQNZVtRpWCpWinlHzenvihbGDFDrybFhzjtYj41hi62uOQlU1SGS7R4.af6qdNatxAVhgzAdvVRgHqaiXhiFJxe2OWd2NPMZ54cr6UFJoVPYZQiLs4obNQa1Te_cnMGojkVuo0zE5il7hMhCXNhesD0rK1fDe.sf0RwZqQERespLsPs9D9j0vUfhqoVtlWfyfa.jlyYTgZFcgsk2HajOlDGipKzvCLeVBC_mhHeoDu.UwIoVDi3x2MK.WgZp_SAlhMMC9gUNG6FKjNbH0eJvtamBDpjWyN2y1KDEYevI.0.IK74wvi37thxuLJ9LGbQ3GiCIi2d2s2H3Fujg.wtQBIU1W5DP8IhCa72O9FKxo63vpGeR4Tx5ivWBAadHSs0lBuPbCF3JgmpZrB.6DWCtbXSvBvWfjw8fTdMlIlDtZI5Th0UKkxTPzQh62wReyhorpjbqSCXWJFDW2vfMJNW8hZh7vI30ay2hsRevt5W.Q0w46Uz_32N6h5_fXiYW5RpAZt67hJZTDlS.pF9A_.WNmQ1SczQghU6q3UVLzK_9yDmIokTsrIH_eI5lPgg0v3FMcWHt06ltFYSP4fG5m8BSPldj3y58_ZSPsrCVewbZW31c54W_5b.SSwp3dBKe3H2ameWApRx.9Vn2WTYyhPZ5nGXI7pCUL9rprILbn5qyI4ivDwm6d.mzhU2ozzgH7s1QQ0S87d7klbXzT2V5DDXKZIQzqS4FDXGuhMqcclHyGjY6SrelAHaViy470OUkbSPKz45F95GdpIfGCWecR3o2mc9J.0eddp3O",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 401,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/__cfknob",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 404,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/ci/a3204a2f1feddc9b/1787888377131/yAkrm4S_P7APyQNkFRteVuj6S03HpZeG9JMDhTzIinM-1787888377-1.3.1.1-d9L0TQXPHxFiDEXwGrhnGGMVFPTCljc4Ndn8RioC1G_XOYGxJux7VoiPuB9X24dcExTgIPVMceTLDvwB8N_xBnxZVlCiPnEfy6R8d.s7cwG6Q29g.AQVZFIW3IxB9k9.lJXDRfAb30na8BiQsEvBbHikRxZOecaSlpfYYvaR5ePu4I1rLKsv46DQfld0DwhErkF3T0_vqomvaftN.7AQ7mqic1ZACND2x_OunRCzd_rVKSQPNYyDgIkQ7StZr7.hz_alQj4J6GOqPzD6SFxeDmZ76_GiLN7oYaqaKg1c6_9nd4g2IxighKHbuEB0GFhC9oUlPf7XsMDZs7NKXk8mK2FZNUthi4Kix2vfTk7oR1Hv9mVQr4dAeTCKrk0tZDO35Ae8FVZgoc5ilw4cmeo355RdyM4WlC21NXBvXzHk.e8k_LBVNJeuK4CFKa.nt9HpA9MqjxhVFJbqF_V1gF5nH3O1zQIByxvpDcHfxNb92e8msoiBCMPY8nDYVktFLC_ZcJzN7DxxY0oO2dbR6BK7PnaxrqyalpA49csKSAV6otvWCvk7RMM.1oE1jkiIUTBlwRBf_phdUjeKCwiljireMWyTUIX5h0RPruHVcXHIMh6w_0GIJIlxn8HWpEI8rSBy5cURPWv.mdx5rzHJ3Lr1c_f1Urt7YThwguNsmKLG1JLPcaJKEJ0MqY7pfRi8i0YaklfbQ3yihnS43EsqsoCFALJ1m8otCuSJdyzis1FAHfU",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/22349905:1787886616:XdspDPBek3tmUMoWv5Ljui1jXfdsV_70imN2gFqgv6I/a3204a2f1feddc9b/fyiJWMt35_CzuL2i6DUc6vBEZEoALNiEBSR0B1mWbcQ-1787888376-1.2.1.1-_YUCbNchaZdQR9fXo3hgdSY3c8.rXemnMyWcyWwQZJ64seLif.G7eYR0MSsE9eTr",
+          "method": "POST",
+          "postLen": 88503,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": "M1m8fowxGr5wxPXa1q3PctXT4Yz1c8hvYWOxss969Iw7nmN6O3Ru2+J2s8HUjja06oLmb84NEhpBsGMspGc3GrJLoBPfwpTqjX4H7bfu/EFJ/fUXNH0VwGGWpiI2KhAk$DYl6BMYNZpd1JbE+WSTaWA=="
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/2044622385:1787886615:MRDuqyZ6DEAacYNvzI60TgA6LNTJlO5IQLKl7fJFXpw/a3204a2c6ccf64b6/aTq82Az9nh0rfnfKq2HbQuLls52BeKfiPYCRB7NAxrI-1787888375-1.2.1.1-EzQiJoyqnhZ6mdj4sLPb14Yq7PlOJS65Nhoxx5k2XhjO9ncgSa9DwWLY1W4S52S4",
+          "method": "POST",
+          "postLen": 8887,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": "4g2t6SUMWnnRrTtgA4gGVzC+HG30m+Omo9zhi8Oy9dQ3I2tD/htIeYXI8iwH9B0H7lboXC1DdzACKxh1QYEeIezh33CNPoTnUkV3qB7DbqIHCe/FcsgTI2vlHzxu3GGNDfO0eFD5djxfMM+kbyrepQ==$GBJwB0dr/n94CLH0lPwWuw=="
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        }
+      ],
+      "beacons": [
+        "no-timezone=www.scrapingcourse.com/top",
+        "no-timezone=/frame",
+        "no-timezone=www.scrapingcourse.com/top"
+      ],
+      "targets": 6
+    },
+    {
+      "documents": [
+        403,
+        200,
+        200
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/2044622385:1787886615:MRDuqyZ6DEAacYNvzI60TgA6LNTJlO5IQLKl7fJFXpw/a3204abbf89cced1/wxAukwvECv5b19k9xXVSHPixI_Xz0E2haJrNOGQ9RFc-1787888398-1.2.1.1-OUIKdMJJbFs1N6HnGlw_XWOrai9.OcZV1gtZ9fovyIowR7tWHOW.tCJtdMTqDcOm",
+          "method": "POST",
+          "postLen": 2316,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "jVch8/owrHBZvWd4bYZ0gRq3zt7gmx1aQxH9dZOtAWk=$W7/pcVWUVUQlIE8wkSiP3g==",
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/v5160/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/22349905:1787886616:XdspDPBek3tmUMoWv5Ljui1jXfdsV_70imN2gFqgv6I/a3204abeea67679a/rHvpFZFMCJkcTsU0KhXiei3wzdumhzXv60UhsGwF24c-1787888399-1.2.1.1-48SmRat5MRI5vwjDqDicgTSqsFBhsXCqCi_kf0v.cG0xL8rJT7eKYksYkQJfkWQw",
+          "method": "POST",
+          "postLen": 4727,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "lw9bniap1Wf+EgWdoGVFB3g1jcDSZDjM2Oewy36PGBlG3na7atMoa3ox0Vw0bGqRL2aF9gFalX8/s+aLmCrqnnKa+l2QgKG9uCQSWxT97rJynZTUswdeAbH6dG7Tn7SgPcLIPEicO5kLEt0Bwl0nqDIrxXYyWJ7aMmJlm3na4sBg/EOMBc2O5TCcIxXJEN1zb3+ipaByyxwKzZquoVXM+qxkbQbq4s4mxNEJEA66Ct5GDbWhbiGoZ5e584sFdxcuBZTb6RDefjspHYAQ3GEdxRX8J6uFr17hZj8G3QND/NlLZeFk5wqxOE2/PdjW4i52bPeZdw/KDJ9HFKIUOtT13OGO9y2tPGNtp/xQFVLlKWR9AYV4IuKfIZ27Ejs4AXwaiUETSalt8Nki/cJm+UgQ02gHnZmX0jeLTElgbMBRAhyGN60ebLqUVms3slPWz0gmNvTbEkx/gUFu3U6880IPP9j+DQK1Dq2R5JiiV1kr8BL4EbzoAnrUZaR+lFHkfdDCYDQNnmoMDF+EuRnnAzgYql6KcBwaQqwPQYHWyuyKqq9tTl5U/BCLESZkCvda2imCBqY9/lB82wNL53JozvB1K22ftiNqrdr7ytMQa13gMnbjmsCDbue2mikq0yztW8ESanhnktjobfJR42xLZ1U6fSDkaXq4lWmE40Dr2EV+u2jkIaR3XUSRDpp310/doYCCR0/DhN79IvFyRAHKupzH3YCvfcHxXQILKZ2gQydlpsj4CJA3fTv9mj5qq2X35e9bRESVyito0fVVU+oyuBO6Roi5YKRvav1RTf0I7kMbhbAwbtlI7RD2jkQ/34vkB/+TpVCtBvS+ootH9DRDTAl+zPD1kKrKznK3EM4l7EUqqli+7WQFfYaU7/QuFDO4QUC5jaMg4oyL37ZkKnM6Yxmw3vQCCef1WWgdoLk6rtUD6WE=$/jcyUDRt5HrlekgiNjvX7w==",
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/pat/a3204abeea67679a/1787888400104/2dfe268fc8d8fb7d9f88d3a8007a63bb44c321ef710d50e75fa2f81bd1eab621/_UD6MeUx0DpAiC6NrpaNH2fmJae.1FdwekDlizmv0jE-1787888400-1.3.1.1-VPIIU46MfqbcUDxiSRyuejxhPTX1OZFXzE9crkMbI5ssXnjt4gCdcqm5sCWrIFRgXy7B7eAU9YzHiLkL3D1zu.sScVo.BxOYL4dzn2RdDr2DArLvXorHgCITM8G2BZO_hwUeFLu21s1gXEcI3rQv.RcP0mbeN0g1JwrMlhY9VROZvgiAFdaNVnGhOftsZ9B8F.5e1MD7F8tb4wK6oOuMzxdIq32OD9ZReYl2zMeR7jkrhCsWYVGKELSm_RsphvXlGXxmECABvypmEXNOjqlp3AzZ6QE17VSkKB0J2KLjepL7wBno71TmM8Q9VSNjvs_rSJL8T6jtSyAXKwO8wib7IlCGZw4o5MX_joHIk_U7zCS8aZQR15kob3uhuHpjEgw1A3lyLxa0DpY.ahmXxuqPX3NV_UgFcv0xittWQGKtIvr0kp2jd4cJ_H4NDxtQ1ktin9m9Mq5ucvbL5vFBDoy3DLstfm.MaM1puG6FAxxpqOxTYmx.0i3yxZvIGCG9k7GOOtHc4IuP9TRAaMm4ahksK8T2TXZb5Q_j5N513O9UbHv94WpkN.j68HGSY3tL0Y1gYMWcBRyD9ZzdkVvke5GygJgTsB3KmC46SM25TdZUsRci5Nnx.cbXLfDgc6J_Qj.VorxlGthGpMYE0xO9k44ETOB8XFivHDuP2oFuesP2vAniqdvDvJCUY9MxxEyxhtDv1fRJrs1nRjbxyxg.EDPMwe_o6RPAjsYINKMTnifv_518r22YEo6EXZNGfZ1hDPGOuujS7_ASN7A_iaiyg6kzHL_JsqSSo_9jUaJE_QMAaksU.vTDUo7TqUP_SuJ6iwzd",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 401,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/__cfknob",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 404,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/ci/a3204abeea67679a/1787888400107/KEEXjZ2jXBbYetLN_1T4akhxPofawKLf1CiRFpKNLkQ-1787888400-1.3.1.1-.Dca0Yu43d3aixuqnyjUpqBRifNyWSD_qntNDv3Cc_qEKhSx_d52lAFBle4mJt8gKJ0fYMvVziQaQYVeW1pzr1vGII3K1zqWUdMQaBuqfxrZXJpP5pd41vEmatVPXleMYn9CCjLJfNMoVZ.sDmeDX2aorTFlwSSWOQqOcr3KKKBGjjQcKybCxlrhKQQN9P5ORvBAYdqjdOZFMtGz5rdh9Gv.NMfXDJt1mWxmbbfcTU3xG5qpQdkNKC52ltp1Y1wL_Q0AeD1oLgeKZdpANoS13drZHZbMiVEP6A3LTBpEabWczOmHrZcYye1_mpTCVkJxZIvSyP.fsYHlAVStN.Uun2eSw6jzYu27io35iM3WS7RqfSdfXOSjyU4dV7rS81sBdV62ANHYpZSIGXNkH2jp_6tQjPQoReF_sQUWC9oDOSU..HtOvCZR.7rK5x8cLfQGRp3iKFNPiz6ZHeUayElrW8GYBfp1h.6ECsXO4hDw3kIj6LHhZwvIpyhlVAWcnhbCUt0BE3b8QekZ9ZtYsyiN6VqqSfHEn3FG22TKq.L2dbe__kSkDxellsHji8b56sLMbBHTA6ZHmC49H5Uw7s2eiQpommF3MOOvJEyknczbplQm_EuiiR3YJjWfbkqqggUGpmAAJ69.eXa77JOpCSOkfX8ZW0MMzukMj1.ikLOP.UIRuwZUerDHzL3vWy9Ey.3y59ZxwFCA3NytzbLcR98kUNJ51x_Ei8tXDubUboYIo8g",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/22349905:1787886616:XdspDPBek3tmUMoWv5Ljui1jXfdsV_70imN2gFqgv6I/a3204abeea67679a/rHvpFZFMCJkcTsU0KhXiei3wzdumhzXv60UhsGwF24c-1787888399-1.2.1.1-48SmRat5MRI5vwjDqDicgTSqsFBhsXCqCi_kf0v.cG0xL8rJT7eKYksYkQJfkWQw",
+          "method": "POST",
+          "postLen": 89442,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": "gSP4GmRZ8UUsub2nfrWCopRn1rxpyEZIInW7QdokIGikEdhj6NCmq0H4DsLnlKaqnXCZs0bXDG9UwU8nez48nv9+FHPl0cYTyw0FVG8URci3Q7i891LQ+0D9yYjvq0cI$Y/q481+b7zUpmnfyVfyZjw=="
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/2044622385:1787886615:MRDuqyZ6DEAacYNvzI60TgA6LNTJlO5IQLKl7fJFXpw/a3204abbf89cced1/wxAukwvECv5b19k9xXVSHPixI_Xz0E2haJrNOGQ9RFc-1787888398-1.2.1.1-OUIKdMJJbFs1N6HnGlw_XWOrai9.OcZV1gtZ9fovyIowR7tWHOW.tCJtdMTqDcOm",
+          "method": "POST",
+          "postLen": 8844,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": "7ZWA1PJWE4+2UGGcX040sL7qsJsPbpzWvhdMNREYWh/vUV1Mtdcy46SHs3ba1vH4xVUdnvnhB6lPD7n8UnrjFqhq+K3xfkX95dLEXChDjk31nnzgO4781u597lz0c1pbfCqqCPYh9yZA7w1wl5adJA==$NnHm1gpGYSDlzSpHhfNKCQ=="
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        }
+      ],
+      "beacons": [
+        "no-timezone=www.scrapingcourse.com/top",
+        "no-timezone=/frame",
+        "no-timezone=www.scrapingcourse.com/top"
+      ],
+      "targets": 6
+    }
+  ]
+}

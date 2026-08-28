@@ -1,0 +1,104 @@
+{
+  "engine": "chrome",
+  "knob": "native-tostring",
+  "headless": false,
+  "target": "https://www.scrapingcourse.com/antibot-challenge",
+  "runs": [
+    {
+      "documents": [
+        403,
+        200
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/2044622385:1787886615:MRDuqyZ6DEAacYNvzI60TgA6LNTJlO5IQLKl7fJFXpw/a3204221fe489ddb/dwROh3tv3jcbCBFLvIKpLNk5x0pfGHZs828Jl0ewEws-1787888046-1.2.1.1-qfAsx_AJnFJW1KBQcoPZ6z4n4H_A8l7v_w6oruhUmVZpODuH1OOazf0WK4Hx4uY1",
+          "method": "POST",
+          "postLen": 2306,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "3CQk6Ea/h0AxRUllQCbuFifEn7f9+h1ksT43RvJMGFc=$vrHULX+O4dD/nfiP0EYChA==",
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/mf34e/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        }
+      ],
+      "beacons": [
+        "native-tostring=www.scrapingcourse.com/top"
+      ],
+      "targets": 3
+    },
+    {
+      "documents": [
+        403,
+        200
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/2044622385:1787886615:MRDuqyZ6DEAacYNvzI60TgA6LNTJlO5IQLKl7fJFXpw/a32042b20a19938c/jURO.bVHQ6R8m1HDTMtxfrRgVhyNN7R1kNlveOmlUTw-1787888069-1.2.1.1-M4mAOJ2eL.5g0Pek6JSs5ih_SlBHu6IENiImEKmVYF9xUkmvkrPLAQzU.q6zcjZI",
+          "method": "POST",
+          "postLen": 2306,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "2NYoXuqgMlDeMBBVZmHFk8GkFyd+c1xMUMwtaUGa61k=$Kv+iaJ6LDwh3bZ1QZTZsZg==",
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/rrulk/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        }
+      ],
+      "beacons": [
+        "native-tostring=www.scrapingcourse.com/top"
+      ],
+      "targets": 3
+    }
+  ]
+}

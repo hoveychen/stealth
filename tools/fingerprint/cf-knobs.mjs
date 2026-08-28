@@ -122,4 +122,124 @@ export const CF_KNOBS = {
         });
       } catch (e) { __send('console-plain-failed=' + e.name); }
     `,
+
+    // --- one family each, to find what the station weighs at all -------------
+    //
+    // These do not try to imitate this engine. They REMOVE a family from a
+    // browser that otherwise passes, which answers "does Cloudflare weigh this
+    // at all" -- and that is the cheap question, because a family it does not
+    // weigh is a family this engine never has to match. Each reports that it
+    // installed, so a kept ticket cannot be confused with a knob that threw.
+
+    'no-error-stack': beacon + `
+      __send('no-error-stack=' + encodeURIComponent(__where()));
+      try {
+        Object.defineProperty(Error.prototype, 'stack', {
+          configurable: true, get() { return undefined; }, set() {},
+        });
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    'native-tostring': beacon + `
+      __send('native-tostring=' + encodeURIComponent(__where()));
+      try {
+        const real = Function.prototype.toString;
+        Object.defineProperty(Function.prototype, 'toString', {
+          configurable: true, writable: true, enumerable: false,
+          value: function () {
+            const s = real.call(this);
+            return s.indexOf('[native code]') === -1 ? s : 'function () { /* nope */ }';
+          },
+        });
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    'no-canvas-readback': beacon + `
+      __send('no-canvas-readback=' + encodeURIComponent(__where()));
+      try {
+        const blank = 'data:,';
+        Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
+          configurable: true, writable: true, enumerable: false,
+          value: function () { return blank; },
+        });
+        const ctxProto = window.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype;
+        if (ctxProto) {
+          Object.defineProperty(ctxProto, 'getImageData', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (x, y, w, h) { return new ImageData(Math.max(1, w | 0), Math.max(1, h | 0)); },
+          });
+        }
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    'no-webgl': beacon + `
+      __send('no-webgl=' + encodeURIComponent(__where()));
+      try {
+        const real = HTMLCanvasElement.prototype.getContext;
+        Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+          configurable: true, writable: true, enumerable: false,
+          value: function (kind, ...rest) {
+            if (typeof kind === 'string' && kind.indexOf('webgl') !== -1) return null;
+            return real.call(this, kind, ...rest);
+          },
+        });
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    'no-plugins': beacon + `
+      __send('no-plugins=' + encodeURIComponent(__where()));
+      try {
+        Object.defineProperty(Navigator.prototype, 'plugins', {
+          configurable: true, enumerable: true, get() { return Object.create(PluginArray.prototype); },
+        });
+        Object.defineProperty(Navigator.prototype, 'mimeTypes', {
+          configurable: true, enumerable: true, get() { return Object.create(MimeTypeArray.prototype); },
+        });
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    'no-timezone': beacon + `
+      __send('no-timezone=' + encodeURIComponent(__where()));
+      try {
+        const real = Intl.DateTimeFormat.prototype.resolvedOptions;
+        Object.defineProperty(Intl.DateTimeFormat.prototype, 'resolvedOptions', {
+          configurable: true, writable: true, enumerable: false,
+          value: function () {
+            const o = real.call(this);
+            o.timeZone = 'Olympus Mons Time';
+            return o;
+          },
+        });
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    'coarse-performance': beacon + `
+      __send('coarse-performance=' + encodeURIComponent(__where()));
+      try {
+        const real = Performance.prototype.now;
+        Object.defineProperty(Performance.prototype, 'now', {
+          configurable: true, writable: true, enumerable: false,
+          value: function () { return Math.floor(real.call(this) / 100) * 100; },
+        });
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    'detached-computed-values': beacon + `
+      __send('detached-computed-values=' + encodeURIComponent(__where()));
+      try {
+        // Chrome answers the empty string for every property of a DETACHED
+        // element; this engine answers values. This hands Chrome our shape, so
+        // the knob says whether the station reads a detached element at all.
+        const real = window.getComputedStyle;
+        Object.defineProperty(window, 'getComputedStyle', {
+          configurable: true, writable: true, enumerable: false,
+          value: function (el, pseudo) {
+            const cs = real.call(window, el, pseudo);
+            try { if (el && el.isConnected === false) return real.call(window, document.body, pseudo); }
+            catch (e) { /* fall through */ }
+            return cs;
+          },
+        });
+      } catch (e) { __send('fail=' + e.name); }
+    `,
 };
