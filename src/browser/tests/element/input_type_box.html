@@ -33,10 +33,17 @@ Measured on Chrome 151 with tools/fingerprint/scratch/b84-typebox.js. Client box
     1px/6px, and a colour well has a 1px border. `box-sizing: border-box` is a
     UA rule for the colour well, the checkbox, the radio and the three buttons,
     and not for the rest;
-  * `color`, `checkbox`, `radio` and `range` do NOT move with the font -- the
-    same box at 100px as at the default. Every other type does;
-  * the date family's width is the rendered width of its segments, not the text
-    field's `size * avgCharWidth` formula, so each is its own measurement.
+  * `color`, `checkbox`, `radio` and `range` do NOT move with the font in
+    Chrome either -- the same box at 100px as at the default;
+  * a button is as wide as its LABEL measured in its own font, exactly: a
+    `submit` is 41.5 of content at the UA font and 311.234 at 100px, which are
+    the widths of the string "Submit" to the last digit;
+  * the date family and the file picker keep their measured box HERE and do not
+    follow the font, which Chrome's do. Their widths are rendered internal
+    layout -- the date field's segments, the picker's button beside its label --
+    and Chrome grows them neither proportionally nor by a constant, so no model
+    is asserted rather than an invented one. Each row below says what Chrome
+    answers at 100px.
 -->
 
 <script id=input_type_box>
@@ -71,19 +78,28 @@ Measured on Chrome 151 with tools/fingerprint/scratch/b84-typebox.js. Client box
     ['password',       '149x17/153x21',   '1045x117/1049x121'],
     ['number',         '149x17/153x21',   '1045x117/1049x121'],
     // The date family: one padding-left of 1px, no other padding, and a width
-    // that is the segments rather than a character count.
-    ['date',           '121x17/125x21',   '834x119/838x123'],
-    ['datetime-local', '207x17/211x21',   '1442x119/1446x123'],
-    ['month',          '151x17/155x21',   '1073x119/1077x123'],
-    ['week',           '143x17/147x21',   '1013x119/1017x123'],
-    ['time',           '100x20/104x24',   '608x119/612x123'],
+    // that is the rendered segments rather than a character count.
+    //
+    // The second column is what THIS engine answers, not Chrome, and that is
+    // deliberate -- see fixedInputBox. These keep their measured box and do not
+    // follow the font, because the way Chrome grows them is neither
+    // proportional nor a constant offset and a two-point fit would assert
+    // nothing between the points. Chrome at 100px: date 834x119/838x123,
+    // datetime-local 1442x119/1446x123, month 1073x119/1077x123, week
+    // 1013x119/1017x123, time 608x119/612x123.
+    ['date',           '121x17/125x21',   '121x17/125x21'],
+    ['datetime-local', '207x17/211x21',   '207x17/211x21'],
+    ['month',          '151x17/155x21',   '151x17/155x21'],
+    ['week',           '143x17/147x21',   '143x17/147x21'],
+    ['time',           '100x20/104x24',   '100x20/104x24'],
     // The four that ignore the font entirely.
     ['color',          '48x25/50x27',     '48x25/50x27'],
     ['checkbox',       '13x13/13x13',     '13x13/13x13'],
     ['radio',          '13x13/13x13',     '13x13/13x13'],
     ['range',          '129x16/129x16',   '129x16/129x16'],
-    // The file picker has no padding or border of its own.
-    ['file',           '253x21/253x21',   '1891x121/1891x121'],
+    // The file picker has no padding or border of its own, and keeps its box for
+    // the same reason the date family does. Chrome at 100px is 1891x121.
+    ['file',           '253x21/253x21',   '253x21/253x21'],
     // The buttons: 1px/6px of padding in a 2px border, border-box.
     ['submit',         '54x17/58x21',     '323x117/327x121'],
     ['reset',          '47x17/51x21',     '273x117/277x121'],
