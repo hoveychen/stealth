@@ -20212,3 +20212,34 @@ almost everywhere, and where it disagrees the disagreement has already been
 cleared causally. The remaining candidates are narrow and named: the storage
 quota that never varies, and the voice list the challenge realm does not
 produce here.
+
+### The 659 bytes, and px-zero re-run
+
+Four collected sections identical and one geometry section 20 bytes shorter does
+not account for an assembled body 659 bytes shorter, so the difference had to be
+somewhere the encode hook does not look. Parsing section 5 -- the assembled body
+is itself plaintext -- answers it. **Both arms post 449 elements.** The order is
+shuffled per run, but the multiset is comparable, and two things differ:
+
+  * the `<w>x<h>` token keys. Chrome's are six distinct sizes (`50x27`,
+    `62x117`, `112x152`, `13x13`, `81x124`, `129x16`); ours are four, with
+    `65x117` repeated five times. Chrome repeats too (`112x152` appears three
+    times), so repetition is not the tell -- the missing spread is what is left
+    of the probe-family degeneracy, already down from fifteen-into-two;
+  * the `h:` and `g:` elements, which are the Proxy trap log. Chrome carries one
+    `h:` element of seven characters; we carry four, at 7, 101, 146 and 150.
+    Read out with `htokens` they are exactly what earlier work named: we probe
+    `RequestInit` and the event dictionaries with `[[Has]]` where Chrome uses
+    `[[Get]]`, so our log is longer.
+
+Both are known families with a causal reading already against them -- `has-probe`
+put our `[[Has]]` signature into Chrome and Chrome kept the ticket ten times out
+of ten.
+
+`px-zero` was re-run here rather than inherited, since it is the single
+load-bearing negative for the payload route: **ten runs, ten tickets**, with
+`beacons=1` on every run confirming the rewrite fired. And the storage quota
+that looked like a candidate -- ours a flat 10737418240 where Chrome was seen at
+10737418391 -- is not one: asked three times in a row on a fresh page, both arms
+answer exactly 10 GiB and never vary. Chrome's other figure came from the second
+document, where usage is no longer zero.
