@@ -308,6 +308,43 @@ export const CF_KNOBS = {
       })();
     `,
 
+    // The one member the challenge asks this engine for, does not get, and
+    // that a real Chrome answers.
+    //
+    // The Debug context's unknown_properties log for the interstitial lists 75
+    // names. Almost all are sentinels (_phantom, angular, pyimport, runProgram),
+    // the challenge's own scrambled globals, or things Chrome does not have
+    // either -- probes/expr-cf-unknown-members.js checks the plausible ones
+    // against real Chrome and fifteen of sixteen agree. The exception is
+    // Window:Summarizer, read twice: Chrome 151 ships the built-in AI summariser
+    // and this engine has no such global. no-newer-globals is the control that
+    // already says deleting a global is not itself the offence -- it removes two
+    // and is 3 of 3.
+    'no-summarizer': beacon + `
+      (() => {
+        try {
+          const had = typeof globalThis.Summarizer;
+          delete globalThis.Summarizer;
+          __send('no-summarizer=deleted&had=' + had + '&now=' + typeof globalThis.Summarizer +
+                 '&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('no-summarizer=cannot-delete:' + e.name); }
+      })();
+    `,
+
+    'no-ai-globals': beacon + `
+      (() => {
+        const NAMES = ['Summarizer', 'LanguageModel', 'Translator', 'LanguageDetector',
+                       'Writer', 'Rewriter', 'Proofreader'];
+        const gone = [];
+        for (const n of NAMES) {
+          try { if (typeof globalThis[n] !== 'undefined') { delete globalThis[n]; gone.push(n); } }
+          catch (e) { __send('no-ai-globals=cannot-delete:' + n + ':' + e.name); }
+        }
+        __send('no-ai-globals=deleted&n=' + gone.length + '&list=' + encodeURIComponent(gone.join(',')) +
+               '&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
     'no-timezone': beacon + `
       __send('no-timezone=' + encodeURIComponent(__where()));
       try {
@@ -1290,6 +1327,45 @@ export const CF_KNOBS = {
           }
         } catch (e) { __send('report-errors=console-failed:' + e.name); }
         __send('report-errors=installed&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // The 8194-byte DOM instruction set, whole.
+    //
+    // report-charsrc caught it going into the payload on both arms at exactly
+    // the same length, and the first 300 characters are identical except for one
+    // selector index: Chrome's second entry is keyed on ".HxBbY02" and this
+    // engine's on ".HxBbY03", with the generated class names otherwise the same
+    // on both sides. A head is not enough to say what that is, so this dumps the
+    // whole string in chunks. The length window is deliberately narrow: dumping
+    // every long string would be tens of thousands of beacons.
+    'report-domjson': beacon + `
+      (() => {
+        const LO = 8000, HI = 8500;
+        const seen = Object.create(null);
+        const safe = (s) => s.replace(/[^\\x20-\\x7e]/g, (c) => '\\\\u' + c.charCodeAt(0).toString(16));
+        const dump = (s) => {
+          const k = 'L' + s.length;
+          if (seen[k]) return;
+          seen[k] = 1;
+          for (let i = 0; i < s.length; i += 600) {
+            __send('dom=' + (i / 600) + '&len=' + s.length +
+                   '&part=' + encodeURIComponent(safe(s.slice(i, i + 600))) +
+                   '&at=' + encodeURIComponent(__where()));
+          }
+        };
+        try {
+          const real = String.prototype.charCodeAt;
+          Object.defineProperty(String.prototype, 'charCodeAt', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (i) {
+              const n = this.length;
+              if (n >= LO && n <= HI) { try { dump(String(this)); } catch (e) {} }
+              return real.call(this, i);
+            },
+          });
+          __send('report-domjson=installed&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('report-domjson=cannot-wrap:' + e.name); }
       })();
     `,
 

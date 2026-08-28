@@ -19814,6 +19814,33 @@ arity and source text of the 95 native accessors and methods the widget reads:
 **95 of 95 identical**, including `Function.prototype.toString` on a bound
 function and on a `Proxy`.
 
+### What the challenge asked for and did not get
+
+Every comparison above starts from a list somebody chose -- the read-set knob
+wraps a curated set of names, so a property the widget reads that is on nobody's
+list is invisible to it. The engine can answer that from its own side:
+`js/Context.zig` keeps an `unknown_properties` log in Debug builds, and
+`unknown-props.mjs` dumps it when the context is torn down.
+
+On the interstitial it lists **75 names**. Most are sentinels no browser has --
+`_phantom`, `angular`, `pyimport`, `runProgram`, `global`, `module` -- or the
+challenge's own scrambled globals (`qJByo6`, read 69 times). Sixteen looked like
+they might be real, and `probes/expr-cf-unknown-members.js` checks them against
+Chrome: `TextMetrics.emHeightAscent`, `NetworkInformation.type` and
+`downlinkMax`, `GPUSupportedLimits.minSubgroupSize`,
+`GPUAdapter.isFallbackAdapter`, `KHR_parallel_shader_compile`'s thread-count
+constant, `document.lang`, `ontouchstart`, `SharedArrayBuffer` -- **Chrome does
+not have any of them either**, and `window.CSS`, `console` and `chrome` are
+present on both arms (`chrome` with the same three keys).
+
+That leaves exactly one: `Summarizer`, Chrome 151's built-in AI summariser,
+which the challenge reads twice and this engine does not have. Deleting it from
+Chrome is 2 of 3, and deleting it together with `LanguageModel`, `Translator`
+and `LanguageDetector` is 3 of 3, against `no-newer-globals` 3 of 3 and `none`
+3 of 3 in the same window. Not weighed.
+
+So the last "something they read that we lack" is closed too.
+
 ### The tally so far
 
 Knobs that keep Chrome's ticket, and so name something this door does not weigh:
@@ -19829,6 +19856,16 @@ than a reading being judged: anything that redefines `navigator.plugins` or
 
 Knobs that cost it and are not artefacts: `webdriver-true`. Still one, after
 twenty-odd families.
+
+And the surfaces that are now closed from this engine's side, each measured
+rather than argued: the read set (92 names, same on both arms bar the two
+globals already cleared), the read values (104 readings, 9 differing, 7 of them
+the measuring rig's geometry), the payload spans (same multiset, same order for
+the first nine, one absent buffer that is not weighed), the plugin surface (26
+of 26), native accessor shape (95 of 95), the unknown-property log (one name,
+not weighed), TLS and the HTTP/2 preface (B53's reading, still holding), and the
+header set on the wire. The door refuses this engine on something no instrument
+in this harness has yet been pointed at.
 
 ## The degeneracy scan comes back nearly clean (B84, 2026-08-27)
 
