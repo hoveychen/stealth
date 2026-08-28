@@ -1498,6 +1498,88 @@ export const CF_KNOBS = {
       })();
     `,
 
+    // The widget's own frame: is it laid out, sized and visible the same way?
+    //
+    // Everything measured so far is what the widget READS. This is what the
+    // widget IS -- the iframe element in the interstitial and the viewport
+    // inside it. A challenge that decides it was never rendered would refuse
+    // without reading anything different.
+    'report-widget-box': beacon + `
+      (() => {
+        const rec = (s) => __send('box=' + encodeURIComponent(String(s).slice(0, 400)) +
+                                  '&at=' + encodeURIComponent(__where()));
+        const look = () => {
+          try {
+            if (window.top === window) {
+              const fs = document.querySelectorAll('iframe');
+              rec('iframes=' + fs.length);
+              for (const f of fs) {
+                const r = f.getBoundingClientRect();
+                const cs = getComputedStyle(f);
+                rec('iframe src=' + String(f.getAttribute('src') || '').slice(0, 60) +
+                    ' box=' + Math.round(r.width) + 'x' + Math.round(r.height) +
+                    '@' + Math.round(r.left) + ',' + Math.round(r.top) +
+                    ' display=' + cs.display + ' visibility=' + cs.visibility +
+                    ' opacity=' + cs.opacity + ' sandbox=' + String(f.getAttribute('sandbox') || '-') +
+                    ' allow=' + String(f.getAttribute('allow') || '-').slice(0, 40) +
+                    ' offsetParent=' + (f.offsetParent ? 'yes' : 'no'));
+              }
+              rec('doc box=' + document.documentElement.clientWidth + 'x' + document.documentElement.clientHeight +
+                  ' scroll=' + document.documentElement.scrollWidth + 'x' + document.documentElement.scrollHeight);
+            } else {
+              rec('frame inner=' + innerWidth + 'x' + innerHeight +
+                  ' outer=' + outerWidth + 'x' + outerHeight +
+                  ' vv=' + (visualViewport ? Math.round(visualViewport.width) + 'x' + Math.round(visualViewport.height) : '-') +
+                  ' body=' + (document.body ? document.body.clientWidth + 'x' + document.body.clientHeight : '-') +
+                  ' frameElement=' + String(window.frameElement));
+            }
+            rec('vis=' + document.visibilityState + ' hidden=' + document.hidden +
+                ' focus=' + document.hasFocus() + ' active=' + (document.activeElement && document.activeElement.tagName) +
+                ' dpr=' + devicePixelRatio);
+          } catch (e) { rec('look-threw:' + e.name); }
+        };
+        for (const ms of [1500, 5000, 12000]) setTimeout(look, ms);
+        __send('report-widget-box=installed&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // The widget frame thinks it has focus here and does not in Chrome.
+    //
+    // report-widget-box found it: inside challenges.cloudflare.com/frame,
+    // document.hasFocus() is false in Chrome -- the top document holds the focus
+    // and a cross-origin child does not -- and true here, on both documents.
+    // Always-focused is a classic headless tell, and it is a boolean, which is
+    // the shape of the only thing this door has ever been seen to judge.
+    'frame-has-focus': beacon + `
+      (() => {
+        try {
+          if (window.top === window) { __send('frame-has-focus=top-skipped'); return; }
+          const real = Document.prototype.hasFocus;
+          Object.defineProperty(Document.prototype, 'hasFocus', {
+            configurable: true, writable: true, enumerable: false,
+            value: function () { real.call(this); return true; },
+          });
+          __send('frame-has-focus=wrapped&was=' + real.call(document) +
+                 '&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('frame-has-focus=cannot-wrap:' + e.name); }
+      })();
+    `,
+
+    'frame-focus-passthru': beacon + `
+      (() => {
+        try {
+          if (window.top === window) { __send('frame-focus-passthru=top-skipped'); return; }
+          const real = Document.prototype.hasFocus;
+          Object.defineProperty(Document.prototype, 'hasFocus', {
+            configurable: true, writable: true, enumerable: false,
+            value: function () { return real.call(this); },
+          });
+          __send('frame-focus-passthru=wrapped&was=' + real.call(document) +
+                 '&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('frame-focus-passthru=cannot-wrap:' + e.name); }
+      })();
+    `,
+
     // What do the widget's workers send back?
     //
     // The font list is built somewhere no knob has reached: not by any DOM or

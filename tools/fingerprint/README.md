@@ -19889,6 +19889,25 @@ first XHR back by 700ms. The timeline lands on Chrome's -- r1 at 0.16s, r2 at
 1.13s, r3 at 2.1s -- and the arm is refused **4 of 4**. When the arms leave at
 the same moment they are still judged differently.
 
+### The widget's own frame, and a focus tell that is not the door either
+
+Everything above measures what the widget *reads*. `report-widget-box` measures
+what it *is* -- the iframe in the interstitial and the viewport inside it. The
+frame is laid out on both arms and at the same size: `inner=300x65`,
+`visualViewport=300x65`, `visibilityState=visible`, `hidden=false`,
+`frameElement=undefined` (cross-origin, correctly). Two things differ:
+
+- `document.body` inside the frame is `300x65` in Chrome and `300x49` here.
+- **`document.hasFocus()` inside the frame is `false` in Chrome and `true`
+  here.** The top document holds the focus and a cross-origin child does not;
+  this engine says yes in both documents. Always-focused is a classic headless
+  tell and it is a boolean, which is the shape of the only thing this door has
+  ever been seen to judge.
+
+`frame-has-focus`, which makes Chrome's widget frame answer `true` (and reports
+that the real answer was `false`), is **6 of 6**. A real fidelity defect, worth
+fixing, and not this lock.
+
 ### The tally so far
 
 Knobs that keep Chrome's ticket, and so name something this door does not weigh:
