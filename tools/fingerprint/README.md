@@ -19432,3 +19432,59 @@ boundary could not redefine `top`, and a single try/catch around the loop aborte
 before `parent` was reached, so it reported nothing wrapped at all. Per-name
 handling fixed the knob; `wrapped=parent` then appears and the ticket still does
 not — which tests `parent` and not the property that actually differs.
+
+## The capability hunt comes up empty too, and it was tested the right way round (B84, 2026-08-27)
+
+With values, boxes and the trap log all ruled out, the remaining theory was a
+missing capability -- something shaped like `navigator.webdriver`, which is
+still the only knob ever seen to cost Chrome its ticket.
+
+**The unknown-property log names nothing.** `unknown-props.mjs` on x-hyatt
+catches 107 reads across 94 interfaces that this engine could not answer. Nearly
+all are sentinels no browser has -- `navigator.brave`, `navigator.duckduckgo`,
+`navigator.wirelessDevices`, `screen.innerWidth`, `then` on half a dozen
+interfaces -- where being absent IS the right answer. Every candidate Chrome
+actually has was checked on both arms and comes back **identical**: `window.CSS`,
+`window.console`, `window.chrome`, `globalPrivacyControl`, `onscrollstart`,
+`onscrollend`. Not one real gap in the list.
+
+**The realm diff names 36, and none of them is it.** An about:blank iframe --
+which is where the guard runs -- has 1237 own names in Chrome and 1201 here,
+with **none the other way round**. The 36 are the newest platform surfaces:
+
+```
+BarcodeDetector, CloseWatcher, CreateMonitor, DigitalCredential,
+DocumentPictureInPicture, DocumentPictureInPictureEvent, Fence,
+FencedFrameConfig, FetchLaterResult, FileSystemObserver, HTMLFencedFrameElement,
+IdentityCredentialError, IdentityProvider, LanguageDetector, LanguageModel,
+Observable, PressureObserver, PressureRecord, RestrictionTarget, SharedStorage,
+SharedStorageAppendMethod, SharedStorageClearMethod, SharedStorageDeleteMethod,
+SharedStorageModifierMethod, SharedStorageSetMethod, SharedStorageWorklet,
+Subscriber, Summarizer, Temporal, Translator, WebSocketError, WebSocketStream,
+documentPictureInPicture, fence, fetchLater, sharedStorage
+```
+
+`drop-36-globals` deletes all thirty-six from Chrome -- `dropped=36 of 36` on
+the wire -- and **Chrome keeps its ticket, 2 of 2**. This is the first of these
+negatives tested in the right direction: unlike the binding layer's `[[Get]]`
+behaviour, a global CAN be removed from a page, so this reproduces our deficit
+exactly rather than adding our tell alongside Chrome's.
+
+### Where that leaves it
+
+Four theories, four causal tests, four negatives:
+
+| theory | test | ticket |
+|---|---|---|
+| the values are wrong | Chrome sends ours | kept |
+| the boxes are wrong | ours fixed to 9/10 | still refused |
+| the trap log is wrong | our `[[Has]]` added to Chrome | kept |
+| a capability is missing | 36 globals removed from Chrome | kept |
+
+Everything reachable from inside the page has now been tried. What has **not**
+been tested is the other half of what the server sees: the `/tl` request's own
+envelope -- the TLS handshake, the HTTP/2 settings and priority frames, the
+header order on the wire. The verdict is issued by the server on that response,
+and a page-side knob cannot reach any of it. `collect-tls.mjs` and `h2-arms.mjs`
+already exist for exactly this comparison, and B53's "the protocol layer is
+clean" was measured thirty sessions and one fork of work ago.

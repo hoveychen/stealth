@@ -588,6 +588,55 @@ export const KNOBS = {
       wrap('InputEvent');
     `,
 
+    // Take away the 36 globals Chrome has and this engine does not.
+    //
+    // Measured off an about:blank iframe realm on both arms: Chrome has 1237
+    // own names there and this engine 1201, with none the other way round. The
+    // 36 are the newest platform surfaces -- Temporal, Observable/Subscriber,
+    // the shared-storage family, fenced frames, the on-device model APIs.
+    //
+    // This is the one capability difference that CAN be tested in the right
+    // direction: unlike the binding layer's [[Get]] behaviour, a global can be
+    // deleted from a page. Chrome losing the ticket here names the tell and the
+    // fix; keeping it rules the whole set out at once.
+    'drop-36-globals': beacon + `
+      const NAMES = ["BarcodeDetector", "CloseWatcher", "CreateMonitor", "DigitalCredential", "DocumentPictureInPicture", "DocumentPictureInPictureEvent", "Fence", "FencedFrameConfig", "FetchLaterResult", "FileSystemObserver", "HTMLFencedFrameElement", "IdentityCredentialError", "IdentityProvider", "LanguageDetector", "LanguageModel", "Observable", "PressureObserver", "PressureRecord", "RestrictionTarget", "SharedStorage", "SharedStorageAppendMethod", "SharedStorageClearMethod", "SharedStorageDeleteMethod", "SharedStorageModifierMethod", "SharedStorageSetMethod", "SharedStorageWorklet", "Subscriber", "Summarizer", "Temporal", "Translator", "WebSocketError", "WebSocketStream", "documentPictureInPicture", "fence", "fetchLater", "sharedStorage"];
+      let gone = 0;
+      for (const n of NAMES) {
+        try {
+          if (n in window) { delete window[n]; }
+          if (n in window) { Object.defineProperty(window, n, { configurable: true, get() { return undefined; } }); }
+          if (!(n in window)) gone++;
+        } catch (e) {}
+      }
+      __send('knob=drop-36-globals&dropped=' + gone + '&of=' + NAMES.length);
+    `,
+
+    // The control `drop-36-globals` needs if it fires: the same deletion loop
+    // over 36 globals BOTH arms already have, so a guard that objects to a
+    // thinned global object rather than to these particular names refuses this
+    // one too.
+    'drop-36-control': beacon + `
+      const NAMES = ["AbsoluteOrientationSensor","Accelerometer","AmbientLightSensor","BatteryManager",
+        "Gyroscope","LinearAccelerationSensor","Magnetometer","OrientationSensor",
+        "RelativeOrientationSensor","Sensor","SensorErrorEvent","GravitySensor",
+        "USB","USBAlternateInterface","USBConfiguration","USBConnectionEvent","USBDevice",
+        "USBEndpoint","USBInTransferResult","USBInterface","USBIsochronousInTransferPacket",
+        "USBIsochronousInTransferResult","USBIsochronousOutTransferPacket",
+        "USBIsochronousOutTransferResult","USBOutTransferResult","Serial","SerialPort",
+        "HID","HIDDevice","HIDConnectionEvent","HIDInputReportEvent","Bluetooth",
+        "BluetoothDevice","BluetoothRemoteGATTServer","BluetoothRemoteGATTService","BluetoothUUID"];
+      let gone = 0;
+      for (const n of NAMES) {
+        try {
+          if (n in window) { delete window[n]; }
+          if (n in window) { Object.defineProperty(window, n, { configurable: true, get() { return undefined; } }); }
+          if (!(n in window)) gone++;
+        } catch (e) {}
+      }
+      __send('knob=drop-36-control&dropped=' + gone + '&of=' + NAMES.length);
+    `,
+
     // Read every section the guard feeds into its payload, whole, on either arm.
     // Descended from probes/inject-b55-funnels.js, which captured the same
     // funnels but only ever compared *lengths* -- the sections' own text was
