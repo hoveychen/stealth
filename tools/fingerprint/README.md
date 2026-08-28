@@ -19091,3 +19091,39 @@ scaled from the top of the table. That gives monospace 15.556 where Chrome's is
 15.5, while Arial's 15.333 rounds to the right answer by luck. Chrome answers
 15.5 at 13.333px for Arial, monospace and serif alike, so the UA's own size
 wants to be a swept entry rather than an extrapolation.
+
+## Nine of the guard's ten readings, and the door is still shut (B84, 2026-08-27)
+
+The re-basing is in. The guard's second group of ten box readings on x-hyatt:
+
+| # | Chrome | before types | after types | after dpr 2 |
+|---|---|---|---|---|
+| 0 | 48x25 | 149x17 | **48x25** | **48x25** |
+| 1 | 13x13 | 149x17 | **13x13** | **13x13** |
+| 2 | 129x16 | 149x17 | **129x16** | **129x16** |
+| 3 | 253x22 | 149x17 | 253x21 | **253x22** |
+| 4 | 100x20 | 149x17 | **100x20** | **100x20** |
+| 5 | 53x18 | 149x17 | 54x17 | 54x18 |
+| 6 | 47x18 | 149x17 | 47x17 | **47x18** |
+| 7-9 | 143x18 | 149x17 | 149x17 | **143x18** |
+
+**Nought, then four, then nine of ten.** The one still out is the `submit`
+button at 54 against 53, and it is not the box table: our button's content box
+agrees with our own `<span>` of the same label exactly, which is what Chrome's
+do too. It is the text advance, which runs a 1/64th step high on some strings --
+"Submit" and "Hello" by one, "XXXXXXXXXX" by three, "X" not at all -- and 41.5
+against Chrome's 41.4921875 is just enough to carry the client box over a
+rounding boundary. That is the advance model's own residual, which the README
+already records as reproducing 100 of 107 readings.
+
+**x-hyatt still withholds the ticket, 3 of 3.**
+
+That is worth stating plainly, because it is the second time this box has been
+made right and the door has not moved. The measurement line is now close to
+exhausted: nine of the ten numbers the guard reads off these elements are
+Chrome's to the pixel, the payload carries the same 449 tokens, and the refusal
+is unchanged. Whatever x-hyatt is holding against this engine is not in the
+boxes it measures, and the next session should look somewhere other than
+layout -- `webdriver-true` remains the only knob ever seen to cost Chrome the
+ticket, so a capability-shaped tell rather than a value-shaped one is still the
+best-supported theory.
