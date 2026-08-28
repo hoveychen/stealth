@@ -722,6 +722,49 @@ export const KNOBS = {
       __send('knob=delay-tl');
     `,
 
+    // One button, one pixel.
+    //
+    // `input-box-frozen` costs Chrome the ticket 0 of 10, so the guard does
+    // weigh these boxes. This engine's boxes now match Chrome on nine of the
+    // guard's ten readings; the tenth is a `submit`, 54x18 of client box here
+    // against Chrome's 53x18, from a text advance that runs a 1/64th step high.
+    //
+    // So: is one wrong box out of ten enough? This gives Chrome our submit and
+    // nothing else. A ticket says the remaining pixel is not the door and the
+    // box family is genuinely closed; no ticket says it is, and the door is one
+    // rounding step away.
+    'submit-off-by-one': beacon + `
+      __send('knob=submit-off-by-one');
+      const isSubmit = (el) => {
+        try { return el && el.nodeName === 'INPUT' && String(el.type).toLowerCase() === 'submit'; }
+        catch (e) { return false; }
+      };
+      const BUMP = { clientWidth: 1, offsetWidth: 1 };
+      for (const [proto, name] of [
+        [Element.prototype, 'clientWidth'],
+        [HTMLElement.prototype, 'offsetWidth'],
+      ]) {
+        const d = Object.getOwnPropertyDescriptor(proto, name);
+        if (!d || !d.get) continue;
+        Object.defineProperty(proto, name, {
+          configurable: true, enumerable: d.enumerable,
+          get() {
+            const v = d.get.call(this);
+            return isSubmit(this) ? v + BUMP[name] : v;
+          },
+        });
+      }
+      const rect = Element.prototype.getBoundingClientRect;
+      Object.defineProperty(Element.prototype, 'getBoundingClientRect', {
+        configurable: true, writable: true, enumerable: false,
+        value: function () {
+          const r = rect.call(this);
+          if (!isSubmit(this)) return r;
+          return new DOMRect(r.x, r.y, r.width + 1, r.height);
+        },
+      });
+    `,
+
     // Read every section the guard feeds into its payload, whole, on either arm.
     // Descended from probes/inject-b55-funnels.js, which captured the same
     // funnels but only ever compared *lengths* -- the sections' own text was

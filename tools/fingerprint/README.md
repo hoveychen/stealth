@@ -19609,3 +19609,41 @@ So does the direction of travel: this engine passes rarely and Chrome passes
 usually. But anything measured here from now on needs a run count chosen against
 a 90% base rate, and the cheap two-run knob reading that this file leaned on for
 four chapters is not strong enough to close a question.
+
+## Re-run at power: the negatives hold, and the guard has hard tells (B84, 2026-08-27)
+
+The previous chapter warned that this file's knob readings were one or two runs
+against a high base rate. Re-counted at ten runs each, on x-hyatt:
+
+| knob | tickets |
+|---|---|
+| `none` (baseline) | **10 / 10** |
+| `all-ours` -- fake timezone, empty codecs, empty voices, zeroed geometry | 10 / 10 |
+| `drop-36-globals` -- every global Chrome has and we lack | 10 / 10 |
+| `has-probe` -- our `[[Has]]` signature added to the trap log | 10 / 10 |
+| all three of the above at once | 10 / 10 |
+| `submit-off-by-one` -- one input box a pixel wide | 10 / 10 |
+| `webdriver-true` | **0 / 10** |
+| `input-box-frozen` -- every input box frozen | **0 / 10** |
+
+Three things follow, and the first is a correction of the correction:
+
+**The negatives hold.** Every one of them survives at ten runs. The worry that a
+two-run reading had missed a knob which merely shifted the odds turns out to be
+unfounded here -- these knobs do not shift the odds at all. The instrument is
+also sharper than the previous chapter feared: baseline is 10 of 10, not 9.
+
+**The guard does not score, it gates.** Combining three individually harmless
+knobs is still 10 of 10, and one wrong input box out of ten readings is 10 of 10
+while all ten wrong is 0 of 10. That is not an accumulating penalty crossing a
+threshold; it is a small number of specific checks, each of which passes or
+fails on its own. `input-box-frozen` fails because it makes the font probe
+*degenerate* -- ten measurements landing on one value -- not because ten values
+are individually wrong.
+
+**And that leaves a third tell.** This engine does not trip `webdriver`, and its
+input boxes now match Chrome on nine of the guard's ten readings, which
+`submit-off-by-one` shows is comfortably enough. Yet the baseline rate here is
+0 of 20 against Chrome's 10 of 10. Something else is being checked, it behaves
+like the two known tells rather than like a score, and no knob written so far
+reproduces it.
