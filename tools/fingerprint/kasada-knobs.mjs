@@ -637,6 +637,48 @@ export const KNOBS = {
       __send('knob=drop-36-control&dropped=' + gone + '&of=' + NAMES.length);
     `,
 
+    // Does the guard's own code throw in this engine?
+    //
+    // This engine reaches Kasada's error endpoint (reporting.cdndex.io/error) on
+    // about half its runs and Chrome never does. That was written off once with
+    // "both runs are 429 anyway", which is bad reasoning: it says the errors do
+    // not separate OUR passing runs from OUR failing ones, not that they do not
+    // separate us from Chrome. An exception part-way through the challenge would
+    // leave the computed answer incomplete, and no amount of correct fingerprint
+    // values would then earn a ticket -- which is the shape every negative so far
+    // has left behind.
+    //
+    // Catches all four routes an exception can surface by: window.onerror,
+    // unhandledrejection, and the console's error/warn channels.
+    errors: beacon + `
+      let n = 0;
+      const shout = (how, msg, extra) => {
+        try {
+          const s = String(msg).replace(/\s+/g, ' ').slice(0, 300);
+          __send('err=' + (n++) + '&how=' + how + '&m=' + encodeURIComponent(s) +
+                 (extra ? '&x=' + encodeURIComponent(String(extra).slice(0, 200)) : ''));
+        } catch (e) {}
+      };
+      window.addEventListener('error', (e) => {
+        shout('onerror', (e && e.message) || 'error',
+              e && e.error && e.error.stack ? e.error.stack : (e && e.filename) + ':' + (e && e.lineno));
+      }, true);
+      window.addEventListener('unhandledrejection', (e) => {
+        const r = e && e.reason;
+        shout('reject', (r && (r.message || r)) || 'rejection', r && r.stack);
+      }, true);
+      for (const level of ['error', 'warn']) {
+        try {
+          const real = console[level];
+          console[level] = function (...a) {
+            try { shout('console.' + level, a.map((x) => { try { return x && x.stack ? x.stack : x; } catch (e) { return '?'; } }).join(' ')); } catch (e) {}
+            return real.apply(this, a);
+          };
+        } catch (e) {}
+      }
+      __send('errors=armed');
+    `,
+
     // Read every section the guard feeds into its payload, whole, on either arm.
     // Descended from probes/inject-b55-funnels.js, which captured the same
     // funnels but only ever compared *lengths* -- the sections' own text was

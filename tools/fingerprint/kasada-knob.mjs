@@ -78,6 +78,11 @@ async function once(port) {
                 // The knob's only channel out: an image request whose query
                 // string is the reading. Runtime.enable is off limits here.
                 if (url.includes('__b84')) rec.beacons.push(url.slice(url.indexOf('__b84')));
+                // The guard's own error channel. It wraps its code in try/catch
+                // and reports there rather than letting anything reach
+                // window.onerror, so this is the only sign from outside that it
+                // threw at all.
+                if (/cdndex|\/error/i.test(url)) rec.errorReports = (rec.errorReports || []).concat(url.slice(0, 160));
                 if (url.endsWith('/tl')) {
                     rec.tl.push({ postLen: m.params.request.postData ? m.params.request.postData.length : null });
                 }
@@ -122,7 +127,9 @@ for (let i = 0; i < runs; i++) {
     console.log(`${engine} ${station} knob=${knobName} run ${i + 1}: ` +
         `docs=${rec.documents.join('->') || '(none)'} ` +
         (tl ? `tl=${tl.status} postLen=${tl.postLen} cr=${tl.cr} r=${tl.r ?? '(absent)'}` : 'tl=(no POST)') +
-        ` beacons=${rec.beacons.length}`);
+        ` beacons=${rec.beacons.length}` +
+        ` errorReports=${(rec.errorReports || []).length}`);
+    for (const e of (rec.errorReports || []).slice(0, 2)) console.log('    ERR ->', e);
     if (!outPath) for (const b of rec.beacons.slice(0, 6)) console.log('   ', decodeURIComponent(b).slice(0, 300));
 }
 if (outPath) {

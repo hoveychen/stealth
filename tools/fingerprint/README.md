@@ -19528,3 +19528,31 @@ and the verdict rides on a POST, so this is not on the path that matters. Worth
 fixing as fidelity; not a candidate for the lock.
 
 So B53's reading still holds thirty sessions later: the protocol layer is clean.
+
+## The error reports are not a tell either, and Chrome makes them too (B84, 2026-08-27)
+
+Carried forward from B83: "this engine reaches `reporting.cdndex.io/error` on
+about half its runs, Chrome never does". The second half is **wrong**.
+
+Counting the requests directly, three runs each:
+
+| | run 1 | run 2 | run 3 | ticket |
+|---|---|---|---|---|
+| this engine | 2 | 0 | 4 | none, 3 of 3 |
+| Chrome | 0 | 0 | 3 | **yes, 3 of 3** |
+
+Chrome's third run reported three errors to Kasada's own endpoint and was
+ticketed anyway (`r=1-B1JyAUc`). So the reports happen on both arms, they are
+intermittent on both, and they do not decide the verdict.
+
+Worth recording how the guard hides them, because it explains why this took a
+direct count to settle: an `errors` knob that listens on `window.onerror`,
+`unhandledrejection` and the console's error and warn channels, armed in all
+five frames, catches **nothing** on a run that does report. The guard wraps its
+own code in try/catch and reports through its own channel, so nothing reaches
+any handler a page can install. The only sign from outside is the request.
+
+The original note was not careless so much as under-powered -- it reasoned "both
+of our runs are 429 anyway, so the errors are not the gate", which is true of
+*our* runs and says nothing about the comparison with Chrome. Counting both arms
+is what closed it.
