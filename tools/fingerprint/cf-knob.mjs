@@ -220,6 +220,10 @@ async function once(port) {
                     postLen: (m.params.request.postData || '').length,
                     postUnknown: !m.params.request.postData && !!m.params.request.hasPostData,
                     reqHeaders: m.params.request.headers || {},
+                    // Wall-clock, so the rounds can be placed on a timeline.
+                    // The verdict rides on r3, and how long the widget took to
+                    // get there is the one thing about it no knob has compared.
+                    sentAt: Date.now(),
                 });
                 return;
             }
@@ -248,6 +252,7 @@ async function once(port) {
                 method: sent.method || 'GET',
                 postLen: sent.postLen || 0,
                 postUnknown: !!sent.postUnknown,
+                sentAt: sent.sentAt || 0,
                 status: r.status,
                 protocol: r.protocol ?? null,
                 chlGen: h['cf-chl-gen'] ?? null,

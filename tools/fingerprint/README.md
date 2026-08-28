@@ -19866,6 +19866,29 @@ about one run in six, so a 3-of-3 negative is a weaker statement than it reads
 as, and the only readings here that carry real weight are the zeros --
 `webdriver-true` and the three plugins knobs.
 
+### The timeline, which was different, and then was not
+
+Timestamping the rounds put the arms on a timeline for the first time, and they
+were not on the same one:
+
+| | r1 | r2 | r3 | r4 |
+|---|---|---|---|---|
+| Chrome | 0.25s | 1.22s | 2.06s | 2.13s |
+| this engine | 0.26s | 0.53s | 1.66s | -- |
+
+Chrome spends about **0.96s** between the interstitial's post and the widget's
+first, to a hundredth of a second across runs; this engine spends 0.27s. Three
+and a half times sooner, every run.
+
+`fast-timers` cannot test it from Chrome's side: clamping every `setTimeout`
+under two seconds to zero clamps **nothing** -- the counter reports zero
+clampings and the run is 6 of 6 -- so that gap is work, not a timer.
+
+`lp-delay-r2` tests it from ours, and it is one line: hold the widget frame's
+first XHR back by 700ms. The timeline lands on Chrome's -- r1 at 0.16s, r2 at
+1.13s, r3 at 2.1s -- and the arm is refused **4 of 4**. When the arms leave at
+the same moment they are still judged differently.
+
 ### The tally so far
 
 Knobs that keep Chrome's ticket, and so name something this door does not weigh:

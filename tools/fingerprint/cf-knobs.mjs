@@ -345,6 +345,84 @@ export const CF_KNOBS = {
       })();
     `,
 
+    // How long the widget takes to get to its first post.
+    //
+    // Timestamping the rounds puts the arms on a timeline and they are not on
+    // the same one. Chrome: r1 at 0.25s, r2 at 1.22s, r3 at 2.06s -- a gap of
+    // about 0.96s between r1 and r2, the same to a hundredth across runs. This
+    // engine: r1 at 0.26s, r2 at 0.53s -- a gap of 0.27s. We arrive at the first
+    // widget post three and a half times sooner, every run. Nothing else about
+    // the widget has survived this far, and this is the one comparison no knob
+    // has made.
+    //
+    // Clamping the short timers to zero is the only way to make Chrome early;
+    // the long ones are left alone because the challenge uses 10000 and 55 for
+    // different purposes and flattening both would be a different experiment.
+    'fast-timers': beacon + `
+      (() => {
+        try {
+          const realTimeout = window.setTimeout;
+          let clamped = 0;
+          Object.defineProperty(window, 'setTimeout', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (fn, ms, ...rest) {
+              const d = Number(ms) || 0;
+              if (d > 0 && d <= 2000) { clamped += 1; return realTimeout.call(window, fn, 0, ...rest); }
+              return realTimeout.call(window, fn, ms, ...rest);
+            },
+          });
+          setTimeout(() => __send('fast-timers=clamped&n=' + clamped +
+                                  '&at=' + encodeURIComponent(__where())), 8000);
+          __send('fast-timers=wrapped&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('fast-timers=cannot-wrap:' + e.name); }
+      })();
+    `,
+
+    'timers-passthru': beacon + `
+      (() => {
+        try {
+          const realTimeout = window.setTimeout;
+          let seen = 0;
+          Object.defineProperty(window, 'setTimeout', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (fn, ms, ...rest) { seen += 1; return realTimeout.call(window, fn, ms, ...rest); },
+          });
+          setTimeout(() => __send('timers-passthru=seen&n=' + seen +
+                                  '&at=' + encodeURIComponent(__where())), 8000);
+          __send('timers-passthru=wrapped&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('timers-passthru=cannot-wrap:' + e.name); }
+      })();
+    `,
+
+    // The same timing question asked on this arm, where a delay is easy.
+    //
+    // fast-timers could not make Chrome early: the challenge never calls
+    // window.setTimeout for that gap, so the 0.96s Chrome spends between r1 and
+    // r2 is work, not a timer, and cannot be clamped away. Making this engine
+    // late is the other half and it is one line -- hold the widget frame's first
+    // XHR back by 700ms and the arms leave at the same moment.
+    'lp-delay-r2': beacon + `
+      (() => {
+        try {
+          if (window.top === window) { __send('lp-delay-r2=top-skipped'); return; }
+          const real = XMLHttpRequest.prototype.send;
+          let n = 0;
+          Object.defineProperty(XMLHttpRequest.prototype, 'send', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (...a) {
+              n += 1;
+              if (n !== 1) return real.apply(this, a);
+              const self = this;
+              __send('lp-delay-r2=holding&at=' + encodeURIComponent(__where()));
+              setTimeout(() => { try { real.apply(self, a); } catch (e) {} }, 700);
+              return undefined;
+            },
+          });
+          __send('lp-delay-r2=wrapped&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('lp-delay-r2=cannot-wrap:' + e.name); }
+      })();
+    `,
+
     'no-timezone': beacon + `
       __send('no-timezone=' + encodeURIComponent(__where()));
       try {
