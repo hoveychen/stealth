@@ -1,0 +1,385 @@
+{
+  "engine": "lightpanda",
+  "headless": false,
+  "target": "https://www.scrapingcourse.com/antibot-challenge",
+  "runs": [
+    {
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/antibot-challenge",
+          "status": 403
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/tpo06/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200
+        }
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "application/javascript; charset=UTF-8",
+          "cf-ray": "a3201530aebac236-SJC"
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "application/javascript; charset=UTF-8",
+          "cf-ray": "a32015314f231990-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/4086735474:1787883009:lu7FKCb_Jb4wTXdgA0-0OGZbFnfIn80-vsaKWGIco3Y/a32015308e8dc236/R1x_K6dLmcQetRyhz1Y3E7Zz7tgwdame8L8Q7O8CI2c-1787886205-1.2.1.1-HigaFU.gXPSVohaL2sNg4wuMOFLtTVPjFLOlIYcqCaBfDsjPB.Zw1Dl1AKth5801",
+          "method": "POST",
+          "postLen": 2306,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "QfwqDvFQ2P8ZODvccIhHHU6emiSZlj6LbaP3H84TtaI=$w4B8dcQ8eH2IeB1Hc9g0/Q==",
+          "cf-ray": "a3201531c869c236-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/tpo06/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/html; charset=UTF-8",
+          "server-timing": "qxjr4ppy;dur=267278",
+          "cf-ray": "a32015325a621990-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/715392326:1787883010:8kD0xT8K0sLIS0Ph3JWGhLMMVZstWZMfbnfoP-0Z-HU/a32015325a621990/ZMNhJTn3gS4crN5t3GqW8wnU9XCya8NKcsg1KONl2TU-1787886205-1.2.1.1-EsB90..WSO3RPAuJwn8L7tF4hYvahUcZWdJtNTxwCZhfIJ.foihwx5I3BfomQxVF",
+          "method": "POST",
+          "postLen": 4919,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "g472xHTECj/dhVUoYyWXkhdm3vpv/UViER0qWR/gsLN+Sr8KCDYiX9foALjZ3JRQgnsNeyY5n+lPXM4ar+N5ddvttj94pWWWhr2ey6LDmoDjHxnLMkFcG+qR+DvPPf/76bct0S3zDgwWx92g+YjvN6i1tV77kpbw3XqVfPnk4ETKNj5OEHissGaYFrTVvG1t3LhFuEgWsrjFk4frISeUaLvoBiz0ob9veT3eWuiWM7cWqKRs1YWckEGX6Fk+E2nHyF3eHLWWwO3bUVV9khPyydWirHvbvgow/8ip+Snr84cBj4aRJS3lyogIxhXo28qCgZJ0MY/d4fEv7HOiwQbCh2teHqMiALhOZlZAfJAejC7iwaYhSxr9mypsvzdAu5F2DZ4V0nLMdnl3EDaY0hnBmSakaGFOE6m1W/+nO6eYUDgfFIa5glr9ikwzQ862tL0ZGKGTzBo1UhdCFRwrsZmu60jYmNhr5/GWaxRzQQRJvPVNJ0xpfYx+G5IQwaJnXiOlKLjQ/AtBsq/F+fZeHE76B3yky+98oBvUhiwgw40otktrmoiHMlxn6iz5x1lgKYBcz7BlhSXbNBaayxJ8+qnC5d40CwlY21zv/eUiSGGYP9swfg8IJQAR2d2IKkLNgV3rLVSjgAuQp4/5cSGzaA4MkV7ijP2YFzuucH47eGWps4Yj+xiNoSvYdVYZTNjzXdrl8G+bOulFWN+edaisuQ2q0cp5GJu2GneGi3HJhHM95914iSCjyy9RuqUlLKIYjMhkuiAFfwl3o+Rs+OUFOY1DHVZy5j7UIQekuSEI+se95ftDsNvXrMO1/MMCrsNoi9dyMyYFP0j1X/44nKzBmrKdfvJeq2dGbG8IV6myJOsJz0+TZx8b/0m7Qazi6WYItkqRvR+OkPepq5xxfcBxQ7FpHOLXCreYaDUPqLJaAMZNpBc=$u3AlfBJll+u3WB7qd8q6aw==",
+          "cf-ray": "a32015338d691990-SJC"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/0e9b9839-bcba-4d9e-aaa4-d7ab1d8fb8b5",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/pat/a32015325a621990/1787886206012/988322af96fff51baf218d4036ff168f79b4763044e09f4685002699431c186a/RZFTZGXlxCKlGNuqn7gieGjumfczPJBCXJk5pNsXrvo-1787886206-1.3.1.1-IvjMhx7PHwTBzMFjJSl9nN5QXlS2f2RnJAv3ice9lBAuZUvBHT3upzPLqKmHUU2PDoKwKiwQHM9AxvYy9fjHLpzfoUtWmLw48dwi0qVzXLF5XXKBVb0u3VEOLFA1Ek9T4kXlud3vRsslO2S70y_uiRkt6dp_rUrtxM17LA6dv9kQQRx6jIu4mMQDow8R2QF4hH_d.6OT5Yb9PrHr6KUnSlz.ezPDSJtdqJHxLaIQCWS5AWQa28qOz4P9NNMtNgJlOfaEhwxoieMgDa_JB2yCwBRyvIzSHZRCXsL_O8kXkH7Q3jKg_afoSNJktAOaobQgV59jFRiKS7m.OyGuElKOQbDc77dNrH.auMKQsh8DrnK_0nLJJ1cElyqxoMy3LwBUGSkLyIAHlbQWDa.R7FQ.uxsa1kTW7cZVA_llNs5FzJJ44Y1aRReDxatOQuMHaplkUTuD8LzZlJQqhmMXPrpozyz38nXPDhyqC2uaTPYyOoJc_O17wD4ZSPmR8PCOZVkAmPsyK29EjzkP7XMWZgJluTEpdyAQ98QHp4YBeHhg0IfzjqHlFDP6og72wDEMftYTLVIvDtWs1aQPesomzcuqE3ZocJ5ZkYtaxsCGZLJ6gzuFJQbLN2lBUVl2t8OFAZRlV291PmEjdBda3rG2FJVh7FXkzldVTxIEUqwPawoOLXQM3HWsXe4ns17qqBK3IdVkOcpW15c_VoLH5Cm0W.F0t9yej5y.ZK2f2fQEzoqHIDvFVPBBco8nqBpoYwBjRTpSp8P9YbhhAs47coRagc_WpzI.jQPZiMSBLdeEbLujaJ3IF7x.LSbKhRCxoXJmwOkN",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 401,
+          "content-type": "text/plain; charset=utf-8",
+          "content-length": "1",
+          "cf-ray": "a3201535cbf81990-SJC"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/0e9b9839-bcba-4d9e-aaa4-d7ab1d8fb8b5",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/0e9b9839-bcba-4d9e-aaa4-d7ab1d8fb8b5",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/ci/a32015325a621990/1787886206015/H4d2xujGD661AyVx..7jh.1IyV6VZuwYO68kINBgUpo-1787886206-1.3.1.1-v1NwRxqOT2a6Hfy21EtGRGsZPeJIGQlvu8zHFoHFN7ypHev_tASirNYvfIRU.Z_pEx0uxOwdwBHVkn6Hr5_N0cwrb.oTy.u_Jc94NoZMtttPUcXmxjC9EHk7KZBfIzrIxnIdHeDqL7Md83FffFGsAF3DoFVrfkn7I33Xe2D0YS59CQQ4Ch2UfKKwtXgUChI34kQ9npObdkBwJmgoiR97ROJVVIzycYO3iJj3_m3QGLZHP8cPyfkdhEpBmMgPsJyL1NEmWaVEdBVvZ5vlFuPMs85zuIwQN_.nba._YzUM4hYw9nHpVI0IwZccQXGUPx_._W8vyMOAR3h8R5rs9jEl1P8..I.3IC0oLDG0W.YX2.p6zNNw3z7fAAAoXCfGVexsyEgMsC6KOxcm.xAfNGPeptPK4HyRkdE6RzvrmRQLoFFLGTicsSP0IuaEK5_w5Y3iusgLhQwoWtpfTPa9bRfRbsKe_9FXthd9bUnJU8ZTGU1IEG7uoDnFNlNl6SF_l865wXmM04rgUr06NDKHkFG0msLrETqq1UAgL5nwfkH1mxVorwqfGi9NZK7lSdxOA.g5OEFgOAHCGB8HeFL61_IVUKuatML6vqAZ_GKfkDenGFF3pa.NgBKTI4ugsLaGMzzmJT0jquIDeqH7rUbaLxG0ENrAdyslVYZq6Zz_y2R.fUGdsG5aA29LPsb3GX88KXRXIicPpDcoXvL44kXs6OROZ5QIPAFbqXURuvF2g4_qTFc",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "image/png",
+          "content-length": "4234",
+          "cf-ray": "a32015371f861990-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/715392326:1787883010:8kD0xT8K0sLIS0Ph3JWGhLMMVZstWZMfbnfoP-0Z-HU/a32015325a621990/ZMNhJTn3gS4crN5t3GqW8wnU9XCya8NKcsg1KONl2TU-1787886205-1.2.1.1-EsB90..WSO3RPAuJwn8L7tF4hYvahUcZWdJtNTxwCZhfIJ.foihwx5I3BfomQxVF",
+          "method": "POST",
+          "postLen": 0,
+          "postUnknown": true,
+          "status": 200,
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "2kXjl9/IXIPCcYAl+Ry56FbitRoLVCxNFKrstJ2NhbRJFLvkisfhjq1mT+XoWI2d$UmEJP0uoGY4rYU6jfwecJw==",
+          "cf-ray": "a3201539df3f1990-SJC"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/fd82842e-f8ac-46ba-925a-1300ec36b47d",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        }
+      ],
+      "cookies": [],
+      "clearance": false
+    },
+    {
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/antibot-challenge",
+          "status": 403
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/rq2ms/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200
+        }
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "application/javascript; charset=UTF-8",
+          "cf-ray": "a32015bc1c73cf1e-SJC"
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "application/javascript; charset=UTF-8",
+          "cf-ray": "a32015bc9c23ebe4-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/4086735474:1787883009:lu7FKCb_Jb4wTXdgA0-0OGZbFnfIn80-vsaKWGIco3Y/a32015bbfc03cf1e/9xdsaUALFf7a4HgzXto19B3K5NcJjmwHQTdH6P5QZbk-1787886227-1.2.1.1-EbvAuIVhGhgZprNXA75KCTcmHurPJbtc6.nmQosh8gTWg_dlrSpFYAR5VkwG.si2",
+          "method": "POST",
+          "postLen": 2306,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "HGwTxLmSzPRb9HNkSYZLVeF7+hDW5cgdTzGjSzaW+j4=$IR/mumgmNHAr7ryPKtkJog==",
+          "cf-ray": "a32015bd1839cf1e-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/rq2ms/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/html; charset=UTF-8",
+          "server-timing": "zjhaacvx;dur=265290",
+          "cf-ray": "a32015bdaf69ebe4-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/715392326:1787883010:8kD0xT8K0sLIS0Ph3JWGhLMMVZstWZMfbnfoP-0Z-HU/a32015bdaf69ebe4/IJ9QVFglVQuzTFvBjDcjBQBm2xy8_kNQ9R16RzUzzeY-1787886228-1.2.1.1-37vRemE59eoNpvJBohfW4QuMwfQg7UST3ZyY5lmKOwEzfk.XrczqAnyKeVXvk5cK",
+          "method": "POST",
+          "postLen": 4898,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "QvO22MJAMjwGRYsUjuVcEUQdoe7sgO/c6fb7p1Ss+i57gqyy5D71JxLuXiYdWov2cWiMWEtEnqfI/72z6QCXsG1cE1i/MsAq/pz2idHGa5fppL4irizt03+5Z0qqq8pLF0BwVUbVjF5dW9RPsCEu9fwPysbNWG04of3fWgQwRsJGsa3i1zyzn4RjT82thj4cmWZm5+XYM1k7LE8pLkCOl3S4m9mJcmGe++pm5c1vBzlRorAxzz6t07trMHgiE/6pq/aIyKy7XrTmWHAJLy6XqMptAjFGiQqBvbe0DrlJeet+FFANyy2RiEyk43RHQjp8f4Ph1FNiVZ/kZvYaVk5sm7442JFyNiVO1CtfQ1S1p1ihqdNcoCvj6jecAeWAA8bHSjPAQvCRVR1oYkM1hrYkhTPUDSsvNAz3U1A4zXDM7JgU0z811CO3OL4ucylhhF9/Q+udXyRYTHLcNLr0BrQgYwsE/dvCK/aMykmIOhh5AE5Ou1eoYWWRFnw4T+ctz6cY75yaaHqzaGp3datRQagpurE2Skvzxe8er97JP/orGFLoaAJHRDO0SPtNVAZU8Wvf4S5IVm0xtyqJHUQ4CxzheyZFr/660nyQFaKS+UkXmToiHY3fSriMR3d7z2ufJgDnU/tqPSPeMpHzWolB+KS6ByaU6ZXhlR+DJ9zjGvLUgHZfhx0LjwP37TK8y8cwBzK+FaFUckLAL6QogKca4tp9mMecvZzbP93NHYSRQEOi6UoUuXqzgkVuxwoXePqFK4ZPiaGdwAGFhWu9AMguQlro4iRYGByJuWk691qW08NpTtvfUe7kEKty1f1Am8DiKG2to4jXkuzFWXMilvaQjXIpV0o8Tujc5bDesMrF2d5Zepv4D2XifuzCPkWHQ+BFe1ErMF+4SvZK8I8SruaZXQCJCr2GKJquqeXwPPGDuQNgpZW6c4QhQDWhZAxIgNT+tDPk$z8JmFtAql/guhlm7L3hMIA==",
+          "cf-ray": "a32015beaaf0ebe4-SJC"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/e0ac0bbf-f08e-4ed2-a981-9993c88c5657",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/pat/a32015bdaf69ebe4/1787886228269/de29d0400cc64da19521d68301f85df18ee03ec2495318cde7ee398b2aad74de/QGkPRiLbMIo3Diex0Lu96AuKce_V8P3qmceY1qmGWHY-1787886228-1.3.1.1-8Cq1gDRoMHvvP0pOuuZfod.wdflQCi7rkKIA3eu3l.pbblbZJOGts8ZDTSH_LhtdCtOtQuWAW596wBTKBHQKwUD_mN24ezHqzszoiWajNVpM5R91CDCMp4sk0djDXC98Jr09ciNfuWz7rt6g754pVZo2v3vmMHIfEFEsi8Arjvn1XZlauMZwbKrw0NMGtQ3dh.2eDZWlhZkKcIlTdMl8nr2EnTt6BBVJ.ATkK2esQ33smwHVgVHxZrlPiyin1FBWmj1xDPJle.0VGMOyW.mZbqpAH421_J4mbKKCaFFbqLhnxmK3H9ZlFNLMje6tVoucULiw5yrOloFT4cHfOMhNx_OCW6TxfB6l7NFMia4cniZqjZK7D7rPpxOhzrvd8Jh9CHTW1sC1lEeiv9a7INF0f05TJg82i1KL0qgVuccmbbJgOjoNUmIrnUT0T.MzE.lU4yMPc_Uc6_aOzuMdPonVMQurmRDBAtuqz.xakfjlAsaBJ3KtxsvjysgoS1StpDBw3wLESUxofaJMC.h9OAzS.kjpS.dyzlx0bua7w24v88hS4kyZJr6qXYpDt4CDf1liWgkW1yayTN5r2M6kkX2ESyrwasRI4knVxUzk82hlolJ._lmd97v6EnIWHkT2Kzw.0L8MsvsPnh9YNqAKIi8svPI.YY6o08g6BE1VsGomIxN4nwBAe22IS9.9Pks.qGbJOSlo8vLUl5jk3VxEFtq_kkew2hhyzApl3cs.2vhJRK3ug5LuFU3ABA1P7NLoRU3zC9c58Vs4nB131.e92_EVSCNZRsWZYx._RIy80_RuMAi9Ny5D_X1jtujvBf6vP.GK",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 401,
+          "content-type": "text/plain; charset=utf-8",
+          "content-length": "1",
+          "cf-ray": "a32015c0ea06ebe4-SJC"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/e0ac0bbf-f08e-4ed2-a981-9993c88c5657",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/e0ac0bbf-f08e-4ed2-a981-9993c88c5657",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/ci/a32015bdaf69ebe4/1787886228271/DQZlMBvknDtm_xHN_.3q2nm9oiaJIrz7Yi1vPNOr6Fs-1787886228-1.3.1.1-chvQa5o3__i6Y.QO8Jqt6PbXB5XylsF9LZEeil9_MtGulK6ej2O6zY5hv5rZ544IxN07kO7PkfF6ZlY81ZG374LgAHT_8gcy4S62jt1GyK0jaajbw6dskw7Lv_vsY7i9k2_KDrPxY55R9lggo6AwrK6dVjLbGyIQ.fjExYe5AO_TAbwRTJM3mLN68NelAcI98N.EA9MlK2zGOXxAJJPpWtcM_RmWNlGCao3r5foZa70MG0zG87O78yxQxK.xD1UOLceouDAk5DfElTL8jCJk7aMcZ3BYgtZz4KpdYrjHuXk30pk_x4vqYdczahaCSj55T_k6qE8p2zvHk6U_ZXVQhKoohbepmEA.FmrlW0N98lJpzWQTi0pJMcJv8qTELYNFHdN2lkivOPeZNGQrdKbWwBXtdpfCnQ453YfaZilLyXK27QUfh28yfbFn1E2JCmfYV5wMZSylJzS8UdwXqGe.1gX9DZvuw_GWhwAOLpoEnVJ8Eox6X4NGgUWh4YwIb9A4T1cOtKs5JuQ0FJMZo7dxCV_Q7teOTYtQHnh.z88pAUF2XPvAP.Z_d8sis1IuXGjGbBSi7dS_8wfRjgJUJlVIGNOQDvZiV.2lw0VaZzbUY4g8n_GRRke0il2on988leJpbiGgHg81kxO9hsb62Dle7uOmsblJKjfzTVan.S2k_LFjhs30yLyjjfihqPMfq0soz9MPG.IyKTrT0QI4_HU2McOyhValaHh8B42q3w1QehQ",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "image/png",
+          "content-length": "152",
+          "cf-ray": "a32015c2e899ebe4-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/715392326:1787883010:8kD0xT8K0sLIS0Ph3JWGhLMMVZstWZMfbnfoP-0Z-HU/a32015bdaf69ebe4/IJ9QVFglVQuzTFvBjDcjBQBm2xy8_kNQ9R16RzUzzeY-1787886228-1.2.1.1-37vRemE59eoNpvJBohfW4QuMwfQg7UST3ZyY5lmKOwEzfk.XrczqAnyKeVXvk5cK",
+          "method": "POST",
+          "postLen": 0,
+          "postUnknown": true,
+          "status": 200,
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "x8XMWs5y0D2/GStRqB3B+CGLpa0hI5j1neq0yTcm4UzFs/VdG74SGJZ+ip4X5xOQ$mgCJ80fHqySgkPHS1viw0w==",
+          "cf-ray": "a32015c42c6aebe4-SJC"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/d34b4cd5-46d0-4218-b507-406e59936535",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        }
+      ],
+      "cookies": [],
+      "clearance": false
+    },
+    {
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/antibot-challenge",
+          "status": 403
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/zla40/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200
+        }
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "application/javascript; charset=UTF-8",
+          "cf-ray": "a32016479eeb15e0-SJC"
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "application/javascript; charset=UTF-8",
+          "cf-ray": "a32016482f69e6fa-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/4086735474:1787883009:lu7FKCb_Jb4wTXdgA0-0OGZbFnfIn80-vsaKWGIco3Y/a32016478ea415e0/zj1XunlSPGk8Ivsl_DepUPPyLDWTy8PkoLUTTD.Vk6U-1787886250-1.2.1.1-IkiX3Rnug5_3mnEp8HCzWStOMGwitVEJ_rjkAUV8LK4SbtP7BflLG.fCVz2Znjbk",
+          "method": "POST",
+          "postLen": 2316,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "+CUd/0vTVMouCr1+LWqepyU8G28zRykqFEjIvpXKuZU=$9gzW9RhJsJRDnVJMw4sxaA==",
+          "cf-ray": "a3201648aa1315e0-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/zla40/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/html; charset=UTF-8",
+          "server-timing": "yqnk2hp8;dur=269258",
+          "cf-ray": "a32016492a52e6fa-SJC"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/715392326:1787883010:8kD0xT8K0sLIS0Ph3JWGhLMMVZstWZMfbnfoP-0Z-HU/a32016492a52e6fa/v_APKWuuc8f6qmsQ0VvM7zHY2gfAcmYFAsLUeuc6eXk-1787886250-1.2.1.1-lqtTxixDIZymCFPRMQ5kvRWgTpaQad_qzcKmtQN5ZKaJIo1ijp89YfB8J7jZ1xW1",
+          "method": "POST",
+          "postLen": 4898,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "27b5CAPYMRdXNhkXag2HgRquJvF3len7Fg/sXOO3wvXGAWUkPxSfi33j78eHaE8cifVhx4zfTzvY2cZfquXxsX1EhuiH7XT+Q6cdcF9lzMQzascTBPUkVwdmDEDTCa2VtbWPcNqUYiQfPKH6Lfvtw6RNWOPCAgraWggC2h2X77+saQjQ2QIqRirVHTmHu5++LR10f2tRK9pv6J9apBTo3uRratCK15rKhEsH+3tGA0SYIVp4iZWzcHF5AOEIifO/eYpgsfyPIj8uauN58n0mnGRQhXtRRMVx0xH9w1c8JJjxiB74kl41Jbj068N3h4at7glj3jD7+jfjWh6seEXepOoOizIgRgyOrN2H1Th9QGe5yBAJ+kpE3VJRxqIrzZXGGRVJj/rpycub+ZZd4UIAj3F1Dr43Wb7mx8I2bcGZz9j5AJ25SUyj3kvZgnmk/6Vp77WAh51oeouHGoh6IqgTSVmhPgrifNBl+dZoITiWVoul0iRYt5CVNEJ4oQgkH69SdclWYOPH0Xn9tpNqIaTgc3Ij9pYQUyWrwBXLEB7KPjaIlkUsR69Glsa9fm2MtovNIp40fAqrTE/pa/10aZklEE8CiyKuW/K1dalrkyB8eYHSKycSj7oN7rfXVr3fwX4F+g0YAJGOSZeqswfYGlMRgfjL/Pa0L3aBtqCMt2M7vtjihHFfZ+wu747cvY3A1rYX6tx0MlS1aC4CZ+77Xkng8OpilJu11fgA/xtoGGZaVlWpyKAUKluzFiGVdirIpx/X5PQgBIt3NjSc5z7YLqEQ2tkPsk5wjxhwjwX76HeEfIBJDzbAmYfCRsNbqk378nJShkHXimfgWScsTLV59XKjWWEB+TIoYSUCg3Ja4neNihWJcpbi8Q7SxBhgVXgPlCYCTueX0iNUq2gxegvse1cfcCbzdkNMufhRd1MUdSzTN6k=$Al7QIF5esT0MJg18unUo8g==",
+          "cf-ray": "a320164a2d87e6fa-SJC"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/f6574725-32b7-45b1-a793-78c1e205a2fc",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/pat/a32016492a52e6fa/1787886250594/77eec9adbec4bdfc32dc2e9c3a4b754abb4d59bb14fdd6558d1161e4d50397d2/ZUo6jS225C9i6mvnfPU97TgRhtQmIyNjGB6aaoLwdns-1787886250-1.3.1.1-V0wt5YbKi9VRjbXv1kd1R.bkLHR9d9OKEQwVkF41ushxbGuXMyfUxBq_5dDoP91_UoUISi8xsthMQx2M65mep1BXN3WczAV8LcYP2qR08.DOoq5j6SGY4sYk0XHrKKlvYXBKrEc7mnh.6TzEIETyALqTFm1uSUFVMUnmZwNre7tJDJcG6vAW7Yqbz_bDpBqn6ylNgALpALdw2b3I51O6fzxoCsAyJc30sNxVOEBF__v33Ur2Mv5NWtb5E8j2vsS56WSIWdsuaVyGtV29.y0rYTtPnxlfXBsoZoFH8fiGNhSwg_gVNmZJHfn6gCkwIoetaFSKuLzS0bMEKYGHqBD_iQGwNMi0JgF38zj.nugK3pwSSYl7iTG1xRKYxJ9uB_Lr6MzCbqKD3GAhgxOEuq4k5mBaL51tcaS5yPyH3f7PLcKl53EbBbm_7zLMwxkdifKWSdg6dN9Cr1hAjl_KZyV6_xVe42M3LU6tfKhqAoWDa2UbI1tE0zOk97ndSssb1SIlK.YQhlVTrUWlOpSIFGsuI0azj0kXLxf4HaC9J.kJcHLCeSfr0Syl5plxkkIozlmUMpL4Qtwo9yqAvYSfSis0w1uSerd1AAUr8UTA5saZ2MXdKiOcAnrPQHRrUhyxWQpRp1Tj4dqIBDHVPUh.Wk3f1TZG7BVL7lxLcRItezMKwbj8QhtvY.XLkKjoSr2gFKbQJIrD.4UmJHPVzrL0nETbIrMh3QKNoe.e9r.pkimP6_VUafSSA9eMxsDMSsTVvXAVr0eNr0hMElE66tFdR92qWTT2LfLKEI1rtzCaUmf9oZLZjzHDVpazHn7YjduRwnBe",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 401,
+          "content-type": "text/plain; charset=utf-8",
+          "content-length": "1",
+          "cf-ray": "a320164c0b36e6fa-SJC"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/f6574725-32b7-45b1-a793-78c1e205a2fc",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/ci/a32016492a52e6fa/1787886250596/QF8sWlIn1FtyEijDaat8tFu83m4EJpf19oOQ4RJFFuU-1787886250-1.3.1.1-TPGirE6lGjcPpy9TJkZaDhw8YUIlkmQl1Kfo2SYePlrgFYLd2TnUQaBNQEka1nPEkAh8ogL7USdN1PLGO0bcA.6WDFBgr9v4JjFZhGBmAJl2laSH18Z7P8AtPRJjzCy4YfDz9pFbf8AJpp_W7GB.3ypmThgngBnbPTsRoLwHS1FWnPrbfHxcR_9QmxO4B4JmlvsCiO_1rXhxmYqMGr2FxbrcxRaZZ4zxaMt66Vtk69xTLM223.tBnoijThhju0HDbAybsrBvh1mWRt0yZbFcQSVgZUz6CQSHXO70pR9CINYFupbauPsw75cIpLSgCsv9fL9bDvA.8MzlyjREWlDfxKD5Y6TUfIefc4LCSgJJRds.F8HJfmHAKMheLIt7WBhNU8t843JTfInRrzUApK2dzx4_6Dng335vYdq_UxV5BroLqUp_AfKC_Qm3lHhQFFG0bycmC.NXhXKeMt99Uiz9YdxrNc1.TpNk.fiMzDavaIYtxGMVvH9c61vQlcIoJz3GZZosZkZjDuGjhiwlKKNeuoqvARC.Pu6rMU6yy3R.E1vqRuPLzI6kv7XWOIMjVydpmK7Xv8OAWUPLohifTrRQrtUyBEq7BVl.knadGWO1A.JxawtNBdXS5w7QlVQqDen241lwq4VpFesF6BELA1KRDvXbA9FQVUw1UOl6Ho0TB9XwpjFuaeYJZTdAImLochS576Yggcs_Qbevq_9H6HqZKr1oRwfFTFQEo0_QOeSQhQ0",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "image/png",
+          "content-length": "1754",
+          "cf-ray": "a320164cfe06e6fa-SJC"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/f6574725-32b7-45b1-a793-78c1e205a2fc",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/715392326:1787883010:8kD0xT8K0sLIS0Ph3JWGhLMMVZstWZMfbnfoP-0Z-HU/a32016492a52e6fa/v_APKWuuc8f6qmsQ0VvM7zHY2gfAcmYFAsLUeuc6eXk-1787886250-1.2.1.1-lqtTxixDIZymCFPRMQ5kvRWgTpaQad_qzcKmtQN5ZKaJIo1ijp89YfB8J7jZ1xW1",
+          "method": "POST",
+          "postLen": 0,
+          "postUnknown": true,
+          "status": 200,
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "E2QmyV5KYgdP25+UQfqD0OyRFYH7YbKVI9kOdj39KhYf5xAc4ayMKXhcvGYd3Ay8$x/uQ+XtcjHYZjxG1JNI1CQ==",
+          "cf-ray": "a320164f3e9be6fa-SJC"
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/173cdeca-b4f4-43e8-812b-acf6559bfc8f",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "content-type": "text/javascript"
+        }
+      ],
+      "cookies": [],
+      "clearance": false
+    }
+  ]
+}
