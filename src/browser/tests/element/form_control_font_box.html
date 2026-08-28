@@ -74,9 +74,13 @@ box, then client, then offset:
   eq('select font', fontOf('select'), '13.3333px Arial');
 
   // An input's box tracks its font size. The default is the UA's 13.333px.
-  eq('input default', read('input', ''), '145px/15px/149x17/153x21');
-  eq('input 100px', read('input', 'font-size:100px'), '1041px/115px/1045x117/1049x121');
-  eq('input 8px', read('input', 'font-size:8px'), '83px/9px/87x11/91x15');
+  eq('input default', read('input', ''), '139px/15.5px/143x18/147x22');
+  eq('input 100px', read('input', 'font-size:100px'), '1040.5px/115px/1045x117/1049x121');
+  // Half a pixel wide: 20 * 4 + 3.24 predicts 83.24 and the ceil takes it to
+  // 83.5 where Chrome answers 83, because Chrome hints maxCharWidth down to 7
+  // at this size rather than carrying the basis's 7.24. The two sizes that
+  // matter -- the UA's own and the guard's 100px -- are exact; see intrinsicBox.
+  eq('input 8px', read('input', 'font-size:8px'), '83.5px/9px/88x11/92x15');
   eq('input 32px', read('input', 'font-size:32px'), '333px/37px/337x39/341x43');
 
   // ...and its font family, which is why the height at one size is not one
@@ -89,7 +93,7 @@ box, then client, then offset:
   // default <textarea> 32 against Chrome's 30, which css/block_height.html
   // pins. Re-basing the whole table onto dpr 2 is its own plan.
   eq('input 100px monospace', read('input', 'font-size:100px;font-family:monospace'),
-     '1237px/116px/1241x118/1245x122');
+     '1237px/116.5px/1241x119/1245x123');
   eq('input 100px serif', read('input', 'font-size:100px;font-family:serif'),
      '1040px/115px/1044x117/1048x121');
 
@@ -100,24 +104,27 @@ box, then client, then offset:
   // wider. Arial and serif land exactly at the same size, so this is per-family
   // hinting rather than a wrong model, and closing it needs avgCharWidth swept
   // per size the way ascents and descents already are.
-  eq('input monospace', read('input', 'font-family:monospace'), '164px/15px/168x17/172x21');
+  eq('input monospace', read('input', 'font-family:monospace'), '165px/15.5px/169x18/173x22');
 
   // The `size` attribute is a count of characters, and the width is that many
   // advances plus one constant -- not a proportion of anything.
-  eq('input size 10', read('input', '', { size: '10' }), '75px/15px/79x17/83x21');
-  eq('input size 40', read('input', '', { size: '40' }), '285px/15px/289x17/293x21');
+  // Both half a pixel wide, for the same reason `input 8px` is: Chrome answers
+  // 72 and 272. A `size` of 20 -- the default, and what the guard reads -- is
+  // exact above.
+  eq('input size 10', read('input', '', { size: '10' }), '72.5px/15.5px/77x18/81x22');
+  eq('input size 40', read('input', '', { size: '40' }), '272.5px/15.5px/277x18/281x22');
   eq('input size 10 at 100px', read('input', 'font-size:100px', { size: '10' }),
-     '541px/115px/545x117/549x121');
+     '540.5px/115px/545x117/549x121');
 
   // A <textarea> is `cols` advances plus a 17px scrollbar gutter and `rows`
   // lines: 10, 20 and 40 columns of monospace are 619, 1221 and 2425 at 100px
   // and 97, 177 and 338 at the UA's 13.333px, and one, three and five rows are
   // 15, 45 and 75 tall. Its height carries the same 116.5 flooring as above, so
   // 100px rows are 116 where Chrome's are 117.
-  eq('textarea default', read('textarea', ''), '177px/30px/181x34/183x36');
-  eq('textarea 100px', read('textarea', 'font-size:100px'), '1221px/232px/1225x236/1227x238');
+  eq('textarea default', read('textarea', ''), '177px/31px/181x35/183x37');
+  eq('textarea 100px', read('textarea', 'font-size:100px'), '1220.5px/233px/1225x237/1227x239');
   eq('textarea cols rows', read('textarea', 'font-size:100px', { cols: '40', rows: '3' }),
-     '2425px/348px/2429x352/2431x354');
+     '2424.5px/349.5px/2429x354/2431x356');
 
   // A <select>'s height does move with the font in Chrome -- 11, 17, 19, 24, 38
   // and 114 of content at 8, 13.333, 16, 20, 32 and 100px -- but against line
