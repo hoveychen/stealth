@@ -1162,4 +1162,50 @@ export const KNOBS = {
         });
       })();
     `,
+
+    // The payload in plain text, every section, in order.
+    //
+    // Disassembling the bytecode does not shorten the road to the payload: the
+    // 187 opcode handlers are a general-purpose runtime -- scope-chain lookup,
+    // `obj[prop]`, `fn.apply` -- with no instruction that names a Web API, so
+    // the field list only exists once the program has run. But the program
+    // hands every section to `TextEncoder.encode` before it goes on the wire,
+    // and that is one interception point for all of them.
+    //
+    // Each section is chunked into beacon URLs and reassembled off the wire, so
+    // two arms can be compared section by section instead of by total length.
+    // Every beacon carries a per-document id. The passing arm navigates into
+    // the site once it clears, the injected script runs again in that second
+    // document, and its sections interleave with the challenge document's on
+    // the wire -- which reads as two arms running different probes when it is
+    // one arm running twice.
+    'payload-plain': beacon + `
+      const DOC = Math.random().toString(36).slice(2, 8);
+      __send('knob=payload-plain&d=' + DOC + '&path=' + encodeURIComponent(location.pathname));
+      const CHUNK = 1400;
+      let sec = 0, sent = 0;
+      const emit = (i, part, total, body) => {
+        if (sent++ > 300) return;
+        const k = sent;
+        setTimeout(() => __send('d=' + DOC + '&p=' + i + '&c=' + part + '/' + total +
+          '&v=' + encodeURIComponent(body)), 4 * k);
+      };
+      const grab = (s) => {
+        if (typeof s !== 'string' || s.length === 0 || sec > 60) return;
+        const i = sec++;
+        const total = Math.ceil(s.length / CHUNK);
+        __send('d=' + DOC + '&phead=' + i + '&len=' + s.length);
+        for (let c = 0; c < total; c++) emit(i, c, total, s.slice(c * CHUNK, (c + 1) * CHUNK));
+      };
+      (() => {
+        const real = TextEncoder.prototype.encode;
+        Object.defineProperty(TextEncoder.prototype, 'encode', {
+          configurable: true, writable: true, enumerable: false,
+          value: function (input) {
+            try { grab(String(input === undefined ? '' : input)); } catch (e) {}
+            return real.call(this, input);
+          },
+        });
+      })();
+    `,
 };

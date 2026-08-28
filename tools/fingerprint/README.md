@@ -20129,3 +20129,86 @@ is the instruction dispatch -- the pool, the heap, the type tags and the operand
 decoder are all in hand, so a disassembler over the same integer array would
 give the payload's field construction directly, and that is the one thing this
 chapter could not read off the strings alone.
+
+## The interpreter decrypts too, and the payload is readable without it
+
+The previous chapter ended with "the payload's field construction is a
+disassembler away". It is not, and finding out why took less work than the
+disassembler would have.
+
+### 187 handlers, two keys
+
+There is no dispatch switch in `ips.js`. The second pool is a
+`"...".split("C")` array behind a `Proxy` whose `get` trap decrypts one entry,
+wraps it in `new Function`, and caches the result -- so the opcode table does
+not exist until the interpreter asks for an opcode. `kasada-dump-handlers.mjs`
+ends the lifted region after the `new Proxy(...)` statement instead of after the
+string heap and asks for all of them: **187 handlers, 16726 bytes.**
+
+77 come out clean and 110 come out as line noise, because `var C = a ? E : 49`
+picks between a constant and `E`, and `E` is reset at runtime through the same
+trap (`if (Number.isNaN(C) && a !== v) return function (V) { E = V }`). The
+plaintext is JavaScript though, so the runtime key is recoverable without the
+program: the cipher is `ch = n ^ (key + i % 11)`, the body must be printable, and
+one key in the range makes all 110 bodies printable at once. **E=154, 110/110.**
+
+What they show is that the disassembler was the wrong tool:
+
+```js
+op001  function(n,e,a,v,i,r){var v=e(n),i=e(n);a(n,v==i)}
+op002  function(n,e,a,v,i,r){a(n,!e(n))}
+op008  function(n,e,a,v,i,r){a(n,e(n)*e(n))}
+op090  ... else n.u[2]=l.apply(o,_)
+```
+
+`e(n)` reads an operand, `a(n,v)` stores one, `v(n)` walks the scope chain. It
+is a general-purpose JavaScript runtime -- scope-chain lookup, `obj[prop]`,
+`fn.apply` -- with **no instruction that names a Web API**. The field list is
+not in the bytecode; it only exists once the program has run.
+
+### The payload in plain text, split by document
+
+Every section goes through `TextEncoder.encode` before it goes on the wire, so
+one interception point catches all of them. `payload-plain` chunks each into
+beacon URLs; `kasada-payload-diff.mjs` reassembles and compares.
+
+The first reading was wrong and the way it was wrong is worth keeping: the two
+arms appeared to run *different probes* -- Chrome encoding voices and a
+`KeyboardLayoutMap`, this engine encoding `Date` strings and a codec list. They
+were the same probes. The passing arm navigates into the site once it clears,
+the injected script runs again in the second document, and the two documents'
+sections interleave on the wire. Tagging every beacon with a per-document id
+separates them.
+
+Split by document, the main collection realm (`about:blank`) is:
+
+| sec | Chrome | this engine |
+|---|---|---|
+| 0 | `Pacific Daylight Time` | same |
+| 1 | `Sun Aug 05 1945 16:16:00 GMT-0700 (...)` | same |
+| 2 | `GMT-0700 (Pacific Daylight Time)` | same |
+| 3 | 522-char codec list | same |
+| 4 | `100075px,155556px,165464px,305134px` | `0px,0px,0px,0px` |
+| 5 | assembled body, 19528 | assembled body, 18869 |
+
+**Four of the five collected sections are byte-identical.** The one that is not
+is the geometry section, and `px-zero` -- handing Chrome our four zeroes through
+the same encode hook -- was already run at ten runs and kept the ticket every
+time.
+
+In the challenge document itself the sections are a number-pair list, the
+`KeyboardLayoutMap`, a storage figure and (in Chrome) the voice list. The pair
+list looked like a structural difference at 7 pairs against our 10, until
+Chrome's own second document in the same run produced 10: **it varies within
+Chrome, so the count is noise.** The storage figure is `10737418240` here every
+time and `10737418240` or `10737418391` in Chrome -- ours is exactly 10 GiB.
+
+### Where that leaves it
+
+The payload is now readable on both arms, section by section, in plain text,
+with the document ambiguity removed. That is the thing eleven chapters of
+guessing were trying to approximate. What it says is that the collection agrees
+almost everywhere, and where it disagrees the disagreement has already been
+cleared causally. The remaining candidates are narrow and named: the storage
+quota that never varies, and the voice list the challenge realm does not
+produce here.
