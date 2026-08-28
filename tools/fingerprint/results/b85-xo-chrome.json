@@ -1,0 +1,122 @@
+{
+  "engine": "chrome",
+  "knob": "report-crossorigin",
+  "headless": false,
+  "target": "https://www.scrapingcourse.com/antibot-challenge",
+  "runs": [
+    {
+      "documents": [
+        403,
+        200,
+        200
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/956859754:1787937025:NX_uMCWJOkH4x4d3gndlr_g9VN9s6He2O-93Vl5_Ozs/a3254acc8c81c1a2/3KmhhXGunftlNYoihKmb2caJK18ZQyQcF8mmKJQGDaY-1787940830-1.2.1.1-_Zlb_nDlEjkrIsYFVRouGC3zdQPVJTwqNt6MgZM3VIJEW1S9XzmaFEW5MCKr.6QQ",
+          "method": "POST",
+          "postLen": 2306,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "HOn6Uf7cNobEd5Fgp7z+qVDPRuH4GzTkT1tQqtudT08=$c5Fy+PM3ClGNvuwxtRuBVQ==",
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/o48fz/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/536230380:1787937027:uth4tO-V3fIS4kBkBcdJVJAhGmcCSpWLkgr8xV8bsQI/a3254ad26adf4d21/gaMZZuH2e_eDdmhgXpjAjWt7LDUCnaOl8Hx0eDJ_VtU-1787940831-1.2.1.1-6M21LNRixUf_sqyKc0VIRUZvDt._xifSHyI_SFLxOW8snIorQja0Uk75s4_qWCSl",
+          "method": "POST",
+          "postLen": 4727,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "e8NSi1+QeUEWFOu/lTGS1bvWcEH4G5gJablthLQndGCdOXw441zGLscfAz6ka3LPi+0IVAbOQ0dN0z4q+MNHx7MrUvTdr2EWS+Rh3audS9AUfk7n1n1dNEFAWmHTilmVkipA+W6pdgGvXc7B2PuI2Tta1KKiGdOOQcNx33P/br7HvVwDo+/VIztxuXIv41LDz1XSlzmPmzRSZ4235ojzH50EoZj1turDRCxxkW65zroh/VnCo4D8dBWHO294c3ZxMOoBp42XVTEm+G7QwVDhXBoCgoypL0Pi/PQujC60JcGb5bhBdSKIdq90U2ePjCW/kygMsVGmGSfAs5WDjujqOfPng+X8/pb0FLvo4h6gCUoivQxJRTNk/i9avefEmbG/DEYIcPiJXuiTVTZDbqr+b84FRsiVKYZoutkUioil4+59uFatNoMnplqF0jAQp1SbetEWwa2cXSY5MEpCoiTDY2zr/WLGF1cuqC4s4Xw+aidX4E56yyNkV7vE3EY0GPkut7xYoioy/yOj6w7okd+ZxNqdpS8ckRfXX49oe4wxKmRCSXBXw+6+IZnevjh8koK897aBmuMO6KUSfwBMYaN806OcYswCwCBK+tl9dqsCADWPgKTsbNtmyPeFvSFIABb4dnAZlawWWVgbG92sgdwaQCfg4eOAW+bdnkTWrtg5rH0QTcYQhhLxx94Q0sw44cSYhnCOZfEnYcrBhkMjkxOZA60RLuapdr1w5d9I8BnGgMoaHqgIvjDx1LSjci7kZ/UnZL8ADjaITcVPhUTz704NBQr4a0VTSmjgIaIfR3QE2U/hWxoR7jDdSkVBpucxtrACFcL8xDYsljjtTpky9X509tcZi75E4CPn1DK5SAGb7jg1Dhfm2U04cKA5aDIfSYqlz/et3pyNT8/0vgf8Vt8giC+/R7Zo6hPuqbB9xLZuo6E=$20NdbOLlCkAPa4hw+BkbNg==",
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/pat/a3254ad26adf4d21/1787940832031/c75b1c1d7eec4bfbc48f0ab59501cd362aa912bdc2964aadd87e4bdcd23cae7f/l1dXfS6TOezuSYnonJEB873XNNyQeLxu85Vbp2qWx0w-1787940832-1.3.1.1-RR9cm4tBLc1ISqpjohjbeEj3_EPcUpHDwsMEx6yg4osjC6OyElIjbl0qgulFXdUQYuHwBj3JnNmuJvI6zdgga7jDw2gQAzQQOugnIlKINrgvu5pMg86zddYWVl1E.TlbBh2Hmd2zKZCEuKy_wyC4yZDPMNaiIblf8jfFkepzRXoSSXearc5K5HR4YWJfv3IFG_0MYVtCShO4wp0lkgSJqc.J2r1BgP3d6oNQLBZcpQgSnpTP5MgeAmVTehdi4yVjNTnL7FjVN_0xiIBw6Pa3qQi4fT9s6ekpgKeMTJmQhsQBHrq7UnbYsYkb_ZEzFhX7i74o383WpM7WwY0YDo13zE2_GRaQsgfqjjWFZULUMzE4jy8lDdjfS8pj8RsqKxEF6AliyUGTy4LGDfPKXK11v5Yg.wL4tgQ3r.R5FQFErKSgbBXynAJBWI5mLhRufOlLoBzHLDa_mVA5XqURl0OKIjwegBnpUxHagu8sUJdk5_zAtCSP2Zz9iJD9u5ROebk_0aT8TgKDVAz700tpJTKk.ptaQYrYr3Rb5f3hwGVd6iwH5dcuX4MObuoDiFFPBp3adRBf77pXgpL2pZb7diaLxdBvzFwQla2aehTfYcjc4NtLViCpLekI0j9YMyrQYsgDmTcpM6EY8cCbUCqM_I620RanUd6IJPgZjG9cgIVakrRHei.8RDTMxxD7I.Tud1x9btfca3VFhEpTDQCMsQUw040R0rNMwZQnTIOsoNqBd9BskZWyUwux_jHRbjfpBkgZ8LHL4Z0pbRLIxnk_11kgh5URREhutcZV6ht08NJqbRqhs2Pn4dgLLwtChwkPE9_3",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 401,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/ci/a3254ad26adf4d21/1787940832034/x89K9MDL8L4om.u69JlSZh3SyIae4gphx4m.638h_Os-1787940832-1.3.1.1-RrX.ioxy9.NEG4T_7s2nFR1XdDcpwx4phkV8BGb6eif59NhLzH2olz5kR_jBYCuYOcDLXL5.bfV31aJI1TigE1XfHyNDuruylcvmC2xAFe89iJvbqxR9nHcbSgJxWeqj16847Bw12Kw3IPaOKg1RFqy2Xb4uuVFsrAR6ZwNf2e.50bSSukmFPSz5lhkdS2uH5Mf._csXnLqHh2lSad.jQ5p6sIFXvbZ1tiQZ1aR2fq6zeVycsl_vMlN86c4Ph20jQXgFhyLzWODLL9qTmDYAwXjRG4EYSl2Cxj38EAfEmH3wXFsyujvwk4TVZnrrhVQM_djINDadm8Xj_PDDSryNJZFgs.AeeNujGzpVFACjQF5OkvLzqOHUvBCFFfLuy.vNvRN5nCN5pbknOwZU.hYEvgEhl1zv2q5gRrDHdVaqz.haSoN3REnt14Yib.wPqmPg8AxBGH3TfaZO6QuM9FEL8R8VMvzL4Njawo6USopwCx8y0ELxlLlkFR0CPN1V7VYkAyeJPeOFNE5eZhoiAIOgQRmJjk3OGExGptubXjDhAtO4UIYfoyBf9M2F8N5vg6lhrvQo34VRJPlbck8ufyq8JK81knrcOCYS7C4oV1BqfoWV66isdYccdGWnC5SY9tqN_VAbz1Igzz3V17DNkul50.nobBhWlydiuUPwJcqRu89fz2gkrEUHOS.IVMOnxQm.x90j8Wvy3Q9S0z9sCTv6apepgidk24p73nvQL8abUik",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/__cfknob",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 404,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/536230380:1787937027:uth4tO-V3fIS4kBkBcdJVJAhGmcCSpWLkgr8xV8bsQI/a3254ad26adf4d21/gaMZZuH2e_eDdmhgXpjAjWt7LDUCnaOl8Hx0eDJ_VtU-1787940831-1.2.1.1-6M21LNRixUf_sqyKc0VIRUZvDt._xifSHyI_SFLxOW8snIorQja0Uk75s4_qWCSl",
+          "method": "POST",
+          "postLen": 88887,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": "0QOc4kR96eh0iybB56PREZhf6Gr9GT4ps2uQDFUBDhB2D91o/x7lSNrvVW4s56TQD/iMh+tsm2iMb4YFxavtLDBvVXMCa0K5c0YtfQi8bNlc8UFGoqYAbhIB5G5CySXv+LNUvQC8CSgPytyP6zwWaw==$pc3EbXK5Rk5jxaK9iFYNnw=="
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/956859754:1787937025:NX_uMCWJOkH4x4d3gndlr_g9VN9s6He2O-93Vl5_Ozs/a3254acc8c81c1a2/3KmhhXGunftlNYoihKmb2caJK18ZQyQcF8mmKJQGDaY-1787940830-1.2.1.1-_Zlb_nDlEjkrIsYFVRouGC3zdQPVJTwqNt6MgZM3VIJEW1S9XzmaFEW5MCKr.6QQ",
+          "method": "POST",
+          "postLen": 9132,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": "FhSWTad8Utg5Tn67OMi/vz3HE/UphOfumwqC4fyYxuU5O3mgcCvC5DSw0FGle13BOt0s7GDttBr+/N0bG0d7H5Tfp1LSNww0iyCiTusDWJtDFQzVqlYSDjaPF+l5hoPnbvl1bBgoFsMrooHBSx2bhQ==$f5zSTmEB8v2Mpblxitimng=="
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        }
+      ],
+      "beacons": [
+        "where=www.scrapingcourse.com/top&sameOriginAsTop=readable&parentHref=https://www.scrapingcourse.com/antibot-challenge&topOrigin=https://www.scrapingcourse.com&parentDocument=[object HTMLDocument]&stringifyParent=threw:TypeError&parentKeys=237&parentProtoIsWindow=not-null&opener=null&frameElement=null&parentTypeof=object&isTop=true",
+        "where=/frame&sameOriginAsTop=threw:SecurityError&parentHref=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/o48fz/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto&topOrigin=threw:SecurityError&parentDocument=[object HTMLDocument]&stringifyParent=threw:TypeError&parentKeys=273&parentProtoIsWindow=not-null&opener=null&frameElement=[object HTMLIFrameElement]&parentTypeof=object&isTop=false",
+        "where=www.scrapingcourse.com/top&sameOriginAsTop=readable&parentHref=https://www.scrapingcourse.com/antibot-challenge&topOrigin=https://www.scrapingcourse.com&parentDocument=[object HTMLDocument]&stringifyParent=threw:TypeError&parentKeys=237&parentProtoIsWindow=not-null&opener=null&frameElement=null&parentTypeof=object&isTop=true"
+      ],
+      "targets": 6
+    }
+  ]
+}

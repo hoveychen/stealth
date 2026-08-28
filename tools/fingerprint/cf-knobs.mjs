@@ -242,4 +242,148 @@ export const CF_KNOBS = {
         });
       } catch (e) { __send('fail=' + e.name); }
     `,
+
+    // --- reporting knobs: measure, do not break ------------------------------
+
+    // What does the widget's frame see when it looks at its parent?
+    //
+    // The Turnstile widget runs cross-origin on challenges.cloudflare.com, so
+    // every reach for `parent` / `top` / `opener` crosses a security boundary
+    // that Chrome enforces with a V8 access check. This engine has an open plan
+    // saying it does not (`cross-origin-access-check`: `JSON.stringify(w)`
+    // answers `"{}"` where Chrome throws) -- and a cross-origin frame that can
+    // read its parent is a large thing for a guard to notice, from the one
+    // document that builds the ~90KB payload.
+    //
+    // This changes nothing. It reports, from every document it lands in, so the
+    // two arms can be compared where it actually matters.
+    'report-crossorigin': beacon + `
+      (() => {
+        const ask = (label, fn) => {
+          let r;
+          try { const v = fn(); r = v === undefined ? 'undefined' : String(v); }
+          catch (e) { r = 'threw:' + e.name; }
+          return label + '=' + r;
+        };
+        const bits = [
+          'where=' + __where(),
+          ask('sameOriginAsTop', () => { try { return window.top.location.href ? 'readable' : 'empty'; } catch (e) { throw e; } }),
+          ask('parentHref', () => window.parent.location.href),
+          ask('topOrigin', () => window.top.location.origin),
+          ask('parentDocument', () => String(window.parent.document)),
+          ask('stringifyParent', () => JSON.stringify(window.parent)),
+          ask('parentKeys', () => Object.keys(window.parent).length),
+          ask('parentProtoIsWindow', () => Object.getPrototypeOf(window.parent) === null ? 'null' : 'not-null'),
+          ask('opener', () => String(window.opener)),
+          ask('frameElement', () => String(window.frameElement)),
+          ask('parentTypeof', () => typeof window.parent),
+          ask('isTop', () => window.top === window),
+        ];
+        __send(bits.map(encodeURIComponent).join('&'));
+      })();
+    `,
+
+    // Hand THIS ENGINE Chrome's cross-origin boundary, from a page, to see
+    // whether that is what the ticket turns on.
+    //
+    // Measured difference (report-crossorigin, both arms, in the widget's own
+    // frame): reaching across an origin for `top.location` throws
+    // **SecurityError** in Chrome and **TypeError** here, and
+    // `JSON.stringify(crossOriginWindow)` throws in Chrome and answers `"{}"`
+    // here. The second is the headline of the open `cross-origin-access-check`
+    // plan; the first is a new one.
+    //
+    // This is the inverse of every knob above: it runs on the arm that FAILS and
+    // adds a capability rather than removing one. If the ticket appears, the
+    // engine change is named. Watch the round count -- a knob that stops the
+    // exchange is not a knob that passed it.
+    'crossorigin-securityerror': beacon + `
+      __send('crossorigin-securityerror=' + encodeURIComponent(__where()));
+      try {
+        const isCross = (w) => {
+          try { void w.location.href; return false; } catch (e) { return true; }
+        };
+        const raise = () => {
+          // Chrome's shape: a DOMException named SecurityError, not a TypeError.
+          throw new DOMException(
+            "Blocked a frame with origin from accessing a cross-origin frame.",
+            'SecurityError');
+        };
+        const opaque = (real) => new Proxy(real, {
+          get(t, k) {
+            // The handful Chrome does allow across an origin.
+            if (k === 'postMessage' || k === 'closed' || k === 'frames' ||
+                k === 'length' || k === 'opener' || k === 'parent' ||
+                k === 'top' || k === 'self' || k === 'window' || k === 'close' ||
+                k === 'blur' || k === 'focus' || k === Symbol.toStringTag) {
+              const v = t[k];
+              return typeof v === 'function' ? v.bind(t) : v;
+            }
+            raise();
+          },
+          set() { raise(); },
+          has() { raise(); },
+          getOwnPropertyDescriptor() { raise(); },
+          ownKeys() { raise(); },
+        });
+        // Per-name try/catch: window.top is non-configurable in this engine
+        // ("Cannot redefine property: top"), and a single catch around the loop
+        // aborted before parent was ever tried -- which made a void run look
+        // like a negative one.
+        for (const name of ['parent', 'top']) {
+          let real;
+          try { real = window[name]; } catch (e) { continue; }
+          if (!real || real === window || !isCross(real)) continue;
+          const wrapped = opaque(real);
+          try {
+            Object.defineProperty(window, name, {
+              configurable: true, enumerable: true, get() { return wrapped; },
+            });
+            __send('wrapped=' + name + '&at=' + encodeURIComponent(__where()));
+          } catch (e) {
+            __send('cannot-wrap=' + name + '&why=' + encodeURIComponent(e.message) +
+                   '&at=' + encodeURIComponent(__where()));
+          }
+        }
+      } catch (e) { __send('crossorigin-failed=' + e.name + ':' + e.message); }
+    `,
+
+    // Does the guard LOOK at its parent at all?
+    //
+    // Before anyone changes the engine's cross-origin boundary -- which needs a
+    // V8 access-check shim, not a page-level patch -- this asks whether the
+    // widget ever reaches across it. window.parent is wrappable here (window.top
+    // is not: "Cannot redefine property: top"), so a counting proxy on parent
+    // answers it. If nothing is ever read, the boundary's error type cannot be
+    // what the ticket turns on and the whole direction is ruled out for the price
+    // of one run.
+    'count-parent-reads': beacon + `
+      __send('count-parent-reads=' + encodeURIComponent(__where()));
+      try {
+        let real;
+        try { real = window.parent; } catch (e) { real = null; }
+        if (!real || real === window) { __send('no-parent&at=' + encodeURIComponent(__where())); }
+        else {
+          let crossOrigin = false;
+          try { void real.location.href; } catch (e) { crossOrigin = true; }
+          const seen = Object.create(null);
+          const proxy = new Proxy(real, {
+            get(t, k) {
+              const key = typeof k === 'symbol' ? 'sym:' + String(k) : String(k);
+              if (!seen[key]) {
+                seen[key] = 1;
+                __send('parent-read=' + encodeURIComponent(key) +
+                       '&cross=' + crossOrigin + '&at=' + encodeURIComponent(__where()));
+              }
+              const v = t[k];
+              return typeof v === 'function' ? v.bind(t) : v;
+            },
+          });
+          Object.defineProperty(window, 'parent', {
+            configurable: true, enumerable: true, get() { return proxy; },
+          });
+          __send('counting=parent&cross=' + crossOrigin + '&at=' + encodeURIComponent(__where()));
+        }
+      } catch (e) { __send('count-failed=' + e.name + ':' + encodeURIComponent(e.message)); }
+    `,
 };

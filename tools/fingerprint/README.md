@@ -19380,3 +19380,55 @@ Chrome from script, because they are what its own binding layer does. So the
 dictionary conversion is still worth fixing, and it is a genuine WebIDL
 deviation either way, but it should be booked as fidelity rather than as a
 door-opener until something tests the other direction.
+
+## The widget reads one property of its parent, and it is `postMessage` (B85, 2026-08-27)
+
+The Turnstile widget runs cross-origin, and it is the document that builds the
+~90KB payload — so the cross-origin boundary looked like a promising place for
+the remaining refusal, especially with `cross-origin-access-check` already open
+on the claim that `JSON.stringify(crossOriginWindow)` answers `"{}"` here where
+Chrome throws.
+
+**Two real differences are there.** `cf-knob.mjs --knob report-crossorigin`
+reports from every document it lands in, and in the widget's own frame:
+
+| reaching across an origin | Chrome | this engine |
+|---|---|---|
+| `top.location.origin` | **`SecurityError`** | **`TypeError`** |
+| `JSON.stringify(crossOriginWindow)` | throws `TypeError` | **`"{}"`** |
+| `Object.keys(crossOriginWindow).length` | — | 0 |
+
+The error *type* is a new finding; the `"{}"` is that plan's headline, confirmed
+from the frame that matters rather than from a synthetic page.
+
+### And the guard never looks at either
+
+Before proposing the engine change — which is a V8 access-check shim, not a
+page-level patch — one run answers whether the widget reaches across the
+boundary at all. `--knob count-parent-reads` wraps `window.parent` in a counting
+proxy and beacons each distinct property the first time it is read. Over a whole
+challenge, in the widget's cross-origin frame, the count is **one**:
+
+```
+parent-read=postMessage  cross=true
+```
+
+No `location`, no `origin`, no `document`, no enumeration. So the boundary's
+error type and its `JSON.stringify` behaviour are on properties this guard does
+not touch, and **`cross-origin-access-check` will not open this door** — worth
+knowing before spending a session exporting
+`SetAccessCheckCallbackAndHandler` from V8.
+
+**The limitation, stated rather than buried:** `window.top` is
+**non-configurable** in this engine ("Cannot redefine property: top"), so only
+`parent` reads were counted. In this frame tree `top` and `parent` are the same
+window, but a read written as `top.x` would not pass through the proxy and would
+not be seen. What is ruled out is reads via `parent`; reads via `top` are
+unmeasured.
+
+That non-configurability also made the first attempt at the inverse experiment
+**void rather than negative**: a knob that hands this engine a Chrome-shaped
+boundary could not redefine `top`, and a single try/catch around the loop aborted
+before `parent` was reached, so it reported nothing wrapped at all. Per-name
+handling fixed the knob; `wrapped=parent` then appears and the ticket still does
+not — which tests `parent` and not the property that actually differs.

@@ -1,0 +1,175 @@
+{
+  "engine": "lightpanda",
+  "knob": "count-parent-reads",
+  "headless": false,
+  "target": "https://www.scrapingcourse.com/antibot-challenge",
+  "runs": [
+    {
+      "documents": [
+        403,
+        200
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/956859754:1787937025:NX_uMCWJOkH4x4d3gndlr_g9VN9s6He2O-93Vl5_Ozs/a325551c394475a8/boNJJSJrSY6QfsWu74nxeRtMPTOcuWo5iEeGK7Ps3MU-1787941252-1.2.1.1-i4sN4iQ2C4ggaQmulS3tDsLHBfoLpo3BxOlG247y6WtlNOg7sgMBK.0oAqMrdWga",
+          "method": "POST",
+          "postLen": 2306,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "Ve+4q8TJlgdMnKRK10pNM0iYHOhYutuMpHqCnMaHQjU=$CRcFjI24kD08bjOdRQM6qQ==",
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/ajtif/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/__cfknob",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 404,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/__cfknob",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 404,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/__cfknob",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 404,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/536230380:1787937027:uth4tO-V3fIS4kBkBcdJVJAhGmcCSpWLkgr8xV8bsQI/a32555201e3eed3d/CZyWa.lq8cnwzIjqsOsoDI3dxKPzhDEWdX.2VhWpVXI-1787941253-1.2.1.1-L6OyUdktpb6RiNw9KoxQuz1vGOA191Tbz0eV_IxWH.touf2bYebvY_ZPQmC2fEJz",
+          "method": "POST",
+          "postLen": 5111,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "j9dKpGgtXB92qHLPEIgF1MsJXAWQOXi01mIC4Xk8iG3L6JkSlszAVl+3oSLerLw9zLgUuvE+6RgvJpgXkOzhgpPZT7P0kO+WF+e9C9ATgkoZ8SjtOq6HjFBJRA7lxZgAERM3MgwjRSHAUr6n4M8vWmFK4HfJ9apLCDJvldHpDPO9VU9nCoPKfXUIbtQVFH6EOnNiJDP0cNAwGLCNjEARloS/pAjUKsbpy4id1de4H8AA9sbW6Ob8xV97MKXIeSNTTrTWwSRDQcorUwL4PYe+au7LMNypzztdvBsRBL32WORS3lh76MIMl1j9gz/xAcdOxiLU1N7EkOd9UNuD5ryzaXZwXRMo6gNPe+BAIHggeWXWHq/5Rrj/fnT3Vym6Nf2gyg0kKN8MGdJ0/3yVgKlg54EfOyoZcNguk5sOOVQ+5YuZyj2jKdsZuxRiPqUvd+JWsPHMW2Z33MOD8+DsELXD6xOayXhP3fBU43SR9Rcl4mjTmC1SCuw46BGNC+xQDf8p2IymBoWNnwLXg9L92tYGsW3T0yE5qx0Sg5wTIWvRmNqXTqlov2/kLoWxmGsngFEUU5x+VP6e5OamV1FkZdo/yaAfYqfR6+ojChjWN38c4WTNrN9ak6zKOeTnGnYYJp30beDaBWhQ1+Xw4f8nrJtuPGC8UNaIaqssNqVEE6gFcej9y5ZBiEwYqAHjqiUJvw+Zb9zQ7jCxfjXcnf3lwFTuqrzifHm3Vlto/yEIqejCbQY52TXEQEuTAZ203C1MTZYXbzk3t6W4FvBULiF8OqhIq1ErdtHr5DxK/PoBF4TpbrB5JfRGUCm9NkXUNps/Q7+sYmtMX+m8SlMA79BU8lnaaSXJJXinL119Tf+PN8rmtIpu5OxmQ8wHzXk31GvRxavBtU8ROZDpFXLhTvM9/+snKce/jazYyxFJh+Qlbe/G8plTZQ0BVjTpo1u3ZVoARYRy$cKj+G5vIUiZvh11Pnext+A==",
+          "chlOut": null
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/01d8304b-6eb4-457d-adad-8f41970028ac",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/pat/a32555201e3eed3d/1787941253627/c8d0cc0c8df94e09ecf0c2bd6f1f406e9adf402741fd4dc7122373ae91619737/JIjHJvSgMDs.R.GMHVCK0pqmHHbyd_MvBlfRRo5MlwM-1787941253-1.3.1.1-GFgPBe1e7M1TQ.i4mam7m1SFZuyBrtvF6RFLjxxWKcZADHTCxYKlFjyivmVK6O12yYEDEAwR0TF0ZCeX8S9XiN.LY9y5CyoJ2oQy2sCVLiGxHpXxSJ2ZgCaizFryt3hVz5WYUuDiurpgZcDL4d2Pi0rHyvmpY3bmniTX389ZPLzN_RccLlMJtZco_oCRxQj8Ek51Uw9Axvx6SC1KpvctyRlC2Ijys11.GfNQ1LhuVZ3GpKgeyrEPbhFNYQ.Nn_UeTNH6oYPDIA2kfN91tZCrKKj8NLtVZgvuuujpGGC.W3hLAKwqx5xoFp.5Ngvznr.z2XmAPid2ezFADxLnVQs2VqMAn5tty9nCaKSW5QFWvKb7TgaNEISag5727wH2LOScLW97ejDExDM1vlLO83tDhb7pzMI3aa_JFlR7iTQ9N6I7tlBXBVCvc7E_y5Wr66r2to5LH0cJxDlM_2v6NrD.nwkQeYk.LhGF.qx.L.JVl97SfLv3DCa11tEsjbk_zZz04SFYjePr2t5WpWU3WqQs5oliqc3hXkyA5I.xwxkJ4hvoNDgD_1xpnE0yQX.gbclHr.lrJGBO7ulnp2UY2j1ufGGh5JJsx_b8zxoK0xPiZOGVDYI.bCFWlptxT1UYQYIsGmMQ0iGzSIkL33IHrzky2KeUO.RF2fAb1dM2kFtWl0LifS5gd8eQr_jG7VBvZWmDIxm68O6ntkvPlgKWhcjZQRH7NGTOHXRiZc70ewkMXsazxFeLRZuiwjmmXh2XMN83FT4vHFG8Y06641v8VbpaONYZMsL1sBM0ACQ6juC9eLAC6cZDwtqVcy20OjFcUISR",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 401,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/ci/a32555201e3eed3d/1787941253631/VLxher5Q2lpUqxzDnN8F06IjFB0PdPVTYIH32G_2Oyo-1787941253-1.3.1.1-vfwg2YYCt_BMJKl4Kjrr35VbYwUkXlFs41vzYwEc3PmAxVhxPRe97eoqAYr2VpVotM5A_eDcrV9_uaOVohQHxzGu1EuQH_Rrwbsg1A5swGne_WNJSybinCALLE0oxv7vRBPhUYW06.4A_KCkGIc_5m1jXRwb_g0rlB1t6OuBQq5GwCuI4MvIkgf5nGOURgrRRF7JSwonSC1vbfeBk6eO8pT9dStQAUDkax1U6Fob.o_THItEkvgfPw9Dvl.TbbFinuZsEQF4XzsGsH1Z_p4ASvqn1lM6dsBchO9oRx7XJDt7NbS90l9BS0OVjPwwdg9sXi89dAmdzQWi1XfDPxLJ8fAX7_4uLIjBzFeJP1ynZGXlBQXuTYYYEvr5FlyU_tw48pvi0UjAsbs1GAHPIgvyJ520aYbZGICaxdbN4y_tmi2eFDCgQPdrnh5.V6mgx3IwubrtLy9ecLvMLM8xGJqCPM3aocU7jspsjxhqG23LutEipKjVYI0nGF8Zl76Uy9wk_WI1lDTxZJww1OYfv6xhxFaFiHMdxUDRNYD9.9osLf3.3Fco0YSPm4rzN1_vfeUh2_sIEEb5VvH6n6Xv13f8NiMcJTDWiee2l9bLmS5OeYaXPKjSoKaXE_Kr67lq_N.9AsfqCGpdB9qdRvNFP3OTS8KuIGGVzVXJZIpauPjIG9.7DtPcE6icfggvXpiKJVFDjj.KtcWgZWKGgVwO_w.jiOOwe61BVGgTsNyQBBlvXds",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/01d8304b-6eb4-457d-adad-8f41970028ac",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/01d8304b-6eb4-457d-adad-8f41970028ac",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/536230380:1787937027:uth4tO-V3fIS4kBkBcdJVJAhGmcCSpWLkgr8xV8bsQI/a32555201e3eed3d/CZyWa.lq8cnwzIjqsOsoDI3dxKPzhDEWdX.2VhWpVXI-1787941253-1.2.1.1-L6OyUdktpb6RiNw9KoxQuz1vGOA191Tbz0eV_IxWH.touf2bYebvY_ZPQmC2fEJz",
+          "method": "POST",
+          "postLen": 89815,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": "JNGbnR3SO4lrnOuGQCZmDTl5AGaI6TG45Jxzo5Mp6V2p8Plx3OQxeTeeQEibM8VU$UTQwEo4lnc/FRL+QGHAuLQ==",
+          "chlOut": null
+        },
+        {
+          "path": "blob:https://challenges.cloudflare.com/b1397f39-4418-4378-9865-0de29edfe0fc",
+          "method": "GET",
+          "postLen": 0,
+          "postUnknown": false,
+          "status": 200,
+          "chlGen": null,
+          "chlOut": null
+        }
+      ],
+      "beacons": [
+        "count-parent-reads=www.scrapingcourse.com/top",
+        "no-parent&at=www.scrapingcourse.com/top",
+        "count-parent-reads=/frame",
+        "counting=parent&cross=false&at=/frame",
+        "count-parent-reads=challenges.cloudflare.com/frame",
+        "counting=parent&cross=true&at=challenges.cloudflare.com/frame",
+        "parent-read=postMessage&cross=true&at=challenges.cloudflare.com/frame",
+        "count-parent-reads=/frame",
+        "counting=parent&cross=false&at=/frame",
+        "count-parent-reads=/frame",
+        "counting=parent&cross=false&at=/frame",
+        "count-parent-reads=/frame",
+        "counting=parent&cross=false&at=/frame",
+        "count-parent-reads=/frame",
+        "counting=parent&cross=false&at=/frame",
+        "count-parent-reads=/frame",
+        "counting=parent&cross=false&at=/frame",
+        "count-parent-reads=/frame",
+        "counting=parent&cross=false&at=/frame",
+        "count-parent-reads=/frame",
+        "counting=parent&cross=false&at=/frame"
+      ],
+      "targets": 1
+    }
+  ]
+}
