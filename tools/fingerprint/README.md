@@ -18993,65 +18993,52 @@ passed. That is `cdp-fields-arent-symmetric` in the one place it would have cost
 a whole session. `cf-chl-out` is a plain response header and both arms report
 those fine (both carry `cf-chl-gen`, `cf-ray`, `content-type`, `server-timing`).
 
-### E1's claim reproduces, and the retraction was the thing that was wrong
+### Corrected: both arms use two instances, and the divergence is round 3
 
-An earlier experiment (E1) put the first divergence at the second `fo/` POST:
-the passing arm posts round 2 back to the **page-level** challenge, and this
-engine posts it to the **widget's own** instance. A later run recorded "does not
-reproduce; here both arms post round 2 to the widget instance" — and that run was
-the misconfigured one. With a properly configured passing arm it reproduces
-exactly: Chrome uses one instance for both rounds, this engine opens a second and
-addresses round 2 to it.
+The first version of this section claimed Chrome used one challenge instance and
+this engine opened a second, said E1's retracted claim therefore reproduced, and
+named a `pat/` 401 that only this engine made. **All three were the instrument,
+and all three are withdrawn.** What they were:
 
-Two more facts fall out of the same reading, and both point the same way rather
-than at content:
+- **the instance count.** Chrome puts the Turnstile widget, which is
+  cross-origin on `challenges.cloudflare.com`, in its OWN target. A listener on
+  the page's session sees the page-level challenge and nothing the widget does.
+  This engine does not isolate that frame, so its widget traffic arrives on the
+  page session — and the two arms then look structurally different for a reason
+  that is entirely the tool. With `Target.setAutoAttach` on every target, **both
+  arms use two instances**, 2 runs for 2.
+- **the `pat/` 401.** Chrome makes it too, and gets 401 too.
+- **the round-2 size comparison** (4930 against 8770) compared our widget POST
+  against Chrome's page-level POST — two different rounds.
 
-- round 2's body is **4930 bytes against Chrome's ~8770** — not a fraction short,
-  about half. A different instance is asked a different, smaller question.
-- the `pat/` GET that only this engine makes comes back **401**. Chrome never
-  requests that path at all.
+A fourth field was lying and is fixed rather than withdrawn: `postData` is
+omitted from `Network.requestWillBeSent` for a large body, only `hasPostData` is
+set, and the round that matters most is ~90KB. The tool reported `0B` for it.
+It now asks `Network.getRequestPostData` and prints `?` when even that cannot
+answer — which is what this engine does, since it sets `hasPostData` and then
+has no body to hand over.
 
-So the next question is not "which value is wrong" — the knob-per-value approach
-that x-hyatt needed — but "why is there a second challenge instance". That is a
-control-flow question about which challenge the widget attaches to, and it is
-where `cfsc-widget-solve-declined` should now be aimed.
+### What the exchange actually is
 
-## Four of the guard's ten readings are now exact, and the other six are one thing (B84, 2026-08-27)
+Four `fo/` POSTs, two instances, 2 runs for 2 on each arm:
 
-The type table is in. Off the station every one of the twenty-two types answers
-Chrome's box at the size it renders at, and on the station the guard's second
-group of ten reads went from nought right to four right:
-
-| # | Chrome | before | after |
+| round | instance | Chrome | this engine |
 |---|---|---|---|
-| 0 | 48x25 | 149x17 | **48x25** |
-| 1 | 13x13 | 149x17 | **13x13** |
-| 2 | 129x16 | 149x17 | **129x16** |
-| 3 | 253x22 | 149x17 | 253x21 |
-| 4 | 100x20 | 149x17 | **100x20** |
-| 5 | 53x18 | 149x17 | 54x17 |
-| 6 | 47x18 | 149x17 | 47x17 |
-| 7-9 | 143x18 | 149x17 | 149x17 |
+| r1 | page-level `221752136` | 2316B → `cf-chl-gen` | 2306B → `cf-chl-gen` |
+| r2 | widget `2506670658` | 4716B → `cf-chl-gen` | 4898B → `cf-chl-gen` |
+| r3 | widget `2506670658` | **~90KB → `cf-chl-out`** | ~89KB → `cf-chl-gen` |
+| r4 | page-level `221752136` | **8834B → `cf-chl-out`** | **never sent** |
 
-**x-hyatt still withholds the ticket, 3 of 3.**
+(r3's size for this engine is 88695B, read with `cfsc-fo-diff.mjs`, which
+captures bodies; the oracle prints `?` there for the reason above. So the bodies
+are the same order of magnitude — this is not a short-payload story.)
 
-The six that are still out are not six problems. They are one: every one of them
-is a height of 17 against Chrome's 18, or the text field's 149 against Chrome's
-143, and both are the **device-pixel-ratio basis**. These boxes are measured at
-dpr 1 -- the table that preceded them was, and `css/block_height.html` pins it
-at 145x15 and 177x30 -- while `font_metrics` is swept at the dpr 2 this engine's
-persona claims and the station reads them at dpr 2. At that scale Chrome answers
-139x15.5 for a text field and 177x31 for a textarea, so the whole intrinsic
-table moves, not one row of it.
+**One divergence, and everything else follows from it.** The widget's big POST is
+answered `cf-chl-out` with `text/html` for Chrome and `cf-chl-gen` with
+`text/plain` for this engine — a clearance instead of yet another challenge. r4
+is the page-level round that hands over the page's own ticket, and it is never
+sent here because r3 never gave the go-ahead.
 
-That makes re-basing the intrinsic boxes onto dpr 2 the next lever, and it is a
-bounded one: it is the only thing standing between these six readings and
-Chrome's. It is not a fidelity nicety any more -- it is six of the ten numbers
-the guard actually reads.
-
-One caveat recorded rather than chased: the guard's FIRST group of ten, the ones
-at `font-size: 100px`, come back `62x117`, `112x134`, `112x152` and `81x124` on
-the station, and those heights are in no off-station table -- Chrome's own date
-family is 119 there and its text field 117. Something on the challenge page
-constrains that group, so it is not a clean target. The second group is, and
-that is the one this chapter is scored against.
+So the target is named and it is narrow: **the ~90KB body of the widget's third
+POST**, and what in it makes Cloudflare answer `chl-gen` rather than `chl-out`.
+That is what a knob bisection should now be pointed at, on the arm that passes.

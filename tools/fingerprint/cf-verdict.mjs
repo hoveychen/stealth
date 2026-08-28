@@ -38,6 +38,16 @@
 // the arm that passes: `HeadlessChrome` in the product token is measured fatal
 // on this station, and a misconfigured arm once produced a retracted README
 // section claiming no arm passed at all.
+//
+// Two instrument traps this tool has already fallen into and now handles, both
+// worth reading before trusting a reading off it:
+//
+//   * Chrome isolates the Turnstile widget into its own target, so without
+//     `Target.setAutoAttach` on every target the widget's whole exchange is
+//     invisible on Chrome and visible on this engine -- which made the arms look
+//     structurally different when they are not.
+//   * `postData` is omitted for a large body. The round that matters is ~90KB,
+//     and reading the field alone reported it as 0 bytes.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -59,7 +69,7 @@ const arg = (name, fallback) => {
 const runs = Number(arg('--runs', 3));
 const basePort = Number(arg('--port', 9450));
 const target = arg('--url', 'https://www.scrapingcourse.com/antibot-challenge');
-const settle = Number(arg('--settle', 14000));
+const settle = Number(arg('--settle', 22000));
 const outPath = arg('--out', null);
 const headless = process.argv.includes('--headless');
 
@@ -117,10 +127,26 @@ async function once(port) {
             if (m.method === 'Network.requestWillBeSent') {
                 const url = String(m.params.request?.url || '');
                 if (!isChallenge(url)) return;
-                posted.set(m.params.requestId, {
-                    method: m.params.request.method,
-                    postLen: (m.params.request.postData || '').length,
-                });
+                // `postData` is omitted for a large body -- only `hasPostData`
+                // is set -- and the challenge's third round is ~90KB, so
+                // reading the field alone reported 0 bytes for the one POST
+                // that matters most. Ask for it when it is missing.
+                const req = m.params.request;
+                const entry = {
+                    method: req.method,
+                    postLen: (req.postData || '').length,
+                    postUnknown: !req.postData && !!req.hasPostData,
+                };
+                posted.set(m.params.requestId, entry);
+                if (entry.postUnknown) {
+                    cdp.send('Network.getRequestPostData', { requestId: m.params.requestId },
+                        m.sessionId)
+                        .then((r) => {
+                            entry.postLen = (r?.postData || '').length;
+                            entry.postUnknown = false;
+                        })
+                        .catch(() => { /* body already gone; stays unknown */ });
+                }
                 return;
             }
             // Chrome puts Set-Cookie in ExtraInfo rather than in the response
@@ -159,9 +185,31 @@ async function once(port) {
                 path: url.replace(/^https?:\/\/[^/]+/, '').split('?')[0],
                 method: sent.method || 'GET',
                 postLen: sent.postLen || 0,
+                postUnknown: !!sent.postUnknown,
                 status: r.status,
                 ...headers,
             });
+        });
+        // Auto-attach, or Chrome's Turnstile iframe is invisible. The widget
+        // runs cross-origin on challenges.cloudflare.com, which Chrome puts in
+        // its OWN target -- so a listener on the page's session alone sees the
+        // page-level challenge and nothing the widget does. This engine does not
+        // isolate that frame, so its widget traffic arrives on the page session,
+        // and the two arms then look structurally different for a reason that is
+        // entirely the instrument: the first version of this tool reported
+        // "Chrome: 1 challenge instance, this engine: 2" and both arms in fact
+        // use two. cdp-fields-arent-symmetric, in the one place that would have
+        // sent a session chasing a control-flow bug that does not exist.
+        await cdp.send('Target.setAutoAttach',
+            { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId);
+        cdp.on(async (m) => {
+            if (m.method !== 'Target.attachedToTarget') return;
+            const child = m.params.sessionId;
+            try { await cdp.send('Network.enable', {}, child); } catch { /* gone already */ }
+            try {
+                await cdp.send('Target.setAutoAttach',
+                    { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, child);
+            } catch { /* not a target that nests */ }
         });
         await cdp.send('Page.enable', {}, sessionId);
         await cdp.send('Network.enable', {}, sessionId);
@@ -188,7 +236,7 @@ for (let i = 0; i < runs; i++) {
     const instance = (c) => (c.path.split('/fo/')[1] || '').split(':')[0];
     const ticket = fo.find((c) => c['cf-chl-out']);
     const rounds = fo
-        .map((c, n) => `r${n + 1}:${c.postLen}B@${instance(c)}` +
+        .map((c, n) => `r${n + 1}:${c.postUnknown ? '?' : c.postLen}B@${instance(c)}` +
             (c['cf-chl-out'] ? '=TICKET' : c['cf-chl-gen'] ? '=chl-gen' : ''))
         .join(' ');
     const pat = out.challenge.filter((c) => c.path.includes('/pat/'));
