@@ -602,8 +602,149 @@ export const CF_KNOBS = {
             return r;
           };
         } catch (e) { rec('fonts.check:hook-failed:' + e.name); }
+        // The ones the first pass missed, and one of them has to be it: an
+        // OffscreenCanvas context is a different prototype from a canvas one,
+        // a Range measures text without an element, and scrollWidth/clientWidth
+        // are two more ways to read a box.
+        try {
+          const p = window.OffscreenCanvasRenderingContext2D &&
+            OffscreenCanvasRenderingContext2D.prototype;
+          if (!p) { rec('offscreen:absent'); }
+          else {
+            const real = p.measureText;
+            Object.defineProperty(p, 'measureText', {
+              configurable: true, writable: true, enumerable: false,
+              value: function (t) {
+                const m = real.call(this, t);
+                rec('offscreen.measureText ' + String(this.font).slice(0, 40) +
+                    ' => ' + Math.round(m.width * 100) / 100);
+                return m;
+              },
+            });
+          }
+        } catch (e) { rec('offscreen:hook-failed:' + e.name); }
+        wrapGetter(Element.prototype, 'scrollWidth', 'scrollWidth');
+        wrapGetter(Element.prototype, 'clientWidth', 'clientWidth');
+        try {
+          const real = Range.prototype.getBoundingClientRect;
+          Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+            configurable: true, writable: true, enumerable: false,
+            value: function () {
+              const r = real.call(this);
+              rec('range.rect => ' + Math.round(r.width * 100) / 100 + 'x' + Math.round(r.height * 100) / 100);
+              return r;
+            },
+          });
+        } catch (e) { rec('range:hook-failed:' + e.name); }
+        // And the producer itself: the list arrives on the wire as names joined
+        // by a pipe, so whatever built it called join once with that separator.
+        try {
+          const realJoin = Array.prototype.join;
+          Object.defineProperty(Array.prototype, 'join', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (sep) {
+              const r = realJoin.call(this, sep);
+              if (sep === '|' && r.length > 40 && r.length < 2000) {
+                let where = '';
+                try { where = String(new Error().stack || '').split('\\n').slice(1, 4).join(' <- '); }
+                catch (e) { where = 'no-stack'; }
+                rec('join| n=' + this.length + ' len=' + r.length + ' at ' + where.slice(0, 200));
+              }
+              return r;
+            },
+          });
+        } catch (e) { rec('join:hook-failed:' + e.name); }
         __send('report-font-probe=installed&at=' + encodeURIComponent(__where()));
       })();
+    `,
+
+    // What do the widget's workers send back?
+    //
+    // The font list is built somewhere no knob has reached: not by any DOM or
+    // canvas measurement in the frame (report-font-probe found no per-font
+    // loop), and the frame is the only document the harness can script. What is
+    // left is the two blob workers -- and evaluating into those stops the
+    // exchange at r1, so they cannot be entered. They can still be listened to:
+    // this records every message crossing the boundary in both directions,
+    // from the frame side, which changes nothing about how they run.
+    'report-worker-traffic': beacon + `
+      (() => {
+        const cut = (v) => {
+          try {
+            if (typeof v === 'string') return 'str[' + v.length + ']' + v.slice(0, 300);
+            if (v && typeof v === 'object') {
+              const j = JSON.stringify(v);
+              return 'obj[' + j.length + ']' + j.slice(0, 300);
+            }
+            return typeof v + ':' + String(v).slice(0, 120);
+          } catch (e) { return 'unshapeable:' + e.name; }
+        };
+        const rec = (s) => __send('wt=' + encodeURIComponent(String(s).slice(0, 400)) +
+                                  '&at=' + encodeURIComponent(__where()));
+        try {
+          const Real = window.Worker;
+          if (typeof Real !== 'function') { rec('no-Worker'); return; }
+          let n = 0;
+          const Hooked = new Proxy(Real, {
+            construct(target, args, nt) {
+              const id = ++n;
+              const w = Reflect.construct(target, args, nt);
+              try {
+                const realPost = w.postMessage.bind(w);
+                w.postMessage = function (m, ...rest) {
+                  rec('w' + id + ' ->worker ' + cut(m));
+                  return realPost(m, ...rest);
+                };
+                w.addEventListener('message', (e) => rec('w' + id + ' <-worker ' + cut(e.data)));
+                w.addEventListener('error', (e) => rec('w' + id + ' error ' + ((e && e.message) || '')));
+              } catch (e) { rec('w' + id + ' cannot-listen:' + e.name); }
+              return w;
+            },
+          });
+          Object.defineProperty(window, 'Worker', {
+            configurable: true, writable: true, enumerable: false, value: Hooked,
+          });
+          rec('report-worker-traffic=installed');
+        } catch (e) { rec('fail=' + e.name); }
+      })();
+    `,
+
+    // The mechanism behind the font span, handed to Chrome.
+    //
+    // The detector is `new FontFace(n, 'local("X")').load()`: Chrome resolves
+    // it for an installed family and rejects with NetworkError otherwise, and
+    // the names that resolve are what gets joined with pipes and sent. Chrome
+    // keeps six on this Mac; this engine resolves every one of the fifty-four
+    // candidates, including Aldhabi, Bahnschrift and Adwaita Sans -- Windows
+    // and GNOME families that no Mac has. Nothing else explains the span: span
+    // width, canvas and OffscreenCanvas measureText, every TextMetrics field,
+    // document.fonts.check and queryLocalFonts all agree between the arms.
+    //
+    // This makes Chrome answer the way this engine does.
+    'all-local-fonts': beacon + `
+      __send('all-local-fonts=' + encodeURIComponent(__where()));
+      try {
+        const real = FontFace.prototype.load;
+        Object.defineProperty(FontFace.prototype, 'load', {
+          configurable: true, writable: true, enumerable: false,
+          value: function () { const self = this; return real.call(this).catch(function () { return self; }); },
+        });
+        __send('fontface-load-forced&at=' + encodeURIComponent(__where()));
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    // The control. Same property, same defineProperty, real behaviour --
+    // heap-passthru is why this is never optional.
+    'fontface-passthru': beacon + `
+      __send('fontface-passthru=' + encodeURIComponent(__where()));
+      try {
+        const real = FontFace.prototype.load;
+        Object.defineProperty(FontFace.prototype, 'load', {
+          configurable: true, writable: true, enumerable: false,
+          value: function () { return real.call(this); },
+        });
+        __send('fontface-passthru-installed&at=' + encodeURIComponent(__where()));
+      } catch (e) { __send('fail=' + e.name); }
     `,
 
     // --- reporting knobs: measure, do not break ------------------------------
