@@ -18950,3 +18950,68 @@ Three notes for whoever implements it:
     `62x117`, `112x134`, `112x152` and `81x124` on the station and do not match
     the table above, so something on the challenge page constrains them. The
     second group is unambiguous, and that is the one worth implementing against.
+
+## Cloudflare's ticket is `cf-chl-out`, and round 2 is posted to the wrong instance (B85, 2026-08-27)
+
+`kasada-verdict.mjs` changed the Kasada line by replacing "did the station serve
+the page" with a header read off the wire. `cf-scrapingcourse` needed the same
+thing more badly, because **the document status does not even separate the arms**
+— both answer `doc=403->200`. What separated them was the page *title*, which is
+the last link in the chain and costs a `Runtime.evaluate` to read.
+
+**First, the arm.** A README section retracted earlier claimed no arm clears this
+station any more. It was a misconfigured run (no `--headed-ua`, so the product
+token said `HeadlessChrome`, which this repo had already measured as fatal here).
+Re-checked: `antibot-sweep --only cf-scrapingcourse --headed --headed-ua` clears
+it on demand — `doc=403->200`, 34 nodes, the real title — while this engine ends
+on `Just a moment...` with 47. So there is a passing arm, and every plan under
+`cf-scrapingcourse-oracle-diff` is unblocked.
+
+### The ticket
+
+`cf-verdict.mjs` dumps every `/cdn-cgi/challenge-platform/` and
+`challenges.cloudflare.com` exchange rather than guessing which header matters.
+One header separates the arms, 2 runs for 2 on each:
+
+| | Chrome | this engine |
+|---|---|---|
+| round 1 `fo/` POST | 2306B → instance `221752136` → `cf-chl-gen` | **identical** |
+| round 2 `fo/` POST | **8770B → the SAME instance → `cf-chl-out`** | 4930B → instance `2506670658` → `cf-chl-gen` again |
+| distinct instances | **1** | **2** |
+| a `pat/` GET | never requested | **401** |
+| after | `cf_clearance`, then a third document | blobs, another POST to the second instance, nothing |
+
+**`cf-chl-out` on the second `fo/` POST's response is the ticket.** It arrives
+about four seconds before the clearance cookie and the re-navigation that follow
+from it, which is what makes it the oracle rather than the consequence.
+
+Why not the cookie, which is the more obvious candidate: **this engine reports no
+`Set-Cookie` to CDP at all** — not on the response headers and not in
+`responseReceivedExtraInfo` — so `cf_clearance` cannot be read symmetrically, and
+a cookie-based verdict reads "refused" for instrumentation reasons on a run that
+passed. That is `cdp-fields-arent-symmetric` in the one place it would have cost
+a whole session. `cf-chl-out` is a plain response header and both arms report
+those fine (both carry `cf-chl-gen`, `cf-ray`, `content-type`, `server-timing`).
+
+### E1's claim reproduces, and the retraction was the thing that was wrong
+
+An earlier experiment (E1) put the first divergence at the second `fo/` POST:
+the passing arm posts round 2 back to the **page-level** challenge, and this
+engine posts it to the **widget's own** instance. A later run recorded "does not
+reproduce; here both arms post round 2 to the widget instance" — and that run was
+the misconfigured one. With a properly configured passing arm it reproduces
+exactly: Chrome uses one instance for both rounds, this engine opens a second and
+addresses round 2 to it.
+
+Two more facts fall out of the same reading, and both point the same way rather
+than at content:
+
+- round 2's body is **4930 bytes against Chrome's ~8770** — not a fraction short,
+  about half. A different instance is asked a different, smaller question.
+- the `pat/` GET that only this engine makes comes back **401**. Chrome never
+  requests that path at all.
+
+So the next question is not "which value is wrong" — the knob-per-value approach
+that x-hyatt needed — but "why is there a second challenge instance". That is a
+control-flow question about which challenge the widget attaches to, and it is
+where `cfsc-widget-solve-declined` should now be aimed.

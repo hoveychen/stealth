@@ -1,0 +1,195 @@
+{
+  "engine": "chrome",
+  "headless": false,
+  "target": "https://www.scrapingcourse.com/antibot-challenge",
+  "runs": [
+    {
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/antibot-challenge",
+          "status": 403
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/xnwwa/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200
+        },
+        {
+          "url": "https://www.scrapingcourse.com/antibot-challenge",
+          "status": 200
+        }
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "status": 200,
+          "cf-ray": "a31fa942fa73fc53-SJC",
+          "server-timing": "cfExtPri",
+          "content-type": "application/javascript; charset=UTF-8"
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "status": 200,
+          "cf-ray": "a31fa9457a147a33-SJC",
+          "server-timing": "cfExtPri",
+          "content-type": "application/javascript; charset=UTF-8"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/221752136:1787879414:I21t9a_ixkMTFlgt_WkC7kx_EW1nO03j-TbHAsbr3JA/a31fa9429a6afc53/SDPzI2yv5kGsQqJdnvSEp9QWH6tytc7SMHXPHj8qNx0-1787881784-1.2.1.1-URcHYjn3WNajBYqVQeRP4Rm.n2V__sAPfR6GEHU96u7fD0fVaaNG666pRM7ISjYT",
+          "method": "POST",
+          "postLen": 2306,
+          "status": 200,
+          "cf-ray": "a31fa947c9966dd5-SJC",
+          "server-timing": "cfExtPri",
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "Zn25ThpuWAKjRKSnLfy1/+mvrwfsue/jpBxb9fMS2wQ=$QCsX9bho82W7UuGnBWn8pQ=="
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/xnwwa/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "status": 200,
+          "cf-ray": "a31fa948bc371d41-SJC",
+          "content-type": "text/html; charset=UTF-8",
+          "server-timing": "cfgbsabz;dur=271100\ncfExtPri"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/221752136:1787879414:I21t9a_ixkMTFlgt_WkC7kx_EW1nO03j-TbHAsbr3JA/a31fa9429a6afc53/SDPzI2yv5kGsQqJdnvSEp9QWH6tytc7SMHXPHj8qNx0-1787881784-1.2.1.1-URcHYjn3WNajBYqVQeRP4Rm.n2V__sAPfR6GEHU96u7fD0fVaaNG666pRM7ISjYT",
+          "method": "POST",
+          "postLen": 8770,
+          "status": 200,
+          "cf-chl-out": "hZzsLBgjMDu4WyjZyqvRVBPSbnr8Q7H0Q5r3vkT/JbXQOGfDdnSDUJJ1ur6ape6JjiGPPSOUz1osTh2LK8eIJecX8ahztjA6GAGES9G6Ay+pZtKPAH7J9z7TN98hyM4AMZIo3It4ic8rr786H/Y80g==$qWPgExAET1SHF2aEsgnpFg==",
+          "cf-ray": "a31fa9595b3c6dd5-SJC",
+          "server-timing": "cfExtPri",
+          "content-type": "text/html; charset=UTF-8"
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "status": 200,
+          "cf-ray": "a31fa95f195b8467-SJC",
+          "server-timing": "cfExtPri",
+          "content-type": "application/javascript; charset=UTF-8"
+        }
+      ],
+      "cookies": [
+        "AWSALB",
+        "AWSALBCORS",
+        "cf_clearance",
+        "AWSALB",
+        "AWSALBCORS",
+        "XSRF-TOKEN",
+        "scrapingcoursecom_session",
+        "AWSALB",
+        "AWSALBCORS",
+        "AWSALB",
+        "AWSALBCORS",
+        "AWSALB",
+        "AWSALBCORS",
+        "AWSALB",
+        "AWSALBCORS",
+        "AWSALB",
+        "AWSALBCORS"
+      ],
+      "clearance": true
+    },
+    {
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/antibot-challenge",
+          "status": 403
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5ey3q/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200
+        },
+        {
+          "url": "https://www.scrapingcourse.com/antibot-challenge",
+          "status": 200
+        }
+      ],
+      "challenge": [
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1",
+          "method": "GET",
+          "postLen": 0,
+          "status": 200,
+          "cf-ray": "a31fa9a30d23ac07-SJC",
+          "server-timing": "cfExtPri",
+          "content-type": "application/javascript; charset=UTF-8"
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "status": 200,
+          "cf-ray": "a31fa9a7b90537c1-SJC",
+          "server-timing": "cfExtPri",
+          "content-type": "application/javascript; charset=UTF-8"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/221752136:1787879414:I21t9a_ixkMTFlgt_WkC7kx_EW1nO03j-TbHAsbr3JA/a31fa9a24d12ac07/GVSJl8ywAZbuZ7tILrwgRc8LuKZcOYevEAjeaCfRtJo-1787881800-1.2.1.1-YweZE5TZtNuBIWQ4dNDDeaz2EW_HjwMtTw.Kj5OHGyZci.REGO_OIlykmSeiuJNV",
+          "method": "POST",
+          "postLen": 2316,
+          "status": 200,
+          "cf-ray": "a31fa9a7adc5ac07-SJC",
+          "server-timing": "cfExtPri",
+          "content-type": "text/plain; charset=UTF-8",
+          "cf-chl-gen": "+bidsWxbIcsYDkOx2r5p849qKDLECoJv84SR37ydbD0=$J6ORT5+h2Srz6iA6nA0XgQ=="
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5ey3q/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal",
+          "method": "GET",
+          "postLen": 0,
+          "status": 200,
+          "cf-ray": "a31fa9a88cdf7b83-SJC",
+          "content-type": "text/html; charset=UTF-8",
+          "server-timing": "fne5g6nd;dur=272975\ncfExtPri"
+        },
+        {
+          "path": "/cdn-cgi/challenge-platform/h/b/fo/221752136:1787879414:I21t9a_ixkMTFlgt_WkC7kx_EW1nO03j-TbHAsbr3JA/a31fa9a24d12ac07/GVSJl8ywAZbuZ7tILrwgRc8LuKZcOYevEAjeaCfRtJo-1787881800-1.2.1.1-YweZE5TZtNuBIWQ4dNDDeaz2EW_HjwMtTw.Kj5OHGyZci.REGO_OIlykmSeiuJNV",
+          "method": "POST",
+          "postLen": 8748,
+          "status": 200,
+          "cf-chl-out": "HLL2c0HzeBAGB1sOYkDSCaXGKqogxYgCyyYeb/67yx29xCrJRmkH8bSbTbJFJjvkz0P9jkL9Fb/JXkQFpMSIGmom8k/eu1B7hjl3W3XUVfXb6wNV4xN6mgvY3HifKxxXVA+ZA0dIc60/HyUIjVdPVw==$zSdHwowSKY5wad88uPwX8A==",
+          "cf-ray": "a31fa9b5efa7ac07-SJC",
+          "server-timing": "cfExtPri",
+          "content-type": "text/html; charset=UTF-8"
+        },
+        {
+          "path": "/turnstile/v0/b/e694063b5082/api.js",
+          "method": "GET",
+          "postLen": 0,
+          "status": 200,
+          "cf-ray": "a31fa9bbbaaf58f1-SJC",
+          "server-timing": "cfExtPri",
+          "content-type": "application/javascript; charset=UTF-8"
+        }
+      ],
+      "cookies": [
+        "AWSALB",
+        "AWSALBCORS",
+        "cf_clearance",
+        "AWSALB",
+        "AWSALBCORS",
+        "XSRF-TOKEN",
+        "scrapingcoursecom_session",
+        "AWSALB",
+        "AWSALBCORS",
+        "AWSALB",
+        "AWSALBCORS",
+        "AWSALB",
+        "AWSALBCORS",
+        "AWSALB",
+        "AWSALBCORS",
+        "AWSALB",
+        "AWSALBCORS"
+      ],
+      "clearance": true
+    }
+  ]
+}
