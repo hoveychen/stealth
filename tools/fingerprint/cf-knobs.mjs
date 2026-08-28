@@ -488,8 +488,12 @@ export const CF_KNOBS = {
           try {
             const str = typeof s === 'string' ? s : String(s);
             if (str.length < 64) return;
+            // Short spans come back whole. The font list is one of them, and
+            // its 90-character prefix says only that the two arms disagree,
+            // not which names this engine adds.
+            const head = str.length <= 1200 ? str : str.slice(0, 90);
             __send('span=' + encodeURIComponent(what) + '&len=' + str.length +
-                   '&h=' + hash(str) + '&head=' + encodeURIComponent(str.slice(0, 90)) +
+                   '&h=' + hash(str) + '&head=' + encodeURIComponent(head) +
                    '&at=' + encodeURIComponent(__where()));
           } catch (e) {}
         };
@@ -526,6 +530,79 @@ export const CF_KNOBS = {
           });
         } catch (e) { __send('fetch-hook-failed=' + e.name); }
         __send('report-payload=installed&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // How does the widget decide a font is installed?
+    //
+    // report-payload catches the answer -- six names in Chrome, fifty-four
+    // here, including Windows and GNOME families that no Mac has. Guessing the
+    // mechanism did not work: span width, canvas measureText, every TextMetrics
+    // field, document.fonts.check and queryLocalFonts all agree between the
+    // arms. So this records the measurement calls themselves, with the family
+    // that was in play and the number that came back, and the disagreement has
+    // to be in there.
+    'report-font-probe': beacon + `
+      (() => {
+        const seen = Object.create(null);
+        const rec = (s) => {
+          const k = String(s).slice(0, 120);
+          if (seen[k]) { seen[k] += 1; return; }
+          seen[k] = 1;
+          __send('probe=' + encodeURIComponent(k) + '&at=' + encodeURIComponent(__where()));
+        };
+        const fam = (el) => {
+          try {
+            const inline = el.style && el.style.fontFamily;
+            if (inline) return inline.slice(0, 40);
+            return '(' + (el.tagName || '?') + ')';
+          } catch (e) { return '?'; }
+        };
+        const wrapGetter = (proto, name, label) => {
+          try {
+            const d = Object.getOwnPropertyDescriptor(proto, name);
+            if (!d || !d.get) { rec(label + ':no-getter'); return; }
+            const g = d.get;
+            Object.defineProperty(proto, name, {
+              configurable: true, enumerable: d.enumerable,
+              get() { const v = g.call(this); rec(label + ' ' + fam(this) + ' => ' + v); return v; },
+            });
+          } catch (e) { rec(label + ':hook-failed:' + e.name); }
+        };
+        wrapGetter(HTMLElement.prototype, 'offsetWidth', 'offsetWidth');
+        wrapGetter(HTMLElement.prototype, 'offsetHeight', 'offsetHeight');
+        try {
+          const real = Element.prototype.getBoundingClientRect;
+          Object.defineProperty(Element.prototype, 'getBoundingClientRect', {
+            configurable: true, writable: true, enumerable: false,
+            value: function () {
+              const r = real.call(this);
+              rec('rect ' + fam(this) + ' => ' + Math.round(r.width * 100) / 100 + 'x' + Math.round(r.height * 100) / 100);
+              return r;
+            },
+          });
+        } catch (e) { rec('rect:hook-failed:' + e.name); }
+        try {
+          const real = CanvasRenderingContext2D.prototype.measureText;
+          Object.defineProperty(CanvasRenderingContext2D.prototype, 'measureText', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (t) {
+              const m = real.call(this, t);
+              rec('measureText ' + String(this.font).slice(0, 40) + ' => ' + Math.round(m.width * 100) / 100);
+              return m;
+            },
+          });
+        } catch (e) { rec('measureText:hook-failed:' + e.name); }
+        try {
+          const fs = document.fonts;
+          const real = fs.check;
+          fs.check = function (...a) {
+            const r = real.apply(fs, a);
+            rec('fonts.check ' + String(a[0]).slice(0, 40) + ' => ' + r);
+            return r;
+          };
+        } catch (e) { rec('fonts.check:hook-failed:' + e.name); }
+        __send('report-font-probe=installed&at=' + encodeURIComponent(__where()));
       })();
     `,
 
