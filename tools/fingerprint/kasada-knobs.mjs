@@ -491,6 +491,103 @@ export const KNOBS = {
 
     `,
 
+    // The payload's `h:` tokens, whole.
+    //
+    // Both arms emit 449 tokens, and after the box work the keys line up -- but
+    // this one does not: Chrome sends ONE `h:` token of 7 characters and this
+    // engine sends FOUR totalling 396. Four short records where a passing
+    // browser has one is the shape of something being reported rather than
+    // measured, and this engine is separately known to hit Kasada's own error
+    // endpoint on about half its runs where Chrome never does. Short enough to
+    // send whole, so the guess stops here and the text decides.
+    'htokens': beacon + `
+      let done = false;
+      const grab = (s) => {
+        if (done || typeof s !== 'string' || s.length < 5000 || s[0] !== '[') return;
+        let arr;
+        try { arr = JSON.parse(s); } catch (e) { return; }
+        if (!Array.isArray(arr)) return;
+        done = true;
+        let n = 0;
+        for (const e of arr) {
+          const t = String(e);
+          const c = t.indexOf(':');
+          if (c <= 0 || c >= 8) continue;
+          const key = t.slice(0, c);
+          if (key !== 'h' && key !== 'g') continue;
+          const body = t.length > 600 ? t.slice(0, 600) + '<TRUNC:' + t.length + '>' : t;
+          const i = n++;
+          setTimeout(() => __send('ht=' + i + '&k=' + key + '&v=' + encodeURIComponent(body)), 12 * i);
+        }
+        __send('htcount=' + n);
+      };
+      (() => {
+        const real = TextEncoder.prototype.encode;
+        Object.defineProperty(TextEncoder.prototype, 'encode', {
+          configurable: true, writable: true, enumerable: false,
+          value: function (input) {
+            try { grab(String(input === undefined ? '' : input)); } catch (e) {}
+            return real.call(this, input);
+          },
+        });
+      })();
+    `,
+
+    // Give Chrome's trap log this engine's [[Has]] signature.
+    //
+    // The guard hands a Proxy to Web API constructors and records the traps.
+    // Chrome reads a dictionary member with [[Get]]; this engine asks [[Has]]
+    // first, in the IDL file's declaration order rather than the alphabetical
+    // one WebIDL requires. Chrome's binding layer cannot be changed from here,
+    // so this replays our exact sequence against the same object before handing
+    // it to the real constructor -- additive, so Chrome's own reads still
+    // happen and the only difference is our tell appearing alongside them.
+    //
+    // Losing the ticket here says the guard weighs the trap log. Keeping it
+    // says this is not what x-hyatt is holding against us, whatever else it is.
+    'has-probe': beacon + `
+      __send('knob=has-probe');
+      const REQ = ['method','headers','body','cache','credentials','redirect','signal',
+                   'priority','duplex','mode','referrer','referrerPolicy','integrity','keepalive'];
+      const EVT = ['bubbles','cancelable','composed','detail','view','data','dataTransfer',
+                   'inputType','isComposing'];
+      const replay = (init, names) => {
+        if (!init || (typeof init !== 'object' && typeof init !== 'function')) return;
+        for (const n of names) { try { Reflect.has(init, n); } catch (e) {} }
+      };
+      const wrap = (name, names) => {
+        const Real = window[name];
+        if (typeof Real !== 'function') return;
+        function Wrapped(...args) {
+          try { replay(args[1], names); } catch (e) {}
+          return Reflect.construct(Real, args, new.target || Wrapped);
+        }
+        Wrapped.prototype = Real.prototype;
+        try { Object.defineProperty(Wrapped, 'name', { value: name, configurable: true }); } catch (e) {}
+        try { window[name] = Wrapped; } catch (e) {}
+      };
+      wrap('Request', REQ);
+      wrap('InputEvent', EVT);
+    `,
+
+    // The control `has-probe` needs: the same two constructors replaced through
+    // the same wrapper, replaying nothing. A guard that objects to a Request
+    // whose constructor is no longer native code refuses this too, and then the
+    // probe run proves nothing about the trap log.
+    'has-probe-passthru': beacon + `
+      __send('knob=has-probe-passthru');
+      const wrap = (name) => {
+        const Real = window[name];
+        if (typeof Real !== 'function') return;
+        function Wrapped(...args) { return Reflect.construct(Real, args, new.target || Wrapped); }
+        Wrapped.prototype = Real.prototype;
+        try { Object.defineProperty(Wrapped, 'name', { value: name, configurable: true }); } catch (e) {}
+        try { window[name] = Wrapped; } catch (e) {}
+      };
+      wrap('Request');
+      wrap('InputEvent');
+    `,
+
     // Read every section the guard feeds into its payload, whole, on either arm.
     // Descended from probes/inject-b55-funnels.js, which captured the same
     // funnels but only ever compared *lengths* -- the sections' own text was
