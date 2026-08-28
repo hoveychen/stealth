@@ -19841,6 +19841,31 @@ and `LanguageDetector` is 3 of 3, against `no-newer-globals` 3 of 3 and `none`
 
 So the last "something they read that we lack" is closed too.
 
+### The first worker dies here, and Chrome does not notice when it dies there
+
+`report-workers` records every `createObjectURL`, every `Worker` construction
+and every message or error on one. The challenge makes the same two blob workers
+on both arms, in the same order: a **13-byte** `text/javascript` blob first, then
+a 291-byte one that does the actual work.
+
+The 13-byte one runs silently in Chrome. Here it fires `error` with the message
+**`Abort`**, in the top document and in the widget's frame, every run. That is a
+real defect and the first difference in this chapter that is behavioural rather
+than a value.
+
+It is also, as far as six runs can say, not the door.
+`first-worker-aborts` -- the knob that has stood since B59 -- turns out not to
+model it: pointing worker #1 at a revoked blob URL makes Chrome produce nothing
+at all, and the error listener added to that knob never fires, so its 6 of 6 was
+about a silent worker rather than a failing one. `first-worker-throws`, which
+gives worker #1 a script that throws at the top, does produce the error event in
+Chrome, and it is **4 of 6** against `none` at **5 of 6** in the same window.
+
+That baseline is the other thing to take away. This door refuses a clean Chrome
+about one run in six, so a 3-of-3 negative is a weaker statement than it reads
+as, and the only readings here that carry real weight are the zeros --
+`webdriver-true` and the three plugins knobs.
+
 ### The tally so far
 
 Knobs that keep Chrome's ticket, and so name something this door does not weigh:

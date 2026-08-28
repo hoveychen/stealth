@@ -532,7 +532,18 @@ export const CF_KNOBS = {
                 const dead = URL.createObjectURL(new Blob([';'], { type: 'text/javascript' }));
                 URL.revokeObjectURL(dead);
                 __send('aborting-worker=1&at=' + encodeURIComponent(__where()));
-                return Reflect.construct(target, [dead, args[1]], nt);
+                const w = Reflect.construct(target, [dead, args[1]], nt);
+                // Whether the abort is observable at all. This engine's first
+                // worker -- a 13-byte text/javascript blob -- fires error with
+                // message "Abort" where Chrome runs it silently, and a knob that
+                // kills the worker without producing an error event would not be
+                // modelling that.
+                try {
+                  w.addEventListener('error', (e) => __send('aborted-worker-error=' +
+                    encodeURIComponent(String((e && e.message) || '')) +
+                    '&at=' + encodeURIComponent(__where())), { once: true });
+                } catch (e) { /* no listener, no report */ }
+                return w;
               }
               return Reflect.construct(target, args, nt);
             },
@@ -542,6 +553,46 @@ export const CF_KNOBS = {
           });
           __send('worker-hooked&at=' + encodeURIComponent(__where()));
         } catch (e) { __send('fail=' + e.name); }
+      })();
+    `,
+
+    // What this engine actually does to the first worker.
+    //
+    // first-worker-aborts points worker #1 at a revoked blob URL, and Chrome
+    // answers that by producing nothing at all -- the added listener never
+    // fires, so the knob models "worker #1 is silent" and not "worker #1
+    // errors". This engine does the second thing: the challenge's first worker
+    // is a 13-byte text/javascript blob, and here it fires error with message
+    // "Abort" in both documents, every run, while Chrome runs it without a
+    // sound. A script that throws at the top gives Chrome the same pair --
+    // nothing runs, and an error event reaches the page.
+    'first-worker-throws': beacon + `
+      (() => {
+        try {
+          const Real = window.Worker;
+          if (typeof Real !== 'function') { __send('first-worker-throws=no-Worker'); return; }
+          let n = 0;
+          const Hooked = new Proxy(Real, {
+            construct(target, args, nt) {
+              n += 1;
+              if (n !== 1) return Reflect.construct(target, args, nt);
+              const url = URL.createObjectURL(new Blob(['throw new Error("Abort")'],
+                { type: 'text/javascript' }));
+              const w = Reflect.construct(target, [url, args[1]], nt);
+              try {
+                w.addEventListener('error', (e) => __send('threw-worker-error=' +
+                  encodeURIComponent(String((e && e.message) || '')) +
+                  '&at=' + encodeURIComponent(__where())), { once: true });
+              } catch (e) { /* no listener, no report */ }
+              __send('first-worker-throws=replaced&at=' + encodeURIComponent(__where()));
+              return w;
+            },
+          });
+          Object.defineProperty(window, 'Worker', {
+            configurable: true, writable: true, enumerable: false, value: Hooked,
+          });
+          __send('first-worker-throws=wrapped&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('first-worker-throws=cannot-wrap:' + e.name); }
       })();
     `,
 
