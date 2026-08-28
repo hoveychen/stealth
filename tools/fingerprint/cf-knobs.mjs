@@ -6,11 +6,40 @@
 // here is interpretable until `alive` has been seen to report from BOTH
 // documents -- the challenge page and the widget's cross-origin frame -- and
 // until one knob has been seen to actually cost the ticket.
+// A worker has no Image and no window, so both helpers have to answer without
+// them -- the challenge runs two blob workers on challenges.cloudflare.com and
+// a knob that throws on its first line inside one reports nothing at all.
+// The channel is a global array, not a request.
+//
+// It used to be `new Image().src = '/__cfknob?...'`, which works from the
+// challenge page and costs the ticket from the widget: `alive` -- one beacon
+// and nothing else -- stopped the exchange at r1 twice in a row from
+// challenges.cloudflare.com, with `none` holding its ticket 2/2 in the same
+// window. One unexplained 404 inside its own frame is apparently enough. So
+// nothing is sent; the harness reads this array off every session with
+// Runtime.evaluate after the verdict is already on the wire.
 const beacon = `
-  const __send = (q) => { try { new Image().src = '/__cfknob?' + q; } catch (e) {} };
+  const __send = (q) => {
+    try {
+      const g = globalThis;
+      (g.__cfk || (g.__cfk = [])).push(q);
+      // --beacon. The stash is read back per SESSION, and this engine puts the
+      // whole page in one target -- so the widget's frame, which has its own
+      // global, is unreachable that way and its report is silently lost. On an
+      // arm with no ticket to protect, a request is the honest channel.
+      if (g.__CFK_WIRE) {
+        if (typeof Image === 'function') { new Image().src = '/__cfknob?' + q; }
+        else { fetch('/__cfknob?' + q, { mode: 'no-cors' }); }
+      }
+    } catch (e) {}
+  };
   const __where = () => {
-    try { return location.host + (window.top === window ? '/top' : '/frame'); }
-    catch (e) { return 'cross-origin/frame'; }
+    try {
+      if (typeof window === 'undefined') {
+        return (self.location.origin || String(self.location.href).slice(0, 40)) + '/worker';
+      }
+      return location.host + (window.top === window ? '/top' : '/frame');
+    } catch (e) { return 'cross-origin/frame'; }
   };
 `;
 
@@ -19,6 +48,25 @@ export const CF_KNOBS = {
     // against -- if this loses the ticket, the station moved and no reading in
     // the session means anything.
     none: '',
+
+    // Control 1b: the smallest possible injected script. `none` installs no
+    // document script at all, so it cannot separate "the station judged what
+    // the knob did" from "the station judged that a script was injected". This
+    // one does nothing and still goes through
+    // Page.addScriptToEvaluateOnNewDocument on every target, including the
+    // widget's out-of-process frame.
+    noop: ';',
+
+    // Control 1c and 1d: the two things every reporting knob does, separated.
+    //
+    // `noop` keeps the ticket and `alive` -- helpers plus one recorded line --
+    // loses it 4/4, so the cost is in the body, and the body only does two
+    // things a page can see. `probe-lexical` declares globals the way an
+    // injected script does; `probe-winprop` puts one own property on window.
+    // Whichever loses the ticket is a constraint on every knob written after
+    // it, because every reporting knob has to stash its answer somewhere.
+    'probe-lexical': 'const __zzKnobA = 1; function __zzKnobB() { return __zzKnobA; }',
+    'probe-winprop': 'try { globalThis.__cfk = []; } catch (e) {}',
 
     // Control 2: does the injection arrive, and where? Reports the host and
     // whether it is the top document, once per document. Until this shows the
@@ -243,6 +291,244 @@ export const CF_KNOBS = {
       } catch (e) { __send('fail=' + e.name); }
     `,
 
+    // The two names the widget reads and this engine does not have.
+    //
+    // Diffing the widget's own ninety-name read list between the arms leaves
+    // exactly two real differences once the harness's geometry is matched:
+    // `window.documentPictureInPicture` and `window.sharedStorage`. Both are
+    // present in Chrome 151 and absent here, and both are read by the document
+    // that builds the payload. This deletes them from a Chrome that otherwise
+    // passes, which is the only way to learn whether their absence is weighed
+    // or merely noticed.
+    'no-newer-globals': beacon + `
+      __send('no-newer-globals=' + encodeURIComponent(__where()));
+      try {
+        const gone = [];
+        for (const n of ['documentPictureInPicture', 'sharedStorage']) {
+          if (!(n in window)) { gone.push(n + ':already-absent'); continue; }
+          try {
+            delete window[n];
+            gone.push(n + ':' + (n in window ? 'still-there' : 'deleted'));
+          } catch (e) { gone.push(n + ':' + e.name); }
+        }
+        __send('deleted=' + encodeURIComponent(gone.join(' ')) + '&at=' + encodeURIComponent(__where()));
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    // Two answers the widget asks for and gets a different one from here.
+    //
+    // `report-calls` on both arms shows the same calls in the same places. Two
+    // of the answers differ: Chrome hands back about fifty voices where this
+    // engine hands back an empty list, and Chrome's performance.memory stays
+    // near a megabyte across four samples where this engine climbs from 3MB to
+    // 82MB across ten. These give Chrome this engine's answer, one at a time.
+    'empty-voices': beacon + `
+      __send('empty-voices=' + encodeURIComponent(__where()));
+      try {
+        const proto = window.SpeechSynthesis && SpeechSynthesis.prototype;
+        if (!proto) { __send('no-SpeechSynthesis&at=' + encodeURIComponent(__where())); }
+        else {
+          Object.defineProperty(proto, 'getVoices', {
+            configurable: true, writable: true, enumerable: false,
+            value: function () { return []; },
+          });
+          __send('voices-emptied&at=' + encodeURIComponent(__where()));
+        }
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    'growing-heap': beacon + `
+      __send('growing-heap=' + encodeURIComponent(__where()));
+      try {
+        const p = window.performance;
+        const m = p && p.memory;
+        if (!m) { __send('no-memory&at=' + encodeURIComponent(__where())); }
+        else {
+          // This engine's measured shape: same limit, an order of magnitude
+          // more heap, and climbing between samples instead of flat.
+          let total = 3145728, used = 2421464;
+          Object.defineProperty(p, 'memory', {
+            configurable: true, enumerable: true,
+            get() {
+              total = Math.min(total * 2, 82362368);
+              used = Math.floor(total * 0.72);
+              return { jsHeapSizeLimit: 4395630592, totalJSHeapSize: total, usedJSHeapSize: used };
+            },
+          });
+          __send('heap-replaced&at=' + encodeURIComponent(__where()));
+        }
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    // The control `growing-heap` needs, and without which it proves nothing.
+    //
+    // It replaces the SAME property through the SAME defineProperty call and
+    // hands back the REAL MemoryInfo, so the only thing that changed is that
+    // the property is an own accessor rather than a prototype one. If this
+    // loses the ticket too, the refusal is about the hook -- a plain object
+    // where a MemoryInfo belongs, or an accessor that is not native -- and not
+    // about the numbers. Same trap console-passthru was built for.
+    'heap-passthru': beacon + `
+      __send('heap-passthru=' + encodeURIComponent(__where()));
+      try {
+        const p = window.performance;
+        const m = p && p.memory;
+        if (!m) { __send('no-memory&at=' + encodeURIComponent(__where())); }
+        else {
+          Object.defineProperty(p, 'memory', {
+            configurable: true, enumerable: true, get() { return m; },
+          });
+          __send('heap-passthru-installed&at=' + encodeURIComponent(__where()));
+        }
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    // And the narrowest version of the real question, if the control says the
+    // hook is free: keep Chrome's own MemoryInfo object and only make the
+    // numbers this engine's. Not possible through the instance -- MemoryInfo's
+    // accessors live on its prototype -- so the prototype is where this goes,
+    // which leaves the object's brand and identity alone.
+    'heap-numbers-only': beacon + `
+      __send('heap-numbers-only=' + encodeURIComponent(__where()));
+      try {
+        const m = window.performance && performance.memory;
+        const proto = m && Object.getPrototypeOf(m);
+        if (!proto) { __send('no-memory-proto&at=' + encodeURIComponent(__where())); }
+        else {
+          let total = 3145728;
+          Object.defineProperty(proto, 'totalJSHeapSize', {
+            configurable: true, enumerable: true,
+            get() { total = Math.min(total * 2, 82362368); return total; },
+          });
+          Object.defineProperty(proto, 'usedJSHeapSize', {
+            configurable: true, enumerable: true,
+            get() { return Math.floor(total * 0.72); },
+          });
+          __send('heap-numbers-installed&at=' + encodeURIComponent(__where()));
+        }
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    // Give Chrome this engine's worker failure.
+    //
+    // report-workers on both arms, inside the widget's own frame: the challenge
+    // makes a 13-byte blob worker and then a 291-byte one. In Chrome both start
+    // and the second answers. Here the 13-byte one fires `error` with message
+    // "Abort" -- it never runs -- and the challenge goes on to build a THIRD
+    // worker that Chrome never builds. That is a structural difference in the
+    // document that assembles the payload, so this reproduces it on the arm
+    // that passes: the first Worker gets a URL that cannot load, which is what
+    // an aborted worker looks like from the page.
+    'first-worker-aborts': beacon + `
+      (() => {
+        __send('first-worker-aborts=' + encodeURIComponent(__where()));
+        try {
+          const Real = window.Worker;
+          if (typeof Real !== 'function') { __send('no-Worker'); return; }
+          let n = 0;
+          const Hooked = new Proxy(Real, {
+            construct(target, args, nt) {
+              n += 1;
+              if (n === 1) {
+                const dead = URL.createObjectURL(new Blob([';'], { type: 'text/javascript' }));
+                URL.revokeObjectURL(dead);
+                __send('aborting-worker=1&at=' + encodeURIComponent(__where()));
+                return Reflect.construct(target, [dead, args[1]], nt);
+              }
+              return Reflect.construct(target, args, nt);
+            },
+          });
+          Object.defineProperty(window, 'Worker', {
+            configurable: true, writable: true, enumerable: false, value: Hooked,
+          });
+          __send('worker-hooked&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('fail=' + e.name); }
+      })();
+    `,
+
+    // The control it needs: the same Proxy on the same constructor, forwarding
+    // every construction untouched. If this loses the ticket, the refusal is
+    // about hooking Worker and says nothing about the abort. heap-passthru is
+    // why this is not optional -- it cost two knobs their meaning.
+    'worker-passthru': beacon + `
+      (() => {
+        __send('worker-passthru=' + encodeURIComponent(__where()));
+        try {
+          const Real = window.Worker;
+          if (typeof Real !== 'function') { __send('no-Worker'); return; }
+          const Hooked = new Proxy(Real, {
+            construct(target, args, nt) { return Reflect.construct(target, args, nt); },
+          });
+          Object.defineProperty(window, 'Worker', {
+            configurable: true, writable: true, enumerable: false, value: Hooked,
+          });
+          __send('worker-passthru-hooked&at=' + encodeURIComponent(__where()));
+        } catch (e) { __send('fail=' + e.name); }
+      })();
+    `,
+
+    // The r3 payload, before it is enciphered.
+    //
+    // r3 is ~90KB of a custom alphabet and the two arms answer it differently;
+    // deobfuscating it is not the move (memory: payload-bytes-by-lengthening).
+    // The move is the one that worked on Kasada -- hook the plaintext on its
+    // way into the encoder -- and it only became possible once the harness
+    // could script the widget's own frame, which is where the encoding happens.
+    //
+    // Records length and a cheap hash rather than content, because the content
+    // is the fingerprint and the point is to find WHICH span differs.
+    'report-payload': beacon + `
+      (() => {
+        const hash = (s) => {
+          let h = 5381;
+          for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+          return h.toString(36);
+        };
+        const note = (what, s) => {
+          try {
+            const str = typeof s === 'string' ? s : String(s);
+            if (str.length < 64) return;
+            __send('span=' + encodeURIComponent(what) + '&len=' + str.length +
+                   '&h=' + hash(str) + '&head=' + encodeURIComponent(str.slice(0, 90)) +
+                   '&at=' + encodeURIComponent(__where()));
+          } catch (e) {}
+        };
+        try {
+          const realStringify = JSON.stringify;
+          JSON.stringify = function (...a) {
+            const r = realStringify.apply(JSON, a);
+            note('JSON.stringify', r);
+            return r;
+          };
+        } catch (e) { __send('stringify-hook-failed=' + e.name); }
+        try {
+          const realEncode = TextEncoder.prototype.encode;
+          Object.defineProperty(TextEncoder.prototype, 'encode', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (s) { note('TextEncoder.encode', s); return realEncode.call(this, s); },
+          });
+        } catch (e) { __send('encode-hook-failed=' + e.name); }
+        try {
+          const realSend = XMLHttpRequest.prototype.send;
+          Object.defineProperty(XMLHttpRequest.prototype, 'send', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (body) { note('xhr.send', body); return realSend.call(this, body); },
+          });
+        } catch (e) { __send('xhr-hook-failed=' + e.name); }
+        try {
+          const realFetch = window.fetch;
+          Object.defineProperty(window, 'fetch', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (input, init) {
+              if (init && init.body) note('fetch.body', init.body);
+              return realFetch.call(window, input, init);
+            },
+          });
+        } catch (e) { __send('fetch-hook-failed=' + e.name); }
+        __send('report-payload=installed&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
     // --- reporting knobs: measure, do not break ------------------------------
 
     // What does the widget's frame see when it looks at its parent?
@@ -385,5 +671,261 @@ export const CF_KNOBS = {
           __send('counting=parent&cross=' + crossOrigin + '&at=' + encodeURIComponent(__where()));
         }
       } catch (e) { __send('count-failed=' + e.name + ':' + encodeURIComponent(e.message)); }
+    `,
+
+    // Which of the candidate families does the guard TOUCH at all?
+    //
+    // Breaking one family per run costs two runs a family and answers only the
+    // family guessed. This asks the station instead: every candidate global,
+    // every own property of Navigator/Screen, is replaced with a pass-through
+    // accessor that records the first read and hands back the real value. What
+    // comes back is the list of names the challenge actually reached for, and
+    // every candidate NOT on it is ruled out for the price of one run -- the
+    // same move that closed the cross-origin family with count-parent-reads.
+    //
+    // It changes no value, so a lost ticket here would be about the hooking, not
+    // about any family; console-passthru already showed hooking alone is not
+    // weighed. Reads are flushed on a timer because the interesting ones happen
+    // long after the document does.
+    'report-reads': beacon + `
+      (() => {
+        const seen = [];
+        const mark = (k) => { if (seen.indexOf(k) === -1) seen.push(k); };
+        let flushed = 0;
+        const flush = () => {
+          const batch = seen.slice(flushed);
+          if (!batch.length) return;
+          flushed = seen.length;
+          for (let i = 0; i < batch.length; i += 16) {
+            __send('at=' + encodeURIComponent(__where()) +
+                   '&reads=' + encodeURIComponent(batch.slice(i, i + 16).join(',')));
+          }
+        };
+        for (const ms of [2000, 5000, 9000, 13000, 17000, 20000]) setTimeout(flush, ms);
+
+        const wrap = (obj, label, names) => {
+          let done = 0;
+          for (const n of names) {
+            let d;
+            try { d = Object.getOwnPropertyDescriptor(obj, n); } catch (e) { continue; }
+            if (!d || !d.configurable) continue;
+            try {
+              if (d.get) {
+                const g = d.get;
+                Object.defineProperty(obj, n, {
+                  configurable: true, enumerable: d.enumerable,
+                  get() { mark(label + '.' + n); return g.call(this); },
+                  set: d.set || undefined,
+                });
+              } else {
+                let v = d.value;
+                Object.defineProperty(obj, n, {
+                  configurable: true, enumerable: d.enumerable,
+                  get() { mark(label + '.' + n); return v; },
+                  set(nv) { v = nv; },
+                });
+              }
+              done += 1;
+            } catch (e) { /* leave it alone */ }
+          }
+          return done;
+        };
+
+        // Curated, because wrapping all of window would put an accessor on
+        // document and location and change how the page loads.
+        const WIN = ['Notification','RTCPeerConnection','webkitRTCPeerConnection',
+          'RTCDataChannel','SharedArrayBuffer','Atomics','WeakRef','FinalizationRegistry',
+          'structuredClone','IntersectionObserver','ResizeObserver','MutationObserver',
+          'PerformanceObserver','ReportingObserver','requestIdleCallback','cancelIdleCallback',
+          'matchMedia','visualViewport','screen','speechSynthesis','SpeechSynthesisUtterance',
+          'indexedDB','caches','crypto','isSecureContext','chrome','external','styleMedia',
+          'openDatabase','webkitStorageInfo','offscreenBuffering','BroadcastChannel',
+          'CompressionStream','DecompressionStream','TransformStream','ReadableStream',
+          'DeviceOrientationEvent','DeviceMotionEvent','ondeviceorientation','ondevicemotion',
+          'PaymentRequest','trustedTypes','scheduler','cookieStore','navigation',
+          'documentPictureInPicture','sharedStorage','launchQueue','onbeforeinstallprompt',
+          'AudioContext','webkitAudioContext','OfflineAudioContext','MediaRecorder',
+          'MediaSource','ImageDecoder','VideoDecoder','AudioDecoder','GPU','gpu',
+          'showOpenFilePicker','showDirectoryPicker','queueMicrotask','reportError',
+          'devicePixelRatio','innerWidth','innerHeight','outerWidth','outerHeight',
+          'screenX','screenY','scrollX','scrollY','name','opener','frameElement',
+          'localStorage','sessionStorage','performance','origin','crossOriginIsolated'];
+
+        const own = (o) => { try { return Object.getOwnPropertyNames(o); } catch (e) { return []; } };
+        const counts = [];
+        counts.push('win:' + wrap(window, 'win', WIN));
+        try { counts.push('nav:' + wrap(Navigator.prototype, 'nav', own(Navigator.prototype))); } catch (e) {}
+        try { counts.push('scr:' + wrap(Screen.prototype, 'scr', own(Screen.prototype))); } catch (e) {}
+        try { counts.push('nk:' + wrap(NavigatorUAData.prototype, 'nk', own(NavigatorUAData.prototype))); } catch (e) {}
+        try { counts.push('vv:' + wrap(VisualViewport.prototype, 'vv', own(VisualViewport.prototype))); } catch (e) {}
+        try { counts.push('mql:' + wrap(MediaQueryList.prototype, 'mql', own(MediaQueryList.prototype))); } catch (e) {}
+        try { counts.push('perf:' + wrap(Performance.prototype, 'perf', ['memory','timeOrigin','timing','navigation','eventCounts'])); } catch (e) {}
+        __send('report-reads=' + encodeURIComponent(__where()) + '&wrapped=' + encodeURIComponent(counts.join(' ')));
+      })();
+    `,
+
+    // What do the calls the widget makes ANSWER?
+    //
+    // `report-reads` names the properties the widget touches and stops there:
+    // it sees `nav.permissions` read and `mql.matches` read, not which media
+    // query was asked or which permission came back. Once the read sets of the
+    // two arms agree -- and they do, to two globals that are provably not
+    // weighed -- what is left is the answers, and this records them on both
+    // arms through one piece of code so they can be diffed.
+    //
+    // This one is allowed to cost the ticket. It is a recorder, not a family
+    // knob: the log is the output, and the arm that matters has no ticket to
+    // lose anyway.
+    'report-calls': beacon + `
+      (() => {
+        const rec = (s) => __send('call=' + encodeURIComponent(String(s).slice(0, 180)) +
+                                  '&at=' + encodeURIComponent(__where()));
+        const shape = (v) => {
+          try {
+            if (v === undefined) return 'undefined';
+            if (v === null) return 'null';
+            if (typeof v === 'object') {
+              const keys = Object.keys(v);
+              if (keys.length) return JSON.stringify(v).slice(0, 140);
+              return Object.prototype.toString.call(v) + '/len=' + (v.length === undefined ? '-' : v.length);
+            }
+            return typeof v + ':' + String(v);
+          } catch (e) { return 'unshapeable:' + e.name; }
+        };
+
+        // The query strings themselves, which the read log cannot show.
+        try {
+          const real = window.matchMedia;
+          Object.defineProperty(window, 'matchMedia', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (q) {
+              const mql = real.call(window, q);
+              rec('matchMedia(' + q + ')=' + mql.matches);
+              return mql;
+            },
+          });
+        } catch (e) { rec('matchMedia-hook-failed:' + e.name); }
+
+        const hook = (owner, name, label) => {
+          try {
+            if (!owner || typeof owner[name] !== 'function') { rec(label + '=absent'); return; }
+            const real = owner[name];
+            Object.defineProperty(owner, name, {
+              configurable: true, writable: true, enumerable: false,
+              value: function (...args) {
+                let r;
+                try { r = real.apply(this, args); }
+                catch (e) { rec(label + '(' + shape(args[0]) + ') threw ' + e.name); throw e; }
+                if (r && typeof r.then === 'function') {
+                  r.then((v) => rec(label + '(' + shape(args[0]) + ') resolved ' + shape(v)),
+                    (e) => rec(label + '(' + shape(args[0]) + ') rejected ' + (e && e.name)));
+                } else {
+                  rec(label + '(' + shape(args[0]) + ') = ' + shape(r));
+                }
+                return r;
+              },
+            });
+          } catch (e) { rec(label + '-hook-failed:' + e.name); }
+        };
+
+        hook(navigator, 'getGamepads', 'getGamepads');
+        hook(navigator, 'getBattery', 'getBattery');
+        hook(navigator, 'sendBeacon', 'sendBeacon');
+        try { hook(navigator.permissions, 'query', 'permissions.query'); } catch (e) {}
+        try { hook(navigator.storage, 'estimate', 'storage.estimate'); } catch (e) {}
+        try { hook(navigator.mediaCapabilities, 'decodingInfo', 'mediaCapabilities.decodingInfo'); } catch (e) {}
+        try { hook(navigator.userAgentData, 'getHighEntropyValues', 'uaData.getHighEntropyValues'); } catch (e) {}
+        try { hook(navigator.userAgentData, 'toJSON', 'uaData.toJSON'); } catch (e) {}
+        try { hook(window.speechSynthesis, 'getVoices', 'getVoices'); } catch (e) {}
+        try { hook(window.indexedDB, 'databases', 'indexedDB.databases'); } catch (e) {}
+        try { hook(window.caches, 'keys', 'caches.keys'); } catch (e) {}
+
+        // performance.memory is read, and it is three numbers, so record them.
+        try {
+          const m = performance.memory;
+          rec('performance.memory=' + (m === undefined ? 'absent'
+            : [m.jsHeapSizeLimit, m.totalJSHeapSize, m.usedJSHeapSize].join(',')));
+        } catch (e) { rec('performance.memory threw ' + e.name); }
+        try { rec('connection=' + shape(navigator.connection)); } catch (e) {}
+        try {
+          const c = navigator.connection;
+          if (c) rec('connection.values=' + [c.effectiveType, c.rtt, c.downlink, c.saveData].join(','));
+        } catch (e) {}
+        rec('report-calls=installed');
+      })();
+    `,
+
+    // Does the challenge run code in a Worker, and does this engine follow it
+    // there?
+    //
+    // Chrome's target list on a passing run holds five auto-attached targets,
+    // two of which are `worker:blob:https://challenges.cloudflare.com/...`;
+    // this engine's holds one. That is not yet a finding -- a CDP client that
+    // never reports worker targets looks identical from the outside -- so this
+    // asks from inside the page instead: hook the Worker constructor and
+    // URL.createObjectURL and beacon every construction, on both arms, through
+    // the same code.
+    //
+    // It matters more than one family because `Page.addScriptToEvaluateOnNewDocument`
+    // cannot reach a worker at all: if the payload is assembled in one, then
+    // every family this session excluded was excluded in the wrong document.
+    'report-workers': beacon + `
+      (() => {
+        const line = (q) => __send('at=' + encodeURIComponent(__where()) + '&' + q);
+        let blobs = 0;
+        try {
+          const realCreate = URL.createObjectURL;
+          Object.defineProperty(URL, 'createObjectURL', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (obj) {
+              const url = realCreate.call(URL, obj);
+              blobs += 1;
+              let size = -1, type = '';
+              try { size = obj.size; type = obj.type; } catch (e) { /* not a Blob */ }
+              line('createObjectURL=' + blobs + '&size=' + size + '&type=' + encodeURIComponent(String(type)));
+              return url;
+            },
+          });
+        } catch (e) { line('createObjectURL-failed=' + e.name); }
+
+        const hookCtor = (name) => {
+          let Real;
+          try { Real = window[name]; } catch (e) { return 'absent'; }
+          if (typeof Real !== 'function') return 'absent';
+          try {
+            const Hooked = new Proxy(Real, {
+              construct(target, args, nt) {
+                const w = Reflect.construct(target, args, nt);
+                line(name + '=new&url=' + encodeURIComponent(String(args[0]).slice(0, 80)));
+                try {
+                  w.addEventListener('message', () => line(name + '=message'), { once: true });
+                  w.addEventListener('error', (e) => line(name + '=error&msg=' +
+                    encodeURIComponent(String((e && e.message) || ''))), { once: true });
+                } catch (e) { line(name + '=cannot-listen&why=' + e.name); }
+                return w;
+              },
+            });
+            Object.defineProperty(window, name, {
+              configurable: true, writable: true, enumerable: false, value: Hooked,
+            });
+            return 'hooked';
+          } catch (e) { return 'failed:' + e.name; }
+        };
+
+        const states = ['Worker', 'SharedWorker'].map((n) => n + ':' + hookCtor(n));
+        let sw = 'absent';
+        try {
+          if (navigator.serviceWorker) {
+            const realReg = navigator.serviceWorker.register;
+            navigator.serviceWorker.register = function (...a) {
+              line('serviceWorker=register&url=' + encodeURIComponent(String(a[0]).slice(0, 80)));
+              return realReg.apply(this, a);
+            };
+            sw = 'hooked';
+          }
+        } catch (e) { sw = 'failed:' + e.name; }
+        line('report-workers=' + encodeURIComponent(states.join(' ') + ' serviceWorker:' + sw));
+        for (const ms of [5000, 12000, 19000]) setTimeout(() => line('tick=' + ms + '&blobs=' + blobs), ms);
+      })();
     `,
 };
