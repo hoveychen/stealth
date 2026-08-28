@@ -19355,3 +19355,28 @@ seen to cost Chrome its ticket. `navigator.webdriver` is a capability tell, not
 a value tell, and so is this: no amount of getting numbers right reaches it,
 because what the guard is reading is *how the engine's binding layer behaves*.
 Every value-shaped chapter above came back negative; this one has not been tried.
+
+### ...and the trap log is not the lock either (B84, 2026-08-27)
+
+Tested with the knob, one direction. Chrome's binding layer cannot be changed
+from a page, so `has-probe` replays this engine's exact `[[Has]]` sequence over
+the same object before handing it to the real `Request` and `InputEvent`
+constructors -- additive, so Chrome's own `[[Get]]` reads still happen and our
+tell simply appears alongside them.
+
+| knob | runs | ticket |
+|---|---|---|
+| `has-probe-passthru` -- same constructors replaced, replaying nothing | 1/1 | yes |
+| `has-probe` -- our `[[Has]]` sequence added | 2/2 | **yes** |
+
+The control matters and so does the body size: `postLen` goes from ~19610 to
+19834 and 19842 under the probe, so the extra reads demonstrably reached the
+payload rather than being dropped on the way.
+
+**What this rules out:** the mere presence of `[[Has]]` reads on a converted
+dictionary. **What it does not:** the absence of Chrome's `[[Get]]` reads, the
+short member sets, and the wrong order -- none of which can be produced in
+Chrome from script, because they are what its own binding layer does. So the
+dictionary conversion is still worth fixing, and it is a genuine WebIDL
+deviation either way, but it should be booked as fidelity rather than as a
+door-opener until something tests the other direction.
