@@ -19190,3 +19190,63 @@ payload demonstrably moved, and the station still refusing. Being refused *for*
 something does not make it the only thing being refused for. What it does mean is
 that the ~448 bytes left in r3 are now a much smaller haystack than the 2293 that
 were there this morning.
+
+## A knob for Cloudflare, and the console formatter is weighed (B85, 2026-08-27)
+
+`cf-verdict.mjs` answers "does this engine get a ticket". `cf-knob.mjs` answers
+the more useful question — "does THIS ONE CHANGE cost a ticket" — by injecting
+into the challenge on the arm that passes and reading the same `cf-chl-out`. That
+is a different question from "where do the two engines differ", and the x-hyatt
+work is what taught the difference: Chrome sent a fake timezone, an empty codec
+list, zeroed geometry and an empty voice list all at once and kept its ticket.
+
+Two things this had to get right that the Kasada version did not:
+
+- **the widget is a separate target.** Chrome isolates
+  `challenges.cloudflare.com`, so `Page.addScriptToEvaluateOnNewDocument` on the
+  page's session never reaches the frame that builds the ~90KB payload. The knob
+  installs on every auto-attached target.
+- `Network.enable` needs `maxPostDataSize`, or the round that matters reports no
+  body at all.
+
+### Calibration, which is what makes the rest readable
+
+| knob | runs | ticket | what it establishes |
+|---|---|---|---|
+| `none` | 3/3 | **yes** | the station is handing out tickets in this window |
+| `alive` | 1/1 | **yes** | the knob arrives in BOTH documents — `alive=www.scrapingcourse.com/top` and `alive=/frame` — and costs nothing |
+| `webdriver-true` | 2/2 | **no** | the zero point: the oracle can read a knob-induced refusal |
+
+The zero point matters twice over, because `navigator.webdriver` reproduces **our
+engine's exact failure signature**: three rounds, r3 answered `cf-chl-gen`, no r4,
+no ticket. Whatever we are being refused for puts us in the same state a
+declared automation flag does.
+
+### The console formatter is weighed, and the control says so
+
+| knob | what it changes | runs | ticket |
+|---|---|---|---|
+| `console-no-format` | console hooked, **conversion removed** | 2/2 | **no** |
+| `console-passthru` | console hooked the same way, **conversion still happens** | 2/2 | **yes** |
+
+The two knobs replace the same nine methods through the same `defineProperty`
+calls. The only difference is whether the argument gets converted — so **the
+refusal is about the conversion, not about console being hooked.** That is the
+`input-box-frozen` / `input-box-passthru` pattern, and it is the only way a
+"still ticketed" reading means anything.
+
+So the formatter this session implemented is something Cloudflare genuinely
+weighs. It was **necessary and not sufficient**: fixing it closed 80% of the r3
+payload gap and the ticket is still withheld, 3 runs of 3 on a ReleaseFast build.
+
+(A third knob, `console-defang-format`, left the methods calling through and only
+mangled the format string so no specifier could match. It came back 1 of 2 and is
+**not** reported as a result — it changes the string's own content, so it is not
+a clean isolation of the conversion. The two knobs above are.)
+
+### What this leaves
+
+r3 is now 448 bytes short of Chrome rather than 2293, and one of the two probes
+known to live in it is answered correctly. The instrument is built and
+calibrated, so the next family costs two runs to test rather than a session to
+argue about.
