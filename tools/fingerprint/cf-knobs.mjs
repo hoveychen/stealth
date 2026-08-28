@@ -747,6 +747,120 @@ export const CF_KNOBS = {
       } catch (e) { __send('fail=' + e.name); }
     `,
 
+    // The CSS span is exactly twice as long here, and this is why.
+    //
+    // report-payload measured the widget's stylesheet text at 20696 bytes in
+    // Chrome and 41393 here -- 2 x 20696 + 1, the extra byte being one more
+    // pipe separator. That arithmetic says the collector saw every rule twice,
+    // not that the rules serialise differently, and the cause is isolated: a
+    // <style> inside a CLOSED shadow root leaks into document.styleSheets in
+    // this engine. Chrome keeps document.styleSheets at 1 and the rules
+    // unreadable from the document; here the count goes to 2 and the shadow
+    // root's rules are readable. The widget builds its UI in a closed shadow
+    // root -- its own 85-byte span carries `attachShadow` and "closed" -- so a
+    // walk of document.styleSheets picks up its sheet a second time.
+    //
+    // This hands Chrome the doubled list, keeping every entry real.
+    'double-stylesheets': beacon + `
+      __send('double-stylesheets=' + encodeURIComponent(__where()));
+      try {
+        const proto = Object.getPrototypeOf(document);
+        const d = Object.getOwnPropertyDescriptor(proto, 'styleSheets') ||
+                  Object.getOwnPropertyDescriptor(Document.prototype, 'styleSheets');
+        if (!d || !d.get) { __send('no-styleSheets-getter&at=' + encodeURIComponent(__where())); }
+        else {
+          const g = d.get;
+          Object.defineProperty(Document.prototype, 'styleSheets', {
+            configurable: true, enumerable: d.enumerable,
+            get() {
+              const real = g.call(this);
+              const doubled = [];
+              for (let i = 0; i < real.length; i++) doubled.push(real[i], real[i]);
+              doubled.item = function (i) { return this[i] === undefined ? null : this[i]; };
+              return doubled;
+            },
+          });
+          __send('stylesheets-doubled&at=' + encodeURIComponent(__where()));
+        }
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    // The control: same getter replaced through the same defineProperty, same
+    // array shape, but each sheet appears once. If this loses the ticket too,
+    // the refusal is about handing back an Array where a StyleSheetList
+    // belongs, and says nothing about the doubling.
+    'stylesheets-passthru': beacon + `
+      __send('stylesheets-passthru=' + encodeURIComponent(__where()));
+      try {
+        const d = Object.getOwnPropertyDescriptor(Document.prototype, 'styleSheets');
+        if (!d || !d.get) { __send('no-styleSheets-getter&at=' + encodeURIComponent(__where())); }
+        else {
+          const g = d.get;
+          Object.defineProperty(Document.prototype, 'styleSheets', {
+            configurable: true, enumerable: d.enumerable,
+            get() {
+              const real = g.call(this);
+              const copy = [];
+              for (let i = 0; i < real.length; i++) copy.push(real[i]);
+              copy.item = function (i) { return this[i] === undefined ? null : this[i]; };
+              return copy;
+            },
+          });
+          __send('stylesheets-copied&at=' + encodeURIComponent(__where()));
+        }
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    // The fourth and last of the payload differences report-payload turned up.
+    //
+    // The widget asks permissions.query for geolocation, notifications, camera
+    // and microphone and puts the four states in the payload. Chrome answers
+    // `denied` for all four; this engine answers `prompt`. This gives Chrome
+    // this engine's answer.
+    'permissions-prompt': beacon + `
+      __send('permissions-prompt=' + encodeURIComponent(__where()));
+      try {
+        const real = navigator.permissions.query;
+        Object.defineProperty(Permissions.prototype, 'query', {
+          configurable: true, writable: true, enumerable: false,
+          value: function (desc) {
+            return real.call(this, desc).then(function (st) {
+              return new Proxy(st, {
+                get(t, k) {
+                  if (k === 'state') return 'prompt';
+                  const v = t[k];
+                  return typeof v === 'function' ? v.bind(t) : v;
+                },
+              });
+            });
+          },
+        });
+        __send('permissions-forced&at=' + encodeURIComponent(__where()));
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
+    // Its control: the same replacement, the same Proxy, the real state.
+    'permissions-passthru': beacon + `
+      __send('permissions-passthru=' + encodeURIComponent(__where()));
+      try {
+        const real = navigator.permissions.query;
+        Object.defineProperty(Permissions.prototype, 'query', {
+          configurable: true, writable: true, enumerable: false,
+          value: function (desc) {
+            return real.call(this, desc).then(function (st) {
+              return new Proxy(st, {
+                get(t, k) {
+                  const v = t[k];
+                  return typeof v === 'function' ? v.bind(t) : v;
+                },
+              });
+            });
+          },
+        });
+        __send('permissions-passthru-installed&at=' + encodeURIComponent(__where()));
+      } catch (e) { __send('fail=' + e.name); }
+    `,
+
     // --- reporting knobs: measure, do not break ------------------------------
 
     // What does the widget's frame see when it looks at its parent?
