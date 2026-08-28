@@ -19300,3 +19300,58 @@ and this engine now implements it, 43 readings out of 43, with the r3 payload ga
 closed by 80%. **The ticket is still withheld**, so what refuses us is something
 this sweep did not cover. The instrument is the deliverable: the next family is
 two runs, and a family ruled out stays ruled out.
+
+## The `h:` tokens are a Proxy trap log, and they read the engine's WebIDL layer (B84, 2026-08-27)
+
+The payload's `h:` tokens were the last structural difference left after the box
+work: both arms emit 449 tokens and the keys otherwise line up, but Chrome sends
+ONE `h:` token of 7 characters and this engine sends FOUR totalling 396.
+
+They are not error reports. They are a **Proxy trap log**: the guard hands a
+Proxy to Web API constructors and records which traps fire, in order --
+`g:` get, `h:` has, `s:` set, `gpd:` getOwnPropertyDescriptor, `dfp:` define,
+`a:` the apply result. Chrome's only `h:` token is `h:cause`, from an Error
+construction, and this engine emits that one too. The other three are ours
+alone, and each is a dictionary being converted:
+
+```
+RequestInit
+  Chrome  g:adAuctionHeaders,g:attributionReporting,h:attributionReporting,g:body,
+          g:browsingTopics,g:cache,g:credentials,g:duplex,g:headers,g:integrity,
+          g:keepalive,g:method,g:mode,g:priority,g:privateToken,g:redirect,
+          g:referrer,g:referrerPolicy,g:sharedStorageWritable,g:signal,
+          g:targetAddressSpace
+  ours    h:method,h:headers,h:body,h:cache,h:credentials,h:redirect,h:signal,
+          h:priority,h:duplex,h:mode,h:referrer,h:referrerPolicy,h:integrity,
+          h:keepalive
+
+InputEventInit
+  Chrome  g:bubbles,g:cancelable,g:composed,g:detail,g:sourceCapabilities,g:view,
+          g:data,g:dataTransfer,g:inputType,g:isComposing,g:targetRanges
+  ours    h:bubbles,h:cancelable,h:composed,h:detail,h:view,h:data,h:dataTransfer,
+          h:inputType,h:isComposing
+```
+
+Three separate tells, in one mechanism:
+
+  * **the trap itself.** Chrome reads a dictionary member with `[[Get]]`; this
+    engine asks `[[Has]]` first. WebIDL says Get -- the conversion is "let value
+    be Get(V, key)", with no HasProperty anywhere in it -- so this is a spec
+    deviation and not a taste, and it shows up on **every** dictionary the page
+    can reach, not just these two;
+  * **the order.** Chrome walks the inherited dictionaries outermost-first and
+    each one's own members in lexicographical order, which is what WebIDL
+    requires. `InputEventInit` shows the shape plainly -- EventInit's bubbles,
+    cancelable, composed, then UIEventInit's detail, sourceCapabilities, view,
+    then InputEventInit's data, dataTransfer, inputType, isComposing,
+    targetRanges. Ours has that shape here but reads `RequestInit` in the IDL
+    file's declaration order instead;
+  * **the member set.** `RequestInit` is 21 members in Chrome and 14 here, and
+    `InputEventInit` 11 against 9. A missing member is a missing read, and the
+    log shows exactly which.
+
+This is the first thing found on x-hyatt that is shaped like the one knob ever
+seen to cost Chrome its ticket. `navigator.webdriver` is a capability tell, not
+a value tell, and so is this: no amount of getting numbers right reaches it,
+because what the guard is reading is *how the engine's binding layer behaves*.
+Every value-shaped chapter above came back negative; this one has not been tried.
