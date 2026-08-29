@@ -1,0 +1,120 @@
+diff --git a/src/browser/webapi/Element.zig b/src/browser/webapi/Element.zig
+index 5bc813a70..108b719c2 100644
+--- a/src/browser/webapi/Element.zig
++++ b/src/browser/webapi/Element.zig
+@@ -1769,6 +1769,16 @@ pub fn parentElement(self: *Element) ?*Element {
+ /// Cache for visibility checks - re-exported from StyleManager for convenience.
+ pub const VisibilityCache = StyleManager.VisibilityCache;
+ 
++/// One measurement's answers for `contentHeight`, so that a subtree measured
++/// from a parent is not measured again from its grandparent.
++///
++/// Carried exactly the way VisibilityCache is -- created at the top of one
++/// measurement, threaded down, stored in the call arena -- because it has the
++/// same lifetime and the same reason to exist. Without it the recursion is not
++/// wrong, it is quadratic in depth and it does not finish: `WebApi: Element`
++/// ended in ExecutionTerminated, from a page that was not about layout.
++pub const ContentHeightCache = std.AutoHashMapUnmanaged(*Element, f64);
++
+ /// Cache for pointer-events checks - re-exported from StyleManager for convenience.
+ pub const PointerEventsCache = StyleManager.PointerEventsCache;
+ 
+@@ -3414,7 +3424,8 @@ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_ca
+         return dims.height + dims.padding_y;
+     }
+ 
+-    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width)) + dims.padding_y;
++    var heights: ContentHeightCache = .{};
++    return @max(dims.height, self.contentHeight(frame, visibility_cache, &heights, .in_flow, dims.width)) + dims.padding_y;
+ }
+ 
+ pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
+@@ -3572,7 +3583,8 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
+ 
+     if (dims.inline_box) return 0;
+ 
+-    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width)) + dims.padding_y);
++    var heights: ContentHeightCache = .{};
++    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, &heights, .scrollable, dims.width)) + dims.padding_y);
+ }
+ 
+ // The height of the direct child elements stacked vertically, the counterpart
+@@ -3593,7 +3605,41 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
+ // is 55.5 (a line, a block, a line) where stacking the block alone says 18.5.
+ // Both measured at dpr 2 with
+ // tools/fingerprint/scratch/expr-inline-content-lines.js.
+-fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64) f64 {
++/// This element's own content height, answered once per measurement.
++///
++/// A declared height stops the walk for the same reason clientHeight's does:
++/// the declaration is the answer and what overflows it is not this box's
++/// height.
++///
++/// The sentinel is not decoration. A box measured from inside its parent's
++/// walk can be asked for again before it has finished -- `getElementDimensions`
++/// reaches back up for the containing block, and that measurement walks down --
++/// and a re-entrant ask has to be answered with something rather than
++/// recursing. It is written before the walk and overwritten with the real
++/// answer after, so only a genuinely re-entrant read ever sees it.
++fn rememberedContentHeight(
++    self: *Element,
++    frame: *Frame,
++    visibility_cache: *VisibilityCache,
++    heights: *ContentHeightCache,
++    box: Dimensions,
++) f64 {
++    if (box.explicit_height) return box.height;
++    if (heights.get(self)) |remembered| return remembered;
++
++    heights.put(frame.call_arena, self, box.height) catch |err| {
++        // Not fatal on its own -- the answer is still right, it is only
++        // recomputed -- but it is the difference between finishing and not, so
++        // it is worth a line rather than a silent fallback.
++        log.warn(.browser, "content height cache", .{ .err = err, .src = "rememberedContentHeight" });
++        return @max(box.height, self.contentHeight(frame, visibility_cache, heights, .in_flow, box.width));
++    };
++    const inner = @max(box.height, self.contentHeight(frame, visibility_cache, heights, .in_flow, box.width));
++    heights.put(frame.call_arena, self, inner) catch {};
++    return inner;
++}
++
++fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, heights: *ContentHeightCache, extent: Extent, content_width: ?f64) f64 {
+     var total: f64 = 0;
+ 
+     const font = self.resolveFont(frame);
+@@ -3664,17 +3710,17 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+             }
+ 
+             const box = el.getElementDimensions(frame);
++            // What the child HOLDS is inside this parent too, and it is asked
++            // for through the memo rather than directly: the same subtree is
++            // reached once per ancestor, and answering it once per ancestor is
++            // what does not finish.
++            const inner = el.rememberedContentHeight(frame, visibility_cache, heights, box);
+             const margins = el.verticalMargins(frame, &margin_containing, 0);
+             group.join(margins.top);
+-            // What the child HOLDS is still missing here, and knowingly so: see
+-            // the note on `content-height-child-box` in the fingerprint README.
+-            // Recursing into `el.contentHeight` is the obvious fix and it is
+-            // measured NOT to be safe -- `WebApi: Element` ends in
+-            // ExecutionTerminated, because a child measured from here reaches
+-            // back up for its containing block and the walk goes down and up
+-            // and down again. That is the same shape element/box_measure_loops
+-            // exists for.
+-            if (box.height == 0 and box.padding_y == 0 and box.border_y == 0) {
++            // `inner` and not `box.height`: a wrapper holding a box is not an
++            // empty box, and reading the declaration alone would collapse the
++            // margins straight through something that is 12px tall.
++            if (inner == 0 and box.padding_y == 0 and box.border_y == 0) {
+                 // Self-collapsing: there is nothing between this box's two
+                 // margins, so they join the same group and it contributes no
+                 // height of its own. An empty <div style="margin:10px 0">
+@@ -3690,7 +3736,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+             // its own offsetHeight is `height + padding_y + border_y`. Reading
+             // only the middle of it made a parent disagree with its own child:
+             // a padded child answers 22 for itself and the parent answered 12.
+-            total += box.height + box.padding_y + box.border_y;
++            total += inner + box.padding_y + box.border_y;
+             placed = true;
+             group.join(margins.bottom);
+             continue;
