@@ -64,12 +64,11 @@ and `0.0156249px` reads back all of itself because six figures reach that far.
     ['33.33333333333333', '33.3281px', 33.328125, '33.3333px'],
     ['465.53125', '465.531px', 465.53125, '465.531px'],
     ['12.3456789', '12.3438px', 12.34375, '12.3457px'],
-    // Chrome prints `7.01562px` here and this engine prints `7.01563px`: the
-    // used value is 7.015625 in both (the rect says so), and six significant
-    // figures land the last digit on a tie that Chrome breaks to even and this
-    // breaks up. css-number-round-half-even is that task; the geometry beside
-    // it is this one's.
-    ['7.0156249', '7.01563px', 7.015625, '7.01562px'],
+    // The used value is 7.015625 and six significant figures land the last
+    // digit on a tie. Both arms break it to even now, so both print
+    // `7.01562px`; this case used to record `7.01563px` because this engine
+    // broke ties away from zero. css-number-round-half-even closed that.
+    ['7.0156249', '7.01562px', 7.015625, '7.01562px'],
     ['250.0078124', '250.008px', 250.0078125, '250.008px'],
     ['250.0078126', '250.008px', 250.0078125, '250.008px'],
     ['3.9999999', '4px', 4, '4px'],

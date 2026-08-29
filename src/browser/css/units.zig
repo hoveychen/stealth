@@ -152,30 +152,89 @@ pub const NumberError = error{ StringTooLarge, WriteFailed };
 /// [-4, 6), exponent padded to at least two digits. Measured — `1/3` prints
 /// `0.333333` while `.value` still reads back the full double, and `999999.9`
 /// rounds up into `1e+06`.
-pub fn writeNumber(writer: *std.Io.Writer, v: f64) NumberError!void {
-    if (std.math.isNan(v)) return writer.writeAll("NaN");
-    if (std.math.isInf(v)) return writer.writeAll(if (v > 0) "Infinity" else "-Infinity");
-    if (v == 0) return writer.writeAll("0");
+/// Six significant digits of `v`, rounded the way Chrome rounds a CSS number.
+///
+/// Two things ride on taking the SHORTEST round-trip decimal first. Zig's
+/// `{e:.5}` breaks a tie away from zero where Chrome breaks it to even, so the
+/// rounding has to be done here rather than by the formatter. And the tie
+/// Chrome breaks is the one in the shortest representation, not in the double's
+/// exact value: 12345.65 is really 12345.650000000000090949..., which correct
+/// rounding would take UP to 12345.7, and Chrome answers 12345.6. Measured over
+/// 188 readings with probes/expr-b53-number-serialisation.js.
+const Significant = struct {
+    digits: [6]u8,
+    count: usize,
+    exponent: i32,
+    negative: bool,
+};
 
+fn significant(v: f64) NumberError!Significant {
     var buf: [64]u8 = undefined;
-    // Rounding to five decimals in scientific form first means the exponent we
-    // branch on is the post-rounding one, exactly as %g does.
-    const formatted = std.fmt.bufPrint(&buf, "{e:.5}", .{v}) catch return error.StringTooLarge;
+    const formatted = std.fmt.bufPrint(&buf, "{e}", .{v}) catch return error.StringTooLarge;
 
     var rest = formatted;
     const negative = rest[0] == '-';
     if (negative) rest = rest[1..];
 
     const e_at = std.mem.indexOfScalar(u8, rest, 'e') orelse return error.StringTooLarge;
-    var digits: [6]u8 = undefined;
-    var count: usize = 0;
+    var all: [32]u8 = undefined;
+    var all_count: usize = 0;
     for (rest[0..e_at]) |c| {
         if (c == '.') continue;
-        if (count == digits.len) break;
-        digits[count] = c;
-        count += 1;
+        if (all_count == all.len) break;
+        all[all_count] = c;
+        all_count += 1;
     }
-    const exponent = std.fmt.parseInt(i32, rest[e_at + 1 ..], 10) catch return error.StringTooLarge;
+    var exponent = std.fmt.parseInt(i32, rest[e_at + 1 ..], 10) catch return error.StringTooLarge;
+
+    var digits: [6]u8 = undefined;
+    const count: usize = @min(all_count, digits.len);
+    @memcpy(digits[0..count], all[0..count]);
+    if (all_count > digits.len) {
+        const next = all[digits.len];
+        var tail_nonzero = false;
+        for (all[digits.len + 1 .. all_count]) |c| {
+            if (c != '0') {
+                tail_nonzero = true;
+                break;
+            }
+        }
+        // Half to even: a bare 5 with nothing after it rounds up only when the
+        // digit it would land on is odd.
+        const round_up = next > '5' or
+            (next == '5' and (tail_nonzero or (digits[digits.len - 1] - '0') % 2 == 1));
+        if (round_up) {
+            var i = count;
+            while (i > 0) {
+                i -= 1;
+                if (digits[i] != '9') {
+                    digits[i] += 1;
+                    break;
+                }
+                digits[i] = '0';
+            } else {
+                // Every digit was a 9: the mantissa becomes 1 and the number
+                // gains a decimal place -- 999999.9 rounds to 1e+06, not to
+                // 1000000, because the exponent moves before the %g branch.
+                digits[0] = '1';
+                for (digits[1..count]) |*d| d.* = '0';
+                exponent += 1;
+            }
+        }
+    }
+    return .{ .digits = digits, .count = count, .exponent = exponent, .negative = negative };
+}
+
+pub fn writeNumber(writer: *std.Io.Writer, v: f64) NumberError!void {
+    if (std.math.isNan(v)) return writer.writeAll("NaN");
+    if (std.math.isInf(v)) return writer.writeAll(if (v > 0) "Infinity" else "-Infinity");
+    if (v == 0) return writer.writeAll("0");
+
+    const rounded = try significant(v);
+    const digits = rounded.digits;
+    const count = rounded.count;
+    const exponent = rounded.exponent;
+    const negative = rounded.negative;
 
     if (negative) try writer.writeAll("-");
 
@@ -190,6 +249,50 @@ pub fn writeNumber(writer: *std.Io.Writer, v: f64) NumberError!void {
         try writer.print("e{c}{d:0>2}", .{ sign, @abs(exponent) });
         return;
     }
+
+    if (exponent >= 0) {
+        const int_len: usize = @intCast(exponent + 1);
+        if (int_len >= count) {
+            try writer.writeAll(digits[0..count]);
+            for (0..int_len - count) |_| try writer.writeAll("0");
+            return;
+        }
+        try writer.writeAll(digits[0..int_len]);
+        const fraction = stripFraction(digits[int_len..count]);
+        if (fraction.len != 0) {
+            try writer.writeAll(".");
+            try writer.writeAll(fraction);
+        }
+        return;
+    }
+
+    try writer.writeAll("0.");
+    for (0..@intCast(-exponent - 1)) |_| try writer.writeAll("0");
+    try writer.writeAll(stripTrailingZeros(digits[0..count]));
+}
+
+/// A `<ratio>` term: six significant digits like a dimension, but never in
+/// exponent form, and an integer written out in full.
+///
+/// Both halves are measured, `probes/expr-b53-number-serialisation.js` over
+/// sixteen ratios: `(min-aspect-ratio: 0.000101562500001)` serialises to
+/// `0.000101563 / 1` where `%g` would give `1.01563e-04`, and
+/// `(min-aspect-ratio: 1234565)` keeps all seven digits where six significant
+/// ones would make it 1234560.
+pub fn writeRatioNumber(writer: *std.Io.Writer, v: f64) NumberError!void {
+    if (std.math.isNan(v)) return writer.writeAll("NaN");
+    if (std.math.isInf(v)) return writer.writeAll(if (v > 0) "Infinity" else "-Infinity");
+    if (v == 0) return writer.writeAll("0");
+    if (v == @trunc(v) and @abs(v) < 9007199254740992.0) {
+        return writer.print("{d}", .{v});
+    }
+
+    const r = try significant(v);
+    if (r.negative) try writer.writeAll("-");
+
+    const digits = r.digits;
+    const count = r.count;
+    const exponent = r.exponent;
 
     if (exponent >= 0) {
         const int_len: usize = @intCast(exponent + 1);
@@ -260,6 +363,66 @@ test "css units: absoluteLengthFactor" {
     try testing.expectEqual(null, absoluteLengthFactor(.em));
     try testing.expectEqual(null, absoluteLengthFactor(.vh));
     try testing.expectEqual(null, absoluteLengthFactor(.deg));
+}
+
+test "css units: writeNumber breaks ties to even" {
+    // Every expected string is Chrome 151's own, measured with
+    // probes/expr-b53-number-serialisation.js. The inputs are the half-way
+    // cases at the sixth significant digit -- the only place the tie-break rule
+    // is visible -- and Chrome breaks them to even where this used to break
+    // them away from zero.
+    const cases = [_]struct { in: f64, want: []const u8 }{
+        .{ .in = 1.015625, .want = "1.01562" },
+        .{ .in = 1.421875, .want = "1.42188" },
+        .{ .in = 1078.125, .want = "1078.12" },
+        .{ .in = 0.9765625, .want = "0.976562" },
+        .{ .in = 38.28125, .want = "38.2812" },
+        .{ .in = 97.65625, .want = "97.6562" },
+        .{ .in = 101.5625, .want = "101.562" },
+        .{ .in = 1.0000152587890625, .want = "1.00002" },
+        .{ .in = 1.59765625, .want = "1.59766" },
+        .{ .in = 1.5994873046875, .want = "1.59949" },
+        .{ .in = 3.14159265358979, .want = "3.14159" },
+        .{ .in = 0.000101562500001, .want = "0.000101563" },
+        // Not ties: the shapes the tie-break must not disturb.
+        .{ .in = 1.0, .want = "1" },
+        .{ .in = 0.5, .want = "0.5" },
+        .{ .in = 100.0, .want = "100" },
+        .{ .in = -1.015625, .want = "-1.01562" },
+        .{ .in = 1234565.0, .want = "1.23456e+06" },
+        .{ .in = 999999.9, .want = "1e+06" },
+    };
+    var buf: [64]u8 = undefined;
+    for (cases) |c| {
+        var w = std.Io.Writer.fixed(&buf);
+        try writeNumber(&w, c.in);
+        try testing.expectEqual(c.want, w.buffered());
+    }
+}
+
+test "css units: writeRatioNumber never reaches exponent form" {
+    // Same probe, the <ratio> half. Six significant digits like a dimension,
+    // but positional however small, and an integer written out in full:
+    // 1234565 keeps seven digits where six would make it 1234560.
+    const cases = [_]struct { in: f64, want: []const u8 }{
+        .{ .in = 1.015625, .want = "1.01562" },
+        .{ .in = 1.421875, .want = "1.42188" },
+        .{ .in = 1078.125, .want = "1078.12" },
+        .{ .in = 0.9765625, .want = "0.976562" },
+        .{ .in = 1.0000152587890625, .want = "1.00002" },
+        .{ .in = 0.000101562500001, .want = "0.000101563" },
+        .{ .in = 3.14159265358979, .want = "3.14159" },
+        .{ .in = 1234565.0, .want = "1234565" },
+        .{ .in = 100.0, .want = "100" },
+        .{ .in = 0.5, .want = "0.5" },
+        .{ .in = 0.0, .want = "0" },
+    };
+    var buf: [64]u8 = undefined;
+    for (cases) |c| {
+        var w = std.Io.Writer.fixed(&buf);
+        try writeRatioNumber(&w, c.in);
+        try testing.expectEqual(c.want, w.buffered());
+    }
 }
 
 test "css units: suffix" {
