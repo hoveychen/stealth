@@ -52,6 +52,49 @@ const beacon = `
   };
 `;
 
+// N image requests into the widget's own origin, on a 25ms cadence so they land
+// across the collection window rather than in one burst before it starts. Same
+// path and same shape as the beacon channel's, because that is the thing being
+// reproduced -- see `frame-noise-8` and its siblings at the bottom of the file.
+const FRAME_NOISE = (n) => `
+  (() => {
+    try {
+      if (typeof window === 'undefined' || window.top === window) return;
+    } catch (e) { /* cross-origin top: this is a frame */ }
+    let i = 0;
+    const t = setInterval(() => {
+      if (i >= ${n}) { clearInterval(t); return; }
+      try { new Image().src = '/__cfknob?n=' + (++i) + '&noise=1'; } catch (e) {}
+    }, 25);
+  })();
+`;
+
+// N requests at once, in waves, with a URL of a chosen length.
+//
+// The 25ms version below it was throttled by its own cadence: r2 is posted
+// 0.25s after r1, so at 25ms apart only about ten requests of any N had been
+// made by the time it was built, and 8, 70 and 200 all measured the same. This
+// fires the whole wave synchronously and repeats it, so "how many" and "how
+// long each URL is" are two dials rather than one accident of timing.
+const FRAME_BURST = (n, urlLen, waves) => `
+  (() => {
+    try {
+      if (typeof window === 'undefined' || window.top === window) return;
+    } catch (e) { /* cross-origin top: this is a frame */ }
+    let pad = 'x';
+    while (pad.length < ${urlLen}) pad += pad;
+    pad = pad.slice(0, ${urlLen});
+    let wave = 0;
+    const fire = () => {
+      for (let i = 0; i < ${n}; i++) {
+        try { new Image().src = '/__cfknob?n=' + (wave * ${n} + i) + '&d=' + pad; } catch (e) {}
+      }
+      if (++wave < ${waves}) setTimeout(fire, 300);
+    };
+    fire();
+  })();
+`;
+
 export const CF_KNOBS = {
     // Control 1: nothing injected at all. The baseline the others are read
     // against -- if this loses the ticket, the station moved and no reading in
@@ -2295,6 +2338,355 @@ export const CF_KNOBS = {
         hook('charCodeAt');
         hook('charAt');
         __send('report-charsrc-top=installed&min=' + MIN + '&cap=' + CAP);
+      })();
+    `,
+
+    // The r2 body, whole, on both arms.
+    //
+    // Every reporter before this one records a length and a hash and at most a
+    // 300-character head, which is enough to say "these two differ" and never
+    // enough to say where. r2 is the last unattributed difference on this door
+    // -- 4898 bytes here against 4716 there, six runs to three -- and 180 bytes
+    // cannot be found in a 300-byte prefix. So this one carries content: every
+    // long string it sees goes out in 400-character chunks, reassembled by
+    // cf-r2-text.mjs from the beacon log.
+    //
+    // Three hooks, because the body has three chances to be caught:
+    //   * `xhr.send` is the body itself, at the moment it leaves;
+    //   * `join("")` is how the body is assembled -- 4716 single characters;
+    //   * the receiver of `charCodeAt`/`charAt` is whatever was cut into those
+    //     characters, which is the plaintext.
+    // The last two are hot, so the dedup key has to be cheap (length plus the
+    // first and last character code, read through an unhooked charCodeAt) --
+    // hashing per call is quadratic and the challenge never finishes a round.
+    //
+    // Content goes out as hex, four digits per UTF-16 code unit, and that is
+    // not paranoia about the alphabet. The two report channels do not agree:
+    // the stash keeps the query verbatim while the wire path hands back
+    // decodeURIComponent(query), so a percent-encoded chunk arrives decoded on
+    // one arm and encoded on the other -- and an encoded '&' inside it splits
+    // the line differently in the two. Hex is a fixed point of URI decoding, so
+    // both channels deliver the same bytes.
+    'report-r2-text': beacon + `
+      (() => {
+        const CHUNK = 300;
+        const MIN = 2500;
+        const BUDGET = 900;
+        const HEX = '0123456789abcdef';
+        const hash = (s) => {
+          let h = 5381;
+          for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+          return h.toString(36);
+        };
+        const __code = String.prototype.charCodeAt;
+        const hex = (s) => {
+          let o = '';
+          for (let i = 0; i < s.length; i++) {
+            const c = __code.call(s, i);
+            o += HEX[(c >> 12) & 15] + HEX[(c >> 8) & 15] + HEX[(c >> 4) & 15] + HEX[c & 15];
+          }
+          return o;
+        };
+        const seen = Object.create(null);
+        let spent = 0;
+        const dump = (tag, raw) => {
+          try {
+            const s = String(raw);
+            if (s.length < MIN) return;
+            // Content-keyed, not tag-keyed: the same string reaches this
+            // through charCodeAt and charAt and often through the join too, and
+            // three copies of a 4716-character body is three times the budget
+            // for no extra information. The tag of the FIRST sighting rides
+            // along in the id, which is the part that says who saw it.
+            const k = s.length + ':' + __code.call(s, 0) + ':' + __code.call(s, s.length - 1);
+            if (seen[k]) return;
+            seen[k] = 1;
+            const n = Math.ceil(s.length / CHUNK);
+            if (spent + n > BUDGET) {
+              __send('txt=' + tag + '&len=' + s.length + '&skipped=budget');
+              return;
+            }
+            spent += n;
+            // The id has to survive one round of URI decoding untouched too,
+            // because the wire channel decodes the whole query.
+            const id = tag.replace(/[^A-Za-z0-9._-]/g, '_') + '-' + s.length;
+            __send('txt=' + id + '&len=' + s.length + '&h=' + hash(s) +
+                   '&parts=' + n + '&at=' + encodeURIComponent(__where()));
+            for (let i = 0; i < n; i++) {
+              __send('chunk=' + id + '&i=' + i +
+                     '&d=' + hex(s.slice(i * CHUNK, i * CHUNK + CHUNK)));
+            }
+          } catch (e) {}
+        };
+        try {
+          const realSend = XMLHttpRequest.prototype.send;
+          Object.defineProperty(XMLHttpRequest.prototype, 'send', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (b) { if (typeof b === 'string') dump('xhr', b); return realSend.call(this, b); },
+          });
+        } catch (e) { __send('r2text=xhr-failed:' + e.name); }
+        try {
+          const realFetch = globalThis.fetch;
+          globalThis.fetch = function (input, init) {
+            try { if (init && typeof init.body === 'string') dump('fetch', init.body); } catch (e) {}
+            return realFetch.call(globalThis, input, init);
+          };
+        } catch (e) { __send('r2text=fetch-failed:' + e.name); }
+        try {
+          const real = Array.prototype.join;
+          Object.defineProperty(Array.prototype, 'join', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (sep) {
+              const r = real.call(this, sep);
+              if (typeof r === 'string' && r.length >= MIN) {
+                dump('join' + (sep === undefined ? ',' : String(sep)).slice(0, 4) + '/' + this.length, r);
+              }
+              return r;
+            },
+          });
+        } catch (e) { __send('r2text=join-failed:' + e.name); }
+        const hook = (name) => {
+          try {
+            const real = String.prototype[name];
+            Object.defineProperty(String.prototype, name, {
+              configurable: true, writable: true, enumerable: false,
+              value: function (i) {
+                if (this.length >= MIN) dump('src.' + name, this);
+                return real.call(this, i);
+              },
+            });
+          } catch (e) { __send('r2text=' + name + '-failed:' + e.name); }
+        };
+        hook('charCodeAt');
+        hook('charAt');
+        __send('report-r2-text=installed&min=' + MIN + '&chunk=' + CHUNK +
+               '&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // The same reporter, narrowed until this engine survives it.
+    //
+    // `report-r2-text` is free on Chrome, where the stash is read per target and
+    // nothing goes on the wire. On this arm the widget's global is only
+    // reachable through the wire, and the wide version put 1635 requests into
+    // the challenge's own origin: the exchange stopped at r1 both runs, with no
+    // r2 to measure. The flood is the instrument, not the station.
+    //
+    // So: the widget document only (the top's strings are the 85KB and 63KB
+    // programs and they were already compared, r1's plaintext included), a
+    // length window that keeps the r2 body and its neighbours and drops the
+    // 20KB stylesheet spans, and chunks nearly three times as long. That is
+    // about forty requests instead of sixteen hundred.
+    'report-r2-body': beacon + `
+      (() => {
+        if (__where().indexOf('/frame') === -1) return;
+        const CHUNK = 800;
+        const LO = 3500, HI = 9000;
+        const BUDGET = 90;
+        const HEX = '0123456789abcdef';
+        const hash = (s) => {
+          let h = 5381;
+          for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+          return h.toString(36);
+        };
+        const __code = String.prototype.charCodeAt;
+        const hex = (s) => {
+          let o = '';
+          for (let i = 0; i < s.length; i++) {
+            const c = __code.call(s, i);
+            o += HEX[(c >> 12) & 15] + HEX[(c >> 8) & 15] + HEX[(c >> 4) & 15] + HEX[c & 15];
+          }
+          return o;
+        };
+        const seen = Object.create(null);
+        let spent = 0;
+        const dump = (tag, raw) => {
+          try {
+            const s = String(raw);
+            if (s.length < LO || s.length > HI) return;
+            const k = s.length + ':' + __code.call(s, 0) + ':' + __code.call(s, s.length - 1);
+            if (seen[k]) return;
+            seen[k] = 1;
+            const n = Math.ceil(s.length / CHUNK);
+            if (spent + n > BUDGET) { __send('txt=' + tag + '&len=' + s.length + '&skipped=budget'); return; }
+            spent += n;
+            const id = tag.replace(/[^A-Za-z0-9._-]/g, '_') + '-' + s.length;
+            __send('txt=' + id + '&len=' + s.length + '&h=' + hash(s) +
+                   '&parts=' + n + '&at=' + encodeURIComponent(__where()));
+            for (let i = 0; i < n; i++) {
+              __send('chunk=' + id + '&i=' + i + '&d=' + hex(s.slice(i * CHUNK, i * CHUNK + CHUNK)));
+            }
+          } catch (e) {}
+        };
+        try {
+          const realSend = XMLHttpRequest.prototype.send;
+          Object.defineProperty(XMLHttpRequest.prototype, 'send', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (b) { if (typeof b === 'string') dump('xhr', b); return realSend.call(this, b); },
+          });
+        } catch (e) { __send('r2body=xhr-failed:' + e.name); }
+        try {
+          const real = Array.prototype.join;
+          Object.defineProperty(Array.prototype, 'join', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (sep) {
+              const r = real.call(this, sep);
+              if (typeof r === 'string' && r.length >= LO) {
+                dump('join' + (sep === undefined ? ',' : String(sep)).slice(0, 4) + '/' + this.length, r);
+              }
+              return r;
+            },
+          });
+        } catch (e) { __send('r2body=join-failed:' + e.name); }
+        const hook = (name) => {
+          try {
+            const real = String.prototype[name];
+            Object.defineProperty(String.prototype, name, {
+              configurable: true, writable: true, enumerable: false,
+              value: function (i) {
+                if (this.length >= LO && this.length <= HI) dump('src.' + name, this);
+                return real.call(this, i);
+              },
+            });
+          } catch (e) { __send('r2body=' + name + '-failed:' + e.name); }
+        };
+        hook('charCodeAt');
+        hook('charAt');
+        __send('report-r2-body=installed&lo=' + LO + '&hi=' + HI + '&at=' + encodeURIComponent(__where()));
+      })();
+    `,
+
+    // `report-r2-body` is ticketed on this arm and `none` is not, so the
+    // reporter is not neutral and the thing it was built to measure is no
+    // longer the question. It does two separable things inside the widget's
+    // frame: it replaces four natives, and it puts a few dozen requests on the
+    // wire. This is the first half alone -- the same four wrappers, forwarding
+    // and returning and recording nothing at all, no beacon, no channel.
+    //
+    // If this is ticketed the cause is that the natives are patched. If it is
+    // not, the cause is the traffic, and `report-r2-body --beacon` against
+    // `report-r2-body` without one separates that.
+    'hook-natives-quiet': `
+      (() => {
+        try {
+          if (typeof window === 'undefined' || window.top === window) return;
+        } catch (e) { /* cross-origin top: this is a frame */ }
+        const wrap = (obj, name) => {
+          try {
+            const real = obj[name];
+            if (typeof real !== 'function') return;
+            Object.defineProperty(obj, name, {
+              configurable: true, writable: true, enumerable: false,
+              value: function (a) { return real.call(this, a); },
+            });
+          } catch (e) {}
+        };
+        wrap(Array.prototype, 'join');
+        wrap(String.prototype, 'charCodeAt');
+        wrap(String.prototype, 'charAt');
+        wrap(XMLHttpRequest.prototype, 'send');
+      })();
+    `,
+
+    // It was the traffic, not the hooks.
+    //
+    // `report-r2-body` with --beacon is ticketed 4 of 6 on this arm and takes
+    // r2 from 4898 bytes to 21751. The same knob with the wire off -- every
+    // hook still installed, every string still recorded, nothing sent -- leaves
+    // r2 at 4898 and is 0 of 4, and four bare pass-through wrappers are 0 of 3.
+    // The only thing left is the few dozen image requests the wire puts into
+    // the widget's own origin, and ~16850 extra bytes over ~69 requests is
+    // about 244 bytes each: the size of one serialised resource timing.
+    //
+    // These fire the requests and do nothing else, so "how many" becomes a dial
+    // rather than a side effect of how chatty the reporter happened to be.
+    'frame-noise-8': FRAME_NOISE(8),
+    'frame-noise-24': FRAME_NOISE(24),
+    'frame-noise-70': FRAME_NOISE(70),
+    'frame-noise-200': FRAME_NOISE(200),
+
+
+    // The dial that opened the door, and the arms that took it apart.
+    //
+    // `frame-noise-*` above measured nothing: it fires on a 25ms timer and r2
+    // goes out 0.25s after r1, so at any N only about ten requests had landed
+    // before the payload they were meant to move. These fire each wave
+    // synchronously and repeat it four times at 300ms, covering r2 at ~0.3s and
+    // r3 at ~1.2s, and they carry no hook and no report -- just requests.
+    //
+    // Ticket counts on this engine, alternated against `none` in the same
+    // window, ReleaseFast at 37551b1ae. `none` is 0 of 12.
+    //
+    //   requests  query  tickets
+    //        280     20    0 / 6
+    //         32   2000    0 / 3
+    //         32   3000    3 / 5
+    //        280    200    2 / 3
+    //        320    200    3 / 3
+    //        280    800    3 / 3
+    //        280   2000    3 / 3
+    //        280   3000    4 / 4
+    //
+    // So it is neither dial alone. `frame-burst-70` and `frame-burst-70-len200`
+    // differ only in query length and are 0/6 against 2/3; `burst-64k-long` and
+    // `burst-64k-short` carry the SAME 64KB total at ten times the difference
+    // in per-request length and are 0/3 against 3/3. Payload size does not
+    // explain it either -- 5324 bytes of r2 with no ticket against 5346 with
+    // one -- and neither does timing: r3 leaves at 1.15-2.46s on the ticketed
+    // runs and 1.14-1.94s on the refused ones.
+    'frame-burst-70': FRAME_BURST(70, 20, 4),
+    'frame-burst-70-len200': FRAME_BURST(70, 200, 4),
+    'frame-burst-70-len800': FRAME_BURST(70, 800, 4),
+    'frame-burst-70-len2000': FRAME_BURST(70, 2000, 4),
+    'frame-burst-70-long': FRAME_BURST(70, 3000, 4),
+    'frame-burst-8-long': FRAME_BURST(8, 3000, 4),
+    // Same total bytes, ten times apart in per-request length.
+    'burst-64k-long': FRAME_BURST(8, 2000, 4),
+    'burst-64k-short': FRAME_BURST(80, 200, 4),
+
+    // Two arms that turned out to be destructive rather than negative, kept so
+    // the next session does not read them as evidence: `frame-burst-cross`
+    // stopped the exchange at r2 all three runs and `top-burst` produced no
+    // rounds at all. Too much traffic at another origin breaks the challenge
+    // the same way 1635 beacons did. Redo them at a much smaller N before
+    // concluding anything about where the requests have to go.
+    'frame-burst-cross': `
+      (() => {
+        try {
+          if (typeof window === 'undefined' || window.top === window) return;
+        } catch (e) { /* cross-origin top: this is a frame */ }
+        let pad = 'x';
+        while (pad.length < 3000) pad += pad;
+        pad = pad.slice(0, 3000);
+        let wave = 0;
+        const fire = () => {
+          for (let i = 0; i < 70; i++) {
+            try {
+              new Image().src = 'https://www.scrapingcourse.com/__cfknob?n=' +
+                (wave * 70 + i) + '&d=' + pad;
+            } catch (e) {}
+          }
+          if (++wave < 4) setTimeout(fire, 300);
+        };
+        fire();
+      })();
+    `,
+    'top-burst': `
+      (() => {
+        try {
+          if (typeof window === 'undefined' || window.top !== window) return;
+        } catch (e) { return; }
+        let pad = 'x';
+        while (pad.length < 3000) pad += pad;
+        pad = pad.slice(0, 3000);
+        let wave = 0;
+        const fire = () => {
+          for (let i = 0; i < 70; i++) {
+            try { new Image().src = '/__cfknob?n=' + (wave * 70 + i) + '&d=' + pad; } catch (e) {}
+          }
+          if (++wave < 4) setTimeout(fire, 300);
+        };
+        fire();
       })();
     `,
 };
