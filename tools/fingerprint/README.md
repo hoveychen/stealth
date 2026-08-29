@@ -20337,10 +20337,19 @@ So r1 holds nothing either, and the list of surfaces on this door that nobody
 has pointed an instrument at is now empty.
 
 One measurable difference is left over and still unattributed: the **r2 request
-body** is 4919 bytes here against 4727 in the same sitting from Chrome (B60 had
-Chrome at 4706–4759 and this engine at 4898–5314). B60 showed the *jitter* in
-that range was a Debug build; the ~200-byte excess itself has never been
-explained.
+body**. Six ReleaseFast runs in one sitting gave 4898 / 4908 / 4919 / 4898 /
+4898 / 4898 against Chrome's 4716 / 4716 / 4716 — a span of 21 bytes, not the
+416 B60 saw, so that jitter really was the Debug build. The **~180-byte excess
+itself did not move**, and it is now the only quantifiable, stable,
+unattributed difference left on this door.
+
+And the acceptance run for the whole batch: with all ten fidelity fixes in
+(hasFocus, the terminated worker, addTransceiver, the platform's codec table,
+getMappedRange, the shadow stylesheet scope, FontFace's local(), unitless
+line-height, quoted family names, the full version), this engine is **0 for 6**
+in a window where Chrome is 3 for 3. The door judges neither the values the
+widget collects — which B60 closed from the breaking direction and this closes
+from the repairing one — nor these ten.
 
 (These readings are from the Debug binary — a ReleaseFast link was still running
 when they were taken. It is a content comparison and both arms stop at r3, so
