@@ -5917,6 +5917,10 @@ test "WebApi: CSSStyleDeclaration child box height" {
     try testing.htmlRunner("css/child_box_height.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration nested content height" {
+    try testing.htmlRunner("css/nested_content_height.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration inline content lines" {
     try testing.htmlRunner("css/inline_content_lines.html", .{});
 }

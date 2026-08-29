@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A box is as tall as what is inside it, however many wrappers deep that is.
+
+css/child_box_height.html closed the half of this that was free -- a child's
+padding and border are inside its parent -- and left three shapes listed rather
+than asserted, because the fix for them was written, measured and reverted:
+recursing into `el.contentHeight` per child makes every shape right and takes
+`WebApi: Element` to ExecutionTerminated. A child measured from inside its
+parent's walk reaches back UP for its containing block, and that walks down
+again, so the work multiplies with depth. See the README chapter beside the
+reverted patch.
+
+So this test is written to fail BOTH ways, and that is deliberate:
+
+  * it fails on a wrong number, because every level of the chain is 12px tall
+    in Chrome and this engine answered 0 above the leaf;
+  * it fails on time, because it measures EVERY level of a 64-deep chain and
+    the parent of 40 siblings 40 times over. A traversal that re-walks the
+    subtree once per measurement does not finish, and not finishing is how the
+    reverted patch failed rather than how it was caught -- it took the whole
+    Element suite down with it, from a page that was not about layout at all.
+
+Measured on Chrome 151 with tools/fingerprint/probes/expr-b86-nested-depth.js
+on https://example.com/: every level of every chain is 12, and the wide parent
+is 480.
+-->
+
+<script id=a_wrapper_is_as_tall_as_what_it_wraps>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+
+  const wrong = [];
+
+  // A chain of N wrappers around one 12px box. Every level is measured, so N
+  // measurements cover the same subtree.
+  for (const depth of [1, 2, 4, 16, 64]) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div>'.repeat(depth) + '<div style="height:12px"></div>' +
+        '</div>'.repeat(depth);
+    host.appendChild(wrap);
+
+    const heights = [];
+    let node = wrap.firstElementChild;
+    while (node) {
+      heights.push(node.offsetHeight);
+      node = node.firstElementChild;
+    }
+    wrap.remove();
+
+    const got = [heights.length, heights.every((h) => h === 12), heights[0]].join(' ');
+    const want = [depth + 1, true, 12].join(' ');
+    if (got !== want) wrong.push('chain' + depth + ': want [' + want + '], got [' + got + ']');
+  }
+
+  // Wide rather than deep: 40 siblings each holding a sized box, and the
+  // parent measured once per sibling. Deep and wide multiply differently.
+  {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div data-p>' +
+        '<div><div style="height:12px"></div></div>'.repeat(40) + '</div>';
+    host.appendChild(wrap);
+    const p = wrap.querySelector('[data-p]');
+    let last = 0;
+    for (let i = 0; i < 40; i++) last = p.offsetHeight;
+    wrap.remove();
+    if (last !== 480) wrong.push('wide40: want [480], got [' + last + ']');
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
