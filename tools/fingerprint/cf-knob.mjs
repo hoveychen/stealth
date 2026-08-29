@@ -41,13 +41,22 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i !== -1 ? process.argv[i + 1] : d; };
 
+// `--knob-file <path>` merges a scratch module's `KNOBS` export on top of the
+// checked-in table, so a dose sweep that only exists for one session's question
+// does not have to land in cf-knobs.mjs. Two sessions have already collided on
+// that file -- one declaring a knob the other was deleting, leaving it
+// unimportable, which reads exactly like a knob that changed nothing.
+const knobFile = arg('--knob-file', null);
+const EXTRA = knobFile ? (await import(path.resolve(process.cwd(), knobFile))).KNOBS : {};
+const KNOBS = { ...CF_KNOBS, ...EXTRA };
+
 if (process.argv.includes('--list')) {
-    console.log(Object.keys(CF_KNOBS).join('\n'));
+    console.log(Object.keys(KNOBS).join('\n'));
     process.exit(0);
 }
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: cf-knob.mjs <lightpanda|chrome> --knob <name> [--runs N] [--port P] [--url U] [--settle MS] [--headless] [--out PATH]');
+    console.error('usage: cf-knob.mjs <lightpanda|chrome> --knob <name> [--knob-file MODULE] [--runs N] [--port P] [--url U] [--settle MS] [--headless] [--out PATH]');
     process.exit(2);
 }
 const knobName = arg('--knob', 'none');
@@ -59,7 +68,7 @@ const knobName = arg('--knob', 'none');
 // from "the repair never landed in the payload".
 const parts = knobName.split('+');
 for (const p of parts) {
-    if (p in CF_KNOBS) continue;
+    if (p in KNOBS) continue;
     console.error(`unknown knob '${p}'. --list to see them.`);
     process.exit(2);
 }
@@ -69,8 +78,8 @@ for (const p of parts) {
 // target, and the per-session stash read cannot reach the widget's global there.
 const wire = process.argv.includes('--beacon');
 const body = parts.length === 1
-    ? CF_KNOBS[knobName]
-    : parts.map((p) => (CF_KNOBS[p] ? `(function () {\n${CF_KNOBS[p]}\n})();` : '')).join('\n');
+    ? KNOBS[knobName]
+    : parts.map((p) => (KNOBS[p] ? `(function () {\n${KNOBS[p]}\n})();` : '')).join('\n');
 const knobSrc = body ? (wire ? 'globalThis.__CFK_WIRE = true;\n' : '') + body : body;
 const runs = Number(arg('--runs', 2));
 const basePort = Number(arg('--port', 9470));
