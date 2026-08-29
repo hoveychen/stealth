@@ -177,6 +177,12 @@ pub const GPUBuffer = struct {
     _usage: u32,
     // The state a freshly created, unmapped buffer reports (measured).
     _map_state: []const u8 = "unmapped",
+    // The intervals getMappedRange() has handed out for the current mapping.
+    // Chrome refuses a second range overlapping any of them and names both
+    // intervals in the message; unmap() clears the list.
+    _ranges: std.ArrayList(Range) = .empty,
+
+    const Range = struct { start: u64, end: u64 };
 
     const label_accessors = labelAccessors(GPUBuffer);
 
@@ -196,18 +202,67 @@ pub const GPUBuffer = struct {
     // back an ArrayBuffer for.
     pub fn shapeOnly(_: *GPUBuffer) void {}
 
-    /// Chrome throws here on a buffer that is not mapped and answers with an
-    /// ArrayBuffer on one that is (measured). Only the refusal is reproduced:
-    /// there are no bytes behind the handle to hand out, so a mapped buffer
-    /// still answers undefined where Chrome gives a buffer of `size` bytes.
-    pub fn getMappedRange(self: *GPUBuffer, exec: *const Execution) !void {
+    const map_range_failed =
+        "Failed to execute 'getMappedRange' on 'GPUBuffer': getMappedRange failed";
+
+    /// The bytes behind a mapped buffer. Measured on Chrome 151
+    /// (probes/expr-gpu-mapped-range.js): a mapped buffer answers an
+    /// ArrayBuffer of the requested interval, all zero on a buffer nothing has
+    /// been copied into; an offset on its own takes the rest; an unmapped
+    /// buffer, an unaligned offset and an interval past the end all throw
+    /// OperationError with the plain message; and a second range overlapping
+    /// one already handed out throws with both intervals named.
+    ///
+    /// This is the one structural gap in the Cloudflare widget's payload B60
+    /// could attribute: the widget runs a WebGPU pipeline and encodes 4096
+    /// bytes out of the buffer it reads back, and answering undefined meant
+    /// that segment was simply missing from ours.
+    ///
+    /// Not reproduced: unmap() detaches the ranges in Chrome, so their
+    /// byteLength reads 0 afterwards. There is no detach in the V8 binding
+    /// here, so a range handed out before unmap() keeps its bytes.
+    pub fn getMappedRange(self: *GPUBuffer, args: []js.Value, exec: *const Execution) !js.ArrayBuffer {
         if (!std.mem.eql(u8, self._map_state, "mapped")) {
-            return throwDom(
-                "OperationError",
-                "Failed to execute 'getMappedRange' on 'GPUBuffer': getMappedRange failed",
-                exec,
-            );
+            return throwDom("OperationError", map_range_failed, exec);
         }
+
+        const offset = argumentSize(args, 0) orelse 0;
+        const size = argumentSize(args, 1) orelse (if (offset > self._size) 0 else self._size - offset);
+        const end = offset + size;
+        // The alignment WebGPU requires of the pair, and the buffer's own end.
+        if (offset % 8 != 0 or size % 4 != 0 or end > self._size or offset > self._size) {
+            return throwDom("OperationError", map_range_failed, exec);
+        }
+
+        for (self._ranges.items) |taken| {
+            if (offset < taken.end and taken.start < end) {
+                return throwDom("OperationError", try std.fmt.allocPrint(
+                    exec.call_arena,
+                    "Failed to execute 'getMappedRange' on 'GPUBuffer': getMappedRange " ++
+                        "[{d}, {d}) overlaps with previously returned range [{d}, {d}).",
+                    .{ offset, end, taken.start, taken.end },
+                ), exec);
+            }
+        }
+        try self._ranges.append(exec.arena, .{ .start = offset, .end = end });
+
+        const bytes = try exec.call_arena.alloc(u8, @intCast(size));
+        @memset(bytes, 0);
+        return .{ .values = bytes };
+    }
+
+    /// A `GPUSize64` argument, or null when it was left out. Anything that is
+    /// not a number reads as 0, which is what the WebIDL conversion of a
+    /// missing-but-present value comes to here.
+    fn argumentSize(args: []js.Value, index: usize) ?u64 {
+        if (index >= args.len or args[index].isUndefined()) {
+            return null;
+        }
+        const number = args[index].toF64() catch return 0;
+        if (!(number > 0)) {
+            return 0;
+        }
+        return @intFromFloat(number);
     }
 
     /// A promise, not a throw, when the argument is missing -- WebIDL turns a
@@ -229,12 +284,16 @@ pub const GPUBuffer = struct {
             return resolver.promise();
         }
         self._map_state = "mapped";
+        self._ranges = .empty;
         return local.resolvePromise({});
     }
 
-    /// Back to 'unmapped' (measured on a mappedAtCreation buffer).
+    /// Back to 'unmapped' (measured on a mappedAtCreation buffer), and the
+    /// ranges handed out for that mapping are forgotten, so the next mapping
+    /// can hand out the same interval again.
     pub fn unmap(self: *GPUBuffer) void {
         self._map_state = "unmapped";
+        self._ranges = .empty;
     }
 
     pub const JsApi = struct {
@@ -251,7 +310,7 @@ pub const GPUBuffer = struct {
         pub const mapState = bridge.accessor(GPUBuffer.getMapState, null, .{});
         pub const label = bridge.accessor(label_accessors.get, label_accessors.set, .{});
         pub const destroy = bridge.function(GPUBuffer.shapeOnly, .{});
-        pub const getMappedRange = bridge.function(GPUBuffer.getMappedRange, .{});
+        pub const getMappedRange = bridge.function(GPUBuffer.getMappedRange, .{ .arity = 0 });
         pub const mapAsync = bridge.function(GPUBuffer.mapAsync, .{ .arity = 1 });
         pub const unmap = bridge.function(GPUBuffer.unmap, .{});
     };
