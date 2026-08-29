@@ -20605,3 +20605,56 @@ reads it, and the two that a guard demonstrably does read -- the box-probe
 family and the Proxy trap log -- were both already knob-cleared before the fix.
 The next attempt on either door needs a new observation channel, not another
 value made to match.
+
+## The margin is not in the box model
+
+`sibling-margin-collapse` asked for one reading -- three blocks whose parent
+should be taller than the sum of their heights -- and the plan cited two files
+in `scratch/`, which is gone. So it was measured again, wider than asked:
+`probes/expr-b86-margin-collapse.js`, ten shapes, both arms on
+`https://example.com/` so the page under the boxes is the same one.
+
+Seven of the ten disagree, and the parent's height is the reading that carries
+it:
+
+| shape | Chrome | this engine |
+|---|---|---|
+| three siblings, `margin:10px 0` each | **56** | 36 |
+| `margin-bottom:30px` against `margin-top:10px` | **54** | 24 |
+| `margin-bottom:30px` against `margin-top:-10px` | **44** | 24 |
+| first child `margin-top:20px`, bare parent | 12 | 12 |
+| the same with `border:1px` | **34** | 14 |
+| the same with `padding-top:1px` | **33** | 13 |
+| last child `margin-bottom:20px`, bare parent | 12 | 12 |
+| empty block between two blocks | **34** | 24 |
+| parent whose only child is an empty margin | 0 | 0 |
+| `overflow:hidden` parent, child `margin-top:20px` | **32** | 12 |
+
+The cause is one line. `Element.contentHeight` walks the children and adds
+`el.getElementDimensions(frame).height`; `Dimensions` carries `padding_x/y` and
+`border_x/y` and no margin at all, so a margin contributes nothing anywhere.
+
+The three that already agree agree by accident, and they are worth naming
+because they are what stops "just add the margins" from being the fix: in all
+three the correct answer is that the margin contributes **nothing to this
+parent**, which is also what an engine that has never heard of margins says.
+They are the escape cases, and they are the reason the rule set has to be
+measured rather than generalised from the sibling case:
+
+* adjoining sibling margins collapse to `max(positives) + min(negatives)` -- 30
+  against 10 is 30 and not 40, and 30 against -10 is 20 and not 20-by-luck;
+* a first child's top margin and a last child's bottom margin **escape** a
+  parent that has no border and no padding on that side: the parent moves and
+  does not grow. `escapeTop` reads 12 of height and 20 of offset from the host;
+* a border or a padding on that side stops the escape, which is why the same
+  markup answers 34 and 33 -- and note that those two also prove the margin is
+  *counted* once contained, so the escape is not "margins never count";
+* an empty block collapses through itself: its own two margins become one gap,
+  so the two blocks around it are 10 apart and the parent is 34, not 44;
+* none of it crosses a block formatting context. `overflow:hidden` contains the
+  child's margin and answers 32.
+
+Only heights are asserted in `css/margin_collapse.html`. Chrome's child
+positions in this markup are real -- `0,22,44` for the three siblings -- and
+this engine answers `5,10,15`, a placeholder; positioning every box is a
+different piece of work and the height is what a guard reads.
