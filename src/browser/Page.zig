@@ -120,6 +120,17 @@ queued_queued_navigation: std.ArrayList(*Frame) = .empty,
 // The root Frame of this Page. Non-optional — a Page always has a root frame.
 frame: Frame,
 
+// The frame holding the focus, which is what `document.hasFocus()` is asked
+// about. Null means the root frame: a page that has been touched nowhere still
+// answers `true` at the top and `false` in every child, which is what Chrome
+// does (measured, tools/fingerprint/probes/expr-b85-has-focus.js).
+//
+// Only the deepest frame is recorded; the chain to the root is walked when the
+// question is asked, so a frame does not have to be told when a descendant
+// takes or loses the focus. Cleared in Frame.deinit, so it never outlives what
+// it points at.
+focused_frame: ?*Frame = null,
+
 // Popup Frames opened by window.open. They are top-level browsing contexts
 // (parent == null, no iframe element) but share this Page's factory, arena,
 // and identity map.

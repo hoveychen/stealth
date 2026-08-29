@@ -320,6 +320,47 @@
 }
 </script>
 
+<script id="has_focus_top_and_detached">
+{
+  // The top document is in the focus chain; a document that was never in a
+  // browsing context cannot be. Measured on Chrome 151 with
+  // tools/fingerprint/probes/expr-b85-has-focus.js: `true` for the top
+  // document and `false` for `createHTMLDocument`.
+  testing.expectEqual(true, document.hasFocus());
+  testing.expectEqual(false, document.implementation.createHTMLDocument('d').hasFocus());
+}
+</script>
+
+<script id="has_focus_child_frame" type="module">
+{
+  // A child frame is not in the focus chain until something inside it is
+  // focused, and it STAYS in the chain after that thing is blurred -- blur
+  // returns focus to the frame's own body, which is still the chain. Same
+  // probe, Chrome 151: false, then true for both documents, then still true.
+  const state = await testing.async();
+
+  const f = document.createElement('iframe');
+  f.srcdoc = '<!doctype html><body><input id=i></body>';
+  f.onload = () => state.resolve(f);
+  document.body.appendChild(f);
+
+  await state.done((f) => {
+    const doc = f.contentDocument;
+    testing.expectEqual(false, doc.hasFocus());
+    testing.expectEqual(true, document.hasFocus());
+
+    doc.getElementById('i').focus();
+    testing.expectEqual(true, doc.hasFocus());
+    testing.expectEqual(true, document.hasFocus());
+
+    doc.getElementById('i').blur();
+    testing.expectEqual(true, doc.hasFocus());
+
+    f.remove();
+  });
+}
+</script>
+
 <script id="focus_display_none_noop">
 {
   // Per HTML spec §6.4.4: an element inside a display:none container

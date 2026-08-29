@@ -1849,9 +1849,24 @@ pub fn getAdoptedStyleSheets(self: *Document, frame: *Frame) !js.Object.Global {
     return self._adopted_style_sheets.?;
 }
 
-pub fn hasFocus(_: *Document) bool {
-    log.debug(.not_implemented, "Document.hasFocus", .{});
-    return true;
+/// Whether this document is on the chain from the focused frame to its root.
+///
+/// Answering `true` unconditionally is a headless tell of the shape these
+/// guards weigh: a real browser gives the top document focus and a child frame
+/// nothing until something inside it is focused. Measured on Chrome 151 with
+/// tools/fingerprint/probes/expr-b85-has-focus.js -- an untouched same-origin
+/// child answers `false`, both answer `true` once an input in the child is
+/// focused, the child still answers `true` after that input is blurred, and a
+/// `createHTMLDocument` answers `false`.
+pub fn hasFocus(self: *Document) bool {
+    // No browsing context, no chain to be on: createHTMLDocument, DOMParser
+    // output and template contents all land here.
+    const doc_frame = self._frame orelse return false;
+    var current: ?*Frame = doc_frame._page.focused_frame orelse &doc_frame._page.frame;
+    while (current) |f| : (current = f.parent) {
+        if (f == doc_frame) return true;
+    }
+    return false;
 }
 
 pub fn setAdoptedStyleSheets(self: *Document, sheets: js.Object) !void {
