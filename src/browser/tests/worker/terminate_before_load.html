@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<body></body>
+<script src="../testing.js"></script>
+
+<!--
+Terminating a worker before its script has arrived is not an error.
+
+The Cloudflare challenge makes a 13-byte text/javascript blob worker -- its
+source is the joke `"you"==="bot"`, caught on a live run with the
+report-worker-source knob -- and terminates it. Chrome runs the page without a
+sound; this engine fired `error` with message "Abort" on every run, in both
+documents, and the challenge then built a third worker Chrome never builds.
+The abort came from terminate() itself: it aborts the pending script fetch with
+error.Abort, and the fetch's error callback fired an error event at the page.
+-->
+
+<script id=terminate_before_the_script_lands type=module>
+{
+  const state = await testing.async();
+
+  const src = '"you"==="bot"';
+  const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  const worker = new Worker(url);
+  const seen = [];
+  worker.addEventListener('error', (e) => seen.push('error:' + String((e && e.message) || '')));
+  // Straight away, before the script can have been fetched.
+  worker.terminate();
+
+  setTimeout(() => state.resolve(), 200);
+  await state.done(() => {
+    testing.expectEqual('', seen.join(','));
+  });
+}
+</script>
+
+<script id=a_worker_that_cannot_load_still_reports type=module>
+{
+  // The other side of it: a fetch that fails on its own -- nobody terminated
+  // this one -- still reaches the page, so the fix must not silence that.
+  const state = await testing.async();
+
+  const worker = new Worker('./no-such-worker-file.js');
+  const seen = [];
+  worker.addEventListener('error', () => seen.push('error'));
+  setTimeout(() => state.resolve(), 500);
+  await state.done(() => {
+    testing.expectEqual('error', seen.join(','));
+  });
+}
+</script>

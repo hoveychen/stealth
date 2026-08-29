@@ -59,6 +59,11 @@ _url: [:0]const u8,
 _name: []const u8 = "",
 _type: WorkerType = .classic,
 _script_loaded: bool = false,
+// Set before the script fetch is aborted on purpose. An abort we asked for is
+// not a load failure, and Chrome reports nothing for it -- the Cloudflare
+// challenge terminates a 13-byte blob worker before its script can land and
+// its page hears nothing, where this fired `error` with message "Abort".
+_aborted_by_us: bool = false,
 _script_arena: ?*lp.Arena = null,
 _script_buffer: std.ArrayList(u8) = .empty,
 _http_transfer: ?*Transfer = null,
@@ -146,6 +151,7 @@ pub fn init(url: []const u8, options: ?WorkerOptions, frame: *Frame) !*Worker {
 pub fn deinit(self: *Worker) void {
     // No pending frame for workers, so we can abort all frames.
     if (self._http_transfer) |res| {
+        self._aborted_by_us = true;
         res.abort(error.Abort);
         self._http_transfer = null;
     }
@@ -275,6 +281,14 @@ fn httpErrorCallback(ctx: *anyopaque, err: anyerror) void {
     self._http_transfer = null;
     self.releaseScriptArena();
 
+    // An abort we asked for -- terminate(), or the frame going away -- is not
+    // a fetch that failed, and the page is told nothing about it.
+    if (self._aborted_by_us) {
+        self._script_loaded = true;
+        self._worker_scope.drainPendingMessages();
+        return;
+    }
+
     log.err(.browser, "worker fetch error", .{
         .url = self._url,
         .err = err,
@@ -330,6 +344,7 @@ fn _fireErrorEvent(self: *Worker, message: []const u8, error_value: ?js.Value.Gl
 pub fn terminate(self: *Worker) void {
     // Abort any pending script fetch
     if (self._http_transfer) |resp| {
+        self._aborted_by_us = true;
         resp.abort(error.Abort);
         self._http_transfer = null;
     }

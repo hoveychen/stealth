@@ -2182,4 +2182,57 @@ export const CF_KNOBS = {
         for (const ms of [5000, 12000, 19000]) setTimeout(() => line('tick=' + ms + '&blobs=' + blobs), ms);
       })();
     `,
+    // What the challenge's tiny first blob worker actually contains.
+    //
+    // report-workers gives its size and type (13 bytes, text/javascript) but
+    // not its text, and no short script guessed at that length reproduces the
+    // `error: Abort` this engine answers it with
+    // (probes/expr-blob-worker-abort.js: eleven candidates, both arms silent).
+    // So read the Blob on the way past createObjectURL and beacon it.
+    'report-worker-source': beacon + `
+      (() => {
+        const line = (q) => __send('at=' + encodeURIComponent(__where()) + '&' + q);
+        let n = 0;
+        try {
+          const realCreate = URL.createObjectURL;
+          Object.defineProperty(URL, 'createObjectURL', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (obj) {
+              const url = realCreate.call(URL, obj);
+              n += 1;
+              const seq = n;
+              try {
+                line('blob=' + seq + '&size=' + obj.size + '&type=' + encodeURIComponent(String(obj.type)));
+                if (typeof obj.text === 'function' && obj.size <= 4096) {
+                  obj.text().then((t) => line('blob-text=' + seq + '&src=' + encodeURIComponent(t)),
+                    (e) => line('blob-text=' + seq + '&err=' + e.name));
+                }
+              } catch (e) { line('blob=' + seq + '&read-failed=' + e.name); }
+              return url;
+            },
+          });
+          line('report-worker-source=hooked');
+        } catch (e) { line('report-worker-source=failed:' + e.name); }
+
+        try {
+          const Real = window.Worker;
+          const Hooked = new Proxy(Real, {
+            construct(target, args, nt) {
+              const w = Reflect.construct(target, args, nt);
+              const url = String(args[0]);
+              line('worker=new&url=' + encodeURIComponent(url.slice(0, 90)));
+              try {
+                w.addEventListener('error', (e) => line('worker=error&msg=' +
+                  encodeURIComponent(String((e && e.message) || '')) +
+                  '&url=' + encodeURIComponent(url.slice(0, 90))), { once: true });
+              } catch (e) { /* no listener, no report */ }
+              return w;
+            },
+          });
+          Object.defineProperty(window, 'Worker', {
+            configurable: true, writable: true, enumerable: false, value: Hooked,
+          });
+        } catch (e) { line('worker-hook=failed:' + e.name); }
+      })();
+    `,
 };
