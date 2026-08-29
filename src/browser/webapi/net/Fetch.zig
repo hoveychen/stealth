@@ -352,7 +352,9 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
     _ = try exec.performance().resourceLoaded(
         if (response._url.len > 0) response._url else self._url,
         t,
-        self._perf_labels.timingAllowOrigin(),
+        // fetch() is CORS mode unless a page asks for no-cors, which
+        // nothing here implements yet.
+        .{ .timing_allow_origin = self._perf_labels.timingAllowOrigin(), .cors_response = true },
         exec,
     );
 

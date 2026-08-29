@@ -566,11 +566,35 @@ fn timingAllowed(header: []const u8, document_url: []const u8) bool {
     return false;
 }
 
+/// What a recorder has to say about a load beyond the numbers, so
+/// `resourceLoaded` can decide how much of it this document may see.
+pub const LoadedOpts = struct {
+    /// The response's `Timing-Allow-Origin` header, empty when it sent none.
+    timing_allow_origin: []const u8 = "",
+
+    /// Whether the request went out in CORS mode and came back a CORS
+    /// response, rather than an opaque one. True for fetch and XHR, which
+    /// announce an Origin and are refused without a matching Allow-Origin;
+    /// false for the loads that go out no-cors -- an <img>, a <script src>, a
+    /// stylesheet, an <iframe>.
+    ///
+    /// It decides one thing: whether `responseStatus` and `contentType` are
+    /// readable. See Timing.maskCrossOrigin for the measurements.
+    ///
+    /// This engine has no `crossorigin` attribute support on script, image or
+    /// link elements, so those really are no-cors here and `false` is the
+    /// honest answer for them -- but it is honest about US, not about Chrome.
+    /// A page that loads a cross-origin script WITH `crossorigin` gets a status
+    /// from Chrome and a zero from this engine; that gap belongs to the
+    /// element's request, not to this entry, and is its own plan.
+    cors_response: bool = false,
+};
+
 pub fn resourceLoaded(
     self: *Performance,
     name: []const u8,
     t: timing.Timing,
-    timing_allow_origin: []const u8,
+    opts: LoadedOpts,
     exec: *const Execution,
 ) !*timing.Timing {
     // ResourceTiming reads its milestones through a pointer, so the timing has
@@ -589,7 +613,11 @@ pub fn resourceLoaded(
     // the same reason the labels are duped here: five recorders file entries
     // and a sixth will, and the one that forgot would be the one that leaks.
     const same_origin = self.sameOriginAsDocument(name);
-    stored.maskCrossOrigin(same_origin, same_origin or timingAllowed(timing_allow_origin, self._nav_name));
+    stored.maskCrossOrigin(
+        same_origin,
+        opts.cors_response,
+        same_origin or timingAllowed(opts.timing_allow_origin, self._nav_name),
+    );
 
     // The two response labels are the only fields whose bytes belong to
     // whoever performed the fetch -- an inline buffer on a Script, an

@@ -142,18 +142,27 @@ pub const Timing = struct {
     /// Hides from a page what Resource Timing does not let it see about a load
     /// from another origin.
     ///
-    /// Two independent gates, which is not obvious and is why they are two
-    /// arguments rather than one (all measured on a two-origin fixture,
-    /// probes/b87-crossorigin-fixture.mjs + probes/expr-b87-crossorigin.js,
-    /// against Chrome):
+    /// Two gates, and they are governed by different things, which is the part
+    /// that is easy to get wrong. Measured on a two-origin fixture
+    /// (probes/b87-crossorigin-fixture.mjs + probes/expr-b87-crossorigin.js)
+    /// against Chrome, where the last two rows are the ones that settle it:
     ///
-    ///   same-origin        sizes real, proto real, walk real, status 200, type real
-    ///   cross + TAO        sizes real, proto real, walk real, status 0,   type ''
-    ///   cross, no TAO      sizes 0,    proto '',   walk 0,    status 0,   type ''
+    ///   load            mode      TAO   sizes/proto/walk   status   contentType
+    ///   same-origin     --        --    real               200      real
+    ///   <img>           no-cors   no    0                  0        ''
+    ///   <img>           no-cors   yes   real               0        ''
+    ///   <iframe>        no-cors   yes   real               0        ''
+    ///   fetch()         cors      no    0                  200      real
+    ///   fetch()         cors      yes   real               200      real
     ///
-    /// So `Timing-Allow-Origin` hands back the *timing and the sizes*, and
-    /// nothing else: the status and the content type need the same origin, and
-    /// stay hidden however loudly the response opts in.
+    /// So `Timing-Allow-Origin` governs the *timing and the sizes* and nothing
+    /// else, while the status and the content type ride on the response TYPE:
+    /// a CORS-mode request that succeeded is not an opaque response, and its
+    /// status is the page's to read whatever TAO says. Reading the status gate
+    /// as "same origin" -- which the <img> rows alone would suggest -- hides
+    /// the status of every cross-origin fetch and XHR, and is contradicted on
+    /// the live station too: Chrome reports cf-scrapingcourse's cross-origin
+    /// api.js with responseStatus 200.
     ///
     /// What survives either way is `fetchStart`, `responseEnd` and therefore
     /// `startTime` and `duration` -- a page may always know that it loaded
@@ -163,11 +172,11 @@ pub const Timing = struct {
     /// exact size.
     ///
     /// `content_encoding` and `delivery_type` are deliberately left alone: both
-    /// read empty in all six rows of the fixture on both arms, so the reading
+    /// read empty in all seven rows of the fixture on both arms, so the reading
     /// does not say which side of either gate they sit on, and blanking a field
     /// on a guess is how the wrong subset gets zeroed.
-    pub fn maskCrossOrigin(self: *Timing, same_origin: bool, timing_allowed: bool) void {
-        if (!same_origin) {
+    pub fn maskCrossOrigin(self: *Timing, same_origin: bool, cors_response: bool, timing_allowed: bool) void {
+        if (!same_origin and !cors_response) {
             self.response_status = 0;
             self.content_type = "";
         }

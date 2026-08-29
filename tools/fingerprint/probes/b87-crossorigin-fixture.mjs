@@ -33,7 +33,21 @@ const PAGE = `<!DOCTYPE html>
 <img src="${OTHER}/tao.gif">
 <iframe src="${OTHER}/plain-frame.html"></iframe>
 <iframe src="${OTHER}/tao-frame.html"></iframe>
-<script>window.__done = new Promise((r) => setTimeout(() => r(true), 700));</script>
+<script>
+// The <img> and <iframe> loads above are no-cors: the page never sees the
+// response as anything but opaque bytes. These two are CORS-mode, which is a
+// different response type entirely, and the live cf-scrapingcourse reading says
+// it matters -- Chrome reports the cross-origin api.js there with
+// responseStatus 200, where a cross-origin <img> with the same
+// Timing-Allow-Origin reports 0. If the status gate were "same origin" that
+// could not happen.
+window.__done = (async () => {
+  await fetch('${OTHER}/plain.txt').then((r) => r.text());
+  await fetch('${OTHER}/tao.txt').then((r) => r.text());
+  await new Promise((r) => setTimeout(r, 400));
+  return true;
+})();
+</script>
 </body>`;
 
 const FRAME = '<!DOCTYPE html><title>frame</title><body>frame</body>';
@@ -57,6 +71,8 @@ const serve = (port, isOther) => http.createServer((req, res) => {
     if (url === '/same-origin.gif') return send('image/gif', Buffer.concat([GIF, Buffer.from(PAD)]));
     if (url === '/plain.gif') return send('image/gif', Buffer.concat([GIF, Buffer.from(PAD)]));
     if (url === '/tao.gif') return send('image/gif', Buffer.concat([GIF, Buffer.from(PAD)]), true);
+    if (url === '/plain.txt') return send('text/plain', PAD);
+    if (url === '/tao.txt') return send('text/plain', PAD, true);
     if (url === '/plain-frame.html') return send('text/html', FRAME + `<!--${PAD}-->`);
     if (url === '/tao-frame.html') return send('text/html', FRAME + `<!--${PAD}-->`, true);
     res.writeHead(404);

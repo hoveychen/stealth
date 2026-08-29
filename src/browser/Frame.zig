@@ -2099,7 +2099,7 @@ fn frameDoneCallback(ctx: *anyopaque) !void {
             // The document's own navigation is not render-blocking for its
             // parent; the parent's layout does not wait on it.
             t.render_blocking_status = "non-blocking";
-            _ = host.resourceLoaded(self.url, t, self._nav_timing_allow, &parent.js.execution) catch |err| {
+            _ = host.resourceLoaded(self.url, t, .{ .timing_allow_origin = self._nav_timing_allow }, &parent.js.execution) catch |err| {
                 log.warn(.http, "iframe resource timing", .{ .err = err, .url = self.url });
             };
         }
@@ -2712,7 +2712,7 @@ pub fn recordResourceTiming(self: *Frame, r: ResourceTimingRecord) void {
         .decoded_body_size = r.body_len,
     };
     t.setConnectionMilestones(r.times, perf);
-    _ = perf.resourceLoaded(r.url, t, r.labels.timingAllowOrigin(), &self.js.execution) catch |err| {
+    _ = perf.resourceLoaded(r.url, t, .{ .timing_allow_origin = r.labels.timingAllowOrigin() }, &self.js.execution) catch |err| {
         log.warn(.http, "resource timing", .{ .err = err, .url = r.url, .initiator = r.initiator });
     };
 }

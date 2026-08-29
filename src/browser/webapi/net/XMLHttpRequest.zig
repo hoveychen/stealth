@@ -712,7 +712,8 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
     _ = try exec.performance().resourceLoaded(
         if (self._response_url.len > 0) self._response_url else self._url,
         t,
-        self._perf_labels.timingAllowOrigin(),
+        // XHR is always CORS mode; there is no no-cors spelling of it.
+        .{ .timing_allow_origin = self._perf_labels.timingAllowOrigin(), .cors_response = true },
         exec,
     );
 

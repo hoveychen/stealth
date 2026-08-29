@@ -861,7 +861,7 @@ pub const Script = struct {
             .decoded_body_size = len,
         };
         t.setConnectionMilestones(self.perf_times, perf);
-        self.perf_timing = perf.resourceLoaded(self.url, t, self.perf_labels.timingAllowOrigin(), exec) catch |err| {
+        self.perf_timing = perf.resourceLoaded(self.url, t, .{ .timing_allow_origin = self.perf_labels.timingAllowOrigin() }, exec) catch |err| {
             log.warn(.http, "script resource timing", .{ .err = err, .req = self.url });
             return;
         };
