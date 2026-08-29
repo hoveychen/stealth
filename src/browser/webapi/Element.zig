@@ -3676,7 +3676,13 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             }
             if (placed or !escapes.top) total += group.gap();
             group = .{};
-            total += box.height;
+            // The child's WHOLE box. `box.height` is its content height, and
+            // its padding and border are inside this parent however much they
+            // are outside that -- which the child itself already knows, since
+            // its own offsetHeight is `height + padding_y + border_y`. Reading
+            // only the middle of it made a parent disagree with its own child:
+            // a padded child answers 22 for itself and the parent answered 12.
+            total += box.height + box.padding_y + box.border_y;
             placed = true;
             group.join(margins.bottom);
             continue;
