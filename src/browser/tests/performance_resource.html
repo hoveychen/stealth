@@ -269,6 +269,48 @@
     });
   </script>
 
+  <script id=an_iframe_element_leaves_a_resource_entry type=module>
+    const state = await testing.async();
+    // An <iframe> is a subresource load like any other and Chrome files it
+    // under its own initiatorType. This engine recorded nothing at all for it:
+    // measured on a fixture with one of every kind
+    // (probes/b86-initiator-fixture.mjs + probes/expr-b86-initiator-set.js),
+    // Chrome answers 7 entries --
+    // `fetch:1 iframe:1 img:1 link:1 other:1 script:1 xmlhttprequest:1` --
+    // and this engine answers the same set minus the iframe: 6 entries, and
+    // 183 bytes of entry names against Chrome's 215, the 32 missing bytes
+    // being that one URL.
+    //
+    // Corroborated off the live station rather than only off the fixture:
+    // Chrome's pre-ticket top document on cf-scrapingcourse carries
+    // `script:2 img:1 xhr:1 other:1 iframe:1` and this engine's carries the
+    // same minus the iframe.
+    const src = testing.ORIGIN + '/src/browser/tests/support/empty_frame.html';
+    const frame = document.createElement('iframe');
+    await new Promise((resolve) => {
+      frame.onload = resolve;
+      frame.onerror = resolve;
+      frame.src = src;
+      document.body.appendChild(frame);
+    });
+    // One tick, so the entry is in the buffer rather than in flight.
+    await new Promise((r) => setTimeout(r, 20));
+    state.resolve();
+    await state.done(() => {
+      const mine = performance.getEntriesByType('resource')
+        .filter((e) => e.name === src);
+      // Composed rather than asserted one boolean at a time: this runner does
+      // not print the `desc` option, so a bare expectEqual(true, ...) would
+      // say "expected true, got false" and nothing about which check it was.
+      testing.expectEqual(
+        'entries=1 initiatorType=iframe entryType=resource',
+        'entries=' + mine.length +
+        ' initiatorType=' + (mine[0] ? mine[0].initiatorType : '(none)') +
+        ' entryType=' + (mine[0] ? mine[0].entryType : '(none)'));
+      frame.remove();
+    });
+  </script>
+
   <script id=entries_carry_one_navigation_id type=module>
     const state = await testing.async();
     // Chrome 151 stamps every entry of a navigation with the same

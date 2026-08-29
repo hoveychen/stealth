@@ -2067,6 +2067,31 @@ fn frameDoneCallback(ctx: *anyopaque) !void {
 
     self.performance().navigationResponseEnded();
 
+    // An <iframe> is a subresource of the document that holds it, and Chrome
+    // files it in the PARENT's buffer under `initiatorType: "iframe"` -- one
+    // entry per framed document, carrying that document's own fetch and
+    // connection walk. This engine recorded nothing at all for it: measured on
+    // a fixture with one of every kind, Chrome answers 7 entries and this
+    // answered the same set minus the iframe, and the same single-entry gap
+    // shows in the live cf-scrapingcourse census.
+    //
+    // Filed here rather than where the request goes out because the entry
+    // needs the body size and the response end, and only a completed
+    // navigation has both -- the same rule the image path follows, where
+    // errorCallback deliberately leaves nothing behind.
+    if (self.iframe != null) {
+        if (self.parent) |parent| {
+            var t = self.performance().navigationTiming();
+            t.initiator_type = "iframe";
+            // The document's own navigation is not render-blocking for its
+            // parent; the parent's layout does not wait on it.
+            t.render_blocking_status = "non-blocking";
+            _ = parent.performance().resourceLoaded(self.url, t, &parent.js.execution) catch |err| {
+                log.warn(.http, "iframe resource timing", .{ .err = err, .url = self.url });
+            };
+        }
+    }
+
     if (comptime lp.IS_DEBUG) {
         log.debug(.frame, "navigate done", .{ .type = self._type, .url = self.url });
     }
