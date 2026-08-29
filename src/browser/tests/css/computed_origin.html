@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A declared `transform-origin` / `perspective-origin` resolves at computed-value
+time against the BORDER box: keywords become percentages, percentages become
+lengths, and the axis the author left out is filled with `center`.
+
+This engine reported the box centre for every percentage form -- the declaration
+was thrown away -- and echoed keyword forms back verbatim, so
+`transform-origin: 25% 75%` on a 240x24 border box answered `120px 12px` where
+Chrome answers `60px 18px`, and `left top` answered `left top` where Chrome
+answers `0px 0px`.
+
+Every expected value is Chrome 151's own, measured with
+tools/fingerprint/probes/expr-b85-transform-origin.js on the box built below:
+content 200x10, padding 220x14, border 240x24. Those three differ on purpose --
+a resolver that picked the content or padding box would answer 50px/5px or
+55px/7px for `25% 75%` instead of 60px/18px, so the choice of box is visible
+rather than a coincidence.
+
+The `display: none` control must not move: with no box Chrome reports the
+SPECIFIED value, which css/computed_unrendered_percentages.html also asserts.
+`visibility: hidden` does have a box and does resolve.
+-->
+
+<script id=origin_resolves_against_the_border_box>
+{
+  // content 200x10, padding 220x14, border 240x24.
+  const BOX = 'width:200px;height:10px;padding:0 10px;border:10px solid;' +
+              'border-top-width:7px;border-bottom-width:7px;box-sizing:content-box';
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const probe = (decl, prop, extra) => {
+    const el = document.createElement('div');
+    el.style.cssText = BOX + ';' + (extra || '') + ';' + decl;
+    host.appendChild(el);
+    const got = getComputedStyle(el).getPropertyValue(prop);
+    el.remove();
+    return got;
+  };
+
+  const CASES = [
+    // Percentages, against 240 wide and 24 tall.
+    ['60px 18px', 'transform-origin:25% 75%', 'transform-origin'],
+    ['0px 0px', 'transform-origin:0% 0%', 'transform-origin'],
+    ['240px 24px', 'transform-origin:100% 100%', 'transform-origin'],
+    // Keywords are percentages: left/top 0%, center 50%, right/bottom 100%.
+    ['0px 0px', 'transform-origin:left top', 'transform-origin'],
+    ['240px 24px', 'transform-origin:right bottom', 'transform-origin'],
+    ['120px 12px', 'transform-origin:center', 'transform-origin'],
+    // One component: the other axis is `center`, and which axis the given one
+    // takes depends on the keyword.
+    ['0px 12px', 'transform-origin:left', 'transform-origin'],
+    ['120px 0px', 'transform-origin:top', 'transform-origin'],
+    ['60px 12px', 'transform-origin:25%', 'transform-origin'],
+    // Lengths pass through, resolved like any other length.
+    ['10px 20px', 'transform-origin:10px 20px', 'transform-origin'],
+    ['16px 32px', 'transform-origin:1em 2em', 'transform-origin'],
+    // The z offset stays, and stays third.
+    ['0px 0px 10px', 'transform-origin:left top 10px', 'transform-origin'],
+    ['120px 12px 30px', 'transform-origin:50% 50% 30px', 'transform-origin'],
+    // Nothing declared: the centre, which is what this engine already did.
+    ['120px 12px', 'color:red', 'transform-origin'],
+    // perspective-origin takes the same two axes and no z.
+    ['60px 18px', 'perspective-origin:25% 75%', 'perspective-origin'],
+    ['0px 0px', 'perspective-origin:left top', 'perspective-origin'],
+    ['10px 20px', 'perspective-origin:10px 20px', 'perspective-origin'],
+    ['120px 12px', 'color:red', 'perspective-origin'],
+  ];
+
+  const wrong = [];
+  for (const [want, decl, prop] of CASES) {
+    const got = probe(decl, prop);
+    if (got !== want) wrong.push(decl + ' -> ' + prop + ': want ' + want + ', got ' + got);
+  }
+
+  // With a box but invisible, it still resolves.
+  const hidden = probe('transform-origin:25% 75%', 'transform-origin', 'visibility:hidden');
+  if (hidden !== '60px 18px') wrong.push('visibility:hidden: want 60px 18px, got ' + hidden);
+
+  // With no box at all, the SPECIFIED value is reported and nothing is
+  // resolved. This is the line a fix here must not break.
+  const none = probe('transform-origin:25% 75%', 'transform-origin', 'display:none');
+  if (none !== '25% 75%') wrong.push('display:none: want 25% 75%, got ' + none);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

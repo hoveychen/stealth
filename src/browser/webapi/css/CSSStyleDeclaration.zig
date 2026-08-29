@@ -580,6 +580,18 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
         return if (folded) |matrix| .{ .value = matrix } else .unreportable;
     }
 
+    // An origin resolves its whole value against the border box, so it cannot go
+    // through the generic length path: that one refuses a percentage and knows
+    // nothing about `left`. Null means the element has no box, and Chrome
+    // reports the specified value there -- `unreportable` leaves the fallback
+    // that already does that.
+    if (isOriginProperty(property_name)) {
+        if (resolvedOrigin(style_manager, element, property_name, substituted)) |px| {
+            return .{ .value = px };
+        }
+        return .unreportable;
+    }
+
     if (computedColourText(frame.call_arena, property_name, substituted)) |folded| {
         return .{ .value = folded };
     }
@@ -2501,6 +2513,112 @@ fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame
     units.writeNumber(&buf.writer, value) catch return "auto";
     buf.writer.writeAll("px") catch return "auto";
     return buf.written();
+}
+
+/// Whether a property name is one of the two origins, in either spelling.
+fn isOriginProperty(property_name: []const u8) bool {
+    return std.mem.eql(u8, property_name, "transform-origin") or
+        std.mem.eql(u8, property_name, "perspective-origin") or
+        std.mem.eql(u8, property_name, "-webkit-transform-origin") or
+        std.mem.eql(u8, property_name, "-webkit-perspective-origin");
+}
+
+/// A declared origin, resolved against the BORDER box the way Chrome resolves
+/// it: keywords become percentages, percentages become lengths, and the axis
+/// the author left out is filled with `center`.
+///
+/// The declaration used to be thrown away entirely -- a percentage form fell
+/// through to `boxCentre` and a keyword form was echoed back -- so
+/// `transform-origin: 25% 75%` on a 240x24 border box answered `120px 12px`
+/// where Chrome answers `60px 18px`, and `left top` answered `left top`.
+/// Measured over eighteen forms with probes/expr-b85-transform-origin.js.
+///
+/// Null when the element has no box, which is not a failure: Chrome reports the
+/// SPECIFIED value there, and returning null leaves the caller to fall through
+/// to the path that already does that.
+fn resolvedOrigin(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    value: []const u8,
+) ?[]const u8 {
+    const frame = element.ownerFrame(style_manager.frame);
+    var visibility_cache: Element.VisibilityCache = .{};
+    if (!element.checkVisibilityCached(&visibility_cache, frame)) return null;
+
+    const edges = boxEdges(element, frame);
+    const width = element.getClientWidthWithCache(frame, &visibility_cache) + edges.border_x;
+    const height = element.getClientHeightWithCache(frame, &visibility_cache) + edges.border_y;
+
+    // The ordering and the missing-axis fill are the specified serialiser's job
+    // and it already does them: horizontal first, `center` for the axis left
+    // out, and a z offset staying third. Anything it refuses is a shape Chrome
+    // does not resolve either.
+    const ordered = (writeOrigin(frame.call_arena, value) catch null) orelse value;
+
+    var parts: [3][]const u8 = undefined;
+    var count: usize = 0;
+    var walk = shorthand.Components.init(ordered);
+    while (walk.next()) |part| {
+        if (count == parts.len) return null;
+        parts[count] = part;
+        count += 1;
+    }
+    if (count == 0) return null;
+
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    for (parts[0..count], 0..) |part, i| {
+        // The z offset is a length and nothing else, so it has no extent to
+        // take a percentage of.
+        const extent: ?f64 = switch (i) {
+            0 => width,
+            1 => height,
+            else => null,
+        };
+        const px = originComponentPx(style_manager, element, property_name, part, extent) orelse return null;
+        if (i != 0) buf.writer.writeAll(" ") catch return null;
+        units.writeNumber(&buf.writer, px) catch return null;
+        buf.writer.writeAll("px") catch return null;
+    }
+    return buf.written();
+}
+
+/// One origin component in pixels. `extent` is the border box's size along that
+/// component's axis, or null for the z offset, which takes no percentage.
+fn originComponentPx(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    part: []const u8,
+    extent: ?f64,
+) ?f64 {
+    // The keywords are percentages: left and top 0%, center 50%, right and
+    // bottom 100%.
+    const keyword: ?f64 = if (std.ascii.eqlIgnoreCase(part, "left") or std.ascii.eqlIgnoreCase(part, "top"))
+        0
+    else if (std.ascii.eqlIgnoreCase(part, "center"))
+        50
+    else if (std.ascii.eqlIgnoreCase(part, "right") or std.ascii.eqlIgnoreCase(part, "bottom"))
+        100
+    else
+        null;
+    if (keyword) |pct| {
+        const of = extent orelse return null;
+        return of * pct / 100.0;
+    }
+
+    const parsed = units.parse(part) catch return null;
+    if (parsed.unit == .percentage) {
+        const of = extent orelse return null;
+        return of * parsed.value / 100.0;
+    }
+    // Every other unit converts the way it does anywhere else, which is what
+    // makes `1em` 16px here without this knowing anything about fonts.
+    return switch (lengthFactor(style_manager, element, property_name, parsed.unit)) {
+        .pixels => |factor| parsed.value * factor,
+        .verbatim => parsed.value,
+        .unresolvable => null,
+    };
 }
 
 /// `transform-origin` and `perspective-origin` both compute to the centre of the
@@ -5774,6 +5892,10 @@ test "WebApi: CSSStyleDeclaration computed alpha clamp" {
 
 test "WebApi: CSSStyleDeclaration computed style of a detached element" {
     try testing.htmlRunner("css/computed_detached.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed transform-origin" {
+    try testing.htmlRunner("css/computed_origin.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration unrendered percentages" {
