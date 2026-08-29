@@ -1395,10 +1395,13 @@ fn writeRatio(w: *std.Io.Writer, value: []const u8) !void {
     if (std.mem.indexOfScalar(u8, value, '/')) |slash| {
         const num = parseNumber(value[0..slash]) orelse return error.EchoRaw;
         const den = parseNumber(value[slash + 1 ..]) orelse return error.EchoRaw;
-        return w.print("{d} / {d}", .{ unsign(num), unsign(den) });
+        try units.writeRatioNumber(w, unsign(num));
+        try w.writeAll(" / ");
+        return units.writeRatioNumber(w, unsign(den));
     }
     const num = parseNumber(value) orelse return error.EchoRaw;
-    return w.print("{d} / 1", .{unsign(num)});
+    try units.writeRatioNumber(w, unsign(num));
+    return w.writeAll(" / 1");
 }
 
 /// A discrete feature's value has to be one of that feature's own keywords:
