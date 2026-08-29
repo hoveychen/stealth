@@ -20978,3 +20978,90 @@ before this change, and they still do:
 The new entry lands *first* here and fourth in Chrome, which is one more input
 for that plan rather than a regression from this one — before the change our
 order was already `script, link, img, …` against Chrome's `link, script, img, …`.
+
+## The buffer was never sorted wrong — three numbers in it were
+
+`resource-entry-buffer-order` was opened on one reading: our
+`getEntriesByType('resource')` came back
+`iframe,script,link,img,…` where Chrome's read `link,script,img,iframe,…`. The
+plan's own P2 named the cause — "entries are queued by responseEnd, not by
+start" — and that was backwards. Both arms already do the same thing, and this
+engine's sort was already right.
+
+The separator is `probes/b87-order-fixture.mjs`: three `<img>` whose server
+delays them 600 / 300 / 0ms, so "the order they started" and "the order they
+finished" are exact reverses of each other. Initiator is held constant on
+purpose — a mixed-initiator page cannot tell a completion-ordered buffer from
+one that happens to group by kind. `probes/expr-b87-order.js` reads the buffer
+*and* the arrival order seen by a `PerformanceObserver` the fixture page
+registers before the images, since an observer added afterwards sees either
+nothing or the buffer's own order, and neither is arrival order.
+
+```
+                 observer (arrival)   getEntriesByType   sorted by responseEnd   sorted by startTime
+  Chrome            c, b, a              a, c, b              c, b, a               a, c, b
+  this engine       c, b, a              a, b, c              c, b, a               a, b, c
+```
+
+Both arms **queue at completion and read back sorted by startTime**. Ours was
+already doing it (`Performance.zig:626`, `std.sort.block` on `_start_time`);
+`sortedByStart` and `startEqualsFetch` are true on both. Had P2 been
+implemented as written it would have broken a read path that was correct.
+
+So the order divergence is entirely in the **values** the sort runs over.
+`probes/expr-b87-initiator-times.js` prints them beside the order on the b86
+mixed fixture, and three runs agree exactly:
+
+```
+  Chrome   sheet.css=66.5 head.js=66.5 pic.gif=66.6 frame.html=70.7 data.txt=70.9 data2.txt=71.8 favicon=117.6
+  before   frame.html=1.8 head.js=6.8 sheet.css=7.7 pic.gif=8.9 data.txt=12.6 favicon=14.1 data2.txt=14.7
+```
+
+Three separate defects, of which one belonged to this plan.
+
+**The iframe entry was stated in the child's time origin.** Our parent entry
+read `end=5.7` and the child's own navigation read `responseEnd=5.7` — byte for
+byte — while the two documents' `timeOrigin` were 10.9ms apart
+(`probes/expr-b87-iframe-timebase.js`). Chrome's parent entry read
+`start=55.6 end=69.4` against a child of `0.0 / 14.0` and a gap of `55.5`: the
+child's numbers plus the gap. Ours therefore claimed a `startTime` of 2.4
+against a nearest sibling of 8.3 — a subresource that began loading before the
+elements *above* it in its own document were parsed. B86 handed the record over
+without restating it. Fixed: `navigationTiming` becomes
+`navigationTimingOn(host)`, which shifts by the origin difference and re-snaps
+onto the host's lattice, walking the `f64` fields by reflection because "every
+`f64` here is milliseconds since the owning document's time origin" is the
+struct's stated invariant. A zero is left alone — it means the milestone did not
+happen. Order after:
+
+```
+  Chrome   link, script, img, iframe, xmlhttprequest, fetch, other
+  before   iframe, script, link, img, xmlhttprequest, other, fetch
+  after    script, link, img, iframe, xmlhttprequest, other, fetch
+```
+
+**`<script src>` always goes out before a `<link rel=stylesheet>` above it.**
+Not a timestamp: the *wire* says so too. `b87-order-fixture.mjs` logs arrival
+order server-side and serves the same two elements in both source orders.
+Chrome follows the document (`link-first` → `link,script`; `script-first` →
+`script,link`); we answer `script,link` to both, and delaying the sheet by 250ms
+does not change it. The cause is `frame/preload.zig:77` — the prescan reads the
+raw HTML before parsing and its callback handles `.script` / `.module` /
+`.base` and nothing else, so scripts leave before the parser has reached the
+link. Chrome's preload scanner covers stylesheets, which is why its order is the
+document's. That is a fetch-scheduling change, not a resource-entry one, and it
+is now `stylesheet-prescan-order` — **priced as debt, not as a door**: cf's
+lever is the *name-byte total* (33–52KB) and Chrome passes that station on
+278–1465 bytes, so nothing in this family walks to it.
+
+**The favicon is not misordered at all.** On the mixed fixture ours goes out at
+14.1 with `fetch` at 14.7 and Chrome's at 117.6 with `fetch` at 71.8, which
+reads like a rule difference. `/slow-chain.html` separates rule from race: its
+only JS-initiated load is an XHR delayed 500ms, and **both arms ask for the
+favicon while that XHR is still in flight** — Chrome issues the XHR at 40.1 and
+the favicon at 67.0, ours 7.9 and 8.3. Chrome's rule is "after the load event",
+not "after every other subresource", and an in-flight fetch does not hold it
+back. `Frame.requestFavicon` already sits at the end of the load event
+(`Frame.zig:1620`). The position gap is engine speed — our load event fires at
+~14ms and Chrome's at ~117ms — and closing it would mean adding an artificial
+delay to buy a position that is not a tell. Left alone.

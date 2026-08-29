@@ -354,15 +354,31 @@ pub fn navigationStarted(self: *Performance, url: []const u8, navigation_type: [
     self._nav_phase = .started;
 }
 
-/// A copy of this document's own navigation timing.
+/// A copy of this document's own navigation timing, restated on `host`'s
+/// timeline.
 ///
 /// For the parent of an <iframe>: Chrome files the child document's load in
 /// the PARENT's resource buffer under `initiatorType: "iframe"`, and the
 /// numbers it reports there are the child's own fetch and connection walk --
 /// which is exactly what this already holds, milestones and all. Copying it is
 /// therefore not an approximation of the entry, it is the entry.
-pub fn navigationTiming(self: *const Performance) timing.Timing {
-    return self._nav;
+///
+/// But only after the restatement. Every stamp in the record is milliseconds
+/// since THIS document's time origin, and a framed document's origin is the
+/// moment it was navigated -- later than its parent's. Handed over unchanged
+/// the parent reports an <iframe> that began loading before the elements above
+/// it in its own document were parsed: measured at `start=2.4` against a
+/// nearest sibling of `8.3`, with the two origins 10.9ms apart
+/// (tools/fingerprint/probes/expr-b87-iframe-timebase.js). Chrome's answer on
+/// the same fixture is the child's numbers plus that gap, to the tenth.
+pub fn navigationTimingOn(self: *const Performance, host: *const Performance) timing.Timing {
+    var t = self._nav;
+    // Both origins are boot-relative microseconds, so the difference is how
+    // much later this document's clock started than the host's.
+    const mine: i64 = @intCast(self._time_origin);
+    const theirs: i64 = @intCast(host._time_origin);
+    t.restateOn(host, @as(f64, @floatFromInt(mine - theirs)) / 1000.0);
+    return t;
 }
 
 pub fn navigationResponseStarted(

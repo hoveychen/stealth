@@ -311,6 +311,60 @@
     });
   </script>
 
+  <script id=the_iframe_entry_is_on_the_parents_clock type=module>
+    const state = await testing.async();
+    // The entry the parent files for an <iframe> is a COPY of the child
+    // document's own navigation timing, and a child document's timeline starts
+    // at its own navigationStart -- so a copy that is not restated on the
+    // parent's clock reports a subresource that began before the elements
+    // above it in the parent were parsed. Measured on
+    // probes/b86-initiator-fixture.mjs with probes/expr-b87-iframe-timebase.js:
+    // this engine's parent entry read `start=2.4 end=5.7` while the child's own
+    // navigation read `start=0.0 end=5.7` and the two time origins were 10.9ms
+    // apart -- the child's numbers, verbatim. Chrome's read `start=55.6
+    // end=69.4` against a child of `0.0 / 14.0` and an origin gap of 55.5,
+    // which is the same numbers plus the gap.
+    // Its own document, not support/empty_frame.html: the block above asserts
+    // that exactly one entry carries that name.
+    const src = testing.ORIGIN + '/src/browser/tests/support/empty_frame_clock.html';
+    const frame = document.createElement('iframe');
+    // Taken on the PARENT's clock immediately before the load can start. The
+    // entry cannot honestly claim to have begun before this instant.
+    const before = performance.now();
+    await new Promise((resolve) => {
+      frame.onload = resolve;
+      frame.onerror = resolve;
+      frame.src = src;
+      document.body.appendChild(frame);
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    const after = performance.now();
+    // The child's own view of the same load, to check the fix translated the
+    // numbers rather than replacing them with the parent's own clock readings.
+    const childNav = frame.contentWindow.performance.getEntriesByType('navigation')[0];
+    state.resolve();
+    await state.done(() => {
+      const mine = performance.getEntriesByType('resource').filter((e) => e.name === src);
+      const e = mine[0];
+      // Composed into one string rather than asserted a boolean at a time: the
+      // runner never prints `desc`, so a bare expectEqual(true, ...) says
+      // "expected true, got false" and names none of the four checks.
+      const span = e && childNav
+        ? Math.abs((e.responseEnd - e.startTime) - (childNav.responseEnd - childNav.fetchStart))
+        : NaN;
+      testing.expectEqual(
+        'startsAfterCreation=true endsBeforeRead=true ordered=true spanPreserved=true',
+        'startsAfterCreation=' + (e ? e.startTime >= before : '(no entry)') +
+        ' endsBeforeRead=' + (e ? e.responseEnd <= after : '(no entry)') +
+        ' ordered=' + (e ? e.responseEnd >= e.startTime : '(no entry)') +
+        // Translating shifts both ends by the same amount, so the load's
+        // duration survives; overwriting them with the parent's `now()` would
+        // not. 1ms of slack for the 0.1ms lattice both ends are snapped onto.
+        ' spanPreserved=' + (span === span ? span < 1 : '(no entry)'));
+      frame.remove();
+    });
+  </script>
+
   <script id=entries_carry_one_navigation_id type=module>
     const state = await testing.async();
     // Chrome 151 stamps every entry of a navigation with the same
