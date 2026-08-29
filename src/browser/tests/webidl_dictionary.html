@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<!--
+How a WebIDL dictionary is read out of a JS object.
+
+Per WebIDL, each member is read with a single [[Get]], and a member whose value
+comes back `undefined` is treated as not present. This engine probed with
+[[Has]] first and only then read, so a Proxy handed to a constructor saw `has`
+traps and never a `get`.
+
+That is observable, and it is observed: Kasada's payload carries a Proxy trap
+log, and this engine's is longer than Chrome's -- four `h:` entries against one
+-- because of exactly this. Decoded from the guard's own payload with the
+`htokens` knob; see tools/fingerprint/README.md.
+
+Measured on Chrome 151 with tools/fingerprint/probes/expr-b85-dictionary-traps.js
+over seven dictionaries: only `get` fires, once per member.
+-->
+
+<script id=dictionary_members_are_read_with_get>
+{
+  const traps = (build) => {
+    const log = [];
+    const proxy = new Proxy({}, {
+      has(t, k) { log.push('has:' + String(k)); return Reflect.has(t, k); },
+      get(t, k, r) { log.push('get:' + String(k)); return Reflect.get(t, k, r); },
+      getOwnPropertyDescriptor(t, k) { log.push('gopd:' + String(k)); return Reflect.getOwnPropertyDescriptor(t, k); },
+      ownKeys(t) { log.push('ownKeys'); return Reflect.ownKeys(t); },
+    });
+    try { build(proxy); } catch (e) { log.push('threw:' + e.name); }
+    return log;
+  };
+
+  const wrong = [];
+  const CASES = [
+    ['CustomEvent', (init) => new CustomEvent('x', init)],
+    ['InputEvent', (init) => new InputEvent('input', init)],
+    ['MouseEvent', (init) => new MouseEvent('click', init)],
+    ['addEventListener', (init) => document.createElement('div').addEventListener('x', () => {}, init)],
+    ['scrollTo', (init) => document.createElement('div').scrollTo(init)],
+  ];
+  for (const [label, build] of CASES) {
+    const log = traps(build);
+    const kinds = [...new Set(log.map((l) => l.split(':')[0]))];
+    if (kinds.length !== 1 || kinds[0] !== 'get') {
+      wrong.push(label + ': traps ' + kinds.join('+') + ' (want get only)');
+    }
+    // One read per member, no repeats.
+    const names = log.map((l) => l.slice(l.indexOf(':') + 1));
+    if (new Set(names).size !== names.length) wrong.push(label + ': repeated reads');
+    if (names.length === 0) wrong.push(label + ': no members read at all');
+  }
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=an_undefined_member_is_absent>
+{
+  // The half that comes with reading through [[Get]]: WebIDL says a member
+  // whose value is `undefined` is not present, so it takes the dictionary's
+  // default rather than converting `undefined`.
+  const explicit = new CustomEvent('x', { bubbles: undefined, detail: undefined });
+  testing.expectEqual(false, explicit.bubbles);
+  testing.expectEqual(null, explicit.detail);
+
+  // A getter that returns undefined is the same as not being there, and it is
+  // still called exactly once.
+  let reads = 0;
+  const e = new CustomEvent('x', {
+    get bubbles() { reads++; return undefined; },
+    cancelable: true,
+  });
+  testing.expectEqual(1, reads);
+  testing.expectEqual(false, e.bubbles);
+  testing.expectEqual(true, e.cancelable);
+}
+</script>
+
+<script id=a_present_member_still_converts>
+{
+  // The control: reading with [[Get]] must not lose the values that ARE there,
+  // including the falsy ones a `has` probe used to let through.
+  const e = new CustomEvent('x', { bubbles: true, cancelable: false, detail: 0 });
+  testing.expectEqual(true, e.bubbles);
+  testing.expectEqual(false, e.cancelable);
+  testing.expectEqual(0, e.detail);
+
+  const m = new MouseEvent('click', { clientX: 0, button: 2, shiftKey: true });
+  testing.expectEqual(0, m.clientX);
+  testing.expectEqual(2, m.button);
+  testing.expectEqual(true, m.shiftKey);
+
+  // A member read off the prototype chain counts as present -- [[Get]] walks
+  // it where a hasOwnProperty check would not.
+  const proto = { bubbles: true };
+  const inherited = new CustomEvent('x', Object.create(proto));
+  testing.expectEqual(true, inherited.bubbles);
+}
+</script>

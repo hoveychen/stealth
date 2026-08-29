@@ -951,13 +951,44 @@ fn jsValueToStruct(self: *const Local, comptime T: type, js_val: js.Value) !?T {
             inline for (@typeInfo(T).@"struct".fields) |field| {
                 const name = field.name;
                 const key = isolate.initStringHandle(name);
-                if (js_obj.has(key)) {
-                    @field(value, name) = try self.jsValueToZig(field.type, try js_obj.get(key));
+                // ONE [[Get]] per member, and no [[Has]] in front of it. WebIDL
+                // reads a dictionary member with Get and treats `undefined` as
+                // not present, which makes the probe and the read the same
+                // operation.
+                //
+                // The difference is observable and it is observed: Kasada's
+                // payload carries a Proxy trap log, and this engine's used to
+                // be longer than Chrome's -- four `h:` entries against one --
+                // because every member was probed before it was read. Measured
+                // over seven dictionaries with
+                // probes/expr-b85-dictionary-traps.js: Chrome fires `get`
+                // alone.
+                //
+                // Reading through Get also walks the prototype chain, which is
+                // what WebIDL asks for and what `has` happened to do too.
+                const member = try js_obj.get(key);
+                if (!member.isUndefined()) {
+                    @field(value, name) = try self.jsValueToZig(field.type, member);
                 } else if (@typeInfo(field.type) == .optional) {
                     @field(value, name) = null;
-                } else {
-                    const dflt = field.defaultValue() orelse return null;
+                } else if (field.defaultValue()) |dflt| {
                     @field(value, name) = dflt;
+                } else if (js_obj.has(key)) {
+                    // Neither optional nor defaulted, so not a dictionary
+                    // member: this shape is used to destructure a JS object
+                    // this engine built itself, and `undefined` is a value
+                    // there rather than an absence. `pipeTo` reads
+                    // `{done, value}` off its own reader, and the last read is
+                    // `{done: true, value: undefined}` -- treating that as an
+                    // absent member made the whole conversion fail and the pipe
+                    // never settled.
+                    //
+                    // The [[Has]] is confined to this branch on purpose. Every
+                    // real dictionary member is optional or defaulted, so the
+                    // trap a page can see stays a single [[Get]].
+                    @field(value, name) = try self.jsValueToZig(field.type, member);
+                } else {
+                    return null;
                 }
             }
 

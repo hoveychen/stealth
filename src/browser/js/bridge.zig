@@ -2023,6 +2023,13 @@ test "WebApi: descriptor kind" {
     try testing.htmlRunner("descriptor_kind.html", .{});
 }
 
+// How a dictionary is read out of a JS object: one [[Get]] per member and an
+// `undefined` treated as absent, which is what a Proxy handed to a constructor
+// sees -- and Kasada's payload carries exactly that log.
+test "WebApi: webidl dictionary conversion" {
+    try testing.htmlRunner("webidl_dictionary.html", .{});
+}
+
 // The read log's answer to "431 calls to matchMedia asking what?". Only the
 // key-building half is testable without a page; that a call reaches it at all
 // is what the prop_arg scope on a real run shows.
