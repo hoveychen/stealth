@@ -21,10 +21,15 @@
 }
 </script>
 
-<script id="status_is_loaded">
+<script id="status_starts_unloaded">
 {
-    const face = new FontFace("F", "url(f.woff)");
-    testing.expectEqual("loaded", face.status);
+    // Measured on Chrome 151, tools/fingerprint/probes/expr-fontface-status.js:
+    // a freshly constructed face is "unloaded" whatever its source. This engine
+    // used to answer "loaded" from a getter that returned a constant, which
+    // meant a face nobody had loaded looked loaded.
+    testing.expectEqual("unloaded", new FontFace("F", "url(f.woff)").status);
+    testing.expectEqual("unloaded", new FontFace("F", 'local("Geneva")').status);
+    testing.expectEqual("unloaded", new FontFace("F", 'local("NoSuchFamilyQZX")').status);
 }
 </script>
 
@@ -92,5 +97,86 @@
   testing.expectEqual('"wdth" 120', configured.variationSettings);
   testing.expectEqual('700', configured.weight);
   testing.expectEqual('normal', configured.descentOverride);
+}
+</script>
+
+<script id="local_source_resolves_only_for_a_family_we_have" type=module>
+{
+  // The Cloudflare widget builds its installed-font list out of
+  // `new FontFace(n, 'local("X")').load()`, keeping the candidates whose
+  // promise resolves. This engine resolved every one of them, so it reported
+  // Windows and GNOME families side by side -- a combination no machine has.
+  //
+  // Measured on Chrome 151 with tools/fingerprint/probes/expr-fontface-local.js
+  // and expr-fontface-status.js: an installed family resolves with the FontFace
+  // itself and leaves it "loaded"; one that is not installed rejects with a
+  // NetworkError DOMException and leaves it "error", and the status is already
+  // "error" by the time load() returns.
+  const state = await testing.async();
+
+  const face = (n) => new FontFace('probe-status', 'local("' + n + '")');
+
+  const there = face('Geneva');
+  const thereLoad = await there.load();
+  const thereStatus = there.status;
+  const thereLoaded = await there.loaded;
+  const thereAgain = await there.load();
+
+  const absent = face('NoSuchFamilyQZX');
+  const pending = absent.load();
+  const absentStatusAtCall = absent.status;
+  let caught = null;
+  try {
+    await pending;
+  } catch (e) {
+    caught = e;
+  }
+  const absentStatusAfter = absent.status;
+  let fromLoaded = null;
+  try {
+    await absent.loaded;
+  } catch (e) {
+    fromLoaded = e.name;
+  }
+
+  const list = new FontFace('probe-list', 'local("NoSuchFamilyQZX"), local("Geneva")');
+  const listLoad = await list.load();
+  const listStatus = list.status;
+
+  // A url() source is not fetched here, so it stays loadable.
+  const url = new FontFace('probe-url', 'url(https://example.invalid/f.woff2)');
+  const urlLoad = await url.load();
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(there, thereLoad);
+    testing.expectEqual('loaded', thereStatus);
+    testing.expectEqual(there, thereLoaded);
+    testing.expectEqual(there, thereAgain);
+
+    testing.expectEqual('error', absentStatusAtCall);
+    testing.expectTrue(caught instanceof DOMException);
+    testing.expectEqual('NetworkError', caught.name);
+    testing.expectEqual('A network error occurred.', caught.message);
+    testing.expectEqual('error', absentStatusAfter);
+    testing.expectEqual('NetworkError', fromLoaded);
+
+    testing.expectEqual(list, listLoad);
+    testing.expectEqual('loaded', listStatus);
+    testing.expectEqual(url, urlLoad);
+  });
+}
+</script>
+
+<script id="adding_a_face_to_the_set_does_not_load_it">
+{
+  // The other side of the same defect: `document.fonts.add(f)` left the face
+  // reading "loaded" here where Chrome reads "unloaded", installed or not.
+  for (const n of ['Geneva', 'Luminari', 'NoSuchFamilyQZX']) {
+    const f = new FontFace('probe-added', 'local("' + n + '")');
+    document.fonts.add(f);
+    testing.expectEqual('unloaded', f.status);
+    document.fonts.delete(f);
+  }
 }
 </script>
