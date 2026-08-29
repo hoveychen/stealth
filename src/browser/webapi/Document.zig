@@ -771,6 +771,24 @@ pub fn getReadyState(self: *const Document) []const u8 {
 }
 
 pub fn getActiveElement(self: *Document) ?*Element {
+    // While the focus chain runs through a child frame, this document's active
+    // element is the iframe hosting it, whatever this document last focused for
+    // itself. It stays the iframe after the element inside the child is
+    // blurred -- blur leaves the chain where it is -- and goes back to real
+    // content the moment top-level content is focused, which moves the chain.
+    // Measured on Chrome 151, tools/fingerprint/probes/expr-b85-active-element.js.
+    if (self._frame) |doc_frame| {
+        var current: ?*Frame = doc_frame._page.focused_frame;
+        while (current) |f| {
+            const parent = f.parent orelse break;
+            if (parent == doc_frame) {
+                if (f.iframe) |host| return host.asElement();
+                break;
+            }
+            current = parent;
+        }
+    }
+
     if (self._active_element) |el| {
         // A focused element inside a shadow tree is exposed as its outermost
         // host; one in a detached tree isn't exposed at all.
