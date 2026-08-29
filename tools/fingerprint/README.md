@@ -20935,3 +20935,46 @@ between 33KB (0/3) and 52KB (3/3) — while **Chrome's own widget document carri
 1–3 entries and 278–1465 bytes**, thirty times under the threshold, and passes
 anyway. Nothing in the resource-timing family is going to walk this engine up to
 40KB of entry names, and nothing in it should be scoped as opening that station.
+
+## The iframe was the missing entry, and the order is still not
+
+`iframe-element-resource-entry`, measured on a fixture with one of every
+subresource kind (`probes/b86-initiator-fixture.mjs` +
+`probes/expr-b86-initiator-set.js`) rather than on the station, so it is
+reproducible:
+
+```
+                 entries  byInitiator                                            nameBytes
+  Chrome            7     fetch:1 iframe:1 img:1 link:1 other:1 script:1 xhr:1      215
+  before            6     fetch:1        img:1 link:1 other:1 script:1 xhr:1      183
+  after             7     fetch:1 iframe:1 img:1 link:1 other:1 script:1 xhr:1      215
+```
+
+The 32 bytes are that one URL. B64's live census says the same thing off the
+station: Chrome's pre-ticket top document on cf-scrapingcourse is
+`script:2 img:1 xhr:1 other:1 iframe:1` and this engine's was the same minus
+the iframe.
+
+An `<iframe>` reaches this engine as a *navigation* — the child frame runs
+`Frame.navigate` and its own Performance records navigation timing — so nothing
+was ever filed in the **parent's** resource buffer. What Chrome puts there is
+one entry per framed document carrying that document's own fetch and connection
+walk, which is precisely what the child's navigation timing already holds. So
+the entry is not reconstructed: `Performance.navigationTiming()` hands the
+child's own record over, `initiator_type` becomes `"iframe"`, and the parent
+records it. Filed in `frameDoneCallback` rather than where the request goes out,
+because the entry needs a body size and a response end and only a completed
+navigation has both — the rule the image path already follows.
+
+**The buffer ORDER is not settled by this and must not be read as settled.**
+`resource-entry-buffer-order` is a separate open plan, both arms disagreed
+before this change, and they still do:
+
+```
+  Chrome   link, script, img, iframe, xmlhttprequest, fetch, other
+  after    iframe, script, link, img, xmlhttprequest, other, fetch
+```
+
+The new entry lands *first* here and fourth in Chrome, which is one more input
+for that plan rather than a regression from this one — before the change our
+order was already `script, link, img, …` against Chrome's `link, script, img, …`.

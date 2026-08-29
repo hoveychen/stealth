@@ -354,6 +354,17 @@ pub fn navigationStarted(self: *Performance, url: []const u8, navigation_type: [
     self._nav_phase = .started;
 }
 
+/// A copy of this document's own navigation timing.
+///
+/// For the parent of an <iframe>: Chrome files the child document's load in
+/// the PARENT's resource buffer under `initiatorType: "iframe"`, and the
+/// numbers it reports there are the child's own fetch and connection walk --
+/// which is exactly what this already holds, milestones and all. Copying it is
+/// therefore not an approximation of the entry, it is the entry.
+pub fn navigationTiming(self: *const Performance) timing.Timing {
+    return self._nav;
+}
+
 pub fn navigationResponseStarted(
     self: *Performance,
     status: u16,
