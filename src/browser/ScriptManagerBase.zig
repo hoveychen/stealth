@@ -276,6 +276,11 @@ pub fn preloadImport(self: *ScriptManagerBase, url: [:0]const u8, referrer: []co
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = owner.url(),
         .resource_type = .script,
+        // A module script is CORS mode with or without a `crossorigin`
+        // attribute -- measured, probes/b87-crossorigin-request-fixture.mjs:
+        // Chrome's `<script type=module src>` carries an Origin and says
+        // `cors` where the classic one beside it carries neither.
+        .cors = true,
         .notification = session.notification,
         .start_callback = if (log.enabled(.http, .debug)) Script.startCallback else null,
         .header_callback = Script.headerCallback,
@@ -469,6 +474,8 @@ pub fn getAsyncImport(self: *ScriptManagerBase, url: [:0]const u8, cb: ImportAsy
         .frame_id = owner.frameId(),
         .loader_id = owner.loaderId(),
         .resource_type = .script,
+        // Modules are CORS mode; see the note on the sibling request above.
+        .cors = true,
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = owner.url(),
         .notification = session.notification,

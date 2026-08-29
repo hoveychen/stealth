@@ -960,11 +960,104 @@ fn timingAllowHandler(req: *std.http.Server.Request, path: []const u8) !bool {
 // weighs exactly what the plain one does and one expected number covers both.
 const TIMING_ALLOW_BODY_HTML = "<!--" ++ "t" ** 505 ++ "-->";
 
+// What a subresource request carried, recorded by the server so a test can ask
+// about headers it has no other way to see: the body of an <img> or a
+// stylesheet never reaches script, and `crossorigin` is precisely a claim about
+// the REQUEST. `/xo-record/<slot>` files what arrived; `/xo-read/<slot>` hands
+// it back as text, same-origin, so a fetch can read it.
+//
+// Guarded by a mutex rather than built from atomics like cors_preflights_seen
+// above: these are strings, and the server answers on a thread per connection.
+var xo_seen_mutex: std.Io.Mutex = .init;
+var xo_seen: [8]XoRecord = @splat(.{});
+
+const XoRecord = struct {
+    slot_len: u8 = 0,
+    slot: [32]u8 = undefined,
+    value_len: u8 = 0,
+    value: [160]u8 = undefined,
+
+    fn name(self: *const XoRecord) []const u8 {
+        return self.slot[0..self.slot_len];
+    }
+};
+
+fn xoHandler(req: *std.http.Server.Request, path: []const u8) !bool {
+    const RECORD = "/xo-record/";
+    const READ = "/xo-read/";
+    const recording = std.mem.startsWith(u8, path, RECORD);
+    if (!recording and !std.mem.startsWith(u8, path, READ)) {
+        return false;
+    }
+    // Everything after the prefix, query and extension included: the slot name
+    // is what the test asks for it back by, and `/xo-record/script.js` has to
+    // read back as `script.js` so the URL can end in something an <img> or a
+    // <script> will accept.
+    const slot = path[(if (recording) RECORD.len else READ.len)..];
+
+    if (recording) {
+        var buf: [160]u8 = undefined;
+        const value = std.fmt.bufPrint(&buf, "origin={s} mode={s}", .{
+            corsRequestHeader(req, "origin") orelse "(none)",
+            corsRequestHeader(req, "sec-fetch-mode") orelse "(none)",
+        }) catch buf[0..0];
+
+        xo_seen_mutex.lockUncancelable(lp.io);
+        for (&xo_seen) |*rec| {
+            if (rec.slot_len != 0 and !std.mem.eql(u8, rec.name(), slot)) continue;
+            rec.slot_len = @intCast(@min(slot.len, rec.slot.len));
+            @memcpy(rec.slot[0..rec.slot_len], slot[0..rec.slot_len]);
+            rec.value_len = @intCast(value.len);
+            @memcpy(rec.value[0..value.len], value);
+            break;
+        }
+        xo_seen_mutex.unlock(lp.io);
+
+        // A body each kind will accept, so the load completes and the element
+        // fires `load` rather than `error`. The type follows the extension the
+        // test asked for.
+        const ext = std.fs.path.extension(slot);
+        const body: []const u8 = if (std.mem.eql(u8, ext, ".css")) "body{color:#111}" else if (std.mem.eql(u8, ext, ".gif")) &GIF_1PX else "void 0;";
+        try req.respond(body, .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = if (std.mem.eql(u8, ext, ".css")) "text/css" else if (std.mem.eql(u8, ext, ".gif")) "image/gif" else "application/javascript" },
+                // Permissive: a CORS refusal would change which loads complete and
+                // muddy a reading about what went out.
+                .{ .name = "Access-Control-Allow-Origin", .value = "*" },
+            },
+        });
+        return true;
+    }
+
+    xo_seen_mutex.lockUncancelable(lp.io);
+    defer xo_seen_mutex.unlock(lp.io);
+    for (&xo_seen) |*rec| {
+        if (rec.slot_len != 0 and std.mem.eql(u8, rec.name(), slot)) {
+            try req.respond(rec.value[0..rec.value_len], .{
+                .extra_headers = &.{.{ .name = "Content-Type", .value = "text/plain" }},
+            });
+            return true;
+        }
+    }
+    try req.respond("(never requested)", .{
+        .extra_headers = &.{.{ .name = "Content-Type", .value = "text/plain" }},
+    });
+    return true;
+}
+
+const GIF_1PX = [_]u8{
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+    0x00, 0x02, 0x01, 0x44, 0x00, 0x3b,
+};
+
 fn testHTTPHandler(req: *std.http.Server.Request) !void {
     const path = req.head.target;
 
     if (try corsHandler(req, path)) return;
     if (try timingAllowHandler(req, path)) return;
+    if (try xoHandler(req, path)) return;
 
     if (std.mem.eql(u8, path, "/xhr")) {
         return req.respond("1234567890" ** 10, .{

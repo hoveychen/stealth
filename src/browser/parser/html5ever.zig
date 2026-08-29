@@ -323,6 +323,9 @@ pub const PrescanResource = enum(u32) {
     script = 0,
     module = 1,
     base = 2,
+    // A classic <script crossorigin src>, which goes out in CORS mode. No
+    // module counterpart: a module script is CORS mode either way.
+    script_cors = 3,
     _,
 };
 

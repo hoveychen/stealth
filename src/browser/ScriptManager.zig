@@ -103,7 +103,7 @@ pub fn tailHook(base: *ScriptManagerBase) void {
 // flight that had no link behind it (the prescan's), which this element
 // adopts. false = no event will fire, so the caller queues a synthetic load.
 // element is null when the hint came from the prescan rather than a <link>.
-pub fn preloadScript(self: *ScriptManager, element: ?*Element.Html, url: []const u8) !bool {
+pub fn preloadScript(self: *ScriptManager, element: ?*Element.Html, url: []const u8, cors: bool) !bool {
     if (self.preloaded_scripts.getPtr(url)) |existing| {
         // The prescan reads the raw HTML before parsing, so a <script src>
         // anywhere in the document registers this URL ahead of the <link
@@ -164,6 +164,7 @@ pub fn preloadScript(self: *ScriptManager, element: ?*Element.Html, url: []const
         .cookie_jar = &frame._session.cookie_jar,
         .cookie_origin = frame.url,
         .resource_type = .script,
+        .cors = cors,
         .notification = frame._session.notification,
         .start_callback = if (log.enabled(.http, .debug)) Script.startCallback else null,
         .header_callback = Script.headerCallback,
@@ -374,6 +375,11 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
         }
     }
 
+    // A module script fetches in CORS mode whether or not the element says
+    // `crossorigin`; a classic one only when it does. Measured on Chrome:
+    // probes/b87-crossorigin-request-fixture.mjs.
+    const element_cors = kind == .module or Frame.elementRequestsCors(element);
+
     const script = try arena.create(Script);
     script.* = .{
         .node = .{},
@@ -431,6 +437,7 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
                     .cookie_jar = &frame._session.cookie_jar,
                     .cookie_origin = frame.url,
                     .resource_type = .script,
+                    .cors = element_cors,
                     .notification = frame._session.notification,
                     .shutdown_callback = HttpClient.noopShutdown, // syncRequest installs its own
                 }, &frame._http_owner);
@@ -503,6 +510,7 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
         .cookie_jar = &frame._session.cookie_jar,
         .cookie_origin = frame.url,
         .resource_type = .script,
+        .cors = element_cors,
         .notification = frame._session.notification,
         .start_callback = if (log.enabled(.http, .debug)) Script.startCallback else null,
         .header_callback = Script.headerCallback,

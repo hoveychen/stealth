@@ -2887,6 +2887,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = self.url,
         .resource_type = .stylesheet,
+        .cors = elementRequestsCors(element),
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown, // syncRequest installs its own
     }, &self._http_owner) catch |err| {
@@ -3193,6 +3194,17 @@ const ImageRequest = struct {
 // element -- there is nothing on the page it belongs to -- so nothing fires
 // for it, but it takes the same callbacks: a browser files a resource entry
 // for the favicon too, under "other" rather than "img".
+// Whether an element asked for its subresource load to go through CORS.
+//
+// The attribute's PRESENCE decides it, not its value: `crossorigin`,
+// `crossorigin=""` and `crossorigin="use-credentials"` are all CORS mode and
+// differ only in credentials, which nothing here models yet (see
+// HttpClient.Request.cors). Measured on Chrome, twenty rows over two origins:
+// probes/b87-crossorigin-request-fixture.mjs.
+pub fn elementRequestsCors(element: *Element) bool {
+    return element.getAttributeSafe(comptime .wrap("crossorigin")) != null;
+}
+
 fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !void {
     const session = self._session;
 
@@ -3207,6 +3219,7 @@ fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = self.url,
         .resource_type = .image,
+        .cors = if (element) |el| elementRequestsCors(el.asElement()) else false,
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown,
     };

@@ -37,6 +37,13 @@ use html5ever::{local_name, ns, Attribute, LocalName};
 const KIND_SCRIPT: u32 = 0;
 const KIND_MODULE: u32 = 1;
 const KIND_BASE: u32 = 2;
+// A classic <script> carrying `crossorigin`. Reported apart rather than folded
+// in because the attribute changes the REQUEST -- it announces an Origin and
+// says `cors` in Sec-Fetch-Mode -- and a speculative fetch that goes out
+// without them is a request the server can tell from Chrome's. There is no
+// module counterpart: a module script is CORS mode with or without the
+// attribute (measured, probes/b87-crossorigin-request-fixture.mjs).
+const KIND_SCRIPT_CORS: u32 = 3;
 
 pub type PrescanCallback =
     extern "C" fn(ctx: *mut c_void, kind: u32, url: *const c_uchar, url_len: usize);
@@ -73,6 +80,10 @@ impl PrescanSink {
         if src.value.is_empty() {
             return;
         }
+        // The attribute's PRESENCE decides it, not its value: `crossorigin`,
+        // `crossorigin=""` and `crossorigin="use-credentials"` are all CORS
+        // mode, and only the credentials differ.
+        let cors = Self::attr(tag, &local_name!("crossorigin")).is_some();
         let kind = match Self::attr(tag, &local_name!("type")) {
             None => KIND_SCRIPT,
             Some(attr) => {
@@ -89,6 +100,7 @@ impl PrescanSink {
                 }
             }
         };
+        let kind = if kind == KIND_SCRIPT && cors { KIND_SCRIPT_CORS } else { kind };
         self.emit(kind, &src.value);
     }
 }
