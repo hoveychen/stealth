@@ -607,6 +607,13 @@ const ResponseWriter = struct {
             // exactly the head -- which is the number Chrome puts here.
             try jws.objectField("encodedDataLength");
             try jws.write(transfer.responseHeaderSize());
+            // The ALPN-style label of the connection this response came in on,
+            // the same string Resource Timing's `nextHopProtocol` answers with.
+            // Chrome puts it here and reports the empty string for a response
+            // that never touched a socket (a data: URL), which is what an
+            // absent response head yields.
+            try jws.objectField("protocol");
+            try jws.write(transfer.nextHopProtocol());
             try jws.objectField("securityState");
             try jws.write(securityState(response_url));
         }
@@ -1634,4 +1641,43 @@ test "cdp.Network: encodedDataLength counts the bytes that crossed the socket" {
     const gzip = try sentBytesFor(&ctx, gzip_url);
     try testing.expect(gzip.at_headers > 0);
     try testing.expectEqual(gzip.at_headers + 45, gzip.at_finish);
+}
+
+test "cdp.Network: responseReceived reports the negotiated protocol" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const cdp = ctx.cdp();
+    _ = try cdp.createBrowserContext();
+    var bc = &cdp.browser_context.?;
+    bc.id = "BID-NP";
+    bc.session_id = "SID-NP";
+    bc.target_id = "TID-NP-0000000".*;
+
+    try ctx.processMessage(.{ .id = 1, .method = "Network.enable" });
+    try ctx.expectSentResult(null, .{ .id = 1 });
+
+    const fixture_root = "http://127.0.0.1:9582/src/browser/tests/cdp/";
+    const page_url = fixture_root ++ "worker_network.html";
+    const worker_url = fixture_root ++ "worker_network.js";
+    const page = try bc.session.createPage();
+    try page.navigate(page_url, .{});
+    try testing.waitForPage(bc);
+
+    // Chrome puts the ALPN-style label of the connection this response arrived
+    // on in `Network.Response.protocol`. This engine already computes it --
+    // `Transfer.nextHopProtocol()` over `CURLINFO_HTTP_VERSION`, which is what
+    // Resource Timing's `nextHopProtocol` answers with -- and only the CDP side
+    // was left unwired. That gap is why a survey of 524 challenge responses
+    // read `protocol: null` on every one of them and was nearly written up as
+    // "measured on h2": the field was absent, not the protocol unknown.
+    // The test server speaks HTTP/1.1, so that is what both events must say.
+    try ctx.expectSentEvent("Network.responseReceived", .{
+        .type = "Document",
+        .response = .{ .url = page_url, .protocol = "http/1.1" },
+    }, .{ .session_id = "SID-NP" });
+    try ctx.expectSentEvent("Network.responseReceived", .{
+        .type = "Script",
+        .response = .{ .url = worker_url, .protocol = "http/1.1" },
+    }, .{ .session_id = "SID-NP" });
 }
