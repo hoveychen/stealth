@@ -463,6 +463,51 @@
     });
   </script>
 
+  <script id=a_crossorigin_element_reads_its_status_like_a_fetch type=module>
+    const state = await testing.async();
+    // The third mode. An <iframe> is always no-cors and a fetch is always CORS;
+    // an ELEMENT is whichever its `crossorigin` attribute says, and the status
+    // gate follows the mode rather than the origin. Same two responses again,
+    // as JavaScript, loaded by a <script> with and without the attribute:
+    //   cross + TAO, crossorigin   sizes real, status 200, type real
+    //   cross + TAO, plain         sizes real, status 0,   type ''
+    // The sizes are equal in both rows on purpose: TAO is satisfied either way,
+    // so anything that differs here is the mode and only the mode.
+    //
+    // Live corroboration: Chrome reports cf-scrapingcourse's cross-origin
+    // api.js -- a script Cloudflare loads with `crossorigin` -- at
+    // responseStatus 200 with its real 27kB, 3/3.
+    const S_XO = 'http://localhost:9582/timing-allow/script-on';
+    const S_PLAIN = 'http://localhost:9582/timing-allow/script-off';
+    const load = (src, xo) => new Promise((resolve) => {
+      const el = document.createElement('script');
+      if (xo) el.crossOrigin = 'anonymous';
+      el.onload = resolve;
+      el.onerror = resolve;
+      el.src = src;
+      document.body.appendChild(el);
+    });
+    // script-on carries Timing-Allow-Origin, script-off does not; loading the
+    // first WITH the attribute and the second WITHOUT would confound the two
+    // gates, so both rows below use the opted-in response.
+    await load(S_XO, true);
+    await load(S_XO + '?plain', false);
+    await new Promise((r) => setTimeout(r, 20));
+    state.resolve();
+    await state.done(() => {
+      const at = (url) => performance.getEntriesByType('resource').filter((e) => e.name === url)[0];
+      const row = (e) => e
+        ? 'enc=' + e.encodedBodySize + ' status=' + e.responseStatus +
+          ' type=' + (e.contentType === '' ? 'empty' : 'real')
+        : '(no entry)';
+      testing.expectEqual(
+        'crossorigin: enc=512 status=200 type=real\n' +
+        'plain:       enc=512 status=0 type=empty',
+        'crossorigin: ' + row(at(S_XO)) + '\n' +
+        'plain:       ' + row(at(S_XO + '?plain')));
+    });
+  </script>
+
   <script id=entries_carry_one_navigation_id type=module>
     const state = await testing.async();
     // Chrome 151 stamps every entry of a navigation with the same

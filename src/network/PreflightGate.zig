@@ -421,3 +421,9 @@ const testing = @import("../testing.zig");
 test "PreflightGate: the cross-origin non-simple cases, end to end" {
     try testing.htmlRunner("net/cors_preflight.html", .{});
 }
+
+// The stylesheet rows are real fetches, so the runner has to be told to make
+// them: it leaves external stylesheets off by default.
+test "PreflightGate: the crossorigin attribute puts a subresource in CORS mode" {
+    try testing.htmlRunner("net/crossorigin_attribute.html", .{ .load_external_stylesheets = true });
+}

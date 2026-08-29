@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>the crossorigin attribute is a claim about the request</title>
+  <script src="/src/browser/tests/testing.js"></script>
+</head>
+<body>
+  <!--
+  `crossorigin` on a <script>, <img> or <link> puts the load into CORS mode:
+  the request announces an Origin and says so in Sec-Fetch-Mode. Without it the
+  load goes out no-cors and carries neither. This engine reflected the attribute
+  as an IDL property and did nothing else with it, so all six requests below
+  went out identically.
+
+  Measured on a two-origin fixture
+  (probes/b87-crossorigin-request-fixture.mjs, page on 127.0.0.1 and
+  subresources on localhost, sixteen rows over two rounds, both arms):
+
+    load                        Chrome                              this engine
+    <script src>                origin=(none)  mode=no-cors         same
+    <script crossorigin src>    origin=<page>  mode=cors            origin=(none) mode=no-cors
+    <img src>                   origin=(none)  mode=no-cors         same
+    <img crossorigin src>       origin=<page>  mode=cors            origin=(none) mode=no-cors
+    <link rel=stylesheet>       origin=(none)  mode=no-cors         same
+    <link crossorigin ...>      origin=<page>  mode=cors            origin=(none) mode=no-cors
+
+  Sec-Fetch-Dest and Sec-Fetch-Site are unaffected by the attribute on both
+  arms. `anonymous` and `use-credentials` were NOT separated: telling them
+  apart needs a cross-site cookie, which needs SameSite=None; Secure, which
+  needs https, which no test server here speaks. Both spellings are treated as
+  "CORS mode" until someone can measure the difference.
+
+  Why it matters beyond tidiness: on cf-scrapingcourse Cloudflare only echoes
+  Timing-Allow-Origin when the request carries an Origin (verified with curl --
+  bare and Referer-only get none), so the missing header changes what the
+  server sends back, not just what we send.
+  -->
+  <script id=crossorigin_puts_the_load_in_cors_mode type=module>
+    const state = await testing.async();
+    // localhost:9582 is the same test server on another origin -- the trick
+    // net/cors_preflight.html already uses. /xo-record/<slot> files the headers
+    // it saw and /xo-read/<slot> hands them back, because an <img>'s and a
+    // stylesheet's bytes never reach script.
+    const FAR = 'http://localhost:9582/xo-record/';
+    const load = (make) => new Promise((resolve) => {
+      const el = make();
+      el.onload = resolve;
+      el.onerror = resolve;
+      document.body.appendChild(el);
+    });
+    const script = (slot, xo) => load(() => {
+      const el = document.createElement('script');
+      if (xo !== null) el.crossOrigin = xo;
+      el.src = FAR + slot + '.js';
+      return el;
+    });
+    const image = (slot, xo) => load(() => {
+      const el = document.createElement('img');
+      if (xo !== null) el.crossOrigin = xo;
+      el.src = FAR + slot + '.gif';
+      return el;
+    });
+    const sheet = (slot, xo) => load(() => {
+      const el = document.createElement('link');
+      el.rel = 'stylesheet';
+      if (xo !== null) el.crossOrigin = xo;
+      el.href = FAR + slot + '.css';
+      return el;
+    });
+
+    // Sequential, not Promise.all: the slots are keyed by name and a parallel
+    // batch would make "which request wrote this slot" a race.
+    await script('s-plain', null);
+    await script('s-anon', 'anonymous');
+    await image('i-plain', null);
+    await image('i-anon', 'anonymous');
+    await sheet('l-plain', null);
+    await sheet('l-anon', 'anonymous');
+
+    const read = async (slot) =>
+      (await fetch(testing.ORIGIN + '/xo-read/' + slot).then((r) => r.text())).trim();
+    const seen = {};
+    for (const slot of ['s-plain.js', 's-anon.js', 'i-plain.gif', 'i-anon.gif', 'l-plain.css', 'l-anon.css']) {
+      seen[slot] = await read(slot);
+    }
+    state.resolve();
+    await state.done(() => {
+      // One string, because the runner never prints `desc`: a bare
+      // expectEqual(true, ...) would say "expected true, got false" and name
+      // none of the six rows.
+      const HERE = testing.ORIGIN;
+      testing.expectEqual(
+        's-plain.js  origin=(none) mode=no-cors\n' +
+        's-anon.js   origin=' + HERE + ' mode=cors\n' +
+        'i-plain.gif origin=(none) mode=no-cors\n' +
+        'i-anon.gif  origin=' + HERE + ' mode=cors\n' +
+        'l-plain.css origin=(none) mode=no-cors\n' +
+        'l-anon.css  origin=' + HERE + ' mode=cors',
+        's-plain.js  ' + seen['s-plain.js'] + '\n' +
+        's-anon.js   ' + seen['s-anon.js'] + '\n' +
+        'i-plain.gif ' + seen['i-plain.gif'] + '\n' +
+        'i-anon.gif  ' + seen['i-anon.gif'] + '\n' +
+        'l-plain.css ' + seen['l-plain.css'] + '\n' +
+        'l-anon.css  ' + seen['l-anon.css']);
+    });
+  </script>
+</body>
+</html>

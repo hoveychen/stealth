@@ -2712,7 +2712,10 @@ pub fn recordResourceTiming(self: *Frame, r: ResourceTimingRecord) void {
         .decoded_body_size = r.body_len,
     };
     t.setConnectionMilestones(r.times, perf);
-    _ = perf.resourceLoaded(r.url, t, .{ .timing_allow_origin = r.labels.timingAllowOrigin() }, &self.js.execution) catch |err| {
+    _ = perf.resourceLoaded(r.url, t, .{
+        .timing_allow_origin = r.labels.timingAllowOrigin(),
+        .cors_response = r.cors,
+    }, &self.js.execution) catch |err| {
         log.warn(.http, "resource timing", .{ .err = err, .url = r.url, .initiator = r.initiator });
     };
 }
@@ -2740,6 +2743,12 @@ pub const ResourceTimingRecord = struct {
 
     // The connection walk behind the response, for the entry's milestones.
     times: HttpClient.ResponseTimes = .{},
+
+    // Whether the load went out in CORS mode (`crossorigin` on the element,
+    // or a module script). It decides one thing about the entry: whether
+    // `responseStatus` and `contentType` are readable when the load was
+    // cross-origin. See Timing.maskCrossOrigin.
+    cors: bool = false,
 
     // Whether the load held up rendering. A stylesheet does; an image does
     // not. Chrome reports it per entry, and reporting every load as
@@ -2887,6 +2896,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = self.url,
         .resource_type = .stylesheet,
+        .cors = elementRequestsCors(element),
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown, // syncRequest installs its own
     }, &self._http_owner) catch |err| {
@@ -2931,6 +2941,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     self.recordResourceTiming(.{
         .url = resolved,
         .initiator = "link",
+        .cors = elementRequestsCors(element),
         .fetch_start = fetch_start,
         .status = response.status,
         .body_len = response.body.items.len,
@@ -3068,6 +3079,10 @@ const ImageRequest = struct {
     // The connection walk, same reason.
     times: HttpClient.ResponseTimes = .{},
 
+    // Whether the element carried `crossorigin`, mirrored off the request so
+    // the entry can say whether its status is the page's to read.
+    cors: bool = false,
+
     // How many bytes arrived, which `prefix` cannot say: it stops at the
     // signature length on purpose.
     bytes: usize = 0,
@@ -3148,6 +3163,7 @@ const ImageRequest = struct {
             .next_hop_protocol = self.next_hop_protocol,
             .labels = self.labels,
             .times = self.times,
+            .cors = self.cors,
         });
         self.report(if (self.arrived()) .load else .@"error");
     }
@@ -3193,6 +3209,17 @@ const ImageRequest = struct {
 // element -- there is nothing on the page it belongs to -- so nothing fires
 // for it, but it takes the same callbacks: a browser files a resource entry
 // for the favicon too, under "other" rather than "img".
+// Whether an element asked for its subresource load to go through CORS.
+//
+// The attribute's PRESENCE decides it, not its value: `crossorigin`,
+// `crossorigin=""` and `crossorigin="use-credentials"` are all CORS mode and
+// differ only in credentials, which nothing here models yet (see
+// HttpClient.Request.cors). Measured on Chrome, twenty rows over two origins:
+// probes/b87-crossorigin-request-fixture.mjs.
+pub fn elementRequestsCors(element: *Element) bool {
+    return element.getAttributeSafe(comptime .wrap("crossorigin")) != null;
+}
+
 fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !void {
     const session = self._session;
 
@@ -3207,6 +3234,7 @@ fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = self.url,
         .resource_type = .image,
+        .cors = if (element) |el| elementRequestsCors(el.asElement()) else false,
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown,
     };
@@ -3217,6 +3245,7 @@ fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !
     pending.* = .{
         .frame = self,
         .element = element,
+        .cors = request.cors,
         .url = resolved,
         .initiator = if (element == null) "other" else "img",
         .fetch_start = self.performance().now(),

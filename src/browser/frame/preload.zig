@@ -44,7 +44,10 @@ pub fn scriptHint(frame: *Frame, element: ?*Element.Html, href: []const u8) bool
     if (!isRemoteScheme(resolved)) {
         return false;
     }
-    return frame._script_manager.preloadScript(element, resolved) catch false;
+    // A <link rel=preload as=script crossorigin> fetches in CORS mode, the
+    // same as the <script crossorigin src> it is preloading for.
+    const cors = if (element) |el| Frame.elementRequestsCors(el.asElement()) else false;
+    return frame._script_manager.preloadScript(element, resolved, cors) catch false;
 }
 
 // start prefetching <link rel="modulepreload" href=...>. element is the hint
@@ -101,7 +104,7 @@ const Prescan = struct {
             .base => {
                 self.base = URL.resolve(self.arena, self.base, href, .{ .encoding = frame.charset }) catch return;
             },
-            .script => {
+            .script, .script_cors => {
                 if (hasNonRemoteScheme(href)) {
                     return;
                 }
@@ -109,7 +112,7 @@ const Prescan = struct {
                 if (isRemoteScheme(resolved) == false) {
                     return;
                 }
-                _ = frame._script_manager.preloadScript(null, resolved) catch {};
+                _ = frame._script_manager.preloadScript(null, resolved, kind == .script_cors) catch {};
             },
             .module => {
                 if (hasNonRemoteScheme(href)) {

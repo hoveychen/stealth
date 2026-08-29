@@ -1975,6 +1975,24 @@ pub const Request = struct {
     resource_type: ResourceType,
     // Only meaningful when resource_type == .document.
     nav: ?Navigation = null,
+
+    // A subresource whose element carried `crossorigin`, which puts the load
+    // in CORS mode: it announces an Origin and says `cors` in Sec-Fetch-Mode
+    // where a bare <script src>, <img> or stylesheet says `no-cors` and names
+    // nobody. Only meaningful for .script, .stylesheet and .image -- fetch, XHR
+    // and EventSource are CORS mode by construction, and a document navigation
+    // is neither.
+    //
+    // Measured (probes/b87-crossorigin-request-fixture.mjs, twenty rows over
+    // two rounds and two origins): Chrome appends the Origin for these even
+    // when the load is SAME-origin, which is where they part company with
+    // fetch() -- a same-origin GET through fetch carries none.
+    //
+    // `anonymous` and `use-credentials` are not distinguished. Telling them
+    // apart needs a cross-site cookie, which needs SameSite=None; Secure,
+    // which needs https, which no fixture here speaks; both spellings read as
+    // "CORS mode" until someone can measure the difference.
+    cors: bool = false,
     redirect: RedirectMode = .follow,
     referrer_policy: ?referrer.Policy = null,
     credentials: ?[:0]const u8 = null,
@@ -3666,9 +3684,10 @@ pub const Transfer = struct {
 
         try self.setHeader("Sec-Fetch-Mode", switch (req.resource_type) {
             .document => "navigate",
-            // Subresources the parser pulls in are no-cors; script-issued
-            // fetches and XHR go through the CORS protocol.
-            .stylesheet, .script, .image => "no-cors",
+            // Subresources the parser pulls in are no-cors -- unless the
+            // element asked for CORS with `crossorigin`. Script-issued fetches
+            // and XHR always go through the CORS protocol.
+            .stylesheet, .script, .image => if (req.cors) "cors" else "no-cors",
             .fetch, .xhr, .eventsource => "cors",
         }, .{ .source = .cdp });
 
@@ -3808,9 +3827,21 @@ pub const Transfer = struct {
 
     fn originHeader(self: *Transfer) !?[]const u8 {
         const req = &self.req;
-        switch (req.resource_type) {
-            .fetch, .xhr, .eventsource => {},
-            .document, .stylesheet, .script, .image => return null,
+        // A `crossorigin` subresource names its origin unconditionally --
+        // same-origin included, unlike the fetch rule below. Measured: a
+        // same-origin `<script crossorigin src>` and `<img crossorigin>` both
+        // carry `Origin: <page origin>` in Chrome, while a same-origin GET
+        // through fetch() carries none
+        // (probes/b87-crossorigin-request-fixture.mjs).
+        const element_cors = switch (req.resource_type) {
+            .stylesheet, .script, .image => req.cors,
+            .document, .fetch, .xhr, .eventsource => false,
+        };
+        if (!element_cors) {
+            switch (req.resource_type) {
+                .fetch, .xhr, .eventsource => {},
+                .document, .stylesheet, .script, .image => return null,
+            }
         }
 
         // No initiator document at all (an internal or CDP-issued request) is
@@ -3820,7 +3851,7 @@ pub const Transfer = struct {
 
         const tainting_cors = fetchSite(origin, req.url) != .same_origin;
         const safe_method = req.method == .GET or req.method == .HEAD;
-        if (!tainting_cors and safe_method) return null;
+        if (!element_cors and !tainting_cors and safe_method) return null;
 
         // The initiator's origin, serialized: scheme, host, non-default port,
         // nothing else. `null` for anything without a tuple origin (a data: or

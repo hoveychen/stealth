@@ -21142,3 +21142,87 @@ permission the response never granted.
 (33–52KB) and Chrome passes that station on 278–1465 bytes — see the chapter
 above. What this closes is a leak: the page could read another origin's exact
 response sizes, which one expression separates from Chrome.
+
+## crossorigin was a property we reflected and never obeyed
+
+`crossorigin-attribute-sends-origin`. `crossorigin` on a `<script>`, `<img>` or
+`<link>` puts the load into CORS mode: the request announces an `Origin` and
+says `cors` in `Sec-Fetch-Mode` where a bare one says `no-cors` and names
+nobody. This engine reflected the attribute as an IDL property
+(`Script.zig:111`, a `reflect.enumerated` and nothing else) and no part of the
+fetch path ever read it, so every subresource went out identically whatever the
+markup said.
+
+It surfaced from the other end. After the cross-origin masking landed, our
+`api.js` entry on cf-scrapingcourse stayed fully opaque where Chrome's is fully
+transparent — which looked like the new mask being too eager, and was not.
+Cloudflare only echoes `Timing-Allow-Origin` **when the request carries an
+`Origin`**: `curl -sI` gets none, `curl -sI -H 'Referer: …'` gets none, and
+`curl -sI -H 'Origin: https://www.scrapingcourse.com'` gets
+`timing-allow-origin: https://www.scrapingcourse.com`. The header we were not
+sending was changing what the server sent back.
+
+`probes/b87-crossorigin-request-fixture.mjs` puts it on ground we control: the
+page on `127.0.0.1`, the subresources on `localhost`, so the loads are
+cross-**site** and not merely cross-origin, and the far server prints the
+headers that arrived. Twenty rows over two rounds:
+
+```
+  load                        Chrome                     this engine (before)
+  <script src>                origin=(none) no-cors      same
+  <script crossorigin src>    origin=<page> cors         origin=(none) no-cors
+  <script type=module src>    origin=<page> cors         origin=(none) no-cors
+  <img src>                   origin=(none) no-cors      same
+  <img crossorigin src>       origin=<page> cors         origin=(none) no-cors
+  <link rel=stylesheet>       origin=(none) no-cors      same
+  <link crossorigin …>        origin=<page> cors         origin=(none) no-cors
+```
+
+Two things the fixture settled that guessing would have got wrong. A **module**
+script is CORS mode with no attribute at all, so `crossorigin` is not the only
+thing that flips the mode. And a **same-origin** `crossorigin` subresource still
+carries the `Origin` — which is where these part company with `fetch()`, whose
+same-origin GET carries none, and why the header could not just reuse the
+existing tainting-cors rule.
+
+`Sec-Fetch-Dest` and `Sec-Fetch-Site` are unaffected by the attribute on both
+arms. `anonymous` and `use-credentials` are **not** distinguished: separating
+them needs a cross-site cookie, which needs `SameSite=None; Secure`, which needs
+https, which no fixture here speaks. Both spellings read as "CORS mode" until
+someone can measure the difference.
+
+The prescan learns about it as its own kind (`KIND_SCRIPT_CORS`) rather than by
+folding: it reads the raw HTML before parsing and starts script fetches from
+there, so a speculative fetch for a `<script crossorigin src>` would otherwise
+go out with a plain one's headers — which is the exact thing being fixed. No
+module counterpart is needed, since modules are CORS either way.
+
+The entry half needed wiring too, and was missed on the first pass: the element
+recorders were still declaring themselves no-cors to `resourceLoaded` after
+their requests had stopped being no-cors, so `responseStatus` stayed 0. Caught
+by the live station rather than by the fixture, and then red-lighted properly —
+forcing the script recorder back to `cors_response = false` turns the new test
+block from `crossorigin: status=200 / plain: status=0` into `status=0` twice.
+
+**After, on the live station** (`probes/expr-b87-station-opacity.js`, 3/3 each):
+
+```
+              enc      xfer     proto   walk      status
+  Chrome      27124    27424    h3      nonzero   200
+  before      27124    27424    h2      nonzero   200   (nothing masked at all)
+  masked      0        0        (empty) zero      0     (no Origin -> no TAO)
+  after       27124    27424    h2      nonzero   200
+```
+
+Every field matches Chrome now except `proto`, which is QUIC and a separate
+axis — and one a neighbouring session has already shown is causally irrelevant
+here: Chrome holds its cf ticket 6/6 with `--disable-quic`.
+
+**The door did not move.** `cf-verdict.mjs`, six runs on the head binary:
+`ticket=(absent)` 6/6, every round `chl-gen`, exactly as before. That is the
+expected outcome — cf's lever is the entry-name byte total and Chrome passes on
+278–1465 bytes — but it is worth stating plainly, because this was the strongest
+signal found in a while: unlike every other defect closed on this codebase
+lately, it was visible in the server's own request log without the page running
+a line of JavaScript, and it demonstrably changed what Cloudflare sent back.
+Closing it did not open anything.
