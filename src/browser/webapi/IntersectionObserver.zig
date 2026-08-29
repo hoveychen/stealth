@@ -59,11 +59,14 @@ const zero_rect: DOMRect.Data = .{};
 pub const ObserverInit = struct {
     pub const js_idl_name = "IntersectionObserverInit";
 
+    // Alphabetical: a dictionary's members are read in that order and a page
+    // handing a Proxy in sees the sequence. Measured with
+    // probes/expr-b85-dictionary-traps.js.
+    delay: ?f64 = null,
     root: ?*Node = null,
     rootMargin: ?[]const u8 = null,
     scrollMargin: ?[]const u8 = null,
     threshold: Threshold = .{ .scalar = 0.0 },
-    delay: ?f64 = null,
     trackVisibility: ?bool = null,
 
     const Threshold = union(enum) {

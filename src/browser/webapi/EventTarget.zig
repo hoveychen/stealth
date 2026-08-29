@@ -326,8 +326,10 @@ const AddEventListenerOptions = union(enum) {
     // passive is optional so that an absent (or undefined) member falls back
     // to the type- and target-dependent default passive value.
     const Options = struct {
-        once: bool = false,
+        // Alphabetical: a dictionary's members are read in that order and a
+        // page handing a Proxy in sees the sequence.
         capture: bool = false,
+        once: bool = false,
         passive: ?bool = null,
         signal: ?js.Value = null,
     };
