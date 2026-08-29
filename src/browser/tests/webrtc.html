@@ -165,9 +165,13 @@
 
   // Video codecs carry no `channels` key at all.
   const video = RTCRtpSender.getCapabilities('video');
-  // Thirteen on Linux, not the fifteen macOS reports: H264 High profile and
-  // H265 both need a platform decoder, which is measured absent here (G21 P4).
-  testing.expectEqual(13, video.codecs.length);
+  // Fifteen: H264 High profile and H265 both need a platform decoder, and the
+  // machine this claims to be has one. The tables were once recorded in a Linux
+  // container, which reports thirteen, and the platform claim moved to macOS
+  // the day after without them -- so the offer went out without H265 while
+  // navigator.platform said MacIntel and the renderer said Metal. Measured on
+  // Chrome 151 here with tools/fingerprint/probes/expr-sdp-offer.js.
+  testing.expectEqual(15, video.codecs.length);
   testing.expectEqual(11, video.headerExtensions.length);
   testing.expectEqual(['clockRate', 'mimeType'], Object.keys(video.codecs[0]));
   testing.expectEqual('video/VP8', video.codecs[0].mimeType);
@@ -175,9 +179,7 @@
 
   // The receiver decodes profiles the encoder will not emit, so its video
   // table is longer; audio is the same for both.
-  // Nineteen on Linux: the four H264-High / H265 receive entries macOS lists
-  // need a platform decoder (G21 P4).
-  testing.expectEqual(19, RTCRtpReceiver.getCapabilities('video').codecs.length);
+  testing.expectEqual(23, RTCRtpReceiver.getCapabilities('video').codecs.length);
   testing.expectEqual(
     JSON.stringify(audio),
     JSON.stringify(RTCRtpReceiver.getCapabilities('audio')),
@@ -264,7 +266,9 @@
     const sdp = offer.sdp;
     const payloads = (kind) => (new RegExp(`m=${kind} [^\\s]+ [^\\s]+ ([^\\r\\n]+)`).exec(sdp) || [])[1].split(' ');
     testing.expectEqual(8, payloads('audio').length);
-    testing.expectEqual(34, payloads('video').length);
+    // Forty-two once the platform codecs are in: eight more than the thirteen
+    // the Linux container offers.
+    testing.expectEqual(42, payloads('video').length);
 
     const rtpmap = (pt) => (new RegExp(`a=rtpmap:${pt} ([^\\r\\n]+)`).exec(sdp) || [])[1];
     testing.expectEqual('opus/48000/2', rtpmap(111));
@@ -743,4 +747,46 @@
       testing.expectEqual(1, RTCRtpTransceiver.prototype[name].length, { desc: name + '.length' });
     }
   }
+</script>
+
+<script id=offer_carries_the_platform_codecs type=module>
+{
+  // The codecs a platform decoder gates. Measured on Chrome 151 here with
+  // tools/fingerprint/probes/expr-sdp-offer.js: the legacy offer is 8398 bytes
+  // and its video m= line ends `... 118 119 120 121 49 50 51 52 122 123 124 53`
+  // -- High-profile H264 at 118/120, H265 at 49/51, then red/rtx/ulpfec and
+  // flexfec pushed up to 122/123/124 and 53. Recorded in a Linux container the
+  // same line stops at `118 119 120 49`, which is what this engine sent while
+  // claiming to be a Mac.
+  const state = await testing.async();
+  const pc = new RTCPeerConnection();
+  pc.createDataChannel('');
+  const offer = await pc.createOffer({ offerToReceiveAudio: 1, offerToReceiveVideo: 1 });
+  state.resolve();
+
+  await state.done(() => {
+    const sdp = offer.sdp;
+    const line = (/^m=video [^\r\n]+/m.exec(sdp) || [''])[0];
+    testing.expectEqual(
+      'm=video 9 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 35 36 37 38 102 103 104 107 ' +
+      '108 109 114 115 116 117 39 40 41 42 43 44 45 46 47 48 118 119 120 121 49 50 ' +
+      '51 52 122 123 124 53',
+      line);
+
+    const rtpmap = (pt) => (new RegExp(`a=rtpmap:${pt} ([^\\r\\n]+)`).exec(sdp) || [])[1];
+    const fmtp = (pt) => (new RegExp(`a=fmtp:${pt} ([^\\r\\n]+)`).exec(sdp) || [])[1];
+    testing.expectEqual('H264/90000', rtpmap(118));
+    testing.expectEqual('level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f', fmtp(118));
+    testing.expectEqual('H264/90000', rtpmap(120));
+    testing.expectEqual('level-asymmetry-allowed=1;packetization-mode=0;profile-level-id=64001f', fmtp(120));
+    testing.expectEqual('H265/90000', rtpmap(49));
+    testing.expectEqual('level-id=180;profile-id=1;tier-flag=0;tx-mode=SRST', fmtp(49));
+    testing.expectEqual('H265/90000', rtpmap(51));
+    testing.expectEqual('level-id=180;profile-id=2;tier-flag=0;tx-mode=SRST', fmtp(51));
+    testing.expectEqual('red/90000', rtpmap(122));
+    testing.expectEqual('ulpfec/90000', rtpmap(124));
+    testing.expectEqual('flexfec-03/90000', rtpmap(53));
+    testing.expectEqual(8398, sdp.length);
+  });
+}
 </script>
