@@ -1564,6 +1564,16 @@ pub fn focus(self: *Element, frame: *Frame) !void {
     const old_active = doc._active_element;
     doc._active_element = self;
 
+    // Focusing something moves the whole chain, not just this document: the
+    // frame that owns the element holds the focus, and every ancestor of it
+    // reports focus too. It stays there when the element is blurred, because
+    // blur hands the focus back to this document's body rather than to the
+    // parent -- measured on Chrome 151.
+    {
+        const doc_frame = doc._frame orelse frame;
+        doc_frame._page.focused_frame = doc_frame;
+    }
+
     if (old_active) |old| {
         if (old == self) {
             return;

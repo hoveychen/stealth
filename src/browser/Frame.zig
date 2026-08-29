@@ -597,6 +597,12 @@ pub fn deinit(self: *Frame) void {
 
     const page = self._page;
 
+    // The focus pointer is the one thing on the Page that names a Frame, so it
+    // is the one thing that could outlive this one.
+    if (page.focused_frame == self) {
+        page.focused_frame = null;
+    }
+
     if (self._queued_navigation) |qn| {
         qn.arena.release();
     }
