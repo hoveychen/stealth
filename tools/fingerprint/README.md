@@ -20572,3 +20572,36 @@ treating that as an absent member fails the whole conversion so the pipe never
 settles. The rule belongs to fields that are optional or defaulted -- which
 every real dictionary member is -- so what a page can observe is still a single
 `Get`.
+
+## Ten defects later, the door count is unchanged
+
+The whole point of asking. Both arms re-swept after the fixes, same route,
+ReleaseFast against Chrome with `--headed-ua`, no crash on either side.
+
+```
+                      before      after
+  this engine         22 / 29     22 / 29
+  Chrome (headed-ua)  19 / 29     21 / 29
+```
+
+Station by station the two real gaps are the same two: **cf-scrapingcourse** and
+**x-hyatt**. The five phantoms are the same five, shut to Chrome as well
+(`cf-zeroclover` answered `cf-blocked` to Chrome this time and `cf-challenge`
+before -- that host is unstable, not discriminating). The three DataDome
+stations this engine passes and Chrome does not are the address-reputation
+throttling already recorded here; the Chrome column ran second again.
+
+So the ten defects closed in this sweep -- the focus chain and `activeElement`,
+`ex`/`ch`, the number tie-break and `<ratio>`, the alpha clamp, the CSS
+namespace's 64 factories, the empty computed style, the declared origin, and the
+dictionary's single `Get` -- moved nothing at the door. Each was real, each was
+measured against Chrome and each now matches it; none of them is what either
+station weighs.
+
+That is worth stating plainly rather than leaving implied: **fidelity debt paid
+one item at a time has not accumulated into a door**. Every one of these was
+found by measuring a family Chrome differs on, not by evidence that a guard
+reads it, and the two that a guard demonstrably does read -- the box-probe
+family and the Proxy trap log -- were both already knob-cleared before the fix.
+The next attempt on either door needs a new observation channel, not another
+value made to match.
