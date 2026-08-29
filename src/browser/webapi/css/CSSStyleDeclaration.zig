@@ -5913,6 +5913,10 @@ test "WebApi: CSSStyleDeclaration margin collapse" {
     try testing.htmlRunner("css/margin_collapse.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration child box height" {
+    try testing.htmlRunner("css/child_box_height.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration inline content lines" {
     try testing.htmlRunner("css/inline_content_lines.html", .{});
 }

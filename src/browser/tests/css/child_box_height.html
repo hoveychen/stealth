@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A parent counts its children's whole boxes, not the middle of them.
+
+`Element.contentHeight` adds `el.getElementDimensions(frame).height` per child.
+That field is the child's CONTENT height: it is not the child's padding, not
+its border, and not what the child's own children put in it. Every one of those
+is inside the parent, and the child itself already knows about all three -- its
+own `offsetHeight` is right in nine of the ten shapes below -- so the parent
+disagrees with its own child about how tall the child is.
+
+That is the shape of the bug worth naming: the numbers do not merely differ
+from Chrome, they differ from each other in the same engine. A padded child
+reports 22 for itself while the parent that contains it reports 12.
+
+Measured on Chrome 151 with
+tools/fingerprint/probes/expr-b86-child-box-height.js, both arms on
+https://example.com/.
+
+`nestedText` is in the probe and deliberately NOT asserted here. A nested block
+holding one line reads 18 on Chrome and 19 here, which is the line box's own
+half-pixel rounding rather than anything about propagation, and asserting it
+would make this test fail for a second reason it is not about.
+-->
+
+<script id=a_parent_counts_the_childs_whole_box>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const p = wrap.querySelector('[data-p]');
+    const k = wrap.querySelector('[data-k]');
+    const out = [p.offsetHeight, k.offsetHeight].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  // markup, then: the parent's offsetHeight, the child's own
+  const CASES = [
+    // The child's content, one and two levels down.
+    ['<div data-p><div data-k><div style="height:12px"></div></div></div>', '12 12'],
+    ['<div data-p><div data-k><div><div style="height:12px"></div></div></div></div>', '12 12'],
+    // The child's own edges, which are outside its content height and inside
+    // the parent's.
+    ['<div data-p><div data-k style="height:12px;padding:5px"></div></div>', '22 22'],
+    ['<div data-p><div data-k style="height:12px;border:3px solid"></div></div>', '18 18'],
+    ['<div data-p><div data-k style="height:12px;padding:5px;border:3px solid"></div></div>', '28 28'],
+    // Padding and nothing else: the padding is the whole box.
+    ['<div data-p><div data-k style="padding:5px"></div></div>', '10 10'],
+    // border-box puts the padding on the other side of the declaration, so the
+    // child is 12 in total rather than 22 -- a fix that adds padding
+    // unconditionally gets this one wrong.
+    ['<div data-p><div data-k style="height:12px;padding:5px;box-sizing:border-box"></div></div>', '12 12'],
+    // Two of them, so double-counting one shows as a doubled number rather
+    // than a plausible one.
+    ['<div data-p><div data-k style="height:12px;padding:5px"></div>' +
+     '<div style="height:12px;padding:5px"></div></div>', '44 22'],
+    // Against margin collapsing: a padded child is not self-collapsing, so the
+    // two margins around it stay two. 22 + 10 + 12, the outer two escaping.
+    ['<div data-p><div data-k style="height:12px;padding:5px;margin:10px 0"></div>' +
+     '<div style="height:12px;margin:10px 0"></div></div>', '44 22'],
+    // A child that is its own formatting context still contributes all of it.
+    ['<div data-p><div data-k style="overflow:hidden;padding:5px">' +
+     '<div style="height:12px"></div></div></div>', '22 22'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
