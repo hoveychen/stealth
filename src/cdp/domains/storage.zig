@@ -121,7 +121,10 @@ pub const CdpCookie = struct {
     path: ?[:0]const u8 = null,
     secure: ?bool = null, // default: https://www.rfc-editor.org/rfc/rfc6265#section-5.3
     httpOnly: bool = false, // default: https://www.rfc-editor.org/rfc/rfc6265#section-5.3
-    sameSite: SameSite = .None, // default: https://datatracker.ietf.org/doc/html/draft-west-first-party-cookies
+    // Absent means the client said nothing about SameSite, which is not the
+    // same thing as saying None: the cookie then behaves as Lax (Chrome's
+    // SameSite-by-default) and reports no attribute at all.
+    sameSite: ?SameSite = null,
     expires: ?f64 = null, // -1? says google
     priority: CookiePriority = .Medium, // default: https://datatracker.ietf.org/doc/html/draft-west-cookie-priority-00
     sameParty: ?bool = null,
@@ -164,11 +167,12 @@ pub fn setCdpCookie(cookie_jar: *CookieJar, param: CdpCookie) !void {
             .expires = param.expires,
             .secure = secure,
             .http_only = param.httpOnly,
-            .same_site = switch (param.sameSite) {
+            .same_site = if (param.sameSite) |same_site| switch (same_site) {
                 .Strict => .strict,
                 .Lax => .lax,
                 .None => .none,
-            },
+            } else .lax,
+            .same_site_explicit = param.sameSite != null,
         };
     };
     try cookie_jar.add(cookie, lp.datetime.timestamp(.real), true);
@@ -235,11 +239,16 @@ pub fn writeCookie(cookie: *const Cookie, w: anytype) !void {
         try w.objectField("session");
         try w.write(cookie.expires == null);
 
-        try w.objectField("sameSite");
-        switch (cookie.same_site) {
-            .none => try w.write("None"),
-            .lax => try w.write("Lax"),
-            .strict => try w.write("Strict"),
+        // A cookie that never carried the attribute has no `sameSite` to
+        // report -- its Lax behaviour is a default, not something the cookie
+        // says about itself, and Chrome leaves the key out.
+        if (cookie.same_site_explicit) {
+            try w.objectField("sameSite");
+            switch (cookie.same_site) {
+                .none => try w.write("None"),
+                .lax => try w.write("Lax"),
+                .strict => try w.write("Strict"),
+            }
         }
 
         // TODO experimentals
