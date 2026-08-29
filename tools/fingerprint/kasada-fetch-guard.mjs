@@ -64,10 +64,45 @@ const pending = [];
 try {
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+    // A cross-origin child frame is its own target in Chrome, so a page-session
+    // listener never sees what it loads. Cloudflare's decision is made inside
+    // the challenges.cloudflare.com widget, whose bundle is therefore invisible
+    // to every instrument that only watches the page. --frames attaches to the
+    // children as they appear and enables Network on each.
+    //
+    // Off by default: auto-attach is observable -- Kasada refuses a headed
+    // Chrome that has it -- so a run that needs a verdict must not use it. A run
+    // that only needs the bytes can, because the bundle is served before the
+    // verdict is reached.
+    const withFrames = process.argv.includes('--frames');
+    const childSessions = new Set();
+    if (withFrames) {
+        cdp.on(async (m) => {
+            if (m.method !== 'Target.attachedToTarget') return;
+            const sid = m.params.sessionId;
+            if (childSessions.has(sid)) return;
+            childSessions.add(sid);
+            try {
+                await cdp.send('Network.enable', { maxPostDataSize: 1 << 20 }, sid);
+                await cdp.send('Runtime.runIfWaitingForDebugger', {}, sid).catch(() => {});
+            } catch (e) { /* the target can die before we finish arming it */ }
+        });
+        await cdp.send('Target.setAutoAttach',
+            { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId);
+    }
 
     const grab = async (requestId, rec) => {
         try {
-            const res = await cdp.send('Network.getResponseBody', { requestId }, rec.session || sessionId);
+            // A child target's document is sometimes only addressable from the
+            // page session and sometimes only from its own, so try both rather
+            // than recording "No resource with given identifier found" as a
+            // station that served nothing.
+            let res = null, lastErr = null;
+            for (const sid of new Set([rec.session || sessionId, sessionId])) {
+                try { res = await cdp.send('Network.getResponseBody', { requestId }, sid); break; }
+                catch (e) { lastErr = e; }
+            }
+            if (!res) throw lastErr;
             const body = res.base64Encoded ? Buffer.from(res.body, 'base64').toString('utf8') : res.body;
             rec.bytes = Buffer.byteLength(body);
             rec.sha256 = crypto.createHash('sha256').update(body).digest('hex');
