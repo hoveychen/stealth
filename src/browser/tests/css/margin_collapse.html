@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A parent's height counts its children's margins, and adjoining margins collapse
+into one. This engine counted neither: `contentHeight` sums the children's
+boxes and margin does not appear in the box model at all, so three 12px blocks
+10px apart answered 36 where Chrome answers 56.
+
+The size of the mistake is the point. It is not a rounding difference in the
+last place -- it is 20px, 30px, a whole gap missing -- on the one reading a
+guard takes of every block on the page.
+
+Measured on Chrome 151 with
+tools/fingerprint/probes/expr-b86-margin-collapse.js, both arms on
+https://example.com/ so the page under the boxes is the same one. The plan that
+asked for this cited two readings in `scratch/`, which does not survive a
+restart; these are taken again rather than trusted.
+
+Four rules, and an engine can get any one right while getting the others wrong,
+so all four are asserted separately:
+
+  * adjoining sibling margins collapse to max(positives) + min(negatives) --
+    30 against 10 is 30, not 40, and 30 against -10 is 20;
+  * a first child's top margin and a last child's bottom margin escape the
+    parent, which moves rather than grows -- unless the parent has a border or
+    padding on that side, which is why `borderTop` is 34 and `paddingTop` 33
+    where `escapeTop` is 12;
+  * an empty block collapses through itself, so its two margins become one gap
+    between the blocks around it -- 34, not 44;
+  * none of it crosses a block formatting context: `overflow:hidden` contains
+    the child's margin and answers 32.
+
+Only heights are asserted. Chrome's child positions in this markup are real
+(`0,22,44` for the three siblings) and this engine's are a placeholder, but
+positioning every box is a different piece of work; the height is the reading
+that carries the collapse.
+-->
+
+<script id=adjoining_margins_collapse_into_the_parent_height>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const p = wrap.querySelector('[data-p]');
+    const out = [p.offsetHeight, p.getBoundingClientRect().height].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const B = 'height:12px;background:#000';
+
+  // markup, then: offsetHeight, rect height
+  const CASES = [
+    // Three siblings 10px apart: 36 of content and two collapsed gaps of 10.
+    // The outer two margins escape and are not in the height.
+    ['<div data-p><div style="' + B + ';margin:10px 0"></div>' +
+     '<div style="' + B + ';margin:10px 0"></div>' +
+     '<div style="' + B + ';margin:10px 0"></div></div>', '56 56'],
+    // Unequal adjoining margins collapse to the larger, not the sum.
+    ['<div data-p><div style="' + B + ';margin-bottom:30px"></div>' +
+     '<div style="' + B + ';margin-top:10px"></div></div>', '54 54'],
+    // A negative against a positive is max(positives) + min(negatives).
+    ['<div data-p><div style="' + B + ';margin-bottom:30px"></div>' +
+     '<div style="' + B + ';margin-top:-10px"></div></div>', '44 44'],
+    // The first child's top margin escapes a parent with no border and no
+    // padding: the parent stays 12 tall.
+    ['<div data-p><div style="' + B + ';margin-top:20px"></div></div>', '12 12'],
+    // A border on that side stops the escape, and adds its own 2.
+    ['<div data-p style="border:1px solid #000">' +
+     '<div style="' + B + ';margin-top:20px"></div></div>', '34 34'],
+    // So does padding.
+    ['<div data-p style="padding-top:1px">' +
+     '<div style="' + B + ';margin-top:20px"></div></div>', '33 33'],
+    // The last child's bottom margin escapes the same way.
+    ['<div data-p><div style="' + B + ';margin-bottom:20px"></div></div>', '12 12'],
+    // An empty block between two blocks collapses through itself: one 10px
+    // gap, not two.
+    ['<div data-p><div style="' + B + '"></div>' +
+     '<div style="margin:10px 0"></div>' +
+     '<div style="' + B + '"></div></div>', '34 34'],
+    // A parent whose only content is an empty block's margins is 0 tall.
+    ['<div data-p><div style="margin:10px 0"></div></div>', '0 0'],
+    // Nothing collapses across a block formatting context.
+    ['<div data-p style="overflow:hidden">' +
+     '<div style="' + B + ';margin-top:20px"></div></div>', '32 32'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

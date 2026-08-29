@@ -2667,22 +2667,73 @@ pub fn containingBlock(self: *Element, frame: *Frame) ?*Element {
 /// SIGBUS on www.sony.com, and the computed-value path a percentage would
 /// otherwise take is worse still -- it starts a fresh measurement at depth 0.
 pub fn horizontalMargin(self: *Element, frame: *Frame, containing: *?f64, depth: u8) f64 {
-    var total: f64 = 0;
-    inline for (.{ "margin-left", "margin-right" }) |name| {
-        if (CSSStyleDeclaration.marginPercentagePx(self, name, frame, containing, depth)) |px| {
-            total += px;
-        } else if (CSSStyleDeclaration.specifiedPx(self, name, frame)) |px| {
-            // The author's number, for the same reason the percentage above
-            // does not go through the computed text: six significant figures of
-            // `465.5466592px` takes a grid step too much off the line.
-            total += px;
-        } else if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
-            if (CSS.parseDimensionViewport(declared, frame)) |px| {
-                total += px;
-            }
+    return self.marginPx("margin-left", frame, containing, depth) +
+        self.marginPx("margin-right", frame, containing, depth);
+}
+
+/// The two block-axis margins, kept apart because they do not add: they
+/// collapse, and the top one and the bottom one collapse against different
+/// neighbours. See contentHeight.
+pub fn verticalMargins(self: *Element, frame: *Frame, containing: *?f64, depth: u8) struct { top: f64, bottom: f64 } {
+    return .{
+        .top = self.marginPx("margin-top", frame, containing, depth),
+        .bottom = self.marginPx("margin-bottom", frame, containing, depth),
+    };
+}
+
+/// One margin in px, from the cascade, so a stylesheet rule counts.
+fn marginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) f64 {
+    if (CSSStyleDeclaration.marginPercentagePx(self, name, frame, containing, depth)) |px| {
+        return px;
+    }
+    // The author's number, for the same reason the percentage above does not go
+    // through the computed text: six significant figures of `465.5466592px`
+    // takes a grid step too much off the line.
+    if (CSSStyleDeclaration.specifiedPx(self, name, frame)) |px| return px;
+    if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
+        if (CSS.parseDimensionViewport(declared, frame)) |px| return px;
+    }
+    return 0;
+}
+
+/// The margins that currently adjoin each other and will become one gap.
+///
+/// Collapsing is not "keep the larger": a negative margin pulls the neighbour
+/// back, and the rule is max(positives) + min(negatives). 30 against 10 is 30
+/// and 30 against -10 is 20 -- both measured, both in css/margin_collapse.html
+/// -- so the two signs are accumulated apart and added only when the group is
+/// paid out.
+const MarginGroup = struct {
+    positive: f64 = 0,
+    negative: f64 = 0,
+
+    fn join(self: *MarginGroup, margin: f64) void {
+        if (margin < 0) {
+            self.negative = @min(self.negative, margin);
+        } else {
+            self.positive = @max(self.positive, margin);
         }
     }
-    return total;
+
+    fn gap(self: MarginGroup) f64 {
+        return self.positive + self.negative;
+    }
+};
+
+/// Whether a first child's top margin and a last child's bottom margin pass
+/// through this element instead of being counted inside it.
+///
+/// A margin that escapes moves the parent rather than growing it, which is why
+/// three 12px blocks 10px apart make a 56px parent and not a 76px one: only
+/// the two gaps between them are inside.
+fn marginEscapes(self: *Element, frame: *Frame, containing: *?f64, depth: u8) struct { top: bool, bottom: bool } {
+    if (CSSStyleDeclaration.establishesBlockFormattingContext(self, frame)) {
+        return .{ .top = false, .bottom = false };
+    }
+    return .{
+        .top = CSSStyleDeclaration.blockEdgePx(self, "top", frame, containing, depth) == 0,
+        .bottom = CSSStyleDeclaration.blockEdgePx(self, "bottom", frame, containing, depth) == 0,
+    };
 }
 
 /// The CONTENT box an element has because of what it is rather than what it
@@ -3560,6 +3611,20 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
     };
     flow.restart();
 
+    // Margins cannot be added as each child is reached, because the gap between
+    // two blocks belongs to neither of them: it is what their two adjoining
+    // margins collapse to. `group` is the run of margins currently adjoining,
+    // and it is paid out only when something that is not a margin ends it --
+    // which at the parent's own top edge may mean paying out nothing at all,
+    // since a first child's margin escapes a parent with no edge to stop it.
+    //
+    // The children share one containing block, so the width a percentage margin
+    // takes its share of is measured once for all of them.
+    var margin_containing: ?f64 = content_width;
+    const escapes = self.marginEscapes(frame, &margin_containing, 0);
+    var group: MarginGroup = .{};
+    var placed = false;
+
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(Element)) |el| {
@@ -3588,9 +3653,32 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 continue;
             }
             // A block box ends the run of lines above it, and opens a new one
-            // below.
-            total += flow.flush();
-            total += el.getElementDimensions(frame).height;
+            // below. Lines between two blocks also stop their margins
+            // adjoining, so the group has to be settled before the lines land.
+            const lines = flow.flush();
+            if (lines > 0) {
+                if (placed or !escapes.top) total += group.gap();
+                group = .{};
+                total += lines;
+                placed = true;
+            }
+
+            const box = el.getElementDimensions(frame);
+            const margins = el.verticalMargins(frame, &margin_containing, 0);
+            group.join(margins.top);
+            if (box.height == 0 and box.padding_y == 0 and box.border_y == 0) {
+                // Self-collapsing: there is nothing between this box's two
+                // margins, so they join the same group and it contributes no
+                // height of its own. An empty <div style="margin:10px 0">
+                // between two blocks leaves them 10 apart, not 20.
+                group.join(margins.bottom);
+                continue;
+            }
+            if (placed or !escapes.top) total += group.gap();
+            group = .{};
+            total += box.height;
+            placed = true;
+            group.join(margins.bottom);
             continue;
         }
         if (node.is(CData.Text)) |text| {
@@ -3598,7 +3686,17 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
         }
     }
 
-    return total + flow.flush();
+    const trailing = flow.flush();
+    if (trailing > 0) {
+        if (placed or !escapes.top) total += group.gap();
+        group = .{};
+        total += trailing;
+    }
+    // Whatever is left is the bottom margin of the last thing in the box, and
+    // it leaves through the bottom edge on the same terms the first one came in
+    // through the top.
+    if (!escapes.bottom) total += group.gap();
+    return total;
 }
 
 /// Where an atomic inline sits on the line, or null when the element is not one.

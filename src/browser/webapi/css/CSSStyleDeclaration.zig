@@ -1852,6 +1852,57 @@ pub fn boxEdgesSharing(element: *Element, frame: *Frame, containing: *?f64, dept
     };
 }
 
+/// Padding plus border on one block edge, which is what decides whether a
+/// child's margin passes through that edge or is counted inside it. Chrome
+/// answers 12 for `<div><div style="margin-top:20px;height:12px"></div></div>`
+/// and 34 for the same parent with `border:1px` -- measured with
+/// probes/expr-b86-margin-collapse.js -- so a single px on the edge is the
+/// whole difference between the margin escaping and not.
+///
+/// Takes the caller's shared containing block for the same reason paddingPx
+/// does: a percentage padding otherwise measures the parent again.
+pub fn blockEdgePx(
+    element: *Element,
+    comptime side: []const u8,
+    frame: *Frame,
+    containing: *?f64,
+    depth: u8,
+) f64 {
+    return paddingPx(element, "padding-" ++ side, frame, containing, depth) +
+        borderPx(element, "border-" ++ side, frame);
+}
+
+/// Whether this element establishes a block formatting context, which is what
+/// stops its children's margins from collapsing out through it.
+///
+/// `overflow:hidden` is the case the probe pins down: the same markup that is
+/// 12 tall on a bare parent is 32 on this one, because the child's 20px margin
+/// is contained rather than escaping. The rest of the list is the standard one
+/// -- a float, an out-of-flow box, and the displays that are their own
+/// formatting context -- and it is deliberately not "display is not block":
+/// `flow-root` exists precisely to be a block that does this.
+pub fn establishesBlockFormattingContext(element: *Element, frame: *Frame) bool {
+    if (flowKind(element, frame) != .in_flow) return true;
+
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    inline for (.{ "overflow", "overflow-x", "overflow-y" }) |name| {
+        if (cascadedKeyword(style_manager, element, name)) |value| {
+            const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+            if (trimmed.len != 0 and !std.ascii.eqlIgnoreCase(trimmed, "visible")) return true;
+        }
+    }
+
+    const display = resolvedDisplay(element, frame);
+    inline for (.{
+        "flow-root",    "inline-block", "inline-flex",   "inline-grid",
+        "inline-table", "table-cell",   "table-caption", "flex",
+        "grid",
+    }) |name| {
+        if (std.mem.eql(u8, display, name)) return true;
+    }
+    return false;
+}
+
 /// One padding in px. A percentage is resolved here, against the shared
 /// containing-block width, rather than through the computed-value machinery --
 /// that path measures the parent from scratch for every property that asks.
@@ -5856,6 +5907,10 @@ test "WebApi: CSSStyleDeclaration specified precision" {
 
 test "WebApi: CSSStyleDeclaration block height" {
     try testing.htmlRunner("css/block_height.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration margin collapse" {
+    try testing.htmlRunner("css/margin_collapse.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration inline content lines" {
