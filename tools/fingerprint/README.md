@@ -20340,6 +20340,10 @@ Turnstile's `api.js` is stronger still: **byte-identical across both arms and
 across requests**, 84236 bytes at `6212b8bf7b8f` every time. It is not
 per-request obfuscated at all.
 
-What only this engine gets is the `turnstile/f/av0/rch/...` document, 274KB of
-it -- the interactive challenge Chrome's widget never has to fetch. That is the
-fork, and it is downstream of a decision the widget makes.
+The `turnstile/f/av0/rch/...` document -- 274KB, and the widget's actual
+program -- looked at first like something only this engine is served. It is not:
+Chrome fetches it too. The widget frame is cross-origin and therefore its own
+target, so a page-session listener never sees what it loads, and "Chrome does
+not fetch it" was the instrument rather than the station. `--frames` attaches to
+the child targets and Chrome's copy appears immediately. Both arms get the
+widget program, as both arms get the orchestrate program.
