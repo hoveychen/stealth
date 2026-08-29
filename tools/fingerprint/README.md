@@ -20395,10 +20395,20 @@ element is blurred, and a document with no browsing context never had it.
 widget happened to expose.
 
 The Page now records the deepest focused frame and the chain to the root is
-walked when the question is asked. **Eight of the nine readings match Chrome**;
-the ninth is a separate defect left open -- focusing an element inside a child
-frame should make the parent's `activeElement` the iframe element, and here it
-stays `BODY`.
+walked when the question is asked. Eight of the nine readings matched
+immediately; the ninth was `activeElement`, and it is fixed too.
+
+`probes/expr-b85-active-element.js` takes the parent and the child together
+through six states. Chrome's rule: while the chain runs through a child frame,
+the parent's `activeElement` is the iframe hosting it -- it stays the iframe
+after the element inside the child is blurred, and goes back to real content the
+moment top-level content is focused. Writing that test found a second defect it
+had to fix to pass: removing an iframe that held the focus left the pointer on
+the detached frame, so the parent kept answering `IFRAME` for an element no
+longer in the document.
+
+**All nine readings of the focus probe and all twenty-four of the activeElement
+probe now match Chrome.**
 
 Not expected to open the door: `frame-has-focus`, which makes Chrome's widget
 frame answer `true`, was 6 of 6 against a baseline that refuses a clean Chrome
