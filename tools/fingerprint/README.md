@@ -20285,3 +20285,36 @@ that looked like a candidate -- ours a flat 10737418240 where Chrome was seen at
 10737418391 -- is not one: asked three times in a row on a fresh page, both arms
 answer exactly 10 GiB and never vary. Chrome's other figure came from the second
 document, where usage is no longer zero.
+
+## The door count, re-measured
+
+Two full sweeps, both arms, same route, minutes apart.
+
+The first Chrome column read **3/29** against this engine's 22/29 -- Chrome
+refused at ak-macys, ak-kohls, x-hyatt, ks-canadagoose and every DataDome
+station. That is not this engine outperforming Chrome; it is the Chrome arm run
+without `--headed-ua`, so its user agent still said `HeadlessChrome` while this
+engine's says Chrome. Two arms with different product tokens is not a
+comparison, and the sweep's own flag comment says so. Re-run with `--headed-ua`,
+Chrome reads **19/29**.
+
+Against that column, the closed doors sort into two piles:
+
+| station | this engine | Chrome |
+|---|---|---|
+| **cf-scrapingcourse** | cf-challenge | **pass** |
+| **x-hyatt** | refused-429 | **pass** |
+| cf-nopecha | cf-challenge | cf-challenge |
+| cf-zeroclover | cf-challenge | cf-blocked (502) |
+| dd-g2 | datadome-challenge | datadome-challenge |
+| dd-saks | datadome-challenge | datadome-challenge |
+| dd-allopneus | cf-blocked | cf-blocked |
+
+**Two real gaps.** The other five are shut to headed-UA Chrome as well, so
+nothing about this engine is keeping them shut -- including `dd-saks`, which
+earlier work had listed as a real gap and which is now a phantom on this route.
+
+The five DataDome stations this engine passed and Chrome did not
+(dd-datadome, dd-leboncoin, dd-hermes, dd-etsy, dd-seloger) are the throttling
+this repo has recorded before: the Chrome column was the third pass over those
+hosts from one address inside an hour. It is not a lead.
