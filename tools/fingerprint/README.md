@@ -20702,3 +20702,50 @@ the same "share one measurement" idiom `containing: *?f64` already uses for the
 containing block, one level up in cost. That is a design task with its own
 performance acceptance test, not a field on the existing walk, and it is filed
 as its own plan rather than left as a comment.
+
+## Three shapes of the same fix, all measured, all reverted
+
+`content-height-memoised-subtree` was opened to finish what
+`content-height-child-box` left: a parent counting what its children's children
+put in them. A wrapper holding a 12px box is 0 here and 12 in Chrome, at every
+depth — `probes/expr-b86-nested-depth.js` reads 12 at every level of a 1, 2, 4,
+16 and 64-deep chain, and 480 for a parent of 40 such wrappers.
+
+The term is one expression and it is not in doubt. What the plan actually found
+is that **this engine cannot afford to ask the question the way it is
+currently asked**, and it found it three times:
+
+1. **Recurse into `el.contentHeight` per child.** Every measured shape becomes
+   right. `WebApi: Element` ends in **ExecutionTerminated**.
+2. **The same, wrapped in the `frame._layout_depth` backstop.** No change. That
+   is the diagnosis rather than a missing guard: the counter stops a *cycle*,
+   and this is not a cycle — a child measured from inside its parent's walk
+   reaches back UP for its containing block and that walk goes down again, so
+   the work multiplies with depth instead of repeating forever.
+3. **A per-measurement memo**, `AutoHashMapUnmanaged(*Element, f64)` carried
+   exactly the way `VisibilityCache` is, with a sentinel written before the
+   walk so a re-entrant ask is answered rather than recursed. The nested test
+   passes — 64 deep and 40 wide, every level — and the suite is **worse**: 373
+   `ExecutionTerminated`, spread across pages that have nothing to do with
+   layout (`cookie_store`, `indexeddb`, `url`, `media_devices`).
+
+Reading 3 is the one that closes the plan. The memo is created inside
+`clientHeightOf`, so a *nested* `clientHeight` — reached through
+`getElementDimensions` and the computed-value machinery — starts over with an
+empty one and the memo never sees the repeat it exists to stop. Sharing it
+across those calls means hanging it on the Frame, and the arena it would have
+to live in (`call_arena`, which is what the visibility cache uses) is released
+between JS calls: a map kept across that boundary and then
+`clearRetainingCapacity`'d is a use-after-free, which is a worse bug than the
+one being fixed.
+
+So the honest shape of the remaining work is not a field on the existing walk
+and not a cache beside it. It is a measurement context that spans one document
+pass — the same thing `containing: *?f64` is for the containing block, one
+level up in scope — and that is an architecture change with its own budget.
+
+**Nothing is asserted for it.** A test for something nothing implements is a
+permanently red test rather than a specification, so `css/child_box_height.html`
+still lists the three shapes in a comment, the probe carries the readings, and
+the third attempt's patch is kept verbatim at
+`probes/b86-memoise-attempt.patch` rather than half-merged as dead code.
