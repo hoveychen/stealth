@@ -97,8 +97,14 @@ pub fn getSheet(self: *Style, frame: *Frame) !?*CSSStyleSheet {
     self._sheet = sheet;
 
     const owner = self.asNode().ownerDocument(frame) orelse frame.document;
-    const sheets = try owner.getStyleSheets(frame);
-    try sheets.add(sheet, frame);
+    try (try owner.cascadeStyleSheets(frame)).add(sheet, frame);
+    // Same scoping as HTMLStyleElement: a sheet inside a shadow tree is that
+    // root's and stays out of `document.styleSheets`. See Element.Html.Style.
+    if (self.asNode().containingShadowRoot()) |root| {
+        try (try root.getStyleSheets(frame)).add(sheet, frame);
+    } else {
+        try (try owner.getStyleSheets(frame)).add(sheet, frame);
+    }
 
     return sheet;
 }

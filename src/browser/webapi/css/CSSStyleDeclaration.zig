@@ -457,8 +457,29 @@ fn cascadedValue(style_manager: *StyleManager, element: *Element, property_name:
     if (!chrome_inherited.inherits(property_name)) {
         return .none;
     }
+    const on_line_height = std.mem.eql(u8, property_name, "line-height");
     var ancestor = element.parentElement();
     while (ancestor) |current| : (ancestor = current.parentElement()) {
+        // An inherited length is the ancestor's resolved px -- `letter-spacing:
+        // 2em` on a 20px ancestor is 40px on every descendant whatever their
+        // own size. A bare number on `line-height` is the exception: it
+        // computes to the number itself, so what comes down is the number and
+        // each element multiplies it by its own font size. Measured on Chrome
+        // 151 (probes/expr-line-height-number.js): 1.5 declared on a 16px
+        // parent is 24px there, 108px on a 72px child and 15px on a 10px
+        // grandchild, where `30px` and `150%` hand the same px to all three.
+        if (on_line_height) {
+            if (declaredDeclaration(style_manager, current, property_name, wrapped)) |declaration| {
+                const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
+                if (units.parse(trimmed)) |parsed| {
+                    if (parsed.unit == .none) {
+                        if (computedLengthText(style_manager, element, property_name, declaration.value, declaration.specified)) |px| {
+                            return .{ .value = px };
+                        }
+                    }
+                } else |_| {}
+            }
+        }
         switch (declaredValue(style_manager, current, property_name, wrapped)) {
             .value => |value| return .{ .value = value },
             .unreportable => return .unreportable,
@@ -3138,8 +3159,8 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
 
     // The two properties whose value carries a font family.
-    const is_font_family = std.mem.eql(u8, property_name, "font-family") or
-        std.mem.eql(u8, property_name, "font");
+    const is_font_shorthand = std.mem.eql(u8, property_name, "font");
+    const is_font_family = std.mem.eql(u8, property_name, "font-family") or is_font_shorthand;
 
     // Measured: `stroke-dasharray` is a list whatever separates it, and Chrome
     // answers every separator as `, ` -- `32 32` comes back `32, 32`. No other
@@ -3149,6 +3170,10 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
     var buf = std.Io.Writer.Allocating.init(arena);
     errdefer buf.deinit();
     var changed = false;
+    // In the `font` shorthand the family is whatever follows the size, so a run
+    // of identifiers is only a family name once a number has gone past. Before
+    // that the run is `italic bold`, which stays two keywords.
+    var seen_number = false;
     var i: usize = 0;
     while (i < value.len) {
         const c = value[i];
@@ -3253,6 +3278,20 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
                 continue;
             }
 
+            // Two or more bare identifiers in a row are one family name, and
+            // Chrome answers it as a quoted string: `Times New Roman` reads
+            // back `"Times New Roman"`. A lone identifier keeps its own
+            // spelling -- quoting it would turn the generic `serif` into a
+            // family that happens to be called that.
+            if (is_font_family and (!is_font_shorthand or seen_number)) {
+                if (familyRunEnd(value, i)) |run_end| {
+                    try writeFamilyRun(&buf.writer, value[i..run_end]);
+                    changed = true;
+                    i = run_end;
+                    continue;
+                }
+            }
+
             const spelling = keywordSpelling(keywords, name, std.mem.eql(u8, trimmed, name));
             try buf.writer.writeAll(spelling);
             changed = changed or !std.mem.eql(u8, spelling, name);
@@ -3277,6 +3316,7 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
             } else {
                 try writeCssNumber(&buf.writer, value[i..end]);
             }
+            seen_number = true;
             i = end;
             if (i < value.len and isIdentStart(value, i)) {
                 const unit_end = identEnd(value, i);
@@ -3418,6 +3458,54 @@ fn writeFontFamily(writer: *std.Io.Writer, value: []const u8, start: usize) !usi
     try writeEscaped(writer, raw);
     try writer.writeByte('"');
     return end;
+}
+
+/// The end of the run of whitespace-separated bare identifiers starting at
+/// `start`, or null when only one identifier is there. A run of two or more is
+/// a single family name written without quotes, which is what Chrome quotes on
+/// the way back out; one identifier is a name or a keyword and stays as it is.
+fn familyRunEnd(value: []const u8, start: usize) ?usize {
+    var end = identEnd(value, start);
+    var count: usize = 1;
+    while (true) {
+        var next = end;
+        while (next < value.len and std.ascii.isWhitespace(value[next])) next += 1;
+        // No gap means the next token is punctuation, and anything that is not
+        // an identifier ends the name.
+        if (next == end or next >= value.len or !isIdentStart(value, next)) {
+            break;
+        }
+        const ident_end = identEnd(value, next);
+        // A call is a value of its own, not a word of the name.
+        if (ident_end < value.len and value[ident_end] == '(') {
+            break;
+        }
+        count += 1;
+        end = ident_end;
+    }
+    return if (count > 1) end else null;
+}
+
+/// Write the run as Chrome does: one double-quoted string, the identifiers
+/// joined by single spaces however many the author wrote.
+fn writeFamilyRun(writer: *std.Io.Writer, run: []const u8) !void {
+    try writer.writeByte('"');
+    var i: usize = 0;
+    var first = true;
+    while (i < run.len) {
+        while (i < run.len and std.ascii.isWhitespace(run[i])) i += 1;
+        if (i >= run.len) {
+            break;
+        }
+        if (!first) {
+            try writer.writeByte(' ');
+        }
+        first = false;
+        const end = identEnd(run, i);
+        try writeEscaped(writer, run[i..end]);
+        i = end;
+    }
+    try writer.writeByte('"');
 }
 
 fn decodeInto(buf: []u8, raw: []const u8) ?[]const u8 {
@@ -5496,6 +5584,10 @@ test "WebApi: CSSStyleDeclaration computed per-tag values" {
 
 test "WebApi: CSSStyleDeclaration serialize" {
     try testing.htmlRunner("css/declaration_serialize.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration font family serialize" {
+    try testing.htmlRunner("css/font_family_serialize.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration value list serialize" {

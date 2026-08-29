@@ -58,6 +58,8 @@ const RTCPeerConnectionIceEvent = @import("RTCPeerConnectionIceEvent.zig");
 const RTCSessionDescription = @import("RTCSessionDescription.zig");
 const RTCStatsReport = @import("RTCStatsReport.zig");
 const chrome_sdp = @import("chrome_sdp.zig");
+const rtp = @import("rtp.zig");
+const RTCRtpTransceiver = rtp.RTCRtpTransceiver;
 const handler_property = @import("../handler_property.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
@@ -91,15 +93,21 @@ _session_id: u64,
 _ice_ufrag: [4]u8,
 _ice_pwd: [24]u8,
 _fingerprint: [95]u8,
+// The cname every `a=ssrc:` line repeats, drawn once per connection.
+_cname: [16]u8,
 
 _config: Config,
 
 // Which m= sections the next offer carries. These only ever turn on: a
 // transceiver Chrome has created for an earlier offer is still there for the
 // next one.
-_want_audio: bool = false,
-_want_video: bool = false,
 _want_application: bool = false,
+// The transceivers addTransceiver() made, in the order they were made. The
+// legacy `offerToReceive*` options land here too: measured on Chrome 151,
+// asking for audio beside an audio transceiver adds no second section, and
+// asking for video adds a recvonly video transceiver -- which is the recvonly
+// section the CreepJS shape has always carried.
+_transceivers: std.ArrayList(*RTCRtpTransceiver) = .empty,
 
 _signaling_state: SignalingState = .stable,
 _ice_gathering_state: IceGatheringState = .new,
@@ -174,6 +182,7 @@ pub fn constructor(config: ?ConfigInit, exec: *Execution) !*RTCPeerConnection {
         ._proto = undefined,
         ._session_id = randomSessionId(),
         ._ice_ufrag = randomIceString(4),
+        ._cname = randomCname(),
         ._ice_pwd = randomIceString(24),
         ._fingerprint = randomFingerprint(),
         ._config = .{},
@@ -260,8 +269,8 @@ pub fn createOffer(self: *RTCPeerConnection, options: ?OfferOptions, exec: *Exec
     }
 
     if (options) |opts| {
-        if (truthy(opts.offerToReceiveAudio)) self._want_audio = true;
-        if (truthy(opts.offerToReceiveVideo)) self._want_video = true;
+        if (truthy(opts.offerToReceiveAudio)) try self.wantToReceive(.audio, exec);
+        if (truthy(opts.offerToReceiveVideo)) try self.wantToReceive(.video, exec);
     }
 
     const sdp = try self.buildSdp(exec._factory._arena, null);
@@ -319,39 +328,98 @@ fn buildSdp(self: *const RTCPeerConnection, allocator: Allocator, candidate: ?[]
     try w.writeAll(chrome_sdp.preamble_head);
 
     // BUNDLE lists the mids in section order, and is left out when there are
-    // no sections at all.
-    const audio_mid: ?u8 = if (self._want_audio) 0 else null;
-    const video_mid: ?u8 = if (self._want_video) (if (audio_mid) |m| m + 1 else 0) else null;
-    const application_mid: ?u8 = if (self._want_application) blk: {
-        if (video_mid) |m| break :blk m + 1;
-        if (audio_mid) |m| break :blk m + 1;
-        break :blk 0;
-    } else null;
-
-    if (audio_mid != null or video_mid != null or application_mid != null) {
+    // no sections at all. A section per transceiver, in the order they were
+    // added, and then the data channel's.
+    const sections = self._transceivers.items.len + @intFromBool(self._want_application);
+    if (sections != 0) {
         try w.writeAll("a=group:BUNDLE");
-        for ([_]?u8{ audio_mid, video_mid, application_mid }) |mid| {
-            if (mid) |m| try w.print(" {d}", .{m});
+        for (0..sections) |mid| {
+            try w.print(" {d}", .{mid});
         }
         try w.writeAll("\r\n");
     }
     try w.writeAll(chrome_sdp.preamble_tail);
 
-    var first = true;
-    if (audio_mid) |mid| {
-        try self.writeSection(w, chrome_sdp.audio_head, chrome_sdp.audio_tail, mid, if (first) candidate else null);
-        first = false;
+    var mid: u8 = 0;
+    for (self._transceivers.items) |transceiver| {
+        try self.writeMediaSection(w, transceiver, mid, if (mid == 0) candidate else null);
+        mid += 1;
     }
-    if (video_mid) |mid| {
-        try self.writeSection(w, chrome_sdp.video_head, chrome_sdp.video_tail, mid, if (first) candidate else null);
-        first = false;
-    }
-    if (application_mid) |mid| {
-        try self.writeSection(w, chrome_sdp.application_head, chrome_sdp.application_tail, mid, if (first) candidate else null);
-        first = false;
+    if (self._want_application) {
+        try self.writeSection(
+            w,
+            chrome_sdp.application_head,
+            chrome_sdp.application_tail,
+            mid,
+            if (mid == 0) candidate else null,
+        );
     }
 
     return out.written();
+}
+
+/// A legacy `offerToReceive*` option. Measured on Chrome 151: it adds a
+/// recvonly transceiver when there is no transceiver of that kind, and does
+/// nothing at all when there is -- `addTransceiver('audio')` plus
+/// `offerToReceiveAudio: 1` is one sendrecv audio section, not two.
+fn wantToReceive(self: *RTCPeerConnection, kind: rtp.Kind, exec: *Execution) !void {
+    if (self.transceiverOfKind(kind) != null) {
+        return;
+    }
+    _ = try self.newTransceiver(kind, .recvonly, exec);
+}
+
+/// One transceiver's m= section. The canned halves differ by kind and by
+/// whether the direction sends: a sending video section offers the sender's
+/// shorter codec list, and carries the track and source blocks a receiving one
+/// leaves out entirely.
+fn writeMediaSection(
+    self: *const RTCPeerConnection,
+    w: *std.Io.Writer,
+    transceiver: *const RTCRtpTransceiver,
+    mid: u8,
+    candidate: ?[]const u8,
+) !void {
+    const sends = transceiver._direction.sends();
+    const audio = transceiver._kind == .audio;
+    const head = if (audio)
+        (if (sends) chrome_sdp.audio_tx_head else chrome_sdp.audio_head)
+    else
+        (if (sends) chrome_sdp.video_tx_head else chrome_sdp.video_head);
+    const tail_head = if (audio)
+        (if (sends) chrome_sdp.audio_tx_tail_head else chrome_sdp.audio_tail_head)
+    else
+        (if (sends) chrome_sdp.video_tx_tail_head else chrome_sdp.video_tail_head);
+    const tail_body = if (audio)
+        (if (sends) chrome_sdp.audio_tx_tail_body else chrome_sdp.audio_tail_body)
+    else
+        (if (sends) chrome_sdp.video_tx_tail_body else chrome_sdp.video_tail_body);
+
+    try w.writeAll(head);
+    if (candidate) |line| {
+        try w.print("a={s}\r\n", .{line});
+    }
+    try w.print("a=ice-ufrag:{s}\r\na=ice-pwd:{s}\r\na=ice-options:trickle\r\n", .{ &self._ice_ufrag, &self._ice_pwd });
+    try w.print("a=fingerprint:sha-256 {s}\r\na=setup:actpass\r\na=mid:{d}\r\n", .{ &self._fingerprint, mid });
+    try w.writeAll(tail_head);
+    try w.print("a={s}\r\n", .{transceiver._direction.text()});
+    if (sends) {
+        try w.print("a=msid:- {s}\r\n", .{&transceiver._track_id});
+    }
+    try w.writeAll(tail_body);
+    if (!sends) {
+        return;
+    }
+
+    const count: usize = if (audio) chrome_sdp.audio_tx_ssrcs else chrome_sdp.video_tx_ssrcs;
+    const group = if (audio) chrome_sdp.audio_tx_fid_group else chrome_sdp.video_tx_fid_group;
+    if (group and count == 2) {
+        try w.print("a=ssrc-group:FID {d} {d}\r\n", .{ transceiver._ssrcs[0], transceiver._ssrcs[1] });
+    }
+    for (transceiver._ssrcs[0..count]) |ssrc| {
+        try w.print("a=ssrc:{d} cname:{s}\r\n", .{ ssrc, &self._cname });
+        try w.print("a=ssrc:{d} msid:- {s}\r\n", .{ ssrc, &transceiver._track_id });
+    }
 }
 
 fn writeSection(
@@ -605,20 +673,95 @@ pub fn removeTrack(_: *RTCPeerConnection, _: ?js.Value) !void {
     return error.InvalidStateError;
 }
 
-pub fn addTransceiver(_: *RTCPeerConnection, _: ?js.Value, _: ?js.Value) !void {
-    return error.InvalidStateError;
+/// Measured on Chrome 151: the default direction is `sendrecv`, `mid` and
+/// `currentDirection` are null until an answer lands, the sender and receiver
+/// are real RTCRtpSender/RTCRtpReceiver objects, and a second transceiver of a
+/// kind gets a second m= section rather than being folded into the first.
+pub fn addTransceiver(self: *RTCPeerConnection, args: []js.Value, exec: *Execution) !*RTCRtpTransceiver {
+    if (args.len == 0) {
+        return throwType(
+            "Failed to execute 'addTransceiver' on 'RTCPeerConnection': 1 argument required, but only 0 present.",
+            exec,
+        );
+    }
+    const kind: rtp.Kind = blk: {
+        if (args[0].isString()) |name| {
+            var buf: [8]u8 = undefined;
+            const text = name.toSliceWithBuf(&buf);
+            if (std.mem.eql(u8, text, "audio")) break :blk .audio;
+            if (std.mem.eql(u8, text, "video")) break :blk .video;
+        }
+        return throwType(
+            "Failed to execute 'addTransceiver' on 'RTCPeerConnection': The argument provided as " ++
+                "parameter 1 is not a valid MediaStreamTrack kind ('audio' or 'video').",
+            exec,
+        );
+    };
+
+    const transceiver = try self.newTransceiver(kind, .sendrecv, exec);
+    if (args.len > 1 and args[1].isObject()) {
+        const value = try args[1].toObject().get("direction");
+        if (value.isString()) |direction| {
+            var buf: [16]u8 = undefined;
+            transceiver.setDirection(direction.toSliceWithBuf(&buf));
+        }
+    }
+    return transceiver;
 }
 
-pub fn getSenders(_: *const RTCPeerConnection) []const js.Value {
-    return &.{};
+fn throwType(message: []const u8, exec: *const Execution) anyerror {
+    const isolate = exec.js.local.?.isolate;
+    _ = isolate.throwException(isolate.createTypeError(message));
+    return error.JsException;
 }
 
-pub fn getReceivers(_: *const RTCPeerConnection) []const js.Value {
-    return &.{};
+fn newTransceiver(
+    self: *RTCPeerConnection,
+    kind: rtp.Kind,
+    direction: RTCRtpTransceiver.Direction,
+    exec: *Execution,
+) !*RTCRtpTransceiver {
+    const transceiver = try exec._factory.create(RTCRtpTransceiver{
+        ._kind = kind,
+        ._direction = direction,
+        ._sender = try exec._factory.create(rtp.RTCRtpSender{ ._kind = kind }),
+        ._receiver = try exec._factory.create(rtp.RTCRtpReceiver{ ._kind = kind }),
+        ._track_id = randomTrackId(),
+        ._ssrcs = .{ randomSsrc(), randomSsrc() },
+    });
+    try self._transceivers.append(exec._factory._arena, transceiver);
+    return transceiver;
 }
 
-pub fn getTransceivers(_: *const RTCPeerConnection) []const js.Value {
-    return &.{};
+/// The first transceiver of `kind`, which is what the legacy `offerToReceive*`
+/// options look for before adding one.
+fn transceiverOfKind(self: *const RTCPeerConnection, kind: rtp.Kind) ?*RTCRtpTransceiver {
+    for (self._transceivers.items) |transceiver| {
+        if (transceiver._kind == kind) return transceiver;
+    }
+    return null;
+}
+
+/// One per transceiver, and the same objects the transceivers hand out
+/// (measured on Chrome 151: `getSenders()[0] === getTransceivers()[0].sender`).
+pub fn getSenders(self: *const RTCPeerConnection, exec: *Execution) ![]const *rtp.RTCRtpSender {
+    const out = try exec.call_arena.alloc(*rtp.RTCRtpSender, self._transceivers.items.len);
+    for (self._transceivers.items, out) |transceiver, *slot| {
+        slot.* = transceiver._sender;
+    }
+    return out;
+}
+
+pub fn getReceivers(self: *const RTCPeerConnection, exec: *Execution) ![]const *rtp.RTCRtpReceiver {
+    const out = try exec.call_arena.alloc(*rtp.RTCRtpReceiver, self._transceivers.items.len);
+    for (self._transceivers.items, out) |transceiver, *slot| {
+        slot.* = transceiver._receiver;
+    }
+    return out;
+}
+
+pub fn getTransceivers(self: *const RTCPeerConnection) []const *RTCRtpTransceiver {
+    return self._transceivers.items;
 }
 
 pub fn getStreams(_: *const RTCPeerConnection) []const js.Value {
@@ -681,6 +824,42 @@ fn randomFingerprint() [95]u8 {
         if (at + 2 < out.len) {
             out[at + 2] = ':';
         }
+    }
+    return out;
+}
+
+// The `cname` every ssrc line carries: 16 characters of the same alphabet as
+// the ICE credentials, drawn once per connection.
+fn randomCname() [16]u8 {
+    return randomIceString(16);
+}
+
+// A synchronisation source is a non-zero 32-bit number.
+fn randomSsrc() u32 {
+    var bytes: [4]u8 = undefined;
+    lp.io.random(&bytes);
+    return std.mem.readInt(u32, &bytes, .big) | 1;
+}
+
+// The UUID an `a=msid:` line names the sender's track by, in the canonical
+// 8-4-4-4-12 lower-case hex form. Version 4, variant 1, as Chrome's are.
+fn randomTrackId() [36]u8 {
+    var bytes: [16]u8 = undefined;
+    lp.io.random(&bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const hex = "0123456789abcdef";
+    var out: [36]u8 = undefined;
+    var at: usize = 0;
+    for (bytes, 0..) |byte, i| {
+        if (i == 4 or i == 6 or i == 8 or i == 10) {
+            out[at] = '-';
+            at += 1;
+        }
+        out[at] = hex[byte >> 4];
+        out[at + 1] = hex[byte & 0x0f];
+        at += 2;
     }
     return out;
 }

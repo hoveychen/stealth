@@ -16,10 +16,13 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../../js/js.zig");
 const Page = @import("../../Page.zig");
+const DOMException = @import("../DOMException.zig");
+const font_metrics = @import("../../font_metrics.zig");
 
 const Execution = js.Execution;
 
@@ -28,6 +31,9 @@ const FontFace = @This();
 _rc: lp.RC = .{},
 _arena: *lp.Arena,
 _family: []const u8,
+// The `src` the face was built from, kept so load() can answer for it.
+_source: []const u8,
+_status: Status = .unloaded,
 
 // The eight font descriptors, all `attribute CSSOMString` and all read-write.
 // They were data properties with the class-wide default baked in, which made
@@ -52,6 +58,24 @@ _line_gap_override: []const u8 = "normal",
 _size_adjust: []const u8 = "100%",
 _variation_settings: []const u8 = "normal",
 
+/// Chrome's four, minus `loading`: this engine's load is not asynchronous, so a
+/// face is settled by the time load() returns -- measured, a face for an absent
+/// family already reads "error" on the line after the call
+/// (probes/expr-fontface-status.js).
+pub const Status = enum {
+    unloaded,
+    loaded,
+    failed,
+
+    fn text(self: Status) []const u8 {
+        return switch (self) {
+            .unloaded => "unloaded",
+            .loaded => "loaded",
+            .failed => "error",
+        };
+    }
+};
+
 /// The descriptor dictionary the constructor takes, which Chrome applies to
 /// the face it builds: `new FontFace('F', src, {ascentOverride: '90%'})` reads
 /// back "90%" (measured on Chrome 151). Every field is optional and an absent
@@ -72,8 +96,6 @@ pub const Descriptors = struct {
 };
 
 pub fn init(family: []const u8, source: []const u8, descriptors_: ?Descriptors, exec: *const Execution) !*FontFace {
-    _ = source;
-
     const arena = try exec.getArena(.tiny, "FontFace");
     errdefer arena.release();
 
@@ -81,6 +103,7 @@ pub fn init(family: []const u8, source: []const u8, descriptors_: ?Descriptors, 
     self.* = .{
         ._arena = arena,
         ._family = try arena.dupe(u8, family),
+        ._source = try arena.dupe(u8, source),
     };
 
     if (descriptors_) |descriptors| {
@@ -227,22 +250,107 @@ pub fn setDisplay(self: *FontFace, value: []const u8) !void {
     return self.setDescriptor(&self._display, value);
 }
 
-// Readonly, and "loaded" because there is no font loading to be partway
-// through: `load()` and `loaded` both resolve immediately. Chrome answers
-// "unloaded" for a freshly constructed FontFace, which is a value difference and
-// not this change's business -- only the kind moves here.
-pub fn getStatus(_: *const FontFace) []const u8 {
-    return "loaded";
+pub fn getStatus(self: *const FontFace) []const u8 {
+    return self._status.text();
 }
 
-// load() - resolves immediately; headless browser has no real font loading.
-pub fn load(_: *FontFace, exec: *const Execution) !js.Promise {
-    return exec.js.local.?.resolvePromise({});
+/// Measured on Chrome 151 (probes/expr-fontface-local.js,
+/// expr-fontface-status.js): `load()` answers with the FontFace itself, leaves
+/// it "loaded", and rejects with a NetworkError DOMException for a family the
+/// machine does not have -- 9 of 9 absent families rejected there where this
+/// engine resolved all 9. The Cloudflare widget builds its installed-font list
+/// from exactly this call, so resolving for everything made it report Windows
+/// and GNOME families side by side, which no machine has.
+pub fn load(self: *FontFace, exec: *const Execution) !js.Promise {
+    if (self._status == .unloaded) {
+        self._status = if (sourceIsAvailable(self._source)) .loaded else .failed;
+    }
+    return self.settled(exec);
 }
 
-// loaded - returns an already-resolved Promise.
-pub fn getLoaded(_: *FontFace, exec: *const Execution) !js.Promise {
-    return exec.js.local.?.resolvePromise({});
+/// The `loaded` promise carries the same answer as `load()`. Chrome leaves it
+/// PENDING on a face nobody has loaded; there is no font fetch here to settle
+/// it later, so an unloaded face answers the way it would if it were loaded --
+/// which is what this returned before there was a status at all.
+pub fn getLoaded(self: *FontFace, exec: *const Execution) !js.Promise {
+    return self.settled(exec);
+}
+
+fn settled(self: *FontFace, exec: *const Execution) !js.Promise {
+    if (self._status == .failed) {
+        var resolver = exec.js.local.?.createPromiseResolver();
+        resolver.reject("FontFace", DOMException.init("A network error occurred.", "NetworkError"));
+        return resolver.promise();
+    }
+    return exec.js.local.?.resolvePromise(self);
+}
+
+/// Whether anything in a `src` list can be loaded here. A `local()` naming a
+/// family this engine has metrics for can; one naming a family it does not
+/// cannot, which is the whole of the difference the widget reads. Anything else
+/// -- a `url()`, or a component this does not recognise -- is left loadable,
+/// since there is no fetch here to fail and refusing would invent a failure
+/// Chrome only reports after trying.
+///
+/// Known gap: Chrome's `local()` also matches a face's full name, so
+/// `local("PingFang HK Light")` resolves there against the "PingFang HK"
+/// family. Only the family names are in the table, so that one answers false
+/// here.
+fn sourceIsAvailable(source: []const u8) bool {
+    var any_local = false;
+    var components = SourceList{ .raw = source };
+    while (components.next()) |component| {
+        const name = localName(component) orelse return true;
+        any_local = true;
+        if (font_metrics.find(name) != null) {
+            return true;
+        }
+    }
+    return !any_local;
+}
+
+/// The comma-separated components of a `src`, with commas inside quotes left
+/// alone -- a family name may carry one.
+const SourceList = struct {
+    raw: []const u8,
+    index: usize = 0,
+
+    fn next(self: *SourceList) ?[]const u8 {
+        if (self.index >= self.raw.len) return null;
+        const start = self.index;
+        var quote: ?u8 = null;
+        while (self.index < self.raw.len) : (self.index += 1) {
+            const c = self.raw[self.index];
+            if (quote) |q| {
+                if (c == q) quote = null;
+                continue;
+            }
+            if (c == '"' or c == '\'') {
+                quote = c;
+                continue;
+            }
+            if (c == ',') {
+                const component = self.raw[start..self.index];
+                self.index += 1;
+                return component;
+            }
+        }
+        return self.raw[start..self.index];
+    }
+};
+
+/// The family named by a `local(...)` component, or null when the component is
+/// something else.
+fn localName(component: []const u8) ?[]const u8 {
+    const trimmed = std.mem.trim(u8, component, &std.ascii.whitespace);
+    if (trimmed.len < "local()".len) return null;
+    if (!std.ascii.startsWithIgnoreCase(trimmed, "local(")) return null;
+    if (trimmed[trimmed.len - 1] != ')') return null;
+    var name = std.mem.trim(u8, trimmed["local(".len .. trimmed.len - 1], &std.ascii.whitespace);
+    if (name.len >= 2 and (name[0] == '"' or name[0] == '\'') and name[name.len - 1] == name[0]) {
+        name = name[1 .. name.len - 1];
+    }
+    return name;
 }
 
 pub const JsApi = struct {

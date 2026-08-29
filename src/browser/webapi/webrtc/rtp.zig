@@ -27,6 +27,9 @@
 
 const std = @import("std");
 
+/// Which of the two media kinds a sender, receiver or transceiver carries.
+pub const Kind = enum { audio, video };
+
 const js = @import("../../js/js.zig");
 const chrome_sdp = @import("chrome_sdp.zig");
 
@@ -91,6 +94,13 @@ fn set(target: js.Object, comptime name: []const u8, value: anytype) !void {
 }
 
 pub const RTCRtpSender = struct {
+    // The kind of the transceiver that owns it. Not observable yet -- `track`
+    // is still null here where Chrome hands back a MediaStreamTrack -- but it
+    // is also what keeps two senders from collapsing onto one JS object: a
+    // struct with no fields at all is zero-sized, so every instance shares an
+    // address and the identity map hands the second one the first's object.
+    _kind: Kind = .audio,
+
     pub fn getCapabilities(kind: []const u8, exec: *const Execution) !?js.Object {
         return capabilitiesFor(kind, chrome_sdp.sender_audio, chrome_sdp.sender_video, exec);
     }
@@ -152,7 +162,6 @@ pub const RTCRtpSender = struct {
             pub const name = "RTCRtpSender";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
         };
 
         pub const getCapabilities = bridge.function(RTCRtpSender.getCapabilities, .{ .static = true });
@@ -173,6 +182,9 @@ pub const RTCRtpSender = struct {
 };
 
 pub const RTCRtpReceiver = struct {
+    // See RTCRtpSender._kind.
+    _kind: Kind = .audio,
+
     pub fn getCapabilities(kind: []const u8, exec: *const Execution) !?js.Object {
         return capabilitiesFor(kind, chrome_sdp.receiver_audio, chrome_sdp.receiver_video, exec);
     }
@@ -238,7 +250,6 @@ pub const RTCRtpReceiver = struct {
             pub const name = "RTCRtpReceiver";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
         };
 
         pub const getCapabilities = bridge.function(RTCRtpReceiver.getCapabilities, .{ .static = true });
@@ -258,35 +269,80 @@ pub const RTCRtpReceiver = struct {
     };
 };
 
-// Handed out by pc.addTransceiver() / pc.getTransceivers() in Chrome; here
-// getTransceivers() is always empty and addTransceiver is absent, so this is
-// prototype surface only. Chrome roots it at Object, not EventTarget, and
-// `new RTCRtpTransceiver()` throws "Illegal constructor" — which is what
-// omitting a `constructor` decl gets us (measured, /tmp/webrtc-protochain-chrome.json).
+// Handed out by pc.addTransceiver() and pc.getTransceivers(). Chrome roots it
+// at Object, not EventTarget, and `new RTCRtpTransceiver()` throws "Illegal
+// constructor" — which is what omitting a `constructor` decl gets us (measured,
+// /tmp/webrtc-protochain-chrome.json).
+//
+// The state here is what the offer is built from: the kind decides which canned
+// section goes in, the direction decides its `a=` line and whether the section
+// carries a sender's msid and ssrc block, and the track id and ssrcs are the
+// per-connection values in that block.
 pub const RTCRtpTransceiver = struct {
+    pub const Direction = enum {
+        sendrecv,
+        sendonly,
+        recvonly,
+        inactive,
+
+        pub fn text(self: Direction) []const u8 {
+            return @tagName(self);
+        }
+
+        /// Whether the section names a track and synchronisation sources.
+        /// Measured on Chrome 151 for the two ends: `sendrecv` carries an
+        /// `a=msid:` and an `a=ssrc:` block, `recvonly` carries neither
+        /// (expr-sdp-offer.js and the addTransceiver probe beside it). The two
+        /// in between were not measured; they are read the way their names do.
+        pub fn sends(self: Direction) bool {
+            return self == .sendrecv or self == .sendonly;
+        }
+    };
+
+    _kind: Kind,
+    _direction: Direction = .sendrecv,
+    _sender: *RTCRtpSender,
+    _receiver: *RTCRtpReceiver,
+    // The msid line names a track by UUID even when there is no track on the
+    // sender: `a=msid:- <uuid>`.
+    _track_id: [36]u8,
+    // One source for audio, two for video (the second is the FID retransmission
+    // stream). chrome_sdp.audio_tx_ssrcs / video_tx_ssrcs say how many are used.
+    _ssrcs: [2]u32,
+
     pub fn getMid(_: *const RTCRtpTransceiver) ?[]const u8 {
+        // Assigned by setLocalDescription, not by createOffer: measured null on
+        // a transceiver whose offer has already been built.
         return null;
     }
 
-    pub fn getSender(_: *const RTCRtpTransceiver) ?js.Value {
-        return null;
+    pub fn getSender(self: *const RTCRtpTransceiver) *RTCRtpSender {
+        return self._sender;
     }
 
-    pub fn getReceiver(_: *const RTCRtpTransceiver) ?js.Value {
-        return null;
+    pub fn getReceiver(self: *const RTCRtpTransceiver) *RTCRtpReceiver {
+        return self._receiver;
     }
 
     pub fn getStopped(_: *const RTCRtpTransceiver) bool {
         return false;
     }
 
-    pub fn getDirection(_: *const RTCRtpTransceiver) []const u8 {
-        return "sendrecv";
+    pub fn getDirection(self: *const RTCRtpTransceiver) []const u8 {
+        return self._direction.text();
     }
 
-    pub fn setDirection(_: *RTCRtpTransceiver, _: []const u8) void {}
+    pub fn setDirection(self: *RTCRtpTransceiver, value: []const u8) void {
+        inline for (@typeInfo(Direction).@"enum".fields) |field| {
+            if (std.mem.eql(u8, field.name, value)) {
+                self._direction = @enumFromInt(field.value);
+                return;
+            }
+        }
+    }
 
     pub fn getCurrentDirection(_: *const RTCRtpTransceiver) ?[]const u8 {
+        // Null until an answer has been applied (measured after createOffer).
         return null;
     }
 
@@ -311,7 +367,6 @@ pub const RTCRtpTransceiver = struct {
             pub const name = "RTCRtpTransceiver";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
         };
 
         pub const mid = bridge.accessor(RTCRtpTransceiver.getMid, null, .{});

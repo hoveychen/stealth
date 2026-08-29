@@ -15,14 +15,9 @@ Every value below is Chrome 151's, read off `style.length` and the indexed names
 -- which ARE Chrome's expansion, since it stores no shorthand -- with
 probes/expr-b81-font-expansion.js and expr-b83-font-refusals.js.
 
-Two differences from Chrome are deliberate and are asserted as this engine
-answers them, each with the plan that owns it:
+One difference from Chrome is deliberate and is asserted as this engine answers
+it, with the plan that owns it:
 
-  * a multi-identifier family is written back unquoted. Chrome writes
-    `16px "bold serif"`; so does its `font-family` LONGHAND, and this engine's
-    longhand writes `bold serif` there too, so the gap is `font-family`'s
-    serialisation and predates the shorthand entirely
-    (probes/expr-b83-font-family-quoting.js).
   * a value carrying `var()`, a function or a comment is kept whole rather than
     expanded. Chrome expands all three -- and reorders the arithmetic inside
     `calc(1px + 1em)` while it is there -- so declining is the direction that
@@ -73,10 +68,8 @@ answers them, each with the plan that owns it:
 
   // Everything after the size is the family, whatever it looks like.
   set('16px bold serif');
-  eq('family is the tail', String(el.style.getPropertyValue('font-family')), 'bold serif');
-  // (Chrome writes `16px "bold serif"` here; this engine's `font-family`
-  // longhand does not quote either, which is where that belongs.)
-  eq('family tail readback', String(el.style.font), '16px bold serif');
+  eq('family is the tail', String(el.style.getPropertyValue('font-family')), '"bold serif"');
+  eq('family tail readback', String(el.style.font), '16px "bold serif"');
 
   // A size of `0` is legal and normalises; a relative keyword is legal too.
   set('0 serif');

@@ -113,3 +113,36 @@ css/chrome_inherited.zig.
   style.remove();
 }
 </script>
+
+<script id=unitless_line_height_inherits_as_the_number>
+{
+  // The one inherited length whose computed value is NOT the parent's px: a
+  // bare number on `line-height` computes to the number itself, so the child
+  // multiplies it by its OWN font size. Measured on Chrome 151 with
+  // tools/fingerprint/probes/expr-line-height-number.js -- 1.5 on a 16px
+  // parent is 24px there, 108px on a 72px child, 15px on a 10px grandchild,
+  // while the `30px` and `150%` forms hand the same px down to everyone.
+  const host = document.createElement('div');
+  host.innerHTML = '<div style="font-size:16px;line-height:LH">' +
+    '<div style="font-size:72px"><div style="font-size:10px">x</div></div></div>';
+  document.body.appendChild(host);
+
+  const read = (lh) => {
+    const parent = host.firstChild;
+    parent.style.lineHeight = lh;
+    const child = parent.firstChild;
+    return [
+      getComputedStyle(parent).lineHeight,
+      getComputedStyle(child).lineHeight,
+      getComputedStyle(child.firstChild).lineHeight,
+    ].join(' ');
+  };
+
+  testing.expectEqual('24px 108px 15px', read('1.5'));
+  testing.expectEqual('30px 30px 30px', read('30px'));
+  testing.expectEqual('24px 24px 24px', read('150%'));
+  testing.expectEqual('normal normal normal', read('normal'));
+
+  host.remove();
+}
+</script>

@@ -301,3 +301,71 @@
   pre.unmap();
   testing.expectEqual('unmapped', pre.mapState);
 </script>
+
+<script type=module id=webgpu_mapped_range_bytes>
+  // A mapped buffer hands back an ArrayBuffer of its own bytes. Measured on
+  // Chrome 151 with tools/fingerprint/probes/expr-gpu-mapped-range.js: 4096
+  // zero bytes for a 4096-byte buffer, an offset alone taking the rest, a
+  // second call over any overlapping range refused by name, and the write to a
+  // mappedAtCreation range readable back.
+  //
+  // This is the one structural gap B60 found in the Cloudflare widget's
+  // payload: the widget runs a whole WebGPU pipeline and encodes 4096 bytes out
+  // of the buffer it reads back, and this engine encoded nothing, because
+  // getMappedRange() answered undefined.
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+  const READ = GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
+
+  const b = dev.createBuffer({ size: 4096, usage: READ });
+  await b.mapAsync(GPUMapMode.READ);
+  const range = b.getMappedRange();
+  testing.expectEqual('[object ArrayBuffer]', Object.prototype.toString.call(range));
+  testing.expectEqual(4096, range.byteLength);
+  testing.expectEqual(false, 'growable' in range);
+  testing.expectEqual(true, new Uint8Array(range).every((v) => v === 0));
+
+  // Any second range that overlaps the first is refused, and the message names
+  // both intervals.
+  testing.expectError(
+    "OperationError: Failed to execute 'getMappedRange' on 'GPUBuffer': getMappedRange " +
+      '[0, 4096) overlaps with previously returned range [0, 4096).',
+    () => b.getMappedRange(),
+  );
+  testing.expectError(
+    "OperationError: Failed to execute 'getMappedRange' on 'GPUBuffer': getMappedRange " +
+      '[2048, 3072) overlaps with previously returned range [0, 4096).',
+    () => b.getMappedRange(2048, 1024),
+  );
+
+  // Offset and size, and an offset on its own taking the rest.
+  const c = dev.createBuffer({ size: 4096, usage: READ });
+  await c.mapAsync(GPUMapMode.READ);
+  testing.expectEqual(512, c.getMappedRange(256, 512).byteLength);
+  const d = dev.createBuffer({ size: 4096, usage: READ });
+  await d.mapAsync(GPUMapMode.READ);
+  testing.expectEqual(3072, d.getMappedRange(1024).byteLength);
+
+  // An unaligned offset and a range past the end both fail the plain way.
+  const e = dev.createBuffer({ size: 4096, usage: READ });
+  await e.mapAsync(GPUMapMode.READ);
+  testing.expectError(
+    "OperationError: Failed to execute 'getMappedRange' on 'GPUBuffer': getMappedRange failed",
+    () => e.getMappedRange(1, 16),
+  );
+  testing.expectError(
+    "OperationError: Failed to execute 'getMappedRange' on 'GPUBuffer': getMappedRange failed",
+    () => e.getMappedRange(0, 8192),
+  );
+
+  // A mappedAtCreation buffer is writable, and unmapping frees the ranges so
+  // the next mapping can hand out the same interval again.
+  const w = dev.createBuffer({ size: 64, usage: GPUBufferUsage.COPY_SRC, mappedAtCreation: true });
+  const bytes = new Uint8Array(w.getMappedRange());
+  testing.expectEqual(64, bytes.byteLength);
+  bytes[0] = 7;
+  testing.expectEqual(7, bytes[0]);
+  w.unmap();
+  await b.unmap();
+  await b.mapAsync(GPUMapMode.READ);
+  testing.expectEqual(4096, b.getMappedRange().byteLength);
+</script>

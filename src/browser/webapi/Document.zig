@@ -79,6 +79,8 @@ _elements_by_id: std.StringHashMapUnmanaged(*Element) = .empty,
 _removed_ids: std.StringHashMapUnmanaged(void) = .empty,
 _active_element: ?*Element = null,
 _style_sheets: ?*StyleSheetList = null,
+// The cascade's own list; see cascadeStyleSheets.
+_cascade_sheets: ?*StyleSheetList = null,
 _implementation: ?*DOMImplementation = null,
 _fonts: ?*FontFaceSet = null,
 _write_insertion_point: ?*Node = null,
@@ -818,6 +820,23 @@ pub fn getStyleSheets(self: *Document, frame: *Frame) !*StyleSheetList {
     }
     const sheets = try StyleSheetList.init(frame);
     self._style_sheets = sheets;
+    return sheets;
+}
+
+/// Every sheet the cascade is built from, in the order they were registered --
+/// including the ones living in a shadow tree, which `document.styleSheets`
+/// must not show. Chrome keeps a shadow tree's sheet only in that root's list
+/// (probes/expr-shadow-stylesheet-scope.js), and we used to leave it in the
+/// document's as well because this was the same list: the widget's rule text
+/// then came back through the document a second time, which is why our span of
+/// it in the Cloudflare payload was exactly twice Chrome's. The cascade still
+/// needs all of them, so it gets its own list rather than losing the sheets.
+pub fn cascadeStyleSheets(self: *Document, frame: *Frame) !*StyleSheetList {
+    if (self._cascade_sheets) |sheets| {
+        return sheets;
+    }
+    const sheets = try StyleSheetList.init(frame);
+    self._cascade_sheets = sheets;
     return sheets;
 }
 
@@ -1771,6 +1790,7 @@ pub fn open(self: *Document, call_frame: *Frame) !*Document {
     self._active_element = null;
     self._open_popovers = .empty;
     self._style_sheets = null;
+    self._cascade_sheets = null;
     self._implementation = null;
     self._ready_state = .loading;
 

@@ -70,20 +70,20 @@ pub fn getSheet(self: *Style, frame: *Frame) !?*CSSStyleSheet {
     self._sheet = sheet;
 
     const owner = self.asNode().ownerDocument(frame) orelse frame.document;
-    const sheets = try owner.getStyleSheets(frame);
-    try sheets.add(sheet, frame);
+    // The cascade is built from one flat list, so every sheet goes in it
+    // wherever it lives.
+    try (try owner.cascadeStyleSheets(frame)).add(sheet, frame);
 
-    // A sheet in a shadow tree is also that root's, which is where Chrome
-    // keeps it -- and *only* there. Here it stays in the document's list as
-    // well, because the cascade is built from that one list
-    // (StyleManager.rebuild); dropping it would leave shadow content
-    // unstyled. So `document.styleSheets` still over-reports a shadow sheet.
-    // Teaching the cascade to walk shadow roots is what would close that, and
-    // it wants the scoping work to go with it.
+    // A sheet in a shadow tree is that root's, and *only* that root's -- Chrome
+    // does not show it in `document.styleSheets` for either mode, and the
+    // widget's closed root is where B59 found our rule text being counted
+    // twice (probes/expr-shadow-stylesheet-scope.js).
     if (self.asNode().containingShadowRoot()) |root| {
         const shadow_sheets = try root.getStyleSheets(frame);
         try shadow_sheets.add(sheet, frame);
         self._sheet_list = shadow_sheets;
+    } else {
+        try (try owner.getStyleSheets(frame)).add(sheet, frame);
     }
 
     return sheet;

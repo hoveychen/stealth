@@ -229,9 +229,9 @@
     testing.expectEqual(want, other[key], { desc: 'FontFace.' + key + ' is per-instance' });
   }
 
-  // status is readonly.
+  // status is readonly -- and a face nobody has loaded is "unloaded".
   ff.status = 'loading';
-  testing.expectEqual('loaded', ff.status);
+  testing.expectEqual('unloaded', ff.status);
 </script>
 
 <script id=input_setters>

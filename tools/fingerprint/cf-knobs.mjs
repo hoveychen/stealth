@@ -2182,4 +2182,119 @@ export const CF_KNOBS = {
         for (const ms of [5000, 12000, 19000]) setTimeout(() => line('tick=' + ms + '&blobs=' + blobs), ms);
       })();
     `,
+    // What the challenge's tiny first blob worker actually contains.
+    //
+    // report-workers gives its size and type (13 bytes, text/javascript) but
+    // not its text, and no short script guessed at that length reproduces the
+    // `error: Abort` this engine answers it with
+    // (probes/expr-blob-worker-abort.js: eleven candidates, both arms silent).
+    // So read the Blob on the way past createObjectURL and beacon it.
+    'report-worker-source': beacon + `
+      (() => {
+        const line = (q) => __send('at=' + encodeURIComponent(__where()) + '&' + q);
+        let n = 0;
+        try {
+          const realCreate = URL.createObjectURL;
+          Object.defineProperty(URL, 'createObjectURL', {
+            configurable: true, writable: true, enumerable: false,
+            value: function (obj) {
+              const url = realCreate.call(URL, obj);
+              n += 1;
+              const seq = n;
+              try {
+                line('blob=' + seq + '&size=' + obj.size + '&type=' + encodeURIComponent(String(obj.type)));
+                if (typeof obj.text === 'function' && obj.size <= 4096) {
+                  obj.text().then((t) => line('blob-text=' + seq + '&src=' + encodeURIComponent(t)),
+                    (e) => line('blob-text=' + seq + '&err=' + e.name));
+                }
+              } catch (e) { line('blob=' + seq + '&read-failed=' + e.name); }
+              return url;
+            },
+          });
+          line('report-worker-source=hooked');
+        } catch (e) { line('report-worker-source=failed:' + e.name); }
+
+        try {
+          const Real = window.Worker;
+          const Hooked = new Proxy(Real, {
+            construct(target, args, nt) {
+              const w = Reflect.construct(target, args, nt);
+              const url = String(args[0]);
+              line('worker=new&url=' + encodeURIComponent(url.slice(0, 90)));
+              try {
+                w.addEventListener('error', (e) => line('worker=error&msg=' +
+                  encodeURIComponent(String((e && e.message) || '')) +
+                  '&url=' + encodeURIComponent(url.slice(0, 90))), { once: true });
+              } catch (e) { /* no listener, no report */ }
+              return w;
+            },
+          });
+          Object.defineProperty(window, 'Worker', {
+            configurable: true, writable: true, enumerable: false, value: Hooked,
+          });
+        } catch (e) { line('worker-hook=failed:' + e.name); }
+      })();
+    `,
+    // P9: the r1 plaintext, from the TOP document.
+    //
+    // report-charsrc caught the long strings the widget reads character by
+    // character, and the seven the top document reads are byte-for-byte the
+    // same on both arms (4520 h=w0vg53, 1279, 85188, 63889, 1026, 4098, 2050).
+    // Its MIN is 1000, so whatever is shorter than that has never been looked
+    // at, and r1 is the one round nothing has been pointed at from the inside.
+    // This is the same hook with the floor dropped and the top document only:
+    // the widget's own reads are already accounted for and would drown this.
+    'report-charsrc-top': beacon + `
+      (() => {
+        if (__where().indexOf('/top') === -1) return;
+        const hash = (s) => {
+          let h = 5381;
+          for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+          return h.toString(36);
+        };
+        const MIN = 120;
+        const CAP = 90;
+        // Taken before anything is hooked, so the key can be built without
+        // going back through the hook.
+        const __code = String.prototype.charCodeAt;
+        const seen = Object.create(null);
+        let noted = 0;
+        const hook = (name) => {
+          try {
+            const real = String.prototype[name];
+            const restore = () => {
+              Object.defineProperty(String.prototype, name, {
+                configurable: true, writable: true, enumerable: false, value: real,
+              });
+            };
+            Object.defineProperty(String.prototype, name, {
+              configurable: true, writable: true, enumerable: false,
+              value: function (i) {
+                if (this.length >= MIN) {
+                  // The key has to be cheap: hashing on every call is O(n) per
+                  // character read, and with MIN this low that is quadratic --
+                  // the first version hashed here and the challenge never
+                  // finished a single round.
+                  const k = this.length + ':' + __code.call(this, 0) +
+                    ':' + __code.call(this, this.length - 1);
+                  if (!seen[k]) {
+                    const s = String(this);
+                    seen[k] = 1;
+                    noted += 1;
+                    __send('src=' + name + '&len=' + s.length + '&h=' + hash(s) +
+                           '&head=' + encodeURIComponent(s.slice(0, 200)) +
+                           '&tail=' + encodeURIComponent(s.slice(-80)));
+                    if (noted >= CAP) restore();
+                  }
+                }
+                return real.call(this, i);
+              },
+            });
+          } catch (e) { __send('src=' + name + '-failed:' + e.name); }
+        };
+        hook('charCodeAt');
+        hook('charAt');
+        __send('report-charsrc-top=installed&min=' + MIN + '&cap=' + CAP);
+      })();
+    `,
 };

@@ -437,3 +437,35 @@
   wrapper.remove();
 }
 </script>
+
+<script id="has_focus_moves_between_sibling_frames">
+{
+  // Focus lives in one browsing context, so giving it to a second frame takes
+  // it from the first. Measured on Chrome 151 with
+  // tools/fingerprint/probes/expr-b85-has-focus.js: a/b answer true/false after
+  // focusing in a, false/true after focusing in b, and false/false once the top
+  // document takes it back.
+  const a = document.body.appendChild(document.createElement('iframe'));
+  const b = document.body.appendChild(document.createElement('iframe'));
+  const ai = a.contentDocument.body.appendChild(a.contentDocument.createElement('input'));
+  const bi = b.contentDocument.body.appendChild(b.contentDocument.createElement('input'));
+
+  ai.focus();
+  testing.expectEqual(true, a.contentDocument.hasFocus());
+  testing.expectEqual(false, b.contentDocument.hasFocus());
+
+  bi.focus();
+  testing.expectEqual(false, a.contentDocument.hasFocus());
+  testing.expectEqual(true, b.contentDocument.hasFocus());
+
+  const own = document.body.appendChild(document.createElement('input'));
+  own.focus();
+  testing.expectEqual(false, a.contentDocument.hasFocus());
+  testing.expectEqual(false, b.contentDocument.hasFocus());
+  testing.expectEqual(true, document.hasFocus());
+
+  a.remove();
+  b.remove();
+  own.remove();
+}
+</script>

@@ -934,14 +934,16 @@ pub const HttpHeaders = struct {
     /// free — so bump this together with the tables, never alone.
     const chrome_major = "151";
     const chrome_reduced_version = chrome_major ++ ".0.0.0";
-    /// The build the reference Chrome reported — the Linux build, because that
-    /// is what claimed_platform says we are and what those tables were recorded
-    /// from. Only navigator.userAgentData.getHighEntropyValues carries it: the
+    /// The build the reference Chrome reported. This used to be the Linux
+    /// build's .137, "because that is what claimed_platform says we are" — and
+    /// then the claim moved to macOS (48efdc6b8) and this did not follow, so it
+    /// named a build no Mac ever ran. The Mac reference is 151.0.7922.174.
+    /// Only navigator.userAgentData.getHighEntropyValues carries it: the
     /// user-agent string zeroes everything after the major (that is what
     /// Chrome's user-agent reduction does), so a Chrome whose UA says 151.0.0.0
-    /// and whose uaFullVersion says 151.0.7922.137 is not contradicting itself —
+    /// and whose uaFullVersion says 151.0.7922.174 is not contradicting itself —
     /// it's the normal shape, and a full version ending .0.0.0 is the anomaly.
-    const chrome_full_version = chrome_major ++ ".0.7922.137";
+    const chrome_full_version = chrome_major ++ ".0.7922.174";
 
     /// Default User-Agent. Since Chrome's user-agent reduction the string is
     /// frozen apart from the major version and a platform token from a closed
