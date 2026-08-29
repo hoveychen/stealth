@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`getComputedStyle` on an element that is not in a document with a browsing
+context returns an EMPTY declaration: `length` is 0, `item(0)` is the empty
+string, and every property -- including `display` and a custom property --
+reads back as "". This engine answered full values for all of them, which is a
+single expression a page can use to tell the two apart.
+
+Measured on Chrome 151 with tools/fingerprint/probes/expr-b85-detached-computed.js.
+
+The predicate is NOT "has no box", and the controls below are what say so: an
+element with `display: none` is in the document and has no box, and its computed
+style is complete -- 475 longhands, `display: none`, `height: auto`. So is
+`visibility: hidden`. What empties the declaration is being out of a browsing
+context, in all four shapes it comes in:
+
+  * an element built with createElement and never appended;
+  * a child of a subtree that was never appended;
+  * an element that was appended and then removed;
+  * an element that IS connected, but to a document made by
+    `createHTMLDocument`, which has no browsing context of its own. This engine
+    answered `width: 1152px` there -- the viewport's width, for a document that
+    has no viewport.
+
+And the declaration object is live: taking one while the element is attached and
+then removing the element makes that same object answer "" and report length 0.
+-->
+
+<script id=detached_computed_style_is_empty>
+{
+  const PROPS = ['width', 'height', 'display', 'color', 'font-size', 'font-family',
+    'margin-left', 'padding-top', 'border-top-width', 'opacity', 'visibility',
+    'position', 'z-index', 'line-height', 'background-color', 'direction',
+    'writing-mode', 'transform', 'inset-inline-start', '--custom'];
+
+  const check = (label, el, wrong) => {
+    const cs = getComputedStyle(el);
+    if (cs.length !== 0) wrong.push(label + ' length: want 0, got ' + cs.length);
+    if (cs.item(0) !== '') wrong.push(label + ' item(0): want empty, got ' + cs.item(0));
+    // The named getter and getPropertyValue have to agree, both empty.
+    if (cs.width !== '') wrong.push(label + ' .width: want empty, got ' + cs.width);
+    if (cs.display !== '') wrong.push(label + ' .display: want empty, got ' + cs.display);
+    for (const p of PROPS) {
+      const v = cs.getPropertyValue(p);
+      if (v !== '') wrong.push(label + ' ' + p + ': want empty, got ' + v);
+    }
+  };
+
+  const wrong = [];
+
+  check('fresh', document.createElement('div'), wrong);
+
+  const holder = document.createElement('div');
+  holder.innerHTML = '<p style="width:50px;color:red">x</p>';
+  check('detached_subtree_child', holder.firstChild, wrong);
+
+  const removed = document.createElement('div');
+  removed.style.width = '50px';
+  document.body.appendChild(removed);
+  removed.remove();
+  check('removed_after_append', removed, wrong);
+
+  const doc = document.implementation.createHTMLDocument('d');
+  const inOtherDoc = doc.createElement('div');
+  doc.body.appendChild(inOtherDoc);
+  // Connected -- its root is a Document -- but that document has no browsing
+  // context, which is the half this engine got wrong even for connected nodes.
+  if (inOtherDoc.isConnected !== true) wrong.push('other-doc child should be connected');
+  check('in_document_without_browsing_context', inOtherDoc, wrong);
+
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=detached_computed_style_is_live>
+{
+  // The same declaration object, before and after the element leaves.
+  const el = document.createElement('div');
+  el.style.width = '50px';
+  document.body.appendChild(el);
+  const cs = getComputedStyle(el);
+  testing.expectEqual('50px', cs.width);
+  testing.expectEqual(475, cs.length);
+
+  el.remove();
+  testing.expectEqual('', cs.width);
+  testing.expectEqual(0, cs.length);
+}
+</script>
+
+<script id=attached_without_a_box_still_computes>
+{
+  // The control. `display:none` and `visibility:hidden` have no box and a full
+  // computed style, so "empty" cannot be keyed off the box.
+  const wrong = [];
+  for (const [label, css, wantDisplay, wantHeight] of [
+    ['rendered', 'width:50px', 'block', '0px'],
+    ['visibility_hidden', 'width:50px;visibility:hidden', 'block', '0px'],
+    ['display_none', 'width:50px;display:none', 'none', 'auto'],
+  ]) {
+    const el = document.createElement('div');
+    el.style.cssText = css;
+    document.body.appendChild(el);
+    const cs = getComputedStyle(el);
+    if (cs.length !== 475) wrong.push(label + ' length: want 475, got ' + cs.length);
+    if (cs.width !== '50px') wrong.push(label + ' width: want 50px, got ' + cs.width);
+    if (cs.display !== wantDisplay) wrong.push(label + ' display: want ' + wantDisplay + ', got ' + cs.display);
+    if (cs.height !== wantHeight) wrong.push(label + ' height: want ' + wantHeight + ', got ' + cs.height);
+    el.remove();
+  }
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
