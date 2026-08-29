@@ -20658,3 +20658,47 @@ Only heights are asserted in `css/margin_collapse.html`. Chrome's child
 positions in this markup are real -- `0,22,44` for the three siblings -- and
 this engine answers `5,10,15`, a placeholder; positioning every box is a
 different piece of work and the height is what a guard reads.
+
+## The other half of the child's box needs the subtree remembered, not recursed
+
+`content-height-child-box` split cleanly into a term that was free and a term
+that is not.
+
+The free one landed: `contentHeight` added `dims.height` per child, which is
+the child's CONTENT box, so every parent lost every child's padding and border.
+The child already knew about both -- its own `offsetHeight` is
+`height + padding_y + border_y` -- so the engine disagreed with itself: a
+`padding:5px` child answered 22 for itself inside a parent that answered 12.
+Seven of the ten shapes in `css/child_box_height.html` turn over on that one
+term, with no extra traversal, and the full suite is unchanged.
+
+The other one is **reverted and stays open**. What a parent still loses is what
+the child's own children put in the child: a wrapper holding a 12px box is 0
+here and 12 in Chrome, two levels down is 0 against 12, and a child that is its
+own formatting context is 10 against 22.
+
+The obvious fix was written and measured:
+
+```zig
+var inner = box.height;
+if (!box.explicit_height) {
+    inner = @max(inner, el.contentHeight(frame, visibility_cache, .in_flow, box.width));
+}
+```
+
+It makes all ten shapes right and takes `WebApi: Element` to
+**ExecutionTerminated**. A `frame._layout_depth` backstop around
+`contentHeight` does not save it, and that is the diagnosis rather than a
+missing guard: the counter stops a *cycle*, and this is not a cycle. A child
+measured from inside its parent's walk reaches back UP for its containing
+block, that measurement walks DOWN again, and the work multiplies with depth
+instead of recursing forever. `element/box_measure_loops.html` is the test that
+exists for this shape, written after www.sony.com took the engine out with a
+stack-overflow SIGBUS.
+
+So the term is not wrong, the traversal is. A correct version measures each
+subtree once and remembers it for the duration of one top-level measurement --
+the same "share one measurement" idiom `containing: *?f64` already uses for the
+containing block, one level up in cost. That is a design task with its own
+performance acceptance test, not a field on the existing walk, and it is filed
+as its own plan rather than left as a comment.

@@ -3666,6 +3666,14 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             const box = el.getElementDimensions(frame);
             const margins = el.verticalMargins(frame, &margin_containing, 0);
             group.join(margins.top);
+            // What the child HOLDS is still missing here, and knowingly so: see
+            // the note on `content-height-child-box` in the fingerprint README.
+            // Recursing into `el.contentHeight` is the obvious fix and it is
+            // measured NOT to be safe -- `WebApi: Element` ends in
+            // ExecutionTerminated, because a child measured from here reaches
+            // back up for its containing block and the walk goes down and up
+            // and down again. That is the same shape element/box_measure_loops
+            // exists for.
             if (box.height == 0 and box.padding_y == 0 and box.border_y == 0) {
                 // Self-collapsing: there is nothing between this box's two
                 // margins, so they join the same group and it contributes no
@@ -3676,7 +3684,13 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             }
             if (placed or !escapes.top) total += group.gap();
             group = .{};
-            total += box.height;
+            // The child's WHOLE box. `box.height` is its content height, and
+            // its padding and border are inside this parent however much they
+            // are outside that -- which the child itself already knows, since
+            // its own offsetHeight is `height + padding_y + border_y`. Reading
+            // only the middle of it made a parent disagree with its own child:
+            // a padded child answers 22 for itself and the parent answered 12.
+            total += box.height + box.padding_y + box.border_y;
             placed = true;
             group.join(margins.bottom);
             continue;
