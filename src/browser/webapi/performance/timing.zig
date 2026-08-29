@@ -170,6 +170,13 @@ pub const Timing = struct {
             self.connect_end = ms(perf, at, times.app_connect);
         } else {
             self.connect_end = ms(perf, at, times.connect);
+            // A REUSED connection reports no handshake, and the two schemes
+            // part company here: over https Chrome still answers
+            // `secureConnectionStart`, collapsed onto fetchStart like the rest
+            // of the walk, and over http it answers 0. Reporting 0 for both
+            // said every https entry this engine produced had negotiated no
+            // TLS at all -- one expression on any entry of any https page.
+            if (times.secure) self.secure_connection_start = at;
         }
 
         self.request_start = ms(perf, at, times.pre_transfer);

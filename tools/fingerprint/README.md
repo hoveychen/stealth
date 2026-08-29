@@ -20884,3 +20884,54 @@ entries **with the nine milestones forced to zero** is ticketed 3/3, same window
 strict alternation. The guard reads `requestStart` / `responseStart` /
 `responseEnd` off every entry (prop_read log, widget realm) and does not refuse
 over their values. So this is a correctness fix and is scoped as one.
+
+## A reused https connection still negotiated TLS once
+
+Chasing the pooling difference noticed while fixing the XHR milestones turned
+up a sharper thing beside it. `probes/expr-b86-connection-reuse.js` fires six
+**sequential** same-origin XHRs (sequential because parallel requests force
+extra connections in any browser, which would manufacture the difference) and
+reads reuse off the entry, the only place a page can see it:
+
+```
+                      fresh connections   secureConnectionStart on a reused one
+  Chrome                    2 / 6              == fetchStart   (non-zero)
+  this engine, before       0 / 6              0
+  this engine, after        0 / 6              == fetchStart
+```
+
+The first column is real and unfixed: Chrome opens two sockets over that burst
+and this engine opens none, riding the navigation's connection for all six.
+That is connection pooling, it is an architectural difference, and B64's dose
+sweep says it points nowhere for cf-scrapingcourse — the lever there is the
+total byte-length of resource entry *names*, and connection count does not move
+that number at all.
+
+The second column is a value error on **every entry of every https page**, and
+it is one expression to read. `setConnectionMilestones` branched on
+`app_connect > 0`, which is curl's TLS handshake timer — and a reused https
+connection reports 0 for it exactly like a plain http one. So the two schemes
+were given the same answer, and reporting 0 said every https resource this
+engine loaded had negotiated no TLS at all.
+
+`http.ResponseTimes` grew a `secure` flag rather than the call sites growing a
+parameter: it is a property of the connection the response arrived over, the
+same as the five timers beside it, and one of the five call sites (the
+navigation) does not have a URL in hand. It is read off `CURLINFO_EFFECTIVE_URL`,
+so a redirect that left https for http is reported as what it landed on.
+
+**Caveat kept from the previous chapter, still true:** the *fresh* TLS branch
+(`app_connect > 0` → a real handshake timestamp between connectStart and
+connectEnd) is exercised by neither measurement. This engine opened no fresh
+connection in any run here, and the local fixture has no TLS. What is verified
+is the reused branch and that plain http still answers 0 — eight readings on the
+two-origin fixture, unchanged, plus 1546/1546.
+
+### Why this is not filed under the door
+
+Same reason as the milestones it came from. B64 measured the cf-scrapingcourse
+lever to be Σ(name bytes) of the widget document's resource entries, bracketed
+between 33KB (0/3) and 52KB (3/3) — while **Chrome's own widget document carries
+1–3 entries and 278–1465 bytes**, thirty times under the threshold, and passes
+anyway. Nothing in the resource-timing family is going to walk this engine up to
+40KB of entry names, and nothing in it should be scoped as opening that station.
