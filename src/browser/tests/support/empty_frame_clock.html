@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<title>empty frame (clock)</title>
+<!--
+A second copy of support/empty_frame.html, for the block in
+performance_resource.html that checks the parent's iframe entry is stated on the
+parent's clock. It needs its OWN url: the neighbouring block asserts that
+exactly one entry carries empty_frame.html's name, and two blocks framing the
+same document would leave two.
+
+Deliberately empty of subresources, for the same reason empty_frame.html is:
+anything this document fetched would land in ITS OWN resource buffer, not the
+parent's.
+-->
+<body>frame</body>

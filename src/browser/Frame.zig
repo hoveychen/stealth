@@ -2081,12 +2081,17 @@ fn frameDoneCallback(ctx: *anyopaque) !void {
     // errorCallback deliberately leaves nothing behind.
     if (self.iframe != null) {
         if (self.parent) |parent| {
-            var t = self.performance().navigationTiming();
+            // Restated on the parent's clock on the way over: the record is
+            // stated in this document's own time origin, which is later than
+            // the parent's, and handed over unchanged it puts the <iframe>
+            // ahead of every element above it in the parent's document.
+            const host = parent.performance();
+            var t = self.performance().navigationTimingOn(host);
             t.initiator_type = "iframe";
             // The document's own navigation is not render-blocking for its
             // parent; the parent's layout does not wait on it.
             t.render_blocking_status = "non-blocking";
-            _ = parent.performance().resourceLoaded(self.url, t, &parent.js.execution) catch |err| {
+            _ = host.resourceLoaded(self.url, t, &parent.js.execution) catch |err| {
                 log.warn(.http, "iframe resource timing", .{ .err = err, .url = self.url });
             };
         }

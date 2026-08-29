@@ -132,6 +132,32 @@ pub const Timing = struct {
         return @floatFromInt(self.encoded_body_size + 300);
     }
 
+    /// Restates every timestamp in this record on another document's timeline.
+    ///
+    /// `shift_ms` is how much later this record's document started than
+    /// `host`'s, so adding it moves a stamp from one origin to the other; the
+    /// result goes back onto `host`'s lattice for the same reason
+    /// `setConnectionMilestones` snaps its own arithmetic, since the page reads
+    /// these beside `host`'s `now()`.
+    ///
+    /// Done by reflection rather than by naming the fields because the
+    /// invariant is exactly "every f64 here is milliseconds since the owning
+    /// document's time origin" (see the struct's own doc comment) — a list
+    /// would be a second place for a later field to fall off of.
+    ///
+    /// A zero is left alone: it means the milestone did not happen (no
+    /// redirect, no TLS, no 1xx), and shifting it would report one that did.
+    pub fn restateOn(self: *Timing, host: *const Performance, shift_ms: f64) void {
+        inline for (std.meta.fields(Timing)) |field| {
+            if (comptime field.type == f64) {
+                const value = @field(self, field.name);
+                if (value != 0) {
+                    @field(self, field.name) = host.snapMs(value + shift_ms);
+                }
+            }
+        }
+    }
+
     /// Lays libcurl's connection walk onto the eight milestones between
     /// fetchStart and responseStart. `fetch_start` must already be set.
     ///
