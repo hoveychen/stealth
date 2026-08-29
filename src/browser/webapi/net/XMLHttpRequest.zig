@@ -27,6 +27,7 @@ const Transfer = HttpClient.Transfer;
 
 const URL = @import("../../URL.zig");
 const Mime = @import("../../Mime.zig");
+const timing = @import("../performance/timing.zig");
 const Page = @import("../../Page.zig");
 const Frame = @import("../../Frame.zig");
 
@@ -90,6 +91,11 @@ _perf_encoded_body_size: u64 = 0,
 
 // contentType / contentEncoding for the entry, copied off the headers.
 _perf_labels: HttpClient.ResponseLabels = .{},
+
+// The connection walk behind the response, for the entry's milestones. Kept
+// here for the same reason the labels are: the transfer is freed before the
+// done callback that records the entry runs.
+_perf_times: HttpClient.ResponseTimes = .{},
 
 _ready_state: ReadyState = .unsent,
 _with_credentials: bool = false,
@@ -634,6 +640,7 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
     self._response_status = transfer.responseStatus().?;
     self._perf_next_hop_protocol = transfer.nextHopProtocol();
     self._perf_labels = transfer.responseLabels();
+    self._perf_times = transfer.responseTimes();
     if (transfer.getContentLength()) |cl| {
         self._response_len = cl;
         try self._response_data.ensureTotalCapacityPrecise(self._arena.allocator(), cl);
@@ -683,22 +690,28 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
 
     const exec = self._exec;
 
+    const loaded_len = self._response_data.items.len;
+    var t: timing.Timing = .{
+        .initiator_type = "xmlhttprequest",
+        .next_hop_protocol = self._perf_next_hop_protocol,
+        .content_type = self._perf_labels.contentType(),
+        .content_encoding = self._perf_labels.contentEncoding(),
+        .fetch_start = self._perf_fetch_start,
+        .response_end = exec.performance().now(),
+        .response_status = self._response_status,
+        .encoded_body_size = if (self._perf_encoded_body_size > 0) self._perf_encoded_body_size else loaded_len,
+        .decoded_body_size = loaded_len,
+    };
+    // The half `Frame.recordResourceTiming` does for the initiators that go
+    // through it. Without this the entry reported seven of the nine milestones
+    // as 0 while responseEnd said bytes had arrived -- a load that resolved no
+    // name, opened no socket and sent no request.
+    t.setConnectionMilestones(self._perf_times, exec.performance());
     // Chrome names the entry with the URL the response finally came from, so a
     // redirected request is filed under its destination, not its request URL.
-    const loaded_len = self._response_data.items.len;
     _ = try exec.performance().resourceLoaded(
         if (self._response_url.len > 0) self._response_url else self._url,
-        .{
-            .initiator_type = "xmlhttprequest",
-            .next_hop_protocol = self._perf_next_hop_protocol,
-            .content_type = self._perf_labels.contentType(),
-            .content_encoding = self._perf_labels.contentEncoding(),
-            .fetch_start = self._perf_fetch_start,
-            .response_end = exec.performance().now(),
-            .response_status = self._response_status,
-            .encoded_body_size = if (self._perf_encoded_body_size > 0) self._perf_encoded_body_size else loaded_len,
-            .decoded_body_size = loaded_len,
-        },
+        t,
         exec,
     );
 

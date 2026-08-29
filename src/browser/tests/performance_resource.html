@@ -201,6 +201,74 @@
     });
   </script>
 
+  <script id=xhr_and_fetch_entries_walk_the_connection_too type=module>
+    const state = await testing.async();
+    // The block above proves a SCRIPT entry walks the connection. It does not
+    // prove an entry does, because the two do not share a code path:
+    // `Frame.recordResourceTiming` says so in its own comment -- script, link
+    // and img go through it and it calls `setConnectionMilestones`, while "XHR
+    // and fetch call Performance directly" and build their `timing.Timing`
+    // literal by hand. That literal never carried the connection walk, so both
+    // reported seven of the nine milestones as 0 while responseEnd said bytes
+    // had arrived.
+    //
+    // Measured against Chrome 151 on a two-origin fixture
+    // (probes/expr-b86-subframe-milestones.js, both frames firing all four
+    // initiator types at their own origin): Chrome leaves exactly
+    // secureConnectionStart at zero over plain HTTP for xmlhttprequest, fetch,
+    // script and img alike, and this engine left seven at zero for the first
+    // two and matched Chrome on the last two.
+    // No query string: the test server matches this path with an exact
+    // compare, so `?anything` is an unknown file and takes the server's
+    // `unreachable`. The two entries are told apart by initiatorType instead,
+    // which is the field under test anyway.
+    const url = testing.ORIGIN + '/served/compressed.js';
+    await new Promise((resolve) => {
+      const x = new XMLHttpRequest();
+      x.open('GET', url);
+      x.onloadend = resolve;
+      x.send();
+    });
+    await fetch(url).then((r) => r.text());
+    // One tick, so the entries are in the buffer rather than in flight.
+    await new Promise((r) => setTimeout(r, 10));
+    state.resolve();
+    await state.done(() => {
+      // One composed string rather than a pile of booleans: a bare
+      // `expectEqual(true, ...)` prints "expected true, got false" and leaves
+      // the reader to guess which of six checks it was, and the `desc` option
+      // does not reach this runner's output.
+      const report = [];
+      for (const kind of ['xmlhttprequest', 'fetch']) {
+        const e = performance.getEntriesByType('resource')
+          .filter((r) => r.initiatorType === kind)[0];
+        if (!e) { report.push(kind + ': no entry'); continue; }
+        const walk = [
+          e.fetchStart, e.domainLookupStart, e.domainLookupEnd,
+          e.connectStart, e.connectEnd, e.requestStart,
+          e.responseStart, e.responseEnd,
+        ];
+        let ordered = true;
+        for (let i = 1; i < walk.length; i++) if (walk[i] < walk[i - 1]) ordered = false;
+        report.push([
+          kind,
+          'ordered=' + ordered,
+          // The one that fails when the walk is missing: with every milestone
+          // at 0 the order check above passes vacuously, because 0 >= 0.
+          'responseStartAfterFetch=' + (e.responseStart > e.fetchStart),
+          'finalHeaders=' + (e.responseStart === e.finalResponseHeadersStart),
+          // The two Chrome also leaves at zero over plain HTTP.
+          'tlsZero=' + (e.secureConnectionStart === 0),
+          'interimZero=' + (e.firstInterimResponseStart === 0),
+        ].join(' '));
+      }
+      testing.expectEqual(
+        'xmlhttprequest ordered=true responseStartAfterFetch=true finalHeaders=true tlsZero=true interimZero=true | ' +
+        'fetch ordered=true responseStartAfterFetch=true finalHeaders=true tlsZero=true interimZero=true',
+        report.join(' | '));
+    });
+  </script>
+
   <script id=entries_carry_one_navigation_id type=module>
     const state = await testing.async();
     // Chrome 151 stamps every entry of a navigation with the same

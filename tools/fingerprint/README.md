@@ -20815,3 +20815,72 @@ where they have been: `cf-scrapingcourse`, where the live lead is
 `cfsc-burst-mechanism`'s finding that a burst of long-query requests inside the
 widget's frame flips the verdict, and `x-hyatt`, which is exhausted from the
 page, the transport, the guard's source and the payload plaintext alike.
+
+## It was never the subframe — it was the initiator
+
+`subframe-resource-milestones` was written as "a resource entry's nine
+connection milestones are all zero inside a cross-origin subframe, while the
+top document fills them". Both halves of that are wrong, and the measurement
+that says so is `probes/expr-b86-subframe-milestones.js` against
+`probes/b86-subframe-fixture.mjs` — parent on `127.0.0.1`, child on
+`localhost`, **each frame fetching its own origin** so that the
+Timing-Allow-Origin rule (which zeroes these fields by spec for a cross-origin
+resource) is not what gets measured. Four initiator types per frame, because
+they do not share a code path here.
+
+Chrome 151, plain HTTP, every one of the eight readings:
+`secureConnectionStart` alone at zero. This engine, before:
+
+```
+  top   xmlhttprequest   domainLookupStart,domainLookupEnd,connectStart,
+                         connectEnd,secureConnectionStart,requestStart,responseStart
+  top   fetch            (the same seven)
+  top   img              secureConnectionStart      <- already right
+  top   script           secureConnectionStart      <- already right
+  child (all four)       the same four answers as the top
+```
+
+So the top document is **equally** broken and the subframe is **not** special —
+and two of the four initiators were already exact. The split is
+`Frame.recordResourceTiming`, which calls `setConnectionMilestones` and says in
+its own comment who skips it: script, link and img go through the Frame, while
+"XHR and fetch call Performance directly". Those two built their
+`timing.Timing` literal by hand and the connection walk was never in it.
+
+The fix is the walk they were missing: `_perf_times`, captured off the transfer
+beside `_perf_labels` and `_perf_next_hop_protocol` (the transfer is freed
+before the done callback runs, which is why those are copied out at all), and
+one `t.setConnectionMilestones(...)` call each. After it, all eight readings are
+`secureConnectionStart` — Chrome's answer — and an XHR entry has the same shape
+as the script entry beside it:
+
+```
+  fetchStart=2267.4 domainLookupStart=2267.4 domainLookupEnd=2267.4
+  connectStart=2267.4 connectEnd=2267.4 secureConnectionStart=0
+  requestStart=2269.1 responseStart=2270.5 responseEnd=2285.8
+```
+
+The lookup and connect fields collapsing onto `fetchStart` is not the bug
+coming back: the fixture is keep-alive over loopback, the connection was
+reused, and `http.ResponseTimes` documents that a reused connection answers
+zero for the first three — which is what a browser reports too.
+
+**Two things this does NOT establish, stated so nobody reads them in.** The TLS
+branch of `setConnectionMilestones` (`app_connect > 0` →
+`secureConnectionStart`) is exercised by neither measurement: the fixture has no
+TLS, and the one https reading reused the connection the navigation had already
+opened, so it correctly answered 0 there as well. And on that https page Chrome
+opened a *fresh* connection for its XHR where this engine reused one — a
+connection-pooling difference, not a milestone one, and not something this plan
+touched.
+
+### And the reason it is filed as fidelity, not as a door
+
+The plan was picked because B64 measured Cloudflare's guard doing a
+resource-timing census inside the widget's own frame — a cross-origin subframe
+— which made this look like the rare fidelity item with evidence a guard reads
+it. B64 then closed that off directly: a knob handing the guard 128 synthetic
+entries **with the nine milestones forced to zero** is ticketed 3/3, same window,
+strict alternation. The guard reads `requestStart` / `responseStart` /
+`responseEnd` off every entry (prop_read log, widget realm) and does not refuse
+over their values. So this is a correctness fix and is scoped as one.
