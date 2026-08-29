@@ -36,6 +36,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Cdp, sleep } from './cdp.mjs';
 import { CF_KNOBS } from './cf-knobs.mjs';
+import { parsePropReads, contextsOf } from './prop-read-log.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -56,7 +57,7 @@ if (process.argv.includes('--list')) {
 }
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: cf-knob.mjs <lightpanda|chrome> --knob <name> [--knob-file MODULE] [--runs N] [--port P] [--url U] [--settle MS] [--headless] [--out PATH]');
+    console.error('usage: cf-knob.mjs <lightpanda|chrome> --knob <name> [--knob-file MODULE] [--runs N] [--port P] [--url U] [--settle MS] [--headless] [--prop-reads [--prop-args]] [--out PATH]');
     process.exit(2);
 }
 const knobName = arg('--knob', 'none');
@@ -100,6 +101,25 @@ const intoWorkers = process.argv.includes('--workers');
 // than this engine's -- a gap that belonged to the harness. Pass --real-ua to
 // leave the switch off and compare against a Chrome whose hints are populated.
 const realUa = process.argv.includes('--real-ua');
+// `--prop-reads` asks the engine which members the guard reached, in the same
+// run the knob is installed in. prop-reads.mjs already answers that question,
+// but it takes a URL and nothing else -- and a two-arm diff of the name list is
+// only worth reading if both arms are the arms the ticket was measured on.
+// Three things the engine needs, all of which the plain run gets wrong:
+//
+//   * a Debug binary. Outside Debug `bridge.logReads` hands the member back
+//     unwrapped and no recorder exists, so the log is empty and looks exactly
+//     like a guard that read nothing. `zig build install --prefix zig-out-dbg`,
+//     then LP_BIN.
+//   * the log has to be kept. `proc.stderr.resume()` throws it away.
+//   * the targets have to be CLOSED. The dump happens when a context is torn
+//     down; SIGKILL produces an empty log every time.
+//
+// Timing read off a Debug build is not comparable to anything
+// ([[fingerprint-harness-runs-debug-build]]), so this is for the name list and
+// the name list only -- and do not expect a ticket on this binary.
+const propReads = process.argv.includes('--prop-reads');
+const propArgs = process.argv.includes('--prop-args');
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const LP = process.env.LP_BIN || path.join(repo, 'zig-out/bin/lightpanda');
@@ -117,10 +137,20 @@ async function once(port) {
             ...(realUa ? [] : [`--user-agent=${UA}`]),
             ...(headless ? ['--headless=new'] : [])],
         { stdio: ['ignore', 'pipe', 'pipe'] })
-        : spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(port)],
-            { stdio: ['ignore', 'pipe', 'pipe'] });
-    proc.stdout.resume();
-    proc.stderr.resume();
+        : spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(port),
+            ...(propReads ? ['--log-level', 'debug', '--log-format', 'logfmt',
+                '--log-filter-scopes', '-all', '--log-filter-scopes', '+prop_read',
+                ...(propArgs ? ['--log-filter-scopes', '+prop_arg'] : [])] : [])],
+        { stdio: ['ignore', 'pipe', 'pipe'] });
+    let engineLog = '';
+    if (propReads) {
+        const keep = (b) => { engineLog += b.toString(); };
+        proc.stdout.on('data', keep);
+        proc.stderr.on('data', keep);
+    } else {
+        proc.stdout.resume();
+        proc.stderr.resume();
+    }
     for (let i = 0; i < 200; i++) {
         try { await (await fetch(`http://127.0.0.1:${port}/json/version`)).json(); break; } catch { await sleep(200); }
     }
@@ -348,10 +378,27 @@ async function once(port) {
             await collect();
         }
         await collect();
+        // The engine dumps a context's read log when the context is torn down,
+        // and nowhere else. On this engine every frame of the challenge lives
+        // in this one target, so closing it is what makes the widget's own
+        // realm speak -- and killing the process instead, which is what the
+        // finally below does, has produced an empty log every single time.
+        if (propReads) {
+            for (const id of [...seenTargets, targetId]) {
+                try { await cdp.send('Target.closeTarget', { targetId: id }); } catch { /* already gone */ }
+            }
+            await sleep(2000);
+        }
     } finally {
         cdp.close();
         proc.kill('SIGKILL');
         await fs.rm(tmp, { recursive: true, force: true }).catch(() => {});
+    }
+    if (propReads) {
+        await sleep(200);
+        out.reads = parsePropReads(engineLog);
+        out.readContexts = contextsOf(out.reads);
+        out.readMembers = [...new Set(out.reads.map((r) => r.member))].length;
     }
     return out;
 }
@@ -373,6 +420,11 @@ for (let i = 0; i < runs; i++) {
     if (out.beacons.length) {
         const shown = [...new Set(out.beacons)].slice(0, 6);
         console.log(`      beacons: ${shown.join(' | ')}${out.beacons.length > shown.length ? ' …' : ''}`);
+    }
+    if (out.reads) {
+        console.log(`      reads: ${out.reads.length} keys / ${out.readMembers} members in ` +
+            `${out.readContexts.length} realms` +
+            out.readContexts.map((c) => `  [${c.context} ${String(c.realm).slice(0, 46)} ${c.members}]`).join(''));
     }
 }
 
