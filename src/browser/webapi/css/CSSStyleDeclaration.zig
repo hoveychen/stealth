@@ -5858,6 +5858,10 @@ test "WebApi: CSSStyleDeclaration block height" {
     try testing.htmlRunner("css/block_height.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration margin collapse" {
+    try testing.htmlRunner("css/margin_collapse.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration inline content lines" {
     try testing.htmlRunner("css/inline_content_lines.html", .{});
 }
