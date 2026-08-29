@@ -456,8 +456,29 @@ fn cascadedValue(style_manager: *StyleManager, element: *Element, property_name:
     if (!chrome_inherited.inherits(property_name)) {
         return .none;
     }
+    const on_line_height = std.mem.eql(u8, property_name, "line-height");
     var ancestor = element.parentElement();
     while (ancestor) |current| : (ancestor = current.parentElement()) {
+        // An inherited length is the ancestor's resolved px -- `letter-spacing:
+        // 2em` on a 20px ancestor is 40px on every descendant whatever their
+        // own size. A bare number on `line-height` is the exception: it
+        // computes to the number itself, so what comes down is the number and
+        // each element multiplies it by its own font size. Measured on Chrome
+        // 151 (probes/expr-line-height-number.js): 1.5 declared on a 16px
+        // parent is 24px there, 108px on a 72px child and 15px on a 10px
+        // grandchild, where `30px` and `150%` hand the same px to all three.
+        if (on_line_height) {
+            if (declaredDeclaration(style_manager, current, property_name, wrapped)) |declaration| {
+                const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
+                if (units.parse(trimmed)) |parsed| {
+                    if (parsed.unit == .none) {
+                        if (computedLengthText(style_manager, element, property_name, declaration.value, declaration.specified)) |px| {
+                            return .{ .value = px };
+                        }
+                    }
+                } else |_| {}
+            }
+        }
         switch (declaredValue(style_manager, current, property_name, wrapped)) {
             .value => |value| return .{ .value = value },
             .unreportable => return .unreportable,
