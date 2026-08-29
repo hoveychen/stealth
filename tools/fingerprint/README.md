@@ -20749,3 +20749,69 @@ permanently red test rather than a specification, so `css/child_box_height.html`
 still lists the three shapes in a comment, the probe carries the readings, and
 the third attempt's patch is kept verbatim at
 `probes/b86-memoise-attempt.patch` rather than half-merged as dead code.
+
+## The door map, re-read after the layout work
+
+Both arms re-swept on today's main (`1364be567`, ReleaseFast), Chrome with
+`--headed-ua`, minutes apart on the same address. The raw counts moved and the
+map did not:
+
+```
+                      B85 (08-29 07:34)   B86 (08-29 11:00)
+  this engine              22 / 29             19 / 29
+  Chrome (headed-ua)       21 / 29             21 / 29
+```
+
+**The two doors are the same two.** `cf-scrapingcourse` and `x-hyatt`: Chrome
+walks in, this engine does not. Every other station either lets both in (19) or
+shuts both out.
+
+The three that fell out of this engine's column are `dd-datadome`,
+`dd-leboncoin` and `dd-hermes` — the exact set B85 recorded as "we pass and
+Chrome does not". That set is now empty, and its loss looks at first like a
+regression from the day's two merges, because Chrome fails those stations in
+*both* sittings and so cannot serve as the control.
+
+### It is not a regression, and this is how that was established
+
+Chrome being the wrong control means the attribution has to be made on our own
+side, with two binaries. `df8e6a36e` — the commit before the margin-collapse
+and child-box merges — was rebuilt ReleaseFast into its own worktree and
+alternated against today's `main` over the whole DataDome family, four cycles,
+32 runs. Alternating rather than block-against-block, because this family
+passes in windows and a block of runs on one binary measures the hour.
+
+```
+  station          before today   today
+  dd-datadome        0/4 ....     0/4 ....
+  dd-hermes          0/4 ....     0/4 ....
+  dd-leboncoin       1/4 P...     0/4 ....
+  dd-etsy            4/4 PPPP     4/4 PPPP     <- control
+  dd-seloger         4/4 PPPP     4/4 PPPP     <- control
+  dd-g2              0/4 ....     0/4 ....     <- control
+  dd-saks            0/4 ....     0/4 ....     <- control
+  dd-allopneus       0/4 ....     0/4 ....     <- control
+```
+
+The pre-merge binary loses `dd-datadome` and `dd-hermes` just as completely as
+today's does, and `dd-leboncoin`'s single pass out of four is the flicker this
+family is known for rather than a difference. Meanwhile the two stations that
+pass are 4 for 4 on both arms, so the instrument was working and the hour was
+not hostile to everything — which is what makes the zeros mean something.
+
+So the DataDome column tracks the address, not the build, exactly as
+`antibot-stations-pass-in-windows` says. What it costs is the *comparison*: on
+a day when those three are open, this engine reads 22 and Chrome 21 and the
+engine looks ahead; on a day when they are shut, it reads 19 against 21. Both
+readings describe the same two doors. **The count is the wrong headline and the
+map is the right one.**
+
+### What that leaves
+
+Nothing about the map moved on the day the engine grew margin collapsing and a
+correct child box — which is the third time in two sessions that a measured,
+Chrome-exact fidelity fix has left the door count alone. The two doors are
+where they have been: `cf-scrapingcourse`, where the live lead is
+`cfsc-burst-mechanism`'s finding that a burst of long-query requests inside the
+widget's frame flips the verdict, and `x-hyatt`, which is exhausted from the
+page, the transport, the guard's source and the payload plaintext alike.
