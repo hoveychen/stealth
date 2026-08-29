@@ -201,8 +201,40 @@ pub fn getComputedValue(self: *const CSSStyleDeclaration, property_name: []const
     return self.propertyValue(property_name, frame, .computed);
 }
 
+/// The six properties whose `<alpha-value>` is brought into [0,1] at
+/// computed-value time.
+///
+/// Only at computed time: `el.style.opacity` still reads back what the author
+/// wrote. Measured on Chrome 151 with probes/expr-b85-clamped-props.js over
+/// twenty-two properties with a range in their grammar -- exactly these six
+/// clamp, and the near neighbours that look like they should do not.
+/// `flex-grow: 1.015625` computes to `1.01562` with no upper bound, and a
+/// negative one is rejected at parse rather than clamped.
+fn clampAlphaValue(property_name: []const u8, value: []const u8) ?[]const u8 {
+    const ALPHA = [_][]const u8{
+        "opacity",      "fill-opacity",  "stroke-opacity",
+        "stop-opacity", "flood-opacity", "shape-image-threshold",
+    };
+    const matches = for (ALPHA) |name| {
+        if (std.ascii.eqlIgnoreCase(property_name, name)) break true;
+    } else false;
+    if (!matches) return null;
+
+    const parsed = units.parse(value) catch return null;
+    if (parsed.unit != .none) return null;
+    if (parsed.value < 0) return "0";
+    if (parsed.value > 1) return "1";
+    return null;
+}
+
 fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame, surface: Surface) []const u8 {
-    return self.propertyValueAt(property_name, frame, surface, 0);
+    const value = self.propertyValueAt(property_name, frame, surface, 0);
+    // On the computed view only, and on both surfaces it reports: the CSS-OM
+    // reads the used value here and the Typed OM the computed one, and Chrome
+    // clamps the alpha family in both. An inline declaration is untouched --
+    // `el.style.opacity` reads back what the author wrote.
+    if (!self._is_computed) return value;
+    return clampAlphaValue(property_name, value) orelse value;
 }
 
 /// Bounds the two reads that reach back into this function: a longhand whose
@@ -5612,6 +5644,10 @@ test "WebApi: CSSStyleDeclaration computed logical properties" {
 
 test "WebApi: CSSStyleDeclaration computed relative units" {
     try testing.htmlRunner("css/computed_relative_units.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed alpha clamp" {
+    try testing.htmlRunner("css/computed_alpha_clamp.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration unrendered percentages" {
