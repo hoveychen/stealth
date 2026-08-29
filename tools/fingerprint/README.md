@@ -20347,3 +20347,40 @@ target, so a page-session listener never sees what it loads, and "Chrome does
 not fetch it" was the instrument rather than the station. `--frames` attaches to
 the child targets and Chrome's copy appears immediately. Both arms get the
 widget program, as both arms get the orchestrate program.
+
+### The static route does not transfer to Cloudflare
+
+At x-hyatt the win was that the guard tables its names: one packed heap, one
+pure decoder, 1078 identifiers recovered without running anything. The same
+question at cf-scrapingcourse has a clean negative answer.
+
+Three programs are reachable and all three were scanned. `orchestrate/chl_page`
+uses the obfuscator's string-array form, and its accessor turns out to be a bare
+offset lookup --
+
+```js
+function Y(G,E,v,u){ return G = G - 453, v = D(), u = v[G], u }
+function D(AW){ return AW = "…31623 chars…".split("!"), D = function(){ return AW }, D() }
+```
+
+-- so no decoder needs lifting at all; splitting the literal *is* the name table.
+Turnstile's `api.js` is not obfuscated. The 274KB `rch` widget document carries
+one 256KB inline script whose array is `;`-delimited and equally readable.
+
+Between them that is **1838 + 497 + 5909 entries**, and the number of
+fingerprinting API names among them is **zero**. Not `webdriver`, not `plugins`,
+not `screen`, `userAgent`, `canvas`, `getParameter`, `hardwareConcurrency`,
+`deviceMemory`, `hasFocus` or `permissions`. The only match anywhere is the
+string `[native code]`.
+
+They are not hidden in an encoded pool the way Kasada's are -- there is no pool.
+They are **computed**, which this harness already knew from the other end:
+`report-charsrc` exists because r2's body leaves as `join("")` over 4716 single
+characters, so no encoder hook can see it and names are assembled per character.
+A program that never spells a name cannot be read for the names it uses.
+
+So the instrument that closed x-hyatt's read set does not point at this door.
+What did come out of pointing it: both arms get the same orchestrate program
+(same-arm Jaccard 0.5376 against cross-arm 0.5650/0.5537), Turnstile's `api.js`
+is byte-identical always, and Chrome fetches the `rch` document too once the
+harness attaches to child targets.
