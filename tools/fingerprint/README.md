@@ -20384,3 +20384,23 @@ What did come out of pointing it: both arms get the same orchestrate program
 (same-arm Jaccard 0.5376 against cross-arm 0.5650/0.5537), Turnstile's `api.js`
 is byte-identical always, and Chrome fetches the `rch` document too once the
 harness attaches to child targets.
+
+### One of the two real defects on that door is fixed
+
+`document.hasFocus()` returned `true` for every document here. Chrome's answer
+is a chain: the top document has focus, a child frame has none until something
+inside it is focused, both have it after that, the child keeps it when that
+element is blurred, and a document with no browsing context never had it.
+`probes/expr-b85-has-focus.js` takes all nine readings rather than the one the
+widget happened to expose.
+
+The Page now records the deepest focused frame and the chain to the root is
+walked when the question is asked. **Eight of the nine readings match Chrome**;
+the ninth is a separate defect left open -- focusing an element inside a child
+frame should make the parent's `activeElement` the iframe element, and here it
+stays `BODY`.
+
+Not expected to open the door: `frame-has-focus`, which makes Chrome's widget
+frame answer `true`, was 6 of 6 against a baseline that refuses a clean Chrome
+about one run in six. It is fidelity debt of exactly the shape this door has
+been seen to judge -- a boolean, always the wrong way -- and it is now paid.
