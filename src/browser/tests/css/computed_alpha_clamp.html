@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Six properties take an <alpha-value> and clamp it to [0,1] at computed-value
+time. The specified value is NOT clamped: `el.style.opacity` still reads back
+what the author wrote, six significant digits of it, and only
+`getComputedStyle` brings it into range.
+
+This engine clamped none of them, so `opacity: 1.015625` computed to `1.01562`
+where Chrome computes `1` -- thirteen of the twenty-eight readings still
+differing after css-number-round-half-even were this one property family.
+
+Measured on Chrome 151 with tools/fingerprint/probes/expr-b85-clamped-props.js,
+which asks twenty-two properties with a range in their grammar, over- and
+under-range, specified beside computed. Exactly these six clamp. The ones that
+look like they should and do not are worth naming, because a wider clamp would
+be wrong: `flex-grow: 1.015625` computes to `1.01562` (no upper bound at all),
+`flex-shrink` likewise, and an out-of-range `flex-grow: -1` is not clamped but
+REJECTED at parse -- the specified value is empty and the computed one is the
+initial `0`.
+-->
+
+<script id=alpha_value_properties_clamp>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const probe = (prop, value) => {
+    const el = document.createElement('div');
+    el.style.setProperty(prop, value);
+    host.appendChild(el);
+    const out = {
+      specified: el.style.getPropertyValue(prop),
+      computed: getComputedStyle(el).getPropertyValue(prop),
+    };
+    el.remove();
+    return out;
+  };
+
+  const ALPHA = ['opacity', 'fill-opacity', 'stroke-opacity', 'stop-opacity',
+                 'flood-opacity', 'shape-image-threshold'];
+
+  const wrong = [];
+  for (const prop of ALPHA) {
+    // Over 1: computed clamps, specified keeps the author's number.
+    let r = probe(prop, '1.015625');
+    if (r.computed !== '1') wrong.push(prop + ' 1.015625 computed: want 1, got ' + r.computed);
+    if (r.specified !== '1.01562') wrong.push(prop + ' 1.015625 specified: want 1.01562, got ' + r.specified);
+
+    // Below 0: same shape the other way.
+    r = probe(prop, '-0.5');
+    if (r.computed !== '0') wrong.push(prop + ' -0.5 computed: want 0, got ' + r.computed);
+    if (r.specified !== '-0.5') wrong.push(prop + ' -0.5 specified: want -0.5, got ' + r.specified);
+
+    // In range: untouched, and still not re-serialised.
+    r = probe(prop, '0.5');
+    if (r.computed !== '0.5') wrong.push(prop + ' 0.5 computed: want 0.5, got ' + r.computed);
+  }
+
+  // A plain integer over the top still clamps, and the clamp is not a
+  // truncation: `2` becomes `1`, not `0`.
+  const two = probe('opacity', '2');
+  if (two.computed !== '1') wrong.push('opacity 2 computed: want 1, got ' + two.computed);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=ranged_properties_that_do_not_clamp>
+{
+  // The control. A clamp that spread to these would be wrong, and they are the
+  // near neighbours most likely to catch it: both take a <number> with a lower
+  // bound in the grammar, and neither is brought into range at computed time.
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const probe = (prop, value) => {
+    const el = document.createElement('div');
+    el.style.setProperty(prop, value);
+    host.appendChild(el);
+    const out = {
+      specified: el.style.getPropertyValue(prop),
+      computed: getComputedStyle(el).getPropertyValue(prop),
+    };
+    el.remove();
+    return out;
+  };
+
+  const wrong = [];
+  for (const prop of ['flex-grow', 'flex-shrink']) {
+    const over = probe(prop, '1.015625');
+    if (over.computed !== '1.01562') wrong.push(prop + ' 1.015625 computed: want 1.01562, got ' + over.computed);
+    // Negative is rejected outright rather than clamped: nothing is specified,
+    // and the computed value is the property's initial one.
+    const under = probe(prop, '-1');
+    if (under.specified !== '') wrong.push(prop + ' -1 specified: want empty, got ' + under.specified);
+  }
+  if (probe('flex-grow', '-1').computed !== '0') wrong.push('flex-grow -1 computed: want 0');
+  if (probe('flex-shrink', '-1').computed !== '1') wrong.push('flex-shrink -1 computed: want 1');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
