@@ -790,3 +790,100 @@
   });
 }
 </script>
+
+<script id=webrtc_add_transceiver type=module>
+{
+  // addTransceiver() threw InvalidStateError unconditionally, so an offer built
+  // the modern way carried no media at all -- 458 bytes of data channel against
+  // Chrome's 6735 (B60, probes/expr-sdp-offer.js).
+  //
+  // Everything below is Chrome 151 here. The shape it exposed is that the
+  // legacy `offerToReceive*` options are transceivers too: asking for audio
+  // beside an audio transceiver does NOT add a second section, it leaves the
+  // one that is there alone, and `offerToReceiveVideo` adds a recvonly video
+  // transceiver -- which is exactly the recvonly section the CreepJS shape has
+  // always carried.
+  const state = await testing.async();
+  const dirs = (sdp) => sdp.split('\r\n').filter((l) => /^a=(sendrecv|recvonly|sendonly|inactive)$/.test(l)).join(',');
+  const kinds = (sdp) => sdp.split('\r\n').filter((l) => l.startsWith('m=')).map((l) => l.split(' ')[0]).join(',');
+
+  const one = new RTCPeerConnection();
+  const t = one.addTransceiver('audio');
+  const oneOffer = await one.createOffer();
+
+  const mixed = new RTCPeerConnection();
+  mixed.addTransceiver('audio');
+  const mixedOffer = await mixed.createOffer({ offerToReceiveAudio: 1, offerToReceiveVideo: 1 });
+
+  const two = new RTCPeerConnection();
+  two.addTransceiver('video');
+  two.addTransceiver('video');
+  const twoOffer = await two.createOffer();
+
+  const rx = new RTCPeerConnection();
+  const rxT = rx.addTransceiver('audio', { direction: 'recvonly' });
+  const rxOffer = await rx.createOffer();
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual(1, RTCPeerConnection.prototype.addTransceiver.length);
+    testing.expectEqual('sendrecv', t.direction);
+    testing.expectEqual(null, t.currentDirection);
+    // The mid is assigned by setLocalDescription, not by createOffer.
+    testing.expectEqual(null, t.mid);
+    testing.expectEqual(false, t.stopped);
+    testing.expectEqual('RTCRtpSender', t.sender.constructor.name);
+    testing.expectEqual('RTCRtpReceiver', t.receiver.constructor.name);
+    testing.expectEqual(null, t.sender.track);
+    testing.expectEqual(1, one.getTransceivers().length);
+    testing.expectEqual(true, one.getTransceivers()[0] === t);
+    // getSenders/getReceivers are the transceivers' own, one each (measured).
+    testing.expectEqual(1, one.getSenders().length);
+    testing.expectEqual(1, one.getReceivers().length);
+    testing.expectEqual(true, one.getSenders()[0] === t.sender);
+    testing.expectEqual(true, one.getReceivers()[0] === t.receiver);
+    testing.expectEqual(0, new RTCPeerConnection().getSenders().length);
+    testing.expectEqual(2, mixed.getSenders().length);
+
+    // One audio transceiver: a sendrecv section with an msid and one ssrc.
+    testing.expectEqual('m=audio', kinds(oneOffer.sdp));
+    testing.expectEqual('a=sendrecv', dirs(oneOffer.sdp));
+    testing.expectEqual(1, (oneOffer.sdp.match(/^a=msid:- [0-9a-f-]{36}$/gm) || []).length);
+    testing.expectEqual(2, (oneOffer.sdp.match(/^a=ssrc:\d+ /gm) || []).length);
+    testing.expectEqual(false, /a=ssrc-group:/.test(oneOffer.sdp));
+
+    // The legacy options do not double a kind that already has a transceiver.
+    testing.expectEqual('m=audio,m=video', kinds(mixedOffer.sdp));
+    testing.expectEqual('a=sendrecv,a=recvonly', dirs(mixedOffer.sdp));
+    testing.expectEqual('sendrecv,recvonly',
+      mixed.getTransceivers().map((x) => x.direction).join(','));
+
+    // Two of a kind are two sections.
+    testing.expectEqual('m=video,m=video', kinds(twoOffer.sdp));
+
+    // A recvonly transceiver is the section the CreepJS shape already had: no
+    // msid, no ssrc. 1212 bytes, measured.
+    testing.expectEqual('recvonly', rxT.direction);
+    testing.expectEqual('a=recvonly', dirs(rxOffer.sdp));
+    testing.expectFalse(/a=ssrc:/.test(rxOffer.sdp));
+    testing.expectFalse(/a=msid:/.test(rxOffer.sdp));
+    testing.expectEqual(1212, rxOffer.sdp.length);
+
+    // A video sending section ties its two sources together.
+    testing.expectEqual(2, (twoOffer.sdp.match(/^a=ssrc-group:FID \d+ \d+$/gm) || []).length);
+    testing.expectEqual(8, (twoOffer.sdp.match(/^a=ssrc:\d+ /gm) || []).length);
+
+    // The refusals.
+    testing.expectError(
+      "TypeError: Failed to execute 'addTransceiver' on 'RTCPeerConnection': " +
+        '1 argument required, but only 0 present.',
+      () => new RTCPeerConnection().addTransceiver(),
+    );
+    testing.expectError(
+      "TypeError: Failed to execute 'addTransceiver' on 'RTCPeerConnection': " +
+        "The argument provided as parameter 1 is not a valid MediaStreamTrack kind ('audio' or 'video').",
+      () => new RTCPeerConnection().addTransceiver('bogus'),
+    );
+  });
+}
+</script>

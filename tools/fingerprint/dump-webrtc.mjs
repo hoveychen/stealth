@@ -39,10 +39,21 @@ const PROBE = `(async () => {
   pc.createDataChannel('');
   const offer = await pc.createOffer({ offerToReceiveAudio: 1, offerToReceiveVideo: 1 });
   const bare = await new RTCPeerConnection().createOffer();
+  // The other way in: addTransceiver() builds sendrecv sections with an msid
+  // and ssrc block, and video offers the SENDER's codec list rather than the
+  // longer receive one, so the m= line is a different set from the legacy
+  // shape above.
+  const tx = new RTCPeerConnection();
+  tx.addTransceiver('audio');
+  tx.addTransceiver('video');
+  tx.createDataChannel('');
+  const txOffer = await tx.createOffer();
+  tx.close();
   pc.close();
   return JSON.stringify({
     version: navigator.userAgent,
     sdp: offer.sdp,
+    txSdp: txOffer.sdp,
     bare: bare.sdp,
     caps: {
       sender_audio: RTCRtpSender.getCapabilities('audio'),
@@ -93,6 +104,43 @@ function splitSection(lines) {
     };
 }
 
+// A media section's tail, split around the lines Chrome draws per connection.
+//
+// Every audio or video section carries a direction line, and a SENDING one
+// (`sendrecv` from addTransceiver, and `sendonly`) carries two more blocks a
+// receiving one has neither of: the `a=msid:` line naming the sender's track,
+// and the `a=ssrc:` block, preceded on video by an `a=ssrc-group:FID` line.
+// Those are per-connection values, so they come out here and go back in at
+// runtime beside the ICE and DTLS ones.
+const DIRECTION = /^a=(sendrecv|sendonly|recvonly|inactive)$/;
+
+function splitMediaTail(tail) {
+    const dirAt = tail.findIndex((l) => DIRECTION.test(l));
+    if (dirAt === -1) throw new Error('media section with no direction line');
+    const msidAt = tail.findIndex((l) => l.startsWith('a=msid:'));
+    const ssrcAt = tail.findIndex((l) => l.startsWith('a=ssrc-group:') || l.startsWith('a=ssrc:'));
+    if (msidAt !== -1 && msidAt !== dirAt + 1) {
+        throw new Error('a=msid: is not the line after the direction');
+    }
+    const ssrcs = new Set();
+    let group = false;
+    if (ssrcAt !== -1) {
+        for (const line of tail.slice(ssrcAt)) {
+            if (line.startsWith('a=ssrc-group:FID ')) { group = true; continue; }
+            const m = /^a=ssrc:(\d+) /.exec(line);
+            if (!m) throw new Error(`unexpected line in the ssrc block: ${line}`);
+            ssrcs.add(m[1]);
+        }
+    }
+    return {
+        tail_head: tail.slice(0, dirAt),
+        direction: tail[dirAt].slice('a='.length),
+        tail_body: tail.slice(msidAt === -1 ? dirAt + 1 : msidAt + 1, ssrcAt === -1 ? tail.length : ssrcAt),
+        ssrc_count: ssrcs.size,
+        fid_group: group,
+    };
+}
+
 function emitLines(name, lines) {
     if (lines.length === 0) return [`pub const ${name} = "";`, ''];
     const out = [`pub const ${name} =`];
@@ -137,7 +185,7 @@ try {
     await sleep(1500);
     const r = await send('Runtime.evaluate', { expression: PROBE, returnByValue: true, awaitPromise: true }, sessionId);
     if (r.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails).slice(0, 500));
-    const { version, sdp, bare, caps } = JSON.parse(r.result.value);
+    const { version, sdp, txSdp, bare, caps } = JSON.parse(r.result.value);
 
     const lines = sdp.split('\r\n').filter((l) => l.length > 0);
     const starts = { audio: -1, video: -1, application: -1 };
@@ -149,8 +197,27 @@ try {
     const sections = {};
     bounds.forEach(([kind, at], i) => {
         const end = i + 1 < bounds.length ? bounds[i + 1][1] : lines.length;
-        sections[kind] = splitSection(lines.slice(at, end));
+        const section = splitSection(lines.slice(at, end));
+        // The application section has no direction line and no sender.
+        sections[kind] = kind === 'application'
+            ? section
+            : { head: section.head, ...splitMediaTail(section.tail) };
     });
+
+    // The same split over the addTransceiver() offer, whose audio and video
+    // sections are sendrecv and carry the msid/ssrc blocks.
+    const txLines = txSdp.split('\r\n').filter((l) => l.length > 0);
+    const tx = {};
+    for (const kind of ['audio', 'video']) {
+        const at = txLines.findIndex((l) => l.startsWith(`m=${kind} `));
+        if (at === -1) throw new Error(`the addTransceiver offer had no m=${kind} section`);
+        let end = txLines.length;
+        for (let i = at + 1; i < txLines.length; i++) {
+            if (txLines[i].startsWith('m=')) { end = i; break; }
+        }
+        const section = splitSection(txLines.slice(at, end));
+        tx[kind] = { head: section.head, ...splitMediaTail(section.tail) };
+    }
 
     // The session-level preamble, minus the o= line (random) and the BUNDLE
     // line (depends on which sections the caller asked for). BUNDLE does not
@@ -209,13 +276,38 @@ try {
         '// no m= sections at all.',
         ...emitLines('preamble_head', preambleHead),
         ...emitLines('preamble_tail', preambleTail),
-        '// Each section is head ++ <the per-connection ICE/DTLS block> ++ a=mid:N ++ tail.',
+        '// An application section is head ++ <the per-connection ICE/DTLS block> ++',
+        '// a=mid:N ++ tail. A media section is the same with three runtime pieces',
+        '// spliced into its tail:',
+        '//',
+        '//   tail_head ++ a=<direction> ++ [a=msid:- <track>] ++ tail_body ++ [ssrc block]',
+        '//',
+        '// The msid and the ssrc block are there for a SENDING direction only -- the',
+        "// recvonly section an `offerToReceiveAudio` offer carries has neither, and",
+        '// that is the shape below in audio_/video_. The addTransceiver default is',
+        '// sendrecv, which does carry them, and whose video section also offers the',
+        "// SENDER's shorter codec list; that shape is audio_tx_/video_tx_.",
         ...emitLines('audio_head', sections.audio.head),
-        ...emitLines('audio_tail', sections.audio.tail),
+        ...emitLines('audio_tail_head', sections.audio.tail_head),
+        ...emitLines('audio_tail_body', sections.audio.tail_body),
         ...emitLines('video_head', sections.video.head),
-        ...emitLines('video_tail', sections.video.tail),
+        ...emitLines('video_tail_head', sections.video.tail_head),
+        ...emitLines('video_tail_body', sections.video.tail_body),
         ...emitLines('application_head', sections.application.head),
         ...emitLines('application_tail', sections.application.tail),
+        ...emitLines('audio_tx_head', tx.audio.head),
+        ...emitLines('audio_tx_tail_head', tx.audio.tail_head),
+        ...emitLines('audio_tx_tail_body', tx.audio.tail_body),
+        ...emitLines('video_tx_head', tx.video.head),
+        ...emitLines('video_tx_tail_head', tx.video.tail_head),
+        ...emitLines('video_tx_tail_body', tx.video.tail_body),
+        '// How many synchronisation sources a sending section names, and whether',
+        '// they are tied together by an a=ssrc-group:FID line.',
+        `pub const audio_tx_ssrcs = ${tx.audio.ssrc_count};`,
+        `pub const audio_tx_fid_group = ${tx.audio.fid_group};`,
+        `pub const video_tx_ssrcs = ${tx.video.ssrc_count};`,
+        `pub const video_tx_fid_group = ${tx.video.fid_group};`,
+        '',
         '// RTCRtpSender/Receiver.getCapabilities(). Audio is identical for sender and',
         '// receiver on this build; video is not, so both are carried.',
         ...emitCapabilities('sender_audio', caps.sender_audio),
