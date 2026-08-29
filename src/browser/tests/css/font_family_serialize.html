@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  A family name written as two or more bare identifiers is one name, and Chrome
+  answers it as a quoted string. Measured on Chrome 151 over http://127.0.0.1
+  by tools/fingerprint/probes/expr-computed-font-family.js and
+  expr-font-shorthand-family.js:
+
+    font-family: Adwaita Sans          -> "Adwaita Sans"
+    font-family: Times New Roman, Times, serif
+                                       -> "Times New Roman", Times, serif
+    font-family: Arial                 -> Arial          (one identifier, bare)
+    font-family: serif                 -> serif          (generic, never quoted)
+    font-family: Initial Value         -> "Initial Value"
+    font: small-caps 400 16px Times New Roman
+                                       -> small-caps 400 16px "Times New Roman"
+
+  The Cloudflare widget reads the computed value, and the missing quotes were
+  the visible half of B59's font-list difference. In the `font` shorthand the
+  same run of identifiers is a family only after the size, so the leading
+  keywords (`italic bold`) must stay bare.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test).
+function styled(prop, value) {
+    const el = document.createElement('div');
+    el.style[prop] = value;
+    document.body.appendChild(el);
+    const out = {
+        inline: el.style[prop],
+        family: el.style.fontFamily,
+        computed: getComputedStyle(el).fontFamily,
+    };
+    el.remove();
+    return out;
+}
+</script>
+
+<script id="spaced_family_name_is_quoted">
+{
+  const r = styled('fontFamily', 'Adwaita Sans');
+  testing.expectEqual('"Adwaita Sans"', r.inline);
+  testing.expectEqual('"Adwaita Sans"', r.computed);
+}
+</script>
+
+<script id="single_identifier_family_stays_bare">
+{
+  testing.expectEqual('Arial', styled('fontFamily', 'Arial').computed);
+  testing.expectEqual('serif', styled('fontFamily', 'serif').computed);
+  testing.expectEqual('sans-serif', styled('fontFamily', 'sans-serif').computed);
+  testing.expectEqual('system-ui', styled('fontFamily', 'system-ui').computed);
+}
+</script>
+
+<script id="only_the_spaced_entries_of_a_list_are_quoted">
+{
+  const r = styled('fontFamily', 'Times New Roman, Times, serif');
+  testing.expectEqual('"Times New Roman", Times, serif', r.inline);
+  testing.expectEqual('"Times New Roman", Times, serif', r.computed);
+
+  const s = styled('fontFamily', 'Adwaita Sans, serif');
+  testing.expectEqual('"Adwaita Sans", serif', s.computed);
+}
+</script>
+
+<script id="a_css_wide_keyword_inside_a_name_is_part_of_the_name">
+{
+  // `initial` alone is the CSS-wide keyword; two identifiers are a family.
+  testing.expectEqual('"Initial Value"', styled('fontFamily', 'Initial Value').computed);
+}
+</script>
+
+<script id="an_already_quoted_name_is_unchanged">
+{
+  testing.expectEqual('"Adwaita Sans"', styled('fontFamily', '"Adwaita Sans"').computed);
+  testing.expectEqual('"Adwaita Sans"', styled('fontFamily', "'Adwaita Sans'").computed);
+}
+</script>
+
+<script id="the_font_shorthand_quotes_the_family_but_not_its_keywords">
+{
+  const r = styled('font', 'small-caps 400 16px Times New Roman');
+  testing.expectEqual('small-caps 400 16px "Times New Roman"', r.inline);
+  testing.expectEqual('"Times New Roman"', r.family);
+  testing.expectEqual('"Times New Roman"', r.computed);
+
+  const s = styled('font', 'italic bold 12px/1.5 Adwaita Sans, serif');
+  testing.expectEqual('italic bold 12px / 1.5 "Adwaita Sans", serif', s.inline);
+  testing.expectEqual('"Adwaita Sans", serif', s.family);
+
+  const t = styled('font', '12px serif');
+  testing.expectEqual('12px serif', t.inline);
+  testing.expectEqual('serif', t.family);
+}
+</script>
+</body>
