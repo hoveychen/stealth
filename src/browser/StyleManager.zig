@@ -689,7 +689,9 @@ fn rebuildIfDirty(self: *StyleManager) !void {
 
     self.declared_longhands = .empty;
 
-    const sheets = self.frame.document._style_sheets orelse return;
+    // The cascade's own list, which unlike `document.styleSheets` also holds
+    // the sheets living in shadow trees. See Document.cascadeStyleSheets.
+    const sheets = self.frame.document._cascade_sheets orelse return;
     for (sheets._sheets.items) |sheet| {
         self.parseSheet(build_arena.allocator(), sheet) catch |err| {
             log.err(.browser, "StyleManager parseSheet", .{ .err = err });

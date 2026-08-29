@@ -2925,8 +2925,8 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     // `document.styleSheets`).
     const sheet = link._sheet orelse blk: {
         const new_sheet = try CSSStyleSheet.initWithOwner(element, self);
-        const sheets = try self.document.getStyleSheets(self);
-        try sheets.add(new_sheet, self);
+        try (try self.document.cascadeStyleSheets(self)).add(new_sheet, self);
+        try (try self.document.getStyleSheets(self)).add(new_sheet, self);
         link._sheet = new_sheet;
         break :blk new_sheet;
     };
@@ -3571,6 +3571,9 @@ pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpt
         // remembers the list rather than re-deriving it.
         if (el.is(Element.Html.Style)) |style| {
             if (style._sheet) |sheet| {
+                if (self.document._cascade_sheets) |sheets| {
+                    sheets.remove(sheet);
+                }
                 if (self.document._style_sheets) |sheets| {
                     sheets.remove(sheet);
                 }
@@ -3589,6 +3592,9 @@ pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpt
             // exactly the SPA theme-switch pattern (append new sheet,
             // remove old) the feature exists to serve.
             if (link._sheet) |sheet| {
+                if (self.document._cascade_sheets) |sheets| {
+                    sheets.remove(sheet);
+                }
                 if (self.document._style_sheets) |sheets| {
                     sheets.remove(sheet);
                 }
