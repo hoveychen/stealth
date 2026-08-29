@@ -3634,6 +3634,21 @@ fn discardIFrameNavigable(iframe: *IFrame) void {
         }
     }
 
+    // Focus goes back to the parent with the navigable. Chrome answers BODY for
+    // the parent's activeElement once the iframe holding the focus is removed,
+    // and leaving the pointer on a detached frame keeps answering IFRAME -- for
+    // an element that is no longer in the document.
+    {
+        const page = frame._page;
+        var focused = page.focused_frame;
+        while (focused) |f| : (focused = f.parent) {
+            if (f == frame) {
+                page.focused_frame = parent;
+                break;
+            }
+        }
+    }
+
     // Same predicate Session.zig uses for a re-navigated frame: the parent is
     // still counting this frame's load unless the frame already reported in.
     if (frame._delays_parent_load and !frame._parent_notified) {

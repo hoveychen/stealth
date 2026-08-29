@@ -361,6 +361,48 @@
 }
 </script>
 
+<script id="active_element_hosts_focused_frame" type="module">
+{
+  // While the focus chain runs through a child frame, the PARENT's
+  // activeElement is the iframe that hosts it -- not whatever the parent last
+  // focused itself, and not its body. It stays the iframe when the element
+  // inside the child is blurred, because blur leaves the chain where it is, and
+  // it goes back to real content the moment top-level content is focused.
+  // Measured on Chrome 151, expr-b85-active-element.js, six states.
+  const state = await testing.async();
+
+  const own = document.createElement('input');
+  document.body.appendChild(own);
+
+  const f = document.createElement('iframe');
+  f.srcdoc = '<!doctype html><body><input id=i></body>';
+  f.onload = () => state.resolve(f);
+  document.body.appendChild(f);
+
+  await state.done((f) => {
+    const doc = f.contentDocument;
+    const input = doc.getElementById('i');
+
+    testing.expectEqual('BODY', document.activeElement.tagName);
+
+    input.focus();
+    testing.expectEqual('IFRAME', document.activeElement.tagName);
+    testing.expectEqual(f, document.activeElement);
+    testing.expectEqual(input, doc.activeElement);
+
+    input.blur();
+    testing.expectEqual('IFRAME', document.activeElement.tagName);
+
+    own.focus();
+    testing.expectEqual(own, document.activeElement);
+    testing.expectEqual(false, doc.hasFocus());
+
+    f.remove();
+    own.remove();
+  });
+}
+</script>
+
 <script id="focus_display_none_noop">
 {
   // Per HTML spec §6.4.4: an element inside a display:none container
