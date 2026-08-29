@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+The `CSS` namespace object. Chrome 151 carries 69 own names; this engine
+carried three, so `CSS.px` was not a function at all and eleven of the readings
+in probes/expr-b53-number-serialisation.js could not even be taken.
+
+Everything asserted below is measured with
+tools/fingerprint/probes/expr-b85-css-namespace.js, which reads the own names,
+every descriptor, and what each factory returns.
+
+Two of Chrome's 69 are deliberately absent rather than stubbed, and the test
+says so rather than pretending otherwise: `registerProperty` is only meaningful
+once the cascade honours a registered custom property's syntax and initial
+value, and `paintWorklet` needs a Worklet that can load a module.
+
+One difference is left open and asserted as it is: Chrome's prototype chain is
+`CSS -> Object.prototype` and this one is `CSS -> {} -> Object.prototype`.
+-->
+
+<script id=css_namespace_own_names>
+{
+  // Chrome's order is its IDL order: `highlights` first, then every operation
+  // in one alphabetical run -- `escape` and `supports` sit among the unit
+  // factories rather than beside each other -- and `paintWorklet` last.
+  const CHROME = ('highlights Hz Q cap ch cm cqb cqh cqi cqmax cqmin cqw deg dpcm dpi dppx ' +
+    'dvb dvh dvi dvmax dvmin dvw em escape ex fr grad ic in kHz lh lvb lvh lvi lvmax lvmin ' +
+    'lvw mm ms number pc percent pt px rad rcap rch registerProperty rem rex ric rlh s ' +
+    'supports svb svh svi svmax svmin svw turn vb vh vi vmax vmin vw x paintWorklet').split(' ');
+  const NOT_IMPLEMENTED = ['registerProperty', 'paintWorklet'];
+  const want = CHROME.filter((n) => !NOT_IMPLEMENTED.includes(n));
+
+  const got = Object.getOwnPropertyNames(CSS);
+  testing.expectEqual(want.join(','), got.join(','));
+
+  // Absent, not present-and-inert.
+  for (const n of NOT_IMPLEMENTED) {
+    testing.expectEqual(false, n in CSS);
+  }
+}
+</script>
+
+<script id=css_namespace_descriptors>
+{
+  // Every name is a writable, enumerable, configurable data property, every
+  // function reports arity 1 and its own name, and `highlights` is the one
+  // accessor.
+  const wrong = [];
+  for (const n of Object.getOwnPropertyNames(CSS)) {
+    const d = Object.getOwnPropertyDescriptor(CSS, n);
+    if (d.enumerable !== true) wrong.push(n + ': enumerable ' + d.enumerable);
+    if (d.configurable !== true) wrong.push(n + ': configurable ' + d.configurable);
+    if (n === 'highlights') {
+      if (typeof CSS[n] !== 'object') wrong.push(n + ': kind ' + typeof CSS[n]);
+      continue;
+    }
+    if (d.writable !== true) wrong.push(n + ': writable ' + d.writable);
+    if (typeof CSS[n] !== 'function') wrong.push(n + ': kind ' + typeof CSS[n]);
+    else {
+      if (CSS[n].length !== 1) wrong.push(n + ': length ' + CSS[n].length);
+      if (CSS[n].name !== n) wrong.push(n + ': name ' + CSS[n].name);
+    }
+  }
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=css_unit_factories_build_unit_values>
+{
+  // The declaration name is not always the unit: `CSS.Hz(3)` is `3hz`, and
+  // `CSS.Q`/`CSS.kHz` likewise report lower case. `number` has no suffix at all
+  // and `percent` serialises as `%`.
+  const CASES = [
+    ['px', 'px', '3px'], ['em', 'em', '3em'], ['ex', 'ex', '3ex'],
+    ['ch', 'ch', '3ch'], ['rem', 'rem', '3rem'], ['cm', 'cm', '3cm'],
+    ['mm', 'mm', '3mm'], ['Q', 'q', '3q'], ['in', 'in', '3in'],
+    ['pt', 'pt', '3pt'], ['pc', 'pc', '3pc'],
+    ['deg', 'deg', '3deg'], ['grad', 'grad', '3grad'], ['rad', 'rad', '3rad'],
+    ['turn', 'turn', '3turn'],
+    ['s', 's', '3s'], ['ms', 'ms', '3ms'],
+    ['Hz', 'hz', '3hz'], ['kHz', 'khz', '3khz'],
+    ['dpi', 'dpi', '3dpi'], ['dpcm', 'dpcm', '3dpcm'],
+    ['dppx', 'dppx', '3dppx'], ['x', 'x', '3x'],
+    ['fr', 'fr', '3fr'],
+    ['number', 'number', '3'], ['percent', 'percent', '3%'],
+    ['cqw', 'cqw', '3cqw'], ['cqmax', 'cqmax', '3cqmax'],
+    ['cap', 'cap', '3cap'], ['rcap', 'rcap', '3rcap'], ['rch', 'rch', '3rch'],
+    ['rex', 'rex', '3rex'], ['ric', 'ric', '3ric'], ['ic', 'ic', '3ic'],
+    ['lh', 'lh', '3lh'], ['rlh', 'rlh', '3rlh'],
+    ['lvw', 'lvw', '3lvw'], ['lvmin', 'lvmin', '3lvmin'],
+    ['svh', 'svh', '3svh'], ['svmax', 'svmax', '3svmax'],
+    ['dvb', 'dvb', '3dvb'], ['dvi', 'dvi', '3dvi'],
+    ['vw', 'vw', '3vw'], ['vmax', 'vmax', '3vmax'],
+  ];
+  const wrong = [];
+  for (const [fn, unit, str] of CASES) {
+    const v = CSS[fn](3);
+    if (v.unit !== unit) wrong.push(fn + ' unit: want ' + unit + ', got ' + v.unit);
+    if (String(v) !== str) wrong.push(fn + ' string: want ' + str + ', got ' + String(v));
+    if (v.value !== 3) wrong.push(fn + ' value: want 3, got ' + v.value);
+    if (Object.prototype.toString.call(v) !== '[object CSSUnitValue]') {
+      wrong.push(fn + ' tag: ' + Object.prototype.toString.call(v));
+    }
+  }
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=css_unit_factory_types>
+{
+  // The numeric type each factory carries, which is what `add` and `to` check
+  // against. Every unit added for this is a length; the pre-existing families
+  // are here as the control.
+  const type = (fn) => JSON.stringify(CSS[fn](1).type());
+  const wrong = [];
+  for (const fn of ['px', 'cap', 'rcap', 'rch', 'rex', 'ric',
+                    'lvw', 'lvmin', 'svh', 'svmax', 'dvb', 'dvi']) {
+    if (type(fn) !== '{"length":1}') wrong.push(fn + ': ' + type(fn));
+  }
+  if (type('deg') !== '{"angle":1}') wrong.push('deg: ' + type('deg'));
+  if (type('s') !== '{"time":1}') wrong.push('s: ' + type('s'));
+  if (type('Hz') !== '{"frequency":1}') wrong.push('Hz: ' + type('Hz'));
+  if (type('dppx') !== '{"resolution":1}') wrong.push('dppx: ' + type('dppx'));
+  if (type('fr') !== '{"flex":1}') wrong.push('fr: ' + type('fr'));
+  if (type('percent') !== '{"percent":1}') wrong.push('percent: ' + type('percent'));
+  if (type('number') !== '{}') wrong.push('number: ' + type('number'));
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=css_namespace_shape>
+{
+  // The parts of `window.CSS` that already match Chrome, asserted so a future
+  // change to the namespace machinery cannot quietly move them.
+  const d = Object.getOwnPropertyDescriptor(window, 'CSS');
+  testing.expectEqual(true, 'value' in d);
+  testing.expectEqual(true, d.writable);
+  testing.expectEqual(false, d.enumerable);
+  testing.expectEqual(true, d.configurable);
+  testing.expectEqual(true, window.CSS === window.CSS);
+  testing.expectEqual('[object CSS]', Object.prototype.toString.call(CSS));
+
+  // And the one that does not: Chrome's chain is `CSS -> Object.prototype`,
+  // this one has an empty interface prototype in between. Asserted as it IS,
+  // so the day it is fixed this line fails and gets updated rather than the
+  // difference going unnoticed.
+  testing.expectEqual(false, Object.getPrototypeOf(CSS) === Object.prototype);
+  testing.expectEqual(true, Object.getPrototypeOf(Object.getPrototypeOf(CSS)) === Object.prototype);
+}
+</script>

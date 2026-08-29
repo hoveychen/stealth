@@ -21,6 +21,7 @@ const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const units = @import("../css/units.zig");
 const HighlightRegistry = @import("css/highlights.zig").HighlightRegistry;
+const typed_om = @import("css/typed_om.zig");
 
 const CSS = @This();
 _pad: bool = false,
@@ -192,7 +193,34 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
         pub const empty_with_no_proto = true;
+
+        // Still open: the prototype chain here is `CSS -> {} -> Object.prototype`
+        // where Chrome's is `CSS -> Object.prototype` -- one extra, empty link.
+        // Everything else about `window.CSS` already matches, measured with
+        // probes/expr-b85-css-namespace.js: a data property, writable,
+        // non-enumerable, configurable, the same object on every read, and
+        // `[object CSS]`.
+        //
+        // Snapshot.zig's `namespace_global` is the path that inherits straight
+        // from %Object.prototype%, and setting it here does nothing: that path
+        // builds the object from the snapshot's global, and this one is handed
+        // out by a Window accessor (`Window._css`) and wrapped at runtime
+        // instead. Moving CSS onto that path is its own change.
     };
+
+    // Chrome's own-property order is its IDL order, and the enumeration is
+    // what a page sees: `highlights` first, then every operation in one
+    // alphabetical run with `escape`, `registerProperty` and `supports` sitting
+    // among the unit factories rather than beside each other. Measured with
+    // probes/expr-b85-css-namespace.js. The declarations below are in that
+    // order because the bridge emits own properties in declaration order.
+    //
+    // Two of Chrome's 69 names are deliberately absent rather than stubbed:
+    // `registerProperty`, which is only meaningful once the cascade honours a
+    // registered custom property's syntax and initial value, and
+    // `paintWorklet`, which needs a Worklet that can actually load a module.
+    // A present-but-inert name is a different lie from an absent one and this
+    // repo has no way to measure which a guard prefers, so neither is invented.
 
     // `CSS.highlights` is an own accessor on the namespace object and answers
     // the same HighlightRegistry every time (measured on Chrome 150).
@@ -201,11 +229,93 @@ pub const JsApi = struct {
         return frame.window.getHighlights(frame);
     }
 
+    /// One numeric factory per CSS unit. Chrome's `CSS` namespace carries 64 of
+    /// them; this engine carried none, so `CSS.px` was not a function.
+    ///
+    /// The declaration name is the JS name and it is not always the unit: the
+    /// factories are `Hz`, `kHz` and `Q`, and what they build reports `hz`,
+    /// `khz` and `q`. Measured over all 64 -- `CSS.Hz(3)` is `3hz`, not `3Hz`.
+    fn unitFactory(comptime unit: typed_om.Unit) fn (f64, *Frame) anyerror!*typed_om.CSSUnitValue {
+        return struct {
+            fn factory(value: f64, frame: *Frame) !*typed_om.CSSUnitValue {
+                return typed_om.CSSUnitValue.create(value, unit, frame);
+            }
+        }.factory;
+    }
+
+    pub const Hz = bridge.function(unitFactory(.hz), .{ .static = true });
+    pub const Q = bridge.function(unitFactory(.q), .{ .static = true });
+    pub const cap = bridge.function(unitFactory(.cap), .{ .static = true });
+    pub const ch = bridge.function(unitFactory(.ch), .{ .static = true });
+    pub const cm = bridge.function(unitFactory(.cm), .{ .static = true });
+    pub const cqb = bridge.function(unitFactory(.cqb), .{ .static = true });
+    pub const cqh = bridge.function(unitFactory(.cqh), .{ .static = true });
+    pub const cqi = bridge.function(unitFactory(.cqi), .{ .static = true });
+    pub const cqmax = bridge.function(unitFactory(.cqmax), .{ .static = true });
+    pub const cqmin = bridge.function(unitFactory(.cqmin), .{ .static = true });
+    pub const cqw = bridge.function(unitFactory(.cqw), .{ .static = true });
+    pub const deg = bridge.function(unitFactory(.deg), .{ .static = true });
+    pub const dpcm = bridge.function(unitFactory(.dpcm), .{ .static = true });
+    pub const dpi = bridge.function(unitFactory(.dpi), .{ .static = true });
+    pub const dppx = bridge.function(unitFactory(.dppx), .{ .static = true });
+    pub const dvb = bridge.function(unitFactory(.dvb), .{ .static = true });
+    pub const dvh = bridge.function(unitFactory(.dvh), .{ .static = true });
+    pub const dvi = bridge.function(unitFactory(.dvi), .{ .static = true });
+    pub const dvmax = bridge.function(unitFactory(.dvmax), .{ .static = true });
+    pub const dvmin = bridge.function(unitFactory(.dvmin), .{ .static = true });
+    pub const dvw = bridge.function(unitFactory(.dvw), .{ .static = true });
+    pub const em = bridge.function(unitFactory(.em), .{ .static = true });
     pub const escape = bridge.function(CSS.escape, .{ .static = true });
+    pub const ex = bridge.function(unitFactory(.ex), .{ .static = true });
+    pub const fr = bridge.function(unitFactory(.fr), .{ .static = true });
+    pub const grad = bridge.function(unitFactory(.grad), .{ .static = true });
+    pub const ic = bridge.function(unitFactory(.ic), .{ .static = true });
+    pub const in = bridge.function(unitFactory(.in), .{ .static = true });
+    pub const kHz = bridge.function(unitFactory(.khz), .{ .static = true });
+    pub const lh = bridge.function(unitFactory(.lh), .{ .static = true });
+    pub const lvb = bridge.function(unitFactory(.lvb), .{ .static = true });
+    pub const lvh = bridge.function(unitFactory(.lvh), .{ .static = true });
+    pub const lvi = bridge.function(unitFactory(.lvi), .{ .static = true });
+    pub const lvmax = bridge.function(unitFactory(.lvmax), .{ .static = true });
+    pub const lvmin = bridge.function(unitFactory(.lvmin), .{ .static = true });
+    pub const lvw = bridge.function(unitFactory(.lvw), .{ .static = true });
+    pub const mm = bridge.function(unitFactory(.mm), .{ .static = true });
+    pub const ms = bridge.function(unitFactory(.ms), .{ .static = true });
+    pub const number = bridge.function(unitFactory(.number), .{ .static = true });
+    pub const pc = bridge.function(unitFactory(.pc), .{ .static = true });
+    pub const percent = bridge.function(unitFactory(.percent), .{ .static = true });
+    pub const pt = bridge.function(unitFactory(.pt), .{ .static = true });
+    pub const px = bridge.function(unitFactory(.px), .{ .static = true });
+    pub const rad = bridge.function(unitFactory(.rad), .{ .static = true });
+    pub const rcap = bridge.function(unitFactory(.rcap), .{ .static = true });
+    pub const rch = bridge.function(unitFactory(.rch), .{ .static = true });
+    pub const rem = bridge.function(unitFactory(.rem), .{ .static = true });
+    pub const rex = bridge.function(unitFactory(.rex), .{ .static = true });
+    pub const ric = bridge.function(unitFactory(.ric), .{ .static = true });
+    pub const rlh = bridge.function(unitFactory(.rlh), .{ .static = true });
+    pub const s = bridge.function(unitFactory(.s), .{ .static = true });
     pub const supports = bridge.function(CSS.supports, .{ .static = true });
+    pub const svb = bridge.function(unitFactory(.svb), .{ .static = true });
+    pub const svh = bridge.function(unitFactory(.svh), .{ .static = true });
+    pub const svi = bridge.function(unitFactory(.svi), .{ .static = true });
+    pub const svmax = bridge.function(unitFactory(.svmax), .{ .static = true });
+    pub const svmin = bridge.function(unitFactory(.svmin), .{ .static = true });
+    pub const svw = bridge.function(unitFactory(.svw), .{ .static = true });
+    pub const turn = bridge.function(unitFactory(.turn), .{ .static = true });
+    pub const vb = bridge.function(unitFactory(.vb), .{ .static = true });
+    pub const vh = bridge.function(unitFactory(.vh), .{ .static = true });
+    pub const vi = bridge.function(unitFactory(.vi), .{ .static = true });
+    pub const vmax = bridge.function(unitFactory(.vmax), .{ .static = true });
+    pub const vmin = bridge.function(unitFactory(.vmin), .{ .static = true });
+    pub const vw = bridge.function(unitFactory(.vw), .{ .static = true });
+    pub const x = bridge.function(unitFactory(.x), .{ .static = true });
 };
 
 const testing = @import("../../testing.zig");
 test "WebApi: CSS" {
     try testing.htmlRunner("css.html", .{});
+}
+
+test "WebApi: CSS namespace" {
+    try testing.htmlRunner("css/css_namespace.html", .{});
 }
