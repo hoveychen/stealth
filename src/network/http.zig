@@ -276,6 +276,19 @@ pub const ResponseTimes = struct {
     app_connect: u64 = 0,
     pre_transfer: u64 = 0,
     start_transfer: u64 = 0,
+
+    /// Whether the response came over TLS, which the five timers above cannot
+    /// say on their own: a REUSED https connection reports `app_connect = 0`
+    /// exactly like a plain http one, and the two get different answers for
+    /// `secureConnectionStart`. Chrome hands back `fetchStart` for the first
+    /// and 0 for the second (measured, probes/expr-b86-connection-reuse.js:
+    /// four reused https entries, all `secureConnectionStart == fetchStart`).
+    ///
+    /// It lives here rather than as an argument at the milestone call sites
+    /// because it is a property of the connection the response arrived over,
+    /// the same as the timers — and because one of those five call sites, the
+    /// navigation, does not have the URL in hand.
+    secure: bool = false,
 };
 
 /// What the redirect chain a transfer walked looks like to Navigation Timing.
@@ -757,6 +770,14 @@ pub const Connection = struct {
             .app_connect = self.getTimerMicros(.appconnect_time_t),
             .pre_transfer = self.getTimerMicros(.pretransfer_time_t),
             .start_transfer = self.getTimerMicros(.starttransfer_time_t),
+            // The URL curl actually ended on, so a redirect that left https
+            // for http is reported as what it landed on rather than what it
+            // started as.
+            .secure = blk: {
+                const url = self.getEffectiveUrl() catch break :blk false;
+                if (url == null) break :blk false;
+                break :blk std.mem.startsWith(u8, std.mem.span(url), "https://");
+            },
         };
     }
 
