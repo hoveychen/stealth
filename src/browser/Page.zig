@@ -66,6 +66,14 @@ broadcast_sequence: u64 = 0,
 // Not exhaustive: some swallowed-callback paths aren't routed here.
 js_error_count: usize = 0,
 
+// Which documents `document.hasFocus()` answers true for. Focus lives in one
+// browsing context at a time, so every focus() bumps this counter and stamps
+// the focused document and its ancestors with it (Document._focus_epoch); a
+// document whose stamp is stale is one focus has since left. Stamping is how
+// the frames focus moved *away* from go false without walking the frame tree
+// or holding a pointer that a torn-down frame would dangle.
+focus_epoch: u64 = 1,
+
 // DOM object factory scoped to this Page's documents.
 factory: Factory,
 

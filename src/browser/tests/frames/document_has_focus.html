@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<head></head>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+Measured on Chrome 151 with tools/fingerprint/probes/expr-frame-has-focus.js:
+
+  { top: true, childBeforeFocus: false, topWhileChildBlurred: true,
+    childAfterFocus: true, topAfterChildFocus: true, childAfterBlur: true }
+
+The top document always answers true while the window has focus. A child frame
+answers false until focus moves into it, and once it has, it keeps answering
+true after that element is blurred -- blur walks focus back to the frame's own
+body, not out of the frame. A frame that answers true before anything inside it
+was ever focused is a headless tell; the Cloudflare widget frame reads exactly
+this (README, "the poll was lying").
+-->
+
+<script id="top_document_has_focus">
+{
+  testing.expectTrue(document.hasFocus());
+}
+</script>
+
+<script id="child_frame_has_no_focus_until_it_is_given">
+{
+  const f = document.createElement('iframe');
+  document.body.appendChild(f);
+  const d = f.contentDocument;
+
+  testing.expectFalse(d.hasFocus());
+  // the top document keeps its own answer while the child has none
+  testing.expectTrue(document.hasFocus());
+
+  const inp = d.body.appendChild(d.createElement('input'));
+  inp.focus();
+  testing.expectEqual(inp, d.activeElement);
+  testing.expectTrue(d.hasFocus());
+  // and the top document is still true with focus inside the child
+  testing.expectTrue(document.hasFocus());
+
+  // blur only walks focus back to the frame's body
+  inp.blur();
+  testing.expectTrue(d.hasFocus());
+
+  f.remove();
+}
+</script>
+
+<script id="focus_moves_out_of_a_child_frame">
+{
+  const a = document.body.appendChild(document.createElement('iframe'));
+  const b = document.body.appendChild(document.createElement('iframe'));
+  const ai = a.contentDocument.body.appendChild(a.contentDocument.createElement('input'));
+  const bi = b.contentDocument.body.appendChild(b.contentDocument.createElement('input'));
+
+  ai.focus();
+  testing.expectTrue(a.contentDocument.hasFocus());
+  testing.expectFalse(b.contentDocument.hasFocus());
+
+  bi.focus();
+  testing.expectFalse(a.contentDocument.hasFocus());
+  testing.expectTrue(b.contentDocument.hasFocus());
+
+  // focusing something in the top document takes it back from both
+  const own = document.body.appendChild(document.createElement('input'));
+  own.focus();
+  testing.expectFalse(a.contentDocument.hasFocus());
+  testing.expectFalse(b.contentDocument.hasFocus());
+  testing.expectTrue(document.hasFocus());
+
+  a.remove();
+  b.remove();
+  own.remove();
+}
+</script>
+</body>

@@ -78,6 +78,8 @@ _elements_by_id: std.StringHashMapUnmanaged(*Element) = .empty,
 // Track IDs that were removed from the map - they might have duplicates in the tree
 _removed_ids: std.StringHashMapUnmanaged(void) = .empty,
 _active_element: ?*Element = null,
+// Page.focus_epoch at the moment focus last entered this document (0 = never).
+_focus_epoch: u64 = 0,
 _style_sheets: ?*StyleSheetList = null,
 _implementation: ?*DOMImplementation = null,
 _fonts: ?*FontFaceSet = null,
@@ -1849,9 +1851,20 @@ pub fn getAdoptedStyleSheets(self: *Document, frame: *Frame) !js.Object.Global {
     return self._adopted_style_sheets.?;
 }
 
-pub fn hasFocus(_: *Document) bool {
-    log.debug(.not_implemented, "Document.hasFocus", .{});
-    return true;
+// Measured on Chrome 151 (probe tools/fingerprint/probes/expr-frame-has-focus.js):
+// the top document always answers true -- the window has the system focus and
+// we are never backgrounded -- while a child frame answers false until focus
+// moves into it, and keeps answering true afterwards even once the focused
+// element is blurred, because blur walks focus back to that frame's own body
+// rather than out of the frame. A child frame that answers true before anything
+// inside it was focused is a headless tell, and the Cloudflare widget frame
+// reads it.
+pub fn hasFocus(self: *Document) bool {
+    const frame = self._frame orelse return false;
+    if (frame.parent == null) {
+        return true;
+    }
+    return self._focus_epoch == frame._page.focus_epoch;
 }
 
 pub fn setAdoptedStyleSheets(self: *Document, sheets: js.Object) !void {

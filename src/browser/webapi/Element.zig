@@ -1564,6 +1564,19 @@ pub fn focus(self: *Element, frame: *Frame) !void {
     const old_active = doc._active_element;
     doc._active_element = self;
 
+    // Focus lives in one browsing context at a time: stamp this document and
+    // every frame above it with a fresh epoch so `document.hasFocus()` answers
+    // true here and goes false in whatever frame held it before.
+    {
+        const page = frame._page;
+        page.focus_epoch += 1;
+        doc._focus_epoch = page.focus_epoch;
+        var ancestor = doc._frame;
+        while (ancestor) |f| : (ancestor = f.parent) {
+            f.document._focus_epoch = page.focus_epoch;
+        }
+    }
+
     if (old_active) |old| {
         if (old == self) {
             return;
