@@ -117,10 +117,37 @@ pub fn isKnownPropertyName(name: []const u8) bool {
     return isAliasSpelling(name);
 }
 
+/// Whether this computed view has nothing to report, because its element is not
+/// in a document with a browsing context.
+///
+/// Chrome answers an EMPTY declaration there -- `length` 0, `item(0)` "", every
+/// property "" including `display` and custom properties -- and this engine
+/// answered full values, which is one expression a page can tell the two apart
+/// with. Measured with probes/expr-b85-detached-computed.js.
+///
+/// The predicate is not "has no box": a `display: none` element is in the
+/// document, has no box, and has a complete computed style. It is being out of
+/// a browsing context, and that covers a shape easy to miss -- an element
+/// CONNECTED to a `createHTMLDocument`, whose document has no browsing context
+/// of its own. This engine answered the viewport's width for one of those.
+///
+/// Asked per call rather than cached: the declaration object is live, so the
+/// same object reports values while the element is attached and empties the
+/// moment it is removed.
+fn computedIsEmpty(self: *const CSSStyleDeclaration) bool {
+    if (!self._is_computed) return false;
+    const element = self._element orelse return false;
+    const node = element.asNode();
+    if (!node.isConnected()) return true;
+    const document = node.ownerDocument(self._frame) orelse return true;
+    return document._frame == null;
+}
+
 pub fn length(self: *const CSSStyleDeclaration) u32 {
     // A computed view enumerates every longhand Chrome computes, whether or not
     // the page set any of them, so its length does not depend on _properties.
     if (self._is_computed) {
+        if (self.computedIsEmpty()) return 0;
         return chrome_properties.computed.len;
     }
     return @intCast(self._properties.len());
@@ -141,6 +168,7 @@ pub fn indexedLength(self: *const CSSStyleDeclaration) u32 {
 /// the declaration object is cached per element for the frame's lifetime, so a
 /// stored list would go stale the moment the page declares another one.
 fn computedCustomNames(self: *const CSSStyleDeclaration) [][]const u8 {
+    if (self.computedIsEmpty()) return &.{};
     const element = self._element orelse return &.{};
     var names: std.ArrayList([]const u8) = .empty;
     self._frame._style_manager.collectCustomPropertyNames(element, &names) catch return &.{};
@@ -161,6 +189,7 @@ pub fn indexedItem(self: *const CSSStyleDeclaration, index: u32) []const u8 {
 
 pub fn item(self: *const CSSStyleDeclaration, index: u32) []const u8 {
     if (self._is_computed) {
+        if (self.computedIsEmpty()) return "";
         if (index >= chrome_properties.computed.len) {
             return "";
         }
@@ -228,6 +257,7 @@ fn clampAlphaValue(property_name: []const u8, value: []const u8) ?[]const u8 {
 }
 
 fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame, surface: Surface) []const u8 {
+    if (self.computedIsEmpty()) return "";
     const value = self.propertyValueAt(property_name, frame, surface, 0);
     // On the computed view only, and on both surfaces it reports: the CSS-OM
     // reads the used value here and the Typed OM the computed one, and Chrome
@@ -5740,6 +5770,10 @@ test "WebApi: CSSStyleDeclaration computed relative units" {
 
 test "WebApi: CSSStyleDeclaration computed alpha clamp" {
     try testing.htmlRunner("css/computed_alpha_clamp.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed style of a detached element" {
+    try testing.htmlRunner("css/computed_detached.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration unrendered percentages" {
