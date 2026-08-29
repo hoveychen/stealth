@@ -271,8 +271,8 @@
       // this one; a full version ending .0.0.0 is what would be anomalous.
       testing.expectEqual(3, v.fullVersionList.length);
       testing.expectEqual({brand: 'Not=A?Brand', version: '99.0.0.0'}, v.fullVersionList[0]);
-      testing.expectEqual({brand: 'Google Chrome', version: '151.0.7922.137'}, v.fullVersionList[1]);
-      testing.expectEqual({brand: 'Chromium', version: '151.0.7922.137'}, v.fullVersionList[2]);
+      testing.expectEqual({brand: 'Google Chrome', version: '151.0.7922.174'}, v.fullVersionList[1]);
+      testing.expectEqual({brand: 'Chromium', version: '151.0.7922.174'}, v.fullVersionList[2]);
 
       // Not requested, so not returned.
       testing.expectEqual(undefined, v.uaFullVersion);
@@ -336,7 +336,7 @@
     const v = await navigator.userAgentData.getHighEntropyValues(['uaFullVersion']);
     state.resolve();
     await state.done(() => {
-      testing.expectEqual('151.0.7922.137', v.uaFullVersion);
+      testing.expectEqual('151.0.7922.174', v.uaFullVersion);
       // Same major as the brands and the user-agent string.
       testing.expectEqual(true, v.uaFullVersion.startsWith('151.'));
       testing.expectEqual(true, navigator.userAgent.includes('Chrome/151.'));
