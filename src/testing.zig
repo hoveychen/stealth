@@ -918,7 +918,12 @@ fn corsQueryParam(query: []const u8, key: []const u8) ?[]const u8 {
 // a plausible small number.
 const TIMING_ALLOW_BODY = "t" ** 512;
 
-fn timingAllowHandler(req: *std.http.Server.Request, path: []const u8) !bool {
+fn timingAllowHandler(req: *std.http.Server.Request, raw_path: []const u8) !bool {
+    // The query is dropped rather than matched on: a test needs two entries
+    // whose names differ but whose RESPONSE is identical -- same
+    // Timing-Allow-Origin, same bytes -- so that a difference between them is
+    // the request's doing and not the response's. `?plain` is that spelling.
+    const path = if (std.mem.indexOfScalar(u8, raw_path, '?')) |i| raw_path[0..i] else raw_path;
     // The `frame-` pair is the same two responses as HTML, so the no-cors half
     // of the rule can be asked with an <iframe>. Whether the request went out
     // in CORS mode is a second, independent gate, and a fetch cannot ask about
@@ -931,17 +936,21 @@ fn timingAllowHandler(req: *std.http.Server.Request, path: []const u8) !bool {
         return false;
     }
     const framed = std.mem.startsWith(u8, path, PREFIX ++ "frame-");
+    // The `script-` pair is the third request mode the rule distinguishes: an
+    // element load that IS in CORS mode because it carries `crossorigin`,
+    // as against fetch (always CORS) and an <iframe> (never).
+    const scripted = std.mem.startsWith(u8, path, PREFIX ++ "script-");
     const tail = path[PREFIX.len..];
-    const allowed = if (std.mem.eql(u8, tail, "on") or std.mem.eql(u8, tail, "frame-on"))
+    const allowed = if (std.mem.eql(u8, tail, "on") or std.mem.eql(u8, tail, "frame-on") or std.mem.eql(u8, tail, "script-on"))
         true
-    else if (std.mem.eql(u8, tail, "off") or std.mem.eql(u8, tail, "frame-off"))
+    else if (std.mem.eql(u8, tail, "off") or std.mem.eql(u8, tail, "frame-off") or std.mem.eql(u8, tail, "script-off"))
         false
     else
         return false;
 
     var headers: [3]std.http.Header = undefined;
     var n: usize = 0;
-    headers[n] = .{ .name = "Content-Type", .value = if (framed) "text/html" else "text/plain" };
+    headers[n] = .{ .name = "Content-Type", .value = if (framed) "text/html" else if (scripted) "application/javascript" else "text/plain" };
     n += 1;
     // Allow-Origin so the page may read the BODY; Timing-Allow-Origin is a
     // separate opt-in governing whether it may read the TIMING. Varying only
@@ -952,13 +961,16 @@ fn timingAllowHandler(req: *std.http.Server.Request, path: []const u8) !bool {
         headers[n] = .{ .name = "Timing-Allow-Origin", .value = "*" };
         n += 1;
     }
-    try req.respond(if (framed) TIMING_ALLOW_BODY_HTML else TIMING_ALLOW_BODY, .{ .extra_headers = headers[0..n] });
+    try req.respond(if (framed) TIMING_ALLOW_BODY_HTML else if (scripted) TIMING_ALLOW_BODY_JS else TIMING_ALLOW_BODY, .{ .extra_headers = headers[0..n] });
     return true;
 }
 
 // 512 bytes either way: the HTML spelling is a comment, so a framed copy
 // weighs exactly what the plain one does and one expected number covers both.
 const TIMING_ALLOW_BODY_HTML = "<!--" ++ "t" ** 505 ++ "-->";
+
+// 512 bytes again, as a comment so the script parses and runs to nothing.
+const TIMING_ALLOW_BODY_JS = "//" ++ "t" ** 510;
 
 // What a subresource request carried, recorded by the server so a test can ask
 // about headers it has no other way to see: the body of an <img> or a

@@ -647,6 +647,12 @@ pub const Script = struct {
     // headers while the transfer still exists.
     perf_labels: HttpClient.ResponseLabels = .{},
 
+    // Whether the fetch went out in CORS mode -- `crossorigin` on the element,
+    // or a module script, which is CORS either way. Read off the transfer
+    // rather than threaded through the four construction sites, and only used
+    // to say whether a cross-origin entry's status is the page's to read.
+    perf_cors: bool = false,
+
     // The connection walk behind the response, for the entry's milestones.
     perf_times: HttpClient.ResponseTimes = .{},
 
@@ -751,6 +757,7 @@ pub const Script = struct {
         self.perf_next_hop_protocol = transfer.nextHopProtocol();
         self.perf_labels = transfer.responseLabels();
         self.perf_times = transfer.responseTimes();
+        self.perf_cors = transfer.req.cors;
         if (transfer.responseStatus() != 200) {
             log.info(.http, "script header", .{
                 .req = transfer,
@@ -868,7 +875,10 @@ pub const Script = struct {
             .decoded_body_size = len,
         };
         t.setConnectionMilestones(self.perf_times, perf);
-        self.perf_timing = perf.resourceLoaded(self.url, t, .{ .timing_allow_origin = self.perf_labels.timingAllowOrigin() }, exec) catch |err| {
+        self.perf_timing = perf.resourceLoaded(self.url, t, .{
+            .timing_allow_origin = self.perf_labels.timingAllowOrigin(),
+            .cors_response = self.perf_cors,
+        }, exec) catch |err| {
             log.warn(.http, "script resource timing", .{ .err = err, .req = self.url });
             return;
         };
