@@ -313,5 +313,76 @@ pub const ResCookie = struct {
     size: usize = 0,
     httpOnly: bool = false,
     secure: bool = false,
-    sameSite: []const u8 = "None",
+    // Absent unless a test names it: a cookie that never carried a SameSite
+    // attribute doesn't get the key at all, so "None" is the wrong default
+    // to hold every other cookie test to.
+    sameSite: ?[]const u8 = null,
 };
+
+// `expectSentResult` is a subset match, so it can say what a key holds but
+// never that the key is missing. Absence has to be read off the parsed
+// message, the way `sentBytesFor` in network.zig reads byte counts.
+fn sentCookie(ctx: anytype, id: i64, name: []const u8) !std.json.ObjectMap {
+    for (ctx.received.items) |msg| {
+        const obj = msg.object;
+        const msg_id = obj.get("id") orelse continue;
+        if (msg_id != .integer or msg_id.integer != id) continue;
+        const result = (obj.get("result") orelse continue).object;
+        for ((result.get("cookies") orelse continue).array.items) |cookie| {
+            const cookie_name = (cookie.object.get("name") orelse continue).string;
+            if (std.mem.eql(u8, cookie_name, name)) {
+                return cookie.object;
+            }
+        }
+    }
+    return error.CookieNotFound;
+}
+
+// Chrome reports `sameSite` as an absent property when the cookie never
+// carried a SameSite attribute. The Lax default lives in the sending
+// behaviour, not in what CDP says the cookie has. Measured on
+// scrapingcourse.com: the server-set `AWSALB` arrives with no attribute and
+// Chrome's Network.getAllCookies omits the key, while we reported "Lax".
+test "cdp.Storage: sameSite absent when it was never specified" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+    const bc = try ctx.loadBrowserContext(.{ .id = "BID-SS" });
+
+    // The way a server sets one: a Set-Cookie header with no SameSite.
+    const jar = &bc.session.cookie_jar;
+    try jar.add(
+        try Cookie.parse(jar.allocator, "https://example.com/", "header=1"),
+        lp.datetime.timestamp(.real),
+        true,
+    );
+
+    try ctx.processMessage(.{
+        .id = 1,
+        .method = "Storage.setCookies",
+        .params = .{
+            .cookies = &[_]CdpCookie{
+                .{ .name = "implicit", .value = "2", .url = "https://example.com/" },
+                .{ .name = "explicit", .value = "3", .url = "https://example.com/", .sameSite = .Strict },
+            },
+            .browserContextId = "BID-SS",
+        },
+    });
+    try ctx.expectSentResult(null, .{ .id = 1 });
+
+    try ctx.processMessage(.{
+        .id = 2,
+        .method = "Storage.getCookies",
+        .params = .{ .browserContextId = "BID-SS" },
+    });
+    try ctx.expectSentResult(.{
+        .cookies = &[_]ResCookie{
+            .{ .name = "header", .value = "1", .domain = "example.com", .size = 7 },
+            .{ .name = "implicit", .value = "2", .domain = "example.com", .size = 9, .secure = true },
+            .{ .name = "explicit", .value = "3", .domain = "example.com", .size = 9, .secure = true, .sameSite = "Strict" },
+        },
+    }, .{ .id = 2 });
+
+    try std.testing.expect((try sentCookie(&ctx, 2, "header")).get("sameSite") == null);
+    try std.testing.expect((try sentCookie(&ctx, 2, "implicit")).get("sameSite") == null);
+    try std.testing.expectEqualStrings("Strict", (try sentCookie(&ctx, 2, "explicit")).get("sameSite").?.string);
+}
