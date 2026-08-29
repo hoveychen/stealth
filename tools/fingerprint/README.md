@@ -20285,3 +20285,64 @@ that looked like a candidate -- ours a flat 10737418240 where Chrome was seen at
 10737418391 -- is not one: asked three times in a row on a fresh page, both arms
 answer exactly 10 GiB and never vary. Chrome's other figure came from the second
 document, where usage is no longer zero.
+
+## cf-scrapingcourse: the last unpointed-at surface is the same on both arms
+
+B60 left one面 untouched on this door: the plaintext the **top** document reads
+on its way into r1. `report-charsrc` hooks `String.prototype.charCodeAt` and
+`charAt` and reports any receiver at least `MIN` characters long, and its MIN
+was 1000 — so the seven long strings it had already compared were the only ones
+anyone had looked at, and they were byte-for-byte the same. Anything shorter
+had never been read.
+
+`report-charsrc-top` is the same hook with the floor dropped to **120**, the cap
+raised to 90, and the install restricted to the top document — the widget's own
+reads are already accounted for and at that floor they drown everything else.
+
+**One trap, worth writing down because it looks exactly like a knob that changed
+nothing:** the first version put `hash(s)` in the dedup key. At MIN 1000 that is
+paid once per long string; at MIN 120 it is paid on *every character read of
+every string over 120 characters*, which is quadratic. The challenge never
+finished a single round — `rounds=[]`, no ticket, one beacon saying the hook
+installed. The key has to be cheap (`length` plus the first and last character
+codes) with the hash computed only on first sight. And the hook has to keep a
+reference to the *unhooked* `charCodeAt` to build that key, or it recurses.
+
+**The comparison has to be against a REFUSED Chrome run.** A Chrome that gets
+its ticket walks to r4 and reads eleven more strings; a Chrome that is refused
+stops at r3, which is the shape our arm always has. Clean Chrome is refused
+about one run in six on this door (B60), so the control is one of those.
+
+Nine receivers on each arm, and the same nine lengths:
+
+| length | Chrome (refused) | this engine | what it is |
+|---|---|---|---|
+| 258 | `1ge6tsu` | `prtlx7` | carries a `-1787977…-` session token |
+| **318** | **`1m5rw90`** | **`1m5rw90`** | **identical** |
+| 1026 | `gwutlw` | `59ttki` | session token |
+| 1279 | `vmzlif` | `1y302u9` | session token |
+| 2050 | `11xuykz` | `n56fuw` | session token |
+| 4098 | `ek6fdb` | `ld6ixl` | session token |
+| **4520** | **`1242xzp`** | **`1242xzp`** | **identical** |
+| ~63.9k | `50zzwr` (63883) | `exzzw7` (63889) | the challenge program |
+| ~85.2k | `6y0mve` (85180) | `7ejm6j` (85188) | the challenge program |
+
+The two strings that carry no per-session token hash identically. The other
+seven cannot match across sessions by construction — they all hold a timestamp
+— and their lengths do match exactly. The last two are the challenge's own text,
+which moves between Chrome's own runs too (63890/85188 on one, 63883/85180 on
+the next), and ours falls inside that spread.
+
+So r1 holds nothing either, and the list of surfaces on this door that nobody
+has pointed an instrument at is now empty.
+
+One measurable difference is left over and still unattributed: the **r2 request
+body** is 4919 bytes here against 4727 in the same sitting from Chrome (B60 had
+Chrome at 4706–4759 and this engine at 4898–5314). B60 showed the *jitter* in
+that range was a Debug build; the ~200-byte excess itself has never been
+explained.
+
+(These readings are from the Debug binary — a ReleaseFast link was still running
+when they were taken. It is a content comparison and both arms stop at r3, so
+the build mode does not bear on the conclusion, but a re-check should use
+`zig-out-rel`.)

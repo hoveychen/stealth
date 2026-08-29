@@ -2235,4 +2235,66 @@ export const CF_KNOBS = {
         } catch (e) { line('worker-hook=failed:' + e.name); }
       })();
     `,
+    // P9: the r1 plaintext, from the TOP document.
+    //
+    // report-charsrc caught the long strings the widget reads character by
+    // character, and the seven the top document reads are byte-for-byte the
+    // same on both arms (4520 h=w0vg53, 1279, 85188, 63889, 1026, 4098, 2050).
+    // Its MIN is 1000, so whatever is shorter than that has never been looked
+    // at, and r1 is the one round nothing has been pointed at from the inside.
+    // This is the same hook with the floor dropped and the top document only:
+    // the widget's own reads are already accounted for and would drown this.
+    'report-charsrc-top': beacon + `
+      (() => {
+        if (__where().indexOf('/top') === -1) return;
+        const hash = (s) => {
+          let h = 5381;
+          for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+          return h.toString(36);
+        };
+        const MIN = 120;
+        const CAP = 90;
+        // Taken before anything is hooked, so the key can be built without
+        // going back through the hook.
+        const __code = String.prototype.charCodeAt;
+        const seen = Object.create(null);
+        let noted = 0;
+        const hook = (name) => {
+          try {
+            const real = String.prototype[name];
+            const restore = () => {
+              Object.defineProperty(String.prototype, name, {
+                configurable: true, writable: true, enumerable: false, value: real,
+              });
+            };
+            Object.defineProperty(String.prototype, name, {
+              configurable: true, writable: true, enumerable: false,
+              value: function (i) {
+                if (this.length >= MIN) {
+                  // The key has to be cheap: hashing on every call is O(n) per
+                  // character read, and with MIN this low that is quadratic --
+                  // the first version hashed here and the challenge never
+                  // finished a single round.
+                  const k = this.length + ':' + __code.call(this, 0) +
+                    ':' + __code.call(this, this.length - 1);
+                  if (!seen[k]) {
+                    const s = String(this);
+                    seen[k] = 1;
+                    noted += 1;
+                    __send('src=' + name + '&len=' + s.length + '&h=' + hash(s) +
+                           '&head=' + encodeURIComponent(s.slice(0, 200)) +
+                           '&tail=' + encodeURIComponent(s.slice(-80)));
+                    if (noted >= CAP) restore();
+                  }
+                }
+                return real.call(this, i);
+              },
+            });
+          } catch (e) { __send('src=' + name + '-failed:' + e.name); }
+        };
+        hook('charCodeAt');
+        hook('charAt');
+        __send('report-charsrc-top=installed&min=' + MIN + '&cap=' + CAP);
+      })();
+    `,
 };
