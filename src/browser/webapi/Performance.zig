@@ -25,6 +25,7 @@ const EventCounts = @import("EventCounts.zig");
 const PerformanceObserver = @import("PerformanceObserver.zig");
 const timing = @import("performance/timing.zig");
 const EventTarget = @import("EventTarget.zig");
+const URL = @import("../URL.zig");
 const http = @import("../../network/http.zig");
 
 const Execution = js.Execution;
@@ -406,6 +407,9 @@ pub fn navigationResponseStarted(
     self._nav.response_start = at;
     self._nav.final_response_headers_start = at;
     self._nav.response_status = status;
+    // See Timing.responded: transferSize keys on this rather than on the
+    // status, which the cross-origin mask can zero.
+    self._nav.responded = status != 0;
     self._nav.content_type = content_type;
     self._nav.content_encoding = content_encoding;
     self._nav.next_hop_protocol = next_hop_protocol;
@@ -523,10 +527,50 @@ pub fn navigationComplete(self: *Performance) void {
 /// needs it: it starts a `<script src>` fetch before the parser reaches the
 /// element, so whether that script blocks the parser is not knowable when the
 /// response arrives.
+/// Whether a load of `url` counts as same-origin for this document.
+///
+/// `_nav_name` is the document's own URL, set at navigationStarted. A realm
+/// that never navigated -- a worker, a fresh realm -- has none, and answering
+/// "same origin" there keeps this from hiding a worker's own fetches from it;
+/// the cross-origin rule is about what one DOCUMENT may learn about another
+/// origin, and with no document URL there is nothing to compare against.
+fn sameOriginAsDocument(self: *const Performance, url: []const u8) bool {
+    if (self._nav_name.len == 0) {
+        return true;
+    }
+    return URL.isSameOrigin(url, self._nav_name);
+}
+
+/// Whether a `Timing-Allow-Origin` header lets `document_url`'s origin read the
+/// response's timing.
+///
+/// The header is `*` or a comma-separated origin list. Each entry is compared
+/// as an origin rather than as a string, so the default port may be written or
+/// left off either side; `URL.isSameOrigin` only looks at scheme, host and
+/// port, which is exactly what an origin is. A `null` entry matches nothing,
+/// since nothing here reads timing from an opaque origin.
+fn timingAllowed(header: []const u8, document_url: []const u8) bool {
+    if (header.len == 0) {
+        return false;
+    }
+    var it = std.mem.splitScalar(u8, header, ',');
+    while (it.next()) |raw| {
+        const entry = std.mem.trim(u8, raw, " \t");
+        if (std.mem.eql(u8, entry, "*")) {
+            return true;
+        }
+        if (document_url.len != 0 and URL.isSameOrigin(entry, document_url)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 pub fn resourceLoaded(
     self: *Performance,
     name: []const u8,
     t: timing.Timing,
+    timing_allow_origin: []const u8,
     exec: *const Execution,
 ) !*timing.Timing {
     // ResourceTiming reads its milestones through a pointer, so the timing has
@@ -537,14 +581,25 @@ pub fn resourceLoaded(
     // a recorder that forgot would let a reader tell its loads from the rest.
     stored.navigation_id = self._navigation_id;
 
+    // Read off the status before the mask below can zero it. See
+    // Timing.responded.
+    stored.responded = t.response_status != 0;
+
+    // What this document is allowed to know about the load, applied here for
+    // the same reason the labels are duped here: five recorders file entries
+    // and a sixth will, and the one that forgot would be the one that leaks.
+    const same_origin = self.sameOriginAsDocument(name);
+    stored.maskCrossOrigin(same_origin, same_origin or timingAllowed(timing_allow_origin, self._nav_name));
+
     // The two response labels are the only fields whose bytes belong to
     // whoever performed the fetch -- an inline buffer on a Script, an
     // ImageRequest or a SyncResponse, all of which are released well before
     // the buffer is read back. Everything else in `t` is a number or a
     // literal. Copied here rather than at each of the five call sites, so a
-    // new recorder cannot forget to.
-    stored.content_type = try exec.arena.dupe(u8, t.content_type);
-    stored.content_encoding = try exec.arena.dupe(u8, t.content_encoding);
+    // new recorder cannot forget to. After the mask, so a hidden content type
+    // does not take arena space to say nothing.
+    stored.content_type = try exec.arena.dupe(u8, stored.content_type);
+    stored.content_encoding = try exec.arena.dupe(u8, stored.content_encoding);
 
     const entry = try exec._factory.chained(.{
         Entry{

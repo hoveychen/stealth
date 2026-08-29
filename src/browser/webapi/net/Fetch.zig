@@ -352,6 +352,7 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
     _ = try exec.performance().resourceLoaded(
         if (response._url.len > 0) response._url else self._url,
         t,
+        self._perf_labels.timingAllowOrigin(),
         exec,
     );
 

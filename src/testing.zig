@@ -908,10 +908,46 @@ fn corsQueryParam(query: []const u8, key: []const u8) ?[]const u8 {
     return null;
 }
 
+// The two responses `performance_resource.html` needs to see the cross-origin
+// opacity rule from both sides: same body, same Allow-Origin, differing only in
+// whether the timing is opted into. Fetched from `localhost:9582` by a page on
+// `127.0.0.1:9582`, which is a real cross origin on the same server -- the trick
+// `net/cors_preflight.html` already relies on.
+//
+// The body is a fixed 512 bytes so a leaked size reads as itself rather than as
+// a plausible small number.
+const TIMING_ALLOW_BODY = "t" ** 512;
+
+fn timingAllowHandler(req: *std.http.Server.Request, path: []const u8) !bool {
+    const allowed = if (std.mem.eql(u8, path, "/timing-allow/on"))
+        true
+    else if (std.mem.eql(u8, path, "/timing-allow/off"))
+        false
+    else
+        return false;
+
+    var headers: [3]std.http.Header = undefined;
+    var n: usize = 0;
+    headers[n] = .{ .name = "Content-Type", .value = "text/plain" };
+    n += 1;
+    // Allow-Origin so the page may read the BODY; Timing-Allow-Origin is a
+    // separate opt-in governing whether it may read the TIMING. Varying only
+    // the second is the whole point of the pair.
+    headers[n] = .{ .name = "Access-Control-Allow-Origin", .value = "*" };
+    n += 1;
+    if (allowed) {
+        headers[n] = .{ .name = "Timing-Allow-Origin", .value = "*" };
+        n += 1;
+    }
+    try req.respond(TIMING_ALLOW_BODY, .{ .extra_headers = headers[0..n] });
+    return true;
+}
+
 fn testHTTPHandler(req: *std.http.Server.Request) !void {
     const path = req.head.target;
 
     if (try corsHandler(req, path)) return;
+    if (try timingAllowHandler(req, path)) return;
 
     if (std.mem.eql(u8, path, "/xhr")) {
         return req.respond("1234567890" ** 10, .{

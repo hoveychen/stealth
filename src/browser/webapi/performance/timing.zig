@@ -110,6 +110,13 @@ pub const Timing = struct {
     decoded_body_size: u64 = 0,
     response_status: u16 = 0,
 
+    // Whether a response actually arrived. `response_status != 0` used to stand
+    // in for this, and cannot any more: `maskCrossOrigin` zeroes the status of
+    // an entry that DID respond, and transferSize still has to answer for it
+    // (Chrome reports 4438 bytes for a cross-origin entry whose responseStatus
+    // reads 0 -- measured, probes/expr-b87-crossorigin.js).
+    responded: bool = false,
+
     unload_event_start: f64 = 0,
     unload_event_end: f64 = 0,
     dom_interactive: f64 = 0,
@@ -126,10 +133,66 @@ pub const Timing = struct {
     /// 460-byte 404 page (760). A response served from cache reports 0, which
     /// nothing here produces yet.
     pub fn transferSize(self: *const Timing) f64 {
-        if (self.response_status == 0) {
+        if (!self.responded) {
             return 0;
         }
         return @floatFromInt(self.encoded_body_size + 300);
+    }
+
+    /// Hides from a page what Resource Timing does not let it see about a load
+    /// from another origin.
+    ///
+    /// Two independent gates, which is not obvious and is why they are two
+    /// arguments rather than one (all measured on a two-origin fixture,
+    /// probes/b87-crossorigin-fixture.mjs + probes/expr-b87-crossorigin.js,
+    /// against Chrome):
+    ///
+    ///   same-origin        sizes real, proto real, walk real, status 200, type real
+    ///   cross + TAO        sizes real, proto real, walk real, status 0,   type ''
+    ///   cross, no TAO      sizes 0,    proto '',   walk 0,    status 0,   type ''
+    ///
+    /// So `Timing-Allow-Origin` hands back the *timing and the sizes*, and
+    /// nothing else: the status and the content type need the same origin, and
+    /// stay hidden however loudly the response opts in.
+    ///
+    /// What survives either way is `fetchStart`, `responseEnd` and therefore
+    /// `startTime` and `duration` -- a page may always know that it loaded
+    /// something and how long it took. This engine hid none of it before: every
+    /// cross-origin entry carried its real byte count, protocol and connection
+    /// walk, which on cf-scrapingcourse handed the page the widget document's
+    /// exact size.
+    ///
+    /// `content_encoding` and `delivery_type` are deliberately left alone: both
+    /// read empty in all six rows of the fixture on both arms, so the reading
+    /// does not say which side of either gate they sit on, and blanking a field
+    /// on a guess is how the wrong subset gets zeroed.
+    pub fn maskCrossOrigin(self: *Timing, same_origin: bool, timing_allowed: bool) void {
+        if (!same_origin) {
+            self.response_status = 0;
+            self.content_type = "";
+        }
+        if (timing_allowed) {
+            return;
+        }
+        self.next_hop_protocol = "";
+        self.encoded_body_size = 0;
+        self.decoded_body_size = 0;
+        // Not "collapsed onto fetchStart", which is what a REUSED connection
+        // reports; an opaque entry reports a true zero, and confusing the two
+        // would say every cross-origin load rode a warm socket.
+        self.responded = false;
+        self.worker_start = 0;
+        self.redirect_start = 0;
+        self.redirect_end = 0;
+        self.domain_lookup_start = 0;
+        self.domain_lookup_end = 0;
+        self.connect_start = 0;
+        self.connect_end = 0;
+        self.secure_connection_start = 0;
+        self.request_start = 0;
+        self.response_start = 0;
+        self.first_interim_response_start = 0;
+        self.final_response_headers_start = 0;
     }
 
     /// Restates every timestamp in this record on another document's timeline.

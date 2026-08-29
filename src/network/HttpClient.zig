@@ -2999,6 +2999,14 @@ pub const Transfer = struct {
             hdr._content_encoding_len = len;
             @memcpy(hdr._content_encoding[0..len], value[0..len]);
         }
+
+        if (conn.getResponseHeader("timing-allow-origin", 0)) |tao| {
+            var hdr = &self.res.header.?;
+            const value = tao.value;
+            const len = @min(value.len, http.ResponseHead.MAX_TIMING_ALLOW_LEN);
+            hdr._timing_allow_len = len;
+            @memcpy(hdr._timing_allow[0..len], value[0..len]);
+        }
     }
 
     pub fn format(self: *Transfer, writer: *std.Io.Writer) !void {
@@ -4006,7 +4014,20 @@ pub const Transfer = struct {
         if (self.contentEncoding()) |ce| {
             labels.setContentEncoding(ce);
         }
+        if (self.timingAllowOrigin()) |tao| {
+            labels.setTimingAllowOrigin(tao);
+        }
         return labels;
+    }
+
+    /// The response's `Timing-Allow-Origin`, if it sent one. Whether it permits
+    /// the reading document is `ResponseLabels.timingAllowed`'s question, not
+    /// this one -- the origin doing the reading is not known down here.
+    pub fn timingAllowOrigin(self: *Transfer) ?[]const u8 {
+        if (self.res.header) |*rh| {
+            return rh.timingAllowOrigin();
+        }
+        return null;
     }
 
     pub fn nextHopProtocol(self: *const Transfer) []const u8 {
