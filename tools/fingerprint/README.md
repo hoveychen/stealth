@@ -20318,3 +20318,28 @@ The five DataDome stations this engine passed and Chrome did not
 (dd-datadome, dd-leboncoin, dd-hermes, dd-etsy, dd-seloger) are the throttling
 this repo has recorded before: the Chrome column was the third pass over those
 hosts from one address inside an hour. It is not a lead.
+
+### Cloudflare serves both arms the same program too
+
+The same question that closed off "the station hands us a stricter script" at
+x-hyatt, asked at cf-scrapingcourse with the same tool. `orchestrate/chl_page/v1`
+comes back 228236 bytes for Chrome and 232089 for this engine, different hashes
+-- and 231750 for Chrome asked a second time. Token-kind 8-gram Jaccard:
+
+```
+  0.5376   chrome #1  vs  chrome #2
+  0.5650   chrome #1  vs  lightpanda
+  0.5537   chrome #2  vs  lightpanda
+```
+
+Cloudflare re-obfuscates far harder than Kasada -- same-arm similarity is 0.54
+where Kasada's is 0.96 -- but the relation is what matters and it is the same
+one: **cross-arm is not lower than same-arm.** Both arms get the same program.
+
+Turnstile's `api.js` is stronger still: **byte-identical across both arms and
+across requests**, 84236 bytes at `6212b8bf7b8f` every time. It is not
+per-request obfuscated at all.
+
+What only this engine gets is the `turnstile/f/av0/rch/...` document, 274KB of
+it -- the interactive challenge Chrome's widget never has to fetch. That is the
+fork, and it is downstream of a decision the widget makes.
