@@ -20483,3 +20483,35 @@ from the repairing one — nor these ten.
 when they were taken. It is a content comparison and both arms stop at r3, so
 the build mode does not bear on the conclusion, but a re-check should use
 `zig-out-rel`.)
+
+## The number probe, end to end: 101 differences down to 4
+
+`probes/expr-b53-number-serialisation.js` takes 188 readings across media
+queries, style declarations, `cssText`, computed values, `CSSUnitValue` and
+`CSS.px`. It started this stretch with **101 differing**. Three changes closed
+97 of them:
+
+  * **round half to even.** Chrome breaks the sixth-significant-digit tie to
+    even and this engine broke it away from zero. The tie it breaks is the one
+    in the shortest round-trip decimal, not in the double's exact value --
+    `12345.65` is really `12345.650000000000090949`, which correct rounding
+    takes up, and Chrome's media query answers `12345.6`. `<ratio>` needed its
+    own writer: six significant digits like a dimension, but never the exponent
+    form, and an integer written out in full.
+  * **the alpha family clamps.** `opacity`, `fill-opacity`, `stroke-opacity`,
+    `stop-opacity`, `flood-opacity` and `shape-image-threshold` are brought into
+    [0,1] on the computed view and nowhere else. Which six is measured, over
+    twenty-two properties with a range in their grammar; the near neighbours do
+    not clamp and the test says so.
+  * **`CSS.px` exists.** The namespace carried three own names against Chrome's
+    69; it now carries 67, in Chrome's IDL order, matching every descriptor
+    flag, name and arity.
+
+The four that remain are attributed rather than outstanding:
+
+| reading | Chrome | here | why |
+|---|---|---|---|
+| `mq min-width 12345.65` | 12345.6px | 12345.7px | pre-existing, same input as below |
+| `style width 0.9765625` | 0.976563px | 0.976562px | the specified-value path is float32 and rounds half UP where the computed one rounds to even -- two rules in Chrome, and `specified_precision.html` owns that one |
+| `style width 0.000101562500001` | 0.0001015px | 0.000101563px | same path |
+| `computed letter-spacing 12345.65` | 12345.7px | 12345.6px | the one regression: Chrome's media query and computed style disagree with each other on this single input, and one rule in `writeNumber` cannot satisfy both |
