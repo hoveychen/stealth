@@ -20515,3 +20515,60 @@ The four that remain are attributed rather than outstanding:
 | `style width 0.9765625` | 0.976563px | 0.976562px | the specified-value path is float32 and rounds half UP where the computed one rounds to even -- two rules in Chrome, and `specified_precision.html` owns that one |
 | `style width 0.000101562500001` | 0.0001015px | 0.000101563px | same path |
 | `computed letter-spacing 12345.65` | 12345.7px | 12345.6px | the one regression: Chrome's media query and computed style disagree with each other on this single input, and one rule in `writeNumber` cannot satisfy both |
+
+## Four more computed-style defects, and the trap log closes
+
+Continuing the fidelity sweep after the number probe. Each started by measuring
+what Chrome does across the whole family rather than the one reading that
+prompted the plan, and twice that changed the fix.
+
+**A computed style out of a browsing context is empty.** `getComputedStyle` on
+an element not in a document with a browsing context answers `length` 0,
+`item(0)` "" and every property "" -- including `display` and custom properties.
+This engine answered full values, so one expression told the arms apart. The
+predicate is not "has no box": a `display: none` element is in the document,
+has no box, and keeps a complete 475-longhand style, and so does
+`visibility: hidden`. Four shapes count as out, and the fourth is the one worth
+naming -- an element CONNECTED to a `createHTMLDocument` is connected, its root
+being a Document, but that document has no browsing context, and this engine
+answered `width: 1152px` there: the viewport's width, for a document with no
+viewport. The declaration is live, too, so the same object empties the moment
+its element is removed.
+
+**A declared origin resolves against the border box.** `transform-origin` and
+`perspective-origin` threw the declaration away entirely -- a percentage fell
+through to the box-centre path and a keyword was echoed back, so `25% 75%` on a
+240x24 border box answered `120px 12px` where Chrome answers `60px 18px`, and
+`left top` answered `left top`. Fifteen of twenty-one forms differed; all
+twenty-one match now. The test's box has content 200x10, padding 220x14 and
+border 240x24 on purpose, so picking the wrong box is visible rather than a
+coincidence.
+
+**The alpha family clamps, and only it.** Six properties are brought into [0,1]
+on the computed view: `opacity`, `fill-opacity`, `stroke-opacity`,
+`stop-opacity`, `flood-opacity`, `shape-image-threshold`. Which six is measured
+over twenty-two properties with a range in their grammar, and the near
+neighbours are asserted too, because a wider clamp would be wrong:
+`flex-grow: 1.015625` computes to `1.01562` with no upper bound at all, and a
+negative one is rejected at parse rather than clamped.
+
+**A dictionary is read with one `Get`.** This is the trap log the guard keeps.
+WebIDL reads each member with `[[Get]]` and treats `undefined` as absent; this
+engine probed with `[[Has]]` first, so a Proxy handed to a constructor saw `has`
+and never a `get` -- which is exactly why our payload carried four `h:` entries
+where Chrome's carries one. Members are also read one level at a time, base
+first, alphabetically within a level, and this engine used IDL declaration order
+and was missing nine members outright.
+
+Six of the seven dictionaries now produce a **byte-identical trap sequence** to
+Chrome's. The seventh differs by one trap: Chrome follows its
+`get:attributionReporting` with a `has` on the same member, a quirk of that
+member alone.
+
+One trap of the fix is worth writing down. Applying "undefined means absent" to
+*every* struct conversion hangs `pipeTo`: `{done, value}` is destructured out of
+the engine's own reader, the last read is `{done: true, value: undefined}`, and
+treating that as an absent member fails the whole conversion so the pipe never
+settles. The rule belongs to fields that are optional or defaulted -- which
+every real dictionary member is -- so what a page can observe is still a single
+`Get`.
