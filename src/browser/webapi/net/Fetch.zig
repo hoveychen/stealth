@@ -22,6 +22,7 @@ const lp = @import("lightpanda");
 const js = @import("../../js/js.zig");
 const URL = @import("../../URL.zig");
 const HttpClient = @import("../../../network/HttpClient.zig");
+const timing = @import("../performance/timing.zig");
 
 const AbortSignal = @import("../AbortSignal.zig");
 const DOMException = @import("../DOMException.zig");
@@ -61,6 +62,11 @@ _perf_encoded_body_size: u64 = 0,
 
 // contentType / contentEncoding for the entry, copied off the headers.
 _perf_labels: HttpClient.ResponseLabels = .{},
+
+// The connection walk behind the response, for the entry's milestones. Kept
+// here for the same reason the labels are: the transfer is freed before the
+// done callback that records the entry runs.
+_perf_times: HttpClient.ResponseTimes = .{},
 
 // The request's CORS mode, and whether it carries credentials. Both are needed
 // once the response arrives: `no-cors` turns a cross-origin answer opaque
@@ -193,6 +199,7 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
 
     self._perf_next_hop_protocol = transfer.nextHopProtocol();
     self._perf_labels = transfer.responseLabels();
+    self._perf_times = transfer.responseTimes();
 
     const arena = self._response._arena;
     if (transfer.getContentLength()) |cl| {
@@ -324,23 +331,27 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
         .len = self._buf.items.len,
     });
 
-    // Chrome names the entry with the URL the response finally came from, so a
-    // redirected request is filed under its destination, not its request URL.
     const exec = self._exec;
     const loaded_len = self._buf.items.len;
+    var t: timing.Timing = .{
+        .initiator_type = "fetch",
+        .next_hop_protocol = self._perf_next_hop_protocol,
+        .content_type = self._perf_labels.contentType(),
+        .content_encoding = self._perf_labels.contentEncoding(),
+        .fetch_start = self._perf_fetch_start,
+        .response_end = exec.performance().now(),
+        .response_status = response._status,
+        .encoded_body_size = if (self._perf_encoded_body_size > 0) self._perf_encoded_body_size else loaded_len,
+        .decoded_body_size = loaded_len,
+    };
+    // The half `Frame.recordResourceTiming` does for the initiators that go
+    // through it -- see the same call in XMLHttpRequest.
+    t.setConnectionMilestones(self._perf_times, exec.performance());
+    // Chrome names the entry with the URL the response finally came from, so a
+    // redirected request is filed under its destination, not its request URL.
     _ = try exec.performance().resourceLoaded(
         if (response._url.len > 0) response._url else self._url,
-        .{
-            .initiator_type = "fetch",
-            .next_hop_protocol = self._perf_next_hop_protocol,
-            .content_type = self._perf_labels.contentType(),
-            .content_encoding = self._perf_labels.contentEncoding(),
-            .fetch_start = self._perf_fetch_start,
-            .response_end = exec.performance().now(),
-            .response_status = response._status,
-            .encoded_body_size = if (self._perf_encoded_body_size > 0) self._perf_encoded_body_size else loaded_len,
-            .decoded_body_size = loaded_len,
-        },
+        t,
         exec,
     );
 
