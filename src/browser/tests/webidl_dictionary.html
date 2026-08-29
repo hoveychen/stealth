@@ -98,3 +98,51 @@ over seven dictionaries: only `get` fires, once per member.
   testing.expectEqual(true, inherited.bubbles);
 }
 </script>
+
+<script id=members_are_read_in_dictionary_order>
+{
+  // One level at a time, base first, alphabetical within a level. That is why
+  // MouseEvent's order is not plain alphabetical: `altKey ctrlKey metaKey
+  // modifier... shiftKey` is EventModifierInit's run and `button buttons
+  // clientX ...` is MouseEventInit's, and the two are separate levels.
+  //
+  // Every sequence is Chrome 151's own, measured with
+  // tools/fingerprint/probes/expr-b85-dictionary-traps.js.
+  const names = (build) => {
+    const log = [];
+    const proxy = new Proxy({}, { get(t, k, r) { log.push(String(k)); return Reflect.get(t, k, r); } });
+    try { build(proxy); } catch (e) { log.push('threw:' + e.name); }
+    return log.join(' ');
+  };
+
+  const wrong = [];
+  const CASES = [
+    ['CustomEvent', (i) => new CustomEvent('x', i),
+      'bubbles cancelable composed detail'],
+    ['InputEvent', (i) => new InputEvent('input', i),
+      'bubbles cancelable composed detail sourceCapabilities view ' +
+      'data dataTransfer inputType isComposing targetRanges'],
+    ['MouseEvent', (i) => new MouseEvent('click', i),
+      'bubbles cancelable composed detail sourceCapabilities view ' +
+      'altKey ctrlKey metaKey modifierAltGraph modifierCapsLock modifierFn ' +
+      'modifierNumLock modifierScrollLock modifierSymbol shiftKey ' +
+      'button buttons clientX clientY movementX movementY region relatedTarget ' +
+      'screenX screenY'],
+    ['Request', (i) => new Request('https://example.com/', i),
+      'adAuctionHeaders attributionReporting body browsingTopics cache credentials ' +
+      'duplex headers integrity keepalive method mode priority privateToken redirect ' +
+      'referrer referrerPolicy sharedStorageWritable signal targetAddressSpace'],
+    ['addEventListener', (i) => document.createElement('div').addEventListener('x', () => {}, i),
+      'capture once passive signal'],
+    ['scrollTo', (i) => document.createElement('div').scrollTo(i),
+      'behavior left top'],
+    ['IntersectionObserver', (i) => new IntersectionObserver(() => {}, i),
+      'delay root rootMargin scrollMargin threshold trackVisibility'],
+  ];
+  for (const [label, build, want] of CASES) {
+    const got = names(build);
+    if (got !== want) wrong.push(label + ':\n    want ' + want + '\n    got  ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n  | '));
+}
+</script>

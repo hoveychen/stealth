@@ -43,6 +43,10 @@ pub const InputEventOptions = struct {
     dataTransfer: ?*DataTransfer = null,
     inputType: ?[]const u8 = null,
     isComposing: bool = false,
+    // Read and discarded, like UIEventInit's sourceCapabilities: no StaticRange
+    // to build, and the observable part is the read. Last, because the members
+    // of one level are read in alphabetical order.
+    targetRanges: ?js.Value = null,
 };
 
 const Options = Event.inheritOptions(

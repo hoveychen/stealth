@@ -49,6 +49,12 @@ pub const Type = union(enum) {
 
 pub const UIEventOptions = struct {
     detail: u32 = 0,
+    // Read and discarded: this engine has no InputDeviceCapabilities to build,
+    // and what a page can observe about the member is that it is READ. A
+    // dictionary's members are read in one alphabetical run per level, so
+    // leaving it out shortened the read log by one name in the middle of the
+    // sequence. Measured with probes/expr-b85-dictionary-traps.js.
+    sourceCapabilities: ?js.Value = null,
     view: ?*Window = null,
 };
 

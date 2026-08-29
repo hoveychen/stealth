@@ -65,23 +65,39 @@ pub const Input = union(enum) {
 };
 
 pub const InitOpts = struct {
-    method: ?[]const u8 = null,
-    headers: ?Headers.InitOpts = null,
+    // Alphabetical, because that is the order a page sees them read in: a
+    // dictionary's members are read one level at a time and alphabetically
+    // within a level, and RequestInit has no base. This engine read them in IDL
+    // declaration order and left seven out, which a Proxy handed to `Request`
+    // reports as a shorter, differently ordered log -- measured with
+    // probes/expr-b85-dictionary-traps.js.
+    //
+    // The seven with no implementation behind them are read and discarded.
+    // Chrome reads them too, and on an ordinary page ignores them just as
+    // thoroughly; what is observable either way is the read.
+    adAuctionHeaders: ?bool = null,
+    attributionReporting: ?js.Value = null,
     body: ?BodyInit = null,
+    browsingTopics: ?bool = null,
     // Read as strings rather than as the typed enums: an out-of-range value has
     // to name the member, the dictionary and the enum type, and the bridge's
     // enum conversion knows none of the three.
     cache: ?[]const u8 = null,
     credentials: ?[]const u8 = null,
-    redirect: ?[]const u8 = null,
-    signal: ?*AbortSignal = null,
-    priority: ?[]const u8 = null,
     duplex: ?[]const u8 = null,
-    mode: ?[]const u8 = null,
-    referrer: ?[]const u8 = null,
-    referrerPolicy: ?[]const u8 = null,
+    headers: ?Headers.InitOpts = null,
     integrity: ?[]const u8 = null,
     keepalive: ?bool = null,
+    method: ?[]const u8 = null,
+    mode: ?[]const u8 = null,
+    priority: ?[]const u8 = null,
+    privateToken: ?js.Value = null,
+    redirect: ?[]const u8 = null,
+    referrer: ?[]const u8 = null,
+    referrerPolicy: ?[]const u8 = null,
+    sharedStorageWritable: ?bool = null,
+    signal: ?*AbortSignal = null,
+    targetAddressSpace: ?[]const u8 = null,
 };
 
 pub const Mode = enum {

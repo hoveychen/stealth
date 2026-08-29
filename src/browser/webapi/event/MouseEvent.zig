@@ -69,20 +69,42 @@ _screen_x: f64,
 _screen_y: f64,
 _shift_key: bool,
 
+/// MouseEventInit's members, and EventModifierInit's before them.
+///
+/// The order is the read order a page sees, and it is not plain alphabetical:
+/// WebIDL reads one level at a time, and MouseEventInit inherits
+/// EventModifierInit, which inherits UIEventInit. So the modifier keys come as
+/// their own alphabetical run and the mouse members as another, which is what
+/// Chrome does -- `altKey ctrlKey metaKey modifier... shiftKey` and then
+/// `button buttons clientX ...`. Measured with
+/// probes/expr-b85-dictionary-traps.js; this engine read them in IDL
+/// declaration order and left six of them out entirely.
+///
+/// The `modifier*` six and `region` are read and discarded: no page-visible
+/// attribute is built from them here, and what is observable is the read.
 pub const MouseEventOptions = struct {
-    screenX: f64 = 0.0,
-    screenY: f64 = 0.0,
-    clientX: f64 = 0.0,
-    clientY: f64 = 0.0,
-    ctrlKey: bool = false,
-    shiftKey: bool = false,
+    // EventModifierInit.
     altKey: bool = false,
+    ctrlKey: bool = false,
     metaKey: bool = false,
+    modifierAltGraph: bool = false,
+    modifierCapsLock: bool = false,
+    modifierFn: bool = false,
+    modifierNumLock: bool = false,
+    modifierScrollLock: bool = false,
+    modifierSymbol: bool = false,
+    shiftKey: bool = false,
+    // MouseEventInit.
     button: i32 = 0,
     buttons: u16 = 0,
-    relatedTarget: ?*EventTarget = null,
+    clientX: f64 = 0.0,
+    clientY: f64 = 0.0,
     movementX: f64 = 0.0,
     movementY: f64 = 0.0,
+    region: ?[]const u8 = null,
+    relatedTarget: ?*EventTarget = null,
+    screenX: f64 = 0.0,
+    screenY: f64 = 0.0,
 };
 
 pub const Options = Event.inheritOptions(

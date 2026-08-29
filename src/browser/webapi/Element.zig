@@ -4123,9 +4123,11 @@ const ScrollToOpts = union(enum) {
     opts: Opts,
 
     const Opts = struct {
-        top: ?i32 = null,
-        left: ?i32 = null,
+        // Alphabetical: a dictionary's members are read in that order and a
+        // page handing a Proxy in sees the sequence.
         behavior: []const u8 = "",
+        left: ?i32 = null,
+        top: ?i32 = null,
     };
 };
 
