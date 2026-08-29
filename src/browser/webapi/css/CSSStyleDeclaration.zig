@@ -43,6 +43,7 @@ const chrome_input_type_values = @import("chrome_input_type_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
 const shorthand = @import("shorthand.zig");
+const font_metrics = @import("../../font_metrics.zig");
 const transform = @import("transform.zig");
 const typed_om = @import("typed_om.zig");
 const color = @import("../../color.zig");
@@ -963,6 +964,26 @@ fn lengthFactor(style_manager: *StyleManager, element: *Element, property_name: 
         else
             style_manager.computedFontSize(element) },
         .rem => .{ .pixels = style_manager.computedFontSize(rootElement(element)) },
+        // `ex` is the x-height of the element's first available font and `ch`
+        // the advance of its `0`, so both are per-family constants that the
+        // font size alone cannot give. This engine answered a flat `0px` for
+        // every one, which is the shape a guard reads as a probe that cannot
+        // tell its inputs apart rather than as a wrong number.
+        //
+        // font_metrics.zig has carried both all along: the per-glyph table is
+        // measured at basis 100, `x`'s ink ascent is the x-height and `0`'s
+        // advance is the ch width. Twelve family/unit pairs check out to the
+        // digit against headed Chrome 151 -- see computed_relative_units.html.
+        .ex, .ch => blk: {
+            const family = if (style_manager.computedFontFamily(element)) |declared|
+                font_metrics.findInList(declared)
+            else
+                font_metrics.fallback;
+            const g = font_metrics.glyph(family, if (unit == .ex) 'x' else '0') orelse
+                break :blk .unresolvable;
+            const ratio = (if (unit == .ex) g.ascent else g.advance) / font_metrics.basis;
+            break :blk .{ .pixels = style_manager.computedFontSize(element) * ratio };
+        },
         // `font-size` and `line-height` are the two percentages with no
         // containing block in them. `width` now has one -- the containing
         // block's width is what a block-level box already takes when it

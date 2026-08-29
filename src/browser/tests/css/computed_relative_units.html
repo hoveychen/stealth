@@ -20,12 +20,10 @@ block.
 
 Deliberately not resolved here, each for a measured reason:
 
-  * **`ex` and `ch`.** Measured with expr-ex-ch-ratio.js across five families and
-    three sizes: the ratio to the font size is exactly constant per family and
-    different for each one — 0.44873 for serif, 0.52295 for sans-serif, 0.54688
-    for monospace, 0.48145 for Georgia, 0.51855 for Arial. That is font metrics,
-    which this engine does not have, so a single ratio would be a guess dressed
-    as a measurement.
+  * ~~**`ex` and `ch`.**~~ Resolved now — see the block below. The ratios are
+    font metrics, and font_metrics.zig has carried them all along: `ex` is the
+    ink ascent of `x` and `ch` is the advance of `0`, both already measured per
+    family at basis 100.
   * **`calc()`**, which needs an evaluator and is its own task.
 -->
 
@@ -59,6 +57,49 @@ Deliberately not resolved here, each for a measured reason:
   for (const [want, decl, prop] of CASES) {
     const got = probe(decl, prop);
     if (got !== want) wrong.push(decl + ' -> ' + prop + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<script id=ex_ch_are_font_metrics>
+{
+  // `ex` is the font's x-height and `ch` the advance of its `0`, so both are
+  // per-family constants and neither is derivable from the font size alone.
+  // This engine answered a flat `0px` for every one of them, which is worse
+  // than a wrong ratio: a whole family of measurements collapsing onto one
+  // value is what a probe that cannot tell its inputs apart looks like.
+  //
+  // Every expected string is Chrome 151's own, measured HEADED (a headless
+  // Chrome resolves serif, sans-serif and monospace to one face) at device
+  // scale factor 2, with tools/fingerprint/probes/expr-b85-ex-ch-20px.js.
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;font-size:20px"><p style="' + decl + '">x</p></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild).paddingTop);
+    host.remove();
+    return got;
+  };
+
+  const CASES = [
+    ['17.9492px', 'font-family:serif;padding-top:2ex'],
+    ['20px', 'font-family:serif;padding-top:2ch'],
+    ['20.918px', 'font-family:sans-serif;padding-top:2ex'],
+    ['22.2461px', 'font-family:sans-serif;padding-top:2ch'],
+    ['21.875px', 'font-family:monospace;padding-top:2ex'],
+    ['24.082px', 'font-family:monospace;padding-top:2ch'],
+    ['20.7422px', 'font-family:Arial;padding-top:2ex'],
+    ['22.2461px', 'font-family:Arial;padding-top:2ch'],
+    ['19.2578px', 'font-family:Georgia;padding-top:2ex'],
+    ['24.5508px', 'font-family:Georgia;padding-top:2ch'],
+    ['21.8164px', 'font-family:Verdana;padding-top:2ex'],
+    ['25.4297px', 'font-family:Verdana;padding-top:2ch'],
+  ];
+  const wrong = [];
+  for (const [want, decl] of CASES) {
+    const got = probe(decl);
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
   }
   testing.expectEqual('', wrong.join(' | '));
 }
@@ -187,7 +228,9 @@ what is left refused is the `ex` and the `calc()`.
   // a percentage margin never looks at a height.
   testing.expectEqual('200px', probe('margin-top:50%', 'marginTop'));
   testing.expectEqual('100px', probe('padding-top:25%', 'paddingTop'));
-  testing.expectEqual('0px', probe('font-size:20px;padding-top:2ex', 'paddingTop'));
+  // `ex` used to be here: it was unresolvable, so it fell through to the
+  // initial value. It resolves now (see ex_ch_are_font_metrics), and what is
+  // left in this block is `calc()`, which still needs an evaluator.
   testing.expectEqual('0px', probe('padding-top:calc(10px + 5px)', 'paddingTop'));
 }
 </script>
