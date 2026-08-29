@@ -365,6 +365,104 @@
     });
   </script>
 
+  <script id=a_cross_origin_entry_is_opaque_without_timing_allow_origin type=module>
+    const state = await testing.async();
+    // Resource Timing hides a cross-origin load's numbers from the page unless
+    // the response opts in with `Timing-Allow-Origin`. This engine hid nothing:
+    // measured on a two-origin fixture
+    // (probes/b87-crossorigin-fixture.mjs + probes/expr-b87-crossorigin.js),
+    // every cross-origin entry came back with its real byte count, its real
+    // protocol and its real connection walk, TAO or no TAO. On
+    // cf-scrapingcourse that hands the page the widget document's exact size.
+    //
+    // The three loads below are the fixture's three columns. `localhost:9582`
+    // is the same test server on a different origin -- the trick
+    // net/cors_preflight.html already uses -- and /timing-allow/{on,off} differ
+    // only in the one header. Body is 512 bytes.
+    //
+    // These three are `fetch`, which is CORS mode. That matters: the sizes and
+    // the connection walk ride on Timing-Allow-Origin, but the STATUS and the
+    // CONTENT TYPE ride on the response type, and a CORS response is not an
+    // opaque one. Chrome, measured:
+    //   same-origin        sizes real, proto real, walk real, status 200, type real
+    //   cross + TAO        sizes real, proto real, walk real, status 200, type real
+    //   cross, no TAO      sizes 0,    proto '',   walk 0,    status 200, type real
+    // The no-cors half of the rule -- where the status IS hidden -- is the
+    // block below this one, which frames the same two responses.
+    const SAME = testing.ORIGIN + '/timing-allow/off';
+    const XO_OFF = 'http://localhost:9582/timing-allow/off';
+    const XO_ON = 'http://localhost:9582/timing-allow/on';
+    await Promise.all([SAME, XO_OFF, XO_ON].map((u) => fetch(u).then((r) => r.text())));
+    await new Promise((r) => setTimeout(r, 20));
+    state.resolve();
+    await state.done(() => {
+      const at = (url) => performance.getEntriesByType('resource').filter((e) => e.name === url)[0];
+      // Composed into one string per column rather than asserted a field at a
+      // time: the runner never prints `desc`, so the red light has to carry the
+      // diagnosis itself.
+      const row = (e) => e
+        ? 'enc=' + e.encodedBodySize + ' dec=' + e.decodedBodySize + ' xfer=' + e.transferSize +
+          ' proto=' + (e.nextHopProtocol === '' ? 'empty' : 'real') +
+          ' status=' + e.responseStatus +
+          ' type=' + (e.contentType === '' ? 'empty' : 'real') +
+          // The five milestones between fetchStart and responseStart, as one
+          // word: an opaque entry reports 0 for all of them, and a real one
+          // reports something at or after fetchStart.
+          ' walk=' + ([e.domainLookupStart, e.domainLookupEnd, e.connectStart, e.connectEnd, e.requestStart]
+            .every((v) => v === 0) ? 'zero' : 'nonzero') +
+          ' rstart=' + (e.responseStart === 0 ? 'zero' : 'nonzero')
+        : '(no entry)';
+      testing.expectEqual(
+        'same: enc=512 dec=512 xfer=812 proto=real status=200 type=real walk=nonzero rstart=nonzero\n' +
+        'tao:  enc=512 dec=512 xfer=812 proto=real status=200 type=real walk=nonzero rstart=nonzero\n' +
+        'off:  enc=0 dec=0 xfer=0 proto=empty status=200 type=real walk=zero rstart=zero',
+        'same: ' + row(at(SAME)) + '\n' +
+        'tao:  ' + row(at(XO_ON)) + '\n' +
+        'off:  ' + row(at(XO_OFF)));
+    });
+  </script>
+
+  <script id=a_no_cors_cross_origin_entry_hides_its_status_too type=module>
+    const state = await testing.async();
+    // The other half of the rule. The block above loads with `fetch`, which is
+    // CORS mode, and Chrome hands back the status and the content type there
+    // whatever Timing-Allow-Origin says. An <iframe> goes out no-cors, and
+    // Chrome hides both -- even when the response opts into being timed:
+    //   cross + TAO, no-cors    sizes real, proto real, walk real, status 0, type ''
+    //   cross, no TAO, no-cors  sizes 0,    proto '',   walk 0,    status 0, type ''
+    // This is the shape the cf-scrapingcourse leak had: the Turnstile widget's
+    // document is a cross-origin <iframe>, and this engine was handing the page
+    // its exact byte count.
+    const F_OFF = 'http://localhost:9582/timing-allow/frame-off';
+    const F_ON = 'http://localhost:9582/timing-allow/frame-on';
+    const framed = await Promise.all([F_OFF, F_ON].map((src) => new Promise((resolve) => {
+      const f = document.createElement('iframe');
+      f.onload = () => resolve(f);
+      f.onerror = () => resolve(f);
+      f.src = src;
+      document.body.appendChild(f);
+    })));
+    await new Promise((r) => setTimeout(r, 20));
+    state.resolve();
+    await state.done(() => {
+      const at = (url) => performance.getEntriesByType('resource').filter((e) => e.name === url)[0];
+      const row = (e) => e
+        ? 'enc=' + e.encodedBodySize + ' xfer=' + e.transferSize +
+          ' proto=' + (e.nextHopProtocol === '' ? 'empty' : 'real') +
+          ' status=' + e.responseStatus +
+          ' type=' + (e.contentType === '' ? 'empty' : 'real') +
+          ' walk=' + ([e.domainLookupStart, e.domainLookupEnd, e.connectStart, e.connectEnd, e.requestStart]
+            .every((v) => v === 0) ? 'zero' : 'nonzero')
+        : '(no entry)';
+      testing.expectEqual(
+        'tao: enc=512 xfer=812 proto=real status=0 type=empty walk=nonzero\n' +
+        'off: enc=0 xfer=0 proto=empty status=0 type=empty walk=zero',
+        'tao: ' + row(at(F_ON)) + '\n' +
+        'off: ' + row(at(F_OFF)));
+      for (const f of framed) f.remove();
+    });
+  </script>
+
   <script id=entries_carry_one_navigation_id type=module>
     const state = await testing.async();
     // Chrome 151 stamps every entry of a navigation with the same

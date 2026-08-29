@@ -222,6 +222,12 @@ pub const ResponseHead = struct {
     // Long enough for every encoding chain a server can plausibly send;
     // Chrome's own four fit in nine characters.
     pub const MAX_CONTENT_ENCODING_LEN = 48;
+    // `Timing-Allow-Origin` is `*` or a comma-separated origin list. In the
+    // wild it is almost always one of those two spellings and short. A longer
+    // list is truncated, and an origin that only appears past the cut reads as
+    // absent -- which errs toward reporting less about the response, never
+    // more.
+    pub const MAX_TIMING_ALLOW_LEN = 256;
 
     status: u16,
     url: [*c]const u8,
@@ -236,6 +242,12 @@ pub const ResponseHead = struct {
     // the response was encoded at all.
     _content_encoding_len: usize = 0,
     _content_encoding: [MAX_CONTENT_ENCODING_LEN]u8 = undefined,
+    // Resource Timing's opt-in: without it a cross-origin entry reports zeros
+    // for its sizes and its connection walk. Kept as the raw header because the
+    // decision needs the reading document's origin, which nothing down here
+    // knows.
+    _timing_allow_len: usize = 0,
+    _timing_allow: [MAX_TIMING_ALLOW_LEN]u8 = undefined,
 
     pub fn contentType(self: *ResponseHead) ?[]u8 {
         if (self._content_type_len == 0) {
@@ -249,6 +261,13 @@ pub const ResponseHead = struct {
             return null;
         }
         return self._content_encoding[0..self._content_encoding_len];
+    }
+
+    pub fn timingAllowOrigin(self: *ResponseHead) ?[]u8 {
+        if (self._timing_allow_len == 0) {
+            return null;
+        }
+        return self._timing_allow[0..self._timing_allow_len];
     }
 };
 
@@ -313,10 +332,17 @@ pub const ResponseLabels = struct {
     pub const MAX_CONTENT_TYPE_LEN = 96;
     pub const MAX_CONTENT_ENCODING_LEN = 48;
 
+    pub const MAX_TIMING_ALLOW_LEN = ResponseHead.MAX_TIMING_ALLOW_LEN;
+
     _type_len: u8 = 0,
     _type: [MAX_CONTENT_TYPE_LEN]u8 = undefined,
     _encoding_len: u8 = 0,
     _encoding: [MAX_CONTENT_ENCODING_LEN]u8 = undefined,
+    // Rides along with the two labels for the same reason they do: whoever
+    // files the entry does it after the transfer that owned the headers is
+    // gone, and the opacity decision needs this header.
+    _timing_allow_len: u16 = 0,
+    _timing_allow: [MAX_TIMING_ALLOW_LEN]u8 = undefined,
 
     pub fn contentType(self: *const ResponseLabels) []const u8 {
         return self._type[0..self._type_len];
@@ -346,6 +372,17 @@ pub const ResponseLabels = struct {
         const len = @min(trimmed.len, MAX_CONTENT_ENCODING_LEN);
         @memcpy(self._encoding[0..len], trimmed[0..len]);
         self._encoding_len = @intCast(len);
+    }
+
+    pub fn timingAllowOrigin(self: *const ResponseLabels) []const u8 {
+        return self._timing_allow[0..self._timing_allow_len];
+    }
+
+    pub fn setTimingAllowOrigin(self: *ResponseLabels, raw: []const u8) void {
+        const trimmed = std.mem.trim(u8, raw, " \t");
+        const len = @min(trimmed.len, MAX_TIMING_ALLOW_LEN);
+        @memcpy(self._timing_allow[0..len], trimmed[0..len]);
+        self._timing_allow_len = @intCast(len);
     }
 };
 

@@ -407,6 +407,11 @@ _delays_parent_load: bool = true,
 _type: enum { root, frame }, // only used for logs right now
 _req_id: u32 = 0,
 _navigated_options: ?NavigatedOpts = null,
+// This document's own `Timing-Allow-Origin`, kept for the entry its PARENT
+// files when this frame is an <iframe>: that entry is a copy of this
+// document's navigation record, and whether the parent may see its numbers is
+// this response's decision, not the parent's.
+_nav_timing_allow: []const u8 = "",
 _http_status: ?u16 = null,
 _http_headers: std.ArrayList(HttpHeader) = .empty,
 
@@ -1936,6 +1941,9 @@ fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
         // and carries the content-encoding alongside it -- the document is as
         // often compressed as any subresource.
         const labels = transfer.responseLabels();
+        // Duped onto the frame arena: the transfer that owns these bytes is
+        // released long before the parent files its <iframe> entry.
+        self._nav_timing_allow = try self.arena.dupe(u8, labels.timingAllowOrigin());
         perf.navigationResponseStarted(
             transfer.responseStatus() orelse 0,
             try self.arena.dupe(u8, labels.contentType()),
@@ -2091,7 +2099,7 @@ fn frameDoneCallback(ctx: *anyopaque) !void {
             // The document's own navigation is not render-blocking for its
             // parent; the parent's layout does not wait on it.
             t.render_blocking_status = "non-blocking";
-            _ = host.resourceLoaded(self.url, t, &parent.js.execution) catch |err| {
+            _ = host.resourceLoaded(self.url, t, .{ .timing_allow_origin = self._nav_timing_allow }, &parent.js.execution) catch |err| {
                 log.warn(.http, "iframe resource timing", .{ .err = err, .url = self.url });
             };
         }
@@ -2704,7 +2712,7 @@ pub fn recordResourceTiming(self: *Frame, r: ResourceTimingRecord) void {
         .decoded_body_size = r.body_len,
     };
     t.setConnectionMilestones(r.times, perf);
-    _ = perf.resourceLoaded(r.url, t, &self.js.execution) catch |err| {
+    _ = perf.resourceLoaded(r.url, t, .{ .timing_allow_origin = r.labels.timingAllowOrigin() }, &self.js.execution) catch |err| {
         log.warn(.http, "resource timing", .{ .err = err, .url = r.url, .initiator = r.initiator });
     };
 }

@@ -21065,3 +21065,80 @@ back. `Frame.requestFavicon` already sits at the end of the load event
 (`Frame.zig:1620`). The position gap is engine speed — our load event fires at
 ~14ms and Chrome's at ~117ms — and closing it would mean adding an artificial
 delay to buy a position that is not a tell. Left alone.
+
+## Another origin's bytes were the page's to count
+
+`cross-origin-entry-opacity`. Resource Timing makes a cross-origin entry opaque
+unless the response opts in with `Timing-Allow-Origin`. This engine opted every
+response in: every cross-origin entry carried its real byte count, its real
+protocol and its real connection walk, TAO or no TAO. On cf-scrapingcourse that
+handed the page the Turnstile widget document's exact size — B66 measured
+`encodedBodySize` 100804 and `transferSize` 101104 there against Chrome's zero.
+
+The plan opened on B66's station reading, which also carried two conclusions
+that the fixture overturned: that `Timing-Allow-Origin` is *not* the
+discriminator, and that Chrome masks only cross-origin **iframe documents**
+rather than cross-origin resources generally. Both are wrong, and the reason is
+worth keeping: B66 read the header with a bare `curl -sI`, and Cloudflare only
+echoes `timing-allow-origin` when the request carries an `Origin` header. A
+header read off a request shape the browser never makes was then used to explain
+the browser's behaviour.
+
+`probes/b87-crossorigin-fixture.mjs` asks it on ground we control — two ports,
+so two real origins — crossing the axes that could matter: framed document vs
+plain subresource, opted-in vs not, and (added after the first cut was wrong)
+no-cors vs CORS request mode. Chrome:
+
+```
+  load        origin   mode      TAO   sizes/proto/walk   status   contentType
+  <img>       same     --        --    real               200      real
+  <img>       cross    no-cors   no    0                  0        ''
+  <img>       cross    no-cors   yes   real               0        ''
+  <iframe>    cross    no-cors   no    0                  0        ''
+  <iframe>    cross    no-cors   yes   real               0        ''
+  fetch()     cross    cors      no    0                  200      real
+  fetch()     cross    cors      yes   real               200      real
+```
+
+**Two gates, governed by different things.** `Timing-Allow-Origin` governs the
+timing and the sizes, and nothing else. The status and the content type ride on
+the response **type**: a CORS-mode request that came back is not an opaque
+response, and its status is the page's to read however the response feels about
+being timed. Reading the status gate off the `<img>` rows alone — "cross-origin
+means status 0" — is the mistake this made first, and it hides the status of
+every cross-origin fetch and XHR. The live station says so independently:
+Chrome reports cf-scrapingcourse's cross-origin `api.js` with
+`responseStatus: 200`, 3/3.
+
+A third thing worth not getting wrong: an opaque milestone is a **true zero**,
+not "collapsed onto `fetchStart`". Collapsing is what a *reused connection*
+reports; confusing the two would say every cross-origin load rode a warm socket.
+What survives either gate is `fetchStart`, `responseEnd`, and therefore
+`startTime` and `duration` — a page may always know that it loaded something and
+how long it took.
+
+The mask is applied in `Performance.resourceLoaded`, which already existed as
+the one place the five recorders funnel through (it is where the response labels
+are duped for the same reason). `Timing-Allow-Origin` rides in on
+`ResponseLabels` beside the two labels it already carries; the `<iframe>` entry
+needs the *child* document's header, so the frame keeps its own on the frame
+arena. `transferSize` stops keying on `response_status == 0` and gets an
+explicit `responded` flag, because the mask zeroes the status of an entry that
+did respond and Chrome still reports its bytes.
+
+After: all eight fixture rows answer as Chrome does, and the live station reads
+`leakedBytes=0`.
+
+**One thing this deliberately does not fix, because it is not this entry's.**
+Our `api.js` entry stays opaque where Chrome's is transparent. That is not the
+mask being too eager — Cloudflare gives *us* no `Timing-Allow-Origin` at all,
+because we do not send an `Origin` header on that request, because this engine
+has no `crossorigin` attribute support on script, image or link elements. A
+missing `Origin` on a `crossorigin` subresource is a wire-visible defect of its
+own and wants its own plan; papering over it at the entry would report a
+permission the response never granted.
+
+**Priced as debt, not as a door.** cf's lever is the entry-name byte total
+(33–52KB) and Chrome passes that station on 278–1465 bytes — see the chapter
+above. What this closes is a leak: the page could read another origin's exact
+response sizes, which one expression separates from Chrome.

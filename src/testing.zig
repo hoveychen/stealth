@@ -908,10 +908,63 @@ fn corsQueryParam(query: []const u8, key: []const u8) ?[]const u8 {
     return null;
 }
 
+// The two responses `performance_resource.html` needs to see the cross-origin
+// opacity rule from both sides: same body, same Allow-Origin, differing only in
+// whether the timing is opted into. Fetched from `localhost:9582` by a page on
+// `127.0.0.1:9582`, which is a real cross origin on the same server -- the trick
+// `net/cors_preflight.html` already relies on.
+//
+// The body is a fixed 512 bytes so a leaked size reads as itself rather than as
+// a plausible small number.
+const TIMING_ALLOW_BODY = "t" ** 512;
+
+fn timingAllowHandler(req: *std.http.Server.Request, path: []const u8) !bool {
+    // The `frame-` pair is the same two responses as HTML, so the no-cors half
+    // of the rule can be asked with an <iframe>. Whether the request went out
+    // in CORS mode is a second, independent gate, and a fetch cannot ask about
+    // it -- fetch is always CORS mode.
+    const PREFIX = "/timing-allow/";
+    // Checked before the slice below, not after: this handler is offered every
+    // request the server takes, and slicing a shorter path panics the whole
+    // run rather than failing one test.
+    if (!std.mem.startsWith(u8, path, PREFIX)) {
+        return false;
+    }
+    const framed = std.mem.startsWith(u8, path, PREFIX ++ "frame-");
+    const tail = path[PREFIX.len..];
+    const allowed = if (std.mem.eql(u8, tail, "on") or std.mem.eql(u8, tail, "frame-on"))
+        true
+    else if (std.mem.eql(u8, tail, "off") or std.mem.eql(u8, tail, "frame-off"))
+        false
+    else
+        return false;
+
+    var headers: [3]std.http.Header = undefined;
+    var n: usize = 0;
+    headers[n] = .{ .name = "Content-Type", .value = if (framed) "text/html" else "text/plain" };
+    n += 1;
+    // Allow-Origin so the page may read the BODY; Timing-Allow-Origin is a
+    // separate opt-in governing whether it may read the TIMING. Varying only
+    // the second is the whole point of the pair.
+    headers[n] = .{ .name = "Access-Control-Allow-Origin", .value = "*" };
+    n += 1;
+    if (allowed) {
+        headers[n] = .{ .name = "Timing-Allow-Origin", .value = "*" };
+        n += 1;
+    }
+    try req.respond(if (framed) TIMING_ALLOW_BODY_HTML else TIMING_ALLOW_BODY, .{ .extra_headers = headers[0..n] });
+    return true;
+}
+
+// 512 bytes either way: the HTML spelling is a comment, so a framed copy
+// weighs exactly what the plain one does and one expected number covers both.
+const TIMING_ALLOW_BODY_HTML = "<!--" ++ "t" ** 505 ++ "-->";
+
 fn testHTTPHandler(req: *std.http.Server.Request) !void {
     const path = req.head.target;
 
     if (try corsHandler(req, path)) return;
+    if (try timingAllowHandler(req, path)) return;
 
     if (std.mem.eql(u8, path, "/xhr")) {
         return req.respond("1234567890" ** 10, .{
