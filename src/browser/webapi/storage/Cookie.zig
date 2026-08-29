@@ -43,6 +43,11 @@ expires: ?f64,
 secure: bool = false,
 http_only: bool = false,
 same_site: SameSite = .none,
+/// Whether the cookie actually carried a SameSite attribute. `same_site` is
+/// always the value the cookie *behaves* as -- Lax when nothing was said --
+/// but CDP reports the attribute, and Chrome omits `sameSite` entirely for a
+/// cookie that never had one. Only reporting may read this.
+same_site_explicit: bool = true,
 
 pub const SameSite = enum {
     strict,
@@ -210,6 +215,7 @@ pub fn parse(allocator: Allocator, url: [:0]const u8, str: []const u8) !Cookie {
         .value = owned_value,
         .path = owned_path,
         .same_site = same_site orelse .lax,
+        .same_site_explicit = same_site != null,
         .secure = secure orelse false,
         .http_only = http_only orelse false,
         .domain = owned_domain,
@@ -1289,6 +1295,57 @@ test "Cookie: parse SameSite" {
     try expectAttribute(.{ .same_site = .strict }, null, "b; SameSite=Strict");
 
     try expectAttribute(.{ .same_site = .strict }, null, "b; SameSite=None; SameSite=lax; SameSite=Strict");
+
+    // The Lax above is a default the cookie behaves as, not something it said.
+    // Nothing at all, a bare `samesite`, and a value we can't make sense of all
+    // leave the attribute unspecified -- which is what CDP reports on.
+    try expectAttribute(.{ .same_site = .lax, .same_site_explicit = false }, null, "b");
+    try expectAttribute(.{ .same_site = .lax, .same_site_explicit = false }, null, "b;samesite");
+    try expectAttribute(.{ .same_site = .lax, .same_site_explicit = false }, null, "b;  SameSite=Nope  ");
+    try expectAttribute(.{ .same_site = .lax, .same_site_explicit = true }, null, "b;samesite=lax");
+    try expectAttribute(.{ .same_site = .strict, .same_site_explicit = true }, null, "b; SameSite=Strict");
+    try expectAttribute(.{ .same_site = .none, .same_site_explicit = true }, null, "b; SameSite=None; Secure");
+}
+
+test "Jar: forRequest a cookie with no SameSite attribute is still sent as Lax" {
+    const expectCookies = struct {
+        fn expect(expected: []const u8, jar: *Jar, target_url: [:0]const u8, opts: Jar.LookupOpts) !void {
+            var aw: std.Io.Writer.Allocating = .init(testing.allocator);
+            defer aw.deinit();
+            try jar.forRequest(target_url, &aw.writer, opts);
+            try testing.expectEqual(expected, aw.written());
+        }
+    }.expect;
+
+    var jar = Jar.init(testing.allocator, null);
+    defer jar.deinit();
+
+    // No SameSite attribute, so nothing to report over CDP -- but the sending
+    // rules still treat it as Lax, and this is the assertion that keeps the
+    // reporting fix from turning into a cookie leak.
+    const victim_url: [:0]const u8 = "http://victim.example/";
+    try jar.add(try Cookie.parse(testing.allocator, victim_url, "sid=NO_ATTRIBUTE; Path=/"), lp.datetime.timestamp(.real), true);
+
+    // Cross-site subresource: excluded. A SameSite=None cookie would be sent.
+    try expectCookies("", &jar, "http://victim.example/api", .{
+        .origin_url = "http://attacker.test/page",
+        .is_navigation = false,
+        .is_http = true,
+    });
+
+    // Cross-site top-level navigation: included, as Lax allows.
+    try expectCookies("sid=NO_ATTRIBUTE", &jar, "http://victim.example/api", .{
+        .origin_url = "http://attacker.test/page",
+        .is_navigation = true,
+        .is_http = true,
+    });
+
+    // Same-site subresource: included.
+    try expectCookies("sid=NO_ATTRIBUTE", &jar, "http://victim.example/api", .{
+        .origin_url = victim_url,
+        .is_navigation = false,
+        .is_http = true,
+    });
 }
 
 test "Cookie: parse max-age" {

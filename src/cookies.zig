@@ -73,7 +73,8 @@ fn _loadFromFile(session: *Session, path: []const u8) !void {
             .expires = jc.expires,
             .secure = jc.secure orelse false,
             .http_only = jc.httpOnly orelse false,
-            .same_site = parseJsonSameSite(jc.sameSite),
+            .same_site = parseJsonSameSite(jc.sameSite) orelse .lax,
+            .same_site_explicit = jc.sameSite != null,
         };
 
         jar.add(cookie, now, true) catch |err| {
@@ -118,7 +119,10 @@ fn _saveToFile(jar: *Cookie.Jar, path: []const u8) !void {
             .expires = c.expires,
             .secure = c.secure,
             .httpOnly = c.http_only,
-            .sameSite = @tagName(c.same_site),
+            // Saving the effective Lax for a cookie that never carried the
+            // attribute would make the reload look like the server had sent
+            // one, so the round trip keeps the absence.
+            .sameSite = if (c.same_site_explicit) @tagName(c.same_site) else null,
         }, .{}, w);
     }
 
@@ -142,8 +146,8 @@ const JsonCookie = struct {
     sameSite: ?[]const u8 = null,
 };
 
-fn parseJsonSameSite(value: ?[]const u8) Cookie.SameSite {
-    const same_site = value orelse return .none;
+fn parseJsonSameSite(value: ?[]const u8) ?Cookie.SameSite {
+    const same_site = value orelse return null;
     if (std.ascii.eqlIgnoreCase(same_site, "strict")) return .strict;
     if (std.ascii.eqlIgnoreCase(same_site, "lax")) return .lax;
     if (std.ascii.eqlIgnoreCase(same_site, "none")) return .none;
@@ -161,5 +165,20 @@ test "cookies: load JSON accepts CDP SameSite casing" {
         .{ .ignore_unknown_fields = true },
     );
 
-    try std.testing.expectEqual(Cookie.SameSite.lax, parseJsonSameSite(parsed[0].sameSite));
+    try std.testing.expectEqual(Cookie.SameSite.lax, parseJsonSameSite(parsed[0].sameSite).?);
+}
+
+test "cookies: load JSON without SameSite leaves the attribute unspecified" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const parsed = try std.json.parseFromSliceLeaky(
+        []const JsonCookie,
+        arena.allocator(),
+        "[{\"name\":\"sid\",\"value\":\"1\",\"domain\":\"example.com\"}]",
+        .{ .ignore_unknown_fields = true },
+    );
+
+    // Null here, not `.none`: the cookie behaves as Lax and reports nothing.
+    try std.testing.expectEqual(null, parseJsonSameSite(parsed[0].sameSite));
 }
