@@ -44,7 +44,8 @@ pub fn lookup(name: []const u8) ?Shorthand {
 /// wrote is still kept whole rather than expanded.
 pub fn lookupJoinable(name: []const u8) ?Shorthand {
     const entry = table.shorthands.get(name) orelse return null;
-    if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry)) return null;
+    if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry) and
+        !isColumns(entry) and !isListStyle(entry) and !isGridArea(entry)) return null;
     return entry;
 }
 
@@ -533,6 +534,9 @@ pub fn joinKeeping(arena: Allocator, entry: Shorthand, values: []const []const u
 
     if (isBorderImage(entry)) return borderImageJoin(arena, values);
     if (isFont(entry)) return fontJoin(arena, values);
+    if (isColumns(entry)) return columnsJoin(arena, values);
+    if (isListStyle(entry)) return listStyleJoin(arena, values, keep_all);
+    if (isGridArea(entry)) return gridAreaJoin(arena, values);
 
     switch (entry.kind) {
         .unmodelled => return "",
@@ -589,7 +593,8 @@ pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
     var found: usize = 0;
     for (table.shorthands.keys(), table.shorthands.values()) |key, entry| {
         if (key[0] == '-') continue;
-        if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry)) continue;
+        if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry) and
+            !isColumns(entry) and !isListStyle(entry) and !isGridArea(entry)) continue;
         if (entry.longhands.len == 1 and std.mem.eql(u8, entry.longhands[0], key)) continue;
         for (entry.longhands) |longhand| {
             if (!std.mem.eql(u8, longhand, name)) continue;
@@ -2105,3 +2110,184 @@ pub const Components = struct {
         return true;
     }
 };
+
+// ---------------------------------------------------------------------------
+// Three grammars the generated table left `.unmodelled`
+// ---------------------------------------------------------------------------
+//
+// `columns`, `list-style` and `grid-area` are marked `.unmodelled` because the
+// generator could not reproduce every probe reading from the table's rules
+// alone. Kept whole, they cost the four, three and four longhands they name:
+// an author writing `columns: 3 100px` left `column-count` reading `auto`
+// where Chrome reads `3` (measured, scratch/b93/expr-shorthand-cases.js).
+//
+// Cloudflare's widget encodes `JSON.stringify(getComputedStyle(el))` whole, so
+// each of these travels in the payload of any page whose CSS uses the
+// shorthand.
+//
+// Two of the three ARE the `.components` rule once their fillers are known --
+// which is all the generator was missing -- so they run on the same machinery
+// via a synthetic entry rather than a parser of their own. `grid-area` is not:
+// its components are separated by `/` and an omitted one copies an earlier one
+// rather than taking a filler.
+
+const columns_longhands = [_][]const u8{ "column-width", "column-count", "column-height", "column-wrap" };
+const columns_fillers = [_][]const u8{ "auto", "auto", "auto", "auto" };
+const list_style_longhands = [_][]const u8{ "list-style-position", "list-style-image", "list-style-type" };
+const list_style_fillers = [_][]const u8{ "outside", "none", "disc" };
+const grid_area_longhands = [_][]const u8{ "grid-row-start", "grid-column-start", "grid-row-end", "grid-column-end" };
+
+/// Told from its shape, the way `isFont` and `isBorderImage` are: by the time
+/// `join` sees an entry there is no name left to match on.
+fn isColumns(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 4 and
+        std.mem.eql(u8, entry.longhands[0], "column-width") and
+        std.mem.eql(u8, entry.longhands[1], "column-count");
+}
+
+fn isListStyle(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 3 and
+        std.mem.eql(u8, entry.longhands[0], "list-style-position");
+}
+
+fn isGridArea(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 4 and
+        std.mem.eql(u8, entry.longhands[0], "grid-row-start");
+}
+
+/// What Chrome stores for one of the three, or null for anything else --
+/// including a CSS-wide keyword, which these still keep whole, and a value the
+/// grammar refuses, which keeps the pre-existing behaviour of storing it whole.
+///
+/// Sits beside the table lookup rather than inside `expand` for the same reason
+/// `fontExpansion` does: `lookup` declines an unmodelled entry before `expand`
+/// is ever reached.
+pub fn grammarExpansion(arena: Allocator, name: []const u8, value: []const u8) !?Expansion {
+    const entry = table.shorthands.get(name) orelse return null;
+    if (entry.kind != .unmodelled) return null;
+    if (cssWide(std.mem.trim(u8, value, &std.ascii.whitespace)) != null) return null;
+
+    if (isColumns(entry)) {
+        return expand(arena, .{
+            .kind = .components,
+            .longhands = entry.longhands,
+            .fillers = &columns_fillers,
+            .group = 2,
+            .groups = 1,
+        }, value);
+    }
+
+    if (isListStyle(entry)) {
+        const expansion = try expand(arena, .{
+            .kind = .components,
+            .longhands = entry.longhands,
+            .fillers = &list_style_fillers,
+            .group = 3,
+            .groups = 1,
+        }, value) orelse return null;
+        // `none` in a `list-style` is BOTH the type and the image, which is the
+        // one thing the components rule cannot say -- it gives each component
+        // one slot. Measured: `list-style: none` answers `list-style-type:
+        // none` as well as `list-style-image: none`, and `list-style: none
+        // inside` answers both plus `inside`.
+        var components = Components.init(value);
+        while (components.next()) |component| {
+            if (!std.ascii.eqlIgnoreCase(component, "none")) continue;
+            const values = @constCast(expansion.values);
+            values[1] = "none";
+            values[2] = "none";
+            break;
+        }
+        return expansion;
+    }
+
+    if (isGridArea(entry)) return gridAreaExpand(arena, value);
+    return null;
+}
+
+/// `<grid-line> [ / <grid-line> ]{0,3}`, and the omitted ones are not fillers:
+/// a line left out copies an earlier one when that one is a custom ident, and
+/// is `auto` otherwise. Measured over seven values
+/// (scratch/b93/expr-grammar-truth.js): `grid-area: foo` answers `foo` on all
+/// four, `grid-area: 1` answers `1` and three `auto`, and `grid-area: span 2`
+/// answers `span 2` and three `auto` -- `span 2` is not an ident.
+fn gridAreaExpand(arena: Allocator, value: []const u8) !?Expansion {
+    var lines: [4][]const u8 = undefined;
+    var count: usize = 0;
+    var it = std.mem.splitScalar(u8, value, '/');
+    while (it.next()) |raw| {
+        const line = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        if (line.len == 0) return null;
+        if (count == lines.len) return null;
+        lines[count] = line;
+        count += 1;
+    }
+    if (count == 0) return null;
+
+    const values = try arena.alloc([]const u8, grid_area_longhands.len);
+    values[0] = lines[0];
+    values[1] = if (count > 1) lines[1] else gridLineFallback(lines[0]);
+    values[2] = if (count > 2) lines[2] else gridLineFallback(lines[0]);
+    values[3] = if (count > 3) lines[3] else gridLineFallback(values[1]);
+    return .{ .names = &grid_area_longhands, .values = values };
+}
+
+/// What an omitted `<grid-line>` takes from the one it mirrors: the ident
+/// itself, or `auto` when there is no ident to copy.
+fn gridLineFallback(line: []const u8) []const u8 {
+    return if (isGridIdent(line)) line else "auto";
+}
+
+/// A bare custom ident -- not `auto`, not a number, not `span <n>`.
+fn isGridIdent(line: []const u8) bool {
+    if (std.ascii.eqlIgnoreCase(line, "auto")) return false;
+    if (std.mem.indexOfAny(u8, line, " \t\r\n") != null) return false;
+    if (line.len == 0) return false;
+    return !std.ascii.isDigit(line[0]) and line[0] != '-' and line[0] != '+';
+}
+
+/// `columns` as Chrome writes it: the components that are not `auto`, width
+/// first whatever order the author used, and `auto` when neither is set.
+/// Measured: `columns: 3 100px` reads back `100px 3`, `columns: 3` reads back
+/// `3`, `columns: auto` reads back `auto`.
+fn columnsJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
+    const width_set = !std.ascii.eqlIgnoreCase(values[0], "auto");
+    const count_set = !std.ascii.eqlIgnoreCase(values[1], "auto");
+    if (width_set and count_set) return std.mem.concat(arena, u8, &.{ values[0], " ", values[1] });
+    if (width_set) return values[0];
+    if (count_set) return values[1];
+    return "auto";
+}
+
+/// `list-style` as Chrome writes it. A computed view writes all three in
+/// longhand order (`outside none square`); a declaration writes only the
+/// components that are off their initial value, and `list-style: none` writes
+/// the single `none` its type carries.
+fn listStyleJoin(arena: Allocator, values: []const []const u8, keep_all: bool) ![]const u8 {
+    if (keep_all) {
+        return std.mem.concat(arena, u8, &.{ values[0], " ", values[1], " ", values[2] });
+    }
+    var written: [3][]const u8 = undefined;
+    var count: usize = 0;
+    for (values, list_style_fillers) |held, filler| {
+        if (std.ascii.eqlIgnoreCase(held, filler)) continue;
+        written[count] = held;
+        count += 1;
+    }
+    if (count == 0) return "";
+    return std.mem.join(arena, " ", written[0..count]);
+}
+
+/// `grid-area` as Chrome writes it: the four lines, slash-separated, with the
+/// trailing ones dropped while they hold exactly what leaving them out would
+/// have produced.
+fn gridAreaJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
+    var count: usize = 4;
+    if (std.ascii.eqlIgnoreCase(values[3], gridLineFallback(values[1]))) count = 3;
+    if (count == 3 and std.ascii.eqlIgnoreCase(values[2], gridLineFallback(values[0]))) count = 2;
+    if (count == 2 and std.ascii.eqlIgnoreCase(values[1], gridLineFallback(values[0]))) count = 1;
+    return std.mem.join(arena, " / ", values[0..count]);
+}

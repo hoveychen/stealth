@@ -3176,6 +3176,21 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
         },
     };
 
+    // Three more the table calls unmodelled whose grammars ARE reproducible;
+    // like `font` above, they sit beside the table lookup because that lookup
+    // declines an unmodelled entry. See shorthand.grammarExpansion.
+    if (try shorthand.grammarExpansion(frame.local_arena, normalized, value)) |expansion| {
+        for (expansion.names, expansion.values) |name, longhand| {
+            if (shorthand.refusesLonghand(name, longhand)) return false;
+        }
+        var changed = false;
+        for (expansion.names, expansion.values) |name, longhand| {
+            const canonical = try normalizePropertyValue(frame.local_arena, name, longhand);
+            changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), important, frame) or changed;
+        }
+        return changed;
+    }
+
     // Ahead of the shorthand lookup, because `background-position` and
     // `mask-position` are shorthands and the grammar being checked is the
     // shorthand's: once expanded into an x and a y, `top 30%` is two components
