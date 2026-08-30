@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The computed `animation` shorthand.
+
+  `COMPUTED_JOIN_DECLINED` carried `animation` with a note saying "a computed
+  `animation` reads `none` where the declared form spells all eight
+  components". That is true of an element declaring nothing and false of one
+  that declares an animation, which is the case a page has. Measured on Chrome
+  151 headed (scratch/b69/expr-animation-shorthand.js and
+  scratch/b69/expr-animation-declared.js), nine declaration shapes each way:
+
+    declaration                                   computed          declared
+    (none)                                        none              --
+    3s linear 1s infinite alternate both running ka
+                                                  3s linear 1s infinite alternate both ka
+                                                                    ...both running ka
+    2s ka                                         2s ka             2s ease 0s 1 normal none running ka
+    ka                                            ka                ...
+    3s ka paused                                  3s paused ka      3s ease 0s 1 normal none paused ka
+    animation-name: ka                            ka                --
+    animation-duration: 4s                        4s                --
+    ka 5s ease-in 2s 3 reverse forwards           5s ease-in 2s 3 reverse forwards ka
+
+  So the two forms differ in exactly one rule: the computed one drops a slot
+  holding its initial value and the declared one writes all eight. `running` is
+  dropped, `paused` is kept, and an element with every slot at its initial reads
+  `none` -- which is the recorded initial value, so an empty join falling
+  through to the table is already the right answer for it.
+
+  chrome_shorthands.zig measured the DECLARED serialisation, which is what a
+  page can write, so its `omit` lists are empty on purpose. The computed join
+  gets omit lists of its own instead of the table being changed.
+
+  Cloudflare's widget encodes `JSON.stringify(getComputedStyle(el))` whole, so
+  `animation` and `-webkit-animation` travel in the payload of every page it
+  challenges.
+
+  NOT here, measured and out of scope: this engine does not expand a
+  comma-separated `animation` at all -- `animation: 1s ka, 2s linear kb` leaves
+  `animationName` at `none` and answers the shorthand off the stored text, which
+  happens to be right. Chrome reports `animationName: ka, kb`. And `background`
+  and `flex-flow` are still on the declined list for the same reason `animation`
+  was, each with a serialisation difference of its own that has not been
+  measured.
+-->
+
+<body>
+
+<script id=computed_animation_drops_initial_slots>
+{
+  const style = document.createElement('style');
+  style.textContent = '@keyframes ka { 100% { opacity: 0; } }';
+  document.head.appendChild(style);
+
+  const probe = (decl) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:10px;height:10px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).animation);
+    el.remove();
+    return got;
+  };
+
+  const CASES = [
+    ['', 'none'],
+    ['animation: 3s linear 1s infinite alternate both running ka;',
+      '3s linear 1s infinite alternate both ka'],
+    ['animation: 2s ka;', '2s ka'],
+    ['animation: ka;', 'ka'],
+    ['animation: 3s ka paused;', '3s paused ka'],
+    ['animation-name: ka;', 'ka'],
+    ['animation-duration: 4s;', '4s'],
+    ['animation: ka 5s ease-in 2s 3 reverse forwards;',
+      '5s ease-in 2s 3 reverse forwards ka'],
+  ];
+  for (const [decl, expected] of CASES) {
+    testing.expectEqual('{' + decl + '} = ' + expected, '{' + decl + '} = ' + probe(decl));
+  }
+  style.remove();
+}
+</script>
+
+<script id=animation_duration_auto_computes_to_zero>
+{
+  // The slot that made the join print. `animation: ka` leaves the duration
+  // unset, this engine's expansion writes the declared form's filler `auto`,
+  // and Chrome's computed value is `0s` -- for an unset duration, for a
+  // name-only longhand, and for an `auto` the page wrote itself, all three
+  // measured (scratch/b69/expr-anim-dur.js). Dropping `auto` in the join
+  // instead would leave the longhand reporting a value Chrome never does.
+  const style = document.createElement('style');
+  style.textContent = '@keyframes kc { 100% { opacity: 0; } }';
+  document.head.appendChild(style);
+  const probe = (decl) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:10px;height:10px;' + decl;
+    document.body.appendChild(el);
+    const cs = getComputedStyle(el);
+    const got = cs.animationDuration + ' / ' + cs.animation;
+    el.remove();
+    return got;
+  };
+  testing.expectEqual('0s / kc', probe('animation: kc;'));
+  testing.expectEqual('0s / kc', probe('animation-name: kc;'));
+  testing.expectEqual('0s / kc', probe('animation: auto kc;'));
+  testing.expectEqual('0s / none', probe(''));
+  style.remove();
+}
+</script>
+
+<script id=computed_webkit_animation_is_the_same>
+{
+  const style = document.createElement('style');
+  style.textContent = '@keyframes kb { 100% { opacity: 0; } }';
+  document.head.appendChild(style);
+  const el = document.createElement('div');
+  el.style.cssText = 'width:10px;height:10px;animation: 3s linear 1s infinite alternate both running kb;';
+  document.body.appendChild(el);
+  const cs = getComputedStyle(el);
+  testing.expectEqual('3s linear 1s infinite alternate both kb', String(cs.webkitAnimation));
+  // ...and the longhands the join reads are unchanged.
+  testing.expectEqual('kb 3s linear 1s infinite alternate both running',
+    [cs.animationName, cs.animationDuration, cs.animationTimingFunction, cs.animationDelay,
+     cs.animationIterationCount, cs.animationDirection, cs.animationFillMode,
+     cs.animationPlayState].join(' '));
+  el.remove();
+  style.remove();
+}
+</script>
+
+<script id=declared_animation_still_writes_every_slot>
+{
+  // The other half of the pair: the declared serialisation must not move.
+  const el = document.createElement('div');
+  el.style.cssText = 'animation: 2s ka;';
+  testing.expectEqual('2s ease 0s 1 normal none running ka', el.style.animation);
+  el.style.cssText = 'animation: 3s ka paused;';
+  testing.expectEqual('3s ease 0s 1 normal none paused ka', el.style.animation);
+}
+</script>
