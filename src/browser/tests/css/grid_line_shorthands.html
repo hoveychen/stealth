@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  `grid-row` and `grid-column`: the two-line shorthands.
+
+  `grid-area` already expands here (shorthand.gridAreaExpand, with the
+  fallback rule an omitted `<grid-line>` follows) and joins back
+  (gridAreaJoin). Its two-line siblings did neither: `grid-row: 1 / 3` left
+  all four longhands at `auto`, so `gridRow` read `auto` on every element
+  that declared one.
+
+  Seventeen shapes measured on Chrome 151 headed
+  (scratch/b69/expr-last-five.js, expr-grid-shapes.js, expr-grid-collapse.js).
+  The rule is the same one `grid-area` already has, with two slots instead of
+  four:
+
+    * An omitted end line copies the start when the start is a bare custom
+      ident, and is `auto` otherwise -- `grid-row: foo` is `foo / foo`,
+      `grid-row: 2` is `2 / auto`, `grid-column: span 2` is `span 2 / auto`.
+    * The join drops the end when it equals what an omitted one would have
+      been. So `3 / auto` reads `3`, `foo / foo` reads `foo`, and **`3 / 3`
+      reads `3 / 3`** -- a number is not an ident, so its omitted form would
+      have been `auto`, and `3` is not `auto`.
+    * `auto / 4` keeps both, because only the END is ever dropped.
+
+  The last two rows are what makes this a rule rather than "drop it when it is
+  `auto`", and they hold for longhands declared directly too:
+  `grid-row-start: foo; grid-row-end: foo` reads `foo`, and the same pair with
+  `3` reads `3 / 3`.
+
+  Cloudflare's widget encodes `JSON.stringify(getComputedStyle(el))` whole, so
+  both names travel in the payload of any page that uses CSS grid.
+-->
+
+<body>
+
+<script id=grid_line_shorthands_expand_and_join>
+{
+  const probe = (decl, props) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;' + decl;
+    document.body.appendChild(el);
+    const cs = getComputedStyle(el);
+    const got = props.map((p) => cs[p]).join(' | ');
+    el.remove();
+    return got;
+  };
+  const ROW = ['gridRow', 'gridRowStart', 'gridRowEnd'];
+  const COL = ['gridColumn', 'gridColumnStart', 'gridColumnEnd'];
+  const CASES = [
+    ['', ROW, 'auto | auto | auto'],
+    ['grid-row: 1 / 3;', ROW, '1 / 3 | 1 | 3'],
+    ['grid-row: 2;', ROW, '2 | 2 | auto'],
+    ['grid-row: 3 / auto;', ROW, '3 | 3 | auto'],
+    ['grid-row: foo;', ROW, 'foo | foo | foo'],
+    ['grid-row: foo / foo;', ROW, 'foo | foo | foo'],
+    ['grid-row: foo / bar;', ROW, 'foo / bar | foo | bar'],
+    ['grid-row: 3 / 3;', ROW, '3 / 3 | 3 | 3'],
+    ['grid-row: 2 / span 3;', ROW, '2 / span 3 | 2 | span 3'],
+    ['grid-row: span 2 / span 2;', ROW, 'span 2 / span 2 | span 2 | span 2'],
+    ['grid-row-start: foo; grid-row-end: foo;', ROW, 'foo | foo | foo'],
+    ['grid-row-start: 3; grid-row-end: 3;', ROW, '3 / 3 | 3 | 3'],
+    ['grid-row-end: 4;', ROW, 'auto / 4 | auto | 4'],
+    ['grid-column: span 2 / 5;', COL, 'span 2 / 5 | span 2 | 5'],
+    ['grid-column: foo / bar;', COL, 'foo / bar | foo | bar'],
+    ['grid-column: span 2;', COL, 'span 2 | span 2 | auto'],
+    ['grid-column: -1 / -3;', COL, '-1 / -3 | -1 | -3'],
+    ['grid-column-start: 3;', COL, '3 | 3 | auto'],
+  ];
+  for (const [decl, props, expected] of CASES) {
+    testing.expectEqual('{' + decl + '} = ' + expected, '{' + decl + '} = ' + probe(decl, props));
+  }
+}
+</script>
+
+<script id=grid_area_still_sees_what_the_pair_wrote>
+{
+  // The four-line shorthand reads the same longhands, so teaching the pair to
+  // expand has to leave `grid-area` answering what Chrome answers for the same
+  // element -- including the row where the middle slot survives because
+  // something to its right did.
+  const probe = (decl) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).gridArea);
+    el.remove();
+    return got;
+  };
+  const CASES = [
+    ['grid-area: 1 / 2 / 3 / 4;', '1 / 2 / 3 / 4'],
+    ['grid-area: 1 / 2;', '1 / 2'],
+    ['grid-area: 1 / 2 / 3;', '1 / 2 / 3'],
+    ['grid-area: foo;', 'foo'],
+    ['grid-row: 1 / 3;', '1 / auto / 3'],
+    ['grid-row: 2;', '2'],
+    ['grid-row: foo / foo;', 'foo / auto'],
+    ['grid-row: 3 / 3;', '3 / auto / 3'],
+    ['grid-row-end: 4;', 'auto / auto / 4'],
+    ['grid-column: span 2;', 'auto / span 2'],
+    ['grid-column: span 2 / 5;', 'auto / span 2 / auto / 5'],
+    ['grid-column: foo / bar;', 'auto / foo / auto / bar'],
+    ['grid-column-start: 3;', 'auto / 3'],
+  ];
+  for (const [decl, expected] of CASES) {
+    testing.expectEqual('{' + decl + '} = ' + expected, '{' + decl + '} = ' + probe(decl));
+  }
+}
+</script>

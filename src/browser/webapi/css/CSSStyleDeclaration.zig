@@ -6705,6 +6705,10 @@ test "WebApi: CSSStyleDeclaration computed background shorthand" {
     try testing.htmlRunner("css/background_computed_shorthand.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration grid line shorthands" {
+    try testing.htmlRunner("css/grid_line_shorthands.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration inheritance" {
     try testing.htmlRunner("css/computed_inheritance.html", .{});
 }

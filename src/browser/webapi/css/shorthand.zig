@@ -48,7 +48,7 @@ pub fn lookup(name: []const u8) ?Shorthand {
 pub fn lookupComputedJoinable(name: []const u8) ?Shorthand {
     const entry = table.shorthands.get(name) orelse return null;
     if (entry.kind != .unmodelled) return entry;
-    if (isColumns(entry) or isListStyle(entry) or isGridArea(entry) or isFontVariant(entry)) return entry;
+    if (isColumns(entry) or isListStyle(entry) or isGridArea(entry) or isGridLinePair(entry) or isFontVariant(entry)) return entry;
     return null;
 }
 
@@ -61,7 +61,7 @@ pub fn lookupJoinable(name: []const u8) ?Shorthand {
     const entry = table.shorthands.get(name) orelse return null;
     if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry) and
         !isColumns(entry) and !isListStyle(entry) and !isGridArea(entry) and
-        !isFontVariant(entry)) return null;
+        !isGridLinePair(entry) and !isFontVariant(entry)) return null;
     return entry;
 }
 
@@ -553,6 +553,7 @@ pub fn joinKeeping(arena: Allocator, entry: Shorthand, values: []const []const u
     if (isColumns(entry)) return columnsJoin(arena, values);
     if (isListStyle(entry)) return listStyleJoin(arena, values, keep_all);
     if (isGridArea(entry)) return gridAreaJoin(arena, values);
+    if (isGridLinePair(entry)) return gridLinePairJoin(arena, values);
     if (isFontVariant(entry)) return fontVariantJoin(arena, values);
 
     switch (entry.kind) {
@@ -612,7 +613,7 @@ pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
         if (key[0] == '-') continue;
         if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry) and
             !isColumns(entry) and !isListStyle(entry) and !isGridArea(entry) and
-            !isFontVariant(entry)) continue;
+            !isGridLinePair(entry) and !isFontVariant(entry)) continue;
         if (entry.longhands.len == 1 and std.mem.eql(u8, entry.longhands[0], key)) continue;
         for (entry.longhands) |longhand| {
             if (!std.mem.eql(u8, longhand, name)) continue;
@@ -2176,6 +2177,15 @@ fn isGridArea(entry: Shorthand) bool {
         std.mem.eql(u8, entry.longhands[0], "grid-row-start");
 }
 
+/// `grid-row` and `grid-column`: `grid-area`'s grammar with two slots instead
+/// of four, and the same rule for the omitted one.
+fn isGridLinePair(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 2 and
+        (std.mem.eql(u8, entry.longhands[0], "grid-row-start") or
+            std.mem.eql(u8, entry.longhands[0], "grid-column-start"));
+}
+
 /// What Chrome stores for one of the three, or null for anything else --
 /// including a CSS-wide keyword, which these still keep whole, and a value the
 /// grammar refuses, which keeps the pre-existing behaviour of storing it whole.
@@ -2223,6 +2233,7 @@ pub fn grammarExpansion(arena: Allocator, name: []const u8, value: []const u8) !
     }
 
     if (isGridArea(entry)) return gridAreaExpand(arena, value);
+    if (isGridLinePair(entry)) return gridLinePairExpand(arena, entry.longhands, value);
 
     if (isFontVariant(entry)) {
         const fillers = [_][]const u8{ "normal", "normal", "normal", "normal", "normal", "normal", "normal" };
@@ -2319,6 +2330,41 @@ fn gridAreaJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
     if (count == 3 and std.ascii.eqlIgnoreCase(values[2], gridLineFallback(values[0]))) count = 2;
     if (count == 2 and std.ascii.eqlIgnoreCase(values[1], gridLineFallback(values[0]))) count = 1;
     return std.mem.join(arena, " / ", values[0..count]);
+}
+
+/// `<grid-line> [ / <grid-line> ]?`. Same fallback as `grid-area`'s: an omitted
+/// end copies the start when the start is a bare custom ident, `auto`
+/// otherwise. Measured over seventeen shapes
+/// (css/grid_line_shorthands.html): `grid-row: foo` is `foo / foo`,
+/// `grid-row: 2` is `2 / auto`, `grid-column: span 2` is `span 2 / auto`.
+fn gridLinePairExpand(arena: Allocator, longhands: []const []const u8, value: []const u8) !?Expansion {
+    var lines: [2][]const u8 = undefined;
+    var count: usize = 0;
+    var it = std.mem.splitScalar(u8, value, '/');
+    while (it.next()) |raw| {
+        const line = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        if (line.len == 0) return null;
+        if (count == lines.len) return null;
+        lines[count] = line;
+        count += 1;
+    }
+    if (count == 0) return null;
+
+    const values = try arena.alloc([]const u8, 2);
+    values[0] = lines[0];
+    values[1] = if (count > 1) lines[1] else gridLineFallback(lines[0]);
+    return .{ .names = longhands, .values = values };
+}
+
+/// The end is dropped when it holds what an omitted one would have held --
+/// which is why `3 / auto` reads `3` and `3 / 3` reads `3 / 3`: a number is not
+/// an ident, so its omitted form is `auto`. Only the end is ever dropped, so
+/// `auto / 4` keeps both.
+fn gridLinePairJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
+    if (std.ascii.eqlIgnoreCase(values[1], gridLineFallback(values[0]))) {
+        return arena.dupe(u8, values[0]);
+    }
+    return std.mem.join(arena, " / ", values[0..2]);
 }
 
 const font_variant_longhands = [_][]const u8{
