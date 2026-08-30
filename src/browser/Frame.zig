@@ -2924,6 +2924,43 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         return self.installStylesheet(link, element, resolved, body);
     }
 
+    // Not cached yet, but possibly on the wire: `<link rel=preload as=style>`
+    // followed by `<link rel=stylesheet>` for the same href is what every Vite
+    // build emits, and it is in the head of www.scrapingcourse.com -- the
+    // cf-scrapingcourse station's own top document. The preload is fetched
+    // asynchronously, so by the time the stylesheet link is parsed the bytes
+    // have not landed and this function used to ask the origin a second time:
+    // Chrome files one resource entry for that pair, this engine filed two,
+    // twenty milliseconds apart (measured on both arms, run-expr.mjs).
+    //
+    // So wait for the transfer that is already open rather than opening
+    // another. Chrome waits too -- a render-blocking sheet holds up the parser
+    // either way -- and the loop is `ScriptManager.waitForPreload`'s: mark the
+    // evaluation window so a `Target.closeTarget` arriving mid-pump cannot free
+    // the frame this stack holds, then pump until the slot closes.
+    const preload_key: []const u8 = if (elementRequestsCors(element))
+        std.fmt.allocPrint(arena.allocator(), "cors\x00{s}", .{resolved}) catch resolved
+    else
+        resolved;
+    if (self._image_cache.get(preload_key)) |open_entry| {
+        const script_manager = &self._script_manager.base;
+        const outer_evaluating = script_manager.is_evaluating;
+        script_manager.is_evaluating = true;
+        while (open_entry.done == false) {
+            http_client.tickSync(200) catch break;
+            if (self.isGoingAway()) break;
+        }
+        script_manager.endEvaluationWindow(outer_evaluating);
+        if (self.isGoingAway()) {
+            return;
+        }
+        // A preload that failed, or one that was never a stylesheet, leaves
+        // nothing here and the fetch below runs as it always did.
+        if (self._stylesheet_bodies.get(resolved)) |body| {
+            return self.installStylesheet(link, element, resolved, body);
+        }
+    }
+
     // Taken before the transfer, not after: a resource entry's startTime is
     // when the load began.
     const fetch_start = self.performance().now();
@@ -3241,6 +3278,14 @@ const ImageRequest = struct {
     cache: *ImageCacheEntry,
     cache_key: []const u8,
 
+    // A stylesheet keeps its bytes where an image keeps a prefix, because the
+    // `<link rel=stylesheet>` that follows a `<link rel=preload as=style>` has
+    // to install those bytes rather than ask the origin for them again. Grown
+    // from the frame arena and bounded like any other sheet.
+    keep_body: bool = false,
+    body: std.ArrayListUnmanaged(u8) = .empty,
+    body_overflowed: bool = false,
+
     fn headerCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.HeaderResult {
         const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
 
@@ -3276,6 +3321,19 @@ const ImageRequest = struct {
         const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
         self.bytes += data.len;
         self.encoded_bytes = transfer.encodedBodySize();
+        if (self.keep_body and !self.body_overflowed) {
+            if (self.body.items.len + data.len > MAX_STYLESHEET_BYTES) {
+                // Past the bound the bytes are not worth keeping, and the
+                // `<link>` that wanted them will fetch and reject them itself.
+                self.body.clearRetainingCapacity();
+                self.body_overflowed = true;
+            } else {
+                self.body.appendSlice(self.frame.arena, data) catch {
+                    self.body.clearRetainingCapacity();
+                    self.body_overflowed = true;
+                };
+            }
+        }
         const room = self.prefix.len - self.prefix_len;
         if (room == 0) {
             return;
@@ -3303,6 +3361,17 @@ const ImageRequest = struct {
             .times = self.times,
             .cors = self.cors,
         });
+        if (self.keep_body and !self.body_overflowed and
+            self.status >= 200 and self.status < 300)
+        {
+            // Same map the two-`<link rel=stylesheet>` case fills, and the same
+            // reason: one sheet named twice is one request. The key is
+            // `self.url`, which `preloadResource` took from the frame arena
+            // precisely so it outlives this transfer.
+            self.frame._stylesheet_bodies.put(self.frame.arena, self.url, self.body.items) catch |err| {
+                log.warn(.http, "stylesheet cache", .{ .err = err, .url = self.url });
+            };
+        }
         const became_a_picture = self.arrived();
         const size = if (became_a_picture) self.intrinsicSize() else null;
         if (size) |s| {
@@ -3623,6 +3692,7 @@ fn requestSubresource(self: *Frame, resolved: [:0]const u8, element: ?*Element.H
         .fetch_start = self.performance().now(),
         .cache = entry,
         .cache_key = cache_key,
+        .keep_body = opts.resource_type == .stylesheet,
     };
     request.ctx = pending;
     request.header_callback = ImageRequest.headerCallback;
