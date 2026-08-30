@@ -252,6 +252,15 @@ const ScheduleCallback = struct {
         self.exec.js.localScope(&ls);
         defer ls.deinit();
 
+        // A dispatch is the closest this engine gets to a rendering frame --
+        // `requestAnimationFrame` callbacks run from here -- so it is where the
+        // document timeline a computed animated value reads is allowed to move.
+        // See Frame.animationTime.
+        switch (self.exec.js.global) {
+            .frame => |frame| frame.releaseAnimationTime(),
+            .worker => {},
+        }
+
         const timers = self.timers;
         const prev_nesting = timers._nesting_level;
         timers._nesting_level = self.nesting;

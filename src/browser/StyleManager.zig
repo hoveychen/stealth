@@ -54,6 +54,20 @@ const Tag = Element.Tag;
 const Input = Element.Html.Input;
 const RuleList = std.MultiArrayList(Rule);
 
+/// One step of a `@keyframes` rule: where in the animation it sits, and the
+/// declarations it carries. A shared selector (`0%, 50% { ... }`) is stored as
+/// one entry per key, all pointing at the same block.
+pub const Keyframe = struct {
+    /// A fraction of one iteration, so `from` is 0 and `to` is 1. Outside
+    /// [0, 1] is possible -- `-50%` parses -- and the interval search that
+    /// reads these simply never selects such a frame.
+    offset: f64,
+    /// The declaration block, verbatim, still to be parsed by whoever wants a
+    /// property out of it. Which property that is depends on the reader, so
+    /// nothing is extracted here.
+    block: []const u8,
+};
+
 frame: *Frame,
 
 arena: *lp.Arena,
@@ -96,6 +110,14 @@ dirty: bool = false,
 // over 800 elements at 1500ms.
 declared_longhands: std.StringHashMapUnmanaged(void) = .empty,
 
+/// `@keyframes` name -> its steps, rebuilt with the rules. Keyframes take no
+/// part in the cascade -- they declare nothing on any element, which is why
+/// `parseSheet` skipped them for so long -- but the computed value of an
+/// animated property is read out of them, and `animation-name` is the only
+/// thing that resolves the name. Names are case-sensitive custom identifiers,
+/// so the lookup is an exact match.
+keyframes: std.StringHashMapUnmanaged([]const Keyframe) = .empty,
+
 pub fn init(frame: *Frame) !StyleManager {
     return .{
         .frame = frame,
@@ -123,6 +145,11 @@ fn parseSheet(self: *StyleManager, build_arena: Allocator, sheet: *CSSStyleSheet
                 // when its query matches the viewport.
                 .media => try self.applyMediaAtRule(build_arena, rule._text, 0, NO_LAYER),
                 .layer_block, .layer_statement => try self.applyLayerAtRule(build_arena, rule._text, 0, NO_LAYER),
+                // Off the stored source for the same reason `@media` is: this
+                // reads the rule as the page wrote it, so a keyframe added
+                // afterwards through `CSSKeyframesRule.appendRule` is not seen
+                // here any more than an `insertRule` inside an `@media` is.
+                .keyframes => try self.addKeyframesAtRule(rule._text),
                 else => {},
             }
         }
@@ -149,14 +176,18 @@ fn parseSheet(self: *StyleManager, build_arena: Allocator, sheet: *CSSStyleSheet
             .style => |s| try self.addRawRule(build_arena, s.selector, s.block, NO_LAYER),
             .at_rule => |a| {
                 // Only `@media` and `@layer` participate in the cascade
-                // here. Other at-rules (`@keyframes`, `@supports`,
-                // `@font-face`, …) don't carry top-level declarations
-                // relevant to the visibility filter and stay skipped as
-                // before.
+                // here. Other at-rules (`@supports`, `@font-face`, …) don't
+                // carry top-level declarations relevant to the visibility
+                // filter and stay skipped as before. `@keyframes` is skipped
+                // by the cascade too -- it declares nothing on any element --
+                // but it is indexed by name, because a computed animated
+                // property is read out of it.
                 if (std.ascii.eqlIgnoreCase(a.keyword, "media")) {
                     try self.applyMediaAtRule(build_arena, a.text, 0, NO_LAYER);
                 } else if (std.ascii.eqlIgnoreCase(a.keyword, "layer")) {
                     try self.applyLayerAtRule(build_arena, a.text, 0, NO_LAYER);
+                } else if (isKeyframesKeyword(a.keyword)) {
+                    try self.addKeyframesAtRule(a.text);
                 }
             },
         }
@@ -251,10 +282,79 @@ fn applyInnerRules(self: *StyleManager, build_arena: Allocator, inner: []const u
                     try self.applyMediaAtRule(build_arena, nested.text, depth, layer);
                 } else if (std.ascii.eqlIgnoreCase(nested.keyword, "layer")) {
                     try self.applyLayerAtRule(build_arena, nested.text, depth, layer);
+                } else if (isKeyframesKeyword(nested.keyword)) {
+                    try self.addKeyframesAtRule(nested.text);
                 }
             },
         }
     }
+}
+
+/// Both spellings of the one at-rule. `@-webkit-keyframes` is not a separate
+/// rule -- a page writing it and reading `animation-name` back gets the same
+/// animation -- so the two index into the same table.
+fn isKeyframesKeyword(keyword: []const u8) bool {
+    return std.ascii.eqlIgnoreCase(keyword, "keyframes") or
+        std.ascii.eqlIgnoreCase(keyword, "-webkit-keyframes");
+}
+
+/// Index one `@keyframes` rule under its name. Everything kept lives in
+/// `self.arena`, since `text` is borrowed from whatever produced it -- a
+/// CSSOM rule's stored source, or a `<style>` element's text -- and only the
+/// first of those outlives the rebuild.
+fn addKeyframesAtRule(self: *StyleManager, text: []const u8) Allocator.Error!void {
+    const block = atRuleBlock(text, "@keyframes") orelse
+        atRuleBlock(text, "@-webkit-keyframes") orelse return;
+    const name = std.mem.trim(u8, block.prelude, &std.ascii.whitespace);
+    if (name.len == 0) {
+        return;
+    }
+
+    const allocator = self.arena.allocator();
+    var frames: std.ArrayList(Keyframe) = .empty;
+
+    var it = CssParser.parseStylesheet(block.body);
+    while (it.next()) |parsed| {
+        const step = switch (parsed) {
+            .style => |s| s,
+            // A `@keyframes` block holds keyframe rules and nothing else.
+            .at_rule => continue,
+        };
+        const declarations = try allocator.dupe(u8, step.block);
+        // `0%, 50% { … }` is two steps sharing one block, which is why the
+        // selector is split rather than parsed as a whole.
+        var keys = std.mem.splitScalar(u8, step.selector, ',');
+        while (keys.next()) |key| {
+            const offset = keyframeOffset(key) orelse continue;
+            try frames.append(allocator, .{ .offset = offset, .block = declarations });
+        }
+    }
+
+    // The later rule replaces the earlier one outright rather than merging
+    // into it: two `@keyframes` under one name are one animation, and it is
+    // the last one that describes it.
+    try self.keyframes.put(allocator, try allocator.dupe(u8, name), frames.items);
+}
+
+/// A keyframe selector as a fraction of one iteration. `from` and `to` are the
+/// two keywords; everything else has to be a percentage, and a selector that is
+/// neither -- `50`, `half` -- takes only itself out of the list.
+fn keyframeOffset(raw: []const u8) ?f64 {
+    const key = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (key.len == 0) return null;
+    if (std.ascii.eqlIgnoreCase(key, "from")) return 0;
+    if (std.ascii.eqlIgnoreCase(key, "to")) return 1;
+    if (key[key.len - 1] != '%') return null;
+    const percent = std.fmt.parseFloat(f64, key[0 .. key.len - 1]) catch return null;
+    return percent / 100;
+}
+
+/// The steps of the `@keyframes` rule named `name`, or null when the document
+/// declares no such rule -- which is what an `animation-name` pointing at
+/// nothing computes as: no animation at all, not an empty one.
+pub fn keyframesFor(self: *StyleManager, name: []const u8) ?[]const Keyframe {
+    self.rebuildIfDirty() catch return null;
+    return self.keyframes.get(name);
 }
 
 /// Split a block at-rule into its prelude and inner block: for
@@ -705,6 +805,7 @@ fn rebuildIfDirty(self: *StyleManager) !void {
     try self.other_rules.ensureTotalCapacity(self.arena.allocator(), other_rules_count);
 
     self.declared_longhands = .empty;
+    self.keyframes = .empty;
 
     // The cascade's own list, which unlike `document.styleSheets` also holds
     // the sheets living in shadow trees. See Document.cascadeStyleSheets.

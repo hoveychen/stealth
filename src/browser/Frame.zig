@@ -410,6 +410,9 @@ window: *Window,
 _history: History = .{},
 _navigation: *Navigation,
 document: *Document,
+
+// The document timeline, held rather than read. See `animationTime`.
+_animation_time: ?f64 = null,
 iframe: ?*IFrame = null,
 
 child_frames_sorted: bool = true,
@@ -2692,6 +2695,36 @@ pub fn getElementByIdFromNode(self: *Frame, node: *Node, id: []const u8) ?*Eleme
 
 pub fn performance(self: *Frame) *Performance {
     return self.window._performance;
+}
+
+/// The document timeline, in seconds, as a computed animated value reads it.
+///
+/// HELD, not read: a browser sets the timeline once per rendering frame and
+/// every style resolution inside that frame sees the same instant. Reading
+/// `performance.now()` per property instead makes an animation advance BETWEEN
+/// TWO READS OF ONE SYNCHRONOUS SCRIPT, which no browser does -- measured on
+/// Chrome 151 (scratch/b70/expr-anim-moving.js): reading `transform` off a
+/// running animation, burning 250ms of wall clock and reading again gives the
+/// same matrix twice there and two different ones off a live clock.
+///
+/// The sample is dropped when the timers dispatch, which is where this engine's
+/// `requestAnimationFrame` callbacks run and so is the closest thing it has to
+/// a frame boundary. A page that never schedules anything keeps its first
+/// sample, which is still much nearer a browser than a clock that moves inside
+/// one task.
+pub fn animationTime(self: *Frame) f64 {
+    if (self._animation_time) |held| {
+        return held;
+    }
+    const sampled = self.performance().now() / 1000;
+    self._animation_time = sampled;
+    return sampled;
+}
+
+/// Let the timeline move to the next frame. Called where the rendering would
+/// have been updated; see `animationTime`.
+pub fn releaseAnimationTime(self: *Frame) void {
+    self._animation_time = null;
 }
 
 /// The viewport this frame is laid out in. The top-level frame takes the page's;

@@ -46,6 +46,7 @@ const chrome_value_case = @import("chrome_value_case.zig");
 const shorthand = @import("shorthand.zig");
 const font_metrics = @import("../../font_metrics.zig");
 const transform = @import("transform.zig");
+const animation_timing = @import("animation_timing.zig");
 const typed_om = @import("typed_om.zig");
 const color = @import("../../color.zig");
 
@@ -490,6 +491,15 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     surface,
                     depth,
                 );
+            }
+            // An element with a running animation computes the value the
+            // animation writes, not the one it declares. `transform` is the
+            // property this is modelled for -- the one the 736-name sweep
+            // against Chrome 151 was left differing on.
+            if (wrapped.eqlSlice("transform") or wrapped.eqlSlice("-webkit-transform")) {
+                if (animatedTransform(style_manager, element, frame)) |value| {
+                    return value;
+                }
             }
             // `animation-duration: auto` is not a computed value. Chrome
             // answers `0s` for an unset duration, for a name-only longhand and
@@ -1916,6 +1926,167 @@ fn computedAnimationDuration(
     }
     // Nothing under either spelling, which is what the recorded table holds too.
     return "0s";
+}
+
+/// The `transform` an element's animation puts on it right now, or null when
+/// no animation contributes one -- the property then reads what the element
+/// declares, exactly as it did before.
+///
+/// Chrome reports the INTERPOLATED matrix here rather than the declared
+/// transform: an element under `animation: 3s linear 1s infinite alternate both
+/// spin` with `@keyframes spin { 100% { transform: rotate(360deg) } }` computes
+/// `matrix(-0.48228, 0.876017, -0.876017, -0.48228, 0, 0)`, and reading it
+/// twice a moment apart gives two different matrices. Measured on Chrome 151
+/// (scratch/b69/computed-fixture.mjs); this engine answered `none`, which was
+/// the last difference on that 736-name sweep outside the column-rule family.
+///
+/// Nine shapes whose value does NOT move with the clock -- the two filled edges
+/// of the active interval, `reverse` reaching for the far end, a paused
+/// animation, a zero duration, an `animation-name` that resolves to no
+/// `@keyframes` at all -- are what css/animation_computed_transform.html
+/// asserts, since a moving matrix cannot be written down as an expectation.
+fn animatedTransform(style_manager: *StyleManager, element: *Element, page_frame: *Frame) ?[]const u8 {
+    const name = animationLonghand(style_manager, element, "animation-name") orelse return null;
+    if (name.len == 0 or std.ascii.eqlIgnoreCase(name, "none")) return null;
+
+    // An `animation-name` naming nothing is not an animation, so the element
+    // keeps its own transform. Measured: Chrome answers `none` for an element
+    // whose only difference from the fixture is a name no `@keyframes` declares.
+    const frames = style_manager.keyframesFor(name) orelse return null;
+    if (frames.len == 0) return null;
+
+    const timing: animation_timing.Timing = .{
+        .duration = durationOf(style_manager, element),
+        .delay = animation_timing.seconds(
+            animationLonghand(style_manager, element, "animation-delay") orelse "0s",
+        ) orelse 0,
+        .iterations = animation_timing.iterationCount(
+            animationLonghand(style_manager, element, "animation-iteration-count") orelse "1",
+        ) orelse 1,
+        .direction = .parse(animationLonghand(style_manager, element, "animation-direction") orelse "normal"),
+        .fill = .parse(animationLonghand(style_manager, element, "animation-fill-mode") orelse "none"),
+        .paused = std.ascii.eqlIgnoreCase(
+            animationLonghand(style_manager, element, "animation-play-state") orelse "running",
+            "paused",
+        ),
+        .easing = animationLonghand(style_manager, element, "animation-timing-function") orelse "ease",
+    };
+
+    const frame = element.ownerFrame(page_frame);
+    // The document timeline, held for the frame rather than read per property.
+    // The animation's own start time is taken as the timeline's origin: nothing
+    // in this engine records when an element first had its animation applied,
+    // and for a page that declares one in its stylesheet the two are a frame
+    // apart.
+    const at = animation_timing.position(timing, frame.animationTime()) orelse return null;
+
+    // What the element would compute without the animation. web-animations
+    // calls it the underlying value, and it is what a missing 0% or 100%
+    // keyframe contributes.
+    const underlying = underlyingTransform(style_manager, element);
+
+    // The two keyframes `progress` sits between. Frames are held in document
+    // order, so both searches keep the LAST of any tied offset -- two keyframes
+    // at one offset are one keyframe whose later declaration wins.
+    var lower: ?StyleManager.Keyframe = null;
+    var upper: ?StyleManager.Keyframe = null;
+    for (frames) |keyframe| {
+        if (keyframe.offset <= at.progress and (lower == null or keyframe.offset >= lower.?.offset)) {
+            lower = keyframe;
+        }
+        if (keyframe.offset >= at.progress and (upper == null or keyframe.offset <= upper.?.offset)) {
+            upper = keyframe;
+        }
+    }
+
+    const from_value = if (lower) |k| keyframeTransform(k.block) orelse underlying else underlying;
+    const to_value = if (upper) |k| keyframeTransform(k.block) orelse underlying else underlying;
+    const from_offset = if (lower) |k| k.offset else 0;
+    const to_offset = if (upper) |k| k.offset else 1;
+
+    const span = to_offset - from_offset;
+    const raw = if (span > 0) (at.progress - from_offset) / span else 0;
+    // An interval is eased by the timing function of the keyframe it starts
+    // at, which may carry one of its own; the element's is the default for the
+    // ones that do not.
+    const interval_easing = if (lower) |k|
+        keyframeDeclaration(k.block, "animation-timing-function") orelse timing.easing
+    else
+        timing.easing;
+    const eased = animation_timing.ease(interval_easing, raw);
+
+    if (transform.interpolatedValue(frame.call_arena, from_value, to_value, eased) catch null) |value| {
+        return value;
+    }
+    // A pair this engine will not interpolate -- two lists of different shapes,
+    // which Chrome resolves by decomposing both matrices -- reports the start
+    // of the interval. That is a value the animation really passes through,
+    // rather than one invented between two it does not.
+    return transform.computedValue(frame.call_arena, from_value) catch null;
+}
+
+/// One `animation-*` longhand as the cascade sees it, under either spelling,
+/// and only its first item.
+///
+/// Every one of these longhands is a list, and the lists are matched by index
+/// so an element can run several animations at once. Only the first is read:
+/// resolving the rest needs the whole effect stack -- two animations both
+/// writing `transform` compose rather than override -- and that is a model
+/// this engine does not have.
+fn animationLonghand(style_manager: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
+    var prefixed_buf: [64]u8 = undefined;
+    const prefixed = std.fmt.bufPrint(&prefixed_buf, "-webkit-{s}", .{name}) catch return null;
+
+    for ([_][]const u8{ name, prefixed }) |spelling| {
+        switch (cascadedValue(style_manager, element, spelling, .wrap(spelling), .computed)) {
+            .value => |value| {
+                var it = std.mem.splitScalar(u8, value, ',');
+                return std.mem.trim(u8, it.first(), &std.ascii.whitespace);
+            },
+            .unreportable, .none => {},
+        }
+    }
+    return null;
+}
+
+/// `animation-duration` in seconds. `auto` is the filler this engine's
+/// shorthand expansion writes and computes as `0s` -- see
+/// `computedAnimationDuration`, which reports the same thing as text.
+fn durationOf(style_manager: *StyleManager, element: *Element) f64 {
+    const declared = animationLonghand(style_manager, element, "animation-duration") orelse return 0;
+    return animation_timing.seconds(declared) orelse 0;
+}
+
+/// The element's own `transform`, folded, with no animation in it. `none` when
+/// it declares none, which is also what a value this engine cannot fold reads
+/// as everywhere else.
+fn underlyingTransform(style_manager: *StyleManager, element: *Element) []const u8 {
+    for ([_][]const u8{ "transform", "-webkit-transform" }) |spelling| {
+        switch (cascadedValue(style_manager, element, spelling, .wrap(spelling), .computed)) {
+            .value => |value| return value,
+            .unreportable, .none => {},
+        }
+    }
+    return "none";
+}
+
+/// The `transform` a keyframe declares, under either spelling.
+fn keyframeTransform(block: []const u8) ?[]const u8 {
+    return keyframeDeclaration(block, "transform") orelse
+        keyframeDeclaration(block, "-webkit-transform");
+}
+
+/// One declaration out of a keyframe's block. The last of a repeated name
+/// wins, the way it does in any declaration block.
+fn keyframeDeclaration(block: []const u8, name: []const u8) ?[]const u8 {
+    var found: ?[]const u8 = null;
+    var it = CssParser.parseDeclarationsList(block);
+    while (it.next()) |declaration| {
+        if (std.ascii.eqlIgnoreCase(declaration.name, name)) {
+            found = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
+        }
+    }
+    return found;
 }
 
 /// The other spelling of a rule width, for the one pair that has two.
@@ -6735,6 +6906,10 @@ test "WebApi: CSSStyleDeclaration first computed read" {
 
 test "WebApi: CSSStyleDeclaration computed transform" {
     try testing.htmlRunner("css/computed_transform.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration animation computed transform" {
+    try testing.htmlRunner("css/animation_computed_transform.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration transform number format" {
