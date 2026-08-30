@@ -55,6 +55,18 @@ _element: ?*Element = null,
 _properties: std.DoublyLinkedList = .{},
 _is_computed: bool = false,
 _syncing: bool = false,
+/// Whether a declaration list is being parsed right now, which decides where a
+/// property that is declared twice ends up.
+///
+/// The CSSOM and the parser disagree about this and both were measured on a
+/// Chrome 151 (scratch/b94/expr-decl-order.js). `setProperty("color", …)` over
+/// an existing `color` leaves the declaration where it is; a `style=` attribute
+/// or a stylesheet rule that names `stroke-width` twice puts it at the SECOND
+/// occurrence, behind everything declared in between. Same for a longhand
+/// re-declared after the shorthand it came from -- `border: solid red;
+/// border-width: 0px 4px 4px 0px` serialises the width last and leaves the
+/// other three where `border` put them.
+_parsing: bool = false,
 /// The frame this declaration belongs to. A computed view's indexed list has
 /// to resolve the element's custom properties through the style manager, and
 /// the accessors behind it (`cs.length`, `cs[0]`, the iterator) are not all
@@ -94,6 +106,10 @@ pub fn parseInlineStyle(self: *CSSStyleDeclaration, frame: *Frame) !void {
 }
 
 fn applyDeclarations(self: *CSSStyleDeclaration, text: []const u8, frame: *Frame) !void {
+    const was_parsing = self._parsing;
+    self._parsing = true;
+    defer self._parsing = was_parsing;
+
     var it = CssParser.parseDeclarationsList(text);
     while (it.next()) |declaration| {
         try self.applyParsedDeclaration(declaration, frame);
@@ -3488,6 +3504,16 @@ fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_
 
     // Find existing property
     if (self.findProperty(.wrap(normalized))) |existing| {
+        // A parsed re-declaration takes the later position; a CSSOM write keeps
+        // the one it had. See `_parsing`. The move happens even when the value
+        // is unchanged, which is what `stroke-width: 6px; fill: red;
+        // stroke-width: 6px` needs -- Chrome answers `fill: red;
+        // stroke-width: 6px;` for it, so the second occurrence is not a no-op
+        // just because it says the same thing.
+        if (self._parsing and self._properties.last != &existing._node) {
+            self._properties.remove(&existing._node);
+            self._properties.append(&existing._node);
+        }
         // Measured: setting a property to the value it already holds does not
         // touch the attribute -- `setProperty('width', '10px')` over a
         // `width: 10px` leaves the authored text, semicolon and all.
@@ -3623,7 +3649,17 @@ fn writeShorthand(
     const text = try shorthand.join(frame.local_arena, entry, held);
     if (text.len == 0) {
         if (entry.fallback.len == 0) return false;
-        for (entry.fallback) |sub| {
+        // In declaration order, not table order. `border: solid red;
+        // border-width: 0px 4px 4px 0px` cannot be written as one `border`, and
+        // Chrome writes the four sub-shorthands where their longhands sit --
+        // `border-style; border-color; border-image; border-width`, with the
+        // re-declared width last. The table's own order (width first) is only
+        // right when nothing moved, which is the all-initial case this fallback
+        // was built for.
+        const order = try frame.local_arena.alloc([]const u8, entry.fallback.len);
+        @memcpy(order, entry.fallback);
+        std.sort.insertion([]const u8, order, self, subShorthandBefore);
+        for (order) |sub| {
             if (!try self.writeShorthand(writer, sub, emitted, first, frame)) return false;
         }
         return true;
@@ -3638,6 +3674,34 @@ fn writeShorthand(
     try writer.writeByte(';');
     for (entry.longhands) |longhand| try emitted.put(frame.local_arena, longhand, {});
     return true;
+}
+
+/// Orders two sub-shorthands by where their longhands actually sit. A
+/// sub-shorthand none of whose longhands are declared sorts last; it cannot be
+/// written anyway, and the caller gives up on the whole fallback when one
+/// refuses.
+fn subShorthandBefore(self: *const CSSStyleDeclaration, a: []const u8, b: []const u8) bool {
+    return self.firstLonghandPosition(a) < self.firstLonghandPosition(b);
+}
+
+fn firstLonghandPosition(self: *const CSSStyleDeclaration, name: []const u8) usize {
+    const entry = shorthand.lookupJoinable(name) orelse return std.math.maxInt(usize);
+    var best: usize = std.math.maxInt(usize);
+    var index: usize = 0;
+    var node = self._properties.first;
+    while (node) |n| : ({
+        node = n.next;
+        index += 1;
+    }) {
+        const held = Property.fromNodeLink(n)._name.str();
+        for (entry.longhands) |longhand| {
+            if (std.mem.eql(u8, held, longhand)) {
+                best = @min(best, index);
+                break;
+            }
+        }
+    }
+    return best;
 }
 
 pub fn setCssText(self: *CSSStyleDeclaration, text: []const u8, frame: *Frame) !void {

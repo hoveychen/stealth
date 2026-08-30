@@ -1647,8 +1647,17 @@ fn utf16Djb2(text: []const u8) struct { hash: u32, units: usize } {
 // How many encode calls are kept, and how much of each. Fifteen is what the
 // Cloudflare widget makes; the cap is well above it so a station that encodes
 // in a loop truncates rather than filling memory.
+//
+// The edge is wide enough that every segment the widget sends except the
+// ~88KB payload itself is kept WHOLE, head and tail overlapping. 512 was the
+// first guess and it was too narrow to be useful: the segment this instrument
+// was next asked about -- the widget's own CSS rules, 20696 characters -- has
+// identical first and last 200 characters on both engines and differs only in
+// the middle, so a reading taken at 512 says "same length, different hash" and
+// nothing more. Debug-only and behind the `text_encode` scope, so the cost is
+// paid by nobody who has not asked for it.
 const MAX_ENCODED_TEXTS = 256;
-const ENCODED_TEXT_EDGE = 512;
+const ENCODED_TEXT_EDGE = 32768;
 
 // Called from `TextEncoder.encode` before the string goes anywhere.
 pub fn recordTextEncode(self: *Context, text: []const u8) void {
@@ -1707,6 +1716,36 @@ fn dumpTextEncodes(self: *Context) void {
             .head = e.head,
             .tail = e.tail,
         });
+        dumpChunks(self.id, realm, i, "head", e.head);
+        if (e.tail.ptr != e.head.ptr) {
+            dumpChunks(self.id, realm, i, "tail", e.tail);
+        }
+    }
+}
+
+// A log field is truncated by the writer well before `ENCODED_TEXT_EDGE` -- a
+// 20696-character segment came out at 2063 -- so the same bytes go out again
+// in pieces small enough to survive, and the driver stitches them back
+// together. Two segments that agree on their first and last 200 characters and
+// differ somewhere in between are exactly what this instrument exists to
+// compare, and a truncated field cannot show that.
+const ENCODED_CHUNK = 900;
+
+fn dumpChunks(context_id: usize, realm: []const u8, seq: usize, comptime side: []const u8, text: []const u8) void {
+    var start: usize = 0;
+    var part: usize = 0;
+    while (start < text.len) : (part += 1) {
+        const end = @min(start + ENCODED_CHUNK, text.len);
+        log.debug(.text_encode, "text encode chunk", .{
+            .context = context_id,
+            .realm = realm,
+            .seq = seq,
+            .side = side,
+            .part = part,
+            .of = (text.len + ENCODED_CHUNK - 1) / ENCODED_CHUNK,
+            .text = text[start..end],
+        });
+        start = end;
     }
 }
 
