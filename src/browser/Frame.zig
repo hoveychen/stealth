@@ -3267,6 +3267,10 @@ pub const SubresourceOpts = struct {
     // Overrides the mode the destination implies; see HttpClient.Request.mode.
     mode: ?HttpClient.Request.Mode = null,
 
+    // Overrides the RFC 9218 hint the destination implies; see
+    // HttpClient.Request.priority.
+    priority: ?[]const u8 = null,
+
     // The entry's initiatorType. Null derives it the way an image does: "img"
     // when an element asked, "other" when nothing did (the favicon).
     initiator: ?[]const u8 = null,
@@ -3292,6 +3296,7 @@ fn requestSubresource(self: *Frame, resolved: [:0]const u8, element: ?*Element.H
         .cookie_origin = self.url,
         .resource_type = opts.resource_type,
         .mode = opts.mode,
+        .priority = opts.priority,
         .cors = if (element) |el| elementRequestsCors(el.asElement()) else false,
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown,

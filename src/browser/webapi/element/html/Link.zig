@@ -148,8 +148,7 @@ pub fn linkAddedCallback(self: *Link, frame: *Frame) !void {
         //
         // Measured (probes/b87-preload-as-fixture.mjs, eight `as` values):
         // Chrome fetches image, style, script, font and fetch, and ignores
-        // document, audio and video. `as=font` is not here -- it needs a `font`
-        // destination this engine does not have; its own P-task.
+        // document, audio and video.
         if (preloadDestination(as)) |dest| {
             if (frame.preloadResource(Factory.protoOf(self), href, dest)) {
                 // load/error fires when the fetch settles
@@ -178,13 +177,18 @@ pub fn linkAddedCallback(self: *Link, frame: *Frame) !void {
 // none. `as` is ASCII-case-insensitive, like every other enumerated attribute.
 //
 // `script` is absent on purpose: it goes through the script preloader above,
-// which can hand the bytes to the <script> that consumes them. `font` is absent
-// because it needs a `font` destination that does not exist yet. `document`,
+// which can hand the bytes to the <script> that consumes them. `document`,
 // `audio` and `video` are absent because Chrome asks for nothing for them
 // (measured, probes/b87-preload-as-fixture.mjs).
 fn preloadDestination(as: []const u8) ?Frame.SubresourceOpts {
     if (std.ascii.eqlIgnoreCase(as, "image")) {
-        return .{ .resource_type = .image, .initiator = "link", .sniff = false };
+        // A bare `i`, not the `u=1, i` a displayed <img> carries: a preloaded
+        // image is not on screen, so it never gets an image's urgency
+        // (measured over h2, probes/b87-preload-priority-h2.mjs).
+        return .{ .resource_type = .image, .priority = "i", .initiator = "link", .sniff = false };
+    }
+    if (std.ascii.eqlIgnoreCase(as, "font")) {
+        return .{ .resource_type = .font, .initiator = "link", .sniff = false };
     }
     if (std.ascii.eqlIgnoreCase(as, "style")) {
         return .{ .resource_type = .stylesheet, .initiator = "link", .sniff = false };

@@ -1928,6 +1928,11 @@ pub const Request = struct {
         stylesheet,
         image,
         eventsource,
+        // Only `<link rel=preload as=font>` reaches this today -- nothing here
+        // loads a font face. Chrome answers `Sec-Fetch-Dest: font`, `Accept:
+        // */*` and `priority: u=1` for it, all measured over h2
+        // (probes/b87-preload-priority-h2.mjs).
+        font,
 
         // Allowed Values: Document, Stylesheet, Image, Media, Font, Script,
         // TextTrack, XHR, Fetch, Prefetch, EventSource, WebSocket, Manifest,
@@ -1942,6 +1947,7 @@ pub const Request = struct {
                 .stylesheet => "Stylesheet",
                 .image => "Image",
                 .eventsource => "EventSource",
+                .font => "Font",
             };
         }
     };
@@ -1998,6 +2004,13 @@ pub const Request = struct {
     // which needs https, which no fixture here speaks; both spellings read as
     // "CORS mode" until someone can measure the difference.
     cors: bool = false,
+
+    // Overrides the RFC 9218 `priority` hint the destination would otherwise
+    // imply. One thing needs it: a preloaded image, which Chrome sends as bare
+    // `i` where a real <img> is `u=1, i` -- the preload is not on screen, so it
+    // never gets the urgency a displayed image does (measured over h2 three
+    // times, probes/b87-preload-priority-h2.mjs).
+    priority: ?[]const u8 = null,
 
     // Overrides the mode this request's destination would otherwise imply.
     // Only one thing needs it today: `<link rel=preload as=fetch>`, whose
@@ -2065,7 +2078,7 @@ pub const Request = struct {
         }
         return switch (self.resource_type) {
             .document => .navigate,
-            .stylesheet, .script, .image => if (self.cors) .cors else .no_cors,
+            .stylesheet, .script, .image, .font => if (self.cors) .cors else .no_cors,
             .fetch, .xhr, .eventsource => .cors,
         };
     }
@@ -3696,7 +3709,8 @@ pub const Transfer = struct {
             .stylesheet => H.Accept.style,
             .image => H.Accept.image,
             .eventsource => H.Accept.event_stream,
-            .script, .fetch, .xhr => H.Accept.any,
+            // A font asks for `*/*`, the same as a script (measured).
+            .script, .fetch, .xhr, .font => H.Accept.any,
         }, .{});
 
         // Chrome labels a subframe navigation "iframe" and a top-level one
@@ -3706,6 +3720,7 @@ pub const Transfer = struct {
             .stylesheet => "style",
             .image => "image",
             .script => "script",
+            .font => "font",
             // fetch(), XHR and EventSource all report an empty destination.
             .fetch, .xhr, .eventsource => "empty",
         }, .{ .source = .cdp });
@@ -3749,10 +3764,12 @@ pub const Transfer = struct {
         // style and script. Chrome re-sends a bare `i` for an image once it
         // matters on screen; that re-prioritisation is not modelled, so an
         // image always carries the value of its first request.
-        try self.setHeader("priority", switch (req.resource_type) {
+        try self.setHeader("priority", req.priority orelse switch (req.resource_type) {
             .document => "u=0, i",
             .stylesheet => "u=0",
-            .script => "u=1",
+            // A font is urgent and not incremental -- there is nothing to show
+            // until all of it is there (measured over h2).
+            .script, .font => "u=1",
             // EventSource was not in the capture, grouped with fetch and XHR
             // the way every other per-destination switch here groups it.
             .image, .fetch, .xhr, .eventsource => "u=1, i",
@@ -3860,7 +3877,7 @@ pub const Transfer = struct {
         // (probes/b87-crossorigin-request-fixture.mjs).
         const cors_mode = req.requestMode() == .cors;
         const element_cors = cors_mode and switch (req.resource_type) {
-            .stylesheet, .script, .image => true,
+            .stylesheet, .script, .image, .font => true,
             .document, .fetch, .xhr, .eventsource => false,
         };
         if (!element_cors) {
@@ -3869,7 +3886,7 @@ pub const Transfer = struct {
                 // `<link rel=preload as=fetch>` has a fetch's destination and a
                 // no-cors mode, and Chrome sends it without an Origin.
                 .fetch, .xhr, .eventsource => if (!cors_mode) return null,
-                .document, .stylesheet, .script, .image => return null,
+                .document, .stylesheet, .script, .image, .font => return null,
             }
         }
 

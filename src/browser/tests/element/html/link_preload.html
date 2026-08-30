@@ -30,10 +30,11 @@
 
   Chrome files all five under `initiatorType: "link"`.
 
-  `as=font` is deliberately not covered here: it needs a `font` destination this
-  engine does not have, and the one header that would pin it down -- the RFC
-  9218 `priority` hint -- is invisible over HTTP/1.1, which is all the fixture
-  and this test server speak. It has its own P-task.
+  The `priority` hint each of them carries is NOT asserted here: Chrome sends it
+  only over h2/h3 and this test server is h1. It is measured separately, over a
+  throwaway-cert h2 server, by probes/b87-preload-priority-h2.mjs -- which is
+  also where the one surprise lives: a preloaded image goes out as a bare `i`
+  where a displayed <img> is `u=1, i`.
   -->
   <script id=preload_fetches_image_style_and_fetch type=module>
     const state = await testing.async();
@@ -56,13 +57,14 @@
     await preload('image', 'pre-image.gif');
     await preload('style', 'pre-style.css');
     await preload('fetch', 'pre-fetch.js');
+    await preload('font', 'pre-font.bin');
     // A little slack: the load event can fire before the entry is in the buffer.
     await new Promise((r) => setTimeout(r, 30));
 
     const read = async (slot) =>
       (await fetch(testing.ORIGIN + '/xo-read/' + slot).then((r) => r.text())).trim();
     const seen = {};
-    for (const slot of ['pre-image.gif', 'pre-style.css', 'pre-fetch.js']) {
+    for (const slot of ['pre-image.gif', 'pre-style.css', 'pre-fetch.js', 'pre-font.bin']) {
       seen[slot] = await read(slot);
     }
     const entry = (slot) => {
@@ -89,10 +91,16 @@
         'image: origin=(none) mode=no-cors dest=image entry=link\n' +
         'style: origin=(none) mode=no-cors dest=style entry=link\n' +
         'fetch: origin=(none) mode=no-cors dest=empty entry=link\n' +
-        'names: pre-fetch.js,pre-image.gif,pre-style.css',
+        // No `crossorigin` on this one, so it is no-cors and names nobody. A
+        // real font preload always carries the attribute -- the font load it
+        // warms is always CORS -- and then it goes out cors with an Origin,
+        // which is the `crossorigin` rule and not this one.
+        'font:  origin=(none) mode=no-cors dest=font entry=link\n' +
+        'names: pre-fetch.js,pre-font.bin,pre-image.gif,pre-style.css',
         'image: ' + seen['pre-image.gif'] + ' entry=' + entry('pre-image.gif') + '\n' +
         'style: ' + seen['pre-style.css'] + ' entry=' + entry('pre-style.css') + '\n' +
         'fetch: ' + seen['pre-fetch.js'] + ' entry=' + entry('pre-fetch.js') + '\n' +
+        'font:  ' + seen['pre-font.bin'] + ' entry=' + entry('pre-font.bin') + '\n' +
         'names: ' + preloadNames());
     });
   </script>
