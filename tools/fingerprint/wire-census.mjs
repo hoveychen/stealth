@@ -86,6 +86,13 @@ const PAGE = `<!doctype html><meta charset=utf-8><title>wire census</title>
 <video><track kind="captions" src="/s/captions.vtt" default></video>
 
 <script src="/s/tail.js"></script>
+
+<!-- Named a second time. A browser serves the second reference out of its
+     memory cache and the server sees one request; two is the duplicate-fetch
+     tell, which is why this table prints counts and not just presence. -->
+<link rel="stylesheet" href="/s/sheet.css">
+<script src="/s/tail.js"></script>
+<img src="/s/plain.png">
 </body>`;
 
 const CSS = `
@@ -199,7 +206,19 @@ async function census(engine) {
         // after `complete`; a census taken at readyState is a census of the
         // race.
         await sleep(settle);
-        return Object.fromEntries([...hits].sort());
+
+        // What the PAGE thinks it asked for, next to what the server was
+        // actually asked for. The two disagree exactly where a memory cache
+        // is doing its job: a second `<link>` naming a sheet already fetched
+        // is one request, and whether it is also one resource-timing entry is
+        // a question only the page can answer.
+        const r = await cdp.send('Runtime.evaluate', {
+            expression: `JSON.stringify(performance.getEntriesByType('resource').map((e) => e.name.split('/').pop()))`,
+            returnByValue: true,
+        }, sessionId).catch(() => null);
+        const entries = {};
+        for (const n of JSON.parse(r?.result?.value ?? '[]')) entries[n] = (entries[n] || 0) + 1;
+        return { hits: Object.fromEntries([...hits].sort()), entries };
     } finally {
         proc.kill('SIGKILL');
         if (profile) await fs.rm(profile, { recursive: true, force: true }).catch(() => { });
@@ -209,7 +228,12 @@ async function census(engine) {
 
 const arms = only ? [only] : ['chrome', 'lightpanda'];
 const out = {};
-for (const a of arms) out[a] = await census(a);
+const seenEntries = {};
+for (const a of arms) {
+    const r = await census(a);
+    out[a] = r.hits;
+    seenEntries[a] = r.entries;
+}
 server.close();
 
 if (jsonOut) await fs.writeFile(jsonOut, JSON.stringify(out, null, 2));
@@ -226,6 +250,17 @@ if (arms.length === 2) {
         console.log(`${n.padEnd(w)}  ${String(c).padStart(6)}  ${String(l).padStart(10)}${c === l ? '' : '   <-- differs'}`);
     }
     console.log(`\n${same}/${names.length} paths agree; chrome asked for ${Object.keys(out.chrome).length}, lightpanda for ${Object.keys(out.lightpanda).length}`);
+
+    if (process.argv.includes('--entries')) {
+        const ce = seenEntries.chrome;
+        const le = seenEntries.lightpanda;
+        const all = [...new Set([...Object.keys(ce), ...Object.keys(le)])].sort();
+        console.log(`\nresource-timing entries the page sees\n${'path'.padEnd(w)}  chrome  lightpanda`);
+        for (const n of all) {
+            const c = ce[n] || 0, l = le[n] || 0;
+            console.log(`${n.padEnd(w)}  ${String(c).padStart(6)}  ${String(l).padStart(10)}${c === l ? '' : '   <-- differs'}`);
+        }
+    }
 } else {
     console.log(JSON.stringify(out[arms[0]], null, 2));
 }

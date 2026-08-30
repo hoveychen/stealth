@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The same sheet named twice is one request.
+
+  Measured with tools/fingerprint/wire-census.mjs (both halves of it: the
+  server's count and the page's own resource-timing entries): Chrome asks the
+  origin once and files one entry, this engine asked twice and filed two. A
+  request count is the loudest kind of wire difference -- it does not depend on
+  the guard reading any property, only on the origin counting lines in its log.
+
+  Two entries would also be visible to script, and the cf-scrapingcourse guard
+  walks the resource-timing buffer entry by entry.
+-->
+<link rel="stylesheet" href="/wire/dup-sheet.css">
+<link rel="stylesheet" href="/wire/dup-sheet.css">
+
+<script id="stylesheet_named_twice_is_one_request" type=module>
+{
+  const test = await testing.async();
+  const deadline = Date.now() + 600;
+  const count = () => performance.getEntriesByType('resource')
+    .filter((e) => e.name.endsWith('/wire/dup-sheet.css')).length;
+  while (Date.now() < deadline && count() < 1) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  test.resolve(count());
+
+  await test.done((n) => {
+    testing.expectEqual('dup-sheet.css entries: 1', 'dup-sheet.css entries: ' + n);
+    // Both links still see the rules: a cache hit is a delivery, not a skip.
+    testing.expectEqual(2, document.styleSheets.length);
+  });
+}
+</script>

@@ -222,6 +222,22 @@ _file_lists: std.ArrayList(*FileList) = .empty,
 /// A call to `documentIsComplete` (which calls `_documentIsComplete`) resets it.
 /// Double-buffered so that dispatching events (which may trigger JS that
 /// creates new elements) doesn't invalidate the list while iterating.
+// Bodies of subresources already fetched for this document, keyed by resolved
+// URL. Chrome's memory cache: a sheet named by two `<link>`s is ONE request to
+// the origin and ONE resource-timing entry, and this engine made two of each
+// (measured, tools/fingerprint/wire-census.mjs, both halves of its table). A
+// request count is the loudest kind of wire difference -- the origin sees it
+// without the page running anything.
+//
+// Stylesheets only, for now. A `<script src>` named twice is still two
+// requests; that path runs through ScriptManager's async machinery rather
+// than through one synchronous fetch, so it needs its own change.
+//
+// Arena-owned and per-document, which is also what makes it safe to keep
+// without honouring `Cache-Control`: the entries die with the navigation, so
+// the staleness window is one page load.
+_stylesheet_bodies: std.StringHashMapUnmanaged([]const u8) = .empty,
+
 _queued_events_1: std.ArrayList(QueuedEvent) = .empty,
 _queued_events_2: std.ArrayList(QueuedEvent) = .empty,
 _queued_events: *std.ArrayList(QueuedEvent) = undefined,
@@ -2895,6 +2911,14 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
 
     const http_client = &session.browser.http_client;
 
+    // Already in this document's memory cache: no request, and no second
+    // resource-timing entry either -- Chrome files one entry for the pair
+    // (measured with `wire-census.mjs --entries`, which reads the page's own
+    // buffer next to the server's count).
+    if (self._stylesheet_bodies.get(resolved)) |body| {
+        return self.installStylesheet(link, element, resolved, body);
+    }
+
     // Taken before the transfer, not after: a resource entry's startTime is
     // when the load began.
     const fetch_start = self.performance().now();
@@ -2984,6 +3008,19 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         return self.queueElementEvent(Factory.protoOf(link), .@"error");
     }
 
+    self._stylesheet_bodies.put(self.arena, resolved, try self.arena.dupe(u8, response.body.items)) catch |err| {
+        // A cache that could not grow is a slower page, not a broken one.
+        log.warn(.http, "stylesheet cache", .{ .err = err, .url = resolved });
+    };
+
+    return self.installStylesheet(link, element, resolved, response.body.items);
+}
+
+// Put a stylesheet's text into the `<link>`'s sheet and tell the page it
+// arrived. Shared by the fetch above and the memory-cache hit before it,
+// which is the whole reason it is a function: a cache hit has to deliver the
+// rules, not skip them.
+fn installStylesheet(self: *Frame, link: *Element.Html.Link, element: *Element, resolved: []const u8, body: []const u8) !void {
     // Reuse the cached sheet on re-fetch (href mutation on a connected
     // link) so `document.styleSheets` keeps a single entry per <link>
     // instead of accumulating one per href change. On first load, create
@@ -3008,7 +3045,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     // scratch-list pattern in `CSSStyleSheet.replaceSync`. Keeping
     // `_href` consistent with what the sheet actually contains is the
     // minimum.
-    sheet.replaceSync(response.body.items, self) catch |err| {
+    sheet.replaceSync(body, self) catch |err| {
         log.warn(.http, "external stylesheet parse", .{ .err = err, .url = resolved });
         return self.queueElementEvent(Factory.protoOf(link), .@"error");
     };
@@ -5041,6 +5078,11 @@ test "WebApi: css style subresources" {
 test "WebApi: markup subresources" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("markup_subresources.html", .{});
+}
+
+test "WebApi: stylesheet memory cache" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/stylesheet_memory_cache.html", .{ .load_external_stylesheets = true });
 }
 
 test "WebApi: Frames" {
