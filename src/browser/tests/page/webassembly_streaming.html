@@ -21,6 +21,25 @@
       testing.expectEqual(1, d.value.length, { desc: name + ' arity' });
       testing.expectEqual(name, d.value.name, { desc: name + ' name' });
     }
+    // Being the embedder's is also visible in the shape of the function, three
+    // separate ways, and a script-defined one fails all three: it prints its
+    // own source, it carries a `prototype`, and `new` on it does not throw.
+    // Kasada's decoded guard greps for exactly that family -- `[native code]`,
+    // `patchedFuncStringErrMsg`, `^[a-z]+\s*\(\)\s*\{...\}`.
+    //
+    // Each assertion compares a string that names itself, because a bare `true`
+    // that fails prints only "expected true got false".
+    for (const name of ['compileStreaming', 'instantiateStreaming']) {
+      const fn = WebAssembly[name];
+      const src = Function.prototype.toString.call(fn);
+      testing.expectEqual(name + ' native:true',
+        name + ' native:' + /\[native code\]/.test(src));
+      testing.expectEqual(name + ' own:length,name',
+        name + ' own:' + Object.getOwnPropertyNames(fn).sort().join(','));
+      let threw = 'no-throw';
+      try { new fn(); } catch (e) { threw = e.constructor.name; }
+      testing.expectEqual(name + ' new:TypeError', name + ' new:' + threw);
+    }
   }
 </script>
 

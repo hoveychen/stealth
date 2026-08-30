@@ -928,6 +928,19 @@ test "Env: Frame context" {
 // body first and hand it to WebAssembly.compile. The difference is not
 // observable from script beyond the timing of a large download.
 //
+// Being the embedder's is visible in the shape of the two functions, not just in
+// the fact that the names exist. Chrome's print `[native code]`, own nothing but
+// `length` and `name`, and throw on `new`; a plain script function fails all
+// three, and Kasada's decoded guard greps for precisely that family
+// (`\[native code\]`, `patchedFuncStringErrMsg`, `^[a-z]+\s*\(\)\s*\{...\}`).
+// Binding a shorthand method fixes all three: V8 gives a method no `prototype`,
+// so `new` throws, and a bound function reports native code. The residual is
+// that a bound function prints *anonymously* -- `function () { [native code] }`
+// where Chrome names the function -- and only a real embedder binding closes
+// that. Measured not to be the x-hyatt door either way: handing Chrome the old
+// script-defined shape cost it nothing, 2/2, and did not move the payload by a
+// byte (README, "the two functions written in javascript").
+//
 // This has to run per context rather than once at snapshot time: V8 materialises
 // the WebAssembly namespace when a context is deserialised, so it does not exist
 // yet while the snapshot is being built (reading it there gives undefined). One
@@ -950,14 +963,26 @@ const wasm_streaming_bootstrap =
     \\    }
     \\    return response.arrayBuffer();
     \\  }
-    \\  const define = (name, fn) => Object.defineProperty(wasm, name, {
-    \\    value: fn, writable: true, enumerable: true, configurable: true,
-    \\  });
-    \\  define('compileStreaming', function compileStreaming(source) {
-    \\    return bytesOf(source, 'compileStreaming').then((bytes) => compile.call(wasm, bytes));
-    \\  });
-    \\  define('instantiateStreaming', function instantiateStreaming(source, imports = undefined) {
-    \\    return bytesOf(source, 'instantiateStreaming').then((bytes) => instantiate.call(wasm, bytes, imports));
-    \\  });
+    \\  const define = (name, impl) => {
+    \\    const fn = impl.bind(undefined);
+    \\    for (const [key, value] of [['name', name], ['length', 1]]) {
+    \\      Object.defineProperty(fn, key, {
+    \\        value, writable: false, enumerable: false, configurable: true,
+    \\      });
+    \\    }
+    \\    Object.defineProperty(wasm, name, {
+    \\      value: fn, writable: true, enumerable: true, configurable: true,
+    \\    });
+    \\  };
+    \\  define('compileStreaming', {
+    \\    compileStreaming(source) {
+    \\      return bytesOf(source, 'compileStreaming').then((bytes) => compile.call(wasm, bytes));
+    \\    },
+    \\  }.compileStreaming);
+    \\  define('instantiateStreaming', {
+    \\    instantiateStreaming(source, imports = undefined) {
+    \\      return bytesOf(source, 'instantiateStreaming').then((bytes) => instantiate.call(wasm, bytes, imports));
+    \\    },
+    \\  }.instantiateStreaming);
     \\})()
 ;
