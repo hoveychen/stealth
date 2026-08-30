@@ -21569,3 +21569,109 @@ same-window anchor is worth nothing — including the "no ticket at any dose"
 columns on this engine earlier in this chapter, which is why the overload
 argument rests on the Chrome arm *losing* clearance rather than on this arm
 failing to gain it.
+
+## The last 440 bytes are 34 global names, and the guard does not read them (B89, 2026-08-29)
+
+The one quantified difference x-hyatt still had was the `/tl` POST length: this
+engine 19114-19234, Chrome 19546-19690, two distributions that never overlap.
+Re-measured on a ReleaseFast binary built from today's main (`cfb3e9ed6`, which
+carries both the Cloudflare collector pad and the wasm-streaming fix), anchored
+and interleaved:
+
+```
+  lightpanda none  ticket 0/4   postLen 19178-19234  mean 19206
+  chrome     none  ticket 4/4   postLen 19570-19682  mean 19646
+```
+
+**440 bytes, and the window was open the whole time.**
+
+### Decomposing it
+
+`payload-plain` was run three times per arm, interleaved, and every element of
+the assembled body bucketed by class — not by index, since the array is shuffled
+per run, and not one run against one run, since a large part of the body is
+per-run random material. Because every element lands in exactly one bucket the
+class deltas sum to the body delta by construction, so nothing hides in a
+residual:
+
+| class | Chrome − us | note |
+|---|---|---|
+| **34 sampled global names** | **+330** | the whole story |
+| trap log `h:` / `g:` | +72 | already negated by `has-probe`, 10/10 |
+| non-global collected enums | +33 | `dark`/`light`, `running`/`idle`, `srgb`, `standard` |
+| numbers | +30 | geometry and timing figures |
+| `performance` member list | +7 | 34 names against our 33 |
+| Intl `resolvedOptions` lists | ~−5 | within per-run spread |
+| geometry `<w>x<h>:` | −11 | already negated by `px-zero`, 10/10 |
+
+Sum of class deltas: 416, against a mean body delta of 416.
+
+### The 330 bytes are an enumeration order, not a missing capability
+
+Both arms emit **exactly 34** global names — same count, different bytes: 720
+against 390. They are not a name list the guard carries. None of
+`webkitRequestFileSystem`, `ongamepadconnected`, `onscrollsnapchanging` or
+`__moduleCache` appears anywhere in the guard's own 3086-name table, but
+`getOwnPropertyNames` does; and each arm omits names the other emitted although
+both engines have them. The draws sit at contiguous index runs in each arm's own
+list, and five of them are the **last five names**:
+
+```
+  chrome  1232..1236  webkitSpeechRecognition, ...Error, ...Event,
+                      webkitRequestFileSystem, webkitResolveLocalFileSystemURL
+  this    1197..1201  WebAssembly, __moduleCache, console, chrome, CSS
+```
+
+132 characters against 40. And we **have** all five of Chrome's — at indices
+263, 264, 1059, 1065 and 1067. So this is not the missing-capability theory
+`drop-36-globals` already tested; own string keys enumerate in creation order,
+and this is the **order the engine defines its globals in**. Our tail is the
+post-snapshot fixup block in `Env.zig` — the collector pad, the re-added
+`console` — landing exactly where the guard samples.
+
+Injection confirms the mechanism: five properties defined at the end of Chrome's
+list appear in the payload at the tail multiplicities (`x1,x2,x2,x2,x2`) and
+push Chrome's `webkit*` draws from `x4` down to `x2`.
+
+### Both directions, both negative
+
+`names-like-ours` deletes the eight long legacy names from Chrome and appends
+five at our own name lengths — removal, the direction that reproduces a deficit
+rather than adding our tell alongside Chrome's. `dropped=8/8` on the wire, and
+277 of the 440 bytes gone:
+
+```
+  chrome none             ticket 8/8   postLen mean 19639
+  chrome names-like-ours  ticket 8/8   postLen mean 19362
+```
+
+`names-like-chrome` is the mirror on this engine: it deletes and reinstates
+Chrome's five tail names with their own descriptors so they move to the end, and
+drops `__moduleCache`. `moved=5/5 padGone=1`, tail identical to Chrome's:
+
+```
+  lightpanda none              ticket 0/6   postLen mean 19162
+  lightpanda names-like-chrome ticket 0/6   postLen mean 19434
+  chrome     none              ticket 6/6   postLen mean 19629
+```
+
+Chrome keeps the ticket carrying our names; we do not win one carrying Chrome's.
+The anchor is 6/6 in the same rounds, so the second reading is not a shut window.
+
+### Where that leaves x-hyatt
+
+Every term of the 440 bytes now has a causal negative against it, and the
+largest one — 79% of the gap — was negated in both directions in the same
+afternoon. The `performance` list is the only term that is a real defect rather
+than a negated one: the missing name is **`when`**, `EventTarget.prototype.when`
+from the Observable integration, which is already P3 of `observable-event-target-when`.
+
+No exec sub-plan comes out of this. The payload route is closed the way the
+page-side, transport and guard-source routes were closed before it.
+
+**One thing worth carrying to the other station.** `__moduleCache` — the 268KB
+Cloudflare collector pad merged into main today — is the **only** own global name
+this engine has that Chrome does not, and it sits at index 1198, inside the
+window Kasada samples. It costs nothing here (`padGone=1` was in the mirror arm,
+still 0/6). But it is a name no browser sends, now default-on in every realm, and
+at least one guard is known to sample global names positionally.
