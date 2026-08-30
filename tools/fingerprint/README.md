@@ -21676,6 +21676,14 @@ window Kasada samples. It costs nothing here (`padGone=1` was in the mirror arm,
 still 0/6). But it is a name no browser sends, now default-on in every realm, and
 at least one guard is known to sample global names positionally.
 
+**Corrected the same evening:** the pad was reverted out of main (`0ede8ffb8`,
+`76e2795d8`) while this was being measured, so `__moduleCache` is no longer a
+name this engine sends and that last paragraph now describes a risk that has
+been taken back rather than a live one. Every reading above was taken on a
+binary that still had it. Nothing in the attribution moves: the pad was one of
+five names in the sampled tail and worth about fifteen bytes of the 330, and the
+mirror arm deleted it explicitly (`padGone=1`) and still read 0/6.
+
 ## Chrome is not a usable reference on DataDome, and dd-saks was never shown to be a door (B89, 2026-08-29)
 
 The door map has carried three real gaps: cf-scrapingcourse, x-hyatt and
