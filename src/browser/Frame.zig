@@ -102,6 +102,7 @@ pub const preload = @import("frame/preload.zig");
 pub const observers = @import("frame/observers.zig");
 pub const user_input = @import("frame/user_input.zig");
 pub const node_factory = @import("frame/node_factory.zig");
+pub const style_resources = @import("frame/style_resources.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -1496,6 +1497,11 @@ pub fn _documentIsLoaded(self: *Frame) !void {
         .loader_id = self._loader_id,
         .timestamp = lp.datetime.timestamp(.boot),
     });
+
+    // Where Chrome's first style resolution falls: the document is complete,
+    // so a rule can be told whether it matches anything, and the load event
+    // has not fired, so the requests still land inside the page's load.
+    style_resources.requestAll(self);
 }
 
 // Fired at the document on every change to document.readyState: before
@@ -3306,6 +3312,30 @@ pub fn preloadResource(self: *Frame, link: *Element.Html, href: []const u8, opts
     return true;
 }
 
+// Fetch something a stylesheet named -- an `@import`, a `@font-face` source,
+// or a url() in a rule that matched. See frame/style_resources.zig for which
+// declarations count and why a rule that matches nothing is skipped.
+//
+// No element rides along: nothing on the page fires load or error for a CSS
+// resource, and nothing here decodes the bytes, so the request itself is the
+// whole of it. The resource entry says "css", which is what Chrome files these
+// under (initiatorType, measured by resource-timing-initiators.mjs).
+pub fn requestStyleResource(self: *Frame, resolved: [:0]const u8, resource_type: HttpClient.Request.ResourceType) void {
+    self.requestSubresource(resolved, null, .{
+        .resource_type = resource_type,
+        .initiator = "css",
+        // A font is fetched in CORS mode whatever the page says -- that is the
+        // font-loading spec's rule, not an opt-in, and it is why a font
+        // request carries an Origin and an image one does not.
+        .mode = if (resource_type == .font) .cors else null,
+        // Nothing displays these, so no `error` event depends on whether the
+        // body was really a picture.
+        .sniff = false,
+    }) catch |err| {
+        log.warn(.http, "style resource fetch", .{ .err = err, .url = resolved });
+    };
+}
+
 // What a subresource fetch that discards its body needs to know beyond the URL
 // and the element. The defaults describe an <img src>, which is what this path
 // was built for; a preload link overrides them.
@@ -4957,6 +4987,11 @@ test "Frame: relHasIcon matches only a whole icon token" {
 test "WebApi: Frame" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("page", .{});
+}
+
+test "WebApi: css style subresources" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/style_subresources.html", .{});
 }
 
 test "WebApi: Frames" {

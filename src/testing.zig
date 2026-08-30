@@ -1807,6 +1807,27 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         }
     }
 
+    // Same bargain as the image placeholder above, for the two other kinds of
+    // subresource a stylesheet can name. A CSS test cares that the request
+    // happened, not what came back -- the bytes of an `@import`ed sheet or a
+    // `@font-face` source are discarded either way (frame/style_resources.zig)
+    // -- so one placeholder each beats a fixture per path.
+    {
+        const without_query = path[0 .. std.mem.indexOfScalar(u8, path, '?') orelse path.len];
+        if (std.mem.endsWith(u8, without_query, ".css")) {
+            return req.respond("/* placeholder */", .{
+                .extra_headers = &.{.{ .name = "Content-Type", .value = "text/css" }},
+            });
+        }
+        for ([_][]const u8{ ".woff2", ".woff", ".ttf", ".otf" }) |ext| {
+            if (std.mem.endsWith(u8, without_query, ext)) {
+                return req.respond("", .{
+                    .extra_headers = &.{.{ .name = "Content-Type", .value = "font/woff2" }},
+                });
+            }
+        }
+    }
+
     std.debug.print("TestHTTPServer was asked to serve an unknown file: {s}\n", .{path});
 
     unreachable;
