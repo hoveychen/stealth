@@ -3208,8 +3208,14 @@ const ImageRequest = struct {
             return;
         }
         const head = self.prefix[0..self.prefix_len];
-        const kind = images.Kind.fromSignature(head) orelse return;
-        const size = images.readSize(kind, head) orelse return;
+        // SVG has no signature -- `arrived` let it through on the declared type
+        // and the markup -- so its size comes from the root element instead.
+        const size = if (images.Kind.fromSignature(head)) |kind|
+            images.readSize(kind, head) orelse return
+        else if (self.declared_svg)
+            images.svgSize(head) orelse return
+        else
+            return;
         as_element.as(Image).setIntrinsicSize(size.width, size.height);
     }
 

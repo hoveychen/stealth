@@ -473,3 +473,32 @@
     img.remove();
   });
 </script>
+
+<script id="img-intrinsic-size-svg" type=module>
+  // SVG is the one image type with no binary header, so its size is markup:
+  // the root element's `width`/`height`, with `viewBox` supplying a ratio and
+  // the replaced-element default (300x150) standing in for whatever is left.
+  // All four rows measured on Chrome 151, probe
+  // `scratch/b90/expr-img-geometry.js`, against the same markup.
+  const cases = {
+    "/served/svg-sized.svg": "4x6",      // both axes declared
+    "/served/svg-bare.svg": "300x150",   // neither: the default
+    "/served/svg-one-axis.svg": "40x150",// one declared, one defaulted
+    "/served/svg-ratio.svg": "40x10",    // one declared, one from the viewBox
+  };
+  for (const [url, expected] of Object.entries(cases)) {
+    const state = await testing.async();
+    const img = document.createElement("img");
+    img.addEventListener("load", () => state.resolve("load"));
+    img.addEventListener("error", () => state.resolve("error"));
+    document.body.appendChild(img);
+    img.src = url;
+
+    await state.done((seen) => {
+      testing.expectEqual(url + " load", url + " " + seen);
+      testing.expectEqual(url + " " + expected, url + " " + img.naturalWidth + "x" + img.naturalHeight);
+      testing.expectEqual(url + " " + expected, url + " " + img.offsetWidth + "x" + img.offsetHeight);
+      img.remove();
+    });
+  }
+</script>

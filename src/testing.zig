@@ -1766,6 +1766,12 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
             .{ .path = "/served/intrinsic-5x9.gif", .content_type = "image/gif", .body = &GIF_5X9 },
             // SVG, the one image type that is answered from the header.
             .{ .path = "/served/vector.svg", .content_type = "image/svg+xml", .body = SVG },
+            // Four shapes of SVG root, one per rule Chrome was measured on
+            // (probe `scratch/b90/expr-img-geometry.js`).
+            .{ .path = "/served/svg-sized.svg", .content_type = "image/svg+xml", .body = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"6\"></svg>" },
+            .{ .path = "/served/svg-bare.svg", .content_type = "image/svg+xml", .body = "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>" },
+            .{ .path = "/served/svg-one-axis.svg", .content_type = "image/svg+xml", .body = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\"></svg>" },
+            .{ .path = "/served/svg-ratio.svg", .content_type = "image/svg+xml", .body = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" viewBox=\"0 0 20 5\"></svg>" },
             .{ .path = "/served/svg-as-text.svg", .content_type = "text/plain", .body = SVG },
         };
         for (fixtures) |f| {
