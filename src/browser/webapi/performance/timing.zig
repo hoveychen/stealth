@@ -1178,22 +1178,74 @@ pub const VisibilityStateEntry = struct {
 
 /// One `long-animation-frame` entry: a rendering frame that took long enough for
 /// Chrome to attribute the blocking work inside it. `scripts` would hold the
-/// PerformanceScriptTiming children below.
+/// PerformanceScriptTiming children below -- Chrome files none with the load
+/// frame (measured: `scripts: []` on both pages below), so neither does this.
+///
+/// Nothing here renders, so the frame this describes is pinned to milestones
+/// that did happen, the same bargain `PaintTiming` above already makes: the
+/// frame opens when the bytes started arriving and closes when the load did.
 pub const PerformanceLongAnimationFrameTiming = struct {
     pub const Proto = Entry;
 
     _proto: *Entry,
+    _render_start: f64,
+    _paint_time: f64,
+    _presentation_time: f64,
+
+    pub const Json = struct {
+        name: []const u8,
+        entryType: []const u8,
+        startTime: f64,
+        duration: f64,
+        navigationId: u32,
+        // Chrome's order, measured off a real entry: paintTime and
+        // presentationTime come before the four this subclass adds.
+        paintTime: f64,
+        presentationTime: f64,
+        renderStart: f64,
+        styleAndLayoutStart: f64,
+        firstUIEventTimestamp: f64,
+        blockingDuration: f64,
+        // Typed as numbers rather than bytes so an empty one serialises as `[]`
+        // and not as `""`.
+        scripts: []const u32,
+    };
 
     fn zero(_: *const PerformanceLongAnimationFrameTiming) f64 {
         return 0;
+    }
+
+    fn renderStart(self: *const PerformanceLongAnimationFrameTiming) f64 {
+        return self._render_start;
+    }
+
+    fn paintTime(self: *const PerformanceLongAnimationFrameTiming) f64 {
+        return self._paint_time;
+    }
+
+    fn presentationTime(self: *const PerformanceLongAnimationFrameTiming) f64 {
+        return self._presentation_time;
     }
 
     fn scripts(_: *const PerformanceLongAnimationFrameTiming) []const js.Value {
         return &.{};
     }
 
-    fn json(_: *const PerformanceLongAnimationFrameTiming) struct {} {
-        return .{};
+    fn json(self: *const PerformanceLongAnimationFrameTiming, exec: *const Execution) Json {
+        return .{
+            .name = self._proto._name,
+            .entryType = self._proto.getEntryType(),
+            .startTime = self._proto._start_time,
+            .duration = self._proto._duration,
+            .navigationId = self._proto.getNavigationId(exec),
+            .paintTime = self._paint_time,
+            .presentationTime = self._presentation_time,
+            .renderStart = self._render_start,
+            .styleAndLayoutStart = self._render_start,
+            .firstUIEventTimestamp = 0,
+            .blockingDuration = 0,
+            .scripts = &.{},
+        };
     }
 
     pub const JsApi = struct {
@@ -1207,14 +1259,16 @@ pub const PerformanceLongAnimationFrameTiming = struct {
 
         const L = PerformanceLongAnimationFrameTiming;
 
-        pub const renderStart = bridge.accessor(L.zero, null, .{});
-        pub const styleAndLayoutStart = bridge.accessor(L.zero, null, .{});
+        pub const renderStart = bridge.accessor(L.renderStart, null, .{});
+        // Chrome reports the same instant for both on a load frame (measured),
+        // and this engine has no separate style pass to distinguish them.
+        pub const styleAndLayoutStart = bridge.accessor(L.renderStart, null, .{});
         pub const firstUIEventTimestamp = bridge.accessor(L.zero, null, .{});
         pub const blockingDuration = bridge.accessor(L.zero, null, .{});
         pub const scripts = bridge.accessor(L.scripts, null, .{});
         pub const toJSON = bridge.function(L.json, .{});
-        pub const paintTime = bridge.accessor(L.zero, null, .{});
-        pub const presentationTime = bridge.accessor(L.zero, null, .{});
+        pub const paintTime = bridge.accessor(L.paintTime, null, .{});
+        pub const presentationTime = bridge.accessor(L.presentationTime, null, .{});
     };
 };
 

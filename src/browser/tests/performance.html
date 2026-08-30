@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <script src="testing.js"></script>
 
+<!--
+  Holds the parser long enough for this document's load to qualify as a long
+  animation frame. No `id`, so the runner does not read it as a test block --
+  it asserts nothing, it only takes time (see `long_animation_frame` at the end of this file). A local
+  test page is otherwise done in single-digit milliseconds, which is under
+  Chrome's 50ms threshold, so Chrome would file nothing for it either and there
+  would be nothing to assert.
+-->
+<script>
+  { const until = Date.now() + 120; while (Date.now() < until) { /* spin */ } }
+</script>
+
 <script id=performance>
   testing.expectEqual(performance, window.performance);
 </script>
@@ -1110,8 +1122,10 @@
       testing.expectError('Illegal constructor', () => ctor());
     }
 
-    // And none of them ever shows up in a buffer.
-    for (const type of ['long-animation-frame', 'script', 'soft-navigation',
+    // And none of them ever shows up in a buffer. `long-animation-frame` used
+    // to be on this list and is not any more -- see `long_animation_frame`
+    // below, which is the one entry of the four Chrome actually files.
+    for (const type of ['script', 'soft-navigation',
       'interaction-contentful-paint']) {
       testing.expectEqual(0, performance.getEntriesByType(type).length, { desc: type + ' buffer' });
     }
@@ -1137,5 +1151,66 @@
     performance.removeEventListener('lp-test', listener);
     performance.dispatchEvent(new Event('lp-test'));
     testing.expectEqual('lp-test', seen.join(','));
+  }
+</script>
+
+<script id=long_animation_frame type=module>
+  {
+    // Chrome files a `long-animation-frame` entry for any rendering frame that
+    // took more than 50ms, and a document that loads a script is over that
+    // before it has finished parsing: measured on Chrome 151 there is exactly
+    // one on www.scrapingcourse.com (startTime 3.5, duration 1268.8) and
+    // exactly one INSIDE the Cloudflare widget document (startTime 87.0,
+    // duration 746.4) -- the realm the cf-scrapingcourse guard runs in, which
+    // walks `performance.getEntries()` reading `entryType` off every entry
+    // moments before it hashes the four values it sends.
+    //
+    // This engine listed `long-animation-frame` in
+    // `PerformanceObserver.supportedEntryTypes` and never filed one. Claiming
+    // a capability and never delivering it is a shape no browser has, and it
+    // is one expression to check.
+    //
+    // The spin loop at the top of this file is what puts this page over
+    // the threshold; without it a local document is done in single-digit
+    // milliseconds and Chrome would file nothing either.
+    const state = await testing.async();
+    if (document.readyState === 'complete') {
+      state.resolve(true);
+    } else {
+      window.addEventListener('load', () => state.resolve(true));
+    }
+
+    await state.done(() => {
+      const loaf = performance.getEntriesByType('long-animation-frame');
+      testing.expectEqual('long-animation-frame count: 1', 'long-animation-frame count: ' + loaf.length);
+      const e = loaf[0];
+      testing.expectEqual('PerformanceLongAnimationFrameTiming', e.constructor.name);
+      testing.expectEqual('long-animation-frame', e.name);
+      testing.expectEqual('long-animation-frame', e.entryType);
+      // Over the threshold that made it an entry at all.
+      testing.expectEqual('duration over 50: true', 'duration over 50: ' + (e.duration > 50));
+      // Chrome's own invariants, read off the entry above: the frame's end is
+      // its paint, and nothing is presented before it is painted.
+      testing.expectEqual('paintTime is frame end: true',
+        'paintTime is frame end: ' + (e.paintTime === e.startTime + e.duration));
+      testing.expectEqual('presented after paint: true',
+        'presented after paint: ' + (e.presentationTime >= e.paintTime));
+      testing.expectEqual('render starts inside the frame: true',
+        'render starts inside the frame: ' + (e.renderStart >= e.startTime && e.renderStart <= e.paintTime));
+      testing.expectEqual('styleAndLayoutStart tracks renderStart: true',
+        'styleAndLayoutStart tracks renderStart: ' + (e.styleAndLayoutStart === e.renderStart));
+      // Chrome answers 0 for both of these on a load frame, and files no
+      // script children with it.
+      testing.expectEqual(0, e.firstUIEventTimestamp);
+      testing.expectEqual(0, e.blockingDuration);
+      testing.expectEqual('scripts: 0', 'scripts: ' + e.scripts.length);
+      testing.expectEqual(
+        ['name', 'entryType', 'startTime', 'duration', 'navigationId', 'paintTime',
+          'presentationTime', 'renderStart', 'styleAndLayoutStart', 'firstUIEventTimestamp',
+          'blockingDuration', 'scripts'],
+        Object.keys(e.toJSON()),
+      );
+      testing.expectEqual(performance.getEntries()[0].navigationId, e.navigationId);
+    });
   }
 </script>

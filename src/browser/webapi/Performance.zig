@@ -74,6 +74,7 @@ _navigation_id: u32 = 0,
 _nav_entry: ?*timing.NavigationTiming = null,
 _nav_phase: NavPhase = .none,
 _paint_entries: bool = false,
+_loaf_entry: bool = false,
 
 // Nothing fires it — the resource buffer never fills because nothing fills it
 // — but the accessor pair is on Chrome's Performance.prototype and reads back
@@ -701,6 +702,49 @@ fn ensureImplicitEntries(self: *Performance, exec: *const Execution) !void {
     // one that closed the load (domComplete). Chrome's own numbers have the
     // same shape — paintTime before presentationTime, startTime equal to
     // presentationTime, duration 0.
+    // A long animation frame, on the same terms as the paint pair below:
+    // nothing here renders, so the frame is pinned to milestones that did
+    // happen. It opens where the bytes started arriving and closes where the
+    // load did, which is the interval every script on the page ran in.
+    //
+    // Filed only past Chrome's threshold, because that is what makes it an
+    // entry at all: a frame under 50ms is not a long one, and a document that
+    // loads that fast leaves Chrome's buffer without one too. Measured on
+    // Chrome 151, one entry per document and no `scripts` children with it:
+    // www.scrapingcourse.com (startTime 3.5, duration 1268.8) and, inside the
+    // Cloudflare widget, startTime 87.0, duration 746.4 -- the realm the
+    // cf-scrapingcourse guard runs in, which walks `getEntries()` reading
+    // `entryType` off every entry. Listing `long-animation-frame` in
+    // `PerformanceObserver.supportedEntryTypes` and never filing one is a shape
+    // no browser has.
+    if (!self._loaf_entry and self._nav_phase == .complete) {
+        self._loaf_entry = true;
+        const opened = self._nav.response_start;
+        const closed = self._nav.dom_complete;
+        if (closed - opened > LONG_ANIMATION_FRAME_MS) {
+            const loaf = try exec._factory.chained(.{
+                Entry{
+                    ._name = "long-animation-frame",
+                    ._start_time = opened,
+                    ._duration = closed - opened,
+                    ._type = undefined,
+                },
+                timing.PerformanceLongAnimationFrameTiming{
+                    ._proto = undefined,
+                    // The parser is done here, so this is where a style and
+                    // layout pass would begin.
+                    ._render_start = self._nav.dom_interactive,
+                    // Chrome's own invariant, read off the entry above:
+                    // paintTime is exactly the end of the frame.
+                    ._paint_time = closed,
+                    ._presentation_time = @max(closed, self._nav.load_event_end),
+                },
+            });
+            loaf._proto._type = .{ .@"long-animation-frame" = loaf };
+            try self._entries.append(exec.arena, loaf._proto);
+        }
+    }
+
     if (!self._paint_entries and self._nav_phase == .complete) {
         self._paint_entries = true;
         for ([_][]const u8{ "first-paint", "first-contentful-paint" }) |name| {
@@ -1098,6 +1142,11 @@ pub const MemoryInfo = struct {
     };
 };
 
+/// What makes an animation frame a long one. Chrome's threshold, and the reason
+/// a fast local document leaves no `long-animation-frame` entry in either
+/// engine's buffer.
+const LONG_ANIMATION_FRAME_MS: f64 = 50;
+
 pub const Entry = struct {
     _duration: f64 = 0.0,
     _type: Type,
@@ -1110,7 +1159,7 @@ pub const Entry = struct {
         @"first-input": *timing.EventTiming,
         @"largest-contentful-paint": *timing.LargestContentfulPaint,
         @"layout-shift": *timing.LayoutShift,
-        @"long-animation-frame",
+        @"long-animation-frame": *timing.PerformanceLongAnimationFrameTiming,
         longtask: *timing.LongTaskTiming,
         measure: *Measure,
         navigation: *timing.NavigationTiming,

@@ -22871,3 +22871,49 @@ the sheet existed, and the synchronous stylesheet fetch always lands before the
 asynchronous preload, so it counted one and passed against the unfixed engine.
 It waits on a preload-only sheet now. A test that stops at the first sign of the
 thing it is counting is not counting.
+
+## A capability listed and never delivered: `long-animation-frame` (B95, 2026-08-30)
+
+`PerformanceObserver.supportedEntryTypes` on this engine listed
+`long-animation-frame`, the interface object
+`PerformanceLongAnimationFrameTiming` was there with Chrome's exact member list
+and order, and `performance.getEntriesByType('long-animation-frame')` answered
+`[]` on every page. Chrome files one:
+
+|  | startTime | duration | renderStart | paintTime | presentationTime | scripts |
+|---|---|---|---|---|---|---|
+| www.scrapingcourse.com | 3.5 | 1268.8 | 1264.3 | 1272.3 | 1296 | `[]` |
+| the cf widget document | 87.0 | 746.4 | — | — | — | — |
+
+The second row is the one that matters: that is the realm the
+cf-scrapingcourse guard runs in, and the engine-side run-up log has it walking
+`performance.getEntries()` and reading `entryType`, `name`, `startTime` and
+`duration` off every entry moments before it hashes what it sends. A browser
+that advertises the type and never produces one is separable by a single
+expression, and "claims the capability, never delivers" is the same shape as
+the broken-image reading two chapters up.
+
+Nothing here renders, so the entry is pinned to milestones that did happen —
+the bargain `PaintTiming` already makes in this file. The frame opens at
+`responseStart`, where the bytes began arriving and the parser had work, and
+closes at `domComplete`, where the load did; `renderStart` (and
+`styleAndLayoutStart`, which Chrome reports as the same instant on a load frame)
+is `domInteractive`, where the parser finished and a style pass would begin.
+`paintTime` is the end of the frame, which is Chrome's own invariant read off
+the entry above — `3.5 + 1268.8 = 1272.3` exactly. `firstUIEventTimestamp`,
+`blockingDuration` and `scripts` are what Chrome answers for a load frame: 0, 0
+and empty, so no script attribution is modelled.
+
+It is filed only past Chrome's 50ms threshold, which is what makes it an entry
+at all — a document that loads in single-digit milliseconds leaves Chrome's
+buffer without one too, and that is why the regression test holds its own parser
+for 120ms before asserting anything.
+
+After, on www.scrapingcourse.com: one entry on each arm, same key order, same
+invariants (`paintTime === startTime + duration`, `presentationTime >=
+paintTime`, `renderStart` inside the frame, no `scripts`). One honest
+difference remains: Chrome's `presentationTime` sits about 23ms past its
+`paintTime` — a compositor delay — and this engine's equals it, because
+`loadEventEnd` and `domComplete` coincide when nothing presents. Inventing a
+delay would be inventing a constant; the paint pair in this engine already
+reports `presentationTime === startTime` for the same reason.
