@@ -42,6 +42,7 @@ pub const Platform = @import("Platform.zig");
 pub const Isolate = @import("Isolate.zig");
 pub const HandleScope = @import("HandleScope.zig");
 pub const TaggedOpaque = @import("TaggedOpaque.zig");
+pub const access_check = @import("access_check.zig");
 
 pub const Value = @import("Value.zig");
 pub const StructuredWriter = Value.StructuredWriter;
@@ -275,6 +276,48 @@ pub fn ArrayBufferRef(comptime kind: ArrayType) type {
         }
     };
 }
+
+// A property key as it arrives at a named interceptor that was installed
+// *without* `kOnlyInterceptStrings` -- which is to say, one that sees symbols
+// as well as strings.
+//
+// Declaring a handler parameter as this type is the opt-in, and it has to be:
+// `Caller.nameToString` turns a `v8::Name` into a `[]const u8` by ptr-casting
+// it to a `v8::String`, which is sound only while every name that reaches the
+// callback really is one. A handler that may be handed a symbol asks first.
+//
+// The only interface that needs it today is the cross-origin WindowProxy, whose
+// guard is a V8 access check rather than a plain interceptor -- and an access
+// check that leaves a symbol to V8 has nowhere good to send it: the
+// failed-access-check callback must throw, while Chrome answers
+// `Object.prototype.toString.call(w)` with '[object Object]'.
+pub const PropertyName = union(enum) {
+    string: []const u8,
+    symbol: Symbol,
+
+    pub const Symbol = struct {
+        /// `Symbol.prototype.description`, null for a symbol without one.
+        ///
+        /// For the message only. Chrome prints it, and prints the same text for
+        /// a page-made `Symbol("Symbol.iterator")` as for the real one --
+        /// measured, scratch/b91/expr-xo-symbols3.js -- so it is never a safe
+        /// answer to "which symbol is this".
+        description: ?[]const u8,
+
+        /// Which well-known symbol this *is*, compared by handle rather than by
+        /// description for exactly that reason.
+        well_known: WellKnown,
+    };
+
+    /// Only the ones a handler here distinguishes; every other symbol, well
+    /// known or not, is `.other`.
+    pub const WellKnown = enum {
+        to_string_tag,
+        has_instance,
+        is_concat_spreadable,
+        other,
+    };
+};
 
 // If a WebAPI takes a []const u8, then we'll coerce any JS value to that string
 // so null -> "null". But if a WebAPI takes an optional string, ?[]const u8,

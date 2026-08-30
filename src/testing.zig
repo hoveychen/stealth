@@ -1823,6 +1823,29 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         }
     }
 
+    // Everything under /wire/ answers 200 with a token body, whatever the
+    // path. The subresource-census tests assert that a request HAPPENED --
+    // that is the whole gap they cover (tools/fingerprint/wire-census.mjs) --
+    // and nothing in the engine decodes a stylesheet's font, an <object>'s
+    // data or a <track>'s cues, so a fixture per path would be a fixture per
+    // path for bytes nobody reads.
+    if (std.mem.startsWith(u8, path, "/wire/")) {
+        const without_query = path[0 .. std.mem.indexOfScalar(u8, path, '?') orelse path.len];
+        const content_type = if (std.mem.endsWith(u8, without_query, ".css"))
+            "text/css"
+        else if (std.mem.endsWith(u8, without_query, ".png"))
+            "image/png"
+        else if (std.mem.endsWith(u8, without_query, ".vtt"))
+            "text/vtt"
+        else if (std.mem.endsWith(u8, without_query, ".webmanifest"))
+            "application/manifest+json"
+        else
+            "application/octet-stream";
+        return req.respond("x", .{
+            .extra_headers = &.{.{ .name = "Content-Type", .value = content_type }},
+        });
+    }
+
     // `<img src>` is fetched for real now (see `Frame.loadImage`), so any test
     // page carrying an image reaches this handler. Nothing decodes the bytes,
     // so one placeholder answers every image path rather than each test having
@@ -1835,6 +1858,23 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
                     .extra_headers = &.{
                         .{ .name = "Content-Type", .value = "image/png" },
                     },
+                });
+            }
+        }
+    }
+
+    // The same bargain as the image placeholder, for the other kinds of
+    // subresource that are now fetched-and-discarded: a media element's
+    // source, a `<track>`'s cues, a plugin's data, a `@font-face` file. None
+    // of it is decoded (frame/markup_resources.zig, frame/style_resources.zig)
+    // so a fixture per path would be a fixture for bytes nobody reads. The
+    // `unreachable` below still catches a typo'd document or script path.
+    {
+        const without_query = path[0 .. std.mem.indexOfScalar(u8, path, '?') orelse path.len];
+        for ([_][]const u8{ ".mp3", ".mp4", ".webm", ".ogg", ".wav", ".vtt", ".swf", ".woff2", ".woff", ".ttf", ".otf" }) |ext| {
+            if (std.mem.endsWith(u8, without_query, ext)) {
+                return req.respond("", .{
+                    .extra_headers = &.{.{ .name = "Content-Type", .value = "application/octet-stream" }},
                 });
             }
         }

@@ -102,6 +102,8 @@ pub const preload = @import("frame/preload.zig");
 pub const observers = @import("frame/observers.zig");
 pub const user_input = @import("frame/user_input.zig");
 pub const node_factory = @import("frame/node_factory.zig");
+pub const style_resources = @import("frame/style_resources.zig");
+pub const markup_resources = @import("frame/markup_resources.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -225,6 +227,22 @@ _file_lists: std.ArrayList(*FileList) = .empty,
 /// A call to `documentIsComplete` (which calls `_documentIsComplete`) resets it.
 /// Double-buffered so that dispatching events (which may trigger JS that
 /// creates new elements) doesn't invalidate the list while iterating.
+// Bodies of subresources already fetched for this document, keyed by resolved
+// URL. Chrome's memory cache: a sheet named by two `<link>`s is ONE request to
+// the origin and ONE resource-timing entry, and this engine made two of each
+// (measured, tools/fingerprint/wire-census.mjs, both halves of its table). A
+// request count is the loudest kind of wire difference -- the origin sees it
+// without the page running anything.
+//
+// Stylesheets only, for now. A `<script src>` named twice is still two
+// requests; that path runs through ScriptManager's async machinery rather
+// than through one synchronous fetch, so it needs its own change.
+//
+// Arena-owned and per-document, which is also what makes it safe to keep
+// without honouring `Cache-Control`: the entries die with the navigation, so
+// the staleness window is one page load.
+_stylesheet_bodies: std.StringHashMapUnmanaged([]const u8) = .empty,
+
 _queued_events_1: std.ArrayList(QueuedEvent) = .empty,
 _queued_events_2: std.ArrayList(QueuedEvent) = .empty,
 _queued_events: *std.ArrayList(QueuedEvent) = undefined,
@@ -1501,6 +1519,16 @@ pub fn _documentIsLoaded(self: *Frame) !void {
         .loader_id = self._loader_id,
         .timestamp = lp.datetime.timestamp(.boot),
     });
+
+    // Where Chrome's first style resolution falls: the document is complete,
+    // so a rule can be told whether it matches anything, and the load event
+    // has not fired, so the requests still land inside the page's load.
+    style_resources.requestAll(self);
+
+    // Same point, for what the MARKUP names beyond <img src> -- <object>,
+    // <embed>, a media element's poster and source, and the rest. See
+    // frame/markup_resources.zig for why it is a walk rather than a hook.
+    markup_resources.requestAll(self);
 }
 
 // Fired at the document on every change to document.readyState: before
@@ -2888,6 +2916,14 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
 
     const http_client = &session.browser.http_client;
 
+    // Already in this document's memory cache: no request, and no second
+    // resource-timing entry either -- Chrome files one entry for the pair
+    // (measured with `wire-census.mjs --entries`, which reads the page's own
+    // buffer next to the server's count).
+    if (self._stylesheet_bodies.get(resolved)) |body| {
+        return self.installStylesheet(link, element, resolved, body);
+    }
+
     // Taken before the transfer, not after: a resource entry's startTime is
     // when the load began.
     const fetch_start = self.performance().now();
@@ -2977,6 +3013,19 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         return self.queueElementEvent(Factory.protoOf(link), .@"error");
     }
 
+    self._stylesheet_bodies.put(self.arena, resolved, try self.arena.dupe(u8, response.body.items)) catch |err| {
+        // A cache that could not grow is a slower page, not a broken one.
+        log.warn(.http, "stylesheet cache", .{ .err = err, .url = resolved });
+    };
+
+    return self.installStylesheet(link, element, resolved, response.body.items);
+}
+
+// Put a stylesheet's text into the `<link>`'s sheet and tell the page it
+// arrived. Shared by the fetch above and the memory-cache hit before it,
+// which is the whole reason it is a function: a cache hit has to deliver the
+// rules, not skip them.
+fn installStylesheet(self: *Frame, link: *Element.Html.Link, element: *Element, resolved: []const u8, body: []const u8) !void {
     // Reuse the cached sheet on re-fetch (href mutation on a connected
     // link) so `document.styleSheets` keeps a single entry per <link>
     // instead of accumulating one per href change. On first load, create
@@ -3001,7 +3050,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     // scratch-list pattern in `CSSStyleSheet.replaceSync`. Keeping
     // `_href` consistent with what the sheet actually contains is the
     // minimum.
-    sheet.replaceSync(response.body.items, self) catch |err| {
+    sheet.replaceSync(body, self) catch |err| {
         log.warn(.http, "external stylesheet parse", .{ .err = err, .url = resolved });
         return self.queueElementEvent(Factory.protoOf(link), .@"error");
     };
@@ -3396,6 +3445,68 @@ pub fn preloadResource(self: *Frame, link: *Element.Html, href: []const u8, opts
         return false;
     };
     return true;
+}
+
+// Fetch something a stylesheet named -- an `@import`, a `@font-face` source,
+// or a url() in a rule that matched. See frame/style_resources.zig for which
+// declarations count and why a rule that matches nothing is skipped.
+//
+// No element rides along: nothing on the page fires load or error for a CSS
+// resource, and nothing here decodes the bytes, so the request itself is the
+// whole of it. The resource entry says "css", which is what Chrome files these
+// under (initiatorType, measured by resource-timing-initiators.mjs).
+pub fn requestStyleResource(self: *Frame, resolved: [:0]const u8, resource_type: HttpClient.Request.ResourceType) void {
+    self.requestSubresource(resolved, null, .{
+        .resource_type = resource_type,
+        .initiator = "css",
+        // A font is fetched in CORS mode whatever the page says -- that is the
+        // font-loading spec's rule, not an opt-in, and it is why a font
+        // request carries an Origin and an image one does not.
+        .mode = if (resource_type == .font) .cors else null,
+        // Nothing displays these, so no `error` event depends on whether the
+        // body was really a picture.
+        .sniff = false,
+    }) catch |err| {
+        log.warn(.http, "style resource fetch", .{ .err = err, .url = resolved });
+    };
+}
+
+// Fetch what a non-<img> element names, and throw the bytes away.
+//
+// `<object data>`, `<embed src>`, `<input type=image src>`, `<svg><image
+// href>`, a media element's poster and source, `<track src>`, `<link
+// rel=manifest>` and `<link rel=prefetch>` are all requests Chrome makes and
+// this engine did not: nine of the fifteen paths in the gap
+// tools/fingerprint/wire-census.mjs measured. Nothing displays or decodes any
+// of it, so as with `loadImage` the request is the whole point.
+//
+// No load/error event follows. Chrome does fire `load` on an `<object>` and an
+// `<input type=image>`, which stays a gap on the event side; wiring the
+// element through here would fire it for the media elements too, where the
+// event Chrome fires is `loadedmetadata` and not `load`.
+//
+// `initiator` is the element's own local name, which is what Chrome files
+// these entries under (initiatorType, resource-timing-initiators.mjs).
+pub fn requestElementResource(
+    self: *Frame,
+    href: []const u8,
+    resource_type: HttpClient.Request.ResourceType,
+    initiator: []const u8,
+) void {
+    if (self.isGoingAway() or href.len == 0 or self._parse_mode == .fragment) {
+        return;
+    }
+    const resolved = URL.resolve(self.arena, self.base(), href, .{ .encoding = self.charset }) catch |err| {
+        log.warn(.http, "element resource resolve", .{ .err = err, .href = href });
+        return;
+    };
+    self.requestSubresource(resolved, null, .{
+        .resource_type = resource_type,
+        .initiator = initiator,
+        .sniff = false,
+    }) catch |err| {
+        log.warn(.http, "element resource fetch", .{ .err = err, .url = resolved });
+    };
 }
 
 // What a subresource fetch that discards its body needs to know beyond the URL
@@ -4179,6 +4290,21 @@ pub fn _insertNodeRelative(self: *Frame, comptime from_parser: bool, parent: *No
         // "replace all" record instead.
         if (self._parse_mode != .fragment) {
             self.notifyChildInserted(parent, child);
+        }
+
+        // An `<img>` asks for its bytes here rather than from `Build.created`,
+        // which is where every other element's subresource starts. The reason
+        // is the `<picture>` case: the candidates come from the `<source>`
+        // siblings that precede the img, and at creation time the parser has
+        // not appended it to anything, so there is no picture to look at and
+        // the request goes to the fallback -- a URL the origin can see is not
+        // the one a browser asks for (one row of
+        // tools/fingerprint/wire-census.mjs). By insertion every preceding
+        // sibling is in place, and a `<source>` after the img is one Chrome
+        // ignores too. The move costs nothing in ordering: the parser appends
+        // an element immediately after creating it.
+        if (child.is(Element.Html.Image)) |image| {
+            try image.imageAddedCallback(self);
         }
 
         if (child.is(Element)) |el| {
@@ -5105,6 +5231,21 @@ test "Frame: relHasIcon matches only a whole icon token" {
 test "WebApi: Frame" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("page", .{});
+}
+
+test "WebApi: css style subresources" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/style_subresources.html", .{});
+}
+
+test "WebApi: markup subresources" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("markup_subresources.html", .{});
+}
+
+test "WebApi: stylesheet memory cache" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/stylesheet_memory_cache.html", .{ .load_external_stylesheets = true });
 }
 
 test "WebApi: Frames" {

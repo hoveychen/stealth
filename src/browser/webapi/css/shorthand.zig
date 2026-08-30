@@ -37,6 +37,21 @@ pub fn lookup(name: []const u8) ?Shorthand {
     return entry;
 }
 
+/// The entry for a shorthand a COMPUTED view rebuilds from its longhands.
+///
+/// Not `lookup`, which declines every unmodelled entry, and not
+/// `lookupJoinable`, which also answers for `font` and `border-image` -- those
+/// two are still stored under their own name, so joining their longhands would
+/// report the initial value over the author's own text. The four below are
+/// expanded now (`grammarExpansion`), so their own name holds nothing and the
+/// longhands are the only place the value is.
+pub fn lookupComputedJoinable(name: []const u8) ?Shorthand {
+    const entry = table.shorthands.get(name) orelse return null;
+    if (entry.kind != .unmodelled) return entry;
+    if (isColumns(entry) or isListStyle(entry) or isGridArea(entry) or isFontVariant(entry)) return entry;
+    return null;
+}
+
 /// Like `lookup`, for the paths that only read a shorthand back rather than
 /// store one: cssText, and the covering walk that builds it. `border-image`
 /// answers here and not in `lookup`, because only half of it is modelled -- its
@@ -44,7 +59,9 @@ pub fn lookup(name: []const u8) ?Shorthand {
 /// wrote is still kept whole rather than expanded.
 pub fn lookupJoinable(name: []const u8) ?Shorthand {
     const entry = table.shorthands.get(name) orelse return null;
-    if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry)) return null;
+    if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry) and
+        !isColumns(entry) and !isListStyle(entry) and !isGridArea(entry) and
+        !isFontVariant(entry)) return null;
     return entry;
 }
 
@@ -533,6 +550,10 @@ pub fn joinKeeping(arena: Allocator, entry: Shorthand, values: []const []const u
 
     if (isBorderImage(entry)) return borderImageJoin(arena, values);
     if (isFont(entry)) return fontJoin(arena, values);
+    if (isColumns(entry)) return columnsJoin(arena, values);
+    if (isListStyle(entry)) return listStyleJoin(arena, values, keep_all);
+    if (isGridArea(entry)) return gridAreaJoin(arena, values);
+    if (isFontVariant(entry)) return fontVariantJoin(arena, values);
 
     switch (entry.kind) {
         .unmodelled => return "",
@@ -589,7 +610,9 @@ pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
     var found: usize = 0;
     for (table.shorthands.keys(), table.shorthands.values()) |key, entry| {
         if (key[0] == '-') continue;
-        if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry)) continue;
+        if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry) and
+            !isColumns(entry) and !isListStyle(entry) and !isGridArea(entry) and
+            !isFontVariant(entry)) continue;
         if (entry.longhands.len == 1 and std.mem.eql(u8, entry.longhands[0], key)) continue;
         for (entry.longhands) |longhand| {
             if (!std.mem.eql(u8, longhand, name)) continue;
@@ -1333,6 +1356,440 @@ pub fn refusesDeclined(entry: Shorthand, value: []const u8) bool {
     return judgeable(value);
 }
 
+/// Whether the value fails the CSS `<position>` grammar of a property that
+/// takes one, in which case Chrome drops the declaration entirely --
+/// `getPropertyValue` answers the empty string and the computed value is the
+/// initial one.
+///
+/// This is a grammar and not a component check, which is why `refusesLonghand`
+/// above cannot do it: every token of `background-position: top 30%` is a
+/// component the property takes, and the declaration is invalid all the same
+/// because `top` names the vertical axis and `30%` then has nowhere to go. Of
+/// 230 readings over 46 values and these five properties, 99 disagreed with
+/// Chrome and every one of them was this -- Chrome dropping where this engine
+/// kept (scratch/b91/expr-position-grammar.js).
+///
+/// The five do not share one grammar. Measured, not read off a spec:
+///
+///   background-position   `<bg-position>`, the only one that still takes the
+///                         legacy three-value form (`left 10px top`).
+///   mask-position         plain `<position>`: one, two or four values, the
+///   object-position       three-value form refused. css-values-3 moved that
+///   perspective-origin    form out of `<position>` and Chrome followed; these
+///                         three refuse byte for byte alike.
+///   transform-origin      `<position>{1,2}` then an optional `<length>` z
+///                         offset -- so `left top 10px` and `10px 20px 30px`
+///                         are fine and no four-value form is.
+///
+/// `background-position-x` / `-y` are deliberately absent: their grammar is a
+/// comma list of edge-relative offsets, nobody has measured it, and a
+/// `<position>` check over it would refuse what Chrome takes. The shorthand is
+/// judged here before it expands into them.
+pub fn refusesPosition(name: []const u8, value: []const u8) bool {
+    const grammar = positionGrammar(name) orelse return false;
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return false;
+    if (cssWide(trimmed) != null) return false;
+    if (!judgeable(trimmed)) return false;
+
+    var tokens: [8][]const u8 = undefined;
+    var count: usize = 0;
+    var walk = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
+    while (walk.next()) |token| {
+        // Longer than any position, so it cannot be one. Counting past the
+        // buffer rather than refusing here keeps the arity check in one place.
+        if (count == tokens.len) return true;
+        tokens[count] = token;
+        count += 1;
+    }
+
+    if (grammar == .position_and_z) {
+        // The position half is one or two values -- not the four-value form the
+        // others take -- and the z offset is a plain <length> after it. Which
+        // is why `left top 10px` is fine here and refused everywhere else,
+        // while `left 10px top 20px` is the other way round.
+        if (count <= 2) return !isPosition(tokens[0..count], .position);
+        if (count == 3) {
+            return !(isLength(tokens[2]) and isPosition(tokens[0..2], .position));
+        }
+        return true;
+    }
+    return !isPosition(tokens[0..count], grammar);
+}
+
+/// One axis of a `<position>`, in the shape both of Chrome's serializations are
+/// written from: the edge an offset is measured from, and the offset itself.
+///
+/// Either half may be absent, and which are present is the whole of what decides
+/// how many values the specified value prints -- `left` is a bare edge, `30%` a
+/// bare offset, and `left 10px` in the three- and four-value forms is both. That
+/// is why one and two values both come back as two while four come back as four:
+/// nothing counts the author's tokens, each axis just prints what it has.
+pub const PositionAxis = struct {
+    edge: ?Edge = null,
+    /// The offset token exactly as the author wrote it; converting it needs
+    /// units and an element, neither of which belongs in this file.
+    offset: ?[]const u8 = null,
+
+    /// Named for the axis's own start rather than for a side, because the same
+    /// three answer both axes: `left` and `top` are `.start`, `right` and
+    /// `bottom` are `.end`.
+    pub const Edge = enum { start, center, end };
+
+    /// The keyword this edge is spelled with on the axis it sits on.
+    pub fn keyword(self: PositionAxis, axis: enum { horizontal, vertical }) ?[]const u8 {
+        return switch (self.edge orelse return null) {
+            .start => if (axis == .horizontal) "left" else "top",
+            .center => "center",
+            .end => if (axis == .horizontal) "right" else "bottom",
+        };
+    }
+};
+
+/// A `<position>` taken apart into its two axes, whatever order and arity the
+/// author wrote it in. `z` is transform-origin's third component, which is a
+/// plain length on no axis at all.
+pub const Position = struct {
+    horizontal: PositionAxis = .{},
+    vertical: PositionAxis = .{},
+    z: ?[]const u8 = null,
+};
+
+/// The value taken apart into its two axes, or null when this file cannot model
+/// it -- which is NOT the same question as `refusesPosition`, and deliberately
+/// so. That function decides what Chrome *accepts*, and it is measured against
+/// 230 readings; this one decides what can be re-serialised, and answering null
+/// leaves the caller printing what it printed before. Keeping them apart means a
+/// gap here can only ever cost fidelity, never turn a declaration Chrome takes
+/// into one this engine drops.
+///
+/// So the shapes below are the ones both agree on. A `center` carrying an offset
+/// is the one shape `refusesPosition` allows and this refuses: `center` is the
+/// middle of the box and has no edge to measure from, and no measurement says
+/// what Chrome prints for it.
+pub fn parsePosition(name: []const u8, value: []const u8) ?Position {
+    const grammar = positionGrammar(name) orelse return null;
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    if (cssWide(trimmed) != null) return null;
+    if (!judgeable(trimmed)) return null;
+
+    var tokens: [8][]const u8 = undefined;
+    var count: usize = 0;
+    var walk = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
+    while (walk.next()) |token| {
+        if (count == tokens.len) return null;
+        tokens[count] = token;
+        count += 1;
+    }
+
+    if (grammar == .position_and_z) {
+        // The z offset is a plain length after a one- or two-value position, so
+        // `left top 10px` is a position and a z here where the same three tokens
+        // are an edge-relative position on `background-position`.
+        if (count <= 2) return positionAxes(tokens[0..count], grammar, null);
+        if (count == 3 and isLength(tokens[2])) {
+            return positionAxes(tokens[0..2], grammar, tokens[2]);
+        }
+        return null;
+    }
+    return positionAxes(tokens[0..count], grammar, null);
+}
+
+fn positionAxes(tokens: []const []const u8, grammar: PositionGrammar, z: ?[]const u8) ?Position {
+    switch (tokens.len) {
+        1 => {
+            if (edgeToken(tokens[0])) |edge| {
+                return placeAxes(edge, null, .{ .axis = .either, .edge = .center }, null, z);
+            }
+            if (!isLengthPercentage(tokens[0])) return null;
+            // A lone offset is horizontal, and the axis it left out is centred.
+            return .{
+                .horizontal = .{ .offset = tokens[0] },
+                .vertical = .{ .edge = .center },
+                .z = z,
+            };
+        },
+        2 => {
+            const lead = edgeToken(tokens[0]);
+            const follow = edgeToken(tokens[1]);
+            if (lead != null and follow != null) {
+                // Two keywords are the `&&` half of the grammar: each takes the
+                // axis it names whichever slot it sits in, so `bottom left` is
+                // `left bottom` and `center left` is `left center`.
+                return placeAxes(lead.?, null, follow.?, null, z);
+            }
+            // With an offset in play the form is slot-ordered -- horizontal
+            // first, vertical second -- and an offset takes the axis of its slot
+            // rather than of a keyword.
+            if (lead == null) {
+                if (!isLengthPercentage(tokens[0])) return null;
+                const vertical: PositionAxis = if (follow) |edge| blk: {
+                    if (edge.axis == .horizontal) return null;
+                    break :blk .{ .edge = edge.edge };
+                } else if (isLengthPercentage(tokens[1]))
+                    .{ .offset = tokens[1] }
+                else
+                    return null;
+                return .{ .horizontal = .{ .offset = tokens[0] }, .vertical = vertical, .z = z };
+            }
+            if (!isLengthPercentage(tokens[1])) return null;
+            if (lead.?.axis == .vertical) return null;
+            return .{
+                .horizontal = .{ .edge = lead.?.edge },
+                .vertical = .{ .offset = tokens[1] },
+                .z = z,
+            };
+        },
+        // `left 10px top` -- one edge carrying an offset and one bare. The
+        // offset belongs to the edge in front of it, so it is in slot 1 or 2 and
+        // the edges are whatever is left.
+        3 => {
+            if (grammar != .bg_position) return null;
+            if (isLengthPercentage(tokens[1])) {
+                const first = edgeToken(tokens[0]) orelse return null;
+                const second = edgeToken(tokens[2]) orelse return null;
+                return placeAxes(first, tokens[1], second, null, z);
+            }
+            if (isLengthPercentage(tokens[2])) {
+                const first = edgeToken(tokens[0]) orelse return null;
+                const second = edgeToken(tokens[1]) orelse return null;
+                return placeAxes(first, null, second, tokens[2], z);
+            }
+            return null;
+        },
+        // `left 10px top 20px` -- both edges carry an offset.
+        4 => {
+            if (!isLengthPercentage(tokens[1]) or !isLengthPercentage(tokens[3])) return null;
+            const first = edgeToken(tokens[0]) orelse return null;
+            const second = edgeToken(tokens[2]) orelse return null;
+            return placeAxes(first, tokens[1], second, tokens[3], z);
+        },
+        else => return null,
+    }
+}
+
+/// Two edges, each with the offset it carries, put on the axes they name.
+/// `center` names neither, so it takes whichever axis the other one leaves --
+/// and when both are `center` the two halves are the same answer anyway.
+fn placeAxes(
+    first: TokenEdge,
+    first_offset: ?[]const u8,
+    second: TokenEdge,
+    second_offset: ?[]const u8,
+    z: ?[]const u8,
+) ?Position {
+    // `center` is the middle of the box, not an edge to measure from. The
+    // grammar check lets one through in the three-value form; nothing has
+    // measured what Chrome prints for it, so it is not modelled here.
+    if (first.axis == .either and first_offset != null) return null;
+    if (second.axis == .either and second_offset != null) return null;
+
+    const first_axis: PositionAxis = .{ .edge = first.edge, .offset = first_offset };
+    const second_axis: PositionAxis = .{ .edge = second.edge, .offset = second_offset };
+
+    if (first.axis == .horizontal) {
+        if (second.axis == .horizontal) return null;
+        return .{ .horizontal = first_axis, .vertical = second_axis, .z = z };
+    }
+    if (first.axis == .vertical) {
+        if (second.axis == .vertical) return null;
+        return .{ .horizontal = second_axis, .vertical = first_axis, .z = z };
+    }
+    // The first is `center`, so the second decides.
+    return switch (second.axis) {
+        .horizontal => .{ .horizontal = second_axis, .vertical = first_axis, .z = z },
+        else => .{ .horizontal = first_axis, .vertical = second_axis, .z = z },
+    };
+}
+
+/// Which axis a per-axis position longhand holds, or null for a property that
+/// is not one.
+///
+/// Both shorthands that take a `<position>` and expand are stored this way, and
+/// the two pairs are spelled differently only by history: `background-position`
+/// splits into `background-position-x` and `-y`, `mask-position` into the
+/// `-webkit-` prefixed pair. A value that reaches either pair has already been
+/// split, so what is left on each is one axis.
+pub const WhichAxis = enum { horizontal, vertical };
+
+pub fn positionAxisProperty(name: []const u8) ?WhichAxis {
+    const AXES = std.StaticStringMap(WhichAxis).initComptime(.{
+        .{ "background-position-x", .horizontal },
+        .{ "background-position-y", .vertical },
+        .{ "-webkit-mask-position-x", .horizontal },
+        .{ "-webkit-mask-position-y", .vertical },
+    });
+    return AXES.get(name);
+}
+
+/// One axis on its own, which is what `background-position-x` and its three
+/// siblings hold: an edge, an offset, or an edge and an offset. Chrome stores a
+/// position shorthand's two halves in exactly this shape and computes each half
+/// by itself -- `background-position: right 10px bottom 20px` puts `right 10px`
+/// in the x longhand, which computes to `calc(100% - 10px)` on its own and joins
+/// back into the shorthand's answer. Measured with
+/// scratch/b92/expr-position-longhand.js.
+///
+/// Null for the comma-separated multi-layer form these longhands also take.
+/// Nobody has measured that, and this file does not model a layer list.
+pub fn parsePositionAxis(name: []const u8, value: []const u8) ?PositionAxis {
+    const vertical = (positionAxisProperty(name) orelse return null) == .vertical;
+
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    if (cssWide(trimmed) != null) return null;
+    if (!judgeable(trimmed)) return null;
+
+    var tokens: [2][]const u8 = undefined;
+    var count: usize = 0;
+    var walk = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
+    while (walk.next()) |token| {
+        if (count == tokens.len) return null;
+        tokens[count] = token;
+        count += 1;
+    }
+
+    // An edge on this longhand has to name this longhand's own axis: `left` is
+    // not a `background-position-y`.
+    const wanted: Axis = if (vertical) .vertical else .horizontal;
+    if (count == 1) {
+        if (edgeToken(tokens[0])) |edge| {
+            if (edge.axis != wanted and edge.axis != .either) return null;
+            return .{ .edge = edge.edge };
+        }
+        if (!isLengthPercentage(tokens[0])) return null;
+        return .{ .offset = tokens[0] };
+    }
+    if (count != 2) return null;
+    const edge = edgeToken(tokens[0]) orelse return null;
+    // `center` takes no offset here for the same reason it takes none above.
+    if (edge.axis != wanted) return null;
+    if (!isLengthPercentage(tokens[1])) return null;
+    return .{ .edge = edge.edge, .offset = tokens[1] };
+}
+
+const TokenEdge = struct { axis: Axis, edge: PositionAxis.Edge };
+
+fn edgeToken(token: []const u8) ?TokenEdge {
+    if (std.ascii.eqlIgnoreCase(token, "left")) return .{ .axis = .horizontal, .edge = .start };
+    if (std.ascii.eqlIgnoreCase(token, "right")) return .{ .axis = .horizontal, .edge = .end };
+    if (std.ascii.eqlIgnoreCase(token, "top")) return .{ .axis = .vertical, .edge = .start };
+    if (std.ascii.eqlIgnoreCase(token, "bottom")) return .{ .axis = .vertical, .edge = .end };
+    if (std.ascii.eqlIgnoreCase(token, "center")) return .{ .axis = .either, .edge = .center };
+    return null;
+}
+
+const PositionGrammar = enum {
+    /// `<position>`: one, two or four values.
+    position,
+    /// `<bg-position>`: the above plus the legacy three-value form.
+    bg_position,
+    /// `<position>{1,2}` then an optional `<length>`.
+    position_and_z,
+};
+
+fn positionGrammar(name: []const u8) ?PositionGrammar {
+    const GRAMMARS = std.StaticStringMap(PositionGrammar).initComptime(.{
+        .{ "background-position", .bg_position },
+        .{ "mask-position", .position },
+        .{ "object-position", .position },
+        .{ "perspective-origin", .position },
+        .{ "transform-origin", .position_and_z },
+    });
+    return GRAMMARS.get(name);
+}
+
+const Axis = enum { horizontal, vertical, either, offset, none };
+
+/// Which half of a position a token can be, on its own.
+fn positionToken(token: []const u8) Axis {
+    if (std.ascii.eqlIgnoreCase(token, "left") or std.ascii.eqlIgnoreCase(token, "right")) {
+        return .horizontal;
+    }
+    if (std.ascii.eqlIgnoreCase(token, "top") or std.ascii.eqlIgnoreCase(token, "bottom")) {
+        return .vertical;
+    }
+    if (std.ascii.eqlIgnoreCase(token, "center")) return .either;
+    if (isLengthPercentage(token)) return .offset;
+    return .none;
+}
+
+fn isLengthPercentage(token: []const u8) bool {
+    const classes = classify(token);
+    return (classes.length or classes.percent) and !unknownUnit(token);
+}
+
+fn isLength(token: []const u8) bool {
+    const classes = classify(token);
+    return classes.length and !classes.percent and !unknownUnit(token);
+}
+
+fn isPosition(tokens: []const []const u8, grammar: PositionGrammar) bool {
+    switch (tokens.len) {
+        // Any single keyword or offset; the other axis is implied `center`.
+        1 => return positionToken(tokens[0]) != .none,
+        2 => {
+            const first = positionToken(tokens[0]);
+            const second = positionToken(tokens[1]);
+            if (first == .none or second == .none) return false;
+            // `center left` is legal and `30% left` is not, so this is not
+            // "each token fits an axis" -- it is the `&&` half of the grammar,
+            // where a keyword may lead only if the other half is a keyword too.
+            // An offset takes its axis from its slot, so it can only ever be
+            // horizontal first and vertical second.
+            if (first == .offset and (second == .horizontal or second == .vertical)) {
+                return second == .vertical;
+            }
+            if (second == .offset) return first != .vertical;
+            return !sameAxis(first, second);
+        },
+        // `left 10px top` -- one edge with an offset and one bare. Only
+        // `<bg-position>` still has it.
+        3 => {
+            if (grammar != .bg_position) return false;
+            // The offset belongs to the edge before it, so it is in slot 1 or
+            // slot 2 and the two edges are whatever is left.
+            if (positionToken(tokens[1]) == .offset) {
+                return edgePair(tokens[0], tokens[2]);
+            }
+            if (positionToken(tokens[2]) == .offset) {
+                return edgePair(tokens[0], tokens[1]);
+            }
+            return false;
+        },
+        // `left 10px top 20px` -- both edges carry an offset, so both must be
+        // keywords and `center` cannot be one: it takes no offset.
+        4 => {
+            if (positionToken(tokens[1]) != .offset or positionToken(tokens[3]) != .offset) {
+                return false;
+            }
+            const first = positionToken(tokens[0]);
+            const second = positionToken(tokens[2]);
+            if (first == .either or second == .either) return false;
+            return (first == .horizontal or first == .vertical) and !sameAxis(first, second);
+        },
+        else => return false,
+    }
+}
+
+/// Two edges naming different axes, `center` standing in for whichever is left.
+/// An offset cannot be one: in the three- and four-value forms an offset always
+/// belongs to the edge in front of it.
+fn edgePair(a: []const u8, b: []const u8) bool {
+    const first = positionToken(a);
+    const second = positionToken(b);
+    if (first == .none or second == .none or first == .offset or second == .offset) {
+        return false;
+    }
+    return !sameAxis(first, second);
+}
+
+fn sameAxis(a: Axis, b: Axis) bool {
+    if (a == .either or b == .either) return false;
+    return a == b;
+}
+
 /// Whether this engine can say anything about the value at all. It cannot when
 /// a component is a function whose name `classify` does not know -- `calc()` is
 /// the live one, because Chrome evaluates it and this engine substitutes it, so
@@ -1671,3 +2128,229 @@ pub const Components = struct {
         return true;
     }
 };
+
+// ---------------------------------------------------------------------------
+// Three grammars the generated table left `.unmodelled`
+// ---------------------------------------------------------------------------
+//
+// `columns`, `list-style` and `grid-area` are marked `.unmodelled` because the
+// generator could not reproduce every probe reading from the table's rules
+// alone. Kept whole, they cost the four, three and four longhands they name:
+// an author writing `columns: 3 100px` left `column-count` reading `auto`
+// where Chrome reads `3` (measured, scratch/b93/expr-shorthand-cases.js).
+//
+// Cloudflare's widget encodes `JSON.stringify(getComputedStyle(el))` whole, so
+// each of these travels in the payload of any page whose CSS uses the
+// shorthand.
+//
+// Two of the three ARE the `.components` rule once their fillers are known --
+// which is all the generator was missing -- so they run on the same machinery
+// via a synthetic entry rather than a parser of their own. `grid-area` is not:
+// its components are separated by `/` and an omitted one copies an earlier one
+// rather than taking a filler.
+
+const columns_longhands = [_][]const u8{ "column-width", "column-count", "column-height", "column-wrap" };
+const columns_fillers = [_][]const u8{ "auto", "auto", "auto", "auto" };
+const list_style_longhands = [_][]const u8{ "list-style-position", "list-style-image", "list-style-type" };
+const list_style_fillers = [_][]const u8{ "outside", "none", "disc" };
+const grid_area_longhands = [_][]const u8{ "grid-row-start", "grid-column-start", "grid-row-end", "grid-column-end" };
+
+/// Told from its shape, the way `isFont` and `isBorderImage` are: by the time
+/// `join` sees an entry there is no name left to match on.
+fn isColumns(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 4 and
+        std.mem.eql(u8, entry.longhands[0], "column-width") and
+        std.mem.eql(u8, entry.longhands[1], "column-count");
+}
+
+fn isListStyle(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 3 and
+        std.mem.eql(u8, entry.longhands[0], "list-style-position");
+}
+
+fn isGridArea(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 4 and
+        std.mem.eql(u8, entry.longhands[0], "grid-row-start");
+}
+
+/// What Chrome stores for one of the three, or null for anything else --
+/// including a CSS-wide keyword, which these still keep whole, and a value the
+/// grammar refuses, which keeps the pre-existing behaviour of storing it whole.
+///
+/// Sits beside the table lookup rather than inside `expand` for the same reason
+/// `fontExpansion` does: `lookup` declines an unmodelled entry before `expand`
+/// is ever reached.
+pub fn grammarExpansion(arena: Allocator, name: []const u8, value: []const u8) !?Expansion {
+    const entry = table.shorthands.get(name) orelse return null;
+    if (entry.kind != .unmodelled) return null;
+    if (cssWide(std.mem.trim(u8, value, &std.ascii.whitespace)) != null) return null;
+
+    if (isColumns(entry)) {
+        return expand(arena, .{
+            .kind = .components,
+            .longhands = entry.longhands,
+            .fillers = &columns_fillers,
+            .group = 2,
+            .groups = 1,
+        }, value);
+    }
+
+    if (isListStyle(entry)) {
+        const expansion = try expand(arena, .{
+            .kind = .components,
+            .longhands = entry.longhands,
+            .fillers = &list_style_fillers,
+            .group = 3,
+            .groups = 1,
+        }, value) orelse return null;
+        // `none` in a `list-style` is BOTH the type and the image, which is the
+        // one thing the components rule cannot say -- it gives each component
+        // one slot. Measured: `list-style: none` answers `list-style-type:
+        // none` as well as `list-style-image: none`, and `list-style: none
+        // inside` answers both plus `inside`.
+        var components = Components.init(value);
+        while (components.next()) |component| {
+            if (!std.ascii.eqlIgnoreCase(component, "none")) continue;
+            const values = @constCast(expansion.values);
+            values[1] = "none";
+            values[2] = "none";
+            break;
+        }
+        return expansion;
+    }
+
+    if (isGridArea(entry)) return gridAreaExpand(arena, value);
+
+    if (isFontVariant(entry)) {
+        const fillers = [_][]const u8{ "normal", "normal", "normal", "normal", "normal", "normal", "normal" };
+        return expand(arena, .{
+            .kind = .components,
+            .longhands = entry.longhands,
+            .fillers = &fillers,
+            .group = 7,
+            .groups = 1,
+        }, value);
+    }
+    return null;
+}
+
+/// `<grid-line> [ / <grid-line> ]{0,3}`, and the omitted ones are not fillers:
+/// a line left out copies an earlier one when that one is a custom ident, and
+/// is `auto` otherwise. Measured over seven values
+/// (scratch/b93/expr-grammar-truth.js): `grid-area: foo` answers `foo` on all
+/// four, `grid-area: 1` answers `1` and three `auto`, and `grid-area: span 2`
+/// answers `span 2` and three `auto` -- `span 2` is not an ident.
+fn gridAreaExpand(arena: Allocator, value: []const u8) !?Expansion {
+    var lines: [4][]const u8 = undefined;
+    var count: usize = 0;
+    var it = std.mem.splitScalar(u8, value, '/');
+    while (it.next()) |raw| {
+        const line = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        if (line.len == 0) return null;
+        if (count == lines.len) return null;
+        lines[count] = line;
+        count += 1;
+    }
+    if (count == 0) return null;
+
+    const values = try arena.alloc([]const u8, grid_area_longhands.len);
+    values[0] = lines[0];
+    values[1] = if (count > 1) lines[1] else gridLineFallback(lines[0]);
+    values[2] = if (count > 2) lines[2] else gridLineFallback(lines[0]);
+    values[3] = if (count > 3) lines[3] else gridLineFallback(values[1]);
+    return .{ .names = &grid_area_longhands, .values = values };
+}
+
+/// What an omitted `<grid-line>` takes from the one it mirrors: the ident
+/// itself, or `auto` when there is no ident to copy.
+fn gridLineFallback(line: []const u8) []const u8 {
+    return if (isGridIdent(line)) line else "auto";
+}
+
+/// A bare custom ident -- not `auto`, not a number, not `span <n>`.
+fn isGridIdent(line: []const u8) bool {
+    if (std.ascii.eqlIgnoreCase(line, "auto")) return false;
+    if (std.mem.indexOfAny(u8, line, " \t\r\n") != null) return false;
+    if (line.len == 0) return false;
+    return !std.ascii.isDigit(line[0]) and line[0] != '-' and line[0] != '+';
+}
+
+/// `columns` as Chrome writes it: the components that are not `auto`, width
+/// first whatever order the author used, and `auto` when neither is set.
+/// Measured: `columns: 3 100px` reads back `100px 3`, `columns: 3` reads back
+/// `3`, `columns: auto` reads back `auto`.
+fn columnsJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
+    const width_set = !std.ascii.eqlIgnoreCase(values[0], "auto");
+    const count_set = !std.ascii.eqlIgnoreCase(values[1], "auto");
+    if (width_set and count_set) return std.mem.concat(arena, u8, &.{ values[0], " ", values[1] });
+    if (width_set) return values[0];
+    if (count_set) return values[1];
+    return "auto";
+}
+
+/// `list-style` as Chrome writes it. A computed view writes all three in
+/// longhand order (`outside none square`); a declaration writes only the
+/// components that are off their initial value, and `list-style: none` writes
+/// the single `none` its type carries.
+fn listStyleJoin(arena: Allocator, values: []const []const u8, keep_all: bool) ![]const u8 {
+    if (keep_all) {
+        return std.mem.concat(arena, u8, &.{ values[0], " ", values[1], " ", values[2] });
+    }
+    var written: [3][]const u8 = undefined;
+    var count: usize = 0;
+    for (values, list_style_fillers) |held, filler| {
+        if (std.ascii.eqlIgnoreCase(held, filler)) continue;
+        written[count] = held;
+        count += 1;
+    }
+    if (count == 0) return "";
+    return std.mem.join(arena, " ", written[0..count]);
+}
+
+/// `grid-area` as Chrome writes it: the four lines, slash-separated, with the
+/// trailing ones dropped while they hold exactly what leaving them out would
+/// have produced.
+fn gridAreaJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
+    var count: usize = 4;
+    if (std.ascii.eqlIgnoreCase(values[3], gridLineFallback(values[1]))) count = 3;
+    if (count == 3 and std.ascii.eqlIgnoreCase(values[2], gridLineFallback(values[0]))) count = 2;
+    if (count == 2 and std.ascii.eqlIgnoreCase(values[1], gridLineFallback(values[0]))) count = 1;
+    return std.mem.join(arena, " / ", values[0..count]);
+}
+
+const font_variant_longhands = [_][]const u8{
+    "font-variant-ligatures", "font-variant-caps",       "font-variant-alternates",
+    "font-variant-numeric",   "font-variant-east-asian", "font-variant-position",
+    "font-variant-emoji",
+};
+
+fn isFontVariant(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 7 and
+        std.mem.eql(u8, entry.longhands[0], "font-variant-ligatures");
+}
+
+/// `font-variant` is seven longhands, each holding `normal` until a keyword
+/// that only IT accepts arrives -- there is no order to get wrong and no
+/// filler to guess, so the components rule reproduces it once the fillers are
+/// known. Measured (scratch/b93/expr-grammar-join.js): `font-variant:
+/// small-caps tabular-nums` leaves caps and numeric holding those two and the
+/// other five `normal`, and reads back as the two of them in longhand order.
+///
+/// It matters through `font`, not through itself: `font: italic small-caps
+/// bold 16px/2 serif` already stored `font-variant-caps: small-caps` here, and
+/// `font-variant` read back `normal` because it had no way to see it.
+fn fontVariantJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
+    var written: [7][]const u8 = undefined;
+    var count: usize = 0;
+    for (values) |held| {
+        if (held.len == 0 or std.ascii.eqlIgnoreCase(held, "normal")) continue;
+        written[count] = held;
+        count += 1;
+    }
+    if (count == 0) return "normal";
+    return std.mem.join(arena, " ", written[0..count]);
+}

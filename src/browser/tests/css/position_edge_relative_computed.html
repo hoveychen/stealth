@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+A `<position>` has two axes however many values it was written with, and Chrome
+prints both of them twice over: once as the SPECIFIED value that
+`el.style.getPropertyValue` answers, and once as the COMPUTED value that
+`getComputedStyle` answers. This engine printed neither, because it had no
+position value at all -- it kept the author's tokens and mapped a keyword to a
+percentage one word at a time.
+
+Both serializations are measured, not read off a spec
+(scratch/b92/expr-position-edge.js, 33 values x these 5 properties = 165
+readings on Chrome 151; 80 of them disagreed before this test):
+
+  SPECIFIED   Horizontal axis first, the axis the author left out filled in as
+              `center`, and a unitless zero written `0px`. So `center left` is
+              `left center`, `bottom 20px right 10px` is `right 10px bottom
+              20px`, `30%` is `30% center` and `right 0 bottom 0` is `right 0px
+              bottom 0px`. The value keeps the arity its axes need -- one and
+              two values both print two, three prints three, four prints four --
+              because an axis prints its edge keyword and its offset, and only
+              the ones it has.
+
+  COMPUTED    Exactly two components (three on transform-origin, whose z offset
+              is a third), each an offset from the axis's START edge, because
+              that is the only origin a single component can be measured from:
+
+                left / top      the offset itself, `0%` when there is none
+                center          `50%`
+                right / bottom  the box minus the offset -- `100%` bare,
+                                `calc(100% - 10px)` with one
+
+              A percentage offset folds into the arithmetic rather than staying
+              in a calc (`right 30%` is `70%`, not `calc(100% - 30%)`), a zero
+              offset folds away entirely (`right 0px` is `100%`), and a length
+              in another unit converts first (`right 2em` is
+              `calc(100% - 32px)`).
+
+  ...except on perspective-origin and transform-origin, which resolve their
+  percentages against the box instead of printing them: on the 100px square
+  below, `right 10px top 20px` is `90px 20px` and `right 30%` is `70px`.
+
+`DROPPED` marks a value the property's grammar refuses, where
+`getPropertyValue` answers the empty string -- transform-origin takes no
+four-value form and the other four take no three-value one. Those refusals are
+css/position_grammar_rejects.html's subject; they are carried here so that a
+serializer which starts accepting them cannot pass this table by accident.
+-->
+
+<script id=position_edge_relative_computed>
+{
+  const CASES = [
+    'right 10px top',
+    'left 10px bottom',
+    'right 10px bottom',
+    'bottom 10px right',
+    'right 10px top 20px',
+    'left 10px bottom 20px',
+    'right 10px bottom 20px',
+    'bottom 20px right 10px',
+    'right 30% top 40%',
+    'right 0 bottom 0',
+    'left 0 top 0',
+    'center 10px',
+    'right center',
+    'center left',
+    'center right',
+    'center top',
+    'center bottom',
+    'bottom left',
+    'bottom right',
+    'bottom center',
+    'right top',
+    'right bottom',
+    'left',
+    'right',
+    'top',
+    'bottom',
+    'center',
+    '30%',
+    '10px',
+    '0',
+    '2em',
+    'left 2em top 1em',
+    'right 2em bottom 1em',
+  ];
+
+  // property -> [ specified (inline), computed ], one entry per CASES row.
+  const CHROME = new Map([
+    ['background-position', [[
+    'right 10px top',
+    'left 10px bottom',
+    'right 10px bottom',
+    'right bottom 10px',
+    'right 10px top 20px',
+    'left 10px bottom 20px',
+    'right 10px bottom 20px',
+    'right 10px bottom 20px',
+    'right 30% top 40%',
+    'right 0px bottom 0px',
+    'left 0px top 0px',
+    'center 10px',
+    'right center',
+    'left center',
+    'right center',
+    'center top',
+    'center bottom',
+    'left bottom',
+    'right bottom',
+    'center bottom',
+    'right top',
+    'right bottom',
+    'left center',
+    'right center',
+    'center top',
+    'center bottom',
+    'center center',
+    '30% center',
+    '10px center',
+    '0px center',
+    '2em center',
+    'left 2em top 1em',
+    'right 2em bottom 1em',
+    ], [
+    'calc(100% - 10px) 0%',
+    '10px 100%',
+    'calc(100% - 10px) 100%',
+    '100% calc(100% - 10px)',
+    'calc(100% - 10px) 20px',
+    '10px calc(100% - 20px)',
+    'calc(100% - 10px) calc(100% - 20px)',
+    'calc(100% - 10px) calc(100% - 20px)',
+    '70% 40%',
+    '100% 100%',
+    '0px 0px',
+    '50% 10px',
+    '100% 50%',
+    '0% 50%',
+    '100% 50%',
+    '50% 0%',
+    '50% 100%',
+    '0% 100%',
+    '100% 100%',
+    '50% 100%',
+    '100% 0%',
+    '100% 100%',
+    '0% 50%',
+    '100% 50%',
+    '50% 0%',
+    '50% 100%',
+    '50% 50%',
+    '30% 50%',
+    '10px 50%',
+    '0px 50%',
+    '32px 50%',
+    '32px 16px',
+    'calc(100% - 32px) calc(100% - 16px)',
+    ]]],
+    ['mask-position', [[
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'right 10px top 20px',
+    'left 10px bottom 20px',
+    'right 10px bottom 20px',
+    'right 10px bottom 20px',
+    'right 30% top 40%',
+    'right 0px bottom 0px',
+    'left 0px top 0px',
+    'center 10px',
+    'right center',
+    'left center',
+    'right center',
+    'center top',
+    'center bottom',
+    'left bottom',
+    'right bottom',
+    'center bottom',
+    'right top',
+    'right bottom',
+    'left center',
+    'right center',
+    'center top',
+    'center bottom',
+    'center center',
+    '30% center',
+    '10px center',
+    '0px center',
+    '2em center',
+    'left 2em top 1em',
+    'right 2em bottom 1em',
+    ], [
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'calc(100% - 10px) 20px',
+    '10px calc(100% - 20px)',
+    'calc(100% - 10px) calc(100% - 20px)',
+    'calc(100% - 10px) calc(100% - 20px)',
+    '70% 40%',
+    '100% 100%',
+    '0px 0px',
+    '50% 10px',
+    '100% 50%',
+    '0% 50%',
+    '100% 50%',
+    '50% 0%',
+    '50% 100%',
+    '0% 100%',
+    '100% 100%',
+    '50% 100%',
+    '100% 0%',
+    '100% 100%',
+    '0% 50%',
+    '100% 50%',
+    '50% 0%',
+    '50% 100%',
+    '50% 50%',
+    '30% 50%',
+    '10px 50%',
+    '0px 50%',
+    '32px 50%',
+    '32px 16px',
+    'calc(100% - 32px) calc(100% - 16px)',
+    ]]],
+    ['object-position', [[
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'right 10px top 20px',
+    'left 10px bottom 20px',
+    'right 10px bottom 20px',
+    'right 10px bottom 20px',
+    'right 30% top 40%',
+    'right 0px bottom 0px',
+    'left 0px top 0px',
+    'center 10px',
+    'right center',
+    'left center',
+    'right center',
+    'center top',
+    'center bottom',
+    'left bottom',
+    'right bottom',
+    'center bottom',
+    'right top',
+    'right bottom',
+    'left center',
+    'right center',
+    'center top',
+    'center bottom',
+    'center center',
+    '30% center',
+    '10px center',
+    '0px center',
+    '2em center',
+    'left 2em top 1em',
+    'right 2em bottom 1em',
+    ], [
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'calc(100% - 10px) 20px',
+    '10px calc(100% - 20px)',
+    'calc(100% - 10px) calc(100% - 20px)',
+    'calc(100% - 10px) calc(100% - 20px)',
+    '70% 40%',
+    '100% 100%',
+    '0px 0px',
+    '50% 10px',
+    '100% 50%',
+    '0% 50%',
+    '100% 50%',
+    '50% 0%',
+    '50% 100%',
+    '0% 100%',
+    '100% 100%',
+    '50% 100%',
+    '100% 0%',
+    '100% 100%',
+    '0% 50%',
+    '100% 50%',
+    '50% 0%',
+    '50% 100%',
+    '50% 50%',
+    '30% 50%',
+    '10px 50%',
+    '0px 50%',
+    '32px 50%',
+    '32px 16px',
+    'calc(100% - 32px) calc(100% - 16px)',
+    ]]],
+    ['perspective-origin', [[
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'right 10px top 20px',
+    'left 10px bottom 20px',
+    'right 10px bottom 20px',
+    'right 10px bottom 20px',
+    'right 30% top 40%',
+    'right 0px bottom 0px',
+    'left 0px top 0px',
+    'center 10px',
+    'right center',
+    'left center',
+    'right center',
+    'center top',
+    'center bottom',
+    'left bottom',
+    'right bottom',
+    'center bottom',
+    'right top',
+    'right bottom',
+    'left center',
+    'right center',
+    'center top',
+    'center bottom',
+    'center center',
+    '30% center',
+    '10px center',
+    '0px center',
+    '2em center',
+    'left 2em top 1em',
+    'right 2em bottom 1em',
+    ], [
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    '90px 20px',
+    '10px 80px',
+    '90px 80px',
+    '90px 80px',
+    '70px 40px',
+    '100px 100px',
+    '0px 0px',
+    '50px 10px',
+    '100px 50px',
+    '0px 50px',
+    '100px 50px',
+    '50px 0px',
+    '50px 100px',
+    '0px 100px',
+    '100px 100px',
+    '50px 100px',
+    '100px 0px',
+    '100px 100px',
+    '0px 50px',
+    '100px 50px',
+    '50px 0px',
+    '50px 100px',
+    '50px 50px',
+    '30px 50px',
+    '10px 50px',
+    '0px 50px',
+    '32px 50px',
+    '32px 16px',
+    '68px 84px',
+    ]]],
+    ['transform-origin', [[
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'center 10px',
+    'right center',
+    'left center',
+    'right center',
+    'center top',
+    'center bottom',
+    'left bottom',
+    'right bottom',
+    'center bottom',
+    'right top',
+    'right bottom',
+    'left center',
+    'right center',
+    'center top',
+    'center bottom',
+    'center center',
+    '30% center',
+    '10px center',
+    '0px center',
+    '2em center',
+    'DROPPED',
+    'DROPPED',
+    ], [
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    'DROPPED',
+    '50px 10px',
+    '100px 50px',
+    '0px 50px',
+    '100px 50px',
+    '50px 0px',
+    '50px 100px',
+    '0px 100px',
+    '100px 100px',
+    '50px 100px',
+    '100px 0px',
+    '100px 100px',
+    '0px 50px',
+    '100px 50px',
+    '50px 0px',
+    '50px 100px',
+    '50px 50px',
+    '30px 50px',
+    '10px 50px',
+    '0px 50px',
+    '32px 50px',
+    'DROPPED',
+    'DROPPED',
+    ]]],
+  ]);
+
+  const host = document.createElement('div');
+  host.style.width = '100px';
+  host.style.height = '100px';
+  document.documentElement.appendChild(host);
+
+  for (const [property, [specified, computed]] of CHROME) {
+    const got_specified = [];
+    const got_computed = [];
+    for (const value of CASES) {
+      host.style.cssText = 'width:100px;height:100px';
+      // setProperty rather than cssText, so a refused value is refused by its
+      // own property's parser and cannot take a neighbour down with it.
+      host.style.setProperty(property, value);
+      const inline = host.style.getPropertyValue(property);
+      if (inline === '') {
+        got_specified.push('DROPPED');
+        got_computed.push('DROPPED');
+        continue;
+      }
+      got_specified.push(inline);
+      got_computed.push(getComputedStyle(host).getPropertyValue(property));
+    }
+    // Joined into one string per property: a boolean assertion would only ever
+    // print "expected true", and what is wanted from a failure here is which
+    // value moved.
+    testing.expectEqual(
+      `${property} specified: ${specified.join(' ; ')}`,
+      `${property} specified: ${got_specified.join(' ; ')}`);
+    testing.expectEqual(
+      `${property} computed: ${computed.join(' ; ')}`,
+      `${property} computed: ${got_computed.join(' ; ')}`);
+  }
+
+  host.remove();
+}
+</script>

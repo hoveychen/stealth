@@ -6,6 +6,8 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
+const MediaQuery = @import("../../../css/MediaQuery.zig");
+const srcset = @import("srcset.zig");
 
 const Image = @This();
 
@@ -55,6 +57,15 @@ pub fn getSrc(self: *const Image, frame: *Frame) ![]const u8 {
         return "";
     }
     return element.asConstNode().resolveURLReflect(src, frame, .{});
+}
+
+/// Chrome reports the candidate it chose, not the `src` it fell back from --
+/// so a page that reads `currentSrc` after setting a srcset sees the same URL
+/// the request went to. See `selectedSource`.
+pub fn getCurrentSrc(self: *const Image, frame: *Frame) ![]const u8 {
+    const chosen = @constCast(self).selectedSource(frame) orelse return "";
+    if (chosen.len == 0) return "";
+    return self.asConstElement().asConstNode().resolveURLReflect(chosen, frame, .{});
 }
 
 pub fn setSrc(self: *Image, value: []const u8, frame: *Frame) !void {
@@ -141,16 +152,121 @@ pub fn getComplete(_: *const Image) bool {
     return true;
 }
 
-/// Used in `Page.nodeIsReady`.
+/// Which URL this image actually asks the server for: the candidate a matching
+/// `<source>` of an enclosing `<picture>` offers, else the srcset candidate
+/// that fits the device, falling back to `src` when neither names anything
+/// usable. See srcset.zig for the candidate arithmetic and `pictureSource` for
+/// which `<source>` gets to supply the candidates.
+///
+/// One function for both readings on purpose: `currentSrc` and the URL that
+/// goes out on the wire have to be the same string, or a page can tell the two
+/// apart. Measured with tools/fingerprint/wire-census.mjs, which watches the
+/// server rather than the page.
+fn selectedSource(self: *Image, frame: *Frame) ?[]const u8 {
+    if (pictureSource(self, frame)) |chosen| {
+        return chosen;
+    }
+    const element = self.asElement();
+    const src = element.getAttributeSafe(comptime .wrap("src"));
+    const set = element.getAttributeSafe(comptime .wrap("srcset")) orelse return src;
+    const sizes = element.getAttributeSafe(comptime .wrap("sizes")) orelse "";
+    return srcset.select(set, sizes, VIEWPORT_WIDTH, DEVICE_PIXEL_RATIO) orelse src;
+}
+
+/// What the enclosing `<picture>` says to load, or null when there is no
+/// picture or none of its `<source>` children apply -- in which case the img's
+/// own `srcset`/`src` decide, which is what the fallback is for.
+///
+/// The first `<source>` that names candidates, declares a type this engine
+/// would decode, and whose media condition holds wins; a later one never gets
+/// looked at. All three rules and the accepted type list were read off Chrome
+/// 151 with scratch/b94: `image/tiff`, `image/heic`, `image/jxl`, `image/*` and
+/// a bare `png` are declined, while an absent or empty `type` is accepted, the
+/// comparison ignores case and any `;` parameters, and a source with no
+/// `srcset` is skipped rather than selecting nothing.
+///
+/// Dispatch is by local name, the way frame/markup_resources.zig does it: the
+/// two element types would otherwise have to import each other.
+fn pictureSource(self: *Image, frame: *Frame) ?[]const u8 {
+    const node = self.asElement().asNode();
+    const parent = node.parentElement() orelse return null;
+    if (!std.mem.eql(u8, parent.getLocalName(), "picture")) return null;
+
+    var child = parent.asNode().firstChild();
+    while (child) |candidate| : (child = candidate.nextSibling()) {
+        // The img ends the search: a `<source>` after it is never consulted.
+        if (candidate == node) return null;
+        const element = candidate.is(Element) orelse continue;
+        if (!std.mem.eql(u8, element.getLocalName(), "source")) continue;
+
+        const set = element.getAttributeSafe(comptime .wrap("srcset")) orelse continue;
+        if (element.getAttributeSafe(comptime .wrap("type"))) |declared| {
+            if (!decodableImageType(declared)) continue;
+        }
+        if (element.getAttributeSafe(comptime .wrap("media"))) |query| {
+            if (query.len != 0 and !MediaQuery.matches(query, frame.viewport())) continue;
+        }
+
+        const sizes = element.getAttributeSafe(comptime .wrap("sizes")) orelse "";
+        if (srcset.select(set, sizes, VIEWPORT_WIDTH, DEVICE_PIXEL_RATIO)) |url| {
+            return url;
+        }
+    }
+    return null;
+}
+
+/// Whether a `<source type>` names an image format this engine claims to
+/// decode. The list is Chrome 151's answer, measured one MIME at a time
+/// (scratch/b94/expr-types.js); it is not the set of formats anything here
+/// actually decodes, because nothing here decodes any of them -- it is the set
+/// a page can tell us apart by.
+fn decodableImageType(declared: []const u8) bool {
+    // `image/png; charset=utf-8` and `image/png ` are both accepted, so the
+    // parameters and the surrounding space come off before the comparison.
+    const semicolon = std.mem.indexOfScalar(u8, declared, ';') orelse declared.len;
+    const name = std.mem.trim(u8, declared[0..semicolon], &std.ascii.whitespace);
+    // An absent type says nothing, and so does an empty one.
+    if (name.len == 0) return true;
+    for (decodable_image_types) |supported| {
+        if (std.ascii.eqlIgnoreCase(name, supported)) return true;
+    }
+    return false;
+}
+
+const decodable_image_types = [_][]const u8{
+    "image/png",
+    "image/apng",
+    "image/jpeg",
+    "image/jpg",
+    "image/gif",
+    "image/webp",
+    "image/avif",
+    "image/svg+xml",
+    "image/bmp",
+    "image/x-icon",
+    "image/vnd.microsoft.icon",
+    "image/x-xbitmap",
+};
+
+// Both are fixed parts of the device profile: see Viewport.default and
+// Window.getDevicePixelRatio. Named here rather than read off the frame because
+// they are the profile, not a window state: the same two numbers answer whether
+// or not the element has been laid out.
+const VIEWPORT_WIDTH: f64 = @floatFromInt(@import("../../../Viewport.zig").default.width);
+const DEVICE_PIXEL_RATIO: f64 = 2;
+
+/// Starts this image's request. Called from the parser's insertion point (see
+/// `Frame._insertNodeRelative`) and from `setSrc`.
 pub fn imageAddedCallback(self: *Image, frame: *Frame) !void {
     // if we're planning on navigating to another frame, don't trigger load event.
     if (frame.isGoingAway()) {
         return;
     }
 
-    const element = self.asElement();
-    // Exit if src not set.
-    const src = element.getAttributeSafe(comptime .wrap("src")) orelse return;
+    // The candidate wins over the `src`, and asking for BOTH would be a
+    // request-count difference rather than a URL one -- the loudest kind. See
+    // srcset.zig.
+    const src = self.selectedSource(frame) orelse return;
     if (src.len == 0) return;
 
     // Request the bytes without decoding them. Never fetching images at all is
@@ -215,7 +331,7 @@ pub const JsApi = struct {
     pub const naturalWidth = bridge.accessor(Image.getNaturalWidth, null, .{});
     pub const naturalHeight = bridge.accessor(Image.getNaturalHeight, null, .{});
     pub const complete = bridge.accessor(Image.getComplete, null, .{});
-    pub const currentSrc = bridge.accessor(Image.getSrc, null, .{});
+    pub const currentSrc = bridge.accessor(Image.getCurrentSrc, null, .{});
     pub const referrerPolicy = reflect.referrerPolicy();
     pub const decoding = reflect.enumerated("decoding", &.{ "async", "sync", "auto" }, .{ .missing = "auto" });
     pub const fetchPriority = reflect.enumerated("fetchpriority", &.{ "high", "low", "auto" }, .{ .missing = "auto" });
@@ -240,12 +356,14 @@ pub const JsApi = struct {
     pub const sharedStorageWritable = reflect.boolean("sharedstoragewritable");
 };
 
-pub const Build = struct {
-    pub fn created(node: *Node, frame: *Frame) !void {
-        const self = node.as(Image);
-        return self.imageAddedCallback(frame);
-    }
-};
+// No `Build.created` hook: an `<img>` starts its request from the parser's
+// insertion point instead, so that an img inside a `<picture>` can see the
+// `<source>` siblings it takes its candidates from. See the `Element.Html.Image`
+// branch in `Frame._insertNodeRelative`.
+//
+// Nothing is lost on the script path, which never reached the hook with a `src`
+// to load: `document.createElement("img")` carries no attributes, and setting
+// `.src` afterwards goes through `setSrc`.
 
 const testing = @import("../../../../testing.zig");
 test "WebApi: HTML.Image" {

@@ -530,6 +530,14 @@ fn isInErrorSet(err: anyerror, comptime T: type) bool {
 }
 
 fn nameToString(local: *const Local, comptime T: type, name: *const v8.Name) !T {
+    // A handler that asked for a js.PropertyName is one whose interceptor was
+    // installed without kOnlyInterceptStrings, so the cast below would be a
+    // lie for it. Everyone else still gets the cast: their flag is set, and a
+    // v8::Name that reaches them is a v8::String.
+    if (comptime T == js.PropertyName) {
+        return propertyName(local, name);
+    }
+
     const handle = @as(*const v8.String, @ptrCast(name));
     if (T == string.String) {
         return js.String.toSSO(.{ .local = local, .handle = handle }, false);
@@ -538,6 +546,51 @@ fn nameToString(local: *const Local, comptime T: type, name: *const v8.Name) !T 
         return js.String.toSSO(.{ .local = local, .handle = handle }, true);
     }
     return try js.String.toSlice(.{ .local = local, .handle = handle });
+}
+
+/// Whether two handles name the same symbol.
+///
+/// Not `a == b`: what the binding passes around as a `*const v8.Symbol` is the
+/// handle, not the symbol. Measured on four reads of @@toStringTag -- the slot
+/// V8 hands the callback and the slot `v8__Symbol__GetToStringTag` hands back
+/// were four different addresses, and the word inside each of them was the
+/// same. Reading through the slot is also what keeps this correct across a GC,
+/// which rewrites handle contents in step.
+fn sameSymbol(a: *const v8.Symbol, b: *const v8.Symbol) bool {
+    const a_slot: *const usize = @ptrCast(@alignCast(a));
+    const b_slot: *const usize = @ptrCast(@alignCast(b));
+    return a_slot.* == b_slot.*;
+}
+
+fn propertyName(local: *const Local, name: *const v8.Name) !js.PropertyName {
+    const value: *const v8.Value = @ptrCast(name);
+    if (!v8.v8__Value__IsSymbol(value)) {
+        return .{ .string = try js.String.toSlice(.{ .local = local, .handle = @ptrCast(name) }) };
+    }
+
+    const isolate = local.isolate.handle;
+    const symbol: *const v8.Symbol = @ptrCast(name);
+
+    // By identity, not by description: a page can build
+    // `Symbol("Symbol.toStringTag")`, and Chrome refuses that one while
+    // answering for the real one (scratch/b91/expr-xo-symbols3.js).
+    const well_known: js.PropertyName.WellKnown = if (sameSymbol(symbol, v8.v8__Symbol__GetToStringTag(isolate).?))
+        .to_string_tag
+    else if (sameSymbol(symbol, v8.v8__Symbol__GetHasInstance(isolate).?))
+        .has_instance
+    else if (sameSymbol(symbol, v8.v8__Symbol__GetIsConcatSpreadable(isolate).?))
+        .is_concat_spreadable
+    else
+        .other;
+
+    const description = v8.v8__Symbol__Description(symbol, isolate).?;
+    return .{ .symbol = .{
+        .well_known = well_known,
+        .description = if (v8.v8__Value__IsUndefined(description))
+            null
+        else
+            try js.String.toSlice(.{ .local = local, .handle = @ptrCast(description) }),
+    } };
 }
 
 // Per Web IDL, exceptions belong to the operation's relevant realm — the

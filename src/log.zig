@@ -45,6 +45,7 @@ pub const Scope = enum {
     unknown_prop,
     prop_read,
     prop_arg,
+    text_encode,
     mcp,
     cache,
     websocket,

@@ -114,12 +114,18 @@ pub fn build(b: *Build) !void {
     b.default_step.dependOn(fmt_step);
 
     linkV8(b, lightpanda_module, enable_asan, enable_tsan, prebuilt_v8_path, shared_v8);
-    // The one C++ translation unit in src/: a V8 API the zig-v8 binding does
-    // not expose. It declares what it needs rather than including V8's
-    // headers, which a prebuilt-V8 build never has on disk, so it needs no
-    // include path -- see the file for the whole story.
+    // The C++ translation units in src/: V8 APIs the zig-v8 binding does not
+    // expose. They declare what they need rather than including V8's headers,
+    // which a prebuilt-V8 build never has on disk, so they need no include
+    // path -- see the files for the whole story.
     lightpanda_module.addCSourceFile(.{
         .file = b.path("src/browser/js/code_generation.cpp"),
+        .language = .cpp,
+    });
+    // The second, for the same reason: V8's access-check entry points, which a
+    // cross-origin WindowProxy needs and no interceptor can stand in for.
+    lightpanda_module.addCSourceFile(.{
+        .file = b.path("src/browser/js/access_check.cpp"),
         .language = .cpp,
     });
     linkCurl(b, lightpanda_module, enable_tsan);

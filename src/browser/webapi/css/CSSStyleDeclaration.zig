@@ -23,6 +23,7 @@ const CssParser = @import("../../css/Parser.zig");
 const units = @import("../../css/units.zig");
 
 const js = @import("../../js/js.zig");
+const URL = @import("../../URL.zig");
 const Frame = @import("../../Frame.zig");
 const Element = @import("../Element.zig");
 const StyleManager = @import("../../StyleManager.zig");
@@ -264,7 +265,56 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
     // clamps the alpha family in both. An inline declaration is untouched --
     // `el.style.opacity` reads back what the author wrote.
     if (!self._is_computed) return value;
-    return clampAlphaValue(property_name, value) orelse value;
+    const clamped = clampAlphaValue(property_name, value) orelse value;
+    return absoluteUrls(property_name, clamped, frame);
+}
+
+/// A `url()` in a computed value is absolute. `background-image: url(/a.png)`
+/// on a page at `http://host/deep/` computes to
+/// `url("http://host/a.png")` in Chrome and read back relative here -- measured
+/// over three properties (scratch/b93/expr-bg-url.js), and it is the same
+/// answer for every property whose value can name an image.
+///
+/// The computed view only. `el.style.backgroundImage` keeps what the author
+/// wrote, which is why this is not done at store time.
+fn absoluteUrls(property_name: []const u8, value: []const u8, frame: *Frame) []const u8 {
+    if (std.mem.indexOf(u8, value, "url(") == null) return value;
+    if (!valueCarriesUrl(property_name)) return value;
+
+    var out = std.Io.Writer.Allocating.init(frame.call_arena);
+    var rest = value;
+    while (std.mem.indexOf(u8, rest, "url(\"")) |at| {
+        const open = at + 5;
+        const close = std.mem.indexOfScalarPos(u8, rest, open, '"') orelse break;
+        const url = rest[open..close];
+        out.writer.writeAll(rest[0..open]) catch return value;
+        const resolved = URL.resolve(frame.call_arena, frame.base(), url, .{ .encoding = frame.charset }) catch url;
+        out.writer.writeAll(resolved) catch return value;
+        rest = rest[close..];
+    }
+    out.writer.writeAll(rest) catch return value;
+    return out.written();
+}
+
+/// The properties whose computed value can carry a `url()` Chrome absolutises.
+/// Names rather than a class test because a custom property holding a `url()`
+/// is NOT absolutised -- it is a token stream until something substitutes it.
+fn valueCarriesUrl(property_name: []const u8) bool {
+    const names = [_][]const u8{
+        // Longhands.
+        "background-image",   "border-image-source",           "content",
+        "cursor",             "list-style-image",              "mask-border-source",
+        "mask-image",         "offset-path",                   "shape-outside",
+        "-webkit-mask-image", "-webkit-mask-box-image-source", "src",
+        // And the shorthands that write one back, which are rebuilt from the
+        // longhands and so never pass through this on their components.
+        "background",         "border-image",                  "list-style",
+        "mask",               "-webkit-mask",                  "offset",
+    };
+    for (names) |name| {
+        if (std.ascii.eqlIgnoreCase(property_name, name)) return true;
+    }
+    return false;
 }
 
 /// Bounds the two reads that reach back into this function: a longhand whose
@@ -304,6 +354,22 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
         return frame._style_manager.substituteVars(element, value) orelse "";
     }
 
+    // Blink's own name for "the decoration this element draws", which is what
+    // the `text-decoration-line` in effect on it resolves to. Measured on
+    // Chrome 151 (scratch/b93/expr-shorthand-cases.js): an element declaring
+    // `text-decoration: underline dotted rgb(10,11,12) 4px` answers
+    // `underline`, one declaring nothing answers `none`.
+    //
+    // The element's OWN line, not its ancestors'. Blink's property is named
+    // "in effect" because a decoration propagates to descendant boxes, and
+    // whether it reports an ancestor's underline here was NOT measured -- this
+    // answers the element's own, which is the case the reading above covers.
+    if (self._is_computed and std.mem.eql(u8, normalized, "-webkit-text-decorations-in-effect")) {
+        if (depth < MAX_PROPERTY_DEPTH) {
+            return self.propertyValueAt("text-decoration-line", frame, surface, depth + 1);
+        }
+    }
+
     if (self._is_computed) {
         if (self._element) |element| {
             const style_manager = &element.ownerFrame(frame)._style_manager;
@@ -319,6 +385,24 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // distinct from `hidden` the way Chrome reports it. Upstream's
                 // hasVisibilityHiddenInherited() cannot express the !important
                 // case or tell `collapse` from `hidden`, so it is not used here.
+                // A CSS-wide keyword never reaches computedVisibility as one --
+                // it parses as no keyword at all and the walk carries on past
+                // it, which read `visibility: initial` back as the parent's
+                // `hidden`. Resolved here for the same reason `display` is:
+                // visibility has a path of its own that never sees
+                // `declaredValue`.
+                if (declaredDeclaration(style_manager, element, "visibility", wrapped)) |declaration| {
+                    if (cssWideKeyword(declaration.value)) |keyword| {
+                        // `initial` is the only one of the four that does not
+                        // end up at the parent: visibility inherits, so
+                        // `inherit`, `unset` and `revert` all do.
+                        if (keyword == .initial) return "visible";
+                        const parent = element.parentElement() orelse return "visible";
+                        const inherited = style_manager.computedVisibility(parent) orelse
+                            StyleManager.Visibility.visible;
+                        return inherited.keyword();
+                    }
+                }
                 const value = style_manager.computedVisibility(element) orelse
                     StyleManager.Visibility.visible;
                 return value.keyword();
@@ -425,17 +509,17 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // declaration is not the answer at all.
                 if ((on_width or on_height) and declaredInPixels(style_manager, element, normalized, wrapped)) {
                     const specified = if (declaredDeclaration(style_manager, element, normalized, wrapped)) |d| d.specified else null;
-                    switch (cascadedValue(style_manager, element, normalized, wrapped)) {
+                    switch (cascadedValue(style_manager, element, normalized, wrapped, surface)) {
                         .value => |value| if (usedLengthText(value, specified, frame)) |snapped| return snapped,
                         .unreportable, .none => {},
                     }
                 }
 
-                switch (cascadedValue(style_manager, element, normalized, wrapped)) {
+                switch (cascadedValue(style_manager, element, normalized, wrapped, surface)) {
                     .value => |value| return self.resolveCurrentColour(value, frame, surface),
                     .unreportable => {},
                     .none => if (chrome_logical.counterpart(normalized)) |other| {
-                        switch (cascadedValue(style_manager, element, other, .wrap(other))) {
+                        switch (cascadedValue(style_manager, element, other, .wrap(other), surface)) {
                             .value => |value| return self.resolveCurrentColour(value, frame, surface),
                             .unreportable, .none => {},
                         }
@@ -449,14 +533,16 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // because a computed view stores none of them either -- each
                 // one is the cascade's answer or the recorded initial value.
                 //
-                // Only the shorthands the table models are joined, and only
-                // after the cascade above has had its say. One the table keeps
-                // whole -- `font`, `columns`, `border-image` -- is stored under
+                // Only the shorthands this engine expands are joined, and
+                // only after the cascade above has had its say. One that is
+                // still kept whole -- `font`, `border-image` -- is stored under
                 // its own name, so the cascade answered it already, and joining
                 // its longhands would report the initial value over the
-                // author's own text.
+                // author's own text. `columns`, `list-style`, `grid-area` and
+                // `font-variant` moved from the second group to the first when
+                // shorthand.grammarExpansion taught them to expand.
                 if (depth < MAX_PROPERTY_DEPTH and !declinesComputedJoin(normalized)) {
-                    if (shorthand.lookup(normalized)) |entry| {
+                    if (shorthand.lookupComputedJoinable(normalized)) |entry| {
                         if (self.computedShorthandValue(normalized, entry, frame, surface, depth)) |value| return value;
                     }
                 }
@@ -495,7 +581,7 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     return boxCentre(element, frame, wrapped.str());
                 }
             }
-            return getDefaultPropertyValue(self, wrapped, surface);
+            return getDefaultPropertyValue(self._element, wrapped, surface);
         }
         return "";
     };
@@ -510,8 +596,8 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
 /// not that declaration can be reported: an ancestor declaring
 /// `letter-spacing:2em` is the one that decides the answer, so a grandparent's
 /// `3px` must not show through it.
-fn cascadedValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) Declared {
-    switch (declaredValue(style_manager, element, property_name, wrapped)) {
+fn cascadedValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String, surface: Surface) Declared {
+    switch (declaredValue(style_manager, element, property_name, wrapped, surface)) {
         .value => |value| return .{ .value = value },
         .unreportable => return .unreportable,
         .none => {},
@@ -542,13 +628,132 @@ fn cascadedValue(style_manager: *StyleManager, element: *Element, property_name:
                 } else |_| {}
             }
         }
-        switch (declaredValue(style_manager, current, property_name, wrapped)) {
+        switch (declaredValue(style_manager, current, property_name, wrapped, surface)) {
             .value => |value| return .{ .value = value },
             .unreportable => return .unreportable,
             .none => {},
         }
     }
     return .none;
+}
+
+/// The CSS-wide keyword a declaration is, or null for an ordinary value. The
+/// comparison is case-insensitive because a declaration keeps the author's
+/// spelling and `INHERIT` is the same keyword.
+fn cssWideKeyword(value: []const u8) ?CssWide {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    const KEYWORDS = std.StaticStringMap(CssWide).initComptime(.{
+        .{ "inherit", .inherit },
+        .{ "initial", .initial },
+        .{ "unset", .unset },
+        .{ "revert", .revert },
+        .{ "revert-layer", .revert },
+    });
+    if (trimmed.len > "revert-layer".len) return null;
+    var lower_buf: ["revert-layer".len]u8 = undefined;
+    const lower = std.ascii.lowerString(lower_buf[0..trimmed.len], trimmed);
+    return KEYWORDS.get(lower);
+}
+
+/// `revert-layer` folds into `revert`: with no cascade layer to fall back to,
+/// the two were measured giving the same answer on every property and tag tried
+/// (scratch/b92/expr-wide-table.js).
+const CssWide = enum { inherit, initial, unset, revert };
+
+/// How deep a chain of `inherit` declarations is followed before the walk gives
+/// up. The same bound StyleManager puts on its own ancestor walks, and for the
+/// same reason: a page can nest deeper than the stack likes, and a cycle
+/// through a detached tree would otherwise not terminate.
+const MAX_CSS_WIDE_DEPTH = 32;
+
+/// What a CSS-wide keyword resolves to on the element that declared it.
+/// Measured on Chrome 151 over three tags x fourteen properties
+/// (scratch/b92/expr-wide-table.js, asserted by css/css_wide_keywords.html):
+///
+///   inherit   the PARENT's computed value, for a property that inherits and
+///             one that does not alike -- a child declaring `width: inherit`
+///             under a 123px parent computes 123px, and `display: inherit`
+///             under an `inline-block` parent computes inline-block.
+///   initial   the property's initial value, which is NOT the UA sheet's: a
+///             <li> declaring `display: initial` computes `inline`, where the
+///             UA rule would have said list-item.
+///   unset     `inherit` for a property that inherits and `initial` for one
+///             that does not, which is the one keyword that needs the
+///             inheritance table to tell which.
+///   revert    the value the element would report with the declaration never
+///             written, UA sheet and all -- so a <li> keeps list-item. That is
+///             exactly what the no-declaration path already answers.
+fn resolvedCssWide(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    wrapped: String,
+    keyword: CssWide,
+    surface: Surface,
+    depth: u8,
+) Declared {
+    // A chain this long is a page doing something strange, and the initial value
+    // is the answer that cannot be wrong about which ancestor it came from.
+    if (depth >= MAX_CSS_WIDE_DEPTH) {
+        return initialDeclared(property_name);
+    }
+
+    const resolved: CssWide = switch (keyword) {
+        .unset => if (chrome_inherited.inherits(property_name)) .inherit else .initial,
+        else => keyword,
+    };
+
+    switch (resolved) {
+        .initial => return initialDeclared(property_name),
+        // "As if never declared" is literally `.none`, and handing that back
+        // puts the value on the path a declaration-less element already takes:
+        // the ancestor walk for a property that inherits, the UA sheet for one
+        // that does not. Answering this element's own default instead would
+        // skip the inheritance -- `visibility: revert` under a hidden parent is
+        // `hidden` in Chrome, not the `visible` a default lookup returns.
+        .revert => return .none,
+        .inherit => {},
+        .unset => unreachable,
+    }
+
+    // The parent's COMPUTED value, which is its cascade when it declares one and
+    // its own default when it does not. The root has no parent to take one from,
+    // and Chrome answers the initial value there.
+    const parent = element.parentElement() orelse return initialDeclared(property_name);
+
+    if (declaredDeclaration(style_manager, parent, property_name, wrapped)) |parent_declaration| {
+        // The parent's own declaration may be a keyword in turn, and following
+        // it here is what keeps `inherit` on top of `inherit` from reporting the
+        // word.
+        if (cssWideKeyword(parent_declaration.value)) |parent_keyword| {
+            return resolvedCssWide(style_manager, parent, property_name, wrapped, parent_keyword, surface, depth + 1);
+        }
+    }
+
+    switch (cascadedValue(style_manager, parent, property_name, wrapped, surface)) {
+        .value => |value| return .{ .value = value },
+        // The parent has a declaration this engine cannot report. Reporting the
+        // initial value is no worse than reporting it for the parent itself,
+        // which is what the caller does with `unreportable`.
+        .unreportable => return .unreportable,
+        .none => return .{ .value = getDefaultPropertyValue(parent, wrapped, surface) },
+    }
+}
+
+/// The two properties whose recorded "default" is the UA sheet's answer for a
+/// div rather than the property's initial value. `initial` is the one keyword
+/// that has to tell those apart: it discards the UA sheet, so `display: initial`
+/// is `inline` even on a <li> and `unicode-bidi: initial` is `normal`. Measured
+/// with scratch/b92/expr-initial-delta.js, which asks all 475 names where
+/// `initial` and an undeclared element disagree -- these two are the whole list.
+const CSS_INITIAL_OVERRIDES = std.StaticStringMap([]const u8).initComptime(.{
+    .{ "display", "inline" },
+    .{ "unicode-bidi", "normal" },
+});
+
+fn initialDeclared(property_name: []const u8) Declared {
+    if (CSS_INITIAL_OVERRIDES.get(property_name)) |value| return .{ .value = value };
+    return .{ .value = chrome_initial_values.initial.get(property_name) orelse return .unreportable };
 }
 
 /// What one element was declared for a property: nothing, something this engine
@@ -566,11 +771,20 @@ const Declared = union(enum) {
 ///
 /// `var()` is substituted at computed-value time either way; the specified value
 /// `el.style` hands out keeps its var() text.
-fn declaredValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) Declared {
+fn declaredValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String, surface: Surface) Declared {
     const declaration = declaredDeclaration(style_manager, element, property_name, wrapped) orelse
         return flexShorthandDeclared(style_manager, element, property_name);
     const substituted = declaration.value;
     const frame = element.ownerFrame(style_manager.frame);
+
+    // A CSS-wide keyword is not a value -- it names where the value comes from,
+    // and by computed-value time it has come from there. Resolved here rather
+    // than at the top of the read, because here is where the element that
+    // DECLARED it is known: an ancestor's `inherit` means that ancestor's
+    // parent, not the descendant's.
+    if (cssWideKeyword(substituted)) |keyword| {
+        return resolvedCssWide(style_manager, element, property_name, wrapped, keyword, surface, 0);
+    }
 
     // `transform` computes to one matrix rather than to the list the author
     // wrote. A function this engine does not model answers `unreportable`, so
@@ -590,6 +804,14 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
             return .{ .value = px };
         }
         return .unreportable;
+    }
+
+    // A position keeps its percentages rather than resolving them, but it still
+    // has to come out as an offset from each axis's start edge -- which is a
+    // rewrite of the whole value, not of one token, so the generic length path
+    // below cannot do it either.
+    if (computedPositionText(style_manager, element, property_name, substituted)) |folded| {
+        return .{ .value = folded };
     }
 
     if (computedColourText(frame.call_arena, property_name, substituted)) |folded| {
@@ -862,12 +1084,14 @@ fn percentageOfTheBox(property_name: []const u8) bool {
 /// stays `cover`. Both are assertions, so a later widening of this list cannot
 /// take them with it.
 ///
-/// `mask-position` is deliberately absent even though the same rule applies to
-/// it: measured, it never reaches this path -- `mask-position: left` still comes
-/// out `left center` with this map in place, and `mask-position: 30%` comes out
-/// `0% center`, wrong in the first slot too. It has an expansion of its own with
-/// a defect of its own, recorded rather than papered over by a name here that
-/// would do nothing.
+/// This is now a FALLBACK rather than the path a position normally takes:
+/// `computedPositionText` runs first and answers all four of the names below
+/// from a parsed position, which is the only way to get the edge-relative forms
+/// right. What is left here catches a value that parser cannot model.
+///
+/// `mask-position` is absent because it never arrives under that name -- it
+/// expands into the `-webkit-mask-position-x` / `-y` pair, which is exactly why
+/// adding it here would have done nothing.
 fn positionKeywordPercentage(property_name: []const u8, token: []const u8) ?[]const u8 {
     const PROPERTIES = std.StaticStringMap(void).initComptime(.{
         .{ "background-position", {} },
@@ -1409,7 +1633,7 @@ fn resolvedFontWeight(style_manager: *StyleManager, element: *Element, depth: u8
     if (depth >= MAX_COMPUTED_DEPTH) return initial_font_weight;
     const wrapped = comptime String.wrap("font-weight");
     const declared = found: {
-        switch (declaredValue(style_manager, element, "font-weight", wrapped)) {
+        switch (declaredValue(style_manager, element, "font-weight", wrapped, .computed)) {
             .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
             .unreportable, .none => {},
         }
@@ -1473,7 +1697,7 @@ const font_stretch_percentages = std.StaticStringMap([]const u8).initComptime(.{
 });
 
 fn computedFontStretch(style_manager: *StyleManager, element: *Element, wrapped: String) []const u8 {
-    const declared = switch (cascadedValue(style_manager, element, "font-stretch", wrapped)) {
+    const declared = switch (cascadedValue(style_manager, element, "font-stretch", wrapped, .computed)) {
         .value => |value| std.mem.trim(u8, value, &std.ascii.whitespace),
         .unreportable, .none => return "100%",
     };
@@ -1515,7 +1739,7 @@ fn usedBorderWidth(
 
     const style_manager = &element.ownerFrame(frame)._style_manager;
     const declared = found: {
-        switch (cascadedValue(style_manager, element, name, wrapped)) {
+        switch (cascadedValue(style_manager, element, name, wrapped, .computed)) {
             .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
             // Written, and this engine cannot report it: `medium`, the same as
             // a declaration Chrome's own parser drops.
@@ -1526,7 +1750,7 @@ fn usedBorderWidth(
         // `border-block-start-width` and `border-top-width` are one property
         // under two names, and this engine stores only the one the page wrote.
         if (chrome_logical.counterpart(name)) |other| {
-            switch (cascadedValue(style_manager, element, other, .wrap(other))) {
+            switch (cascadedValue(style_manager, element, other, .wrap(other), .computed)) {
                 .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
                 .unreportable, .none => {},
             }
@@ -1639,7 +1863,7 @@ fn leftAtCurrentColour(
 
     const element = self._element orelse return false;
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    return switch (cascadedValue(style_manager, element, longhand, .wrap(longhand))) {
+    return switch (cascadedValue(style_manager, element, longhand, .wrap(longhand), .computed)) {
         .none => true,
         .unreportable => false,
         .value => |value| std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, &std.ascii.whitespace), "currentcolor"),
@@ -1652,8 +1876,27 @@ fn leftAtCurrentColour(
 /// when nothing declares one, and then blockification -- a flex or grid parent
 /// turns its child element's outer display block-level, which is how Chrome
 /// exposes it and the reason innerText breaks a line there.
+/// The declared display before blockification, with a CSS-wide keyword resolved
+/// -- `display` has a resolution path of its own because the layout needs the
+/// answer too, so it never reaches `declaredValue` where the other properties
+/// have their keywords taken apart.
+fn resolvedDisplaySpecified(element: *Element, frame: *Frame) []const u8 {
+    const declared = frame._style_manager.computedDisplay(element) orelse
+        return getDefaultDisplay(element);
+    const keyword = cssWideKeyword(declared) orelse return declared;
+
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const wrapped = comptime String.wrap("display");
+    return switch (resolvedCssWide(style_manager, element, "display", wrapped, keyword, .computed, 0)) {
+        .value => |value| value,
+        // Nothing here can report, so the element keeps the display its tag
+        // would have had -- the answer it gave before any of this.
+        .unreportable, .none => getDefaultDisplay(element),
+    };
+}
+
 pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
-    const specified = frame._style_manager.computedDisplay(element) orelse getDefaultDisplay(element);
+    const specified = resolvedDisplaySpecified(element, frame);
 
     // Nothing below can change a display that is block-level already, and
     // asking would cost two cascade reads per element on a path that runs per
@@ -1690,13 +1933,13 @@ pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
 /// computed path knew that before this.
 pub fn cascadedComputedValue(element: *Element, name: []const u8, frame: *Frame) ?[]const u8 {
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    switch (cascadedValue(style_manager, element, name, .wrap(name))) {
+    switch (cascadedValue(style_manager, element, name, .wrap(name), .computed)) {
         .value => |value| return value,
         .unreportable => return null,
         .none => {},
     }
     const other = chrome_logical.counterpart(name) orelse return null;
-    return switch (cascadedValue(style_manager, element, other, .wrap(other))) {
+    return switch (cascadedValue(style_manager, element, other, .wrap(other), .computed)) {
         .value => |value| value,
         .unreportable, .none => null,
     };
@@ -2092,7 +2335,7 @@ fn cascadedOrUaInherited(element: *Element, frame: *Frame, name: []const u8, wra
     const style_manager = &element.ownerFrame(frame)._style_manager;
     var current: ?*Element = element;
     while (current) |el| : (current = el.parentElement()) {
-        switch (declaredValue(style_manager, el, name, wrapped)) {
+        switch (declaredValue(style_manager, el, name, wrapped, .computed)) {
             .value => |value| return std.mem.trim(u8, value, &std.ascii.whitespace),
             .unreportable => return null,
             .none => {},
@@ -2523,7 +2766,7 @@ fn fillsAtDisplay(display: []const u8) bool {
 fn cascadedKeyword(style_manager: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
     // Not `comptime .wrap`: a comptime String has to fit the small-string
     // optimisation's twelve bytes and `justify-items` is thirteen.
-    return switch (cascadedValue(style_manager, element, name, .wrap(name))) {
+    return switch (cascadedValue(style_manager, element, name, .wrap(name), .computed)) {
         .value => |value| value,
         .unreportable, .none => null,
     };
@@ -2601,37 +2844,194 @@ fn resolvedOrigin(
     const width = element.getClientWidthWithCache(frame, &visibility_cache) + edges.border_x;
     const height = element.getClientHeightWithCache(frame, &visibility_cache) + edges.border_y;
 
-    // The ordering and the missing-axis fill are the specified serialiser's job
-    // and it already does them: horizontal first, `center` for the axis left
-    // out, and a z offset staying third. Anything it refuses is a shape Chrome
-    // does not resolve either.
-    const ordered = (writeOrigin(frame.call_arena, value) catch null) orelse value;
-
-    var parts: [3][]const u8 = undefined;
-    var count: usize = 0;
-    var walk = shorthand.Components.init(ordered);
-    while (walk.next()) |part| {
-        if (count == parts.len) return null;
-        parts[count] = part;
-        count += 1;
-    }
-    if (count == 0) return null;
+    // Which axis each component sits on is the parser's answer, not the slot's:
+    // `bottom 20px right 10px` names its axes out of order and resolves the same
+    // as `right 10px bottom 20px`. The prefixed spellings are aliases and the
+    // parser is keyed on the real names.
+    const unprefixed = if (std.mem.startsWith(u8, property_name, "-webkit-"))
+        property_name["-webkit-".len..]
+    else
+        property_name;
+    const position = shorthand.parsePosition(unprefixed, value) orelse return null;
 
     var buf = std.Io.Writer.Allocating.init(frame.local_arena);
-    for (parts[0..count], 0..) |part, i| {
-        // The z offset is a length and nothing else, so it has no extent to
-        // take a percentage of.
-        const extent: ?f64 = switch (i) {
-            0 => width,
-            1 => height,
-            else => null,
-        };
-        const px = originComponentPx(style_manager, element, property_name, part, extent) orelse return null;
-        if (i != 0) buf.writer.writeAll(" ") catch return null;
+    const horizontal = originAxisPx(style_manager, element, property_name, position.horizontal, width) orelse return null;
+    const vertical = originAxisPx(style_manager, element, property_name, position.vertical, height) orelse return null;
+    units.writeNumber(&buf.writer, horizontal) catch return null;
+    buf.writer.writeAll("px ") catch return null;
+    units.writeNumber(&buf.writer, vertical) catch return null;
+    buf.writer.writeAll("px") catch return null;
+    if (position.z) |z| {
+        // A z offset is a plain length on no axis, so it has no extent to take a
+        // percentage of.
+        const px = originComponentPx(style_manager, element, property_name, z, null) orelse return null;
+        buf.writer.writeAll(" ") catch return null;
         units.writeNumber(&buf.writer, px) catch return null;
         buf.writer.writeAll("px") catch return null;
     }
     return buf.written();
+}
+
+/// A `<position>` as a computed style prints it, for the properties that keep
+/// their percentages instead of resolving them against a box: exactly two
+/// components, each an offset from its axis's START edge, because that is the
+/// only origin a single component can be read against.
+///
+/// Measured on Chrome 151 over 33 values (scratch/b92/expr-position-edge.js):
+///
+///   left / top      the offset itself, `0%` when the axis carries none
+///   center          `50%`
+///   right / bottom  the box minus the offset -- `100%` bare, and
+///                   `calc(100% - 10px)` with one
+///
+/// A percentage offset folds into that subtraction rather than staying in a
+/// calc (`right 30%` is `70%`, not `calc(100% - 30%)`) and so does a zero
+/// (`right 0px` is `100%`), because both are subtractions this can finish.
+/// Anything else keeps the calc, which is the only spelling a computed value has
+/// for "a percentage of a box nobody here has measured, minus a length".
+///
+/// `background-position` itself is absent because it never arrives: it is stored
+/// as its two longhands and joined back from them, so the axis each of THEM
+/// computes is the shorthand's answer. Chrome does the same -- its
+/// `background-position-x` for `right 10px` is `calc(100% - 10px)`, measured
+/// with scratch/b92/expr-position-longhand.js.
+///
+/// The two origins are absent for the opposite reason: they resolve their
+/// percentages against the border box and are answered by `resolvedOrigin`
+/// before this is reached.
+fn computedPositionText(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    value: []const u8,
+) ?[]const u8 {
+    const frame = element.ownerFrame(style_manager.frame);
+
+    if (shorthand.parsePositionAxis(property_name, value)) |axis| {
+        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+        if (!writeComputedPositionAxis(&buf.writer, style_manager, element, property_name, axis)) {
+            return null;
+        }
+        return buf.written();
+    }
+
+    if (!std.mem.eql(u8, property_name, "mask-position") and
+        !std.mem.eql(u8, property_name, "object-position"))
+    {
+        return null;
+    }
+    const position = shorthand.parsePosition(property_name, value) orelse return null;
+
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    if (!writeComputedPositionAxis(&buf.writer, style_manager, element, property_name, position.horizontal)) {
+        return null;
+    }
+    buf.writer.writeByte(' ') catch return null;
+    if (!writeComputedPositionAxis(&buf.writer, style_manager, element, property_name, position.vertical)) {
+        return null;
+    }
+    return buf.written();
+}
+
+fn writeComputedPositionAxis(
+    writer: *std.Io.Writer,
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    axis: shorthand.PositionAxis,
+) bool {
+    const edge = axis.edge orelse .start;
+    if (edge == .center) {
+        writer.writeAll("50%") catch return false;
+        return true;
+    }
+
+    const offset: ?PositionOffset = if (axis.offset) |token|
+        positionOffset(style_manager, element, property_name, token) orelse return false
+    else
+        null;
+
+    if (edge == .start) {
+        const measured = offset orelse {
+            writer.writeAll("0%") catch return false;
+            return true;
+        };
+        switch (measured) {
+            .percent => |pct| {
+                units.writeNumber(writer, pct) catch return false;
+                writer.writeAll("%") catch return false;
+            },
+            .pixels => |px| {
+                units.writeNumber(writer, px) catch return false;
+                writer.writeAll("px") catch return false;
+            },
+        }
+        return true;
+    }
+
+    const measured = offset orelse {
+        writer.writeAll("100%") catch return false;
+        return true;
+    };
+    switch (measured) {
+        .percent => |pct| {
+            units.writeNumber(writer, 100 - pct) catch return false;
+            writer.writeAll("%") catch return false;
+        },
+        .pixels => |px| {
+            if (px == 0) {
+                writer.writeAll("100%") catch return false;
+                return true;
+            }
+            writer.writeAll("calc(100% - ") catch return false;
+            units.writeNumber(writer, px) catch return false;
+            writer.writeAll("px)") catch return false;
+        },
+    }
+    return true;
+}
+
+/// An offset in the only two shapes a computed position carries it: a
+/// percentage of a box this cannot measure, or a length in pixels.
+const PositionOffset = union(enum) { percent: f64, pixels: f64 };
+
+fn positionOffset(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    token: []const u8,
+) ?PositionOffset {
+    const parsed = units.parse(token) catch return null;
+    if (parsed.unit == .percentage) return .{ .percent = parsed.value };
+    return switch (lengthFactor(style_manager, element, property_name, parsed.unit)) {
+        // `.verbatim` is `px` and the unitless zero, both of which are already
+        // the number of pixels they name.
+        .verbatim => .{ .pixels = parsed.value },
+        .pixels => |factor| .{ .pixels = parsed.value * factor },
+        .unresolvable => null,
+    };
+}
+
+/// One axis of an origin in pixels, measured from the box's own start edge --
+/// which is the only origin a single number can be read against. An offset from
+/// the END edge is the extent minus it, so `right 10px` on a 100px box is 90px.
+fn originAxisPx(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    axis: shorthand.PositionAxis,
+    extent: f64,
+) ?f64 {
+    const offset = if (axis.offset) |token|
+        originComponentPx(style_manager, element, property_name, token, extent) orelse return null
+    else
+        0;
+    return switch (axis.edge orelse .start) {
+        .start => offset,
+        // `center` takes no offset, so there is nothing to add to the middle.
+        .center => extent / 2,
+        .end => extent - offset,
+    };
 }
 
 /// One origin component in pixels. `extent` is the border box's size along that
@@ -2843,6 +3243,28 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
             return changed;
         },
     };
+
+    // Three more the table calls unmodelled whose grammars ARE reproducible;
+    // like `font` above, they sit beside the table lookup because that lookup
+    // declines an unmodelled entry. See shorthand.grammarExpansion.
+    if (try shorthand.grammarExpansion(frame.local_arena, normalized, value)) |expansion| {
+        for (expansion.names, expansion.values) |name, longhand| {
+            if (shorthand.refusesLonghand(name, longhand)) return false;
+        }
+        var changed = false;
+        for (expansion.names, expansion.values) |name, longhand| {
+            const canonical = try normalizePropertyValue(frame.local_arena, name, longhand);
+            changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), important, frame) or changed;
+        }
+        return changed;
+    }
+
+    // Ahead of the shorthand lookup, because `background-position` and
+    // `mask-position` are shorthands and the grammar being checked is the
+    // shorthand's: once expanded into an x and a y, `top 30%` is two components
+    // each of which its own longhand takes, and what made the pair invalid is
+    // gone. See shorthand.refusesPosition.
+    if (shorthand.refusesPosition(normalized, value)) return false;
 
     if (shorthand.lookup(normalized)) |entry| {
         if (try shorthand.expand(frame.local_arena, entry, value)) |expansion| {
@@ -3111,6 +3533,16 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
     }
     const value = try canonicaliseValue(arena, property_name, raw_value);
 
+    // A CSS-wide keyword is not a value of the property's grammar, so none of
+    // the rewrites below have anything to say about it. Chrome agrees byte for
+    // byte: `counter-increment: inherit` stays `inherit` where `chapter` grows
+    // the count it was written without (scratch/b92/expr-counter-wide.js).
+    // Without this the keyword was stored as `inherit 1`, which then no longer
+    // looked like a keyword to the computed path and leaked the word out.
+    if (cssWideKeyword(value) != null) {
+        return value;
+    }
+
     // Per CSSOM spec, unitless zero in length properties should serialize as "0px"
     if (std.mem.eql(u8, value, "0") and isLengthProperty(property_name)) {
         return "0px";
@@ -3152,14 +3584,10 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
         }
     }
 
-    // An origin is written with its horizontal axis first, and with the axis
-    // the author left out filled in.
-    if (std.mem.eql(u8, property_name, "transform-origin") or
-        std.mem.eql(u8, property_name, "perspective-origin"))
-    {
-        if (try writeOrigin(arena, value)) |ordered| {
-            return ordered;
-        }
+    // A position is written with its horizontal axis first, with the axis the
+    // author left out filled in, and with a unitless zero spelled `0px`.
+    if (try writePosition(arena, property_name, value)) |ordered| {
+        return ordered;
     }
 
     // Canonicalize anchor-size() function: anchor name (dashed ident) comes before size keyword
@@ -3178,71 +3606,66 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
     return value;
 }
 
-/// Which axis an origin component names, or null for a length or a percentage,
-/// which takes whichever axis its slot gives it.
-const OriginAxis = enum { horizontal, vertical, either };
+/// The SPECIFIED value of a `<position>` as Chrome writes it: horizontal axis
+/// first, the axis the author left out filled in with `center`, and a unitless
+/// zero spelled `0px`. Measured over 33 values x the five properties that take
+/// one, on Chrome 151 (scratch/b92/expr-position-edge.js) -- `center left` is
+/// `left center`, `bottom 20px right 10px` is `right 10px bottom 20px`, `30%` is
+/// `30% center` and `right 0 bottom 0` is `right 0px bottom 0px`.
+///
+/// Nothing here counts the author's tokens. Each axis prints the edge and the
+/// offset it holds and only those, which is what makes one and two values both
+/// come back as two while three come back as three and four as four.
+///
+/// Null for a value `parsePosition` cannot model, which leaves it the bytes it
+/// arrived with -- the answer this engine gave before.
+fn writePosition(arena: Allocator, property_name: []const u8, value: []const u8) !?[]const u8 {
+    // A substitution stands in for text that arrives later, so which axis each
+    // component lands on is not knowable here.
+    if (hasVerbatimFunction(value)) return null;
 
-fn originAxis(part: []const u8) ?OriginAxis {
-    if (std.ascii.eqlIgnoreCase(part, "left") or std.ascii.eqlIgnoreCase(part, "right")) {
-        return .horizontal;
+    if (shorthand.parsePositionAxis(property_name, value)) |axis| {
+        var buf = std.Io.Writer.Allocating.init(arena);
+        errdefer buf.deinit();
+        const which = shorthand.positionAxisProperty(property_name).?;
+        try writePositionAxis(&buf.writer, axis, if (which == .vertical) .vertical else .horizontal);
+        return buf.written();
     }
-    if (std.ascii.eqlIgnoreCase(part, "top") or std.ascii.eqlIgnoreCase(part, "bottom")) {
-        return .vertical;
+
+    const position = shorthand.parsePosition(property_name, value) orelse return null;
+    var buf = std.Io.Writer.Allocating.init(arena);
+    errdefer buf.deinit();
+    try writePositionAxis(&buf.writer, position.horizontal, .horizontal);
+    try buf.writer.writeByte(' ');
+    try writePositionAxis(&buf.writer, position.vertical, .vertical);
+    if (position.z) |z| {
+        try buf.writer.writeByte(' ');
+        try buf.writer.writeAll(zeroWithUnit(z));
     }
-    if (std.ascii.eqlIgnoreCase(part, "center")) return .either;
-    return null;
+    return buf.written();
 }
 
-/// `transform-origin` and `perspective-origin` as Chrome writes them. Measured
-/// with tools/fingerprint/probes/expr-transform-serialize.js: both axes are
-/// always written, horizontal first, and a third component -- the z offset --
-/// stays where it is while the first two swap.
-///
-/// A lone component takes `center` on the other axis, and which side it goes
-/// depends on the axis the component itself names: `top` is `center top` where
-/// `right` is `right center` and `50%` is `50% center`.
-///
-/// Answers null for anything not of that shape, which keeps the value as
-/// written. That covers `transform-origin: top 20px`, which Chrome refuses
-/// outright: swapping it would invent `20px top`, a value with a different
-/// meaning that Chrome never writes, and keeping it is the wrong this engine
-/// already had.
-fn writeOrigin(arena: Allocator, value: []const u8) !?[]const u8 {
-    if (hasVerbatimFunction(value)) {
-        return null;
+fn writePositionAxis(
+    writer: *std.Io.Writer,
+    axis: shorthand.PositionAxis,
+    which: enum { horizontal, vertical },
+) !void {
+    var wrote = false;
+    if (axis.keyword(if (which == .horizontal) .horizontal else .vertical)) |word| {
+        try writer.writeAll(word);
+        wrote = true;
     }
-
-    var parts: [3][]const u8 = undefined;
-    var count: usize = 0;
-    var walk = shorthand.Components.init(value);
-    while (walk.next()) |part| {
-        if (count == parts.len) return null;
-        parts[count] = part;
-        count += 1;
+    if (axis.offset) |offset| {
+        if (wrote) try writer.writeByte(' ');
+        try writer.writeAll(zeroWithUnit(offset));
     }
-    // A `/` stops the walk, and an origin never carries one.
-    if (walk.stopped or count == 0) return null;
+}
 
-    if (count == 1) {
-        const filled: [2][]const u8 = if (originAxis(parts[0]) == .vertical)
-            .{ "center", parts[0] }
-        else
-            .{ parts[0], "center" };
-        return try std.mem.join(arena, " ", &filled);
-    }
-
-    // Only a vertical keyword in front of something that can hold the
-    // horizontal axis is out of order. A length second -- `top 20px` -- is the
-    // shape Chrome refuses, and is left alone rather than swapped.
-    const lead = originAxis(parts[0]);
-    const follow = originAxis(parts[1]);
-    if (lead != .vertical or (follow != .horizontal and follow != .either)) {
-        return null;
-    }
-
-    var out: [3][]const u8 = .{ parts[1], parts[0], undefined };
-    if (count == 3) out[2] = parts[2];
-    return try std.mem.join(arena, " ", out[0..count]);
+/// A unitless zero written the way Chrome writes it inside a position, where
+/// `normalizePropertyValue`'s whole-value rule cannot reach it: the zero is one
+/// component of several, so the value is never the two bytes that rule matches.
+fn zeroWithUnit(token: []const u8) []const u8 {
+    return if (std.mem.eql(u8, token, "0")) "0px" else token;
 }
 
 /// A shadow layer as Chrome writes it: the colour first, then the lengths in
@@ -5050,7 +5473,7 @@ fn isLengthProperty(name: []const u8) bool {
     return length_properties.has(name);
 }
 
-fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surface: Surface) []const u8 {
+fn getDefaultPropertyValue(element_opt: ?*Element, name: String, surface: Surface) []const u8 {
     // The UA stylesheet first, because it is what a browser cascades ahead of
     // the property's initial value and it is per-tag where the flat table is
     // not: <body> takes `margin: 8px`, <pre> a monospace 13px font, <hr> a grey
@@ -5058,7 +5481,7 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surfa
     // them. An element whose tag the UA sheet says nothing about is not a div
     // either -- a div carries UA rules of its own -- so a miss falls to the
     // recorded unknown-tag row rather than straight through.
-    if (self._element) |element| {
+    if (element_opt) |element| {
         // Per TYPE before per tag for an <input>, the same order uaValue uses.
         // Both lookups have to agree: the layout reads uaValue and this is what
         // getComputedStyle reports, and when only the first knew about types a
@@ -5077,7 +5500,7 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surfa
     switch (name.len) {
         5 => {
             if (name.eql(comptime .wrap("color"))) {
-                const element = self._element orelse return "";
+                const element = element_opt orelse return "";
                 return getDefaultColor(element);
             }
         },
@@ -5086,7 +5509,7 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surfa
                 return "1";
             }
             if (name.eql(comptime .wrap("display"))) {
-                const element = self._element orelse return "";
+                const element = element_opt orelse return "";
                 return getDefaultDisplay(element);
             }
             if (name.eql(comptime .wrap("z-index"))) {
@@ -5865,6 +6288,10 @@ test "WebApi: CSSStyleDeclaration author longhands" {
     try testing.htmlRunner("css/computed_author_longhands.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration author shorthands" {
+    try testing.htmlRunner("css/computed_author_shorthands.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration inheritance" {
     try testing.htmlRunner("css/computed_inheritance.html", .{});
 }
@@ -5967,4 +6394,16 @@ test "WebApi: CSSStyleDeclaration percentage kept" {
 
 test "WebApi: CSSStyleDeclaration position keywords" {
     try testing.htmlRunner("css/computed_position_keywords.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration position grammar" {
+    try testing.htmlRunner("css/position_grammar_rejects.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration position serialization" {
+    try testing.htmlRunner("css/position_edge_relative_computed.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration css-wide keywords" {
+    try testing.htmlRunner("css/css_wide_keywords.html", .{});
 }
