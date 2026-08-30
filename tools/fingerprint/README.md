@@ -22909,6 +22909,19 @@ at all — a document that loads in single-digit milliseconds leaves Chrome's
 buffer without one too, and that is why the regression test holds its own parser
 for 120ms before asserting anything.
 
+**Where it does not reach, measured rather than assumed.** The entry is filed
+from navigation milestones, so it only describes the *parse* frame. Read back
+out of each realm after the challenge settles
+(`scratch/b95/widget-entries.mjs`, Runtime enabled only after the verdict), the
+top document now carries `long-animation-frame:92+101` — the fix fires — and the
+Cloudflare widget document carries none, because its whole navigation is 80ms
+and 80 is under the threshold. Chrome's widget entry is `87.0 + 746.4`: it
+brackets the *script* frame the guard runs in, which begins after that document
+has loaded and which nothing here models. So the type now exists on a normal
+page and still does not exist in the realm the guard reads. Closing that would
+mean filing a frame for a long post-load task, which is a second model and a
+second set of milestones to justify — not a tweak to this one.
+
 After, on www.scrapingcourse.com: one entry on each arm, same key order, same
 invariants (`paintTime === startTime + duration`, `presentationTime >=
 paintTime`, `renderStart` inside the frame, no `scripts`). One honest
