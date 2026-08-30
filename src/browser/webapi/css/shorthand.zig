@@ -37,6 +37,21 @@ pub fn lookup(name: []const u8) ?Shorthand {
     return entry;
 }
 
+/// The entry for a shorthand a COMPUTED view rebuilds from its longhands.
+///
+/// Not `lookup`, which declines every unmodelled entry, and not
+/// `lookupJoinable`, which also answers for `font` and `border-image` -- those
+/// two are still stored under their own name, so joining their longhands would
+/// report the initial value over the author's own text. The four below are
+/// expanded now (`grammarExpansion`), so their own name holds nothing and the
+/// longhands are the only place the value is.
+pub fn lookupComputedJoinable(name: []const u8) ?Shorthand {
+    const entry = table.shorthands.get(name) orelse return null;
+    if (entry.kind != .unmodelled) return entry;
+    if (isColumns(entry) or isListStyle(entry) or isGridArea(entry) or isFontVariant(entry)) return entry;
+    return null;
+}
+
 /// Like `lookup`, for the paths that only read a shorthand back rather than
 /// store one: cssText, and the covering walk that builds it. `border-image`
 /// answers here and not in `lookup`, because only half of it is modelled -- its
@@ -45,7 +60,8 @@ pub fn lookup(name: []const u8) ?Shorthand {
 pub fn lookupJoinable(name: []const u8) ?Shorthand {
     const entry = table.shorthands.get(name) orelse return null;
     if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry) and
-        !isColumns(entry) and !isListStyle(entry) and !isGridArea(entry)) return null;
+        !isColumns(entry) and !isListStyle(entry) and !isGridArea(entry) and
+        !isFontVariant(entry)) return null;
     return entry;
 }
 
@@ -537,6 +553,7 @@ pub fn joinKeeping(arena: Allocator, entry: Shorthand, values: []const []const u
     if (isColumns(entry)) return columnsJoin(arena, values);
     if (isListStyle(entry)) return listStyleJoin(arena, values, keep_all);
     if (isGridArea(entry)) return gridAreaJoin(arena, values);
+    if (isFontVariant(entry)) return fontVariantJoin(arena, values);
 
     switch (entry.kind) {
         .unmodelled => return "",
@@ -594,7 +611,8 @@ pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
     for (table.shorthands.keys(), table.shorthands.values()) |key, entry| {
         if (key[0] == '-') continue;
         if (entry.kind == .unmodelled and !isBorderImage(entry) and !isFont(entry) and
-            !isColumns(entry) and !isListStyle(entry) and !isGridArea(entry)) continue;
+            !isColumns(entry) and !isListStyle(entry) and !isGridArea(entry) and
+            !isFontVariant(entry)) continue;
         if (entry.longhands.len == 1 and std.mem.eql(u8, entry.longhands[0], key)) continue;
         for (entry.longhands) |longhand| {
             if (!std.mem.eql(u8, longhand, name)) continue;
@@ -2205,6 +2223,17 @@ pub fn grammarExpansion(arena: Allocator, name: []const u8, value: []const u8) !
     }
 
     if (isGridArea(entry)) return gridAreaExpand(arena, value);
+
+    if (isFontVariant(entry)) {
+        const fillers = [_][]const u8{ "normal", "normal", "normal", "normal", "normal", "normal", "normal" };
+        return expand(arena, .{
+            .kind = .components,
+            .longhands = entry.longhands,
+            .fillers = &fillers,
+            .group = 7,
+            .groups = 1,
+        }, value);
+    }
     return null;
 }
 
@@ -2290,4 +2319,38 @@ fn gridAreaJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
     if (count == 3 and std.ascii.eqlIgnoreCase(values[2], gridLineFallback(values[0]))) count = 2;
     if (count == 2 and std.ascii.eqlIgnoreCase(values[1], gridLineFallback(values[0]))) count = 1;
     return std.mem.join(arena, " / ", values[0..count]);
+}
+
+const font_variant_longhands = [_][]const u8{
+    "font-variant-ligatures", "font-variant-caps",       "font-variant-alternates",
+    "font-variant-numeric",   "font-variant-east-asian", "font-variant-position",
+    "font-variant-emoji",
+};
+
+fn isFontVariant(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 7 and
+        std.mem.eql(u8, entry.longhands[0], "font-variant-ligatures");
+}
+
+/// `font-variant` is seven longhands, each holding `normal` until a keyword
+/// that only IT accepts arrives -- there is no order to get wrong and no
+/// filler to guess, so the components rule reproduces it once the fillers are
+/// known. Measured (scratch/b93/expr-grammar-join.js): `font-variant:
+/// small-caps tabular-nums` leaves caps and numeric holding those two and the
+/// other five `normal`, and reads back as the two of them in longhand order.
+///
+/// It matters through `font`, not through itself: `font: italic small-caps
+/// bold 16px/2 serif` already stored `font-variant-caps: small-caps` here, and
+/// `font-variant` read back `normal` because it had no way to see it.
+fn fontVariantJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
+    var written: [7][]const u8 = undefined;
+    var count: usize = 0;
+    for (values) |held| {
+        if (held.len == 0 or std.ascii.eqlIgnoreCase(held, "normal")) continue;
+        written[count] = held;
+        count += 1;
+    }
+    if (count == 0) return "normal";
+    return std.mem.join(arena, " ", written[0..count]);
 }
