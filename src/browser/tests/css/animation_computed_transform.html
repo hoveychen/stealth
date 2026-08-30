@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+An element with a running animation computes the value its @keyframes write,
+not the one it declares. The engine answered `none` for all of this, which was
+the last difference on the 736-name computed sweep against Chrome 151 outside
+the column-rule family.
+
+Every expectation is a reading from headed Chrome 151, taken with
+scratch/b69/expr-anim-static.js and scratch/b70/expr-anim-moving.js and pasted
+in unedited.
+
+The shapes here are the ones whose value does NOT move with the clock, because
+a running animation's matrix cannot be written down: the two filled edges of
+the active interval, a paused animation, a zero duration, and a name resolving
+to no @keyframes at all. The two blocks at the bottom assert what CAN be said
+about a moving one -- that it is a rotation, and that it does not move within a
+single task, which is the tell a live `performance.now()` read would leave.
+-->
+
+<style>
+  @keyframes spinq { from { transform: rotate(0deg); } to { transform: rotate(90deg); } }
+  @keyframes halfq { 0% { transform: rotate(0deg); } 50% { transform: rotate(90deg); } 100% { transform: rotate(180deg); } }
+  @keyframes to360 { 100% { transform: rotate(360deg); } }
+  @keyframes shifted { 0% { transform: translateX(0px); } 100% { transform: translateX(100px); } }
+</style>
+
+<script id=static_animation_phases_compute_a_matrix>
+{
+  const probe = (decl) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).transform);
+    el.remove();
+    return got;
+  };
+
+  const CASES = [
+    // A backwards fill before a delay long enough that the animation cannot
+    // have started shows the start of the first iteration.
+    ['matrix(1, 0, 0, 1, 0, 0)', 'animation: 3s linear 999s 1 normal backwards spinq;'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'animation: 3s linear 999s 1 normal both spinq;'],
+    // Without a fill covering the before phase the animation says nothing, and
+    // the element's own transform -- none -- is what computes.
+    ['none', 'animation: 3s linear 999s 1 normal none spinq;'],
+    // Paused from the moment it was created, so it holds time zero.
+    ['matrix(1, 0, 0, 1, 0, 0)', 'animation: 3s linear 0s 1 normal both paused spinq;'],
+    // A zero duration collapses the active interval to a point, so any elapsed
+    // time at all is already the after phase: `forwards` shows the far end.
+    ['matrix(0, 1, -1, 0, 0, 0)', 'animation: 0s linear 0s 1 normal forwards spinq;'],
+    ['none', 'animation: 0s linear 0s 1 normal none spinq;'],
+    // `reverse` puts the start of the first iteration at the far end.
+    ['matrix(0, 1, -1, 0, 0, 0)', 'animation: 3s linear 999s 1 reverse backwards spinq;'],
+    // Three keyframes rather than two, so the interval search has a choice.
+    ['matrix(1, 0, 0, 1, 0, 0)', 'animation: 4s linear 0s 1 normal both paused halfq;'],
+    // An animation-name naming no @keyframes is not an animation.
+    ['none', 'animation: 3s linear 999s 1 normal both nosuchq;'],
+  ];
+  for (const [want, decl] of CASES) {
+    testing.expectEqual(decl + ' -> ' + want, decl + ' -> ' + probe(decl));
+  }
+}
+</script>
+
+<script id=animation_fills_in_a_missing_keyframe_from_the_element>
+{
+  // `to360` declares only its 100% step, so the 0% end is the element's own
+  // transform. Chrome interpolates `none` against `rotate(360deg)` as a
+  // rotation from zero, and a backwards fill therefore shows the identity --
+  // not `none`, and not the element's declared translate either when it has
+  // one, because the underlying value is the OTHER end of the same function.
+  const probe = (decl) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).transform);
+    el.remove();
+    return got;
+  };
+
+  testing.expectEqual(
+    'matrix(1, 0, 0, 1, 0, 0)',
+    probe('animation: 3s linear 999s 1 normal backwards to360;'));
+  testing.expectEqual(
+    'matrix(1, 0, 0, 1, 0, 0)',
+    probe('animation: 0s linear 0s 1 normal forwards to360;'));
+
+  // The webkit spelling of the property reads the same animated value.
+  {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;animation: 3s linear 999s 1 normal backwards spinq;';
+    document.body.appendChild(el);
+    const cs = getComputedStyle(el);
+    testing.expectEqual('matrix(1, 0, 0, 1, 0, 0)', String(cs.webkitTransform));
+    testing.expectEqual(String(cs.transform), String(cs.webkitTransform));
+    el.remove();
+  }
+
+  // The webkit spelling of the at-rule declares the same animation.
+  {
+    const sheet = document.createElement('style');
+    sheet.textContent = '@-webkit-keyframes wkq { to { transform: rotate(90deg); } }';
+    document.head.appendChild(sheet);
+    testing.expectEqual(
+      'matrix(0, 1, -1, 0, 0, 0)',
+      probe('animation: 0s linear 0s 1 normal forwards wkq;'));
+    sheet.remove();
+  }
+
+  // A `@keyframes` inside `@media` is indexed too, when the query matches.
+  {
+    const sheet = document.createElement('style');
+    sheet.textContent = '@media all { @keyframes mq { to { transform: rotate(90deg); } } }';
+    document.head.appendChild(sheet);
+    testing.expectEqual(
+      'matrix(0, 1, -1, 0, 0, 0)',
+      probe('animation: 0s linear 0s 1 normal forwards mq;'));
+    sheet.remove();
+  }
+
+  // A later `@keyframes` under one name replaces the earlier one rather than
+  // merging into it.
+  {
+    const sheet = document.createElement('style');
+    sheet.textContent =
+      '@keyframes dupq { to { transform: rotate(90deg); } }' +
+      '@keyframes dupq { to { transform: scale(4); } }';
+    document.head.appendChild(sheet);
+    testing.expectEqual(
+      'matrix(4, 0, 0, 4, 0, 0)',
+      probe('animation: 0s linear 0s 1 normal forwards dupq;'));
+    sheet.remove();
+  }
+}
+</script>
+
+<script id=running_animation_is_a_matrix_that_holds_within_one_task>
+{
+  const el = document.createElement('div');
+  el.style.cssText = 'width:100px;height:50px;' +
+    'animation: 3s linear 1s infinite alternate both running to360;';
+  document.body.appendChild(el);
+  const cs = getComputedStyle(el);
+
+  const first = String(cs.transform);
+  testing.expectEqual('starts with matrix(', 'starts with ' + first.slice(0, 7));
+
+  // A rotation and nothing else: the two diagonal entries equal, the two
+  // off-diagonal ones opposite, no translation.
+  const n = first.slice(7, -1).split(',').map(Number);
+  testing.expectEqual('6 numbers, got 6', '6 numbers, got ' + n.length);
+  testing.expectEqual('diagonal equal: true', 'diagonal equal: ' + (Math.abs(n[0] - n[3]) < 1e-6));
+  testing.expectEqual('off-diagonal opposite: true', 'off-diagonal opposite: ' + (Math.abs(n[1] + n[2]) < 1e-6));
+  testing.expectEqual('no translation: true', 'no translation: ' + (n[4] === 0 && n[5] === 0));
+
+  // The document timeline is set once per frame, so burning wall clock inside
+  // one task cannot move it. Measured on Chrome 151: the same matrix twice.
+  const start = Date.now();
+  while (Date.now() - start < 60) { /* burn */ }
+  testing.expectEqual('held within one task: true', 'held within one task: ' + (first === String(cs.transform)));
+
+  el.remove();
+}
+</script>
+
+<script id=animation_interpolates_each_function_not_the_matrix>
+{
+  // A translate rather than a rotation, so the interpolation is visible in a
+  // number rather than in a trigonometric one, and a paused animation puts it
+  // at an exact endpoint.
+  const probe = (decl) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).transform);
+    el.remove();
+    return got;
+  };
+
+  testing.expectEqual(
+    'matrix(1, 0, 0, 1, 0, 0)',
+    probe('animation: 5s linear 0s 1 normal both paused shifted;'));
+  testing.expectEqual(
+    'matrix(1, 0, 0, 1, 100, 0)',
+    probe('animation: 0s linear 0s 1 normal forwards shifted;'));
+  // A forwards fill shows the end of the LAST iteration, and under `alternate`
+  // that is not the same thing as the end of the keyframes: iteration 1 runs
+  // backwards, so an even count finishes where the animation started.
+  testing.expectEqual(
+    'matrix(1, 0, 0, 1, 100, 0)',
+    probe('animation: 0s linear 0s 1 alternate forwards shifted;'));
+  testing.expectEqual(
+    'matrix(1, 0, 0, 1, 0, 0)',
+    probe('animation: 0s linear 0s 2 alternate forwards shifted;'));
+
+  // The default timing function is `ease`, not `linear`, and a keyframe may
+  // carry one of its own. Neither moves an endpoint, which is what a paused
+  // animation sits on -- so both read as the start of the keyframes.
+  testing.expectEqual(
+    'matrix(1, 0, 0, 1, 0, 0)',
+    probe('animation: 5s 0s 1 normal both paused shifted;'));
+  testing.expectEqual(
+    'matrix(1, 0, 0, 1, 0, 0)',
+    probe('animation: 5s steps(4) 0s 1 normal both paused shifted;'));
+}
+</script>

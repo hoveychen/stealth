@@ -55,56 +55,225 @@ const Matrix = struct {
 /// `none` answers `none`, which is what Chrome answers and what an element with
 /// no transform reads anyway.
 pub fn computedValue(arena: Allocator, value: []const u8) !?[]const u8 {
-    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
-    if (trimmed.len == 0) return null;
-    if (std.ascii.eqlIgnoreCase(trimmed, "none")) return "none";
+    var it = ListIterator.init(value) orelse return null;
+    if (it.is_none) return "none";
 
     var matrix: Matrix = .identity;
     var three_d = false;
     var seen = false;
 
-    var i: usize = 0;
-    while (i < trimmed.len) {
-        while (i < trimmed.len and std.ascii.isWhitespace(trimmed[i])) : (i += 1) {}
-        if (i >= trimmed.len) break;
-
-        const name_start = i;
-        while (i < trimmed.len and (std.ascii.isAlphanumeric(trimmed[i]) or trimmed[i] == '-')) : (i += 1) {}
-        if (i >= trimmed.len or trimmed[i] != '(') return null;
-        const name = trimmed[name_start..i];
-
-        const close = std.mem.indexOfScalarPos(u8, trimmed, i, ')') orelse return null;
-        const args = trimmed[i + 1 .. close];
-        i = close + 1;
-
-        const parsed = try parseFunction(name, args) orelse return null;
-        matrix = matrix.multiply(parsed.matrix);
-        three_d = three_d or parsed.three_d;
-        seen = true;
+    while (true) {
+        switch (it.next()) {
+            .done => break,
+            .refused => return null,
+            .function => |f| {
+                const parsed = matrixFor(f.name, f.scalars()) orelse return null;
+                matrix = matrix.multiply(parsed.matrix);
+                three_d = three_d or parsed.three_d;
+                seen = true;
+            },
+        }
     }
 
     if (!seen) return null;
     return try write(arena, matrix, three_d);
 }
 
+/// The matrix `from` folds to when it has travelled `fraction` of the way to
+/// `to`, or null when the pair is one this file will not interpolate -- the
+/// caller then reports an endpoint rather than a value Chrome never shows.
+///
+/// Chrome interpolates a transform FUNCTION BY FUNCTION when the two lists have
+/// the same shape: `rotate(0deg)` to `rotate(90deg)` at the halfway point is
+/// `rotate(45deg)`, not the average of the two matrices. Only that case is
+/// modelled. Lists of different shapes -- `rotate(…)` against `scale(…)`, or
+/// `scale(2)` against `scale(2, 3)`, which are the same transform written two
+/// ways but not the same shape -- fall to matrix decomposition in Chrome, which
+/// this refuses instead.
+///
+/// `none` on one side is not a shape mismatch: it stands for the other side's
+/// functions holding their neutral values, so `none` to `rotate(90deg)` is a
+/// rotation from zero. The one exception is a `matrix`, `matrix3d` or
+/// `perspective` opposite a `none`, which has no such neutral form here.
+pub fn interpolatedValue(arena: Allocator, from: []const u8, to: []const u8, fraction: f64) !?[]const u8 {
+    var start: [MAX_FUNCTIONS]Function = undefined;
+    var end: [MAX_FUNCTIONS]Function = undefined;
+
+    const start_count = collect(from, &start) orelse return null;
+    const end_count = collect(to, &end) orelse return null;
+
+    if (start_count == 0 and end_count == 0) return "none";
+    if (start_count == 0) {
+        if (!neutralise(end[0..end_count], &start)) return null;
+        return try foldPair(arena, start[0..end_count], end[0..end_count], fraction);
+    }
+    if (end_count == 0) {
+        if (!neutralise(start[0..start_count], &end)) return null;
+        return try foldPair(arena, start[0..start_count], end[0..start_count], fraction);
+    }
+    if (start_count != end_count) return null;
+    return try foldPair(arena, start[0..start_count], end[0..end_count], fraction);
+}
+
+/// Interpolate two lists already known to be the same length, then fold the
+/// result. Null when the two disagree on a function or on its arity.
+fn foldPair(arena: Allocator, from: []const Function, to: []const Function, fraction: f64) !?[]const u8 {
+    var matrix: Matrix = .identity;
+    var three_d = false;
+
+    for (from, to) |a, b| {
+        if (!std.ascii.eqlIgnoreCase(a.name, b.name)) return null;
+        if (a.count != b.count) return null;
+
+        var lerped: [MAX_ARGS]f64 = undefined;
+        for (a.scalars(), b.scalars(), lerped[0..a.count]) |x, y, *out| {
+            out.* = x + (y - x) * fraction;
+        }
+
+        const parsed = matrixFor(a.name, lerped[0..a.count]) orelse return null;
+        matrix = matrix.multiply(parsed.matrix);
+        three_d = three_d or parsed.three_d;
+    }
+
+    return try write(arena, matrix, three_d);
+}
+
+/// The list a `none` stands for when it is interpolated against `functions`:
+/// the same functions holding the values that leave the element where it was.
+/// False when one of them has no such value here.
+fn neutralise(functions: []const Function, out: *[MAX_FUNCTIONS]Function) bool {
+    for (functions, out[0..functions.len]) |f, *slot| {
+        slot.* = f;
+        if (eq(f.name, "translate") or eq(f.name, "translatex") or eq(f.name, "translatey") or
+            eq(f.name, "translatez") or eq(f.name, "translate3d") or
+            eq(f.name, "rotate") or eq(f.name, "rotatex") or eq(f.name, "rotatey") or
+            eq(f.name, "rotatez") or eq(f.name, "skew") or eq(f.name, "skewx") or eq(f.name, "skewy"))
+        {
+            slot.args = @splat(0);
+        } else if (eq(f.name, "scale") or eq(f.name, "scalex") or eq(f.name, "scaley") or
+            eq(f.name, "scalez") or eq(f.name, "scale3d"))
+        {
+            slot.args = @splat(1);
+        } else if (eq(f.name, "rotate3d")) {
+            // The axis stays; only the angle goes to zero. Interpolating the
+            // axis towards a made-up one would rotate about the wrong line.
+            if (f.count != 4) return false;
+            slot.args[3] = 0;
+        } else {
+            // `matrix`, `matrix3d` and `perspective`: no neutral argument list
+            // stands for `none` here.
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The most functions a list may hold before interpolation gives up on it.
+/// Only interpolation is capped: `computedValue` streams the list and folds
+/// any length, so a page writing more than this still reads a matrix back --
+/// it just does not get an interpolated one.
+const MAX_FUNCTIONS = 32;
+
+/// A whole `<transform-list>` into `out`, answering how many functions it held.
+/// `none` is zero of them. Null for a list this file does not model, or one
+/// longer than `out`.
+fn collect(value: []const u8, out: *[MAX_FUNCTIONS]Function) ?usize {
+    var it = ListIterator.init(value) orelse return null;
+    if (it.is_none) return 0;
+
+    var count: usize = 0;
+    while (true) {
+        switch (it.next()) {
+            .done => break,
+            .refused => return null,
+            .function => |f| {
+                if (count == out.len) return null;
+                if (matrixFor(f.name, f.scalars()) == null) return null;
+                out[count] = f;
+                count += 1;
+            },
+        }
+    }
+    if (count == 0) return null;
+    return count;
+}
+
+/// Walks a `<transform-list>` one function at a time. The arguments are parsed
+/// here but not folded, so both the reader that wants a matrix and the one that
+/// wants to interpolate read the list the same way.
+const ListIterator = struct {
+    text: []const u8,
+    i: usize = 0,
+    is_none: bool = false,
+
+    const Item = union(enum) { function: Function, done, refused };
+
+    /// Null when there is no list at all -- an empty value, which is not the
+    /// same as `none`.
+    fn init(value: []const u8) ?ListIterator {
+        const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+        if (trimmed.len == 0) return null;
+        return .{ .text = trimmed, .is_none = std.ascii.eqlIgnoreCase(trimmed, "none") };
+    }
+
+    fn next(self: *ListIterator) Item {
+        const text = self.text;
+        while (self.i < text.len and std.ascii.isWhitespace(text[self.i])) : (self.i += 1) {}
+        if (self.i >= text.len) return .done;
+
+        const name_start = self.i;
+        while (self.i < text.len and (std.ascii.isAlphanumeric(text[self.i]) or text[self.i] == '-')) : (self.i += 1) {}
+        if (self.i >= text.len or text[self.i] != '(') return .refused;
+        const name = text[name_start..self.i];
+
+        const close = std.mem.indexOfScalarPos(u8, text, self.i, ')') orelse return .refused;
+        var args: [MAX_ARGS]f64 = undefined;
+        const count = parseArgs(text[self.i + 1 .. close], &args) orelse return .refused;
+        self.i = close + 1;
+
+        return .{ .function = .{ .name = name, .args = args, .count = count } };
+    }
+};
+
 const Parsed = struct {
     matrix: Matrix,
     three_d: bool,
 };
 
-fn parseFunction(name: []const u8, args: []const u8) !?Parsed {
-    var numbers: [16]f64 = undefined;
+/// The most arguments any transform function takes: `matrix3d`'s sixteen.
+const MAX_ARGS = 16;
+
+/// One function of a `<transform-list>`, kept as the numbers the matrix wants
+/// rather than as a matrix. Interpolation happens between these -- Chrome
+/// interpolates a rotation's angle, not the matrix it folds to -- so the
+/// scalars have to survive the parse.
+const Function = struct {
+    name: []const u8,
+    args: [MAX_ARGS]f64,
+    count: usize,
+
+    fn scalars(self: *const Function) []const f64 {
+        return self.args[0..self.count];
+    }
+};
+
+/// The comma-separated arguments as the numbers the matrix wants, answering
+/// how many there were. Null for an argument this file does not model, which
+/// takes the whole declaration with it.
+fn parseArgs(args: []const u8, out: *[MAX_ARGS]f64) ?usize {
     var count: usize = 0;
     var it = std.mem.splitScalar(u8, args, ',');
     while (it.next()) |raw| {
-        if (count == numbers.len) return null;
+        if (count == out.len) return null;
         const arg = std.mem.trim(u8, raw, &std.ascii.whitespace);
         if (arg.len == 0) return null;
-        numbers[count] = parseScalar(arg) orelse return null;
+        out[count] = parseScalar(arg) orelse return null;
         count += 1;
     }
-    const n = numbers[0..count];
+    return count;
+}
 
+fn matrixFor(name: []const u8, n: []const f64) ?Parsed {
     var m: Matrix = .identity;
 
     // The names are compared case-insensitively because a declaration keeps the
