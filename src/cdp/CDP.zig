@@ -1055,7 +1055,15 @@ pub const BrowserContext = struct {
             const transfer = msg.transfer;
             const key = keyFromTransfer(transfer);
             const body = transfer.req.body orelse "";
-            if (body.len == 0 or body.len > self.max_post_data_size) {
+            // Retention is NOT gated on max_post_data_size. That parameter says
+            // how much rides along in the requestWillBeSent notification;
+            // `Network.getRequestPostData` exists for the bodies that did not,
+            // and dropping them here made it answer RequestNotFound for exactly
+            // the payloads worth reading -- measured against Chrome on a 90KB
+            // POST under a bare `Network.enable {}`
+            // (probes/b87-post-data-cap.mjs): Chrome answered 92160 bytes,
+            // this answered nothing.
+            if (body.len == 0 or body.len > @import("domains/network.zig").max_retained_post_data_size) {
                 _ = self.captured_requests.remove(key);
             } else {
                 const owned_body = try self.frame_arena.dupe(u8, body);
