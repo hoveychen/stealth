@@ -439,15 +439,7 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
             // this the longhand reports a value no browser does and the
             // computed `animation` join prints it.
             if (wrapped.eqlSlice("animation-duration") or wrapped.eqlSlice("-webkit-animation-duration")) {
-                switch (cascadedValue(style_manager, element, normalized, wrapped, .computed)) {
-                    .value => |value| {
-                        const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
-                        return if (std.ascii.eqlIgnoreCase(trimmed, "auto")) "0s" else trimmed;
-                    },
-                    // Nothing declared, or written and unreportable: `0s` both
-                    // ways, which is what the recorded table holds too.
-                    .unreportable, .none => return "0s",
-                }
+                return computedAnimationDuration(style_manager, element, normalized, wrapped);
             }
             // The width keywords, for the width properties that are not a
             // border's. Not gated on the surface, because the thing that makes
@@ -1816,6 +1808,46 @@ fn ruleWidthScale(name: []const u8) ?RuleWidthScale {
         if (std.ascii.eqlIgnoreCase(name, entry[0])) return entry[1];
     }
     return null;
+}
+
+/// `animation-duration`, whose computed value is never `auto`.
+///
+/// Chrome answers `0s` for an unset duration, for a name-only longhand and for
+/// an `auto` the page wrote itself -- three shapes measured
+/// (scratch/b69/expr-anim-dur.js). This engine's shorthand expansion writes the
+/// DECLARED form's filler into the longhand, and that filler is `auto`, so
+/// without this the longhand reports a value no browser does and the computed
+/// `animation` join prints it.
+///
+/// The `-webkit-` spelling is the same property under a second name and this
+/// engine stores only the one the page wrote, so it has to look under both --
+/// the same fallback `usedBorderWidth` and `computedRuleWidth` make. Answering
+/// `0s` without it made `-webkit-animation-duration` report `0s` for an element
+/// whose `animation-duration` was 3s.
+fn computedAnimationDuration(
+    style_manager: *StyleManager,
+    element: *Element,
+    name: []const u8,
+    wrapped: String,
+) []const u8 {
+    const other: []const u8 = if (std.mem.eql(u8, name, "animation-duration"))
+        "-webkit-animation-duration"
+    else
+        "animation-duration";
+    for ([_]struct { []const u8, String }{ .{ name, wrapped }, .{ other, .wrap(other) } }) |spelling| {
+        switch (cascadedValue(style_manager, element, spelling[0], spelling[1], .computed)) {
+            .value => |value| {
+                const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+                return if (std.ascii.eqlIgnoreCase(trimmed, "auto")) "0s" else trimmed;
+            },
+            // Written and unreportable is still a declaration, and `auto` is
+            // the only value this engine cannot report here.
+            .unreportable => return "0s",
+            .none => {},
+        }
+    }
+    // Nothing under either spelling, which is what the recorded table holds too.
+    return "0s";
 }
 
 /// The other spelling of a rule width, for the one pair that has two.

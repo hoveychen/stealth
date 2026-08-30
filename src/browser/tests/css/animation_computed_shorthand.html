@@ -103,6 +103,17 @@
     return got;
   };
   testing.expectEqual('0s / kc', probe('animation: kc;'));
+  // The -webkit- spelling is the same property under a second name, so it
+  // reads whatever the unprefixed one was declared as -- 0s only when nothing
+  // set a duration. Mapping `auto` without this made it answer 0s always.
+  {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:10px;height:10px;animation: 3s kc;';
+    document.body.appendChild(el);
+    const cs = getComputedStyle(el);
+    testing.expectEqual('3s 3s', cs.animationDuration + ' ' + cs.webkitAnimationDuration);
+    el.remove();
+  }
   testing.expectEqual('0s / kc', probe('animation-name: kc;'));
   testing.expectEqual('0s / kc', probe('animation: auto kc;'));
   testing.expectEqual('0s / none', probe(''));
