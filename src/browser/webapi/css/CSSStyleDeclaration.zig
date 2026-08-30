@@ -6737,6 +6737,10 @@ test "WebApi: CSSStyleDeclaration computed transform" {
     try testing.htmlRunner("css/computed_transform.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration transform number format" {
+    try testing.htmlRunner("css/transform_number_format.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration percentage width" {
     try testing.htmlRunner("css/percentage_width.html", .{});
 }

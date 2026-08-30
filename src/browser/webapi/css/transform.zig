@@ -190,8 +190,8 @@ fn parseFunction(name: []const u8, args: []const u8) !?Parsed {
     }
     if (eq(name, "rotate") or eq(name, "rotatez")) {
         if (n.len != 1) return null;
-        const c = @cos(n[0]);
-        const s = @sin(n[0]);
+        const c = cosine(n[0]);
+        const s = sine(n[0]);
         m.m[0][0] = c;
         m.m[0][1] = s;
         m.m[1][0] = -s;
@@ -200,8 +200,8 @@ fn parseFunction(name: []const u8, args: []const u8) !?Parsed {
     }
     if (eq(name, "rotatex")) {
         if (n.len != 1) return null;
-        const c = @cos(n[0]);
-        const s = @sin(n[0]);
+        const c = cosine(n[0]);
+        const s = sine(n[0]);
         m.m[1][1] = c;
         m.m[1][2] = s;
         m.m[2][1] = -s;
@@ -210,8 +210,8 @@ fn parseFunction(name: []const u8, args: []const u8) !?Parsed {
     }
     if (eq(name, "rotatey")) {
         if (n.len != 1) return null;
-        const c = @cos(n[0]);
-        const s = @sin(n[0]);
+        const c = cosine(n[0]);
+        const s = sine(n[0]);
         m.m[0][0] = c;
         m.m[0][2] = -s;
         m.m[2][0] = s;
@@ -225,8 +225,8 @@ fn parseFunction(name: []const u8, args: []const u8) !?Parsed {
         const x = n[0] / len;
         const y = n[1] / len;
         const z = n[2] / len;
-        const c = @cos(n[3]);
-        const s = @sin(n[3]);
+        const c = cosine(n[3]);
+        const s = sine(n[3]);
         const t = 1 - c;
         m.m[0][0] = t * x * x + c;
         m.m[0][1] = t * x * y + s * z;
@@ -321,20 +321,153 @@ fn write(arena: Allocator, matrix: Matrix, three_d: bool) ![]const u8 {
     return buf.written();
 }
 
-/// Six decimals, trailing zeros dropped, and no negative zero. Measured:
-/// `rotate(45deg)` answers `0.707107` rather than `0.70710678`,
-/// `skew(10deg, 20deg)` answers `0.36397` rather than `0.363970`, and
-/// `rotate(0.25turn)` answers a plain `0` for a cosine that is 6.1e-17.
-fn writeNumber(writer: *std.Io.Writer, value: f64) !void {
-    var buf: [64]u8 = undefined;
-    const text = std.fmt.bufPrint(&buf, "{d:.6}", .{value}) catch return error.WriteFailed;
+/// A rotation's cosine and sine, exact at multiples of a right angle.
+///
+/// Chrome answers `matrix(0, 1, -1, 0, 0, 0)` for `rotate(90deg)` and for the
+/// `turn`, `grad` and `rad` spellings of it, and this engine's `@cos` there is
+/// `6.123233995736766e-17`. It is not a print-time epsilon on Chrome's side:
+/// `rotate(89.9999999deg)` prints `1.74533e-09`, so nothing near zero is being
+/// swallowed -- the rotation itself is exact when the angle is a right angle.
+/// Six decimals used to hide the difference; six significant digits does not.
+///
+/// The angle arrives in radians (`parseScalar`), so the test is against
+/// multiples of pi/2 rather than of 90.
+fn quarterTurns(radians: f64) ?i64 {
+    const quarter = std.math.pi / 2.0;
+    const turns = radians / quarter;
+    const rounded = @round(turns);
+    if (@abs(turns - rounded) > 1e-12) return null;
+    if (@abs(rounded) > 1e15) return null;
+    return @intFromFloat(rounded);
+}
 
+fn cosine(radians: f64) f64 {
+    if (quarterTurns(radians)) |q| {
+        return switch (@mod(q, 4)) {
+            0 => 1,
+            1, 3 => 0,
+            else => -1,
+        };
+    }
+    return @cos(radians);
+}
+
+fn sine(radians: f64) f64 {
+    if (quarterTurns(radians)) |q| {
+        return switch (@mod(q, 4)) {
+            0, 2 => 0,
+            1 => 1,
+            else => -1,
+        };
+    }
+    return @sin(radians);
+}
+
+/// `%g` with precision 6 -- six SIGNIFICANT digits, not six decimals, with the
+/// exponent form C uses outside `[1e-4, 1e6)`. Measured on Chrome 151 over ten
+/// magnitudes and a ladder from 1e-6 to 1e-17
+/// (css/transform_number_format.html): `scale(0.000123456789)` is
+/// `0.000123457`, `translate(1234567.89px)` is `1.23457e+06`,
+/// `scale(-0.0000001234)` is `-1.234e-07`, and nothing is ever clamped to zero.
+///
+/// Six decimals agreed with this between about 0.1 and 10, which is where the
+/// rule was first read off (`rotate(45deg)` is `0.707107` either way).
+///
+/// Built off Zig's `{e:.5}`, which is the same six digits in scientific form
+/// (`1.23457e-4`), because a runtime number of decimal places is not something
+/// `bufPrint` takes. The digits are then placed either side of a point.
+fn writeNumber(writer: *std.Io.Writer, value: f64) !void {
+    if (value == 0) return writer.writeAll("0");
+
+    var buf: [64]u8 = undefined;
+    const text = std.fmt.bufPrint(&buf, "{e:.5}", .{value}) catch return error.WriteFailed;
+    const e_at = std.mem.indexOfScalar(u8, text, 'e') orelse return writer.writeAll(text);
+    const mantissa = text[0..e_at];
+    const exponent = std.fmt.parseInt(i32, text[e_at + 1 ..], 10) catch return error.WriteFailed;
+
+    if (exponent < -4 or exponent >= 6) {
+        try writer.writeAll(trimZeros(mantissa));
+        try writer.writeByte('e');
+        try writer.writeByte(if (exponent < 0) '-' else '+');
+        var exp_buf: [8]u8 = undefined;
+        const digits = std.fmt.bufPrint(&exp_buf, "{d}", .{@abs(exponent)}) catch return error.WriteFailed;
+        if (digits.len < 2) try writer.writeByte('0');
+        return writer.writeAll(digits);
+    }
+
+    // Fixed notation: the same digits with the point moved `exponent` places.
+    var fixed_buf: [64]u8 = undefined;
+    const written = placePoint(&fixed_buf, mantissa, exponent) orelse return error.WriteFailed;
+    return writer.writeAll(trimZeros(written));
+}
+
+/// `-1.23457` and an exponent of -3 becomes `-0.00123457`. Only ever called
+/// with an exponent in [-4, 6), so the point lands inside the buffer.
+fn placePoint(buf: []u8, mantissa: []const u8, exponent: i32) ?[]const u8 {
+    var at: usize = 0;
+    var body = mantissa;
+    if (body.len > 0 and (body[0] == '-' or body[0] == '+')) {
+        if (body[0] == '-') {
+            buf[at] = '-';
+            at += 1;
+        }
+        body = body[1..];
+    }
+    var digits: [32]u8 = undefined;
+    var count: usize = 0;
+    for (body) |c| {
+        if (c == '.') continue;
+        if (count == digits.len) return null;
+        digits[count] = c;
+        count += 1;
+    }
+    if (count == 0) return null;
+
+    // Where the decimal point goes, counted from the left of `digits`.
+    const point: i32 = exponent + 1;
+    if (point <= 0) {
+        if (at + 2 + @as(usize, @intCast(-point)) + count > buf.len) return null;
+        buf[at] = '0';
+        buf[at + 1] = '.';
+        at += 2;
+        var pad: i32 = 0;
+        while (pad < -point) : (pad += 1) {
+            buf[at] = '0';
+            at += 1;
+        }
+        @memcpy(buf[at..][0..count], digits[0..count]);
+        return buf[0 .. at + count];
+    }
+
+    const whole: usize = @intCast(point);
+    if (whole >= count) {
+        if (at + whole > buf.len) return null;
+        @memcpy(buf[at..][0..count], digits[0..count]);
+        at += count;
+        var pad = whole - count;
+        while (pad > 0) : (pad -= 1) {
+            buf[at] = '0';
+            at += 1;
+        }
+        return buf[0..at];
+    }
+    if (at + count + 1 > buf.len) return null;
+    @memcpy(buf[at..][0..whole], digits[0..whole]);
+    at += whole;
+    buf[at] = '.';
+    at += 1;
+    @memcpy(buf[at..][0 .. count - whole], digits[whole..count]);
+    return buf[0 .. at + count - whole];
+}
+
+/// Trailing zeros dropped, and no negative zero -- `%g` does both.
+fn trimZeros(text: []const u8) []const u8 {
     var end = text.len;
     if (std.mem.indexOfScalar(u8, text, '.') != null) {
         while (end > 0 and text[end - 1] == '0') : (end -= 1) {}
         if (end > 0 and text[end - 1] == '.') end -= 1;
     }
     const trimmed = text[0..end];
-    if (std.mem.eql(u8, trimmed, "-0")) return writer.writeAll("0");
-    return writer.writeAll(trimmed);
+    if (std.mem.eql(u8, trimmed, "-0")) return "0";
+    return trimmed;
 }

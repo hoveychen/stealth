@@ -22664,3 +22664,65 @@ What is left is not a serialisation. `transform` reads `none` here and a live
 matrix in Chrome because the animation is *running*: closing it needs a clock
 and keyframe interpolation, which is a feature and has its own plan
 (`animation-computed-transform`).
+
+## Six digits, not six decimals — and the rotation was never exact (B69, 2026-08-30)
+
+`transform` is the last of the 736 computed properties to disagree with Chrome,
+and the disagreement everyone was looking at — a running animation's matrix —
+turned out to sit on top of two older ones that had nothing to do with
+animation.
+
+### The printer
+
+`writeNumber` printed `{d:.6}`: six DECIMAL places. Chrome prints `%g` with
+precision 6: six SIGNIFICANT digits, exponent form and all. The two agree
+between about 0.1 and 10, which is exactly where the original rule was read off
+(`rotate(45deg)` is `0.707107` either way), and disagree everywhere else:
+
+| declared | Chrome | this engine |
+|---|---|---|
+| `scale(0.000123456789)` | `0.000123457` | `0.000123` |
+| `translate(1234567.89px)` | `1.23457e+06` | `1234570` |
+| `scale(-0.0000001234)` | `-1.234e-07` | `0` |
+| `rotate(1deg)` | `0.0174524` | `0.017452` |
+| `scale(12345.6789012)` | `12345.7` | `12345.7` |
+
+And there is no epsilon in it anywhere: a ladder from `scale(1e-6)` to
+`scale(1e-17)` prints every rung, `1e-17` included.
+
+### Which is why the right angles had to become exact
+
+`rotate(90deg)` reads `matrix(0, 1, -1, 0, 0, 0)` in Chrome, and this engine's
+`@cos` there is `6.123233995736766e-17` — six decimals had been hiding it, and
+six significant digits would have printed it. Chrome is not clamping at print
+time; it prints `1.74533e-09` for `rotate(89.9999999deg)`. So the rotation
+itself is exact at multiples of a right angle, and `cosine`/`sine` in
+`transform.zig` now say so, for all four spellings (`deg`, `turn`, `grad`,
+`rad`).
+
+### Two rows measured and deliberately not asserted
+
+**Two 45s composing to a right angle.** Chrome gives an exact
+`matrix(0, 1, -1, 0, 0, 0)`, this engine `2.22045e-16`. Not the rule above:
+Chrome's cosine and sine at 45 degrees are the same double and this engine's
+differ in the last bit (`0.7071067811865476` against `0.7071067811865475`), so
+`c*c - s*s` cancels there and not here. Matching it means reproducing Blink's
+trigonometry, not its serialisation.
+
+**The declared value is already rounded before anything computes with it.**
+`rotate(1.5707963267948966rad)` computes to an exact `matrix(0, 1, -1, 0, 0, 0)`
+in Chrome and `-0.000004` here — and `el.style.transform` reads back
+`rotate(1.5708rad)` on **both**. So Chrome rounds to six significant digits only
+on the way out and keeps the full-precision number internally, while this
+engine's declaration store keeps the rounded one and every computation
+downstream reads it. Same for `rotate(89.9999999deg)`, whose stored angle
+becomes exactly `90deg` here. That is a change to the number store rather than
+to the transform code, and it is the third defect on `transform-number-format`.
+
+### A note on reading red
+
+`text_measure: plain text is not charged for the emoji table` fails on
+**unmodified main** as well, and `WebApi: Window` / `Window scroll` come and go —
+the machine was at load average 36 while several sessions ran Chrome. Same
+condition the previous chapter records. Check the named test against main before
+attributing it to a change.
