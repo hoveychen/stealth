@@ -25,6 +25,7 @@ const Page = @import("../Page.zig");
 
 const js = @import("js.zig");
 const bridge = @import("bridge.zig");
+const access_check = @import("access_check.zig");
 const Factory = @import("../Factory.zig");
 const reflect = @import("../reflect.zig");
 const Caller = @import("Caller.zig");
@@ -380,7 +381,16 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
             // namespace objects in Snapshot.createSnapshotContext.
             if (comptime @hasDecl(JsApi.Meta, "null_prototype")) {
                 var maybe_proto: v8.MaybeBool = undefined;
-                v8.v8__Object__SetPrototype(js_obj.handle, self.handle, @ptrCast(isolate.initNull()), &maybe_proto);
+                // Through the access-check gate, because V8 runs the check on
+                // SetPrototype as well and this object's whole point is to
+                // refuse it. Without the gate the call returns Nothing and V8
+                // aborts the process on the FromJust inside it.
+                access_check.whileBuilding(v8.v8__Object__SetPrototype, .{
+                    js_obj.handle,
+                    self.handle,
+                    @as(*const v8.Value, @ptrCast(isolate.initNull())),
+                    &maybe_proto,
+                });
             }
 
             if (!@hasDecl(JsApi.Meta, "empty_with_no_proto")) {
