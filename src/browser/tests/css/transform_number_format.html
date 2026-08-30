@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The numbers inside a computed `matrix()`.
+
+  This engine printed six DECIMALS and Chrome prints six SIGNIFICANT DIGITS --
+  C's `%g` with precision 6, exponent form and all. The two agree on everything
+  between about 0.1 and 10, which is where the rule was originally read off
+  (`rotate(45deg)` is `0.707107` either way), and disagree everywhere else.
+  Measured on Chrome 151 headed, scratch/b69/expr-matrix-precision.js and
+  expr-tiny-ladder.js:
+
+    scale(1.4142135623730951)   1.41421        (six digits, not six decimals)
+    scale(12345.6789012)        12345.7
+    scale(0.000123456789)       0.000123457    we printed 0.000123
+    scale(1.2345678)            1.23457
+    scale(2.5)                  2.5
+    translate(1234567.89px)     1.23457e+06    we printed 1234570
+    scale(-0.0000001234)        -1.234e-07     we printed 0
+    rotate(1deg)                0.0174524      we printed 0.017452
+
+  There is no epsilon anywhere in it: `scale(1e-17)` prints `1e-17`, and a
+  ladder from 1e-6 to 1e-17 prints every rung.
+
+  **And that is why the quarter turns need their own handling.** `rotate(90deg)`
+  is `matrix(0, 1, -1, 0, 0, 0)` in Chrome, and this engine's cosine there is
+  `6.123233995736766e-17` -- printing six decimals was hiding it. Chrome is not
+  rounding at print time (it prints `1.74533e-09` for `rotate(89.9999999deg)`),
+  so the rotation itself is exact at multiples of a right angle, which is what
+  `rotateMatrix` now does.
+
+  One more row is measured and NOT asserted: two 45-degree rotations compose to
+  an exact `matrix(0, 1, -1, 0, 0, 0)` in Chrome and to `2.22045e-16` here. That
+  is not the rule above -- it is that Chrome's cosine and sine at 45 degrees are
+  the same double and this engine's differ in the last bit
+  (`0.7071067811865476` against `0.7071067811865475`), so `c*c - s*s` cancels
+  there and not here. Matching it would mean reproducing Blink's trigonometry,
+  not its serialisation.
+
+  NOT here, measured and out of scope: `rotate(89.9999999deg)` prints
+  `1.74533e-09` in Chrome and `0` here, and `rotate(1.5707963267948966rad)` is
+  exactly `matrix(0, 1, -1, 0, 0, 0)` there and `-0.000004` here. Both are the
+  same third defect: this engine's declaration store keeps the number ROUNDED to
+  six significant digits and every computation downstream reads the rounded one,
+  while Chrome rounds only on the way out -- its `el.style.transform` reads back
+  `rotate(1.5708rad)` too. That one is a change to the number store, not to the
+  transform code, and it has its own plan.
+-->
+
+<body>
+
+<script id=matrix_numbers_are_six_significant_digits>
+{
+  const probe = (t) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;transform: ' + t + ';';
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).transform);
+    el.remove();
+    return got;
+  };
+  const CASES = [
+    ['scale(1.4142135623730951)', 'matrix(1.41421, 0, 0, 1.41421, 0, 0)'],
+    ['scale(12345.6789012)', 'matrix(12345.7, 0, 0, 12345.7, 0, 0)'],
+    ['scale(0.000123456789)', 'matrix(0.000123457, 0, 0, 0.000123457, 0, 0)'],
+    ['scale(1.2345678)', 'matrix(1.23457, 0, 0, 1.23457, 0, 0)'],
+    ['scale(1.23456)', 'matrix(1.23456, 0, 0, 1.23456, 0, 0)'],
+    ['scale(2.5)', 'matrix(2.5, 0, 0, 2.5, 0, 0)'],
+    ['translate(1234567.89px)', 'matrix(1, 0, 0, 1, 1.23457e+06, 0)'],
+    ['scale(-0.0000001234)', 'matrix(-1.234e-07, 0, 0, -1.234e-07, 0, 0)'],
+    ['rotate(30deg)', 'matrix(0.866025, 0.5, -0.5, 0.866025, 0, 0)'],
+    ['rotate(1deg)', 'matrix(0.999848, 0.0174524, -0.0174524, 0.999848, 0, 0)'],
+  ];
+  for (const [t, expected] of CASES) {
+    testing.expectEqual(t + ' = ' + expected, t + ' = ' + probe(t));
+  }
+}
+</script>
+
+<script id=matrix_numbers_have_no_epsilon>
+{
+  const probe = (v) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;transform: scale(' + v + ');';
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).transform);
+    el.remove();
+    return got.slice(7, got.indexOf(','));
+  };
+  const CASES = [
+    ['1e-6', '1e-06'],
+    ['1e-7', '1e-07'],
+    ['1e-10', '1e-10'],
+    ['1e-15', '1e-15'],
+    ['1e-17', '1e-17'],
+    ['2e-7', '2e-07'],
+  ];
+  for (const [v, expected] of CASES) {
+    testing.expectEqual('scale(' + v + ') -> ' + expected, 'scale(' + v + ') -> ' + probe(v));
+  }
+}
+</script>
+
+<script id=right_angle_rotations_are_exact>
+{
+  const probe = (t) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;transform: ' + t + ';';
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).transform);
+    el.remove();
+    return got;
+  };
+  const CASES = [
+    ['rotate(90deg)', 'matrix(0, 1, -1, 0, 0, 0)'],
+    ['rotate(180deg)', 'matrix(-1, 0, 0, -1, 0, 0)'],
+    ['rotate(270deg)', 'matrix(0, -1, 1, 0, 0, 0)'],
+    ['rotate(-90deg)', 'matrix(0, -1, 1, 0, 0, 0)'],
+    ['rotate(360deg)', 'matrix(1, 0, 0, 1, 0, 0)'],
+    ['rotate(450deg)', 'matrix(0, 1, -1, 0, 0, 0)'],
+    ['rotate(0.25turn)', 'matrix(0, 1, -1, 0, 0, 0)'],
+    ['rotate(0.5turn)', 'matrix(-1, 0, 0, -1, 0, 0)'],
+    ['rotate(100grad)', 'matrix(0, 1, -1, 0, 0, 0)'],
+    // ...and an angle that is NOT a right angle keeps its tiny cosine rather
+    // than being snapped to one.
+    ['rotate(45deg)', 'matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, 0)'],
+  ];
+  for (const [t, expected] of CASES) {
+    testing.expectEqual(t + ' = ' + expected, t + ' = ' + probe(t));
+  }
+}
+</script>
