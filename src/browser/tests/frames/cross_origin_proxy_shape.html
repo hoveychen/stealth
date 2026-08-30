@@ -206,23 +206,40 @@ on the deny interceptor.
     testing.expectEqual('SecurityError', caught(() => `${w}`).split(':')[0]);
     testing.expectEqual('SecurityError', caught(() => w + '').split(':')[0]);
 
-    // Two readings this engine still gets wrong, asserted so the gap is a fact
-    // in the suite rather than a note in a file. Chrome throws for both, by way
-    // of V8's access-check callback rather than an interceptor:
+    // The four readings an interceptor cannot reach, and the reason this
+    // engine now runs the same V8 mechanism Blink does -- an access check on
+    // the instance template, with the cross-origin properties served by its
+    // handler. An interceptor is consulted during a property lookup; an access
+    // check runs *before* one, which is what these four turn on.
     //
-    //   - JSON.stringify never reaches the interceptor at all. V8's stringifier
-    //     looks `toJSON` up with PROTOTYPE_CHAIN_SKIP_INTERCEPTOR, which is why
-    //     `w.toJSON`, `Reflect.get(w, 'toJSON')` and `'toJSON' in w` all throw
-    //     here while `JSON.stringify(w)` answers "{}".
-    //   - `then` is an own property, so [[HasProperty]] finds it and never
-    //     reaches the [[NonMasking]] interceptor. Chrome's own-key list has
-    //     `then` too, and its `in` still throws, because the access check runs
-    //     before the own-property lookup.
+    //   - JSON.stringify never reaches an interceptor at all: V8's stringifier
+    //     looks `toJSON` up with PROTOTYPE_CHAIN_SKIP_INTERCEPTOR. Chrome names
+    //     `toJSON` in the sentence, because the access check does see which
+    //     property was being read.
+    //   - `then`, `length` and the other twelve are own KEYS on both arms (all
+    //     seventeen are still listed), and an own key is found before any
+    //     [[NonMasking]] interceptor -- so `in` answered true and `delete`
+    //     answered true, and the delete actually removed the key.
+    //   - ToPrimitive reaches for @@toPrimitive first. That is a symbol, which
+    //     no named handler here intercepts, so Chrome's sentence carries no
+    //     property name at all -- where an interceptor answers, it knows the
+    //     name and says `toString`.
     //
-    // Cloudflare's widget reads `window.parent` 44 times per interstitial and
-    // gets "{}" every time, so the first of the two is a live signal.
-    testing.expectEqual('{}', JSON.stringify(w));
-    testing.expectEqual(true, 'then' in w);
+    // All four measured on Chrome 151, probe scratch/b90/expr-xo-messages.js.
+    testing.expectEqual(`SecurityError: Failed to read a named property 'toJSON' from 'Window': ${blocked}`,
+      caught(() => JSON.stringify(w)));
+    testing.expectEqual(`SecurityError: ${blocked}`, caught(() => ('then' in w)));
+    testing.expectEqual(`SecurityError: ${blocked}`, caught(() => delete w.length));
+    testing.expectEqual(`SecurityError: Failed to read a named property from 'Window': ${blocked}`,
+      caught(() => String(w)));
+    testing.expectEqual(`SecurityError: ${blocked}`,
+      caught(() => Object.defineProperty(w, 'y', { value: 1 })));
+
+    // ...and the key list is untouched by all of that: seventeen own keys, the
+    // fourteen names in Blink's order plus three symbols.
+    testing.expectEqual(17, Reflect.ownKeys(w).length);
+    testing.expectEqual('window,self,location,closed,frames,length,top,opener,parent,blur,close,focus,postMessage,then',
+      Object.getOwnPropertyNames(w).join(','));
   });
 }
 </script>

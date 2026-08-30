@@ -1928,7 +1928,7 @@ pub const JsApi = struct {
     pub const webdriver = bridge.accessor(Window.getWebDriver, null, .{ .wpt_only = true });
 };
 
-const CrossOriginWindow = struct {
+pub const CrossOriginWindow = struct {
     window: *Window,
 
     pub fn postMessage(self: *CrossOriginWindow, message: js.Value, target_origin: ?[]const u8, transfer: ?[]const *MessagePort, frame: *Frame) !void {
@@ -2046,7 +2046,10 @@ const CrossOriginWindow = struct {
         );
     }
 
-    fn blockedSentence(frame: *Frame) ![]const u8 {
+    /// Public because the access-check failure callback throws the same
+    /// sentence for the operations a handler never sees -- a symbol read, an
+    /// `in`, a delete. See browser/js/access_check.zig.
+    pub fn blockedSentence(frame: *Frame) ![]const u8 {
         const origin = frame.window._location.getOrigin(&frame.js.execution) catch "null";
         return std.fmt.allocPrint(
             frame.call_arena,
