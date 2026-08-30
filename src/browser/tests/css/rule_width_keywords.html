@@ -20,12 +20,13 @@
     * `-webkit-text-stroke-width` has a scale of its own: two thirds of the
       others, 0.666667px / 2px / 3.33333px.
     * An element that declares NO column rule reads `1.5px`, not the `3px` its
-      own `medium` resolves to. That is three DEVICE pixels: the same reading is
-      3px on a devicePixelRatio-1 Chrome (headless, and headed under
-      --force-device-scale-factor=1, and headed under =3, all four measured) and
-      1.5px on the dpr-2 headed one. This engine reports devicePixelRatio 2 as a
-      fixed part of its device profile (Window.getDevicePixelRatio), so 1.5px is
-      the number that matches it.
+      own `medium` resolves to. That is three DEVICE pixels: 3px on both dpr-1
+      arms (headless, and headless under --force-device-scale-factor=1) and
+      1.5px on both dpr-2 arms (headless under =2, and headed), with
+      devicePixelRatio read back in the same run as the width every time. So the
+      split is the ratio and not headedness. This engine reports
+      devicePixelRatio 2 as a fixed part of its device profile
+      (Window.getDevicePixelRatio), so 1.5px is the number that matches it.
 
   webapi/css/chrome_initial_values.zig records 3px for the three rule widths
   because that table was generated against a HEADLESS Chrome, which is dpr 1.

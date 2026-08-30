@@ -22429,19 +22429,37 @@ This engine echoed the keyword back on all five non-border names —
 
 ### The 1.5px is the device pixel ratio, and the arm was the confound
 
-B93's note says "dsf=1 and dsf=2 are the same, so it is not a DPR artefact".
-The flag never landed: `run-expr.mjs --chrome-arg --force-device-scale-factor=2`
-reports `devicePixelRatio` **1**, the same as without it, so both of those runs
-were the same arm. What separates the readings is which arm they came from:
+Four configurations, each asserting `devicePixelRatio` in the same run as the
+width:
 
 ```
-  headless                              dpr 1   3px
-  headed, --force-device-scale-factor=1 dpr 1   3px
-  headed, --force-device-scale-factor=3 dpr 1   3px
-  headed                                dpr 2   1.5px
+  headless                                dpr 1   3px
+  headless, --force-device-scale-factor=1 dpr 1   3px
+  headless, --force-device-scale-factor=2 dpr 2   1.5px
+  headed                                  dpr 2   1.5px
 ```
 
-`width × dpr = 3` in all four. The undeclared value is **three device pixels**,
+`width × dpr = 3` in all four, and the third row is the one that matters: the
+split is the device pixel ratio and not headedness, because a headless arm with
+the flag answers the headed number.
+
+**A retraction, and the trap behind it.** An earlier draft of this section said
+the flag "never landed" -- that `--force-device-scale-factor` reported
+`devicePixelRatio` 1 through `run-expr.mjs` -- and used that to explain why B93's
+note called the reading "not a DPR artefact". That was wrong. Re-run on
+debugging ports nothing else had used, `run-expr.mjs --chrome-arg
+--force-device-scale-factor=2` reports dpr 2, three times out of three, and a
+directly launched `--headless=new --force-device-scale-factor=2` reports it four
+times out of four. What produced the dpr-1 readings was **a stale Chrome
+answering on a reused `--remote-debugging-port`**: several probes had been run
+concurrently, the driver's `fetch(/json/version)` loop connects to whatever
+answers, and a browser from a previous invocation answers exactly like the one
+that was just spawned. `sweep-needs-explicit-port` is the same failure recorded
+for the sweep.
+
+So the rule for anything whose answer has dpr in it is not "pass this flag" --
+it is **read `devicePixelRatio` back in the same run and check it**, because the
+flag can be right and the arm still wrong. The undeclared value is **three device pixels**,
 and the `medium` keyword is three CSS pixels — which is why the two disagree at
 all. This engine reports `devicePixelRatio` 2 as a fixed part of its device
 profile (`Window.getDevicePixelRatio`, and the comment there is about Kasada
