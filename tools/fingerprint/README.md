@@ -21675,3 +21675,59 @@ this engine has that Chrome does not, and it sits at index 1198, inside the
 window Kasada samples. It costs nothing here (`padGone=1` was in the mirror arm,
 still 0/6). But it is a name no browser sends, now default-on in every realm, and
 at least one guard is known to sample global names positionally.
+
+## Chrome is not a usable reference on DataDome, and dd-saks was never shown to be a door (B89, 2026-08-29)
+
+The door map has carried three real gaps: cf-scrapingcourse, x-hyatt and
+dd-saks. With the first two accounted for, dd-saks was the one nobody was on.
+It is not clear it is a gap at all.
+
+`dd-saks`, interleaved, three rounds each, same window:
+
+```
+  lightpanda  datadome-challenge  doc=403->200  nodes=9   3/3
+  chrome      datadome-challenge  doc=403->200  nodes=9   3/3
+  chrome --headed                 doc=403->200  nodes=9   3/3
+```
+
+Identical shape on every arm. But a station that refuses both arms says nothing
+until you know what the reference arm does when it *should* pass, so the whole
+vendor was swept:
+
+```
+              lightpanda                    chrome (headless)
+  dd-g2       datadome-challenge            datadome-challenge
+  dd-leboncoin  pass  200, 1486 nodes       datadome-challenge
+  dd-hermes     pass  200, 2037 nodes       datadome-challenge
+  dd-etsy       pass  200, 1829 nodes       datadome-challenge
+  dd-seloger    pass  200, 1484 nodes       datadome-challenge
+  dd-saks     datadome-challenge            datadome-challenge
+  dd-allopneus  cf-blocked                  cf-blocked
+              5/8 passed                    0/8 passed
+```
+
+**This engine passes five DataDome stations; Chrome passes none.** And headed
+Chrome is challenged on `dd-leboncoin` and `dd-hermes` too — the two this engine
+passes in the same window — first with `--headed-ua` and then again without it,
+since `--headed-ua` passes `--user-agent=` and that blanks the high-entropy
+client hints DataDome reads (memory `ua-override-blanks-client-hints`); a headed
+browser needs no override in the first place. Same verdict both ways.
+
+So on this vendor, from this address, a fresh-profile Chrome is challenged
+everywhere regardless of head or user agent. Whatever DataDome is keying on —
+cookie age, session history, address reputation — Chrome-with-a-scratch-profile
+does not have it, and **the Chrome column cannot separate "this engine is
+detected" from "this profile is".** dd-saks being refused is not evidence of an
+engine gap; the arm that was supposed to prove it is refused on stations we walk
+straight into.
+
+Counts are honest: one round per station for the vendor sweep, three for dd-saks
+per arm, one per station for each headed control. The passes are unambiguous
+(200 with 1500–2000 nodes against an interstitial's nine).
+
+**What this does to the door map:** of the three gaps that survived
+`six-of-nine-closed-doors-are-phantoms`, x-hyatt is now exhausted on all four
+routes, cf-scrapingcourse's ticket turned out not to be a pass, and dd-saks rests
+on a control that does not hold. Re-deriving the map needs a reference arm that
+actually passes — an aged profile, or a residential address — not another
+scratch-profile Chrome.
