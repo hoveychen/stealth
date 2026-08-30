@@ -243,3 +243,144 @@ on the deny interceptor.
   });
 }
 </script>
+
+<!--
+The keys a handler that only intercepts strings never sees: symbols and
+indices. All of it measured on Chrome 151 against the same two-origin fixture
+(scratch/b91/expr-xo-symbols{,2,3}.js, expr-xo-then.js).
+
+The rule for a symbol turns out to be two rules that pull apart, and a page can
+tell them apart:
+
+  who may read it   by identity. The three the proxy owns answer undefined; every
+                    other symbol throws. A page-made Symbol("Symbol.toStringTag")
+                    throws, so a handler comparing descriptions would be wrong.
+  what the sentence names   by description. `[<description>]`, and nothing at all
+                    when there is no description -- or when the description is
+                    "Symbol.toPrimitive", forged or not. That last one is why
+                    String(w), whose first lookup is @@toPrimitive, throws a
+                    sentence with no property name in it.
+-->
+
+<script id=proxy_symbol_and_index_keys type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+  const ORIGIN = testing.ORIGIN;
+
+  const iframe = document.createElement('iframe');
+  iframe.src = ALT_BASE + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    const w = iframe.contentWindow;
+    const blocked = `Blocked a frame with origin "${ORIGIN}" from accessing a cross-origin frame.`;
+    const caught = (fn) => {
+      try { return `(no throw) ${String(fn())}`; } catch (e) { return `${e.name}: ${e.message}`; }
+    };
+
+    // The three own symbols read as their own undefined value rather than
+    // throwing, which is what keeps Object.prototype.toString off the throwing
+    // path -- it reaches for @@toStringTag and gets undefined, so it falls back
+    // to the unbranded '[object Object]' asserted further up.
+    for (const s of [Symbol.toStringTag, Symbol.hasInstance, Symbol.isConcatSpreadable]) {
+      testing.expectEqual('(no throw) undefined', caught(() => w[s]));
+      testing.expectEqual('(no throw) true', caught(() => s in w));
+      testing.expectEqual('(no throw) undefined,false,false,true', caught(() => {
+        const d = Object.getOwnPropertyDescriptor(w, s);
+        return `${d.value},${d.writable},${d.enumerable},${d.configurable}`;
+      }));
+    }
+
+    // Any other symbol is refused, and named by its description.
+    testing.expectEqual(`SecurityError: Failed to read a named property '[Symbol.iterator]' from 'Window': ${blocked}`,
+      caught(() => w[Symbol.iterator]));
+    testing.expectEqual(`SecurityError: Failed to set a named property '[Symbol.iterator]' on 'Window': ${blocked}`,
+      caught(() => { w[Symbol.iterator] = 1; }));
+    testing.expectEqual(`SecurityError: Failed to read a named property '[Symbol.iterator]' from 'Window': ${blocked}`,
+      caught(() => Object.getOwnPropertyDescriptor(w, Symbol.iterator)));
+    testing.expectEqual(`SecurityError: ${blocked}`, caught(() => Symbol.iterator in w));
+    // ...a delete is not a read, here as everywhere: the bare sentence, even
+    // for a symbol the proxy owns.
+    testing.expectEqual(`SecurityError: ${blocked}`, caught(() => delete w[Symbol.toStringTag]));
+
+    // The two rules pulling apart. Identity decides the refusal -- a forged
+    // @@toStringTag throws where the real one answered undefined above -- and
+    // the description decides the name, so the forged one is named as if it
+    // were real.
+    testing.expectEqual(`SecurityError: Failed to read a named property '[Symbol.toStringTag]' from 'Window': ${blocked}`,
+      caught(() => w[Symbol('Symbol.toStringTag')]));
+    // A symbol with no description is not named at all...
+    testing.expectEqual(`SecurityError: Failed to read a named property from 'Window': ${blocked}`,
+      caught(() => w[Symbol()]));
+    // ...an empty one is named as empty...
+    testing.expectEqual(`SecurityError: Failed to read a named property '[]' from 'Window': ${blocked}`,
+      caught(() => w[Symbol('')]));
+    // ...and "Symbol.toPrimitive" is the description Chrome declines to print,
+    // real or forged. String(w) above is the reading this is under.
+    testing.expectEqual(`SecurityError: Failed to read a named property from 'Window': ${blocked}`,
+      caught(() => w[Symbol.toPrimitive]));
+    testing.expectEqual(`SecurityError: Failed to read a named property from 'Window': ${blocked}`,
+      caught(() => w[Symbol('Symbol.toPrimitive')]));
+
+    // An index gets its own words, and one getter answers all three readings:
+    // V8 falls back to it when the handler has no query and no descriptor.
+    for (const read of [() => w[0], () => 0 in w, () => Object.getOwnPropertyDescriptor(w, 0)]) {
+      testing.expectEqual(`SecurityError: Failed to read an indexed property [0] from 'Window': ${blocked}`,
+        caught(read));
+    }
+    testing.expectEqual(`SecurityError: Failed to set an indexed property [0] on 'Window': ${blocked}`,
+      caught(() => { w[0] = 1; }));
+    testing.expectEqual(`SecurityError: ${blocked}`, caught(() => delete w[0]));
+  });
+}
+</script>
+
+<!--
+What the proxy still hands over, and the reason the handler fetches those
+members off the object rather than rebuilding them. Under a failed access check
+a handler that declines is a handler that refused -- V8 reports the check
+instead of falling through to the own property -- so the fourteen readable keys
+are served by reading them, and their identity survives that.
+
+`then` is on the readable side even though it is not a cross-origin property:
+its own value is undefined and Chrome hands it back, which is what stops
+`await w` from throwing. Measured, scratch/b91/expr-xo-then.js.
+-->
+
+<script id=proxy_readable_members type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+
+  const iframe = document.createElement('iframe');
+  iframe.src = ALT_BASE + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    const w = iframe.contentWindow;
+
+    testing.expectEqual('object,object,object,object,function,function,function,function',
+      [typeof w.window, typeof w.self, typeof w.frames, typeof w.top,
+       typeof w.blur, typeof w.close, typeof w.focus, typeof w.postMessage].join(','));
+    testing.expectEqual('false,0,undefined', `${w.closed},${w.length},${w.then}`);
+
+    // The identity a rebuilt answer would lose. Chrome has all four true.
+    testing.expectEqual('true,true,true,true',
+      [w.postMessage === w.postMessage, w.blur === w.blur,
+       w.window === w.self, w.window === w.frames].join(','));
+
+    // Reading a member must not disturb the key list -- it goes through the
+    // object, and the object is the same object.
+    testing.expectEqual(17, Reflect.ownKeys(w).length);
+  });
+}
+</script>
