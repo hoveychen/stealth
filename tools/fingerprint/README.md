@@ -22126,3 +22126,161 @@ the CDP layer and the whole probe returns nothing, which reads exactly like a
 hung page. `fetch` does resolve, so a few data-URL round trips are the usable
 pump. Every async probe in `scratch/b90/` is written without timers for that
 reason.
+
+## The channel nobody had pointed an instrument at is the access log (B69, 2026-08-30)
+
+Seven sessions closed cf-scrapingcourse from inside the page: the read set, the
+read values, the payload spans, the plugin surface, native accessor shape, the
+unknown-property log, the transport layer, twenty launch-flag families. B68
+ended with "what is left must be an observation channel we do not have, not
+another candidate value". This is one, and it was sitting in the trace the whole
+time: **how many times the server was asked.**
+
+### The `ci` PNG, asked for twice
+
+`cfsc-fo-diff.mjs` prints one line per challenge request. Read as a sequence
+rather than as a set, one row is doubled on this engine and single on Chrome:
+
+```
+  lightpanda   GET 200 body=1994  {cf}/…/ci/a33295e729d0f31f/…
+               GET 200 body=1994  {cf}/…/ci/a33295e729d0f31f/…   <- same URL, again
+  chrome       GET 200 body=3050  {cf}/…/ci/a332985619af2734/…
+```
+
+`ci` is a greyscale PNG the challenge loads as an `Image` (`type: "Image"` on
+both arms, identical request headers on both of ours). Three runs of three, and
+it is 2 every time here and 1 every time there. The two `cf-ray` values differ,
+so these are two real requests and not one record printed twice.
+
+Nothing in the page can see this. Both loads fire `load`, both report the same
+size, `complete` is true either way. It is only visible to whoever keeps the
+access log — which is to say, to Cloudflare.
+
+### What Chrome's rule actually is
+
+`scratch/b69/img-cache-fixture.mjs` serves one PNG and loads it nine ways,
+counting requests at the server and `PerformanceResourceTiming` entries in the
+page. The two columns agree row for row on both engines, which is worth saying
+first: a reused resource files no second entry either.
+
+| shape | Chrome | this engine, before | after |
+|---|---|---|---|
+| two `Image`s in sequence | 1 | 2 | 1 |
+| two `Image`s in one task | 1 | 2 | 1 |
+| one element, `src` assigned twice | 1 | 2 | 1 |
+| markup `<img>` plus a scripted `Image` | 1 | 2 | 1 |
+| three loads of one URL | 1 | 2 | 1 |
+| response carries `Cache-Control: no-store` | 1 | 2 | 1 |
+| 404 both times | 2 | 2 | 2 |
+| 200 whose bytes are not a picture | 2 | 2 | 2 |
+| second load in CORS mode | 2 | 2 | 2 |
+
+The right-hand rows are the ones that pin the rule down, and they rule out the
+two obvious guesses. It is not cacheability — `no-store` is reused. It is not
+the status — a 200 carrying a page is not. **What is reused is a resource that
+became a picture**, which is the question `ImageRequest.arrived` already answers
+for the event. So `Frame` keeps one slot per resolved URL (prefixed for CORS,
+which is a separate key in Chrome too): a load that finds an open slot attaches
+to it and takes the outcome when the transfer lands, one that finds a settled
+slot replays the `load` and the intrinsic size, and a transfer that failed or
+whose bytes were not an image drops its slot so the next load asks again.
+
+After the fix all nine rows match Chrome on both columns, and on the live
+station the `ci` row is asked for once.
+
+### And it is not the door
+
+Six alternating rounds, the fixed binary against a headed Chrome with a Chrome
+user agent, same sitting:
+
+```
+  chrome   5 / 5   "Cloudflare Challenge - ScrapingCourse.com"
+  fixed    0 / 5   "Just a moment..."      ci asked for once, r2 still ~180B long
+```
+
+A real defect, fixed and measured, and the door did not move. Which is the
+twenty-somethingth negative on this station, but the *channel* is new, so the
+rest of it was worth walking.
+
+### The rest of the channel: 26 kinds of request against 11
+
+`scratch/b69/wire-census-fixture.mjs` is one page that names a subresource
+every way a page can, and a server that counts. Duplicates are one half of
+"what the server sees"; absence is the other, and nothing here had ever
+enumerated it.
+
+Chrome asks for 26 of them. This engine asks for 11. It never requests:
+
+- from CSS: `@import`, `@font-face` `src` (for a family a rendered element
+  uses), `background-image`, `list-style-image`, `border-image-source`,
+  `cursor`, `-webkit-mask-image`
+- from markup: `<object data>`, `<embed src>`, `<input type=image>`,
+  `<video poster>`, `<audio preload=metadata>`, SVG `<image href>`,
+  `<link rel=manifest>`, `<link rel=prefetch>`
+
+and for `srcset`, `sizes` and `<picture>` it requests the **fallback** where
+Chrome requests the candidate it selected — `srcset-fallback.png` against
+`srcset-2x.png`, `sizes-fallback.png` against `sizes-800.png`,
+`picture-fallback.png` against `picture-webp.png`. Both engines correctly skip
+a `background-image` on a selector nothing matches.
+
+External stylesheets are off by default in this engine, so a plain `serve` on a
+real site fetches the document, a script or two and nothing else. `Frame.loadImage`
+already carries the argument for why that matters — "never fetching images at
+all is a server-visible tell" — and the same sentence applies to every row
+above. It was never extended past `<img>`.
+
+The same duplicate defect is there for the other two kinds, unfixed:
+`scratch/b69/sub-cache-fixture.mjs` measures a second `<script src>` and a
+second `<link rel=stylesheet>` for one URL at 2 requests here and 1 in Chrome,
+while two `fetch()`es are 2 on both and an `<img>` followed by a `fetch()` is 2
+on both (a different destination is a different key).
+
+### Where the census does *not* fire, which is why it is filed as fidelity
+
+On an interstitial there is nothing to miss. `scratch/b69/wire-net.mjs` lists
+every request off `Network.requestWillBeSent` with **only** the Network domain
+enabled — no `Runtime`, no `Page`, no `Target.setAutoAttach`, all three of which
+are measured detectable on Kasada — and run against x-hyatt the pre-verdict
+sequence is the same seven requests on both arms, in the same order, with the
+same methods:
+
+```
+  GET  document   hyatt.com/
+  GET  script     …/ips.js
+  POST xhr        reporting.cdndex.io/error
+  OPTIONS         reporting.cdndex.io/error      <- the CORS preflight, on both
+  GET  script     blob:…
+  GET              favicon.ico
+  POST xhr        …/tl
+```
+
+Chrome's list then runs to 91 requests and ours stops at 7 — but that is the
+consequence of the verdict, not its cause: request 9 on Chrome is a second
+`Document` for `hyatt.com/`, the interstitial reloading the real page after it
+passed. Everything before the verdict matches. Same on cf-scrapingcourse once
+the `ci` row is single: fifteen requests each, in the same order.
+
+Two differences survive there and neither is on the wire. Chrome loads a
+`data:image/svg+xml` from the interstitial's markup and this engine issues no
+request record for it (a data URL never reaches a server, so it is a CDP and
+resource-timing difference, not a traffic one), and every `initiator.type` this
+engine reports is `other` where Chrome distinguishes `parser`, `script` and
+`preflight`.
+
+One more small thing fell out of the same reading: on `example.com`, whose
+markup carries `<link rel="icon" href="data:,">`, this engine's resource-timing
+buffer holds an entry named `data:,` and Chrome's holds nothing — while a
+`data:image/png` load *does* get an entry on both. An empty data URL is not a
+load Chrome files.
+
+### The blob worker's `Abort`, still unreproduced
+
+B60 measured the challenge's 13-byte blob worker firing `error` with the message
+`Abort` here and running silently in Chrome, and the live trace still shows the
+first blob request ending `Abort` on this arm. It does not reproduce off-site.
+`probes/expr-blob-worker-abort.js` covers four revoke timings on a plain page
+and `scratch/b69/blob-worker-fixture.mjs` adds the same three worker shapes in
+the top document, in a same-origin iframe and in a cross-origin one: **silent in
+all nine**. Whatever the challenge does to it is not the source, not the revoke,
+and not the frame.
