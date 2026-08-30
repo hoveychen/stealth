@@ -12,7 +12,7 @@ const Image = @This();
 pub const Proto = HtmlElement;
 
 /// The intrinsic size the arriving bytes declared, or 0 while nothing has
-/// arrived. Written by `Frame.ImageRequest.recordIntrinsicSize` before the
+/// arrived. Written by `Frame.applyIntrinsicSize` before the
 /// `load` event fires, so a handler that reads `naturalWidth` sees it.
 ///
 /// A field rather than one of Frame's side tables (`_element_scroll_positions`

@@ -702,6 +702,11 @@ var serve_counts = [_]struct { name: []const u8, count: u32 = 0 }{
     .{ .name = "prescan_module" },
 };
 
+// Requests the server has seen for `/served/counted.png`; read back over
+// `/served/counted-hits`. Atomic because the test server answers on its own
+// thread.
+var counted_png_hits: std.atomic.Value(u32) = .init(0);
+
 // Smallest valid PNG: a single transparent pixel. Served for any image request
 // the tests make; see the image branch at the end of `testHTTPHandler`.
 const ONE_PIXEL_PNG = [_]u8{
@@ -1722,6 +1727,34 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         }
         // strip off leading / so that it's relative to CWD
         return TestHTTPServer.sendFile(req, path[1..]);
+    }
+
+    // How many times the server was actually asked for `/served/counted.png`.
+    // The count is the only way to see the document's memory cache from a
+    // page: a reused resource fires `load` and reports a size exactly like a
+    // fetched one, and the difference lives on the wire. Measured on Chrome
+    // 151 (scratch/b69/img-cache-fixture.mjs), a second <img> for a URL that
+    // already loaded costs zero requests -- and Cloudflare's challenge loads
+    // its `ci` PNG twice, so this engine asking twice is visible to it.
+    if (std.mem.eql(u8, path, "/served/counted.png")) {
+        _ = counted_png_hits.fetchAdd(1, .monotonic);
+        return req.respond(&ONE_PIXEL_PNG, .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "image/png" },
+            },
+        });
+    }
+    if (std.mem.eql(u8, path, "/served/counted-hits")) {
+        var buf: [16]u8 = undefined;
+        const body = std.fmt.bufPrint(&buf, "{d}", .{counted_png_hits.load(.monotonic)}) catch unreachable;
+        return req.respond(body, .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/plain" },
+                // The count has to be read fresh every time, or the second
+                // read would answer the first read's number.
+                .{ .name = "Cache-Control", .value = "no-store" },
+            },
+        });
     }
 
     if (std.mem.eql(u8, path, "/served/compressed.js")) {

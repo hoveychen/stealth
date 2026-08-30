@@ -182,6 +182,11 @@ _element_internals: ElementInternals.Lookup = .empty,
 _node_owner_documents: Node.OwnerDocumentLookup = .empty,
 _element_scroll_positions: Element.ScrollPositionLookup = .empty,
 
+/// The document's memory cache for images, keyed by resolved URL (prefixed
+/// when the request is a CORS one, which is a different key in Chrome too).
+/// See `ImageCacheEntry` for what goes in it and what stays out.
+_image_cache: std.StringHashMapUnmanaged(*ImageCacheEntry) = .empty,
+
 /// How many `Element.dimensionsAt` measurements are in flight. The faux layout
 /// reaches for other elements' boxes -- a containing block's, a flex sibling's,
 /// an inline child's -- and not every one of those routes carries a depth, so
@@ -3061,6 +3066,57 @@ pub fn loadImage(self: *Frame, element: *Element.Html, src: []const u8) !void {
 // How much of an image's head is kept. See `ImageRequest.prefix`.
 const IMAGE_HEAD_LEN = 4096;
 
+// One URL in the document's image memory cache.
+//
+// A second `<img>` for a URL this document already loaded does not reach the
+// server in Chrome, and leaves no second resource entry behind. Measured nine
+// ways on Chrome 151 (`scratch/b69/img-cache-fixture.mjs`), counting requests
+// at the server and entries in the buffer, which agree row for row:
+//
+//   two Images in sequence            1     three Images, one URL      1
+//   two Images in the same task       1     404 both times             2
+//   one element, src assigned twice   1     200 that is not a picture  2
+//   markup <img> plus a scripted one  1     second load with CORS      2
+//   `Cache-Control: no-store`         1
+//
+// The reuse rule the right-hand column pins down is not about the HTTP status
+// and not about cacheability -- `no-store` is reused and a 200 carrying a page
+// is not. What is reused is a resource that *became a picture*, which is the
+// same question `ImageRequest.arrived` already answers. So an entry is only
+// kept once its bytes arrived; anything else is dropped and asked for again.
+//
+// This is not academic. Cloudflare's challenge loads its `ci` PNG as an Image,
+// and on cf-scrapingcourse this engine asked the server for it twice in three
+// runs of three while Chrome asked once (`scratch/b69/alt-*.log`). That
+// difference is invisible to every instrument that reads the page -- both
+// loads fire `load` and report the same size -- and plain to the server.
+// The two numbers an image header declares. Named rather than anonymous
+// because the reader and the two writers have to agree on the type.
+const IntrinsicSize = struct { width: u32, height: u32 };
+
+const ImageCacheEntry = struct {
+    // An element waiting on a transfer that is already in flight. `sniff` is
+    // the waiter's own, not the transfer's: a `<link rel=preload>` does not
+    // judge the bytes and an `<img>` for the same URL does.
+    const Waiter = struct {
+        element: *Element.Html,
+        sniff: bool,
+    };
+
+    // False while the transfer is open. Waiters attach until it flips.
+    done: bool = false,
+
+    // Only true entries survive: see the comment above.
+    arrived: bool = false,
+
+    // The size the head declared, replayed onto every later element so a
+    // cached load reports the same `naturalWidth` as the one that fetched.
+    width: u32 = 0,
+    height: u32 = 0,
+
+    waiting: std.ArrayListUnmanaged(Waiter) = .empty,
+};
+
 const ImageRequest = struct {
     frame: *Frame,
     element: ?*Element.Html,
@@ -3122,6 +3178,12 @@ const ImageRequest = struct {
     // type with nothing to sniff, so the declaration is all there is to go on
     // (see `Mime.isImageSignature`).
     declared_svg: bool = false,
+
+    // The memory-cache slot this transfer is filling, and the key it is filed
+    // under. Every image request opens one, so later loads of the same URL
+    // have something to attach to while this is still in flight.
+    cache: *ImageCacheEntry,
+    cache_key: []const u8,
 
     fn headerCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.HeaderResult {
         const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
@@ -3186,10 +3248,44 @@ const ImageRequest = struct {
             .cors = self.cors,
         });
         const became_a_picture = self.arrived();
-        if (became_a_picture) {
-            self.recordIntrinsicSize();
+        const size = if (became_a_picture) self.intrinsicSize() else null;
+        if (size) |s| {
+            applyIntrinsicSize(self.element, s.width, s.height);
         }
+        self.settle(became_a_picture, size);
         self.report(if (!self.sniff or became_a_picture) .load else .@"error");
+    }
+
+    // Close the cache slot this transfer opened and hand the outcome to every
+    // element that attached to it while it was open.
+    //
+    // A slot only survives when the bytes became a picture; a transfer that
+    // failed, or one whose bytes were not an image, is removed so the next
+    // load asks the server again -- which is what Chrome does for both (the
+    // `404` and `200 that is not a picture` rows above).
+    fn settle(self: *ImageRequest, became_a_picture: bool, size: ?IntrinsicSize) void {
+        const entry = self.cache;
+        entry.done = true;
+        entry.arrived = became_a_picture;
+        if (size) |s| {
+            entry.width = s.width;
+            entry.height = s.height;
+        }
+        for (entry.waiting.items) |waiter| {
+            if (size) |s| {
+                applyIntrinsicSize(waiter.element, s.width, s.height);
+            }
+            self.frame.queueElementEvent(
+                waiter.element,
+                if (!waiter.sniff or became_a_picture) .load else .@"error",
+            ) catch |err| {
+                log.warn(.http, "image event", .{ .err = err, .cached = true });
+            };
+        }
+        entry.waiting.clearRetainingCapacity();
+        if (!became_a_picture) {
+            _ = self.frame._image_cache.remove(self.cache_key);
+        }
     }
 
     // The size the head declares, written onto the element before its `load`
@@ -3201,22 +3297,17 @@ const ImageRequest = struct {
     // false and fires nothing; Chrome with images on gives a size. Nothing here
     // decodes -- these are two numbers read out of the header the sniffer
     // already had to look at.
-    fn recordIntrinsicSize(self: *ImageRequest) void {
-        const element = self.element orelse return;
-        const as_element = element.asElement();
-        if (as_element.getTag() != .img) {
-            return;
-        }
+    fn intrinsicSize(self: *const ImageRequest) ?IntrinsicSize {
         const head = self.prefix[0..self.prefix_len];
         // SVG has no signature -- `arrived` let it through on the declared type
         // and the markup -- so its size comes from the root element instead.
         const size = if (images.Kind.fromSignature(head)) |kind|
-            images.readSize(kind, head) orelse return
+            images.readSize(kind, head) orelse return null
         else if (self.declared_svg)
-            images.svgSize(head) orelse return
+            images.svgSize(head) orelse return null
         else
-            return;
-        as_element.as(Image).setIntrinsicSize(size.width, size.height);
+            return null;
+        return .{ .width = size.width, .height = size.height };
     }
 
     // Whether the bytes became a picture, as far as this engine can tell.
@@ -3238,6 +3329,7 @@ const ImageRequest = struct {
     fn errorCallback(ctx: *anyopaque, err: anyerror) void {
         const self: *ImageRequest = @ptrCast(@alignCast(ctx));
         log.debug(.http, "image fetch failed", .{ .err = err });
+        self.settle(false, null);
         self.report(.@"error");
     }
 
@@ -3329,8 +3421,54 @@ pub const SubresourceOpts = struct {
     sniff: bool = true,
 };
 
+// The size a picture declared, written onto the element before its `load`
+// fires so a handler reading `naturalWidth` sees it. Only an `<img>` has the
+// slot: the favicon has no element and a `<link rel=preload>` is not one.
+//
+// Answering 0 for a picture that arrived is not a small inaccuracy, it is a
+// contradiction: `complete` is true and `load` fired, and no browser pairs
+// that with no size. Chrome with images switched off leaves `complete` false
+// and fires nothing; Chrome with images on gives a size. Nothing here decodes
+// -- these are two numbers read out of the header the sniffer already had to
+// look at.
+fn applyIntrinsicSize(element: ?*Element.Html, width: u32, height: u32) void {
+    const el = element orelse return;
+    const as_element = el.asElement();
+    if (as_element.getTag() != .img) {
+        return;
+    }
+    as_element.as(Image).setIntrinsicSize(width, height);
+}
+
 fn requestSubresource(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html, opts: SubresourceOpts) !void {
     const session = self._session;
+
+    // The document's memory cache, ahead of anything that would reach the
+    // network. A CORS request is a different key -- measured: an `<img>` and a
+    // `crossorigin` `<img>` for one URL cost two requests in Chrome -- so it
+    // gets a prefix rather than sharing the plain entry.
+    const wants_cors = if (element) |el| elementRequestsCors(el.asElement()) else false;
+    const cache_key: []const u8 = if (wants_cors)
+        try std.fmt.allocPrint(self.arena, "cors\x00{s}", .{resolved})
+    else
+        resolved;
+
+    if (self._image_cache.get(cache_key)) |entry| {
+        if (entry.done == false) {
+            // Still on the wire. Attaching costs no request and files no
+            // second entry, which is what Chrome's two-in-one-task row says.
+            if (element) |el| {
+                try entry.waiting.append(self.arena, .{ .element = el, .sniff = opts.sniff });
+            }
+            return;
+        }
+        // Only pictures are kept, so a hit here always reports `load`.
+        applyIntrinsicSize(element, entry.width, entry.height);
+        if (element) |el| {
+            try self.queueElementEvent(el, .load);
+        }
+        return;
+    }
 
     // Accept and the Sec-Fetch-* set come from Transfer.seedFetchMetadata via
     // resource_type = .image, and makeRequest runs headersForRequest (the
@@ -3345,13 +3483,17 @@ fn requestSubresource(self: *Frame, resolved: [:0]const u8, element: ?*Element.H
         .resource_type = opts.resource_type,
         .mode = opts.mode,
         .priority = opts.priority,
-        .cors = if (element) |el| elementRequestsCors(el.asElement()) else false,
+        .cors = wants_cors,
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown,
     };
 
     // Frame-arena'd: the transfer is torn down with the frame, so there is no
     // lifetime here that outlasts one.
+    const entry = try self.arena.create(ImageCacheEntry);
+    entry.* = .{};
+    try self._image_cache.put(self.arena, cache_key, entry);
+
     const pending = try self.arena.create(ImageRequest);
     pending.* = .{
         .frame = self,
@@ -3361,6 +3503,8 @@ fn requestSubresource(self: *Frame, resolved: [:0]const u8, element: ?*Element.H
         .initiator = opts.initiator orelse (if (element == null) "other" else "img"),
         .sniff = opts.sniff,
         .fetch_start = self.performance().now(),
+        .cache = entry,
+        .cache_key = cache_key,
     };
     request.ctx = pending;
     request.header_callback = ImageRequest.headerCallback;
@@ -3369,8 +3513,12 @@ fn requestSubresource(self: *Frame, resolved: [:0]const u8, element: ?*Element.H
     request.error_callback = ImageRequest.errorCallback;
 
     self.makeRequest(request) catch |err| {
-        // The request never went out, so no callback of ours will ever run.
+        // The request never went out, so no callback of ours will ever run --
+        // including the one that closes the cache slot, which has to go now or
+        // the next load for this URL would wait on a transfer that does not
+        // exist.
         log.warn(.http, "image fetch", .{ .err = err, .url = resolved });
+        _ = self._image_cache.remove(cache_key);
         if (element) |el| {
             self.queueElementEvent(el, .@"error") catch {};
         }
