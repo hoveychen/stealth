@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+A declaration whose value does not fit its property's grammar is *dropped*, and
+a dropped declaration is not the same thing as a declaration holding odd text:
+`el.style.getPropertyValue(...)` answers the empty string for it, and the
+computed value falls back to the initial one. This engine kept them, so
+`background-position: top 30%` -- which is not a position at all, `top` naming
+an axis the second slot then contradicts -- read back as `0% 30%`, a value no
+browser prints.
+
+That is the kind of gap a detector reaches for on purpose: it writes a value it
+knows to be invalid and reads the computed style back, the same trick Kasada
+plays with `color: FakeColor` at x-hyatt (see the note on valueClasses in
+css/shorthand.zig). One `setProperty` and one `getComputedStyle` separate the
+two engines, on a property every page uses.
+
+Measured on Chrome 151 over 46 values x 5 properties
+(scratch/b91/expr-position-grammar.js, both arms). Ninety-nine of the 230
+readings disagreed, every one of them in the same direction: Chrome dropped and
+this engine kept.
+
+The five properties do NOT share one grammar, which is the part a single
+validator gets wrong:
+
+  background-position   <bg-position>, the only one that still takes the legacy
+                        three-value edge-relative form (`left 10px top`).
+  mask-position         plain <position>: one, two or four values. css-values-3
+  object-position       took the three-value form out of <position> and left it
+  perspective-origin    in <bg-position> alone, and Chrome follows that -- these
+                        three refuse `left 10px top` byte for byte alike.
+  transform-origin      <position>{1,2} followed by an optional <length> z
+                        offset. So `left top 10px` and `10px 20px 30px` are
+                        fine (two-value position, then z), `left 10px top` is
+                        not (z must be a length), and no four-value form is.
+
+Read through the inline value rather than the computed one, because "dropped"
+and "computed to the initial value" are different facts that look alike:
+`background-position: left top` computes to `0% 0%`, which IS the initial value,
+and reading that as a refusal is how the first pass of this measurement got
+mask-position and object-position backwards.
+-->
+
+<script id=position_grammar_rejects>
+{
+  // value ; value ; ... -- exactly the values Chrome drops, in the order the
+  // table below tries them. Asserted as one joined string per property so a
+  // failure prints which values moved rather than only "expected true".
+  const CASES = [
+    'left', 'right', 'top', 'bottom', 'center', '30%', '10px', '0',
+    'left top', 'top left', 'left center', 'center left', 'top center', 'center top',
+    'center center', 'left 30%', '30% top', 'top 30%', '30% left', 'left right',
+    'top bottom', '30% 40%', '10px 20px', 'center 30%', '30% center',
+    'left left', 'top top', 'bottom top', 'right left',
+    'left 10px top', 'top 10px left', 'left top 10px', 'center left 10px',
+    'left 10px center', 'top left 10px', 'left 10px 20px', '10px 20px 30px',
+    'center center center',
+    'left 10px top 20px', 'top 20px left 10px', 'left 10px right 20px',
+    'left 10px top 20px bottom', 'center 10px top 20px',
+    'left top left', 'notakeyword', 'inherit',
+  ];
+
+  const DROPPED = new Map([
+    ['background-position',
+      'top 30% ; 30% left ; left right ; top bottom ; left left ; top top ; bottom top ; right left ; ' +
+      'left 10px 20px ; 10px 20px 30px ; center center center ; left 10px right 20px ; ' +
+      'left 10px top 20px bottom ; center 10px top 20px ; left top left ; notakeyword'],
+    // Identical to object-position and perspective-origin, byte for byte: the
+    // three that take a plain <position>.
+    ['mask-position',
+      'top 30% ; 30% left ; left right ; top bottom ; left left ; top top ; bottom top ; right left ; ' +
+      'left 10px top ; top 10px left ; left top 10px ; center left 10px ; left 10px center ; top left 10px ; ' +
+      'left 10px 20px ; 10px 20px 30px ; center center center ; left 10px right 20px ; ' +
+      'left 10px top 20px bottom ; center 10px top 20px ; left top left ; notakeyword'],
+    ['object-position',
+      'top 30% ; 30% left ; left right ; top bottom ; left left ; top top ; bottom top ; right left ; ' +
+      'left 10px top ; top 10px left ; left top 10px ; center left 10px ; left 10px center ; top left 10px ; ' +
+      'left 10px 20px ; 10px 20px 30px ; center center center ; left 10px right 20px ; ' +
+      'left 10px top 20px bottom ; center 10px top 20px ; left top left ; notakeyword'],
+    ['perspective-origin',
+      'top 30% ; 30% left ; left right ; top bottom ; left left ; top top ; bottom top ; right left ; ' +
+      'left 10px top ; top 10px left ; left top 10px ; center left 10px ; left 10px center ; top left 10px ; ' +
+      'left 10px 20px ; 10px 20px 30px ; center center center ; left 10px right 20px ; ' +
+      'left 10px top 20px bottom ; center 10px top 20px ; left top left ; notakeyword'],
+    // The z offset is what makes this one different in both directions: it
+    // accepts three values the other four refuse and refuses the four-value
+    // form they accept.
+    ['transform-origin',
+      'top 30% ; 30% left ; left right ; top bottom ; left left ; top top ; bottom top ; right left ; ' +
+      'left 10px top ; top 10px left ; left 10px center ; center center center ; ' +
+      'left 10px top 20px ; top 20px left 10px ; left 10px right 20px ; ' +
+      'left 10px top 20px bottom ; center 10px top 20px ; left top left ; notakeyword'],
+  ]);
+
+  const host = document.createElement('div');
+  host.style.width = '100px';
+  host.style.height = '100px';
+  document.documentElement.appendChild(host);
+
+  for (const [property, expected] of DROPPED) {
+    const dropped = [];
+    for (const value of CASES) {
+      host.style.cssText = 'width:100px;height:100px';
+      // setProperty rather than cssText: a value has to be refused by its own
+      // property's parser, and a bad declaration inside cssText could take its
+      // neighbours with it and make the reading say nothing.
+      host.style.setProperty(property, value);
+      if (host.style.getPropertyValue(property) === '') dropped.push(value);
+    }
+    testing.expectEqual(`${property}: ${expected}`, `${property}: ${dropped.join(' ; ')}`);
+  }
+
+  // ...and an empty value removes the declaration on every property, which is
+  // the one refusal this engine already had. Here so that a validator that
+  // refuses everything cannot pass the table above by accident.
+  host.style.cssText = 'width:100px;height:100px;background-position:30% 40%';
+  testing.expectEqual('30% 40%', host.style.getPropertyValue('background-position'));
+  host.style.setProperty('background-position', '');
+  testing.expectEqual('', host.style.getPropertyValue('background-position'));
+
+  // The accepted values must still compute to what they computed before: a
+  // grammar check that also changed the answer would be two changes wearing
+  // one hat. Measured on Chrome 151, same run.
+  host.style.cssText = 'width:100px;height:100px';
+  host.style.setProperty('background-position', 'left 30%');
+  testing.expectEqual('0% 30%', getComputedStyle(host).getPropertyValue('background-position'));
+  host.style.setProperty('object-position', '30% top');
+  testing.expectEqual('30% 0%', getComputedStyle(host).getPropertyValue('object-position'));
+
+  host.remove();
+}
+</script>

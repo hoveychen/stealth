@@ -2844,6 +2844,13 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
         },
     };
 
+    // Ahead of the shorthand lookup, because `background-position` and
+    // `mask-position` are shorthands and the grammar being checked is the
+    // shorthand's: once expanded into an x and a y, `top 30%` is two components
+    // each of which its own longhand takes, and what made the pair invalid is
+    // gone. See shorthand.refusesPosition.
+    if (shorthand.refusesPosition(normalized, value)) return false;
+
     if (shorthand.lookup(normalized)) |entry| {
         if (try shorthand.expand(frame.local_arena, entry, value)) |expansion| {
             // Measured: refusing is not a partial write. `border-radius: 10px
@@ -5967,4 +5974,8 @@ test "WebApi: CSSStyleDeclaration percentage kept" {
 
 test "WebApi: CSSStyleDeclaration position keywords" {
     try testing.htmlRunner("css/computed_position_keywords.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration position grammar" {
+    try testing.htmlRunner("css/position_grammar_rejects.html", .{});
 }
