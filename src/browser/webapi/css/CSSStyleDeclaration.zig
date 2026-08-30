@@ -23,6 +23,7 @@ const CssParser = @import("../../css/Parser.zig");
 const units = @import("../../css/units.zig");
 
 const js = @import("../../js/js.zig");
+const URL = @import("../../URL.zig");
 const Frame = @import("../../Frame.zig");
 const Element = @import("../Element.zig");
 const StyleManager = @import("../../StyleManager.zig");
@@ -264,7 +265,56 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
     // clamps the alpha family in both. An inline declaration is untouched --
     // `el.style.opacity` reads back what the author wrote.
     if (!self._is_computed) return value;
-    return clampAlphaValue(property_name, value) orelse value;
+    const clamped = clampAlphaValue(property_name, value) orelse value;
+    return absoluteUrls(property_name, clamped, frame);
+}
+
+/// A `url()` in a computed value is absolute. `background-image: url(/a.png)`
+/// on a page at `http://host/deep/` computes to
+/// `url("http://host/a.png")` in Chrome and read back relative here -- measured
+/// over three properties (scratch/b93/expr-bg-url.js), and it is the same
+/// answer for every property whose value can name an image.
+///
+/// The computed view only. `el.style.backgroundImage` keeps what the author
+/// wrote, which is why this is not done at store time.
+fn absoluteUrls(property_name: []const u8, value: []const u8, frame: *Frame) []const u8 {
+    if (std.mem.indexOf(u8, value, "url(") == null) return value;
+    if (!valueCarriesUrl(property_name)) return value;
+
+    var out = std.Io.Writer.Allocating.init(frame.call_arena);
+    var rest = value;
+    while (std.mem.indexOf(u8, rest, "url(\"")) |at| {
+        const open = at + 5;
+        const close = std.mem.indexOfScalarPos(u8, rest, open, '"') orelse break;
+        const url = rest[open..close];
+        out.writer.writeAll(rest[0..open]) catch return value;
+        const resolved = URL.resolve(frame.call_arena, frame.base(), url, .{ .encoding = frame.charset }) catch url;
+        out.writer.writeAll(resolved) catch return value;
+        rest = rest[close..];
+    }
+    out.writer.writeAll(rest) catch return value;
+    return out.written();
+}
+
+/// The properties whose computed value can carry a `url()` Chrome absolutises.
+/// Names rather than a class test because a custom property holding a `url()`
+/// is NOT absolutised -- it is a token stream until something substitutes it.
+fn valueCarriesUrl(property_name: []const u8) bool {
+    const names = [_][]const u8{
+        // Longhands.
+        "background-image",   "border-image-source",           "content",
+        "cursor",             "list-style-image",              "mask-border-source",
+        "mask-image",         "offset-path",                   "shape-outside",
+        "-webkit-mask-image", "-webkit-mask-box-image-source", "src",
+        // And the shorthands that write one back, which are rebuilt from the
+        // longhands and so never pass through this on their components.
+        "background",         "border-image",                  "list-style",
+        "mask",               "-webkit-mask",                  "offset",
+    };
+    for (names) |name| {
+        if (std.ascii.eqlIgnoreCase(property_name, name)) return true;
+    }
+    return false;
 }
 
 /// Bounds the two reads that reach back into this function: a longhand whose
@@ -302,6 +352,22 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
         // var() is substituted at computed-value time; the specified value
         // that `el.style` hands out keeps its var() text.
         return frame._style_manager.substituteVars(element, value) orelse "";
+    }
+
+    // Blink's own name for "the decoration this element draws", which is what
+    // the `text-decoration-line` in effect on it resolves to. Measured on
+    // Chrome 151 (scratch/b93/expr-shorthand-cases.js): an element declaring
+    // `text-decoration: underline dotted rgb(10,11,12) 4px` answers
+    // `underline`, one declaring nothing answers `none`.
+    //
+    // The element's OWN line, not its ancestors'. Blink's property is named
+    // "in effect" because a decoration propagates to descendant boxes, and
+    // whether it reports an ancestor's underline here was NOT measured -- this
+    // answers the element's own, which is the case the reading above covers.
+    if (self._is_computed and std.mem.eql(u8, normalized, "-webkit-text-decorations-in-effect")) {
+        if (depth < MAX_PROPERTY_DEPTH) {
+            return self.propertyValueAt("text-decoration-line", frame, surface, depth + 1);
+        }
     }
 
     if (self._is_computed) {
@@ -467,14 +533,16 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // because a computed view stores none of them either -- each
                 // one is the cascade's answer or the recorded initial value.
                 //
-                // Only the shorthands the table models are joined, and only
-                // after the cascade above has had its say. One the table keeps
-                // whole -- `font`, `columns`, `border-image` -- is stored under
+                // Only the shorthands this engine expands are joined, and
+                // only after the cascade above has had its say. One that is
+                // still kept whole -- `font`, `border-image` -- is stored under
                 // its own name, so the cascade answered it already, and joining
                 // its longhands would report the initial value over the
-                // author's own text.
+                // author's own text. `columns`, `list-style`, `grid-area` and
+                // `font-variant` moved from the second group to the first when
+                // shorthand.grammarExpansion taught them to expand.
                 if (depth < MAX_PROPERTY_DEPTH and !declinesComputedJoin(normalized)) {
-                    if (shorthand.lookup(normalized)) |entry| {
+                    if (shorthand.lookupComputedJoinable(normalized)) |entry| {
                         if (self.computedShorthandValue(normalized, entry, frame, surface, depth)) |value| return value;
                     }
                 }
@@ -3175,6 +3243,21 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
             return changed;
         },
     };
+
+    // Three more the table calls unmodelled whose grammars ARE reproducible;
+    // like `font` above, they sit beside the table lookup because that lookup
+    // declines an unmodelled entry. See shorthand.grammarExpansion.
+    if (try shorthand.grammarExpansion(frame.local_arena, normalized, value)) |expansion| {
+        for (expansion.names, expansion.values) |name, longhand| {
+            if (shorthand.refusesLonghand(name, longhand)) return false;
+        }
+        var changed = false;
+        for (expansion.names, expansion.values) |name, longhand| {
+            const canonical = try normalizePropertyValue(frame.local_arena, name, longhand);
+            changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), important, frame) or changed;
+        }
+        return changed;
+    }
 
     // Ahead of the shorthand lookup, because `background-position` and
     // `mask-position` are shorthands and the grammar being checked is the
@@ -6203,6 +6286,10 @@ test "WebApi: CSSStyleDeclaration important beats the style attribute" {
 
 test "WebApi: CSSStyleDeclaration author longhands" {
     try testing.htmlRunner("css/computed_author_longhands.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration author shorthands" {
+    try testing.htmlRunner("css/computed_author_shorthands.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration inheritance" {

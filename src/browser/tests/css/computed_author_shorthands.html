@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A shorthand an author wrote has to reach the longhands the computed view
+reports. `computed_author_longhands.html` covers the longhand a rule declares
+directly, and notes that `border`, `margin` and `background` already expand;
+this covers the shorthands that did not.
+
+Measured on Chrome 151 (scratch/b93/expr-shorthand-cases.js, one probe per
+row, each in its own subtree with its own sheet so no rule can see another's):
+`columns`, `grid-area`, `list-style` and `font`'s `small-caps` all read back as
+the initial value here while Chrome reported what the shorthand said, and a
+`url()` in a computed value came back relative where Chrome absolutises it.
+
+Cloudflare's widget encodes `JSON.stringify(getComputedStyle(el))` whole -- 736
+property names, one read each -- so every row below travels in the payload of
+any page whose author CSS uses the shorthand, which is every page.
+
+NOT here, measured but out of scope for this plan: Chrome answers
+`column-rule-width: 1.5px` for an element that declares no column rule and
+`3px` once `column-rule: solid` is declared, where this engine answers `3px`
+both times. That is `medium` behaving differently from a border's, not a
+shorthand failing to expand.
+-->
+
+<script id=author_shorthand_longhands>
+{
+  // Each probe gets its own subtree and its own sheet, so no probe can see
+  // another's rule. Same harness as computed_author_longhands.html.
+  const probe = (decl, prop) => {
+    const style = document.createElement('style');
+    style.textContent = '.cx{' + decl + '}';
+    document.head.appendChild(style);
+    const host = document.createElement('div');
+    host.innerHTML = '<p class="cx">x</p>';
+    document.body.appendChild(host);
+    const got = String(getComputedStyle(host.firstChild)[prop]);
+    host.remove();
+    style.remove();
+    return got;
+  };
+
+  const URL_NONE = 'url("' + testing.ORIGIN + '/none.png")';
+
+  const CASES = [
+    // `columns` takes its two components in either order, and the computed
+    // longhands do not care which order they arrived in.
+    ['3', 'columns:3 100px', 'columnCount'],
+    ['100px', 'columns:3 100px', 'columnWidth'],
+    ['3', 'columns:100px 3', 'columnCount'],
+    ['100px', 'columns:100px 3', 'columnWidth'],
+    ['3', 'columns:auto 3', 'columnCount'],
+
+    ['1', 'grid-area:1 / 2 / 3 / 4', 'gridRowStart'],
+    ['2', 'grid-area:1 / 2 / 3 / 4', 'gridColumnStart'],
+    ['3', 'grid-area:1 / 2 / 3 / 4', 'gridRowEnd'],
+    ['4', 'grid-area:1 / 2 / 3 / 4', 'gridColumnEnd'],
+    ['span 2', 'grid-area:span 2 / auto', 'gridRowStart'],
+
+    ['square', 'list-style:square inside url("/none.png")', 'listStyleType'],
+    ['inside', 'list-style:square inside url("/none.png")', 'listStylePosition'],
+    [URL_NONE, 'list-style:square inside url("/none.png")', 'listStyleImage'],
+    ['none', 'list-style:none', 'listStyleType'],
+
+    // The rest of `font` already lands; `small-caps` did not.
+    ['small-caps', 'font: italic small-caps bold 16px/2 "Helvetica", sans-serif', 'fontVariant'],
+    ['italic', 'font: italic small-caps bold 16px/2 "Helvetica", sans-serif', 'fontStyle'],
+    ['700', 'font: italic small-caps bold 16px/2 "Helvetica", sans-serif', 'fontWeight'],
+    ['32px', 'font: italic small-caps bold 16px/2 "Helvetica", sans-serif', 'lineHeight'],
+
+    // A url() in a computed value is absolute. `background-image` already was;
+    // `mask` and `list-style` were not.
+    [URL_NONE, 'mask:url("/none.png") center center / 50px 60px no-repeat border-box padding-box add', 'maskImage'],
+    [URL_NONE, 'background-image:url("/none.png")', 'backgroundImage'],
+
+    // Reports the decoration in effect on the element, which is the one the
+    // `text-decoration` shorthand just set.
+    ['underline', 'text-decoration: underline dotted rgb(10,11,12) 4px', '-webkit-text-decorations-in-effect'],
+    ['underline', 'text-decoration: underline dotted rgb(10,11,12) 4px', 'textDecorationLine'],
+    ['4px', 'text-decoration: underline dotted rgb(10,11,12) 4px', 'textDecorationThickness'],
+    ['none', 'color:red', '-webkit-text-decorations-in-effect'],
+  ];
+
+  for (const [want, decl, prop] of CASES) {
+    // One string per assertion: a bare value comparison names neither the
+    // declaration nor the property in the red light.
+    testing.expectEqual(decl + ' -> ' + prop + '=' + want,
+                        decl + ' -> ' + prop + '=' + probe(decl, prop));
+  }
+}
+</script>

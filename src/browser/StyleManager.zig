@@ -572,6 +572,23 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
             },
         };
 
+        // Same story a third time, for `columns` / `list-style` / `grid-area`:
+        // the table calls them unmodelled, so `lookup` below declines them and
+        // the grammar lives beside it. A rule saying `columns: 3 100px` has
+        // said `column-count: 3`, and a computed style is asked for the
+        // longhand.
+        if (shorthand.grammarExpansion(self.arena.allocator(), name, val) catch null) |expansion| {
+            for (expansion.names, expansion.values) |longhand_name, longhand_value| {
+                try longhands.append(self.arena.allocator(), .{
+                    .name = longhand_name,
+                    .value = canonicalValue(self.arena.allocator(), longhand_name, longhand_value),
+                    .important = decl.important,
+                    .specified = CSSStyleDeclaration.specifiedNumber(longhand_value),
+                });
+            }
+            continue;
+        }
+
         if (shorthand.lookup(name)) |entry| {
             if (shorthand.expand(self.arena.allocator(), entry, val) catch null) |expansion| {
                 for (expansion.names, expansion.values) |longhand_name, longhand_value| {
