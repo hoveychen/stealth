@@ -21739,3 +21739,70 @@ routes, cf-scrapingcourse's ticket turned out not to be a pass, and dd-saks rest
 on a control that does not hold. Re-deriving the map needs a reference arm that
 actually passes — an aged profile, or a residential address — not another
 scratch-profile Chrome.
+
+## The door map, re-derived against a reference arm that can open doors (B89, 2026-08-29)
+
+The previous chapter ended with the Chrome column refusing stations this engine
+walks into, which makes every "station X is a door" reading in the map suspect.
+So the reference arm was fixed first.
+
+### What a reference arm needs
+
+Two things, and neither alone is enough. Measured on `dd-leboncoin` and
+`dd-hermes`, the two DataDome stations this engine passes:
+
+```
+         | headless  | headed
+   fresh | challenge | challenge
+   warm  | challenge | pass        <- 1436 and 2014 nodes
+```
+
+*Warm* is `--profile-dir` plus `warm-profile.mjs`: sixteen ordinary pages
+(Wikipedia, BBC, HN, gov.uk, MDN, NYT, Stack Overflow, IMDb), no guarded site
+among them, leaving 125 cookies and 11 history entries. The profile never
+visited leboncoin or hermes before the run that passed them, so the pass comes
+from the profile having a past at all, not from a cookie for the target.
+
+Two things had to be fixed to get there. `--profile-dir` did nothing at first
+because teardown sends `SIGKILL`, and Chrome writes its cookie store on
+graceful shutdown -- the first warmed run persisted **0 cookies** into a
+correctly created sqlite file, which reads exactly like a station that set none.
+And the first headed control was run with `--headed-ua`, which passes
+`--user-agent=` and blanks the high-entropy client hints DataDome reads; a
+headed browser needs no override. Both are now handled.
+
+### The map
+
+29 stations, both arms back to back per station rather than two serial sweeps,
+`--fresh` so one wedged station cannot report the rest as timeouts. The
+disagreements re-run three more rounds:
+
+| | stations |
+|---|---|
+| **real door** (reference passes, we do not) | **cf-scrapingcourse, x-hyatt** — 3/3 each |
+| both pass | 19, including all four Akamai, px-wayfair, ks-canadagoose, x-sony, x-zillow |
+| both refused | cf-nopecha, cf-zeroclover, dd-g2, dd-allopneus |
+| **undetermined** | dd-datadome, dd-leboncoin, dd-hermes, dd-saks |
+
+**dd-saks is not a door, and it is not a phantom either — it is undetermined.**
+The claim that it was one of three real gaps rested on the old Chrome column.
+With the fixed arm the question was put properly: five rounds gated on a canary,
+`dd-leboncoin` first and `dd-saks` immediately after, and the canary never came
+back `pass` in any of them. A reference arm that cannot open *any* DataDome
+station in the window cannot referee one. There was one round where this engine
+passed `dd-leboncoin` while the reference arm did not.
+
+The whole DataDome column moved during the session — leboncoin, hermes, etsy and
+seloger all passed for this engine early and were refused later, and the warmed
+reference passed leboncoin and hermes at 22:30 and nothing after. Whether that is
+the vendor's window closing for everyone or ~30 automated visits spending the
+profile's reputation is not separated here; both arms degraded together, which
+is what a vendor-wide window looks like. Either way **a warmed profile is a
+consumable, not a fixture** — treat DataDome readings as valid only when a canary
+station is passing in the same minute.
+
+### Where that leaves the count
+
+Two doors, both confirmed against an arm that demonstrably opens doors:
+`cf-scrapingcourse` and `x-hyatt`. x-hyatt's four routes are closed (previous
+chapter). cf-scrapingcourse is the one live gap.
