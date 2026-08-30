@@ -22126,3 +22126,92 @@ the CDP layer and the whole probe returns nothing, which reads exactly like a
 hung page. `fetch` does resolve, so a few data-URL round trips are the usable
 pump. Every async probe in `scratch/b90/` is written without timers for that
 reason.
+
+## Reading the guard's plaintext from inside the engine (B69, 2026-08-30)
+
+Cloudflare's telemetry leaves the page as ciphertext in a 64-character custom
+base64 (`+`, `$` and `-` are in the alphabet; r2 and r3 share their first ~166
+characters, which is the session prefix). So every wire diff on this door has
+been a diff of ciphertext. `cf-r3-payload-segments` was opened to read those
+contents and could not.
+
+The plaintext does exist, for one instant, as the argument to the encoder — and
+the challenge program names `TextEncoder` twice. `prop-reads.mjs` against a
+Debug binary confirms it is not dead code: **`TextEncoder.encode`, occurrences
+15**, all of them in the `challenges.cloudflare.com` realm.
+
+**This engine owns that encoder.** `Context.recordTextEncode`, called from
+`TextEncoder.encode` and gated on the `text_encode` log scope, keeps the length,
+a hash, and 512 characters of each end, and `Context.deinit` dumps them the way
+`unknown_properties` is dumped. Nothing lands in the realm: no wrapped native,
+no extra own property, no changed `Function.prototype.toString`. The driver is
+`scratch/b69/encode-log.mjs`.
+
+The hash is deliberately **djb2 over UTF-16 code units** rather than anything
+Zig would reach for first, and the length is in code units too, because the
+number it has to line up with is what a JS-side hook on Chrome reports. The
+first version recorded UTF-8 byte lengths and every pixel buffer looked
+thousands of characters longer than Chrome's — 9216 against 13753 — which is
+one byte per non-ASCII character and not a difference at all.
+
+Chrome's half is `report-encodes` in `scratch/b69/knobs-b69.mjs` (the beacon
+prelude is copied, not imported: `beacon` is private to `cf-knobs.mjs` and a
+knob referencing an undefined `__send` reads exactly like a knob that did
+nothing). It does **not** cost Chrome its ticket — `served=true`, r3 and r4 both
+ticketed — so the comparison is against a passing arm.
+
+### Fifteen calls each, and what is in them
+
+| what | Chrome | this engine |
+|---|---|---|
+| `getImageData` 48x48 | 9216 `1ly97t5` | 9216 `1xof2yz` |
+| `readPixels` 16x16 | 1024 `ard9mt` | **1024 `ard9mt`** |
+| 49x44 buffer, three times | 8624 `1m3v0nt` | 8624 `101c16` |
+| WebGPU 32x32 | 4096 `sq54p1` | 4096 `e4lqd` |
+| `JSON.stringify(getComputedStyle(el))` | 30918 `t3o0bu` | 30902 `15ewidm` |
+| `0\|0\|0\|…`, twice | 15361 `3coxr6` | **15361 `3coxr6`** |
+| the widget's own CSS rules | 20696 `ug2ibx` | 20696 `a5zc6l` |
+| font probe list | 69 `mt6m58` | 41 `1iwivuo` |
+| four timings/randoms | 17, 1, 18, 16 | 13, 2, 2, 14 |
+
+Two are byte-identical. Every pixel buffer is the right *length* and the wrong
+content, which was already known and already knob-tested as not weighed. The
+two that are new and small enough to name:
+
+**The font list.** Chrome reports
+`Apple Symbols|Galvji|Geneva|InaiMathi Bold|Luminari|PingFang HK Light`; this
+engine reports `Apple Symbols|Galvji|Geneva|Luminari|Skia`. Two families the
+guard's probe finds here are absent, and one it does not find is present.
+
+**The computed style is 16 characters short**, with the first and last 190
+identical. `scratch/b69/computed-fixture.mjs` reproduces the same string on a
+page whose every box is pinned, so nothing in the diff is layout: **41 of the
+736 values disagree**, and none of them is a rounding difference. They fall into
+five groups:
+
+- **A shorthand set in author CSS does not reach its longhands.** `background`
+  leaves all eight `background*` longhands answering the literal string
+  `"initial"` — which is not a computed value in any browser — and
+  `background-color` transparent. `list-style` leaves its three longhands at
+  their defaults, `grid-area` leaves all four grid longhands `auto`, `columns`
+  leaves `column-count`/`column-width` `auto`, and `font` leaves `font-variant`
+  `normal`.
+- **`url()` in a computed value is not absolutised.** Chrome answers
+  `url("http://127.0.0.1:38689/none.png")` where this engine echoes
+  `url("/none.png")`, for `list-style-image`, `mask-image` and the `mask` and
+  `list-style` shorthands.
+- **`-webkit-` aliases are not aliases.** `webkitFlex`, `webkitColumns` and
+  `webkitAnimation` answer their initial values while the unprefixed property
+  answers correctly.
+- **Serialisation.** `columns` is `3 100px` here and `100px 3` in Chrome;
+  `mask-position: center center` is `center center` here and `50% 50%` there;
+  `timelineTrigger` is `none` here and the empty string there.
+- **`animation` is not applied at all**, so a running keyframe's `transform`
+  reads `none` where Chrome reports the matrix.
+
+None of this is filed as the door. `cfsc-does-not-judge-collected-values` closed
+the value question from both directions, and `lp-chrome-values` — the knob that
+repaired three of these values on the arm that passes — was refused. It is filed
+as what it is: a list of 41 named, reproducible, off-site-testable defects on
+the single largest surface any guard in this file reads, obtained by an
+instrument the guard cannot see.
