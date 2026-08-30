@@ -50,7 +50,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--headed-ua] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--trace-headers] [--attach-frames|--same-process]]');
+    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--headed-ua] [--profile-dir DIR] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--trace-headers] [--attach-frames|--same-process]]');
     process.exit(2);
 }
 const arg = (name, fallback) => {
@@ -66,6 +66,9 @@ const only = arg('--only', null);
 // time the default expires is either failing or slow, and those are different
 // findings; raising this is how the two get told apart.
 const settleOverride = arg('--settle', null);
+// A Chrome profile directory that survives the run, so cookies and history
+// accumulate across sweeps. Without it every Chrome arm is a first-ever visit.
+const profileDir = arg('--profile-dir', null) && path.resolve(arg('--profile-dir'));
 const headed = process.argv.includes('--headed');
 // One engine process per station instead of one per sweep. Needed because a
 // station that wedges the page takes every station after it down with it: the
@@ -227,7 +230,16 @@ let killed = false;
 async function launch() {
     if (ENDPOINT) return;
     if (engine === 'chrome') {
-        profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-antibot-'));
+        // A named profile is kept across launches; the default one is a fresh
+        // mkdtemp that teardown deletes. That default is not neutral: a Chrome
+        // with no cookie and no history is challenged by every DataDome station
+        // measured, including ones this engine walks into, so the reference
+        // column cannot tell "the engine is detected" from "this scratch
+        // profile is" (README, B89). Warming a profile is how that column is
+        // made to mean something.
+        profile = profileDir
+            ? (await fs.mkdir(profileDir, { recursive: true }), profileDir)
+            : await fs.mkdtemp(path.join(os.tmpdir(), 'fp-antibot-'));
         proc = spawn(CHROME, [
             `--remote-debugging-port=${PORT}`,
             `--user-data-dir=${profile}`,
@@ -269,10 +281,24 @@ async function launch() {
 
 async function teardown() {
     killed = true;
+    // SIGKILL costs a named profile everything it just learned: Chrome keeps
+    // cookies in memory and writes the sqlite store on a graceful shutdown, so
+    // a killed browser leaves the file created and empty -- which reads exactly
+    // like a station that set no cookie. Measured: one run against dd-hermes
+    // under SIGKILL persisted 0 cookies. Ask politely first when the profile is
+    // meant to survive, and keep the immediate kill otherwise so an ordinary
+    // sweep pays nothing.
+    if (proc && profileDir) {
+        const dead = new Promise((resolve) => proc.once('exit', resolve));
+        proc.kill('SIGTERM');
+        await Promise.race([dead, sleep(5000)]);
+    }
     proc?.kill('SIGKILL');
     proc = undefined;
     if (profile) {
-        await fs.rm(profile, { recursive: true, force: true }).catch(() => { });
+        // Deleting a named profile would throw away the very thing it exists to
+        // accumulate.
+        if (!profileDir) await fs.rm(profile, { recursive: true, force: true }).catch(() => { });
         profile = undefined;
     }
     // The port has to be free before the next launch binds it.
@@ -467,6 +493,10 @@ function verdict(station, r, documents) {
 
 // Resolved before the first launch when --headed-ua is on, and recorded in the
 // header: two snapshots that differ only in this are two different browsers.
+if (profileDir && engine !== 'chrome') {
+    console.error('--profile-dir only makes sense with the chrome engine');
+    process.exit(2);
+}
 let userAgentOverride = null;
 if (headedUa) {
     if (engine !== 'chrome') {
@@ -643,6 +673,9 @@ try {
 } finally {
     await teardown();
     snapshot.fresh = fresh;
+    // Two snapshots that differ only in whether the profile was warm are two
+    // different reference arms; the door map is not comparable across them.
+    snapshot.profileDir = profileDir;
     snapshot.engineLog = engineLog.join('').split('\n').filter(Boolean).slice(-60);
     const pass = snapshot.stations.filter((s) => s.verdict === 'pass').length;
     snapshot.summary = { stations: snapshot.stations.length, pass };
