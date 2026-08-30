@@ -26,7 +26,7 @@ pub fn init() TextEncoder {
     return .{};
 }
 
-pub fn encode(_: *const TextEncoder, v_: ?js.Value) !js.TypedArray(u8) {
+pub fn encode(_: *const TextEncoder, v_: ?js.Value, exec: *const js.Execution) !js.TypedArray(u8) {
     const v = v_ orelse return .{ .values = "" };
 
     if (v.isUndefined()) {
@@ -41,6 +41,10 @@ pub fn encode(_: *const TextEncoder, v_: ?js.Value) !js.TypedArray(u8) {
     if (!std.unicode.utf8ValidateSlice(str)) {
         return error.InvalidUtf8;
     }
+
+    // The one place a guard's telemetry is in the clear -- see
+    // `Context.encoded_texts`. Off unless the `text_encode` scope is on.
+    exec.js.recordTextEncode(str);
 
     return .{ .values = str };
 }

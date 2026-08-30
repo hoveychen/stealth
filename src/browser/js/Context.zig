@@ -198,6 +198,25 @@ property_reads: (if (lp.IS_DEBUG) std.StringHashMapUnmanaged(PropertyReadStat) e
 // which answer the script branched on before it stopped asking.
 property_read_seq: (if (lp.IS_DEBUG) u32 else void) = if (lp.IS_DEBUG) 0 else {},
 
+// Every string the page handed to `TextEncoder.encode`, in call order.
+//
+// A guard's telemetry leaves the page encrypted, so comparing what two engines
+// *send* compares ciphertext. The plaintext exists for one instant, as the
+// argument to the encoder -- and this engine owns the encoder, so it can be
+// read there without leaving anything in the realm for the guard to find. That
+// is the difference from a `TextEncoder.prototype.encode` hook installed from
+// JS, which every station in this file has been measured detecting.
+//
+// Cloudflare's widget calls it fifteen times per challenge
+// (results measured 2026-08-30, `prop-reads.mjs` against cf-scrapingcourse,
+// `TextEncoder.encode` occurrences=15 in the challenges.cloudflare.com realm).
+//
+// Behind `log.enabled(.text_encode, .debug)` like `property_reads`, and it
+// keeps a head and a tail rather than the whole string: an 88KB payload per
+// call would make the log the expensive part. Turn it on with
+// `--log-level debug --log-filter-scopes -all,+text_encode`.
+encoded_texts: (if (lp.IS_DEBUG) std.ArrayListUnmanaged(EncodedText) else void) = if (lp.IS_DEBUG) .empty else {},
+
 // This realm's own `Object.freeze`, taken off the global before any script has
 // run. Every WebIDL FrozenArray has to come back frozen and the vendored V8 C
 // API exports no `SetIntegrityLevel` (nor `PreventExtensions`), so the freeze
@@ -309,6 +328,7 @@ pub fn deinit(self: *Context) void {
             });
         }
         self.dumpPropertyReads();
+        self.dumpTextEncodes();
     }
 
     const env = self.env;
@@ -1575,6 +1595,120 @@ const PropertyReadStat = struct {
     count: usize,
     first_seq: u32,
 };
+
+// One `TextEncoder.encode` argument. See `encoded_texts`.
+//
+// `len` is UTF-16 code units, not bytes, because the number this has to line up
+// with is the `String.length` a JS-side hook on the other engine reports -- and
+// the two differ by one per non-ASCII character, which for a page encoding a
+// pixel buffer is thousands. `bytes` keeps the UTF-8 length that Zig sees.
+const EncodedText = struct {
+    len: usize,
+    bytes: usize,
+    hash: u32,
+    head: []const u8,
+    tail: []const u8,
+};
+
+// djb2 over UTF-16 code units, which is what the JS twin computes:
+//
+//   let h = 5381; for (i) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+//
+// Same function on both arms is the whole point: an equal hash says the two
+// engines handed the guard the same string, which no length comparison can.
+// Returns the hash and the code-unit count.
+fn utf16Djb2(text: []const u8) struct { hash: u32, units: usize } {
+    var h: u32 = 5381;
+    var units: usize = 0;
+    var i: usize = 0;
+    while (i < text.len) {
+        const width = std.unicode.utf8ByteSequenceLength(text[i]) catch 1;
+        const cp: u21 = if (i + width <= text.len)
+            (std.unicode.utf8Decode(text[i..][0..width]) catch text[i])
+        else
+            text[i];
+        i += width;
+        if (cp < 0x10000) {
+            h = (h *% 33) ^ @as(u32, @intCast(cp));
+            units += 1;
+        } else {
+            // A surrogate pair is two `charCodeAt` values in JS.
+            const v = cp - 0x10000;
+            const hi: u32 = 0xD800 + @as(u32, @intCast(v >> 10));
+            const lo: u32 = 0xDC00 + @as(u32, @intCast(v & 0x3FF));
+            h = (h *% 33) ^ hi;
+            h = (h *% 33) ^ lo;
+            units += 2;
+        }
+    }
+    return .{ .hash = h, .units = units };
+}
+
+// How many encode calls are kept, and how much of each. Fifteen is what the
+// Cloudflare widget makes; the cap is well above it so a station that encodes
+// in a loop truncates rather than filling memory.
+const MAX_ENCODED_TEXTS = 256;
+const ENCODED_TEXT_EDGE = 512;
+
+// Called from `TextEncoder.encode` before the string goes anywhere.
+pub fn recordTextEncode(self: *Context, text: []const u8) void {
+    if (comptime lp.IS_DEBUG == false) return;
+    if (log.enabled(.text_encode, .debug) == false) return;
+    if (self.encoded_texts.items.len >= MAX_ENCODED_TEXTS) return;
+
+    const allocator = self.arena.allocator();
+    const edge = @min(text.len, ENCODED_TEXT_EDGE);
+    const head = allocator.dupe(u8, text[0..edge]) catch return;
+    const tail = allocator.dupe(u8, text[text.len - edge ..]) catch return;
+    const digest = utf16Djb2(text);
+    self.encoded_texts.append(allocator, .{
+        .len = digest.units,
+        .bytes = text.len,
+        .hash = digest.hash,
+        .head = head,
+        .tail = tail,
+    }) catch return;
+}
+
+// `Number.prototype.toString(36)`, which is how the JS twin prints the hash.
+fn base36(v: u32, buf: []u8) []const u8 {
+    if (v == 0) {
+        buf[0] = '0';
+        return buf[0..1];
+    }
+    const digits = "0123456789abcdefghijklmnopqrstuvwxyz";
+    var n = v;
+    var i = buf.len;
+    while (n > 0) {
+        i -= 1;
+        buf[i] = digits[n % 36];
+        n /= 36;
+    }
+    return buf[i..];
+}
+
+fn dumpTextEncodes(self: *Context) void {
+    if (comptime lp.IS_DEBUG == false) return;
+    if (self.encoded_texts.items.len == 0) return;
+
+    const realm: []const u8 = switch (self.global) {
+        .frame => |frame| frame.url,
+        .worker => "worker",
+    };
+    var hash_buf: [8]u8 = undefined;
+    for (self.encoded_texts.items, 0..) |e, i| {
+        log.debug(.text_encode, "text encode", .{
+            .context = self.id,
+            .realm = realm,
+            .seq = i,
+            .len = e.len,
+            .bytes = e.bytes,
+            .hash = base36(e.hash, &hash_buf),
+            .head = e.head,
+            .tail = e.tail,
+        });
+    }
+}
 
 // Called from the wrappers Snapshot puts around every accessor getter and
 // operation callback. `key` is comptime ("Navigator.userAgent"), so nothing is
