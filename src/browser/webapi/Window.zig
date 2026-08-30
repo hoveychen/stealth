@@ -1994,7 +1994,39 @@ pub const CrossOriginWindow = struct {
     // the property and the origin that was refused; DOMException's stock text
     // ("The operation is insecure") names neither and is a sentence no browser
     // prints for this. Measured on Chrome 151, expr-xo-proxy-detail.
+    /// HTML's CrossOriginProperties for Window, in Blink's order: the nine
+    /// attributes then the four operations. Every one of them is an own
+    /// property of the proxy, declared in JsApi below; this list is what the
+    /// access-check handler consults to decide whether to answer at all.
+    ///
+    /// `then` is deliberately absent. It is an own KEY -- it is in
+    /// `Reflect.ownKeys` and it has a descriptor -- but `'then' in w` throws on
+    /// Chrome 151 all the same (measured, scratch/b90/expr-xo-handler-target.js),
+    /// so it belongs to the key list and not to this one.
+    const cross_origin_names = [_][]const u8{
+        "window", "self",   "location", "closed", "frames", "length",      "top",
+        "opener", "parent", "blur",     "close",  "focus",  "postMessage",
+    };
+
+    fn isCrossOriginName(name: []const u8) bool {
+        for (cross_origin_names) |candidate| {
+            if (std.mem.eql(u8, candidate, name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // `error.NotHandled` is how a handler says "keep looking", and under a
+    // failed access check V8 keeps looking at the object's own properties --
+    // which is where the fourteen live. That is what makes this a safelist
+    // rather than a reimplementation: the values, their descriptors and the
+    // identity of the four functions all stay where they were, and the handler
+    // only decides who may see them.
     fn getDenied(_: *const CrossOriginWindow, name: []const u8, frame: *Frame) !?[]const u8 {
+        if (isCrossOriginName(name)) {
+            return error.NotHandled;
+        }
         return frame.js.fail(error.SecurityError, try deniedMessage(frame, "read a named property '{s}' from", name));
     }
 
@@ -2007,7 +2039,10 @@ pub const CrossOriginWindow = struct {
     // any particular property as far as the access check is concerned. Without
     // this the `in` would fall through to the getter and answer the read
     // sentence -- right kind of exception, wrong sentence.
-    fn queryDenied(_: *const CrossOriginWindow, _: []const u8, frame: *Frame) !u32 {
+    fn queryDenied(_: *const CrossOriginWindow, name: []const u8, frame: *Frame) !u32 {
+        if (isCrossOriginName(name)) {
+            return error.NotHandled;
+        }
         return frame.js.fail(error.SecurityError, try blockedSentence(frame));
     }
 
@@ -2015,7 +2050,16 @@ pub const CrossOriginWindow = struct {
     // named property and gets the named sentence. Without its own callback the
     // descriptor lookup would fall through to `queryDenied` above and answer the
     // bare one, which is the sentence Chrome keeps for `in`.
+    // Wider than the getter's list by one: `Object.getOwnPropertyDescriptor(w,
+    // 'then')` answers a descriptor on Chrome 151 -- `{writable: false,
+    // enumerable: false, configurable: true}` over an undefined value -- while
+    // `'then' in w` on the same object throws. Blink draws the line between
+    // "which keys does this object own" and "may you ask about a property",
+    // and `then` is on the first side only.
     fn descriptorDenied(_: *const CrossOriginWindow, name: []const u8, frame: *Frame) !?[]const u8 {
+        if (isCrossOriginName(name) or std.mem.eql(u8, name, "then")) {
+            return error.NotHandled;
+        }
         return frame.js.fail(error.SecurityError, try deniedMessage(frame, "read a named property '{s}' from", name));
     }
 
@@ -2099,6 +2143,15 @@ pub const CrossOriginWindow = struct {
             // false, and the fourteen names are all own.
             pub const own_properties = true;
             pub const null_prototype = true;
+
+            // The proxy is guarded by V8's access check, not by an interceptor
+            // alone. An interceptor runs inside a property lookup, so anything
+            // that reaches a property without one is unguarded: `JSON.stringify`
+            // skips interceptors when it looks for `toJSON`, and an own key --
+            // `then`, `length` and the twelve others -- is found before a
+            // [[NonMasking]] interceptor ever runs. Measured on Chrome 151:
+            // all three throw there. See browser/js/access_check.zig.
+            pub const access_check = true;
 
             // The brand is an own Symbol.toStringTag whose *value is undefined*
             // rather than a string, which sends Object.prototype.toString past

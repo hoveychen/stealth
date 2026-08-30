@@ -126,6 +126,12 @@ void lp_access_check__install_handler(
     const v8::IndexedPropertyHandlerConfiguration* indexed_handler);
 
 void lp_access_check__install_failure_callback(v8::Isolate* isolate);
+
+// The address V8 serialises into the snapshot for an access-checked template.
+// A snapshot records every embedder callback as an index into an external
+// reference table, and deserialising with a table that does not carry this one
+// aborts the isolate with "Unknown external reference".
+const void* lp_access_check__callback_address();
 }
 
 namespace {
@@ -153,4 +159,8 @@ void lp_access_check__install_handler(
 
 void lp_access_check__install_failure_callback(v8::Isolate* isolate) {
   isolate->SetFailedAccessCheckCallbackFunction(failedAccessCheck);
+}
+
+const void* lp_access_check__callback_address() {
+  return reinterpret_cast<const void*>(accessCheck);
 }

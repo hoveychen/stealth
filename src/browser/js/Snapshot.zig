@@ -33,6 +33,7 @@ const HtmlElement = @import("../webapi/element/Html.zig");
 const Window = @import("../webapi/Window.zig");
 
 const v8 = js.v8;
+const access_check = @import("access_check.zig");
 const log = lp.log;
 const JsApis = bridge.JsApis;
 const PageJsApis = bridge.PageJsApis;
@@ -706,6 +707,12 @@ fn countExternalReferences() comptime_int {
     // +1 for unknownWindowPropertyCallback used on Window's global template
     count += 1;
 
+    // +1 for the access-check callback the cross-origin window proxy's template
+    // carries. Unconditional rather than counted per interface: it is one
+    // shared C function whatever number of templates install it, and an
+    // uncounted entry is an isolate that aborts on deserialisation.
+    count += 1;
+
     const wpt_extensions_enabled = lp.build_config.wpt_extensions;
 
     inline for (JsApis) |JsApi| {
@@ -784,6 +791,9 @@ fn collectExternalReferences() [countExternalReferences()]isize {
     idx += 1;
 
     references[idx] = @bitCast(@intFromPtr(&bridge.unknownWindowPropertyCallback));
+    idx += 1;
+
+    references[idx] = @bitCast(@intFromPtr(access_check.callbackAddress()));
     idx += 1;
 
     const wpt_extensions_enabled = lp.build_config.wpt_extensions;
@@ -1220,6 +1230,15 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                 v8.v8__ObjectTemplate__SetIndexedHandler(instance, &configuration);
             },
             bridge.NamedIndexed => {
+                // `access_check` swaps two things at once, and they go
+                // together. The flags lose kNonMasking, because the whole point
+                // is to be consulted BEFORE the own properties rather than
+                // after them; and the handler is installed through V8's access
+                // check rather than as a plain interceptor, because an
+                // interceptor is skipped on the paths this exists to close --
+                // `JSON.stringify`, `in` and `delete` over an own key. See
+                // browser/js/access_check.zig.
+                const guarded = comptime @hasDecl(JsApi.Meta, "access_check") and JsApi.Meta.access_check;
                 var configuration: v8.NamedPropertyHandlerConfiguration = .{
                     .getter = bridge.logReads(JsApi, name, value).getter,
                     .setter = value.setter,
@@ -1229,9 +1248,28 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     .definer = if (value.definer) |definer| @ptrCast(definer) else null,
                     .descriptor = if (value.descriptor) |descriptor| @ptrCast(descriptor) else null,
                     .data = null,
-                    .flags = v8.kOnlyInterceptStrings | v8.kNonMasking,
+                    .flags = if (guarded) v8.kOnlyInterceptStrings else v8.kOnlyInterceptStrings | v8.kNonMasking,
                 };
-                v8.v8__ObjectTemplate__SetNamedHandler(instance, &configuration);
+                if (guarded) {
+                    // V8 takes both handlers; this interface has no indexed
+                    // members, so the indexed one is empty and every index goes
+                    // to the failure callback.
+                    const indexed: v8.IndexedPropertyHandlerConfiguration = .{
+                        .getter = null,
+                        .setter = null,
+                        .query = null,
+                        .deleter = null,
+                        .enumerator = null,
+                        .definer = null,
+                        .descriptor = null,
+                        .index_of = null,
+                        .data = null,
+                        .flags = 0,
+                    };
+                    access_check.installHandler(instance, &configuration, &indexed);
+                } else {
+                    v8.v8__ObjectTemplate__SetNamedHandler(instance, &configuration);
+                }
                 has_named_index_getter = true;
             },
             bridge.Iterator => {

@@ -36,11 +36,14 @@ const Context = @import("Context.zig");
 ///
 /// Replaces `SetNamedHandler` rather than joining it: V8 refuses both at once.
 pub fn installHandler(
-    object_template: *const v8.ObjectTemplate,
+    object_template: ?*const v8.ObjectTemplate,
     named: *const v8.NamedPropertyHandlerConfiguration,
     indexed: *const v8.IndexedPropertyHandlerConfiguration,
 ) void {
-    lp_access_check__install_handler(object_template, named, indexed);
+    // Optional to match what the binding hands back from ObjectTemplate::New;
+    // a null here is a template that was never created, which is a build-time
+    // bug rather than a runtime state.
+    lp_access_check__install_handler(object_template.?, named, indexed);
 }
 
 /// Once per isolate. Without it a refused operation the handler did not answer
@@ -58,17 +61,47 @@ extern fn lp_access_check__install_handler(
 
 extern fn lp_access_check__install_failure_callback(isolate: *v8.Isolate) void;
 
+extern fn lp_access_check__callback_address() *const anyopaque;
+
+/// The access-check callback's own address, for the snapshot's external
+/// reference table. V8 serialises an access-checked template as an index into
+/// that table, and deserialising without this entry aborts the isolate with
+/// "Unknown external reference" before the first line of script runs.
+pub fn callbackAddress() *const anyopaque {
+    return lp_access_check__callback_address();
+}
+
+/// Open while this engine is building an access-checked object, and only then.
+///
+/// V8 runs the check on `Object::SetPrototype` too, and a cross-origin proxy
+/// has to have its prototype cut to null right after `NewInstance` -- so the
+/// engine's own construction would be refused by the guard it is installing.
+/// Blink does not hit this because it never sets the prototype from outside the
+/// object's own context; here there is no such context to be in. Measured
+/// failure: `v8::Object::SetPrototype` returns Nothing and V8 aborts the
+/// process on the FromJust.
+var building: bool = false;
+
+/// Wraps the one call that has to get through. Not a general escape hatch: it
+/// is opened and closed around a single V8 call with no script in between, so
+/// nothing a page runs can be inside it.
+pub fn whileBuilding(comptime call: anytype, args: anytype) @TypeOf(@call(.auto, call, args)) {
+    building = true;
+    defer building = false;
+    return @call(.auto, call, args);
+}
+
 /// Called by V8 before every property operation on an access-checked object.
 ///
-/// Always false, and that is the whole policy: the only template this is
-/// installed on is the cross-origin window proxy, and a proxy exists precisely
-/// because the access was already found to be cross-origin. A same-origin frame
-/// hands out its real Window and never reaches this.
+/// False for everything a page does, and that is the whole policy: the only
+/// template this is installed on is the cross-origin window proxy, and a proxy
+/// exists precisely because the access was already found to be cross-origin. A
+/// same-origin frame hands out its real Window and never reaches this.
 pub export fn lp_access_check__allow(
     _: ?*const v8.Context,
     _: ?*const v8.Object,
 ) callconv(.c) bool {
-    return false;
+    return building;
 }
 
 /// Called once per refused operation that the handler did not answer -- a
