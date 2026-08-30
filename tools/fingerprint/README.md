@@ -22521,3 +22521,50 @@ Chrome reports `ka, kb` — the shorthand happens to read right because the stor
 text is answered directly. `background` and `flex-flow` are still on the
 declined list, each with a serialisation difference of its own that has not been
 measured.
+
+## Two more shorthands the declined list was wrong about (B69, 2026-08-30)
+
+`flex-flow` sat on `COMPUTED_JOIN_DECLINED` beside `animation`, under a note of
+the same shape — "a computed `flex-flow` keeps `nowrap` where the declared form
+drops it" — and the same error: that describes an element declaring nothing, and
+what a page has is an element that declares something. Eleven declaration shapes
+on Chrome 151 headed (`scratch/b69/expr-flex-rules.js`):
+
+| declared | `flex` | `flex-flow` |
+|---|---|---|
+| *(nothing)* | `0 1 auto` | `row nowrap` |
+| `flex: 2 3 40px` | `2 3 40px` | `row nowrap` |
+| `flex-grow: 7` | `7 1 auto` | `row nowrap` |
+| `flex-basis: 30%` | `0 1 30%` | `row nowrap` |
+| `flex: 1` | `1 1 0%` | `row nowrap` |
+| `flex: none` | `0 0 auto` | `row nowrap` |
+| `flex: auto` | `1 1 auto` | `row nowrap` |
+| `flex-wrap: wrap` | `0 1 auto` | `row wrap` |
+| `flex-direction: column` | `0 1 auto` | `column nowrap` |
+| `flex-flow: column wrap` | `0 1 auto` | `column wrap` |
+| `flex-flow: wrap` | `0 1 auto` | `row wrap` |
+
+Both computed forms write every component, always. `-webkit-flex` and
+`-webkit-flex-flow` mirror them exactly — both spellings name the same
+unprefixed longhands in `chrome_shorthands`.
+
+This engine answered `row nowrap` for `flex-flow` on every element, `0 1 auto`
+for `-webkit-flex` on every element, and for `flex` it echoed the declared text
+(`1`, `none`, `auto`) or the recorded initial when only a longhand was declared.
+**All three longhands were already right in all eleven rows**, so a join is the
+whole fix — `flex-flow` gets a computed omit list that drops nothing, and `flex`
+gets a join of its own because it is `.unmodelled` in `chrome_shorthands` (no
+distribution rule was ever measured for its declared form) and so the generic
+join never reaches it.
+
+### The suite is flaky right now, and it is not this change
+
+Worth writing down because it cost half an hour of bisecting. On **unmodified
+main**, `make test` failed 2 runs out of 4, on a different test each time —
+`WebApi: Frames`, `WebApi: CORS response check`, and in a worktree
+`WebApi: script async order`. All three are timing- or network-ordering tests,
+none reproduces when run alone (`script async order` passed 4/4 in isolation on
+the same tree that had just failed it in a full run), and the suite total itself
+wobbles between 1570 and 1571 across runs of one tree. So a single red full-suite
+run currently proves nothing; re-run it, and check the named test in isolation
+before believing it.

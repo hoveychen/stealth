@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  `flex` and `flex-flow` off a computed style, and their `-webkit-` twins.
+
+  Measured on Chrome 151 headed over eleven declaration shapes
+  (scratch/b69/expr-flex-rules.js). Two rules, and neither has an exception in
+  the table:
+
+    * computed `flex` is `<grow> <shrink> <basis>`, all three, always -- `flex: 1`
+      reads `1 1 0%`, `flex: none` reads `0 0 auto`, `flex: auto` reads
+      `1 1 auto`, and an element declaring only `flex-grow: 7` reads `7 1 auto`.
+    * computed `flex-flow` is `<direction> <wrap>`, both, always -- `row nowrap`
+      on an element that declares neither.
+
+  `-webkit-flex` and `-webkit-flex-flow` mirror them exactly; both spellings
+  name the same unprefixed longhands in chrome_shorthands.
+
+  What this engine did: `flex` echoed the declared text (`1`, `none`, `auto`) or
+  answered the recorded initial `0 1 auto` when only a longhand was declared,
+  `-webkit-flex` answered `0 1 auto` always, and `flex-flow` answered
+  `row nowrap` always -- `flex-flow` was on COMPUTED_JOIN_DECLINED under a note
+  saying the computed form "keeps nowrap where the declared form drops it",
+  which is the reason it needs a computed join of its own rather than no join.
+
+  All three longhands were already right in all eleven rows, so the join is the
+  whole fix.
+
+  Cloudflare's widget encodes `JSON.stringify(getComputedStyle(el))` whole, so
+  all four names travel in the payload of every page it challenges.
+-->
+
+<body>
+
+<script id=computed_flex_is_always_three_parts>
+{
+  const probe = (decl, prop) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el)[prop]);
+    el.remove();
+    return got;
+  };
+  const CASES = [
+    ['', '0 1 auto'],
+    ['flex: 2 3 40px;', '2 3 40px'],
+    ['flex-grow: 7;', '7 1 auto'],
+    ['flex-basis: 30%;', '0 1 30%'],
+    ['flex: 1;', '1 1 0%'],
+    ['flex: none;', '0 0 auto'],
+    ['flex: auto;', '1 1 auto'],
+  ];
+  for (const [decl, expected] of CASES) {
+    testing.expectEqual('flex {' + decl + '} = ' + expected, 'flex {' + decl + '} = ' + probe(decl, 'flex'));
+    testing.expectEqual('-webkit-flex {' + decl + '} = ' + expected,
+      '-webkit-flex {' + decl + '} = ' + probe(decl, 'webkitFlex'));
+  }
+}
+</script>
+
+<script id=computed_flex_flow_is_always_two_parts>
+{
+  const probe = (decl, prop) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el)[prop]);
+    el.remove();
+    return got;
+  };
+  const CASES = [
+    ['', 'row nowrap'],
+    ['flex-wrap: wrap;', 'row wrap'],
+    ['flex-direction: column;', 'column nowrap'],
+    ['flex-flow: column wrap;', 'column wrap'],
+    ['flex-flow: wrap;', 'row wrap'],
+  ];
+  for (const [decl, expected] of CASES) {
+    testing.expectEqual('flex-flow {' + decl + '} = ' + expected,
+      'flex-flow {' + decl + '} = ' + probe(decl, 'flexFlow'));
+    testing.expectEqual('-webkit-flex-flow {' + decl + '} = ' + expected,
+      '-webkit-flex-flow {' + decl + '} = ' + probe(decl, 'webkitFlexFlow'));
+  }
+}
+</script>
+
+<script id=declared_flex_flow_still_drops_its_initials>
+{
+  // The other half of the pair: the declared serialisation is the one
+  // chrome_shorthands measured, and it drops a component at its initial.
+  const el = document.createElement('div');
+  el.style.cssText = 'flex-flow: row wrap;';
+  testing.expectEqual('wrap', el.style.flexFlow);
+  el.style.cssText = 'flex-flow: column nowrap;';
+  testing.expectEqual('column', el.style.flexFlow);
+}
+</script>
