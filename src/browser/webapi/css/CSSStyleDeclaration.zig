@@ -431,6 +431,14 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // reasons. See computedFontText.
                 return self.computedFontText(frame, surface, depth);
             }
+            // The width keywords, for the width properties that are not a
+            // border's. Not gated on the surface, because the thing that makes
+            // a border's width surface-dependent -- `border-style: none`
+            // collapsing it to 0px -- has no counterpart here: measured on
+            // Chrome 151, `column-rule-style: none` leaves the width at 3px.
+            if (ruleWidthScale(normalized)) |scale| {
+                return computedRuleWidth(style_manager, element, normalized, wrapped, scale);
+            }
             // The used surface only. The CSS Typed OM reports the computed
             // width, which `border-style: none` does not collapse -- see
             // `borderWidth`, and typedom_computed_initial_values, where the two
@@ -1706,6 +1714,103 @@ fn computedFontStretch(style_manager: *StyleManager, element: *Element, wrapped:
         const key = std.ascii.lowerString(lower[0..declared.len], declared);
         if (font_stretch_percentages.get(key)) |percentage| return percentage;
     }
+    return declared;
+}
+
+/// The three widths `thin` / `medium` / `thick` resolve to for one property,
+/// and what the property answers when nothing declared it. Null for every name
+/// that is not one of these -- `border-*-width` has its own path, because a
+/// border's style collapses it and these are not collapsed by theirs.
+///
+/// Measured on Chrome 151 headed, devicePixelRatio 2, over 22 declaration sets
+/// (`scratch/b69/rule-width-fixture.mjs` and
+/// `scratch/b69/expr-width-keywords.js`):
+///
+///   * The four rule/outline names take the border scale, 1px / 3px / 5px, and
+///     answer it whatever their style says -- `column-rule-style: none` with
+///     `column-rule-width: medium` is 3px, where a border would be 0px.
+///   * `-webkit-text-stroke-width` has two thirds of that scale.
+///   * An element declaring no column rule answers **1.5px**, not the 3px its
+///     own `medium` resolves to. That is three DEVICE pixels: the same reading
+///     is 3px on every devicePixelRatio-1 Chrome measured (headless, headed
+///     under `--force-device-scale-factor=1`, headed under `=3`) and 1.5px on
+///     the dpr-2 headed one. This engine reports devicePixelRatio 2 as a fixed
+///     part of its device profile (`Window.getDevicePixelRatio`), so 1.5px is
+///     the number that matches it.
+///
+/// `chrome_initial_values.zig` records 3px for the three rule widths because
+/// that table is generated against a HEADLESS Chrome, which is dpr 1. It is
+/// generated and carries a do-not-hand-edit banner, so the undeclared answer is
+/// overridden here instead.
+const RuleWidthScale = struct {
+    thin: []const u8,
+    medium: []const u8,
+    thick: []const u8,
+    // Null leaves the undeclared answer to the recorded table, which is already
+    // right for `outline-width` (3px) and `-webkit-text-stroke-width` (0px).
+    undeclared: ?[]const u8,
+};
+
+fn ruleWidthScale(name: []const u8) ?RuleWidthScale {
+    const BORDER: RuleWidthScale = .{ .thin = "1px", .medium = "3px", .thick = "5px", .undeclared = null };
+    const RULE: RuleWidthScale = .{ .thin = "1px", .medium = "3px", .thick = "5px", .undeclared = "1.5px" };
+    const STROKE: RuleWidthScale = .{ .thin = "0.666667px", .medium = "2px", .thick = "3.33333px", .undeclared = null };
+    const NAMES = [_]struct { []const u8, RuleWidthScale }{
+        .{ "outline-width", BORDER },
+        .{ "column-rule-width", RULE },
+        .{ "row-rule-width", RULE },
+        .{ "-webkit-column-rule-width", RULE },
+        .{ "-webkit-text-stroke-width", STROKE },
+    };
+    for (NAMES) |entry| {
+        if (std.ascii.eqlIgnoreCase(name, entry[0])) return entry[1];
+    }
+    return null;
+}
+
+/// The other spelling of a rule width, for the one pair that has two.
+fn ruleWidthAlias(name: []const u8) ?[]const u8 {
+    if (std.ascii.eqlIgnoreCase(name, "column-rule-width")) return "-webkit-column-rule-width";
+    if (std.ascii.eqlIgnoreCase(name, "-webkit-column-rule-width")) return "column-rule-width";
+    return null;
+}
+
+fn computedRuleWidth(
+    style_manager: *StyleManager,
+    element: *Element,
+    name: []const u8,
+    wrapped: String,
+    scale: RuleWidthScale,
+) []const u8 {
+    const declared = found: {
+        switch (cascadedValue(style_manager, element, name, wrapped, .computed)) {
+            .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
+            // Written, and this engine cannot report it: `medium`, the same
+            // case `usedBorderWidth` treats as the keyword.
+            .unreportable => return scale.medium,
+            .none => {},
+        }
+        // The name's other spelling. `-webkit-column-rule-width` and
+        // `column-rule-width` are one property under two names in Chrome --
+        // declaring either moves both, measured four ways
+        // (`scratch/b69/expr-webkit-alias.js`) -- and this engine stores only
+        // the one the page wrote. Same shape as `usedBorderWidth`'s logical
+        // counterpart lookup.
+        if (ruleWidthAlias(name)) |other| {
+            switch (cascadedValue(style_manager, element, other, .wrap(other), .computed)) {
+                .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
+                .unreportable => return scale.medium,
+                .none => {},
+            }
+        }
+        // Nothing declared under either spelling. The rule widths have an
+        // answer of their own here; the rest fall through to the recorded
+        // table.
+        return scale.undeclared orelse chrome_initial_values.initial.get(name) orelse "";
+    };
+    if (std.ascii.eqlIgnoreCase(declared, "thin")) return scale.thin;
+    if (std.ascii.eqlIgnoreCase(declared, "medium")) return scale.medium;
+    if (std.ascii.eqlIgnoreCase(declared, "thick")) return scale.thick;
     return declared;
 }
 
@@ -6290,6 +6395,10 @@ test "WebApi: CSSStyleDeclaration author longhands" {
 
 test "WebApi: CSSStyleDeclaration author shorthands" {
     try testing.htmlRunner("css/computed_author_shorthands.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration rule width keywords" {
+    try testing.htmlRunner("css/rule_width_keywords.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration inheritance" {

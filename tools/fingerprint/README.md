@@ -22394,3 +22394,67 @@ and `scratch/b69/blob-worker-fixture.mjs` adds the same three worker shapes in
 the top document, in a same-origin iframe and in a cross-origin one: **silent in
 all nine**. Whatever the challenge does to it is not the source, not the revoke,
 and not the frame.
+
+## Three device pixels, and a table generated on the wrong arm (B69, 2026-08-30)
+
+The last non-`animation` row of the computed-style diff was
+`column-rule-width`: an element declaring no column rule reads `1.5px` in
+Chrome and read `3px` here. B93 left it with a note saying not to guess the
+rule from two points, and it was right not to — the two points were
+confounded.
+
+### The matrix
+
+`scratch/b69/rule-width-fixture.mjs` puts 22 declaration sets on one page and
+`scratch/b69/expr-width-keywords.js` puts nine more on one element, across every
+width property that takes `thin`/`medium`/`thick`. Chrome 151:
+
+| | undeclared | `thin` | `medium` | `thick` | style `none` |
+|---|---|---|---|---|---|
+| `border-top-width` | 0px | 1px | 3px | 5px | **collapses to 0px** |
+| `outline-width` | 3px | 1px | 3px | 5px | no effect |
+| `column-rule-width` | **1.5px** | 1px | 3px | 5px | no effect |
+| `row-rule-width` | **1.5px** | 1px | 3px | 5px | no effect |
+| `-webkit-column-rule-width` | **1.5px** | 1px | 3px | 5px | no effect |
+| `-webkit-text-stroke-width` | 0px | **0.666667px** | **2px** | **3.33333px** | no effect |
+
+Two things fall out of it that neither of the original two points could say.
+The style beside these widths has no say at all — a `column-rule-style: none`
+with `column-rule-width: medium` is 3px, where the same shape on a border is
+0px, so the border's used-value path is the wrong model to copy. And
+`-webkit-text-stroke-width` has a scale of its own, two thirds of the others.
+
+This engine echoed the keyword back on all five non-border names —
+`outlineWidth` reported the literal string `medium`, which no browser does.
+
+### The 1.5px is the device pixel ratio, and the arm was the confound
+
+B93's note says "dsf=1 and dsf=2 are the same, so it is not a DPR artefact".
+The flag never landed: `run-expr.mjs --chrome-arg --force-device-scale-factor=2`
+reports `devicePixelRatio` **1**, the same as without it, so both of those runs
+were the same arm. What separates the readings is which arm they came from:
+
+```
+  headless                              dpr 1   3px
+  headed, --force-device-scale-factor=1 dpr 1   3px
+  headed, --force-device-scale-factor=3 dpr 1   3px
+  headed                                dpr 2   1.5px
+```
+
+`width × dpr = 3` in all four. The undeclared value is **three device pixels**,
+and the `medium` keyword is three CSS pixels — which is why the two disagree at
+all. This engine reports `devicePixelRatio` 2 as a fixed part of its device
+profile (`Window.getDevicePixelRatio`, and the comment there is about Kasada
+binary-searching that number to twenty bits), so 1.5px is the matching answer.
+
+**And the table it was reading from was generated on the wrong arm.**
+`webapi/css/chrome_initial_values.zig` carries a `do-not-hand-edit` banner and a
+line naming its source: `HeadlessChrome/151.0.0.0`. Every value in it that
+resolves against the device pixel ratio is therefore a dpr-1 value, and these
+three names are the ones that showed. The undeclared answer is overridden in
+`CSSStyleDeclaration` rather than in the generated file; whether any of the
+other 689 entries are dpr-dependent is not known, and regenerating that table
+against a headed arm is its own piece of work.
+
+After the fix all 22 fixture cases and all nine element cases are identical to
+Chrome's, property for property.

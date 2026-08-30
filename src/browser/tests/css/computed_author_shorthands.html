@@ -18,11 +18,11 @@ Cloudflare's widget encodes `JSON.stringify(getComputedStyle(el))` whole -- 736
 property names, one read each -- so every row below travels in the payload of
 any page whose author CSS uses the shorthand, which is every page.
 
-NOT here, measured but out of scope for this plan: Chrome answers
-`column-rule-width: 1.5px` for an element that declares no column rule and
-`3px` once `column-rule: solid` is declared, where this engine answers `3px`
-both times. That is `medium` behaving differently from a border's, not a
-shorthand failing to expand.
+Chrome answers `column-rule-width: 1.5px` for an element that declares no
+column rule and `3px` once `column-rule: solid` is declared, where this engine
+answered `3px` both times. That is `medium` behaving differently from a
+border's, not a shorthand failing to expand, so it is measured and fixed in
+`css/rule_width_keywords.html` instead of here.
 -->
 
 <script id=author_shorthand_longhands>
