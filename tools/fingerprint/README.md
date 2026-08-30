@@ -22664,3 +22664,101 @@ What is left is not a serialisation. `transform` reads `none` here and a live
 matrix in Chrome because the animation is *running*: closing it needs a clock
 and keyframe interpolation, which is a feature and has its own plan
 (`animation-computed-transform`).
+
+## The four short values are not a measurement of anything the page can see (B95, 2026-08-30)
+
+The Cloudflare widget hands `TextEncoder.encode` four short numbers in a row and
+hashes each one, and the third is the only place in the guard's plaintext where
+this engine answers something Chrome does not: Chrome sends `0`, this engine
+sends `16`. B94 read the values and ruled out three sources; this chapter closes
+four more and says what the values are not.
+
+The values, same epoch, both arms:
+
+| | Chrome | this engine |
+|---|---|---|
+| 1 | `5000.266115188599` | `4998.22265625` |
+| 2 | `83.9800615310669` | `84` |
+| 3 | **`0`** | **`16`** |
+| 4 | `0.6387105289554597` | `0.639611171875` |
+
+**They are not invariant, which is the correction B94 needs.** B94 read the same
+four doubles in three consecutive runs and concluded from that identity that
+they cannot be a timing measurement. The identity is real but it is bounded: an
+hour later Chrome answered `5002.609375` / `87.97607231140137` / `0` /
+`0.6387295662117005`, and then answered *that* set bit-identically in six more
+runs across forty minutes. Two clusters, each internally exact. The instrument
+is not what moved them -- B94's own knob, replayed in the later epoch, reports
+the later set. This engine's four values did **not** move: the same Debug binary
+gives `4998.22265625` / `84` / `16` / `0.639611171875` six hours apart.
+
+**They are not timing, and this is a stronger test than B94's.** B94 burned
+150ms per frame inside the widget's `requestAnimationFrame`. This saturated the
+whole machine -- six spinning processes, load average from 7 to 11 -- and Chrome
+answered the four values bit-identically. A quantity that survives that is not
+measured with a clock.
+
+**They are not any number the page hands out.** A knob wrapping every numeric
+surface in the widget's realm -- `TextMetrics` (all twelve members), `DOMRect`,
+`offset*` / `client*` / `scroll*`, `getBoundingClientRect`, `getComputedStyle`,
+`performance.now`, `WebGLRenderingContext.getParameter` and
+`getShaderPrecisionFormat`, the audio contexts, `screen`, `SVGGeometryElement`
+`getTotalLength` / `getPointAtLength` / `getBBox`, `SVGTextContentElement`, and
+twenty-one `Math` functions -- keeps every distinct value it sees and dumps the
+set at the fourth encode. The four values are never in it. The pool's *size* at
+that moment is 54 in one run and 2 in the next, which is the useful part: the
+canvas and WebGL probes are not ordered before these encodes at all, so nothing
+they produce can be an input.
+
+**They are not the performance timeline.** The engine-side run-up log (below)
+shows the guard reading `performance.mark`, `performance.getEntries` and then
+every field of every entry immediately before the encodes, which made the
+timeline the last surviving candidate. Dumping Chrome's timeline at exactly that
+moment gives six entries -- navigation, visibility-state,
+long-animation-frame, two paints, one resource -- and none of their fields is
+any of the four values. Those fields also move run to run while the four values
+do not.
+
+### The run-up instrument
+
+`Context` already answered "was this member reached, and when first"
+(`prop_read`) and "what string did the page encode" (`text_encode`). Neither
+answers the question those two raise together: what had the page just read when
+it encoded *this*. A guard computing a number from a member it has already read
+a hundred times has a `first_seq` far away, so the first-read order says nothing.
+
+So `recentReads` keeps a ring of the members read, newest last, with runs of the
+same member collapsed into one slot and a count -- without that collapse sixty
+`appendChild` calls in a row fill the whole ring. `recordTextEncode` copies the
+ring into any encode of 24 characters or less, and the dump quotes it as
+`text encode run-up` lines counting back from the encode. Both scopes have to be
+on, and the parser takes at most two `--log-filter-scopes` arguments, so they
+share one: `--log-filter-scopes -all --log-filter-scopes +text_encode,+prop_read`.
+Driver: `scratch/b95/runup-live.mjs`.
+
+What it says about these four, from the widget realm's whole life: the guard
+walks the performance timeline, then builds seventeen SVG elements in a
+`<template>`, imports it, appends twenty-one children and removes it -- that is
+the Turnstile checkbox drawing itself, not a probe -- and then, with **no
+measuring call in between**, does `crypto.subtle` + `TextEncoder.encode` once per
+value. The values are computed inside the VM well before they are hashed.
+
+### Reading the guard's program, and why that is where this stops
+
+`cf-knob.mjs` records every challenge response but slices the body to 4000
+characters, which is exactly what destroys the one document that matters:
+`.../new/normal`, ~269KB, carrying a ~247KB inline program. B94's attempt to
+lift it from inside the page (chunked through the beacon array) reported nothing
+at all. `scratch/b95/dump-normal.mjs` takes it off the wire instead --
+`Network.enable`, `Network.getResponseBody` on every challenge request, each
+body written whole -- and injects a knob in the same run so a stack read there
+names offsets in the document that run saved. Identifiers and offsets are
+per-delivery: three runs named the same helper `cA.cT`, `cU.cY` and `bv.bC`.
+
+With the stack limit raised the chain under the encode is legible, and it is a
+bytecode VM: one dispatcher (`bg`), a switch of two hundred opcode handlers
+reached as `bv.<computed>.<computed> [as run]`, and host helpers like the `bC`
+that calls `TextEncoder`. Every frame between the encode and the top is the
+interpreter. The logic that computes the four values is in the bytecode, not in
+the JavaScript, so reading it statically means writing a disassembler for this
+VM -- a different plan, not a next step in this one.
