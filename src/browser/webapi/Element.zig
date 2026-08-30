@@ -2463,11 +2463,36 @@ pub fn hasBrokenImageBox(self: *const Element) bool {
     if (self.getTag() != .img) {
         return false;
     }
+    // Bytes that became a picture render as the picture, not as the icon. The
+    // header they arrived with carries the size (Frame.ImageRequest).
+    if (self.intrinsicImageSize() != null) {
+        return false;
+    }
     const src = self.getAttributeSafe(comptime .wrap("src")) orelse return false;
     if (src.len == 0) {
         return false;
     }
     return self.asConstNode().isConnected();
+}
+
+/// The size an arrived `<img>` declared, or null for every other element and
+/// for one whose bytes never became a picture.
+///
+/// Imported in the body rather than at the top of the file: Image.zig imports
+/// this module, and the pair only has to agree at the point of use.
+pub fn intrinsicImageSize(self: *const Element) ?IntrinsicBox {
+    if (self.getTag() != .img) {
+        return null;
+    }
+    const Image = @import("element/html/Image.zig");
+    const image = @constCast(self).as(Image);
+    if (!image.hasIntrinsicSize()) {
+        return null;
+    }
+    return .{
+        .width = @floatFromInt(image.getNaturalWidth()),
+        .height = @floatFromInt(image.getNaturalHeight()),
+    };
 }
 
 /// `width` and `height` are the CONTENT box. What a page reads is one of three
@@ -2923,6 +2948,9 @@ const IntrinsicBox = struct { width: f64, height: f64 };
 
 fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?IntrinsicBox {
     switch (tag) {
+        // A picture that arrived is as big as it is. One that did not has no
+        // intrinsic box at all -- the icon above already spoke for it.
+        .img => return self.intrinsicImageSize(),
         .canvas, .video, .object, .svg, .iframe => return .{ .width = 300, .height = 150 },
         .input, .textarea, .select, .progress, .meter => {},
         else => return null,

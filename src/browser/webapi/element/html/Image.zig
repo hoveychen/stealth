@@ -10,7 +10,17 @@ const HtmlElement = @import("../Html.zig");
 const Image = @This();
 
 pub const Proto = HtmlElement;
-_pad: bool = false,
+
+/// The intrinsic size the arriving bytes declared, or 0 while nothing has
+/// arrived. Written by `Frame.ImageRequest.recordIntrinsicSize` before the
+/// `load` event fires, so a handler that reads `naturalWidth` sees it.
+///
+/// A field rather than one of Frame's side tables (`_element_scroll_positions`
+/// and friends) because the two readers that need it cannot reach a frame:
+/// `width` and `height` are reflected attributes, and reflection hands its
+/// `undeclared` hook an element and nothing else.
+_natural_width: u32 = 0,
+_natural_height: u32 = 0,
 _proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 
 pub fn constructor(w_: ?u32, h_: ?u32, frame: *Frame) !*Image {
@@ -62,24 +72,59 @@ pub fn setLoading(self: *Image, value: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("loading"), .wrap(value), frame);
 }
 
-pub fn getNaturalWidth(_: *const Image) u32 {
-    // this is a valid response under a number of normal conditions, but could
-    // be used to detect the nature of Browser.
-    return 0;
+/// The size the arriving header declared. 0 until something arrives, which is
+/// still the answer for an element with no src, for a request that failed, and
+/// for bytes that were not a picture -- all three are states a real browser
+/// reports 0 for too.
+pub fn getNaturalWidth(self: *const Image) u32 {
+    return self._natural_width;
 }
 
-pub fn getNaturalHeight(_: *const Image) u32 {
-    // this is a valid response under a number of normal conditions, but could
-    // be used to detect the nature of Browser.
-    return 0;
+pub fn getNaturalHeight(self: *const Image) u32 {
+    return self._natural_height;
+}
+
+/// Records what the sniffed header said. Both numbers or neither: a size with
+/// one axis zero is not a size, and `hasIntrinsicSize` keys off the pair.
+pub fn setIntrinsicSize(self: *Image, width: u32, height: u32) void {
+    if (width == 0 or height == 0) {
+        return;
+    }
+    self._natural_width = width;
+    self._natural_height = height;
+}
+
+/// Whether this <img> has bytes that became a picture with a size.
+pub fn hasIntrinsicSize(self: *const Image) bool {
+    return self._natural_width != 0 and self._natural_height != 0;
 }
 
 /// What `width` and `height` answer when no attribute declared one. They
-/// report the rendered box rather than the attribute, and a broken <img> is
-/// rendered as the broken-image icon -- 16, where an element with no box at
-/// all reads 0. Measured on Chrome 151 (probe `expr-broken-image.js`), which
-/// also answers 16 for `width="invalid"` and `width="-5"`: an attribute that
-/// declares nothing usable leaves the box to speak, same as an absent one.
+/// report the rendered box rather than the attribute: a picture that arrived
+/// renders at its intrinsic size, and a broken <img> renders as the
+/// broken-image icon -- 16, where an element with no box at all reads 0.
+/// Measured on Chrome 151 (probe `expr-broken-image.js`), which also answers 16
+/// for `width="invalid"` and `width="-5"`: an attribute that declares nothing
+/// usable leaves the box to speak, same as an absent one.
+///
+/// One function per axis, which the icon did not need: it is square, and the
+/// intrinsic size is not.
+fn undeclaredWidth(el: *Element) u32 {
+    const image = el.as(Image);
+    if (image.hasIntrinsicSize()) {
+        return image._natural_width;
+    }
+    return brokenImageIcon(el);
+}
+
+fn undeclaredHeight(el: *Element) u32 {
+    const image = el.as(Image);
+    if (image.hasIntrinsicSize()) {
+        return image._natural_height;
+    }
+    return brokenImageIcon(el);
+}
+
 fn brokenImageIcon(el: *Element) u32 {
     if (!el.hasBrokenImageBox()) {
         return 0;
@@ -165,8 +210,8 @@ pub const JsApi = struct {
     pub const crossOrigin = reflect.enumerated("crossorigin", &.{ "anonymous", "use-credentials" }, .{ .missing = null, .nullable = true, .invalid = "anonymous" });
     pub const useMap = reflect.string("usemap");
     pub const isMap = reflect.boolean("ismap");
-    pub const width = reflect.unsignedLong("width", .{ .undeclared = brokenImageIcon });
-    pub const height = reflect.unsignedLong("height", .{ .undeclared = brokenImageIcon });
+    pub const width = reflect.unsignedLong("width", .{ .undeclared = undeclaredWidth });
+    pub const height = reflect.unsignedLong("height", .{ .undeclared = undeclaredHeight });
     pub const naturalWidth = bridge.accessor(Image.getNaturalWidth, null, .{});
     pub const naturalHeight = bridge.accessor(Image.getNaturalHeight, null, .{});
     pub const complete = bridge.accessor(Image.getComplete, null, .{});

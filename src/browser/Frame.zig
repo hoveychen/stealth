@@ -45,6 +45,10 @@ const EventTarget = @import("webapi/EventTarget.zig");
 const Element = @import("webapi/Element.zig");
 const HtmlElement = @import("webapi/element/Html.zig");
 const ElementInternals = @import("webapi/element/ElementInternals.zig");
+const Image = @import("webapi/element/html/Image.zig");
+// Geometry parsers, shared with ImageDecoder: an `<img>` and a decoder read the
+// same headers, and `readSize` is the entry point that stops at the two numbers.
+const images = @import("webapi/webcodecs/images.zig");
 const Window = @import("webapi/Window.zig");
 const History = @import("webapi/History.zig");
 const Location = @import("webapi/Location.zig");
@@ -3054,6 +3058,9 @@ pub fn loadImage(self: *Frame, element: *Element.Html, src: []const u8) !void {
 // still rides this struct, because it is still a load a browser leaves an
 // entry behind for -- Chrome files it as "other" (measured by
 // tools/fingerprint/resource-timing-initiators.mjs).
+// How much of an image's head is kept. See `ImageRequest.prefix`.
+const IMAGE_HEAD_LEN = 4096;
+
 const ImageRequest = struct {
     frame: *Frame,
     element: ?*Element.Html,
@@ -3098,7 +3105,17 @@ const ImageRequest = struct {
     // decodes, so a signature is as close to "it became a picture" as this
     // engine gets -- close enough that the residual gap is a truncated image,
     // which Chrome errors on and this reads as a load.
-    prefix: [Mime.IMAGE_SIGNATURE_LEN]u8 = undefined,
+    //
+    // Longer than the signature it started as, because the same bytes now also
+    // answer the intrinsic size (see `intrinsicSize`). Every geometry field
+    // sits in the head: PNG needs 33 bytes, BMP 26, WebP 30, GIF 10. The two
+    // that scan -- JPEG walks segments to its SOF marker, AVIF walks boxes to
+    // `ispe` -- are the reason this is kilobytes rather than tens of bytes, and
+    // the reason it is bounded at all: a JPEG can carry 64KB of colour profile
+    // ahead of its SOF, and buffering an arbitrary image to find two numbers
+    // would be paying decoder memory for a decoder this engine does not have.
+    // A header past the bound reads as no size, which is where this was before.
+    prefix: [IMAGE_HEAD_LEN]u8 = undefined,
     prefix_len: usize = 0,
 
     // Set when the response declares `image/svg+xml`. SVG is the one image
@@ -3168,7 +3185,32 @@ const ImageRequest = struct {
             .times = self.times,
             .cors = self.cors,
         });
-        self.report(if (!self.sniff or self.arrived()) .load else .@"error");
+        const became_a_picture = self.arrived();
+        if (became_a_picture) {
+            self.recordIntrinsicSize();
+        }
+        self.report(if (!self.sniff or became_a_picture) .load else .@"error");
+    }
+
+    // The size the head declares, written onto the element before its `load`
+    // fires so a handler reading `naturalWidth` sees it.
+    //
+    // Answering 0 for a picture that arrived is not a small inaccuracy, it is a
+    // contradiction: `complete` is true and `load` fired, and no browser pairs
+    // that with no size. Chrome with images switched off leaves `complete`
+    // false and fires nothing; Chrome with images on gives a size. Nothing here
+    // decodes -- these are two numbers read out of the header the sniffer
+    // already had to look at.
+    fn recordIntrinsicSize(self: *ImageRequest) void {
+        const element = self.element orelse return;
+        const as_element = element.asElement();
+        if (as_element.getTag() != .img) {
+            return;
+        }
+        const head = self.prefix[0..self.prefix_len];
+        const kind = images.Kind.fromSignature(head) orelse return;
+        const size = images.readSize(kind, head) orelse return;
+        as_element.as(Image).setIntrinsicSize(size.width, size.height);
     }
 
     // Whether the bytes became a picture, as far as this engine can tell.

@@ -45,6 +45,29 @@ pub const Kind = enum {
     avif,
     bmp,
 
+    /// The format the bytes themselves declare, for the caller that has no
+    /// declared type to go on: an `<img>` decides what it received by sniffing,
+    /// because the header a server sends gets no say (`Frame.ImageRequest`).
+    ///
+    /// Deliberately not shared with `Mime.isImageSignature`, which answers a
+    /// different question with a different budget: whether the bytes are a
+    /// picture *at all*, from fourteen bytes, including the two types that have
+    /// no geometry parser here -- ICO and SVG. This one picks a parser, so a
+    /// format it cannot measure has no reason to appear.
+    pub fn fromSignature(prefix: []const u8) ?Kind {
+        if (std.mem.startsWith(u8, prefix, &PNG_SIGNATURE)) return .png;
+        if (std.mem.startsWith(u8, prefix, &.{ 0xFF, 0xD8, 0xFF })) return .jpeg;
+        if (std.mem.startsWith(u8, prefix, "GIF87a") or std.mem.startsWith(u8, prefix, "GIF89a")) return .gif;
+        if (std.mem.startsWith(u8, prefix, "BM")) return .bmp;
+        if (prefix.len >= 14 and std.mem.eql(u8, prefix[0..4], "RIFF") and
+            std.mem.eql(u8, prefix[8..14], "WEBPVP")) return .webp;
+        if (prefix.len >= 12 and std.mem.eql(u8, prefix[4..8], "ftyp")) {
+            const brand = prefix[8..12];
+            if (std.mem.eql(u8, brand, "avif") or std.mem.eql(u8, brand, "avis")) return .avif;
+        }
+        return null;
+    }
+
     /// Chrome matches the type case-insensitively: `IMAGE/PNG` is supported
     /// (measured). x-icon, svg+xml and tiff are not.
     pub fn fromType(mime: []const u8) ?Kind {
@@ -102,6 +125,37 @@ pub fn read(kind: Kind, data: []const u8, allocator: Allocator) ?Image {
     };
 }
 
+pub const Size = struct {
+    width: u32,
+    height: u32,
+};
+
+/// Just the intrinsic size, decoding nothing and allocating nothing.
+///
+/// `read` above is shaped for ImageDecoder, which is asked for frames and for
+/// samples. An `<img>` only ever needs these two numbers, and reaching them
+/// through `read` would hand a PNG the pixel path -- a `width * height * 4`
+/// allocation out of the frame arena, for a buffer that is then dropped.
+///
+/// `data` may be a prefix rather than the whole body: every parser here reads
+/// forward from the head and stops at the field it wants, so a truncated body
+/// answers null instead of guessing.
+pub fn readSize(kind: Kind, data: []const u8) ?Size {
+    return switch (kind) {
+        .png => pngSize(data),
+        .gif => gifSize(data),
+        .jpeg => sizeOf(readJpeg(data)),
+        .bmp => sizeOf(readBmp(data)),
+        .webp => sizeOf(readWebp(data)),
+        .avif => sizeOf(readAvif(data)),
+    };
+}
+
+fn sizeOf(image: ?Image) ?Size {
+    const found = image orelse return null;
+    return .{ .width = found.width, .height = found.height };
+}
+
 /// The one frame of a still image: no duration, no repetition.
 fn still(width: u32, height: u32, pixels: ?[]const u8) ?Image {
     if (width == 0 or height == 0) {
@@ -121,21 +175,31 @@ fn still(width: u32, height: u32, pixels: ?[]const u8) ?Image {
 
 const PNG_SIGNATURE = [_]u8{ 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a };
 
-fn readPng(data: []const u8, allocator: Allocator) ?Image {
+/// IHDR, which is the whole of a PNG's geometry and comes before anything a
+/// decoder would need. Split out so `readSize` can stop here.
+fn pngSize(data: []const u8) ?Size {
     if (data.len < 8 + 12 + 13 or !std.mem.eql(u8, data[0..8], &PNG_SIGNATURE)) {
         return null;
     }
     if (!std.mem.eql(u8, data[12..16], "IHDR")) {
         return null;
     }
+    const width = std.mem.readInt(u32, data[16..20], .big);
+    const height = std.mem.readInt(u32, data[20..24], .big);
+    if (width == 0 or height == 0) {
+        return null;
+    }
+    return .{ .width = width, .height = height };
+}
+
+fn readPng(data: []const u8, allocator: Allocator) ?Image {
+    const size = pngSize(data) orelse return null;
     const header = data[16..29];
-    const width = std.mem.readInt(u32, header[0..4], .big);
-    const height = std.mem.readInt(u32, header[4..8], .big);
     const depth = header[8];
     const colour = header[9];
     const interlace = header[12];
 
-    return still(width, height, pngPixels(data, width, height, depth, colour, interlace, allocator));
+    return still(size.width, size.height, pngPixels(data, size.width, size.height, depth, colour, interlace, allocator));
 }
 
 /// The samples, as BGRA. Only the shape this engine's own encoder writes and
@@ -296,7 +360,10 @@ fn sampleToRgba(
 
 /// The frame count, per-frame delays and loop count. The samples are LZW and
 /// nothing here decodes them, so the frames carry geometry and timing only.
-fn readGif(data: []const u8, allocator: Allocator) ?Image {
+/// The logical screen descriptor, which is a GIF's geometry and sits in the
+/// first thirteen bytes. Split out for the same reason as `pngSize`: the frame
+/// walk below it needs the whole file, and an intrinsic size does not.
+fn gifSize(data: []const u8) ?Size {
     if (data.len < 13) {
         return null;
     }
@@ -308,6 +375,13 @@ fn readGif(data: []const u8, allocator: Allocator) ?Image {
     if (width == 0 or height == 0) {
         return null;
     }
+    return .{ .width = width, .height = height };
+}
+
+fn readGif(data: []const u8, allocator: Allocator) ?Image {
+    const size = gifSize(data) orelse return null;
+    const width = size.width;
+    const height = size.height;
 
     var at: usize = 13;
     const flags = data[10];

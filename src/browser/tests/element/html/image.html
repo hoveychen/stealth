@@ -398,3 +398,78 @@
   img.remove();
 }
 </script>
+
+<script id="img-intrinsic-size" type=module>
+  // A picture that arrived has an intrinsic size, and a page reads it through
+  // `naturalWidth`/`naturalHeight`. This engine answered 0 for both while also
+  // firing `load` and answering `complete === true` -- a combination no browser
+  // produces. Chrome with images turned off
+  // (`--blink-settings=imagesEnabled=false`) leaves `complete` at false and
+  // fires nothing at all; Chrome with images on answers a real size. "Loaded,
+  // and no size" is a shape only this engine had.
+  //
+  // Nothing here decodes pixels. The size comes out of the header the sniffer
+  // already reads to decide `load` against `error`, which is why two formats
+  // are checked: they come from two different parsers.
+  const state = await testing.async();
+  const img = document.createElement("img");
+  img.addEventListener("load", () => state.resolve("load"));
+  img.addEventListener("error", () => state.resolve("error"));
+  document.body.appendChild(img);
+  img.src = "/served/intrinsic-7x3.png";
+
+  await state.done((seen) => {
+    // Joined into one string on purpose: a bare `expectEqual(7, ...)` red
+    // light prints "expected true got false" and says nothing about which of
+    // the two numbers moved.
+    testing.expectEqual("load", seen);
+    testing.expectEqual("7x3", img.naturalWidth + "x" + img.naturalHeight);
+    testing.expectEqual(true, img.complete);
+
+    // The box follows the intrinsic size, not the 16x16 broken-image icon.
+    testing.expectEqual("7x3", img.width + "x" + img.height);
+    testing.expectEqual("7x3", img.offsetWidth + "x" + img.offsetHeight);
+    const rect = img.getBoundingClientRect();
+    testing.expectEqual("7x3", rect.width + "x" + rect.height);
+
+    img.remove();
+  });
+</script>
+
+<script id="img-intrinsic-size-gif" type=module>
+  // Same reading through the GIF parser, and a different shape so a hard-coded
+  // 7x3 could not pass it.
+  const state = await testing.async();
+  const img = document.createElement("img");
+  img.addEventListener("load", () => state.resolve("load"));
+  img.addEventListener("error", () => state.resolve("error"));
+  document.body.appendChild(img);
+  img.src = "/served/intrinsic-5x9.gif";
+
+  await state.done((seen) => {
+    testing.expectEqual("load", seen);
+    testing.expectEqual("5x9", img.naturalWidth + "x" + img.naturalHeight);
+    testing.expectEqual("5x9", img.offsetWidth + "x" + img.offsetHeight);
+    img.remove();
+  });
+</script>
+
+<script id="img-intrinsic-size-absent-when-nothing-arrived" type=module>
+  // The other side of the same line, which is what stops this from becoming
+  // "answer a size for everything": bytes that never became a picture still
+  // read 0 and still draw the icon. `/served/html-bytes.png` is a page in an
+  // image's clothing, so the request succeeds and the decode does not.
+  const state = await testing.async();
+  const img = document.createElement("img");
+  img.addEventListener("load", () => state.resolve("load"));
+  img.addEventListener("error", () => state.resolve("error"));
+  document.body.appendChild(img);
+  img.src = "/served/html-bytes.png";
+
+  await state.done((seen) => {
+    testing.expectEqual("error", seen);
+    testing.expectEqual("0x0", img.naturalWidth + "x" + img.naturalHeight);
+    testing.expectEqual("16x16", img.offsetWidth + "x" + img.offsetHeight);
+    img.remove();
+  });
+</script>
