@@ -22,7 +22,7 @@ const lp = @import("lightpanda");
 const js = @import("../../js/js.zig");
 const Page = @import("../../Page.zig");
 const DOMException = @import("../DOMException.zig");
-const font_metrics = @import("../../font_metrics.zig");
+const font_faces = @import("../../font_faces.zig");
 
 const Execution = js.Execution;
 
@@ -286,23 +286,32 @@ fn settled(self: *FontFace, exec: *const Execution) !js.Promise {
 }
 
 /// Whether anything in a `src` list can be loaded here. A `local()` naming a
-/// family this engine has metrics for can; one naming a family it does not
+/// face this engine claims to have installed can; one naming a face it does not
 /// cannot, which is the whole of the difference the widget reads. Anything else
 /// -- a `url()`, or a component this does not recognise -- is left loadable,
 /// since there is no fetch here to fail and refusing would invent a failure
 /// Chrome only reports after trying.
 ///
-/// Known gap: Chrome's `local()` also matches a face's full name, so
-/// `local("PingFang HK Light")` resolves there against the "PingFang HK"
-/// family. Only the family names are in the table, so that one answers false
-/// here.
+/// A FACE, not a family: `local("Skia")` fails on Chrome while
+/// `local("Skia Regular")` and `local("Skia-Regular")` succeed, and the same
+/// holds for `PingFang HK`, `Times` and `Menlo`. What resolves is a full font
+/// name or a PostScript name. A family whose regular face carries the family's
+/// own name -- Arial, Geneva, Luminari, InaiMathi -- matches either way, which
+/// is why keying this on `font_metrics.find` looked right: it agreed on every
+/// family anyone had thought to check.
+///
+/// It is not a detail. Cloudflare's challenge builds its font list out of
+/// `FontFace.load` -- 55 calls in one challenge, counted off this engine's own
+/// `prop_read` log -- so this lookup decides which families the guard is told
+/// about. Keyed on families it named `Skia`, which Chrome does not, and left
+/// out `InaiMathi Bold` and `PingFang HK Light`, which Chrome does.
 fn sourceIsAvailable(source: []const u8) bool {
     var any_local = false;
     var components = SourceList{ .raw = source };
     while (components.next()) |component| {
         const name = localName(component) orelse return true;
         any_local = true;
-        if (font_metrics.find(name) != null) {
+        if (font_faces.has(name)) {
             return true;
         }
     }
