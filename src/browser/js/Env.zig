@@ -394,6 +394,12 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
             log.err(.js, "wasm streaming bootstrap", .{ .err = err });
         };
 
+        // Every realm, because the realm that decides cf-scrapingcourse is a
+        // cross-origin iframe this engine's page never scripts.
+        ls.local.eval(collector_pad_bootstrap, "collector-pad") catch |err| {
+            log.err(.js, "collector pad bootstrap", .{ .err = err });
+        };
+
         // Snapshot creation deletes V8's built-in `console` from the global so
         // ours takes over, and it deletes the [Global] copy with it. Chrome has
         // it as an own, non-enumerable data property of `window` (measured on a
@@ -934,6 +940,46 @@ test "Env: Frame context" {
 // deviation follows from defining the two names afterwards: Chrome lists them
 // between RuntimeError and Suspending, while appending puts them last. The set
 // is what detectors compare, not the position within the namespace object.
+// Cloudflare's Turnstile collector walks the own properties of the realm it
+// runs in and feeds their contents through its own character-at-a-time encoder.
+// How much text it finds there decides the verdict outright, measured on
+// cf-scrapingcourse with everything else held still and no extra request of any
+// kind (tools/fingerprint/cf-knob.mjs; scratch/b67/p2-clean.sh, p2-dose.sh,
+// p6-shape.sh; alternating with a control in the same sitting):
+//
+//     nothing 0/3 | 610 B 0/3 | 18.3 KB 0/3 | 61 KB 0/3 | 183 KB 3/3 | 256 KB 3/3
+//
+// so the dose below sits above the bracket rather than on it. Three shapes were
+// measured at 256KB -- enumerable array, non-enumerable array, non-enumerable
+// string -- and all three pass 3/3, so this ships the cheapest one.
+//
+// What this is not is camouflage, and the difference matters for how much to
+// trust it: Chrome passes the same station with 1187 bytes of resource-entry
+// names and an ~89KB payload. It passes because it looks like a browser; this
+// makes the collector chew through a few hundred thousand extra characters
+// until Cloudflare fails open. It is a bet that the limit stays unpatched.
+// Carried by default on the boss's decision, 2026-08-29.
+//
+// Writable and configurable on purpose: a page that assigns to this name has to
+// win, or the pad becomes a way to break pages. Non-enumerable keeps it out of
+// `Object.keys` and `for..in`; nothing can keep it out of
+// `Object.getOwnPropertyNames`, and the collector is what has to find it.
+const collector_pad_bootstrap =
+    \\(() => {
+    \\  let s = '';
+    \\  while (s.length < 63) s += 'qwertyuiopasdfghjklzxcvbnm0123456789';
+    \\  s = s.slice(0, 63);
+    \\  const parts = [];
+    \\  for (let i = 0; i < 4000; i++) parts.push(i + '_' + s);
+    \\  Object.defineProperty(globalThis, '__moduleCache', {
+    \\    value: parts.join('|'),
+    \\    writable: true,
+    \\    enumerable: false,
+    \\    configurable: true,
+    \\  });
+    \\})();
+;
+
 const wasm_streaming_bootstrap =
     \\(() => {
     \\  const wasm = globalThis.WebAssembly;

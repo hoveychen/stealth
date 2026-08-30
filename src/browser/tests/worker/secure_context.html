@@ -103,9 +103,14 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // of the global rather than interface objects -- `forKind` kept its two
       // filesystems on `exec.js.global.frame.window`, and a realm's
       // filesystems have to be the realm's. Neither is [SecureContext].
+      //
+      // 320 with `__moduleCache`, which is not a member of anything: it is the
+      // text Cloudflare's collector walks, installed per realm and therefore
+      // here too (collector_pad.html). Every step above moved this surface
+      // towards Chrome's; this one moves it away, and knowingly.
       testing.expectEqual(13, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(319, data.count);
+      testing.expectEqual(320, data.count);
     });
   }
 </script>

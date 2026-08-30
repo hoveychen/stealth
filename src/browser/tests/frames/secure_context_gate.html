@@ -49,7 +49,7 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(true, secure.secure);
       testing.expectEqual(17, secure.gated.length);
       testing.expectEqual(6, secure.ungated.length);
-      testing.expectEqual(1201, secure.count);
+      testing.expectEqual(1202, secure.count);
 
       // 0.0.0.0 is not, so every [SecureContext] name is gone -- and the ones
       // that are not gated stay.
@@ -68,11 +68,18 @@ insecure origin this suite can reach without a second listener.
       // surface HTML elements, 1208 with the seven leftovers -- six interfaces
       // and the window.viewport accessor -- back to 1203 once the five
       // interface objects Chrome names nowhere stopped being named, and 1201
-      // once the WebMCP pair went behind `--webmcp`. The two
+      // once the WebMCP pair went behind `--webmcp`. 1202 is the first step
+      // that moves this surface AWAY from Chrome's rather than towards it:
+      // `__moduleCache`, the text Cloudflare's collector is meant to walk (see
+      // collector_pad.html). It cannot be hidden from this census -- a
+      // symbol-keyed property and a nested one were both measured on the live
+      // station and neither is collected at all (0/3, payload unmoved), so a
+      // string-keyed own property of the global is the only shape that works.
+      // The two
       // totals parted company by one at the Event subclasses: Chrome gates
       // ClipboardChangeEvent and not the other eight (measured, probe-
       // secure-context), so that step added nine names here and eight there.
-      testing.expectEqual(966, insecure.count);
+      testing.expectEqual(967, insecure.count);
     });
   }
 </script>
@@ -103,7 +110,7 @@ insecure origin this suite can reach without a second listener.
       // Trustworthy URL, untrustworthy ancestor.
       testing.expectEqual(false, grandchild.secure);
       testing.expectEqual('', grandchild.gated.join(' '));
-      testing.expectEqual(966, grandchild.count);
+      testing.expectEqual(967, grandchild.count);
     });
   }
 </script>
@@ -138,8 +145,9 @@ insecure origin this suite can reach without a second listener.
       // HID, Serial, the caches, the locks, the service-worker client surface,
       // the storage buckets and all 40 of WebGPU -- and 24 unconditional ones:
       // MSE, the two font interfaces and the two sandboxed-filesystem
-      // operations.
-      testing.expectEqual(231, w.count);
+      // operations. 232 once `__moduleCache` -- per realm, so the worker's too
+      // -- joined them; it is not gated by anything.
+      testing.expectEqual(232, w.count);
     });
   }
 </script>

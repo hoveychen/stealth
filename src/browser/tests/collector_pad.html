@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<head>
+  <title>Collector Pad Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<body>
+</body>
+
+<!--
+Cloudflare's Turnstile collector walks the own properties of the realm it runs
+in and ships their contents: measured on cf-scrapingcourse, where leaving text
+in one global grew the challenge's third POST from ~90KB to ~215KB, and where
+the size of that text decides the verdict outright --
+
+  nothing 0/3, 610 B 0/3, 18.3 KB 0/3, 61 KB 0/3, 183 KB 3/3, 256 KB 3/3
+
+-- alternating with a control in the same sitting, with no extra requests of
+any kind (tools/fingerprint/cf-knob.mjs, scratch/b67/p2-clean.sh and p2-dose.sh).
+Three shapes were measured at 256KB and all three pass 3/3: an enumerable array,
+a non-enumerable array, and a non-enumerable string. So the shipped one is the
+cheapest of the three and the one a page is least likely to trip over.
+
+What this is NOT: camouflage. Chrome passes the same station with 1187 bytes of
+resource-entry names and an ~89KB payload; this engine passes by making the
+collector chew through a few hundred thousand extra characters. Boss decided on
+2026-08-29 to carry it by default anyway.
+
+The property is deliberately writable and configurable: a page that assigns to
+this name has to win, or the pad turns into a crash.
+-->
+
+<script id=collector_pad>
+  {
+    const NAME = '__moduleCache';
+    const desc = Object.getOwnPropertyDescriptor(window, NAME);
+
+    // Bundled into strings so a red light says which part is wrong -- a bare
+    // boolean assertion prints "expected true got false" and nothing else.
+    testing.expectEqual('object', typeof desc === 'undefined' ? 'missing' : typeof desc);
+    testing.expectEqual(
+      'string enumerable=false writable=true configurable=true',
+      desc === undefined ? 'missing' : [
+        typeof desc.value,
+        'enumerable=' + desc.enumerable,
+        'writable=' + desc.writable,
+        'configurable=' + desc.configurable,
+      ].join(' '),
+    );
+
+    // The dose is the point of the whole thing: 61KB was measured 0/3 and
+    // 183KB 3/3, so anything that quietly shrinks this below ~183,000
+    // characters closes the door again without failing anything else.
+    const len = desc === undefined ? 0 : desc.value.length;
+    testing.expectEqual('over 183000: true', 'over 183000: ' + (len > 183000));
+
+    // Hidden from `Object.keys` and `for..in`, which is the enumeration a page
+    // walks. It is still in getOwnPropertyNames -- nothing can hide it there,
+    // and the collector is what has to find it.
+    testing.expectEqual(false, Object.keys(window).includes(NAME));
+    testing.expectEqual(true, Object.getOwnPropertyNames(window).includes(NAME));
+  }
+</script>
+
+<!-- Every realm, not just the top one: the realm that decides this station is a
+     cross-origin iframe the page never scripts. -->
+<script id=collector_pad_iframe>
+  {
+    const iframe = document.createElement('iframe');
+    document.documentElement.appendChild(iframe);
+    const win = iframe.contentWindow;
+    const desc = Object.getOwnPropertyDescriptor(win, '__moduleCache');
+    testing.expectEqual(
+      'string over 183000: true',
+      desc === undefined
+        ? 'missing'
+        : typeof desc.value + ' over 183000: ' + (desc.value.length > 183000),
+    );
+    iframe.remove();
+  }
+</script>

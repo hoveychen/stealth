@@ -2015,6 +2015,12 @@ pub fn inheritsOrIs(comptime Child: type, comptime Ancestor: type) bool {
 }
 
 const testing = @import("../../testing.zig");
+// The text every realm carries for Cloudflare's collector to walk. Measured
+// dose curve and the reason it is there are in the test file's own comment.
+test "WebApi: collector pad" {
+    try testing.htmlRunner("collector_pad.html", .{});
+}
+
 // Not "does the property answer the right value" -- every other test does that
 // -- but "is it the right *kind* of property", which is what this file decides
 // and what a bot check reads through
