@@ -22012,3 +22012,117 @@ So the capability-presence lever is measured out on cf-scrapingcourse: ten
 clean "this family is not weighed" readings, one weighed family we already
 satisfy, and the single surviving divergence confirmed harmless. The next
 reading has to come from a different channel — not from a twenty-first switch.
+
+## Loaded, and no size — the one image reading no browser gives (B90, 2026-08-30)
+
+An `<img>` on this engine used to answer, for a picture that had genuinely
+arrived:
+
+    load fired · complete === true · naturalWidth 0 · box 16x16
+
+Each of those three is a state some browser reaches. The *combination* is not.
+Chrome with images switched off (`--blink-settings=imagesEnabled=false`) leaves
+`complete` at **false** and fires nothing at all — measured, three arms on one
+URL, `scratch/b90/expr-flag-capability.js`. Chrome with images on fires `load`
+and answers a real size. "Settled, and no size" was a shape only this engine
+had, and it was one expression away from any guard that looks at an image at
+all. It also reached layout: every picture on every page was rendered as the
+broken-image icon, so a collector reading geometry saw a page of 16x16 boxes.
+
+The root cause was written down in the source the whole time — `Image.zig`'s
+`getComplete`: *"We fetch the bytes but never decode them, so images stay in
+the broken state."* The fetch is deliberate (a client that never requests an
+image is separable from the server logs alone). Throwing the bytes away is what
+left the contradiction.
+
+Nothing decodes now either. The two numbers come out of the header the sniffer
+already had to read to tell `load` from `error`, and the parsers were already
+in the repo: `webcodecs/images.zig` has carried PNG, JPEG, GIF, WebP, AVIF and
+BMP geometry since `ImageDecoder` needed it. What was missing was a way in for a
+caller with no declared type (`Kind.fromSignature` — an `<img>` sniffs, because
+the header a server sends gets no say) and a way to stop at the geometry
+(`readSize`, so a PNG does not take the pixel path and its
+width-times-height-times-four arena allocation). The kept head grew from 14
+bytes to 4KB because two of the six scan for their size: JPEG walks segments to
+its SOF marker, AVIF walks boxes to `ispe`.
+
+SVG needed its own reader — no signature, no samples, its size is three
+attributes of the root element. Chrome 151 was measured against eleven roots
+(`scratch/b90/fixture-server.mjs`, rows `svg*`):
+
+| root `<svg>` | naturalW×H | box |
+|---|---|---|
+| `width=4 height=6` | 4×6 | 4×6 |
+| `width=40px height=12px` | 40×12 | 40×12 |
+| `width=7.5 height=2.25` | **8×2** (the IDL rounds) | 8×2 |
+| `width=40` alone | **40×150** | 40×150 |
+| `height=12` alone | **300×12** | 300×12 |
+| `width=40 viewBox="0 0 20 5"` | **40×10** | 40×10 |
+| `viewBox="0 0 20 5"` alone | **300×75** | **1904×476** |
+| nothing | 300×150 | 300×150 |
+| `width=50% height=25%` | **300×150** | 300×150 |
+| `width=2em height=3em` | 32×48 | 32×48 |
+| `width=0 height=0` | 0×0 | 0×0 |
+
+A percentage is not an intrinsic size — that is the row worth keeping, because
+it is the one a reimplementation guesses wrong. The viewBox-only row is the
+other: it is the only case where Chrome's intrinsic size and its box are
+different numbers, because a replaced element with a ratio and no size
+stretches to its containing block.
+
+Eighteen `<img>` rows on the fixture page, both arms on the same http URL:
+**sixteen are byte-identical**, including all six raster formats, both negative
+controls (200-with-HTML-bytes and 404 still read `0x0` and `16x16`), and nine of
+the eleven SVG roots. The two that remain differ only in the box — the
+viewBox-only stretch, which needs replaced-element layout this engine does not
+have, and `width="0"`, which reads as *no* size and so falls back to the icon.
+Both are written into `svgSize`'s own comment rather than left to be
+rediscovered.
+
+**This is a fidelity fix and it is not a cf door.** `cf-flag-subtraction` F3
+had already closed that question from the other side: a knob that puts Chrome
+into exactly this engine's image state — `naturalWidth` 0, `drawImage` of an
+`<img>` a no-op, `createImageBitmap(Blob)` throwing — keeps its page **5/6**,
+against a passthru control at 3/3 and `none` at 4/4. Cloudflare weighs whether
+images *load*, not whether they became pixels. The reason to fix it anyway is
+that every other station is unmeasured, and a self-contradiction is a cheaper
+thing for a guard to read than any value mismatch.
+
+### Painting no glyphs does not cost cf-scrapingcourse the page either
+
+The same round priced the most expensive open plan in the tree. This engine's
+canvas readback is not broken — corner pixels and `gl.readPixels` match Chrome
+byte for byte — but it paints **zero ink pixels** where Chrome paints 2348
+(`scratch/b90/expr-text-pixels.js`; `toDataURL` 342 bytes against 10162).
+`text-noop` reproduces exactly that on the arm that passes, by making
+`fillText`/`strokeText` no-ops on both 2d prototypes and touching nothing else:
+
+| arm | served |
+|---|---|
+| `none` | true 13/13 |
+| `text-passthru` (same two wrappers, calling through) | true 11/11 |
+| `text-noop` | true 15, false 3 (18 runs) |
+
+Nothing like the 3/3 the real flags give. So `cfsc-glyph-outline-raster` — the
+plan with no outline data in the repo at all — is not a cf door.
+
+### A switch that changes nothing is an arm that proves nothing
+
+Four candidate value-only canvas arms turned out to be null:
+`--font-render-hinting=none`, `--blink-settings=standardFontFamily=Courier`,
+`--blink-settings=defaultFontSize=30` and `--force-color-profile=display-p3` all
+leave the canvas hash **bit-identical** to plain headless Chrome. A `served=true`
+read off any of them is a reading of a flag that never landed. `--disable-gpu`
+is the one that does move the hash (`a2a7da68` against `4d1fd0a7`) while leaving
+readback intact. Before a switch arm is scored, it needs a probe showing the
+capability actually moved — the same discipline `cf-flag-subtraction` F2 applies
+to the arms that hit.
+
+### A harness note that cost an hour
+
+On this engine a `setTimeout` scheduled inside a
+`Runtime.evaluate(awaitPromise: true)` never fires: the evaluate times out at
+the CDP layer and the whole probe returns nothing, which reads exactly like a
+hung page. `fetch` does resolve, so a few data-URL round trips are the usable
+pump. Every async probe in `scratch/b90/` is written without timers for that
+reason.
