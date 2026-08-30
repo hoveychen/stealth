@@ -90,12 +90,12 @@
       // none of the six rows.
       const HERE = testing.ORIGIN;
       testing.expectEqual(
-        's-plain.js  origin=(none) mode=no-cors\n' +
-        's-anon.js   origin=' + HERE + ' mode=cors\n' +
-        'i-plain.gif origin=(none) mode=no-cors\n' +
-        'i-anon.gif  origin=' + HERE + ' mode=cors\n' +
-        'l-plain.css origin=(none) mode=no-cors\n' +
-        'l-anon.css  origin=' + HERE + ' mode=cors',
+        's-plain.js  origin=(none) mode=no-cors dest=script\n' +
+        's-anon.js   origin=' + HERE + ' mode=cors dest=script\n' +
+        'i-plain.gif origin=(none) mode=no-cors dest=image\n' +
+        'i-anon.gif  origin=' + HERE + ' mode=cors dest=image\n' +
+        'l-plain.css origin=(none) mode=no-cors dest=style\n' +
+        'l-anon.css  origin=' + HERE + ' mode=cors dest=style',
         's-plain.js  ' + seen['s-plain.js'] + '\n' +
         's-anon.js   ' + seen['s-anon.js'] + '\n' +
         'i-plain.gif ' + seen['i-plain.gif'] + '\n' +

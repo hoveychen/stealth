@@ -981,7 +981,13 @@ const TIMING_ALLOW_BODY_JS = "//" ++ "t" ** 510;
 // Guarded by a mutex rather than built from atomics like cors_preflights_seen
 // above: these are strings, and the server answers on a thread per connection.
 var xo_seen_mutex: std.Io.Mutex = .init;
-var xo_seen: [8]XoRecord = @splat(.{});
+// One slot per distinct name across the WHOLE run, not per test: the server is
+// shared and this array is a global, so two test files asking about six and
+// three requests need nine between them. Overflowing is silent from the
+// server's side and reads back as "(never requested)" -- which looks exactly
+// like the request never going out, and cost one confused debugging round. Keep
+// it comfortably above the number of slots in use.
+var xo_seen: [32]XoRecord = @splat(.{});
 
 const XoRecord = struct {
     slot_len: u8 = 0,
@@ -1009,9 +1015,10 @@ fn xoHandler(req: *std.http.Server.Request, path: []const u8) !bool {
 
     if (recording) {
         var buf: [160]u8 = undefined;
-        const value = std.fmt.bufPrint(&buf, "origin={s} mode={s}", .{
+        const value = std.fmt.bufPrint(&buf, "origin={s} mode={s} dest={s}", .{
             corsRequestHeader(req, "origin") orelse "(none)",
             corsRequestHeader(req, "sec-fetch-mode") orelse "(none)",
+            corsRequestHeader(req, "sec-fetch-dest") orelse "(none)",
         }) catch buf[0..0];
 
         xo_seen_mutex.lockUncancelable(lp.io);

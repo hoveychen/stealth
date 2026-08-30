@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>a preload link fetches the thing it names</title>
+  <script src="/src/browser/tests/testing.js"></script>
+</head>
+<body>
+  <!--
+  `<link rel=preload as=X>` is a request, not a declaration: the browser fetches
+  the named resource immediately and warms its cache, and the destination of
+  that request is the `as` value rather than "link".
+
+  This engine handled `as=script` and nothing else -- every other `as` fired a
+  synthetic load event and fetched nothing at all, so a page that preloads its
+  hero image made one fewer request than Chrome did, visible in the site's own
+  log without a line of JavaScript running.
+
+  Measured (probes/b87-preload-as-fixture.mjs + expr-b87-preload-as.js, one page
+  with eight `as` values, both arms):
+
+    as=       Chrome fetches?  dest    mode      Origin   this engine
+    image     yes              image   no-cors   no       no request
+    style     yes              style   no-cors   no       no request
+    script    yes              script  no-cors   no       fetched (the only one)
+    font      yes              font    cors      yes      no request
+    fetch     yes              empty   no-cors   no       no request
+    document  no               --      --        --       no request
+    audio     no               --      --        --       no request
+    video     no               --      --        --       no request
+
+  Chrome files all five under `initiatorType: "link"`.
+
+  `as=font` is deliberately not covered here: it needs a `font` destination this
+  engine does not have, and the one header that would pin it down -- the RFC
+  9218 `priority` hint -- is invisible over HTTP/1.1, which is all the fixture
+  and this test server speak. It has its own P-task.
+  -->
+  <script id=preload_fetches_image_style_and_fetch type=module>
+    const state = await testing.async();
+    // /xo-record/<slot> answers with a body matching the extension and files
+    // the headers it saw; /xo-read/<slot> hands them back. A preload's bytes
+    // never reach script, so the server is the only witness.
+    const REC = testing.ORIGIN + '/xo-record/';
+    const preload = (as, slot) => new Promise((resolve) => {
+      const el = document.createElement('link');
+      el.rel = 'preload';
+      el.as = as;
+      el.onload = resolve;
+      el.onerror = resolve;
+      el.href = REC + slot;
+      document.head.appendChild(el);
+    });
+
+    // Sequential: the slots are keyed by name and a parallel batch would make
+    // "which request wrote this slot" a race.
+    await preload('image', 'pre-image.gif');
+    await preload('style', 'pre-style.css');
+    await preload('fetch', 'pre-fetch.js');
+    // A little slack: the load event can fire before the entry is in the buffer.
+    await new Promise((r) => setTimeout(r, 30));
+
+    const read = async (slot) =>
+      (await fetch(testing.ORIGIN + '/xo-read/' + slot).then((r) => r.text())).trim();
+    const seen = {};
+    for (const slot of ['pre-image.gif', 'pre-style.css', 'pre-fetch.js']) {
+      seen[slot] = await read(slot);
+    }
+    const entry = (slot) => {
+      const e = performance.getEntriesByType('resource').filter((x) => x.name === REC + slot)[0];
+      return e ? e.initiatorType : '(no entry)';
+    };
+    state.resolve();
+    await state.done(() => {
+      // One string: the runner never prints `desc`, so the red light has to
+      // name the row itself.
+      testing.expectEqual(
+        'image: origin=(none) mode=no-cors dest=image entry=link\n' +
+        'style: origin=(none) mode=no-cors dest=style entry=link\n' +
+        'fetch: origin=(none) mode=no-cors dest=empty entry=link',
+        'image: ' + seen['pre-image.gif'] + ' entry=' + entry('pre-image.gif') + '\n' +
+        'style: ' + seen['pre-style.css'] + ' entry=' + entry('pre-style.css') + '\n' +
+        'fetch: ' + seen['pre-fetch.js'] + ' entry=' + entry('pre-fetch.js'));
+    });
+  </script>
+</body>
+</html>

@@ -1950,6 +1950,11 @@ pub const Request = struct {
     // internal requests transparently following redirects.
     pub const RedirectMode = enum { follow, manual, @"error" };
 
+    // Fetch request mode, as Sec-Fetch-Mode reports it. Every request has one
+    // by destination; `Request.mode` overrides that default for the loads whose
+    // mode is not implied by what they are fetching.
+    pub const Mode = enum { navigate, no_cors, cors };
+
     // Fetch-metadata inputs for a document request that only the navigating
     // frame knows. Absent on subresources, where cookie_origin and
     // resource_type are enough.
@@ -1993,6 +1998,14 @@ pub const Request = struct {
     // which needs https, which no fixture here speaks; both spellings read as
     // "CORS mode" until someone can measure the difference.
     cors: bool = false,
+
+    // Overrides the mode this request's destination would otherwise imply.
+    // Only one thing needs it today: `<link rel=preload as=fetch>`, whose
+    // destination is `empty` -- the same as a real fetch() -- but which Chrome
+    // sends no-cors, where a real fetch() is always cors (measured,
+    // probes/b87-preload-as-fixture.mjs). Left null everywhere else, so the
+    // per-destination defaults below stay the single description of the rule.
+    mode: ?Mode = null,
     redirect: RedirectMode = .follow,
     referrer_policy: ?referrer.Policy = null,
     credentials: ?[:0]const u8 = null,
@@ -2041,6 +2054,21 @@ pub const Request = struct {
     // every caller decides — pass `HttpClient.noopShutdown` to opt out,
     // knowingly.
     shutdown_callback: ShutdownCallback,
+
+    // The mode this request goes out in: `mode` when it was set, and the
+    // destination's own default otherwise. A document navigates; a subresource
+    // the parser pulls in is no-cors unless its element asked for CORS; a
+    // script-issued fetch or XHR goes through the CORS protocol.
+    pub fn requestMode(self: *const Request) Mode {
+        if (self.mode) |m| {
+            return m;
+        }
+        return switch (self.resource_type) {
+            .document => .navigate,
+            .stylesheet, .script, .image => if (self.cors) .cors else .no_cors,
+            .fetch, .xhr, .eventsource => .cors,
+        };
+    }
 
     pub fn getCookieString(self: *Request, arena: Allocator) !?[:0]const u8 {
         const jar = self.cookie_jar orelse return null;
@@ -3682,13 +3710,10 @@ pub const Transfer = struct {
             .fetch, .xhr, .eventsource => "empty",
         }, .{ .source = .cdp });
 
-        try self.setHeader("Sec-Fetch-Mode", switch (req.resource_type) {
-            .document => "navigate",
-            // Subresources the parser pulls in are no-cors -- unless the
-            // element asked for CORS with `crossorigin`. Script-issued fetches
-            // and XHR always go through the CORS protocol.
-            .stylesheet, .script, .image => if (req.cors) "cors" else "no-cors",
-            .fetch, .xhr, .eventsource => "cors",
+        try self.setHeader("Sec-Fetch-Mode", switch (req.requestMode()) {
+            .navigate => "navigate",
+            .no_cors => "no-cors",
+            .cors => "cors",
         }, .{ .source = .cdp });
 
         try self.setHeader("Sec-Fetch-Site", if (self.initiatorOrigin()) |origin|
@@ -3833,13 +3858,17 @@ pub const Transfer = struct {
         // carry `Origin: <page origin>` in Chrome, while a same-origin GET
         // through fetch() carries none
         // (probes/b87-crossorigin-request-fixture.mjs).
-        const element_cors = switch (req.resource_type) {
-            .stylesheet, .script, .image => req.cors,
+        const cors_mode = req.requestMode() == .cors;
+        const element_cors = cors_mode and switch (req.resource_type) {
+            .stylesheet, .script, .image => true,
             .document, .fetch, .xhr, .eventsource => false,
         };
         if (!element_cors) {
             switch (req.resource_type) {
-                .fetch, .xhr, .eventsource => {},
+                // A no-cors request names nobody, whatever its destination:
+                // `<link rel=preload as=fetch>` has a fetch's destination and a
+                // no-cors mode, and Chrome sends it without an Origin.
+                .fetch, .xhr, .eventsource => if (!cors_mode) return null,
                 .document, .stylesheet, .script, .image => return null,
             }
         }

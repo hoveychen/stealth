@@ -139,6 +139,23 @@ pub fn linkAddedCallback(self: *Link, frame: *Frame) !void {
                 return;
             }
         }
+        // A preload is a REQUEST, not a declaration: the browser fetches what
+        // the link names and warms its cache, and the destination of that
+        // request is the `as` value. Only `as=script` was ever fetched here;
+        // everything else fired the synthetic load below and asked for nothing,
+        // so a page preloading its hero image made one fewer request than
+        // Chrome, visible in the site's own log with no script running.
+        //
+        // Measured (probes/b87-preload-as-fixture.mjs, eight `as` values):
+        // Chrome fetches image, style, script, font and fetch, and ignores
+        // document, audio and video. `as=font` is not here -- it needs a `font`
+        // destination this engine does not have; its own P-task.
+        if (preloadDestination(as)) |dest| {
+            if (frame.preloadResource(Factory.protoOf(self), href, dest)) {
+                // load/error fires when the fetch settles
+                return;
+            }
+        }
         // synthetic load, fires next tick
         return frame.queueLoad(Factory.protoOf(self));
     }
@@ -155,6 +172,29 @@ pub fn linkAddedCallback(self: *Link, frame: *Frame) !void {
         // synthetic load, fires next tick
         return frame.queueLoad(Factory.protoOf(self));
     }
+}
+
+// The request a `<link rel=preload as=...>` makes, or null when Chrome makes
+// none. `as` is ASCII-case-insensitive, like every other enumerated attribute.
+//
+// `script` is absent on purpose: it goes through the script preloader above,
+// which can hand the bytes to the <script> that consumes them. `font` is absent
+// because it needs a `font` destination that does not exist yet. `document`,
+// `audio` and `video` are absent because Chrome asks for nothing for them
+// (measured, probes/b87-preload-as-fixture.mjs).
+fn preloadDestination(as: []const u8) ?Frame.SubresourceOpts {
+    if (std.ascii.eqlIgnoreCase(as, "image")) {
+        return .{ .resource_type = .image, .initiator = "link", .sniff = false };
+    }
+    if (std.ascii.eqlIgnoreCase(as, "style")) {
+        return .{ .resource_type = .stylesheet, .initiator = "link", .sniff = false };
+    }
+    if (std.ascii.eqlIgnoreCase(as, "fetch")) {
+        // Destination `empty`, the same as a real fetch() -- but no-cors, where
+        // a real fetch() is always cors. Measured; hence the mode override.
+        return .{ .resource_type = .fetch, .mode = .no_cors, .initiator = "link", .sniff = false };
+    }
+    return null;
 }
 
 pub const JsApi = struct {
@@ -214,6 +254,13 @@ pub const Build = struct {
 const testing = @import("../../../../testing.zig");
 test "WebApi: HTML.Link" {
     try testing.htmlRunner("element/html/link.html", .{});
+}
+
+// The stylesheet preload is a real fetch, so the runner has to be told to make
+// it: it leaves external stylesheets off by default.
+test "WebApi: HTML.Link preload fetches what it names" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("element/html/link_preload.html", .{ .load_external_stylesheets = true });
 }
 
 test "WebApi: HTML.Link external stylesheet" {
