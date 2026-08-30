@@ -6141,3 +6141,7 @@ test "WebApi: CSSStyleDeclaration position grammar" {
 test "WebApi: CSSStyleDeclaration position serialization" {
     try testing.htmlRunner("css/position_edge_relative_computed.html", .{});
 }
+
+test "WebApi: CSSStyleDeclaration css-wide keywords" {
+    try testing.htmlRunner("css/css_wide_keywords.html", .{});
+}

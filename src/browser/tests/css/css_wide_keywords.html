@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+A CSS-wide keyword is not a value. `inherit`, `initial`, `unset`, `revert` and
+`revert-layer` each say where the value comes from, and by the time
+getComputedStyle answers, the value has come from there -- so the word itself is
+never what a page reads back. This engine answered the word: 462 of the 475
+names getComputedStyle enumerates leaked it, for every one of the five, where
+Chrome leaks none (scratch/b92/expr-css-wide.js). That is 2306 wrong readings
+off a single element, and one `setProperty` plus one `getComputedStyle` tells
+the two engines apart on any property a page cares to pick.
+
+The resolutions are distinct, and the table below is built to separate them: the
+parent declares values that neither the initial value nor the UA sheet would
+give, so a keyword resolving from the wrong source shows up as a wrong answer
+rather than as a coincidence.
+
+  inherit        the PARENT's computed value, for inherited and non-inherited
+                 properties alike -- `width` becomes the parent's 123px and
+                 `display` its inline-block.
+  initial        the property's initial value, ignoring the UA sheet -- `display`
+                 is `inline` even on a <li>, whose UA rule says list-item.
+  unset          inherit for a property that inherits, initial for one that does
+                 not.
+  revert         as if the declaration had never been written, which keeps the
+                 UA sheet: `display` stays list-item on a <li> and
+                 `unicode-bidi` stays isolate. `revert-layer` is the same answer
+                 here, there being no cascade layer to fall back to.
+
+Measured on Chrome 151 with scratch/b92/expr-wide-table.js.
+
+The parent is deliberately not `display: flex`. A flex container blockifies its
+children, so `display: initial` reads back `block` under one -- which looks
+exactly like a wrong initial value while being the layout doing its job.
+
+The `bare` rows are the same reading with nothing declared, and every one of
+them passed before this test was written. They are kept because they hold the
+layout and the UA sheet still: a failure in the keyword rows is then the keyword
+and not the baseline underneath it.
+-->
+
+<script id=css_wide_keywords>
+{
+  const PROPS = ["color","font-size","visibility","letter-spacing","text-align","white-space","width","background-position","border-top-width","opacity","z-index","margin-top","display","unicode-bidi"];
+
+  // tag ; keyword ; the computed values, in PROPS order
+  const CHROME = [
+    ['div', 'bare', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; block ; isolate'],
+    ['div', 'inherit', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 7px 9px ; 0px ; 0.25 ; 7 ; 13px ; inline-block ; bidi-override'],
+    ['div', 'initial', 'rgb(0, 0, 0) ; 16px ; visible ; normal ; start ; normal ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
+    ['div', 'unset', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
+    ['div', 'revert', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; block ; isolate'],
+    ['div', 'revert-layer', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; block ; isolate'],
+    ['li', 'bare', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; list-item ; isolate'],
+    ['li', 'inherit', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 7px 9px ; 0px ; 0.25 ; 7 ; 13px ; inline-block ; bidi-override'],
+    ['li', 'initial', 'rgb(0, 0, 0) ; 16px ; visible ; normal ; start ; normal ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
+    ['li', 'unset', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
+    ['li', 'revert', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; list-item ; isolate'],
+    ['li', 'revert-layer', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; list-item ; isolate'],
+    ['span', 'bare', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
+    ['span', 'inherit', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 7px 9px ; 0px ; 0.25 ; 7 ; 13px ; inline-block ; bidi-override'],
+    ['span', 'initial', 'rgb(0, 0, 0) ; 16px ; visible ; normal ; start ; normal ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
+    ['span', 'unset', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
+    ['span', 'revert', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
+    ['span', 'revert-layer', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
+  ];
+
+  const parent = document.createElement('div');
+  parent.style.cssText = 'color:rgb(1,2,3);font-size:29px;visibility:hidden;letter-spacing:3px;text-align:right;white-space:pre;width:123px;background-position:7px 9px;border-top-width:11px;opacity:0.25;z-index:7;margin-top:13px;display:inline-block;unicode-bidi:bidi-override';
+  document.documentElement.appendChild(parent);
+
+  for (const [tag, keyword, expected] of CHROME) {
+    const el = document.createElement(tag);
+    parent.appendChild(el);
+    const got = [];
+    for (const prop of PROPS) {
+      el.style.cssText = '';
+      if (keyword !== 'bare') el.style.setProperty(prop, keyword);
+      got.push(getComputedStyle(el).getPropertyValue(prop));
+    }
+    el.remove();
+    // Joined per row so a failure names the property that moved; a boolean
+    // assertion here would only ever say "expected true".
+    testing.expectEqual(
+      tag + ' ' + keyword + ': ' + expected,
+      tag + ' ' + keyword + ': ' + got.join(' ; '));
+  }
+
+  parent.remove();
+}
+</script>
