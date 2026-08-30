@@ -502,3 +502,43 @@
     });
   }
 </script>
+
+<script id="img-second-load-is-served-from-memory" type=module>
+  // A second <img> for a URL this document already loaded must not reach the
+  // server. Chrome answers it out of the renderer's memory cache and leaves no
+  // second resource entry behind; measured seven ways on Chrome 151
+  // (scratch/b69/img-cache-fixture.mjs): two Images in sequence, two in the
+  // same task, one element whose src is assigned twice, markup plus a scripted
+  // Image, and a response carrying `Cache-Control: no-store` all cost ONE
+  // request. Only an error response and a request in a different CORS mode are
+  // asked for again.
+  //
+  // Why it is worth a test: the difference is invisible from the page -- both
+  // loads fire `load` and report the same size either way -- and visible to
+  // the server. Cloudflare's challenge loads its `ci` PNG as an Image, and on
+  // cf-scrapingcourse this engine asked for it twice in 3 runs of 3 while
+  // Chrome asked once (scratch/b69/alt-*.log).
+  const state = await testing.async();
+  const url = "/served/counted.png";
+  const hits = async () => Number(await (await fetch("/served/counted-hits")).text());
+  const load = () => new Promise((r) => {
+    const img = document.createElement("img");
+    img.addEventListener("load", () => r("load"));
+    img.addEventListener("error", () => r("error"));
+    document.body.appendChild(img);
+    img.src = url;
+  });
+
+  const before = await hits();
+  const first = await load();
+  const second = await load();
+  const after = await hits();
+  const entries = performance.getEntriesByName(testing.ORIGIN + url, "resource").length;
+  state.resolve({ first, second, requests: after - before, entries });
+
+  await state.done((r) => {
+    testing.expectEqual("load,load", r.first + "," + r.second);
+    testing.expectEqual("requests 1", "requests " + r.requests);
+    testing.expectEqual("entries 1", "entries " + r.entries);
+  });
+</script>
