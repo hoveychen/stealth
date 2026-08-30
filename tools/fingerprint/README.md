@@ -22823,3 +22823,51 @@ to the transform code, and it is the third defect on `transform-number-format`.
 the machine was at load average 36 while several sessions ran Chrome. Same
 condition the previous chapter records. Check the named test against main before
 attributing it to a change.
+
+## A preloaded sheet was fetched twice, on the station's own front page (B95, 2026-08-30)
+
+`www.scrapingcourse.com` — the top document of cf-scrapingcourse — has the pair
+every Vite build emits:
+
+```html
+<link rel="preload" as="style" href=".../app-DxJb4DfE.css" />
+<link rel="stylesheet"          href=".../app-DxJb4DfE.css" />
+```
+
+Chrome files **one** resource entry for that pair. This engine filed two, with
+different startTimes, so it asked the origin twice — measured on both arms
+through `run-expr.mjs --url https://www.scrapingcourse.com/`, which otherwise
+agreed URL for URL: fourteen distinct URLs on each arm, fourteen entries on
+Chrome and fifteen here. A request count is the loudest kind of wire difference:
+it does not need the guard to read a property, only the origin to count lines in
+its log. The guard also walks the resource buffer entry by entry — the run-up
+log has it reading `entryType`, `name`, `startTime`, `duration`, `transferSize`,
+`encodedBodySize`, `nextHopProtocol` and `initiatorType` over every entry
+moments before it hashes its four short values.
+
+The dedup that already covered two `<link rel=stylesheet>`s did not cover this
+pairing, and could not: `_stylesheet_bodies` holds *completed* bodies, and the
+preload is asynchronous, so when the stylesheet link is parsed twenty
+milliseconds later the bytes have not landed. The preload also went through
+`requestSubresource`, which keeps a prefix and throws the body away.
+
+Two changes, both in `Frame.zig`. A subresource fetched as a stylesheet now
+keeps its bytes (bounded by `MAX_STYLESHEET_BYTES`, dropped past it) and files
+them in `_stylesheet_bodies` on a 2xx. And `loadExternalStylesheet`, on a cache
+miss, looks for an *open* slot for the same URL and waits for it instead of
+opening a second one — the loop is `ScriptManager.waitForPreload`'s, evaluation
+window marked so a `Target.closeTarget` arriving mid-pump cannot free the frame
+this stack holds. Waiting is what Chrome does too: a render-blocking sheet holds
+up the parser either way. A preload that fails or was never a stylesheet leaves
+nothing behind and the fetch below runs as it always did.
+
+After: fourteen entries on both arms, no duplicate. Regression test:
+`preloaded_sheet_is_one_request` in `css/stylesheet_memory_cache.html`, which
+also asserts the preload alone still reaches the wire — Chrome fetches `as=style`
+and a fix that stopped preloading would pass the count and lose a request.
+
+One trap the test hit first: its polling loop stopped as soon as *one* entry for
+the sheet existed, and the synchronous stylesheet fetch always lands before the
+asynchronous preload, so it counted one and passed against the unfixed engine.
+It waits on a preload-only sheet now. A test that stops at the first sign of the
+thing it is counting is not counting.

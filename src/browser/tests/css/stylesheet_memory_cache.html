@@ -74,3 +74,52 @@
   });
 }
 </script>
+
+<!--
+  ...and a sheet the page preloaded first is not fetched again.
+
+  `<link rel=preload as=style>` followed by `<link rel=stylesheet>` for the same
+  href is what Laravel/Vite emits on every page it builds, and it is on
+  www.scrapingcourse.com -- the top document of the cf-scrapingcourse station.
+  Measured there (tools/fingerprint/run-expr.mjs, both arms, same URL): Chrome
+  files ONE resource entry for app-DxJb4DfE.css, this engine filed two, with
+  different startTimes, so it went to the origin twice.
+
+  The preload takes `Frame.preloadResource` -> `requestSubresource`, which knows
+  nothing about `_stylesheet_bodies`; the stylesheet link then misses the cache
+  and asks again. The dedup that already covers two `<link rel=stylesheet>`s has
+  to cover this pairing too -- including while the preload is still in flight,
+  which is the case on the real page: the second request started twenty
+  milliseconds after the first and two hundred before it finished.
+-->
+<link rel="preload" as="style" href="/wire/preload-only.css">
+<link rel="preload" as="style" href="/wire/preloaded-sheet.css">
+<link rel="stylesheet" href="/wire/preloaded-sheet.css">
+
+<script id="preloaded_sheet_is_one_request" type=module>
+{
+  const test = await testing.async();
+  // Waits on the preload-only sheet, not on this one: the stylesheet link is
+  // fetched synchronously and lands first, so a loop that stops at "one entry
+  // exists" would count before the asynchronous preload had even arrived.
+  const deadline = Date.now() + 2000;
+  const count = (name) => performance.getEntriesByType('resource')
+    .filter((e) => e.name.endsWith(name)).length;
+  while (Date.now() < deadline && count('/wire/preload-only.css') < 1) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  await new Promise((r) => setTimeout(r, 200));
+  test.resolve(count('/wire/preloaded-sheet.css'));
+
+  await test.done((n) => {
+    const only = performance.getEntriesByType('resource')
+      .filter((e) => e.name.endsWith('/wire/preload-only.css')).length;
+    testing.expectEqual('preload-only fired: 1, preloaded-sheet entries: 1',
+      'preload-only fired: ' + only + ', preloaded-sheet entries: ' + n);
+    // The stylesheet link still delivers its rules: a cache hit is a delivery.
+    const sheets = [...document.styleSheets]
+      .filter((s) => String(s.href || '').endsWith('/wire/preloaded-sheet.css')).length;
+    testing.expectEqual('preloaded-sheet.css sheets: 1', 'preloaded-sheet.css sheets: ' + sheets);
+  });
+}
+</script>
