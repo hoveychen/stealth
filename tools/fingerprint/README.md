@@ -21226,3 +21226,69 @@ signal found in a while: unlike every other defect closed on this codebase
 lately, it was visible in the server's own request log without the page running
 a line of JavaScript, and it demonstrably changed what Cloudflare sent back.
 Closing it did not open anything.
+
+## A preload link is a request, not a declaration
+
+`preload-link-fetches-resource`. `<link rel=preload as=X>` fetches what it names
+and warms the cache; the destination of that request is the `as` value. This
+engine handled `as=script` and nothing else — every other `as` fired a synthetic
+load event and asked for nothing — so a page preloading its hero image made one
+fewer request than Chrome, in the site's own log, with no script running.
+
+`probes/b87-preload-as-fixture.mjs` puts all eight `as` values on one page:
+
+```
+  as=       Chrome fetches?  dest    mode      Origin   this engine (before)
+  image     yes              image   no-cors   no       no request
+  style     yes              style   no-cors   no       no request
+  script    yes              script  no-cors   no       fetched (the only one)
+  font      yes              font    cors      yes      no request
+  fetch     yes              empty   no-cors   no       no request
+  document  no               --      --        --       no request
+  audio     no               --      --        --       no request
+  video     no               --      --        --       no request
+```
+
+Chrome files all five under `initiatorType: "link"`.
+
+Two of them needed something the request layer could not express, and both are
+the same shape of surprise — a destination whose header is *not* what the
+destination usually implies:
+
+* **`as=fetch` is no-cors.** Its destination is `empty`, the same as a real
+  `fetch()`, but Chrome sends it no-cors where a real `fetch()` is always cors.
+  So `Request` grows a `mode` override, null everywhere else.
+* **A preloaded image is `priority: i`, where a displayed `<img>` is
+  `u=1, i`.** Same destination, different urgency: the preload is not on screen,
+  so it never gets the boost. Hence a `priority` override too.
+
+That second one could only be seen over h2 — Chrome sends the RFC 9218 hint on
+h2/h3 and nothing at all on h1, and every fixture here is node's `http`. So
+there is a small h2 fixture now (`probes/b87-preload-priority-h2.mjs`), reusing
+`h2-echo.mjs`'s throwaway-certificate helper rather than editing the shared page
+set it serves. Both arms, all six rows, after:
+
+```
+  /p-image.gif   dest=image   prio=i
+  /p-style.css   dest=style   prio=u=0
+  /p-script.js   dest=script  prio=u=1
+  /p-font.bin    dest=font    prio=u=1
+  /p-fetch.bin   dest=empty   prio=u=1, i
+  /favicon.ico   dest=image   prio=u=1, i
+```
+
+`as=font` brought a `font` destination with it — the first one this engine has,
+since nothing here loads a font face.
+
+**A use-after-free the html test passed straight through, worth remembering.**
+The first cut resolved the href onto a scoped arena and released it on return,
+but the transfer stores that slice and the entry quotes it back long after. The
+buffer came back naming two preloads `favicon.ico` and a third a run of NUL
+bytes — while the requests themselves went out perfectly well, so the wire log
+looked right. The test passed because it looked entries up *by* name, and a
+freed name reports as "(no entry)", which reads like the request never going
+out. It now asserts the names the entries actually carry, so the same corruption
+returns as a wrong string rather than a missing row.
+
+**Priced as debt.** Nothing in this family has moved a door: see the two
+chapters above and `only-two-real-doors-left`.
