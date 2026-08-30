@@ -431,6 +431,21 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // reasons. See computedFontText.
                 return self.computedFontText(frame, surface, depth);
             }
+            // `flex` off a computed style is always its three longhands, and
+            // it is `.unmodelled` in chrome_shorthands -- no distribution rule
+            // was measured for the declared form -- so the generic join never
+            // reaches it and a declared `flex: 1` was echoed back as `1` where
+            // Chrome answers `1 1 0%`. Eleven shapes measured
+            // (scratch/b69/expr-flex-rules.js), and all three longhands already
+            // agreed in every one of them, so the join is the whole fix.
+            if (wrapped.eqlSlice("flex") or wrapped.eqlSlice("-webkit-flex")) {
+                return self.joinComputedParts(
+                    &.{ "flex-grow", "flex-shrink", "flex-basis" },
+                    frame,
+                    surface,
+                    depth,
+                );
+            }
             // `animation-duration: auto` is not a computed value. Chrome
             // answers `0s` for an unset duration, for a name-only longhand and
             // for an `auto` the page wrote itself -- all three measured
@@ -1473,25 +1488,24 @@ fn shorthandValue(self: *const CSSStyleDeclaration, name: []const u8, frame: *Fr
     return shorthand.join(frame.local_arena, entry, held) catch null;
 }
 
-/// Shorthands Chrome serialises differently off a computed style than off a
+/// A shorthand Chrome serialises differently off a computed style than off a
 /// declared one, measured with tools/fingerprint/scratch/expr-computed-shorthands.js
 /// against Chrome 151: a computed `background` puts the layer's colour first and
-/// writes every slot, and a computed `flex-flow` keeps `nowrap` where the
-/// declared form drops it. chrome_shorthands measured the declared
-/// serialisation -- that is what a page can write -- so joining these off a
-/// computed view answers the wrong shape. The recorded initial value stands
-/// instead, which is what they answered before the join existed: both were
-/// already wrong on a declaring element, and this keeps them right on one that
-/// declares nothing.
+/// writes every slot. chrome_shorthands measured the declared serialisation --
+/// that is what a page can write -- so joining it off a computed view answers
+/// the wrong shape. The recorded initial value stands instead, which is what it
+/// answered before the join existed: it was already wrong on a declaring
+/// element, and this keeps it right on one that declares nothing.
 ///
-/// `animation` used to be on this list under the same note, "a computed
-/// `animation` reads `none`". That is true of an element declaring nothing and
-/// false of one that declares an animation -- nine shapes measured both ways in
-/// css/animation_computed_shorthand.html, and the two forms differ by exactly
-/// one rule, which `ANIMATION_COMPUTED_OMIT` below expresses.
+/// `animation` and `flex-flow` used to be on this list under the same note.
+/// Both were wrong the same way: the note describes an element declaring
+/// nothing, and what a page has is an element that declares something. Nine
+/// shapes for `animation` (css/animation_computed_shorthand.html) and eleven for
+/// `flex-flow` (css/flex_computed_shorthands.html), each measured both ways, and
+/// in both the computed form differs from the declared one by exactly one rule
+/// about which slots are dropped -- which is what `computedOmitFor` expresses.
 const COMPUTED_JOIN_DECLINED = [_][]const u8{
-    "background",        "flex-flow",
-    "-webkit-flex-flow",
+    "background",
 };
 
 /// What the computed `animation` join drops, one list per slot of the group, in
@@ -1515,9 +1529,18 @@ const ANIMATION_COMPUTED_OMIT = [_][]const []const u8{
     &.{"normal"}, &.{"none"}, &.{"running"}, &.{"none"},
 };
 
+/// `flex-flow` drops nothing off a computed style: `row nowrap` on an element
+/// that declares neither component, both parts always. The table's own lists
+/// drop each at its initial, which is the declared form -- `flex-flow: row wrap`
+/// reads back as `wrap` from `el.style`.
+const FLEX_FLOW_COMPUTED_OMIT = [_][]const []const u8{ &.{}, &.{} };
+
 fn computedOmitFor(name: []const u8) ?[]const []const []const u8 {
     if (std.mem.eql(u8, name, "animation") or std.mem.eql(u8, name, "-webkit-animation")) {
         return &ANIMATION_COMPUTED_OMIT;
+    }
+    if (std.mem.eql(u8, name, "flex-flow") or std.mem.eql(u8, name, "-webkit-flex-flow")) {
+        return &FLEX_FLOW_COMPUTED_OMIT;
     }
     return null;
 }
@@ -2007,6 +2030,37 @@ fn computedKeepsAll(name: []const u8) bool {
 /// empty is the declared serialisation saying "this cannot be written as one
 /// shorthand", which is an answer for `el.style` and not for a computed view:
 /// Chrome answers every one of these names off getComputedStyle.
+/// A computed shorthand that is just its longhands with spaces between them and
+/// nothing ever dropped. `flex` is the one that needs it: the generic join
+/// works off `chrome_shorthands`, which has no model for `flex` at all, and
+/// every omit rule there is the DECLARED form's.
+fn joinComputedParts(
+    self: *const CSSStyleDeclaration,
+    longhands: []const []const u8,
+    frame: *Frame,
+    surface: Surface,
+    depth: u8,
+) []const u8 {
+    var total: usize = 0;
+    const parts = frame.local_arena.alloc([]const u8, longhands.len) catch return "";
+    for (longhands, parts) |longhand, *part| {
+        part.* = self.propertyValueAt(longhand, frame, surface, depth + 1);
+        if (part.len == 0) return "";
+        total += part.len + 1;
+    }
+    const out = frame.local_arena.alloc(u8, total - 1) catch return "";
+    var at: usize = 0;
+    for (parts, 0..) |part, i| {
+        if (i != 0) {
+            out[at] = ' ';
+            at += 1;
+        }
+        @memcpy(out[at..][0..part.len], part);
+        at += part.len;
+    }
+    return out;
+}
+
 fn computedShorthandValue(
     self: *const CSSStyleDeclaration,
     name: []const u8,
@@ -6489,6 +6543,10 @@ test "WebApi: CSSStyleDeclaration rule width keywords" {
 
 test "WebApi: CSSStyleDeclaration computed animation shorthand" {
     try testing.htmlRunner("css/animation_computed_shorthand.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed flex shorthands" {
+    try testing.htmlRunner("css/flex_computed_shorthands.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration inheritance" {
