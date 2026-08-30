@@ -22611,3 +22611,56 @@ took it to **3**: `grid-row` and `grid-column` (two-value shorthands this engine
 does not expand at all — `grid-area` does, they do not), and
 `transform`/`webkitTransform`, which is the running keyframe and a feature
 rather than a serialisation.
+
+## `grid-area` expanded and its two siblings did not (B69, 2026-08-30)
+
+The last serialisation difference on the 736-property table was `grid-row` and
+`grid-column` reading `auto` on every element that declared one. It looked like
+a missing join and it was not: `grid-area` **expands** here — B93 taught it the
+grammar, including the rule an omitted `<grid-line>` follows — and its two-line
+siblings expand not at all, so all four longhands stayed at `auto` and there was
+nothing for a join to read.
+
+Seventeen shapes on Chrome 151 headed, and the rule is `grid-area`'s with two
+slots instead of four:
+
+| declared | `grid-row` | start | end |
+|---|---|---|---|
+| `1 / 3` | `1 / 3` | `1` | `3` |
+| `2` | `2` | `2` | `auto` |
+| `3 / auto` | `3` | `3` | `auto` |
+| `foo` | `foo` | `foo` | `foo` |
+| `foo / foo` | `foo` | `foo` | `foo` |
+| `foo / bar` | `foo / bar` | `foo` | `bar` |
+| **`3 / 3`** | **`3 / 3`** | `3` | `3` |
+| `span 2 / span 2` | `span 2 / span 2` | `span 2` | `span 2` |
+| `grid-row-end: 4` | `auto / 4` | `auto` | `4` |
+
+An omitted end copies the start when the start is a bare custom ident and is
+`auto` otherwise; the join drops the end when it holds what an omitted one would
+have held. Those two sentences are the same sentence, which is why `3 / 3` keeps
+both halves and `foo / foo` does not — a number is not an ident, so its omitted
+form would have been `auto`, and `3` is not `auto`. Only the end is ever
+dropped, so `auto / 4` keeps both. The rule holds for longhands declared
+directly too: `grid-row-start: foo; grid-row-end: foo` reads `foo`.
+
+`shorthand.zig` already had `gridLineFallback` and `gridAreaJoin`, so this is
+`isGridLinePair` plus a two-slot expand and join beside them, registered in the
+five places `grid-area` is.
+
+### The 736, end to end
+
+Against a headed Chrome on a fixture whose every box is pinned:
+
+```
+  41  where the computed-style track started
+   9  when this session picked it up
+   4  after the width keywords, the animation and flex and background joins,
+      and timeline-trigger
+   2  now -- transform and -webkit-transform, which are the running keyframe
+```
+
+What is left is not a serialisation. `transform` reads `none` here and a live
+matrix in Chrome because the animation is *running*: closing it needs a clock
+and keyframe interpolation, which is a feature and has its own plan
+(`animation-computed-transform`).
