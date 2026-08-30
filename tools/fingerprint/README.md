@@ -21292,3 +21292,56 @@ returns as a wrong string rather than a missing row.
 
 **Priced as debt.** Nothing in this family has moved a door: see the two
 chapters above and `only-two-real-doors-left`.
+
+## The cap said what to inline; we heard "what to remember"
+
+`cdp-post-data-beyond-the-cap`. `Network.getRequestPostData` answered
+`RequestNotFound` for every body over `maxPostDataSize`, because the capture was
+discarded at the same threshold. Those are two different questions — the
+parameter governs how much rides along in the `requestWillBeSent` notification,
+and this method exists *precisely* for the bodies that did not ride along.
+
+It surfaced from a side-by-side that had been printing a `?` for months.
+`cf-verdict.mjs`'s rounds line, this arm against Chrome:
+
+```
+  chrome   r1:2306B  r2:4716-4727B  r3:88311-90167B=TICKET  r4:8748-8855B=TICKET
+  before   r1:2306B  r2:4898-4908B  r3:?B=chl-gen
+```
+
+The `?` means "the tool asked `getRequestPostData` because the body was not
+inlined, and got nothing back". Chrome's fallback returned 90167 bytes; ours
+returned an error, so the biggest exchange in the challenge was unreadable on
+the arm that fails it.
+
+`probes/b87-post-data-cap.mjs` isolates it — one 90KB POST, a bare
+`Network.enable {}`, the same script driving both engines:
+
+```
+  chrome      bodyLen=92160  inlined=92160  getRequestPostData=92160
+  before      bodyLen=92160  inlined=0      getRequestPostData=RequestNotFound
+  after       bodyLen=92160  inlined=92160  getRequestPostData=92160
+```
+
+Note the middle column on the Chrome row. **The documented 64KB default is not
+what Chrome does**: under a bare `Network.enable {}` it inlined the 90KB body,
+and a 1MB one, and an 8MB one, in full. So the figure in the protocol docs
+describes nothing anyone ships, and a 64KB default made this the only arm that
+withheld a challenge payload from its own driver. Retention now has its own
+fixed ceiling instead of following the client's parameter, since the memory is
+ours and the protocol gives the client no way to ask for it.
+
+**And then the negative that fell out of it.** With r3 readable:
+
+```
+  chrome   r1:2306B  r2:4716-4727B  r3:88311-90167B=TICKET
+  after    r1:2306B  r2:4908B       r3:87660-88460B=chl-gen
+```
+
+The third round is **not short, not missing and not truncated** — it is the same
+~88KB Chrome sends, and Cloudflare answers `chl-gen` to it anyway. `r1` is
+byte-identical between the arms and the instance ids match exactly
+(`2417424015`, `2001508894`), on both. So "our r3 never gets built" is dead as
+an explanation, and what is left is r2's extra ~185 bytes or r3's *contents*.
+The body is now readable on this arm, which is what `cf-r3-payload-segments`
+needs to look at those contents at all.

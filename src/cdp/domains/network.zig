@@ -42,7 +42,20 @@ const Allocator = std.mem.Allocator;
 // default is 0 -- omit the parameter there and you are only told a body
 // existed -- but our own instrumentation reads postData off the event
 // without asking, so a body-shaped default stays.
-pub const default_max_post_data_size = 64 * 1024;
+// What `Network.enable` inlines in requestWillBeSent when the client names no
+// `maxPostDataSize`. The protocol documents 64KB; Chrome does not behave that
+// way -- measured with probes/b87-post-data-cap.mjs under a bare
+// `Network.enable {}`, it inlined a 90KB body, a 1MB body and an 8MB body in
+// full. So the documented figure describes nothing anyone ships, and a 64KB
+// default made this engine the only arm that withheld a challenge payload.
+pub const default_max_post_data_size = 8 * 1024 * 1024;
+
+// The ceiling on bodies KEPT for `Network.getRequestPostData`, which is a
+// different question from how much is inlined: a client that asked for a small
+// notification still expects this method to answer. Fixed rather than
+// client-settable, because the memory is ours and the protocol gives the client
+// no way to ask for it.
+pub const max_retained_post_data_size = 8 * 1024 * 1024;
 
 pub fn processMessage(cmd: *CDP.Command) !void {
     const action = std.meta.stringToEnum(enum {
@@ -1241,7 +1254,7 @@ test "cdp.Network: POST body exposed as postData" {
     try ctx.expectSentError(-31998, "RequestNotFound", .{ .id = 3 });
 }
 
-test "cdp.Network: a body over maxPostDataSize is announced but not carried" {
+test "cdp.Network: a body over maxPostDataSize is announced, withheld, and still fetchable" {
     var ctx = try testing.context();
     defer ctx.deinit();
 
@@ -1311,12 +1324,21 @@ test "cdp.Network: a body over maxPostDataSize is announced but not carried" {
         try testing.expectEqual(true, request.get("postDataEntries") == null);
     }
 
+    // ...and getRequestPostData still answers with it. The parameter governs
+    // what rides along in the NOTIFICATION; this method exists precisely for
+    // the bodies that did not, and reading it as "over the cap, forget the
+    // body" left every CDP client blind to exactly the payloads worth reading.
+    //
+    // Measured on Chrome with the same probe on both arms
+    // (probes/b87-post-data-cap.mjs, a 90KB POST under a bare
+    // `Network.enable {}`): Chrome inlines 92160 bytes AND answers 92160 from
+    // getRequestPostData; this engine inlined 0 and answered RequestNotFound.
     try ctx.processMessage(.{
         .id = 4,
         .method = "Network.getRequestPostData",
         .params = .{ .requestId = &request_id },
     });
-    try ctx.expectSentError(-31998, "RequestNotFound", .{ .id = 4 });
+    try ctx.expectSentResult(.{ .postData = body }, .{ .id = 4 });
 }
 
 test "cdp.Network: redirect hop precedes Fetch pause and carries redirectResponse" {
