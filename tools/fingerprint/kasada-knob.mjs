@@ -1,6 +1,7 @@
 // Bisect Kasada's verdict with a knob, on either arm.
 //
-//   node kasada-knob.mjs <lightpanda|chrome> --knob <name> [--url U] [--runs N] [--port P]
+//   node kasada-knob.mjs <lightpanda|chrome> --knob <name> [--knob-file MODULE]
+//                        [--url U] [--runs N] [--port P]
 //
 // kasada-verdict.mjs answers "does this engine get a ticket". This answers
 // "does *this one change* cost a ticket", by injecting a script into the
@@ -20,12 +21,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Cdp, sleep } from './cdp.mjs';
-import { KNOBS } from './kasada-knobs.mjs';
+import { KNOBS as TABLE } from './kasada-knobs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i !== -1 ? process.argv[i + 1] : d; };
+// `--knob-file <path>` merges a scratch module's `KNOBS` export on top of the
+// checked-in table, exactly as cf-knob.mjs does, so a one-session dose sweep
+// does not have to land in kasada-knobs.mjs -- two sessions have already
+// collided on the cf table, one declaring a knob the other was deleting, which
+// leaves it unimportable and reads as a knob that changed nothing.
+const knobFile = arg('--knob-file', null);
+const EXTRA = knobFile ? (await import(path.resolve(process.cwd(), knobFile))).KNOBS : {};
+const KNOBS = { ...TABLE, ...EXTRA };
 const runs = Number(arg('--runs', 1));
 const basePort = Number(arg('--port', 9400));
 const target = arg('--url', 'https://www.hyatt.com/');
