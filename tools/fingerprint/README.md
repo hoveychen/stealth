@@ -22458,3 +22458,48 @@ against a headed arm is its own piece of work.
 
 After the fix all 22 fixture cases and all nine element cases are identical to
 Chrome's, property for property.
+
+## A shorthand has two serialisations, and the list only knew one (B69, 2026-08-30)
+
+`animation` sat on `COMPUTED_JOIN_DECLINED` with a note: "a computed
+`animation` reads `none` where the declared form spells all eight components".
+The note is true of an element that declares nothing and false of one that
+declares an animation, which is the case a page has — so the engine answered
+the recorded initial `none` for every animated element on every page.
+
+Nine declaration shapes, measured both ways on Chrome 151 headed
+(`scratch/b69/expr-animation-shorthand.js`, `expr-animation-declared.js`):
+
+| declared | computed reads | `el.style.animation` reads |
+|---|---|---|
+| *(nothing)* | `none` | — |
+| `3s linear 1s infinite alternate both running ka` | `3s linear 1s infinite alternate both ka` | `…both running ka` |
+| `2s ka` | `2s ka` | `2s ease 0s 1 normal none running ka` |
+| `ka` | `ka` | — |
+| `3s ka paused` | `3s paused ka` | `3s ease 0s 1 normal none paused ka` |
+| `animation-duration: 4s` | `4s` | — |
+| `ka 5s ease-in 2s 3 reverse forwards` | `5s ease-in 2s 3 reverse forwards ka` | — |
+
+The two forms differ by exactly one rule: the computed one drops a slot holding
+its initial value, the declared one writes all eight. `running` is dropped and
+`paused` is kept, which is that same rule and not an exception, and an element
+with every slot at its initial joins to nothing and falls through to the
+recorded `none`. So the fix is a second `omit` table for the computed join
+rather than a change to `chrome_shorthands`, which measured the declared form on
+purpose.
+
+**One slot in it is not the declared filler.** The table drops an unset duration
+at `auto`; Chrome's *computed* `animation-duration` is `0s` — for an unset
+duration, for a name-only longhand, and for an `auto` the page wrote itself
+(three shapes, `scratch/b69/expr-anim-dur.js`). This engine's expansion writes
+the declared filler into the longhand, so the longhand was reporting `auto`,
+which no browser does, and the join printed it. Dropping `auto` in the join
+would have hidden that; the longhand is mapped instead.
+
+Eight of the nine shapes are now identical to Chrome's, property for property.
+The ninth is the comma-separated case: this engine does not expand
+`animation: 1s ka, 2s linear kb` at all, so `animationName` stays `none` where
+Chrome reports `ka, kb` — the shorthand happens to read right because the stored
+text is answered directly. `background` and `flex-flow` are still on the
+declined list, each with a serialisation difference of its own that has not been
+measured.

@@ -431,6 +431,24 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // reasons. See computedFontText.
                 return self.computedFontText(frame, surface, depth);
             }
+            // `animation-duration: auto` is not a computed value. Chrome
+            // answers `0s` for an unset duration, for a name-only longhand and
+            // for an `auto` the page wrote itself -- all three measured
+            // (scratch/b69/expr-anim-dur.js). This engine's shorthand expansion
+            // writes the DECLARED form's filler, which is `auto`, so without
+            // this the longhand reports a value no browser does and the
+            // computed `animation` join prints it.
+            if (wrapped.eqlSlice("animation-duration") or wrapped.eqlSlice("-webkit-animation-duration")) {
+                switch (cascadedValue(style_manager, element, normalized, wrapped, .computed)) {
+                    .value => |value| {
+                        const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+                        return if (std.ascii.eqlIgnoreCase(trimmed, "auto")) "0s" else trimmed;
+                    },
+                    // Nothing declared, or written and unreportable: `0s` both
+                    // ways, which is what the recorded table holds too.
+                    .unreportable, .none => return "0s",
+                }
+            }
             // The width keywords, for the width properties that are not a
             // border's. Not gated on the surface, because the thing that makes
             // a border's width surface-dependent -- `border-style: none`
@@ -1463,22 +1481,54 @@ fn shorthandValue(self: *const CSSStyleDeclaration, name: []const u8, frame: *Fr
     return shorthand.join(frame.local_arena, entry, held) catch null;
 }
 
-/// Three shorthands Chrome serialises differently off a computed style than off
-/// a declared one, measured with tools/fingerprint/scratch/expr-computed-shorthands.js
-/// against Chrome 151: a computed `animation` reads `none` where the declared
-/// form spells all eight components; a computed `background` puts the layer's
-/// colour first and writes every slot; a computed `flex-flow` keeps `nowrap`
-/// where the declared form drops it. chrome_shorthands measured the declared
+/// Shorthands Chrome serialises differently off a computed style than off a
+/// declared one, measured with tools/fingerprint/scratch/expr-computed-shorthands.js
+/// against Chrome 151: a computed `background` puts the layer's colour first and
+/// writes every slot, and a computed `flex-flow` keeps `nowrap` where the
+/// declared form drops it. chrome_shorthands measured the declared
 /// serialisation -- that is what a page can write -- so joining these off a
 /// computed view answers the wrong shape. The recorded initial value stands
-/// instead, which is what they answered before the join existed: all three were
+/// instead, which is what they answered before the join existed: both were
 /// already wrong on a declaring element, and this keeps them right on one that
 /// declares nothing.
+///
+/// `animation` used to be on this list under the same note, "a computed
+/// `animation` reads `none`". That is true of an element declaring nothing and
+/// false of one that declares an animation -- nine shapes measured both ways in
+/// css/animation_computed_shorthand.html, and the two forms differ by exactly
+/// one rule, which `ANIMATION_COMPUTED_OMIT` below expresses.
 const COMPUTED_JOIN_DECLINED = [_][]const u8{
-    "animation",         "-webkit-animation",
     "background",        "flex-flow",
     "-webkit-flex-flow",
 };
+
+/// What the computed `animation` join drops, one list per slot of the group, in
+/// the order chrome_shorthands stores the longhands: duration, timing function,
+/// delay, iteration count, direction, fill mode, play state, name.
+///
+/// The declared form writes all eight (`2s ease 0s 1 normal none running ka`)
+/// and the computed form writes only what is not at its initial (`2s ka`), so
+/// the table's own `omit` -- which is the declared measurement, deliberately
+/// empty -- cannot answer both. `paused` is kept and `running` is dropped, which
+/// is the same rule and not an exception. An element with every slot at its
+/// initial joins to nothing and falls through to the recorded `none`.
+///
+/// The first slot is `0s` and not the table's `auto`: the table's fillers are
+/// what the DECLARED form writes for an unset slot, and Chrome's *computed*
+/// `animation-duration` on an element declaring nothing is `0s`
+/// (chrome_initial_values agrees, and `animation: ka` computes to `ka` with no
+/// duration printed). Same distinction the list above is about.
+const ANIMATION_COMPUTED_OMIT = [_][]const []const u8{
+    &.{"0s"},     &.{"ease"}, &.{"0s"},      &.{"1"},
+    &.{"normal"}, &.{"none"}, &.{"running"}, &.{"none"},
+};
+
+fn computedOmitFor(name: []const u8) ?[]const []const []const u8 {
+    if (std.mem.eql(u8, name, "animation") or std.mem.eql(u8, name, "-webkit-animation")) {
+        return &ANIMATION_COMPUTED_OMIT;
+    }
+    return null;
+}
 
 fn declinesComputedJoin(name: []const u8) bool {
     for (COMPUTED_JOIN_DECLINED) |declined| {
@@ -1939,7 +1989,11 @@ fn computedShorthandValue(
         if (computed.len == 0 or std.mem.eql(u8, computed, "initial")) return null;
         value.* = if (self.leftAtCurrentColour(name, longhand, frame)) "currentcolor" else computed;
     }
-    const joined = shorthand.joinKeeping(frame.local_arena, entry, held, computedKeepsAll(name)) catch return null;
+    var effective = entry;
+    if (computedOmitFor(name)) |omit| {
+        effective.omit = omit;
+    }
+    const joined = shorthand.joinKeeping(frame.local_arena, effective, held, computedKeepsAll(name)) catch return null;
     return if (joined.len == 0) null else joined;
 }
 
@@ -6399,6 +6453,10 @@ test "WebApi: CSSStyleDeclaration author shorthands" {
 
 test "WebApi: CSSStyleDeclaration rule width keywords" {
     try testing.htmlRunner("css/rule_width_keywords.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed animation shorthand" {
+    try testing.htmlRunner("css/animation_computed_shorthand.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration inheritance" {
