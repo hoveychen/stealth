@@ -870,12 +870,14 @@ fn percentageOfTheBox(property_name: []const u8) bool {
 /// stays `cover`. Both are assertions, so a later widening of this list cannot
 /// take them with it.
 ///
-/// `mask-position` is deliberately absent even though the same rule applies to
-/// it: measured, it never reaches this path -- `mask-position: left` still comes
-/// out `left center` with this map in place, and `mask-position: 30%` comes out
-/// `0% center`, wrong in the first slot too. It has an expansion of its own with
-/// a defect of its own, recorded rather than papered over by a name here that
-/// would do nothing.
+/// This is now a FALLBACK rather than the path a position normally takes:
+/// `computedPositionText` runs first and answers all four of the names below
+/// from a parsed position, which is the only way to get the edge-relative forms
+/// right. What is left here catches a value that parser cannot model.
+///
+/// `mask-position` is absent because it never arrives under that name -- it
+/// expands into the `-webkit-mask-position-x` / `-y` pair, which is exactly why
+/// adding it here would have done nothing.
 fn positionKeywordPercentage(property_name: []const u8, token: []const u8) ?[]const u8 {
     const PROPERTIES = std.StaticStringMap(void).initComptime(.{
         .{ "background-position", {} },
