@@ -6205,6 +6205,10 @@ test "WebApi: CSSStyleDeclaration author longhands" {
     try testing.htmlRunner("css/computed_author_longhands.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration author shorthands" {
+    try testing.htmlRunner("css/computed_author_shorthands.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration inheritance" {
     try testing.htmlRunner("css/computed_inheritance.html", .{});
 }
