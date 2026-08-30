@@ -59,12 +59,21 @@ const initial = 'border-image-source: none; border-image-slice: 100%; ' +
 {
     // `border` cannot be written as one shorthand when the four widths
     // disagree, so it writes the sub-shorthands instead -- all four of them,
-    // and nothing else.
+    // and nothing else. They come out in DECLARATION order, so a `border-width`
+    // written after the `border` it overrides is written last.
+    //
+    // That last clause was asserted the other way round here until b94, when
+    // the payload itself was read in the clear: rule 116 of the widget's own
+    // stylesheet has `border-style; border-color; border-image; border-width`
+    // on Chrome, and `border-width` first here. The expectation below is now
+    // Chrome's answer to this exact text (scratch/b94/expr-declof.js) rather
+    // than a reconstruction chosen to reproduce this engine's output.
     testing.expectEqual(
-        'border-width: 0px 4px 4px 0px; border-style: solid; ' +
-        'border-color: rgb(196, 77, 14); border-image: none;',
+        'border-style: solid; border-color: rgb(196, 77, 14); ' +
+        'border-image: none; border-width: 0px 4px 4px 0px;',
         declOf('border:solid rgb(196, 77, 14);border-width:0 4px 4px 0'));
-    // The exact block recorded for rule 116 of the payload.
+    // An authoring that names the widths FIRST keeps them first -- the same
+    // rule, read the other way. Measured on Chrome alongside the case above.
     testing.expectEqual(
         'top: 0px; left: 5px; border-width: 0px 4px 4px 0px; border-style: solid; ' +
         'border-color: rgb(196, 77, 14); border-image: none; border-radius: 0px; ' +

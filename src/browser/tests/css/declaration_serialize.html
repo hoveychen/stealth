@@ -1326,3 +1326,51 @@ function withStyle(text) {
 </script>
 </body>
 </html>
+
+<script id="a_redeclared_property_moves_to_its_last_position">
+{
+  // Where a property that the PARSER saw twice ends up. Chrome moves it to the
+  // later occurrence; this engine used to leave it where it was first seen.
+  //
+  // Not academic: Cloudflare's challenge encodes every rule of its own
+  // stylesheet as one string, and two of its 183 rules differed from Chrome's
+  // by exactly this -- same declarations, same total length, different order
+  // (scratch/b94/css-chrome.txt against css-lp-full.txt).
+  //
+  // The CSSOM path is the other way round and already agreed: `setProperty`
+  // over an existing declaration updates it in place. Both measured on a
+  // Chrome 151 with scratch/b94/expr-decl-order.js.
+  const text = (style) => withStyle(style).style.cssText;
+
+  // The parser: last occurrence wins the position, not just the value.
+  testing.expectEqual('fill: red; stroke-width: 6px;',
+      text('stroke-width: 6px; fill: red; stroke-width: 6px'));
+  testing.expectEqual('fill: red; stroke-width: 6px;',
+      text('stroke-width: 2px; fill: red; stroke-width: 6px'));
+
+  // A longhand re-declared after the shorthand it came from moves alone; the
+  // shorthand's other longhands keep their places.
+  testing.expectEqual('border-style: solid; border-color: red; border-image: none; border-width: 0px 4px 4px 0px;',
+      text('border: solid red; border-width: 0px 4px 4px 0px'));
+
+  // ...and the same through `cssText`, which is the same parser.
+  const el = withStyle('');
+  el.style.cssText = 'stroke-width: 6px; fill: red; stroke-width: 6px';
+  testing.expectEqual('fill: red; stroke-width: 6px;', el.style.cssText);
+
+  // The CSSOM path keeps the position. This is the control: a fix that moves
+  // the declaration here would be wrong.
+  const cssom = withStyle('color: red; width: 1px');
+  cssom.style.setProperty('color', 'blue');
+  testing.expectEqual('color: blue; width: 1px;', cssom.style.cssText);
+
+  const assigned = withStyle('color: red; width: 1px');
+  assigned.style.color = 'blue';
+  testing.expectEqual('color: blue; width: 1px;', assigned.style.cssText);
+
+  const longhand = withStyle('border: solid red; padding: 2px');
+  longhand.style.setProperty('border-width', '0px 4px 4px 0px');
+  testing.expectEqual('border-width: 0px 4px 4px 0px; border-style: solid; border-color: red; border-image: none; padding: 2px;',
+      longhand.style.cssText);
+}
+</script>
