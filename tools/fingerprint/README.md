@@ -22224,11 +22224,13 @@ Chrome requests the candidate it selected — `srcset-fallback.png` against
 `picture-fallback.png` against `picture-webp.png`. Both engines correctly skip
 a `background-image` on a selector nothing matches.
 
-External stylesheets are off by default in this engine, so a plain `serve` on a
-real site fetches the document, a script or two and nothing else. `Frame.loadImage`
-already carries the argument for why that matters — "never fetching images at
-all is a server-visible tell" — and the same sentence applies to every row
-above. It was never extended past `<img>`.
+The stylesheet itself is fetched — `Config.enableExternalStylesheets` is on
+unless `--disable-external-stylesheets` says otherwise, and the census shows
+`sheet.css` requested on both arms. What is never fetched is anything the
+stylesheet *references*. `Frame.loadImage` already carries the argument for why
+that matters — "never fetching images at all is a server-visible tell" — and
+the same sentence applies to every row above. It was never extended past
+`<img>`.
 
 The same duplicate defect is there for the other two kinds, unfixed:
 `scratch/b69/sub-cache-fixture.mjs` measures a second `<script src>` and a
