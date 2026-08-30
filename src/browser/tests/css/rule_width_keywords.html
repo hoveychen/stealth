@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The width keywords, for the width properties that are not a border's.
+
+  `border-*-width` already resolves `thin`/`medium`/`thick` and collapses to
+  `0px` when its style is `none`. Every other width property that takes those
+  keywords was echoing them back: `outline-width`, `column-rule-width`,
+  `row-rule-width`, `-webkit-column-rule-width` and `-webkit-text-stroke-width`
+  all computed to the literal string `medium`, which no browser reports.
+
+  Measured on Chrome 151 headed, devicePixelRatio 2
+  (scratch/b69/expr-width-keywords.js and scratch/b69/rule-width-fixture.mjs,
+  22 declaration sets):
+
+    * The keywords resolve to 1px / 3px / 5px, and the style beside them has no
+      say -- `column-rule-style: none` leaves the width at 3px, where a border
+      would read 0px.
+    * `-webkit-text-stroke-width` has a scale of its own: two thirds of the
+      others, 0.666667px / 2px / 3.33333px.
+    * An element that declares NO column rule reads `1.5px`, not the `3px` its
+      own `medium` resolves to. That is three DEVICE pixels: the same reading is
+      3px on a devicePixelRatio-1 Chrome (headless, and headed under
+      --force-device-scale-factor=1, and headed under =3, all four measured) and
+      1.5px on the dpr-2 headed one. This engine reports devicePixelRatio 2 as a
+      fixed part of its device profile (Window.getDevicePixelRatio), so 1.5px is
+      the number that matches it.
+
+  webapi/css/chrome_initial_values.zig records 3px for the three rule widths
+  because that table was generated against a HEADLESS Chrome, which is dpr 1.
+  It is generated and not hand-edited, so the three names are overridden in
+  CSSStyleDeclaration instead.
+
+  Cloudflare's widget encodes `JSON.stringify(getComputedStyle(el))` whole, so
+  all five names travel in the payload of every page it challenges.
+-->
+
+<body>
+
+<script id=rule_width_keywords_resolve>
+{
+  const probe = (decl, prop) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:20px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el)[prop]);
+    el.remove();
+    return got;
+  };
+  const rows = [];
+  const check = (decl, prop, expected) => {
+    rows.push(prop + ' {' + decl + '} = ' + probe(decl, prop));
+    rows.push(prop + ' {' + decl + '} = ' + expected);
+  };
+
+  // The keywords, on the three that share the border scale.
+  for (const [kw, px] of [['thin', '1px'], ['medium', '3px'], ['thick', '5px']]) {
+    check('outline-width:' + kw + ';', 'outlineWidth', px);
+    check('column-rule-width:' + kw + ';', 'columnRuleWidth', px);
+    check('row-rule-width:' + kw + ';', 'rowRuleWidth', px);
+    check('-webkit-column-rule-width:' + kw + ';', 'webkitColumnRuleWidth', px);
+  }
+
+  // The style beside them has no say, which is the whole difference from a
+  // border: `border-width: medium` with `border-style: none` is 0px.
+  check('column-rule-width:medium;column-rule-style:none;', 'columnRuleWidth', '3px');
+  check('outline-width:medium;outline-style:none;', 'outlineWidth', '3px');
+  check('border-width:medium;border-style:none;', 'borderTopWidth', '0px');
+
+  // ...and a length still passes through.
+  check('column-rule-width:10px;column-rule-style:none;', 'columnRuleWidth', '10px');
+
+  for (let i = 0; i < rows.length; i += 2) {
+    testing.expectEqual(rows[i + 1], rows[i]);
+  }
+}
+</script>
+
+<script id=text_stroke_width_has_its_own_scale>
+{
+  const probe = (decl) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:20px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).webkitTextStrokeWidth);
+    el.remove();
+    return got;
+  };
+  for (const [kw, px] of [['thin', '0.666667px'], ['medium', '2px'], ['thick', '3.33333px']]) {
+    testing.expectEqual(
+      '-webkit-text-stroke-width:' + kw + ' = ' + px,
+      '-webkit-text-stroke-width:' + kw + ' = ' + probe('-webkit-text-stroke-width:' + kw + ';'));
+  }
+}
+</script>
+
+<script id=undeclared_rule_width_is_three_device_pixels>
+{
+  const el = document.createElement('div');
+  el.style.cssText = 'width:100px;height:20px;';
+  document.body.appendChild(el);
+  const cs = getComputedStyle(el);
+  const seen = [cs.columnRuleWidth, cs.rowRuleWidth, cs.webkitColumnRuleWidth,
+                cs.outlineWidth, cs.borderTopWidth].join(' ');
+  el.remove();
+  // Three device pixels for the rule widths, three CSS pixels for the outline,
+  // and a border with no style is not drawn at all.
+  testing.expectEqual('1.5px 1.5px 1.5px 3px 0px', seen);
+  testing.expectEqual(2, devicePixelRatio);
+}
+</script>
