@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<!--
+  What the markup asks the server for, beyond `<img src>`.
+
+  The companion to css/style_subresources.html: same channel (a request the
+  origin's own access log sees), different half of the gap. Measured against
+  Chrome with tools/fingerprint/wire-census.mjs, every path below was one
+  Chrome asked for and this engine did not.
+
+  The two controls are the point of the `preload="none"` video: Chrome fetches
+  its poster and does NOT fetch its `<source>`, so a run that asks for both has
+  swapped one tell for another.
+-->
+
+<object data="/wire/mk-object.png" type="image/png"></object>
+<embed src="/wire/mk-embed.png" type="image/png">
+<input type="image" src="/wire/mk-input-image.png">
+<svg width="10" height="10"><image href="/wire/mk-svg-image.png" width="10" height="10"></image></svg>
+<video poster="/wire/mk-poster.png" preload="none"><source src="/wire/mk-movie.mp4" type="video/mp4"></video>
+<audio preload="metadata" src="/wire/mk-sound.mp3"></audio>
+<video><track kind="captions" src="/wire/mk-captions.vtt" default></video>
+<link rel="manifest" href="/wire/mk-app.webmanifest">
+<link rel="prefetch" href="/wire/mk-prefetch.png">
+
+<script id="markup_subresources" type=module>
+{
+  const WANTED = [
+    'mk-object.png',
+    'mk-embed.png',
+    'mk-input-image.png',
+    'mk-svg-image.png',
+    'mk-poster.png',
+    'mk-sound.mp3',
+    'mk-captions.vtt',
+    'mk-app.webmanifest',
+    'mk-prefetch.png',
+  ];
+  // preload="none" means the media itself is not touched until something
+  // plays it; asking for it anyway is over-fetching, which is its own tell.
+  const UNWANTED = ['mk-movie.mp4'];
+
+  const asked = () => new Set(
+    performance.getEntriesByType('resource').map((e) => e.name.split('/').pop()));
+
+  const test = await testing.async();
+  const deadline = Date.now() + 600;
+  while (Date.now() < deadline) {
+    const seen = asked();
+    if (WANTED.every((w) => seen.has(w))) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  test.resolve(asked());
+
+  await test.done((seen) => {
+    const missing = WANTED.filter((w) => !seen.has(w));
+    testing.expectEqual('missing: ', 'missing: ' + missing.join(','));
+
+    const spurious = UNWANTED.filter((u) => seen.has(u));
+    testing.expectEqual('spurious: ', 'spurious: ' + spurious.join(','));
+  });
+}
+</script>

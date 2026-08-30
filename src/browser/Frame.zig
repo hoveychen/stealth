@@ -103,6 +103,7 @@ pub const observers = @import("frame/observers.zig");
 pub const user_input = @import("frame/user_input.zig");
 pub const node_factory = @import("frame/node_factory.zig");
 pub const style_resources = @import("frame/style_resources.zig");
+pub const markup_resources = @import("frame/markup_resources.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -1502,6 +1503,11 @@ pub fn _documentIsLoaded(self: *Frame) !void {
     // so a rule can be told whether it matches anything, and the load event
     // has not fired, so the requests still land inside the page's load.
     style_resources.requestAll(self);
+
+    // Same point, for what the MARKUP names beyond <img src> -- <object>,
+    // <embed>, a media element's poster and source, and the rest. See
+    // frame/markup_resources.zig for why it is a walk rather than a hook.
+    markup_resources.requestAll(self);
 }
 
 // Fired at the document on every change to document.readyState: before
@@ -3336,6 +3342,44 @@ pub fn requestStyleResource(self: *Frame, resolved: [:0]const u8, resource_type:
     };
 }
 
+// Fetch what a non-<img> element names, and throw the bytes away.
+//
+// `<object data>`, `<embed src>`, `<input type=image src>`, `<svg><image
+// href>`, a media element's poster and source, `<track src>`, `<link
+// rel=manifest>` and `<link rel=prefetch>` are all requests Chrome makes and
+// this engine did not: nine of the fifteen paths in the gap
+// tools/fingerprint/wire-census.mjs measured. Nothing displays or decodes any
+// of it, so as with `loadImage` the request is the whole point.
+//
+// No load/error event follows. Chrome does fire `load` on an `<object>` and an
+// `<input type=image>`, which stays a gap on the event side; wiring the
+// element through here would fire it for the media elements too, where the
+// event Chrome fires is `loadedmetadata` and not `load`.
+//
+// `initiator` is the element's own local name, which is what Chrome files
+// these entries under (initiatorType, resource-timing-initiators.mjs).
+pub fn requestElementResource(
+    self: *Frame,
+    href: []const u8,
+    resource_type: HttpClient.Request.ResourceType,
+    initiator: []const u8,
+) void {
+    if (self.isGoingAway() or href.len == 0 or self._parse_mode == .fragment) {
+        return;
+    }
+    const resolved = URL.resolve(self.arena, self.base(), href, .{ .encoding = self.charset }) catch |err| {
+        log.warn(.http, "element resource resolve", .{ .err = err, .href = href });
+        return;
+    };
+    self.requestSubresource(resolved, null, .{
+        .resource_type = resource_type,
+        .initiator = initiator,
+        .sniff = false,
+    }) catch |err| {
+        log.warn(.http, "element resource fetch", .{ .err = err, .url = resolved });
+    };
+}
+
 // What a subresource fetch that discards its body needs to know beyond the URL
 // and the element. The defaults describe an <img src>, which is what this path
 // was built for; a preload link overrides them.
@@ -4992,6 +5036,11 @@ test "WebApi: Frame" {
 test "WebApi: css style subresources" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("css/style_subresources.html", .{});
+}
+
+test "WebApi: markup subresources" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("markup_subresources.html", .{});
 }
 
 test "WebApi: Frames" {

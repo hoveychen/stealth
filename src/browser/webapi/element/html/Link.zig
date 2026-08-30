@@ -159,6 +159,17 @@ pub fn linkAddedCallback(self: *Link, frame: *Frame) !void {
         return frame.queueLoad(Factory.protoOf(self));
     }
 
+    // Two more rels that are a REQUEST rather than a declaration, for the same
+    // reason `preload` above is: Chrome fetches both, and a client that never
+    // asks for the manifest a page declares is separable in the site's own log
+    // with no script running (tools/fingerprint/wire-census.mjs). Neither has
+    // anywhere to go afterwards -- nothing here installs an app or warms a
+    // cache -- so the bytes are discarded, as with `Frame.loadImage`.
+    if (std.ascii.eqlIgnoreCase(rel, "manifest") or std.ascii.eqlIgnoreCase(rel, "prefetch")) {
+        frame.requestElementResource(href, .fetch, "link");
+        return;
+    }
+
     if (std.mem.eql(u8, rel, "modulepreload")) {
         // "as" defaults to script in this case
         const as = element.getAttributeSafe(comptime .wrap("as")) orelse "";
