@@ -21806,3 +21806,163 @@ station is passing in the same minute.
 Two doors, both confirmed against an arm that demonstrably opens doors:
 `cf-scrapingcourse` and `x-hyatt`. x-hyatt's four routes are closed (previous
 chapter). cf-scrapingcourse is the one live gap.
+
+## Two things Cloudflare scores, both of which this engine already does (B68, 2026-08-29)
+
+Every knob in `cf-knobs.mjs` works by `defineProperty`, and `cf-what-is-scored`
+found that six of its seven screen hits were the patch rather than the family —
+this station refuses arms whose natives look rewritten. So the subtraction was
+redone with **launch switches**: the capability is removed inside Chrome, and
+there is nothing left for a native-integrity check to find. The wrappers go
+through the `CHROME` environment variable (`scratch/b67/flags/*.sh`), so no
+shared tool changed.
+
+Seven switches, one run each, `none` interleaved and true 7/7. Three came back
+`served=false`: `--disable-reading-from-canvas`, `--blink-settings=imagesEnabled=false`
+and `--disable-notifications`. The permission family was measured first and is
+identical on both engines — `Notification.permission` is `default` on both and
+all seven `permissions.query` states are `prompt` on both — so that third one is
+a family we are already on the passing side of, and the note in the
+`lp-chrome-values` knob claiming otherwise is stale.
+
+### `served=false` does not say which kind of failure it was
+
+A scored arm and an arm whose challenge could not run produce the same column.
+**The `rounds=` column separates them**, and that is the instrument this chapter
+leaves behind. Three runs each, `none` before and after every group
+(`scratch/b68/f2-confirm.sh`):
+
+| arm | served | r1 | r2 | r3 | r4 | targets |
+|---|---|---|---|---|---|---|
+| `none` ×3 | true 3/3 | 2306–2316B | 4716–4727B | 88.2–89.5KB **=TICKET** | 8.8KB | 8 |
+| `--disable-reading-from-canvas` ×3 | **false 3/3** | 2306–2316B | 4716–4727B | 88.0–88.1KB **=gen** | — | 9 |
+| `imagesEnabled=false` ×3 | **false 3/3** | 2306B | 4706–4727B | 88.1–90.1KB **=gen** | — | 9 |
+
+All three arms post the same three rounds at the same sizes — the failing arms'
+r3 is not short, and `imagesEnabled=false` posts a *longer* r3 than the control.
+The guard collected everything and sent it; Cloudflare read it and answered
+`cf-chl-gen` instead of `cf-chl-out`. A challenge that cannot run stops at r1 or
+r2, and neither arm ever did. The extra target is the re-challenge.
+
+So these are the first clean "Cloudflare weighs this" readings on this station:
+hook-free, capability verifiably gone, challenge verifiably finished, 3/3.
+
+### Both of them, measured on this side, come out passing
+
+**Canvas readback: what is scored is whether it completes, not what it returns.**
+The switch does not make readback noisy — it marks every canvas tainted, so
+`getImageData` throws `SecurityError` (`scratch/b68/expr-caps.js`; WebGL
+`readPixels` is unaffected). Against that, the `no-canvas-readback` knob returns
+an all-zero `ImageData` and `data:,` from `toDataURL` and is served true 3/3.
+Hooks produce false negatives, not false positives, so that pass stands. This
+engine's `getImageData` returns exactly the pixel that was drawn and throws
+nothing. Pixel *fidelity* is a different question and already has a plan tree
+(`cfsc-glyph-raster` and its children); this is not it.
+
+**Images: the state that is scored is not the state we are in.** A valid 2×2 PNG,
+same URL on both arms (`scratch/b68/expr-image-family.js`):
+
+| | Chrome | lightpanda |
+|---|---|---|
+| `onload` / `complete` | load / true | load / true |
+| `naturalWidth` / `naturalHeight` | 2 | **0** |
+| `width` / `offsetWidth` / rect | 2 / 2 / 2×2 | **16 / 16 / 16×16** (the broken icon) |
+| `decode()` | resolved | resolved |
+| `createImageBitmap(blob)` | `[2,2]` | **`InvalidStateError`** |
+| `drawImage` then read back | `[200,100,50,255]` | **`[0,0,0,0]`** |
+
+The cause is in the source, not inferred: `Image.getComplete`'s comment says the
+bytes are fetched and never decoded, so images stay in the broken state. That is
+a real divergence — but it is *not* the switch's state. `imagesEnabled=false`
+stops `load` from firing at all and leaves `complete` false, while here `load`
+fires and only the picture is missing. Filing a raster-pipeline plan off the
+switch alone would have been writing an unverified causal claim into a
+requirement.
+
+So the state was put on Chrome directly (`scratch/b68/knobs-b68.mjs`, each knob
+verified through `run-expr` before it was spent on the station): `lp-image-state`
+forces `naturalWidth`/`naturalHeight` to 0, makes `drawImage` of an
+`HTMLImageElement` a no-op and rejects `createImageBitmap(Blob)` with
+`InvalidStateError`; `image-passthru` installs the same three hooks and returns
+the true values.
+
+| arm | served |
+|---|---|
+| `none` ×4 | true 4/4 |
+| `image-passthru` ×3 | true 3/3 — the hooks alone cost nothing |
+| **`lp-image-state` ×6** | **true 5/6** |
+
+5/6 is this station's own floor; a clean Chrome drops about one page in six.
+**Negative: Cloudflare weighs whether an image loads at all, not whether it
+became pixels.** This engine fetches the bytes, fires `load`, and emits the image
+subresource requests, so it is on the passing side of that too. Do not open a
+decoder plan off this reading.
+
+What this chapter actually leaves is the method: switch-based subtraction with a
+`none` control on both sides, `rounds=` to classify the hit, and a passthru twin
+before any knob-based reading is believed. Twenty more switches are two runs each.
+
+## Twenty more switches, one survivor, and it is CORS (B68, 2026-08-30)
+
+The method from the previous chapter, run wide: twenty launch switches, one run
+each, `none` every fifth run, the whole line kept (`scratch/b68/gen-flags.sh`
+generates the wrappers from a name→switch table, `w2-screen.sh` runs them).
+
+Twenty-five runs, twenty-one served. **One of the five `none` controls was
+refused**, which is the documented floor showing up on cue — and with twenty arms
+against a floor of about one page in six, three false hits is what chance
+predicts. The screen produced exactly three: `--blink-settings=defaultFontSize=32`,
+`--blink-settings=forceDarkModeEnabled=true`, `--disable-web-security`.
+
+So the screen decided nothing. Three more runs each did:
+
+| arm | screen | +3 runs | verdict |
+|---|---|---|---|
+| `defaultFontSize=32` (verified: 16px → 32px) | false | **true 3/3** | floor |
+| `forceDarkModeEnabled=true` | false | **true 3/3** | floor |
+| **`--disable-web-security`** (verified: cross-origin fetch 200) | false | **false 3/3** | **scored** |
+
+`no-web-security`'s three runs post `r1:2306B r2:4706–4716B r3:88.2–89.6KB=gen` —
+the same sizes the served control posts. The guard finished; Cloudflare read it
+and re-challenged.
+
+### What that switch actually removes is CORS, and nothing else
+
+The obvious reading — "Cloudflare notices the same-origin policy is off" — is
+wrong, and one probe says so. A cross-origin iframe on a real page, thirteen
+readings, three arms (`scratch/b68/expr-xo.js`):
+
+| | Chrome | `--disable-web-security` | lightpanda |
+|---|---|---|---|
+| `w.document`, `w.foo`, `w.foo = 1`, `String(w)` | SecurityError | **SecurityError — unchanged** | SecurityError |
+| `JSON.stringify(w)` | SecurityError | SecurityError | **`"{}"`** |
+| `'then' in w` / `delete w.length` / `setPrototypeOf(w, null)` | SecurityError ×3 | SecurityError ×3 | **true / true / ok** |
+| `w.location.href` | SecurityError | SecurityError | **TypeError** (`w.location` is undefined) |
+| `Reflect.ownKeys(w).length` | 17 | 17 | **16** |
+| cross-origin `fetch` | TypeError | **200** | **TypeError** |
+
+In Chrome 151 the switch leaves every frame-boundary check standing. The single
+observable it moves is the CORS one — and this engine enforces CORS, so it is on
+the served side of the only thing that switch subtracts.
+
+The right-hand column is still a real divergence: it is six of the eighteen
+readings `cross-origin-proxy-shape` left open, reproduced unchanged. The exec
+plan that closes four of them in one mechanism (`cross-origin-access-check`, V8
+access checks) is still unstarted. **What changed today is its justification** —
+this switch shows Cloudflare is not weighing that family, so that plan is
+fidelity work, not door work.
+
+### Where the flag lever stands
+
+Three families are now confirmed scored on cf-scrapingcourse — canvas readback
+completing, images loading, CORS being enforced — and this engine is on the
+served side of all three. Seventeen more families came back served=true.
+
+One caveat on those seventeen, and it is the reason this chapter does not claim
+them as closed: **only the hits were checked for whether the switch landed.** A
+switch Chrome ignores also produces `served=true`, and that is an empty arm, not
+a cleared family. Measured by stealth-a9 in the same window:
+`--font-render-hinting=none`, `--blink-settings=standardFontFamily=Courier` and
+`--force-color-profile=display-p3` leave the headless canvas hash bit-identical
+to bare Chrome. Anyone quoting the served=true column has to verify the switch
+first.
