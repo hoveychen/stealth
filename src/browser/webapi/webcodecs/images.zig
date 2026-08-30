@@ -36,6 +36,9 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 const flate = std.compress.flate;
+// Only for the SVG root's `width`/`height`, which are CSS lengths rather than
+// header fields; the six raster formats carry integers.
+const units = @import("../../css/units.zig");
 
 pub const Kind = enum {
     png,
@@ -44,6 +47,29 @@ pub const Kind = enum {
     webp,
     avif,
     bmp,
+
+    /// The format the bytes themselves declare, for the caller that has no
+    /// declared type to go on: an `<img>` decides what it received by sniffing,
+    /// because the header a server sends gets no say (`Frame.ImageRequest`).
+    ///
+    /// Deliberately not shared with `Mime.isImageSignature`, which answers a
+    /// different question with a different budget: whether the bytes are a
+    /// picture *at all*, from fourteen bytes, including the two types that have
+    /// no geometry parser here -- ICO and SVG. This one picks a parser, so a
+    /// format it cannot measure has no reason to appear.
+    pub fn fromSignature(prefix: []const u8) ?Kind {
+        if (std.mem.startsWith(u8, prefix, &PNG_SIGNATURE)) return .png;
+        if (std.mem.startsWith(u8, prefix, &.{ 0xFF, 0xD8, 0xFF })) return .jpeg;
+        if (std.mem.startsWith(u8, prefix, "GIF87a") or std.mem.startsWith(u8, prefix, "GIF89a")) return .gif;
+        if (std.mem.startsWith(u8, prefix, "BM")) return .bmp;
+        if (prefix.len >= 14 and std.mem.eql(u8, prefix[0..4], "RIFF") and
+            std.mem.eql(u8, prefix[8..14], "WEBPVP")) return .webp;
+        if (prefix.len >= 12 and std.mem.eql(u8, prefix[4..8], "ftyp")) {
+            const brand = prefix[8..12];
+            if (std.mem.eql(u8, brand, "avif") or std.mem.eql(u8, brand, "avis")) return .avif;
+        }
+        return null;
+    }
 
     /// Chrome matches the type case-insensitively: `IMAGE/PNG` is supported
     /// (measured). x-icon, svg+xml and tiff are not.
@@ -102,6 +128,37 @@ pub fn read(kind: Kind, data: []const u8, allocator: Allocator) ?Image {
     };
 }
 
+pub const Size = struct {
+    width: u32,
+    height: u32,
+};
+
+/// Just the intrinsic size, decoding nothing and allocating nothing.
+///
+/// `read` above is shaped for ImageDecoder, which is asked for frames and for
+/// samples. An `<img>` only ever needs these two numbers, and reaching them
+/// through `read` would hand a PNG the pixel path -- a `width * height * 4`
+/// allocation out of the frame arena, for a buffer that is then dropped.
+///
+/// `data` may be a prefix rather than the whole body: every parser here reads
+/// forward from the head and stops at the field it wants, so a truncated body
+/// answers null instead of guessing.
+pub fn readSize(kind: Kind, data: []const u8) ?Size {
+    return switch (kind) {
+        .png => pngSize(data),
+        .gif => gifSize(data),
+        .jpeg => sizeOf(readJpeg(data)),
+        .bmp => sizeOf(readBmp(data)),
+        .webp => sizeOf(readWebp(data)),
+        .avif => sizeOf(readAvif(data)),
+    };
+}
+
+fn sizeOf(image: ?Image) ?Size {
+    const found = image orelse return null;
+    return .{ .width = found.width, .height = found.height };
+}
+
 /// The one frame of a still image: no duration, no repetition.
 fn still(width: u32, height: u32, pixels: ?[]const u8) ?Image {
     if (width == 0 or height == 0) {
@@ -121,21 +178,31 @@ fn still(width: u32, height: u32, pixels: ?[]const u8) ?Image {
 
 const PNG_SIGNATURE = [_]u8{ 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a };
 
-fn readPng(data: []const u8, allocator: Allocator) ?Image {
+/// IHDR, which is the whole of a PNG's geometry and comes before anything a
+/// decoder would need. Split out so `readSize` can stop here.
+fn pngSize(data: []const u8) ?Size {
     if (data.len < 8 + 12 + 13 or !std.mem.eql(u8, data[0..8], &PNG_SIGNATURE)) {
         return null;
     }
     if (!std.mem.eql(u8, data[12..16], "IHDR")) {
         return null;
     }
+    const width = std.mem.readInt(u32, data[16..20], .big);
+    const height = std.mem.readInt(u32, data[20..24], .big);
+    if (width == 0 or height == 0) {
+        return null;
+    }
+    return .{ .width = width, .height = height };
+}
+
+fn readPng(data: []const u8, allocator: Allocator) ?Image {
+    const size = pngSize(data) orelse return null;
     const header = data[16..29];
-    const width = std.mem.readInt(u32, header[0..4], .big);
-    const height = std.mem.readInt(u32, header[4..8], .big);
     const depth = header[8];
     const colour = header[9];
     const interlace = header[12];
 
-    return still(width, height, pngPixels(data, width, height, depth, colour, interlace, allocator));
+    return still(size.width, size.height, pngPixels(data, size.width, size.height, depth, colour, interlace, allocator));
 }
 
 /// The samples, as BGRA. Only the shape this engine's own encoder writes and
@@ -296,7 +363,10 @@ fn sampleToRgba(
 
 /// The frame count, per-frame delays and loop count. The samples are LZW and
 /// nothing here decodes them, so the frames carry geometry and timing only.
-fn readGif(data: []const u8, allocator: Allocator) ?Image {
+/// The logical screen descriptor, which is a GIF's geometry and sits in the
+/// first thirteen bytes. Split out for the same reason as `pngSize`: the frame
+/// walk below it needs the whole file, and an intrinsic size does not.
+fn gifSize(data: []const u8) ?Size {
     if (data.len < 13) {
         return null;
     }
@@ -308,6 +378,13 @@ fn readGif(data: []const u8, allocator: Allocator) ?Image {
     if (width == 0 or height == 0) {
         return null;
     }
+    return .{ .width = width, .height = height };
+}
+
+fn readGif(data: []const u8, allocator: Allocator) ?Image {
+    const size = gifSize(data) orelse return null;
+    const width = size.width;
+    const height = size.height;
 
     var at: usize = 13;
     const flags = data[10];
@@ -502,6 +579,161 @@ fn readAvif(data: []const u8) ?Image {
     return null;
 }
 
+// -- SVG ---------------------------------------------------------------------
+
+/// What a replaced element with no intrinsic size of its own is laid out as.
+/// An SVG reaches it whenever its root declares nothing usable.
+const SVG_DEFAULT_WIDTH = 300.0;
+const SVG_DEFAULT_HEIGHT = 150.0;
+
+/// SVG is not a `Kind`: it has no signature to sniff, no samples to decode, and
+/// its size is markup rather than a header field. It is here anyway because
+/// this is where "how big is this picture" is answered, and an `<img>` asks the
+/// same question of an SVG as of a PNG.
+///
+/// The rules, measured on Chrome 151 against the same markup
+/// (`scratch/b90/expr-img-geometry.js`, rows `svg*`):
+///
+///   width=4 height=6         -> 4x6        width=40px height=12px -> 40x12
+///   width=7.5 height=2.25    -> 8x2        width=40               -> 40x150
+///   height=12                -> 300x12     width=40 viewBox 20 5  -> 40x10
+///   viewBox 0 0 20 5         -> 300x75     (nothing)              -> 300x150
+///   width=50% height=25%     -> 300x150    width=0 height=0       -> 0x0
+///
+/// Two of those are read and then deliberately not reproduced. `2em` needs a
+/// font-size context an image request does not have, so a relative unit reads
+/// as absent and falls back. And the viewBox-only row is the one where Chrome's
+/// BOX and its intrinsic size disagree -- 300x75 intrinsic, 1904x476 laid out,
+/// because a replaced element with a ratio and no size stretches to its
+/// containing block. This engine has no replaced-element layout to stretch
+/// with, so it answers the intrinsic size for both.
+pub fn svgSize(markup: []const u8) ?Size {
+    const attrs = svgRootAttributes(markup) orelse return null;
+    var width = attrs.width;
+    var height = attrs.height;
+    if (width == null or height == null) {
+        // A viewBox has no size of its own, only a ratio, and the ratio is what
+        // fills in the axis that was not declared.
+        const ratio: ?f64 = if (attrs.view_w) |vw| blk: {
+            const vh = attrs.view_h orelse break :blk null;
+            if (vw <= 0 or vh <= 0) break :blk null;
+            break :blk vw / vh;
+        } else null;
+        if (width) |w| {
+            height = if (ratio) |r| w / r else SVG_DEFAULT_HEIGHT;
+        } else if (height) |h| {
+            width = if (ratio) |r| h * r else SVG_DEFAULT_WIDTH;
+        } else {
+            width = SVG_DEFAULT_WIDTH;
+            height = if (ratio) |r| SVG_DEFAULT_WIDTH / r else SVG_DEFAULT_HEIGHT;
+        }
+    }
+    return .{
+        .width = roundToU32(width.?),
+        .height = roundToU32(height.?),
+    };
+}
+
+fn roundToU32(value: f64) u32 {
+    if (!(value > 0)) {
+        return 0;
+    }
+    return @intFromFloat(@round(@min(value, @as(f64, std.math.maxInt(u32)))));
+}
+
+const SvgRoot = struct {
+    width: ?f64 = null,
+    height: ?f64 = null,
+    view_w: ?f64 = null,
+    view_h: ?f64 = null,
+};
+
+/// The three attributes of the root `<svg>` that carry a size, scanned off the
+/// head of the document. A hand-rolled scan rather than the HTML parser: this
+/// runs in a transfer callback over the first few kilobytes, and the whole
+/// question is three attributes of one element.
+fn svgRootAttributes(markup: []const u8) ?SvgRoot {
+    const open = std.mem.indexOf(u8, markup, "<svg") orelse return null;
+    var at = open + 4;
+    // `<svgfoo` is a different element.
+    if (at < markup.len and !isTagBreak(markup[at])) {
+        return null;
+    }
+    var out: SvgRoot = .{};
+    while (at < markup.len) {
+        while (at < markup.len and std.ascii.isWhitespace(markup[at])) at += 1;
+        if (at >= markup.len or markup[at] == '>' or markup[at] == '/') {
+            break;
+        }
+        const name_start = at;
+        while (at < markup.len and markup[at] != '=' and markup[at] != '>' and
+            markup[at] != '/' and !std.ascii.isWhitespace(markup[at])) at += 1;
+        const name = markup[name_start..at];
+        while (at < markup.len and std.ascii.isWhitespace(markup[at])) at += 1;
+        if (at >= markup.len or markup[at] != '=') {
+            // A valueless attribute. Nothing sized is spelled that way.
+            continue;
+        }
+        at += 1;
+        while (at < markup.len and std.ascii.isWhitespace(markup[at])) at += 1;
+        if (at >= markup.len) break;
+        var value: []const u8 = "";
+        if (markup[at] == '"' or markup[at] == '\'') {
+            const quote = markup[at];
+            at += 1;
+            const value_start = at;
+            while (at < markup.len and markup[at] != quote) at += 1;
+            value = markup[value_start..at];
+            if (at < markup.len) at += 1;
+        } else {
+            const value_start = at;
+            while (at < markup.len and markup[at] != '>' and !std.ascii.isWhitespace(markup[at])) at += 1;
+            value = markup[value_start..at];
+        }
+        // SVG is XML, so these names are case-sensitive -- `viewbox` is not
+        // `viewBox` in a standalone document, which is what an <img> loads.
+        if (std.mem.eql(u8, name, "width")) {
+            out.width = svgLength(value);
+        } else if (std.mem.eql(u8, name, "height")) {
+            out.height = svgLength(value);
+        } else if (std.mem.eql(u8, name, "viewBox")) {
+            var parts = std.mem.tokenizeAny(u8, value, " ,\t\r\n");
+            var seen: usize = 0;
+            while (parts.next()) |part| : (seen += 1) {
+                const number = std.fmt.parseFloat(f64, part) catch return null;
+                if (seen == 2) out.view_w = number;
+                if (seen == 3) out.view_h = number;
+            }
+        }
+    }
+    return out;
+}
+
+fn isTagBreak(c: u8) bool {
+    return std.ascii.isWhitespace(c) or c == '>' or c == '/';
+}
+
+/// The initial `font-size` of a standalone SVG document, which is what `em`
+/// resolves against when an <img> loads one: Chrome answers 32 for `width=2em`.
+const SVG_ROOT_FONT_SIZE = 16.0;
+
+/// A number in any absolute length unit, plus the two font-relative units that
+/// a document with no cascade still has an answer for. A percentage reads as
+/// absent because it genuinely IS absent -- a percentage has no intrinsic size,
+/// and Chrome answers 300x150 for `width="50%"`.
+fn svgLength(text: []const u8) ?f64 {
+    const parsed = units.parse(std.mem.trim(u8, text, &std.ascii.whitespace)) catch return null;
+    const factor = units.absoluteLengthFactor(parsed.unit) orelse switch (parsed.unit) {
+        .em, .rem => SVG_ROOT_FONT_SIZE,
+        else => return null,
+    };
+    const pixels = parsed.value * factor;
+    if (!std.math.isFinite(pixels) or pixels < 0) {
+        return null;
+    }
+    return pixels;
+}
+
 const testing = @import("../../../testing.zig");
 
 test "images: a PNG this engine wrote reads back with its own pixels" {
@@ -569,4 +801,71 @@ test "images: the type match is case-insensitive, and only six types match" {
     try testing.expect(Kind.fromType("image/svg+xml") == null);
     try testing.expect(Kind.fromType("image/tiff") == null);
     try testing.expect(Kind.fromType("") == null);
+}
+
+test "images: an SVG root's intrinsic size" {
+    const cases = [_]struct { markup: []const u8, want: ?Size }{
+        // Every row measured on Chrome 151 against this markup; see `svgSize`.
+        .{ .markup = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"6\"></svg>", .want = .{ .width = 4, .height = 6 } },
+        .{ .markup = "<svg width='40px' height='12px'/>", .want = .{ .width = 40, .height = 12 } },
+        // Absolute units and the two font-relative ones a document with no
+        // cascade still answers: Chrome reads `2em` as 32 (measured).
+        .{ .markup = "<svg width=\"2em\" height=\"3em\"/>", .want = .{ .width = 32, .height = 48 } },
+        .{ .markup = "<svg width=\"1in\" height=\"6pt\"/>", .want = .{ .width = 96, .height = 8 } },
+        // The IDL is an unsigned long, and Chrome rounds rather than truncates.
+        .{ .markup = "<svg width=\"7.5\" height=\"2.25\"/>", .want = .{ .width = 8, .height = 2 } },
+        .{ .markup = "<svg width=\"40\"/>", .want = .{ .width = 40, .height = 150 } },
+        .{ .markup = "<svg height=\"12\"/>", .want = .{ .width = 300, .height = 12 } },
+        .{ .markup = "<svg width=\"40\" viewBox=\"0 0 20 5\"/>", .want = .{ .width = 40, .height = 10 } },
+        .{ .markup = "<svg height=\"10\" viewBox=\"0 0 20 5\"/>", .want = .{ .width = 40, .height = 10 } },
+        .{ .markup = "<svg viewBox=\"0 0 20 5\"/>", .want = .{ .width = 300, .height = 75 } },
+        .{ .markup = "<svg viewBox=\"0,0,20,5\"/>", .want = .{ .width = 300, .height = 75 } },
+        .{ .markup = "<svg></svg>", .want = .{ .width = 300, .height = 150 } },
+        // A percentage is not an intrinsic size, so the default stands.
+        .{ .markup = "<svg width=\"50%\" height=\"25%\"/>", .want = .{ .width = 300, .height = 150 } },
+        // XML, so the attribute name is case-sensitive: `viewbox` is not it.
+        .{ .markup = "<svg viewbox=\"0 0 20 5\"/>", .want = .{ .width = 300, .height = 150 } },
+        // A prolog and a comment ahead of the root are still the same document.
+        .{ .markup = "<?xml version=\"1.0\"?>\n<!-- x -->\n<svg width=\"9\" height=\"3\"/>", .want = .{ .width = 9, .height = 3 } },
+        // Not the root element this is looking for.
+        .{ .markup = "<svgx width=\"4\" height=\"6\"/>", .want = null },
+        .{ .markup = "<html><body>nope</body></html>", .want = null },
+    };
+    for (cases) |case| {
+        const got = svgSize(case.markup);
+        if (case.want) |want| {
+            try testing.expectEqual(want.width, (got orelse return error.NoSize).width);
+            try testing.expectEqual(want.height, (got orelse return error.NoSize).height);
+        } else {
+            // Compared as a boolean: the test helper cannot walk into an
+            // optional struct.
+            try testing.expectEqual(true, got == null);
+        }
+    }
+}
+
+test "images: a size from a signature and a header" {
+    try testing.expectEqual(Kind.png, Kind.fromSignature(&.{ 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a }) orelse return error.NoKind);
+    try testing.expectEqual(Kind.gif, Kind.fromSignature("GIF89a.......") orelse return error.NoKind);
+    try testing.expectEqual(Kind.jpeg, Kind.fromSignature(&.{ 0xFF, 0xD8, 0xFF, 0xE0 }) orelse return error.NoKind);
+    try testing.expectEqual(Kind.bmp, Kind.fromSignature("BM..........") orelse return error.NoKind);
+    try testing.expectEqual(Kind.webp, Kind.fromSignature("RIFF\x24\x00\x00\x00WEBPVP8 ") orelse return error.NoKind);
+    try testing.expectEqual(Kind.avif, Kind.fromSignature("\x00\x00\x00\x18ftypavif....") orelse return error.NoKind);
+    // ICO carries no geometry parser here, so it has no Kind to pick.
+    try testing.expectEqual(true, Kind.fromSignature(&.{ 0x00, 0x00, 0x01, 0x00, 0x01 }) == null);
+    try testing.expectEqual(true, Kind.fromSignature("<svg/>") == null);
+    try testing.expectEqual(true, Kind.fromSignature("") == null);
+
+    // The same 8x8 PNG the tests elsewhere use, read for geometry only: no
+    // allocator, and therefore no pixels.
+    const png = [_]u8{
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x03,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x5f, 0xc3, 0x15, 0xc5,
+    };
+    const size = readSize(.png, &png) orelse return error.NoSize;
+    try testing.expectEqual(@as(u32, 7), size.width);
+    try testing.expectEqual(@as(u32, 3), size.height);
+    // Truncated before IHDR is complete: no guess.
+    try testing.expectEqual(true, readSize(.png, png[0..20]) == null);
 }
