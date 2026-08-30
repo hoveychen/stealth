@@ -3239,9 +3239,14 @@ pub fn preloadResource(self: *Frame, link: *Element.Html, href: []const u8, opts
         return false;
     }
 
-    const arena = self.getArena(.small, "Frame.preloadResource") catch return false;
-    defer arena.release();
-    const resolved = URL.resolve(arena.allocator(), self.base(), href, .{ .encoding = self.charset }) catch |err| {
+    // Frame-arena'd, like loadImage's -- NOT a scoped arena. The transfer
+    // stores this slice and the entry quotes it back long after this function
+    // returns, so a released arena leaves the resource buffer naming freed
+    // memory. It did, briefly: two preloads came back named `favicon.ico` and
+    // one as a run of NUL bytes, and the html test passed the whole time,
+    // because a use-after-free reads correctly right up until something reuses
+    // the arena.
+    const resolved = URL.resolve(self.arena, self.base(), href, .{ .encoding = self.charset }) catch |err| {
         log.warn(.http, "preload resolve", .{ .err = err, .href = href });
         return false;
     };
