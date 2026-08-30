@@ -4144,6 +4144,21 @@ pub fn _insertNodeRelative(self: *Frame, comptime from_parser: bool, parent: *No
             self.notifyChildInserted(parent, child);
         }
 
+        // An `<img>` asks for its bytes here rather than from `Build.created`,
+        // which is where every other element's subresource starts. The reason
+        // is the `<picture>` case: the candidates come from the `<source>`
+        // siblings that precede the img, and at creation time the parser has
+        // not appended it to anything, so there is no picture to look at and
+        // the request goes to the fallback -- a URL the origin can see is not
+        // the one a browser asks for (one row of
+        // tools/fingerprint/wire-census.mjs). By insertion every preceding
+        // sibling is in place, and a `<source>` after the img is one Chrome
+        // ignores too. The move costs nothing in ordering: the parser appends
+        // an element immediately after creating it.
+        if (child.is(Element.Html.Image)) |image| {
+            try image.imageAddedCallback(self);
+        }
+
         if (child.is(Element)) |el| {
             // Invoke connectedCallback for custom elements during parsing.
             // For main document parsing we know nodes are connected (fast path);

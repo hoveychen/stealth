@@ -38,6 +38,53 @@
 }
 </script>
 
+<!-- Which candidate the `<img>` inside a `<picture>` actually resolves to. Every
+     expectation below is Chrome 151's answer to the same markup, read with
+     scratch/b94/expr-picture.js at this engine's persona (devicePixelRatio 2,
+     a 1920 CSS-pixel viewport) -- see the `<source>` selection comment in
+     Picture.zig. The reading matters off the page too: `currentSrc` and the URL
+     that goes on the wire come from one function, so a fallback here is a
+     fallback in the origin's log. -->
+<picture id="ps-type-ok"><source srcset="a-source.png" type="image/png"><img src="a-fallback.png"></picture>
+<picture id="ps-type-bad"><source srcset="b-source.png" type="image/fake"><img src="b-fallback.png"></picture>
+<picture id="ps-media"><source srcset="c-narrow.png" media="(max-width: 100px)"><source srcset="c-wide.png" media="(min-width: 100px)"><img src="c-fallback.png"></picture>
+<picture id="ps-density"><source srcset="d-1x.png 1x, d-2x.png 2x"><img src="d-fallback.png"></picture>
+<picture id="ps-no-srcset"><source><img src="e-fallback.png"></picture>
+<picture id="ps-sizes"><source srcset="f-400.png 400w, f-1600.png 1600w" sizes="50vw"><img src="f-fallback.png"></picture>
+<picture id="ps-beats-img"><source srcset="g-source.png"><img src="g-fallback.png" srcset="g-imgset.png 1x"></picture>
+<picture id="ps-img-own"><img src="h-fallback.png" srcset="h-2x.png 2x"></picture>
+<picture id="ps-first-wins"><source srcset="i-a.png" type="image/png"><source srcset="i-b.png" type="image/png"><img src="i-fallback.png"></picture>
+
+<script id="picture_source_selection">
+{
+    const base = testing.BASE_URL + 'element/html/';
+    const chose = (id) => {
+        const img = document.getElementById(id).querySelector('img');
+        return id + '=' + img.currentSrc.replace(base, '');
+    };
+
+    // A `<source>` whose type this browser can decode wins over the fallback.
+    testing.expectEqual('ps-type-ok=a-source.png', chose('ps-type-ok'));
+    // One it cannot is skipped, and nothing else matches: the fallback.
+    testing.expectEqual('ps-type-bad=b-fallback.png', chose('ps-type-bad'));
+    // First source whose media condition matches, not the first source.
+    testing.expectEqual('ps-media=c-wide.png', chose('ps-media'));
+    // The source's own srcset is a candidate list, resolved at this dpr.
+    testing.expectEqual('ps-density=d-2x.png', chose('ps-density'));
+    // A `<source>` naming nothing is skipped rather than selecting empty.
+    testing.expectEqual('ps-no-srcset=e-fallback.png', chose('ps-no-srcset'));
+    // `sizes` belongs to the source too: 50vw of 1920 at dpr 2 wants 1920
+    // device pixels, which only the 1600w candidate gets near.
+    testing.expectEqual('ps-sizes=f-1600.png', chose('ps-sizes'));
+    // A matching source shadows the img's own srcset entirely.
+    testing.expectEqual('ps-beats-img=g-source.png', chose('ps-beats-img'));
+    // With no source at all the img's own srcset still decides.
+    testing.expectEqual('ps-img-own=h-2x.png', chose('ps-img-own'));
+    // Two equally usable sources: the first, not the last.
+    testing.expectEqual('ps-first-wins=i-a.png', chose('ps-first-wins'));
+}
+</script>
+
 <!-- <script id="appendChild">
 {
     const picture = document.createElement('picture');
