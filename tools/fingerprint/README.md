@@ -22568,3 +22568,46 @@ the same tree that had just failed it in a full run), and the suite total itself
 wobbles between 1570 and 1571 across runs of one tree. So a single red full-suite
 run currently proves nothing; re-run it, and check the named test in isolation
 before believing it.
+
+## The last two the declined list held, and one Chrome quirk (B69, 2026-08-30)
+
+**`background`.** The note on `COMPUTED_JOIN_DECLINED` is right about the shape
+— the computed form puts the layer's colour first and writes every slot, where
+the declared form `chrome_shorthands` measured drops the ones at their initial.
+What it does not say is that the recorded initial it falls back to is only right
+for an element with no background at all; every element that has one reads its
+neighbour's answer. Measured on Chrome 151 headed, the order is colour, image,
+repeat, attachment, position, `/`, size, origin, clip, and **all nine longhands
+were already byte-identical to Chrome's**, so the join is the whole fix.
+
+Multi-layer is left alone on purpose. Chrome joins the layers with `, ` and puts
+the colour on the last one, and this engine's per-layer longhands are not ready:
+a two-layer `background` leaves `background-size`, `-repeat`, `-attachment`,
+`-origin` and `-clip` reading the literal `initial, initial` and the positions
+unresolved as `left, right`. The join is taken only when
+`background-repeat` has no comma in it — a keyword list with no quoting, so a
+comma there is a second layer and nothing else — and a multi-layer element keeps
+the old fallback rather than getting a confidently wrong string.
+
+**`timeline-trigger`**, which is not a join at all. Chrome answers `none` on an
+element that declares nothing and **the empty string** the moment anything in
+the `animation-*` family is declared, whatever the declaration says. Twelve
+shapes: `animation-name: none` computes to `none` and still flips it, an
+`animation-duration`, `-delay`, `-timeline`, `-play-state`, `-composition` or
+`-range-start` each flip it on their own, and `transition: color 2s` and
+`opacity: 0.5` leave it alone. So it is the family and not "the element declares
+anything". An explicitly declared trigger is reported either way.
+
+That is a Chrome quirk with no spec story behind it, recorded as measured. It
+matters here only because `JSON.stringify(getComputedStyle(el))` carries all 736
+names and Cloudflare's widget encodes the whole string — and any page with a CSS
+animation on the element is in the second row.
+
+### Where the 736 stand
+
+Against a headed Chrome on a fixture whose every box is pinned, the computed
+style went 41 differences → 7 over the sessions that worked it, and this one
+took it to **3**: `grid-row` and `grid-column` (two-value shorthands this engine
+does not expand at all — `grid-area` does, they do not), and
+`transform`/`webkitTransform`, which is the running keyframe and a feature
+rather than a serialisation.

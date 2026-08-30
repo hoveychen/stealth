@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  `timeline-trigger` off a computed style.
+
+  Chrome answers `none` on an element that declares nothing and **the empty
+  string** as soon as anything in the `animation-*` family is declared —
+  whatever that declaration says. Twelve shapes measured on Chrome 151 headed
+  (scratch/b69/expr-timeline-trigger.js, expr-tt2.js, expr-tt3.js):
+
+    none        (nothing)   transition: color 2s   opacity: 0.5
+    ""          animation: 3s … tt   animation: none   animation-name: none
+                animation-name: tt   animation-name: nosuchkeyframes
+                animation-duration: 1s   animation-delay: 0s
+                animation-timeline: auto   animation-play-state: running
+                animation-composition: replace   animation-range-start: normal
+
+  So it is not the animation's *value* that flips it -- `animation-name: none`
+  computes `animation-name: none` and still flips it -- it is whether the family
+  was declared at all. An explicit `timeline-trigger` of its own is reported
+  either way (`timeline-trigger: --t` reads `--t` with and without an animation).
+
+  This engine answered `none` in all twelve. The property is one of the 736 a
+  `JSON.stringify(getComputedStyle(el))` carries, which is what Cloudflare's
+  widget encodes, and any page with a CSS animation on the element is in the
+  second row.
+-->
+
+<body>
+
+<script id=timeline_trigger_empties_once_the_animation_family_is_declared>
+{
+  const style = document.createElement('style');
+  style.textContent = '@keyframes tt { 100% { opacity: 0; } }';
+  document.head.appendChild(style);
+  const probe = (decl) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:10px;height:10px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).timelineTrigger);
+    el.remove();
+    return got;
+  };
+  const CASES = [
+    ['', 'none'],
+    ['opacity: 0.5;', 'none'],
+    ['transition: color 2s;', 'none'],
+    ['animation: 3s linear 1s infinite alternate both running tt;', ''],
+    ['animation: none;', ''],
+    ['animation-name: tt;', ''],
+    ['animation-name: none;', ''],
+    ['animation-duration: 1s;', ''],
+    ['animation-delay: 0s;', ''],
+    ['animation-timeline: auto;', ''],
+    ['animation-play-state: running;', ''],
+    ['animation-composition: replace;', ''],
+    ['animation-range-start: normal;', ''],
+  ];
+  for (const [decl, expected] of CASES) {
+    testing.expectEqual('{' + decl + '} = [' + expected + ']', '{' + decl + '} = [' + probe(decl) + ']');
+  }
+  // A declared trigger is reported whether or not an animation is beside it.
+  testing.expectEqual('--t', probe('timeline-trigger: --t;'));
+  testing.expectEqual('--t', probe('timeline-trigger: --t; animation-name: tt;'));
+  style.remove();
+}
+</script>
