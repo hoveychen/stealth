@@ -1928,6 +1928,11 @@ pub const Request = struct {
         stylesheet,
         image,
         eventsource,
+        // Only `<link rel=preload as=font>` reaches this today -- nothing here
+        // loads a font face. Chrome answers `Sec-Fetch-Dest: font`, `Accept:
+        // */*` and `priority: u=1` for it, all measured over h2
+        // (probes/b87-preload-priority-h2.mjs).
+        font,
 
         // Allowed Values: Document, Stylesheet, Image, Media, Font, Script,
         // TextTrack, XHR, Fetch, Prefetch, EventSource, WebSocket, Manifest,
@@ -1942,6 +1947,7 @@ pub const Request = struct {
                 .stylesheet => "Stylesheet",
                 .image => "Image",
                 .eventsource => "EventSource",
+                .font => "Font",
             };
         }
     };
@@ -1949,6 +1955,11 @@ pub const Request = struct {
     // Fetch request redirect mode. `.follow` keeps navigations, XHR and
     // internal requests transparently following redirects.
     pub const RedirectMode = enum { follow, manual, @"error" };
+
+    // Fetch request mode, as Sec-Fetch-Mode reports it. Every request has one
+    // by destination; `Request.mode` overrides that default for the loads whose
+    // mode is not implied by what they are fetching.
+    pub const Mode = enum { navigate, no_cors, cors };
 
     // Fetch-metadata inputs for a document request that only the navigating
     // frame knows. Absent on subresources, where cookie_origin and
@@ -1993,6 +2004,21 @@ pub const Request = struct {
     // which needs https, which no fixture here speaks; both spellings read as
     // "CORS mode" until someone can measure the difference.
     cors: bool = false,
+
+    // Overrides the RFC 9218 `priority` hint the destination would otherwise
+    // imply. One thing needs it: a preloaded image, which Chrome sends as bare
+    // `i` where a real <img> is `u=1, i` -- the preload is not on screen, so it
+    // never gets the urgency a displayed image does (measured over h2 three
+    // times, probes/b87-preload-priority-h2.mjs).
+    priority: ?[]const u8 = null,
+
+    // Overrides the mode this request's destination would otherwise imply.
+    // Only one thing needs it today: `<link rel=preload as=fetch>`, whose
+    // destination is `empty` -- the same as a real fetch() -- but which Chrome
+    // sends no-cors, where a real fetch() is always cors (measured,
+    // probes/b87-preload-as-fixture.mjs). Left null everywhere else, so the
+    // per-destination defaults below stay the single description of the rule.
+    mode: ?Mode = null,
     redirect: RedirectMode = .follow,
     referrer_policy: ?referrer.Policy = null,
     credentials: ?[:0]const u8 = null,
@@ -2041,6 +2067,21 @@ pub const Request = struct {
     // every caller decides — pass `HttpClient.noopShutdown` to opt out,
     // knowingly.
     shutdown_callback: ShutdownCallback,
+
+    // The mode this request goes out in: `mode` when it was set, and the
+    // destination's own default otherwise. A document navigates; a subresource
+    // the parser pulls in is no-cors unless its element asked for CORS; a
+    // script-issued fetch or XHR goes through the CORS protocol.
+    pub fn requestMode(self: *const Request) Mode {
+        if (self.mode) |m| {
+            return m;
+        }
+        return switch (self.resource_type) {
+            .document => .navigate,
+            .stylesheet, .script, .image, .font => if (self.cors) .cors else .no_cors,
+            .fetch, .xhr, .eventsource => .cors,
+        };
+    }
 
     pub fn getCookieString(self: *Request, arena: Allocator) !?[:0]const u8 {
         const jar = self.cookie_jar orelse return null;
@@ -3668,7 +3709,8 @@ pub const Transfer = struct {
             .stylesheet => H.Accept.style,
             .image => H.Accept.image,
             .eventsource => H.Accept.event_stream,
-            .script, .fetch, .xhr => H.Accept.any,
+            // A font asks for `*/*`, the same as a script (measured).
+            .script, .fetch, .xhr, .font => H.Accept.any,
         }, .{});
 
         // Chrome labels a subframe navigation "iframe" and a top-level one
@@ -3678,17 +3720,15 @@ pub const Transfer = struct {
             .stylesheet => "style",
             .image => "image",
             .script => "script",
+            .font => "font",
             // fetch(), XHR and EventSource all report an empty destination.
             .fetch, .xhr, .eventsource => "empty",
         }, .{ .source = .cdp });
 
-        try self.setHeader("Sec-Fetch-Mode", switch (req.resource_type) {
-            .document => "navigate",
-            // Subresources the parser pulls in are no-cors -- unless the
-            // element asked for CORS with `crossorigin`. Script-issued fetches
-            // and XHR always go through the CORS protocol.
-            .stylesheet, .script, .image => if (req.cors) "cors" else "no-cors",
-            .fetch, .xhr, .eventsource => "cors",
+        try self.setHeader("Sec-Fetch-Mode", switch (req.requestMode()) {
+            .navigate => "navigate",
+            .no_cors => "no-cors",
+            .cors => "cors",
         }, .{ .source = .cdp });
 
         try self.setHeader("Sec-Fetch-Site", if (self.initiatorOrigin()) |origin|
@@ -3724,10 +3764,12 @@ pub const Transfer = struct {
         // style and script. Chrome re-sends a bare `i` for an image once it
         // matters on screen; that re-prioritisation is not modelled, so an
         // image always carries the value of its first request.
-        try self.setHeader("priority", switch (req.resource_type) {
+        try self.setHeader("priority", req.priority orelse switch (req.resource_type) {
             .document => "u=0, i",
             .stylesheet => "u=0",
-            .script => "u=1",
+            // A font is urgent and not incremental -- there is nothing to show
+            // until all of it is there (measured over h2).
+            .script, .font => "u=1",
             // EventSource was not in the capture, grouped with fetch and XHR
             // the way every other per-destination switch here groups it.
             .image, .fetch, .xhr, .eventsource => "u=1, i",
@@ -3833,14 +3875,18 @@ pub const Transfer = struct {
         // carry `Origin: <page origin>` in Chrome, while a same-origin GET
         // through fetch() carries none
         // (probes/b87-crossorigin-request-fixture.mjs).
-        const element_cors = switch (req.resource_type) {
-            .stylesheet, .script, .image => req.cors,
+        const cors_mode = req.requestMode() == .cors;
+        const element_cors = cors_mode and switch (req.resource_type) {
+            .stylesheet, .script, .image, .font => true,
             .document, .fetch, .xhr, .eventsource => false,
         };
         if (!element_cors) {
             switch (req.resource_type) {
-                .fetch, .xhr, .eventsource => {},
-                .document, .stylesheet, .script, .image => return null,
+                // A no-cors request names nobody, whatever its destination:
+                // `<link rel=preload as=fetch>` has a fetch's destination and a
+                // no-cors mode, and Chrome sends it without an Origin.
+                .fetch, .xhr, .eventsource => if (!cors_mode) return null,
+                .document, .stylesheet, .script, .image, .font => return null,
             }
         }
 

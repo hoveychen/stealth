@@ -3039,7 +3039,7 @@ pub fn loadImage(self: *Frame, element: *Element.Html, src: []const u8) !void {
         return self.queueElementEvent(element, .@"error");
     };
 
-    return self.requestImage(resolved, element);
+    return self.requestSubresource(resolved, element, .{});
 }
 
 // One in-flight image request, holding what the transfer needs to report an
@@ -3061,8 +3061,11 @@ const ImageRequest = struct {
     // Frame-arena'd like the request itself, so it outlives the transfer.
     url: []const u8,
 
-    // "img" for an <img src>, "other" for the favicon.
+    // "img" for an <img src>, "other" for the favicon, "link" for a preload.
     initiator: []const u8,
+
+    // See SubresourceOpts.sniff.
+    sniff: bool = true,
 
     // Taken where the request goes out; see Frame.recordResourceTiming.
     fetch_start: f64,
@@ -3165,7 +3168,7 @@ const ImageRequest = struct {
             .times = self.times,
             .cors = self.cors,
         });
-        self.report(if (self.arrived()) .load else .@"error");
+        self.report(if (!self.sniff or self.arrived()) .load else .@"error");
     }
 
     // Whether the bytes became a picture, as far as this engine can tell.
@@ -3220,7 +3223,65 @@ pub fn elementRequestsCors(element: *Element) bool {
     return element.getAttributeSafe(comptime .wrap("crossorigin")) != null;
 }
 
-fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !void {
+// Start the fetch a `<link rel=preload as=...>` names. Returns true when a
+// request went out and the element's load/error event will follow it; false
+// when nothing was started, so the caller queues a synthetic load instead --
+// the same contract `preload.scriptHint` has.
+pub fn preloadResource(self: *Frame, link: *Element.Html, href: []const u8, opts: SubresourceOpts) bool {
+    if (self.isGoingAway() or self._parse_mode == .fragment) {
+        return false;
+    }
+    // A preloaded stylesheet is still a stylesheet fetch, so it obeys the same
+    // opt-out: with --disable-external-stylesheets nothing else asks a server
+    // for CSS either, and a preload that still did would be the only request
+    // of its kind on the wire.
+    if (opts.resource_type == .stylesheet and !self._session.load_external_stylesheets) {
+        return false;
+    }
+
+    // Frame-arena'd, like loadImage's -- NOT a scoped arena. The transfer
+    // stores this slice and the entry quotes it back long after this function
+    // returns, so a released arena leaves the resource buffer naming freed
+    // memory. It did, briefly: two preloads came back named `favicon.ico` and
+    // one as a run of NUL bytes, and the html test passed the whole time,
+    // because a use-after-free reads correctly right up until something reuses
+    // the arena.
+    const resolved = URL.resolve(self.arena, self.base(), href, .{ .encoding = self.charset }) catch |err| {
+        log.warn(.http, "preload resolve", .{ .err = err, .href = href });
+        return false;
+    };
+
+    self.requestSubresource(resolved, link, opts) catch |err| {
+        log.warn(.http, "preload fetch", .{ .err = err, .url = resolved });
+        return false;
+    };
+    return true;
+}
+
+// What a subresource fetch that discards its body needs to know beyond the URL
+// and the element. The defaults describe an <img src>, which is what this path
+// was built for; a preload link overrides them.
+pub const SubresourceOpts = struct {
+    resource_type: HttpClient.Request.ResourceType = .image,
+
+    // Overrides the mode the destination implies; see HttpClient.Request.mode.
+    mode: ?HttpClient.Request.Mode = null,
+
+    // Overrides the RFC 9218 hint the destination implies; see
+    // HttpClient.Request.priority.
+    priority: ?[]const u8 = null,
+
+    // The entry's initiatorType. Null derives it the way an image does: "img"
+    // when an element asked, "other" when nothing did (the favicon).
+    initiator: ?[]const u8 = null,
+
+    // Whether the body decides the outcome. An <img> fires `error` for bytes
+    // that are not a picture; a preload fires `load` for whatever came back,
+    // because it is warming a cache rather than displaying anything.
+    sniff: bool = true,
+};
+
+fn requestSubresource(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html, opts: SubresourceOpts) !void {
     const session = self._session;
 
     // Accept and the Sec-Fetch-* set come from Transfer.seedFetchMetadata via
@@ -3233,7 +3294,9 @@ fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !
         .loader_id = self._loader_id,
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = self.url,
-        .resource_type = .image,
+        .resource_type = opts.resource_type,
+        .mode = opts.mode,
+        .priority = opts.priority,
         .cors = if (element) |el| elementRequestsCors(el.asElement()) else false,
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown,
@@ -3247,7 +3310,8 @@ fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !
         .element = element,
         .cors = request.cors,
         .url = resolved,
-        .initiator = if (element == null) "other" else "img",
+        .initiator = opts.initiator orelse (if (element == null) "other" else "img"),
+        .sniff = opts.sniff,
         .fetch_start = self.performance().now(),
     };
     request.ctx = pending;
@@ -3321,7 +3385,7 @@ fn requestFavicon(self: *Frame) void {
             return;
         };
 
-    self.requestImage(resolved, null) catch |err| {
+    self.requestSubresource(resolved, null, .{}) catch |err| {
         log.warn(.http, "favicon fetch", .{ .err = err, .url = resolved });
     };
 }

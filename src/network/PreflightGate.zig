@@ -135,11 +135,13 @@ fn describe(transfer: *Transfer) !?Plan {
     if (req.internal) return null;
 
     switch (req.resource_type) {
-        // `Sec-Fetch-Mode: cors`, the requests that go through the CORS
-        // protocol at all. Subresources the parser pulls in are no-cors and a
-        // navigation is not a CORS request; EventSource does its own check.
+        // The requests that can need a preflight at all. A navigation is not a
+        // CORS request and EventSource does its own check. An element load CAN
+        // be CORS mode now -- `crossorigin` on a script, image or link, or a
+        // font preload -- but it is always a simple GET with no author headers,
+        // and a simple request never preflights.
         .fetch, .xhr => {},
-        .document, .stylesheet, .script, .image, .eventsource => return null,
+        .document, .stylesheet, .script, .image, .eventsource, .font => return null,
     }
 
     // Same-origin first, and without allocating: this runs on every fetch()
