@@ -12,14 +12,27 @@
 // moment..." against the real one -- which is the last link in the chain and
 // costs a `Runtime.evaluate` to read.
 //
-// The answer it found, and what it now keys on: **`cf-chl-out`** on the SECOND
-// `fo/` telemetry POST's response. Chrome carries it 2 for 2 and this engine
-// never does, and it arrives about four seconds before the clearance cookie and
-// the re-navigation that follow from it. Unlike the cookie it is a plain
-// response header, which matters: this engine reports no Set-Cookie to CDP at
-// all -- neither on the response nor in ExtraInfo -- so `cf_clearance` cannot be
-// read symmetrically and a cookie-based verdict would have read "refused" for
-// instrumentation reasons on a run that passed.
+// The answer it found, and what it keyed on for a long time: **`cf-chl-out`** on
+// the SECOND `fo/` telemetry POST's response.
+//
+// **That header is a token, not a pass, and the `served=` column is the one to
+// read.** Measured 2026-08-29 with a binary that gets `cf-chl-out` 6 times out
+// of 6: the document still cycles 403->200 four times and never settles. Two
+// transplants close it -- Chrome's clearance handed to a clean instance of this
+// engine is served 200 on the first navigation (2/2, no challenge at all, so
+// the edge re-checks nothing about our client), and our own clearance handed to
+// a clean instance is refused 403 whether it travels alone, with the
+// load-balancer pair, or with everything including `cf_chl_rc_ni`. Cloudflare
+// issues us a clearance it has already decided not to honour. A run that
+// reports `ticket=...` and `served=false` has not opened anything.
+//
+// It is still worth recording. Without the collector pad this engine never gets
+// `cf-chl-out` at all, so the header does separate two states of the guard --
+// it just is not the state the boss is asking about. It also arrives about four
+// seconds before the clearance cookie, and unlike the cookie it is a plain
+// response header: this engine reports no Set-Cookie to CDP at all, neither on
+// the response nor in ExtraInfo, so a cookie-based reading would have said
+// "refused" for instrumentation reasons on a run that passed.
 //
 // So this records the challenge exchange itself: every
 // `/cdn-cgi/challenge-platform/` and `challenges.cloudflare.com` request and
@@ -167,7 +180,16 @@ async function once(port) {
             if (m.method !== 'Network.responseReceived') return;
             const r = m.params.response;
             const url = String(r.url);
-            if (m.params.type === 'Document') out.documents.push({ url, status: r.status });
+            if (m.params.type === 'Document') {
+                // `cf-mitigated` rides along because the status alone cannot
+                // separate "the site" from "another interstitial": a managed
+                // challenge is a 403 that carries `cf-mitigated: challenge`,
+                // and the served page is a 200 that carries none.
+                out.documents.push({
+                    url, status: r.status,
+                    mitigated: (r.headers || {})['cf-mitigated'] || null,
+                });
+            }
             if (!isChallenge(url)) return;
             const headers = pick(r.headers);
             const sent = posted.get(m.params.requestId) || {};
@@ -240,13 +262,25 @@ for (let i = 0; i < runs; i++) {
             (c['cf-chl-out'] ? '=TICKET' : c['cf-chl-gen'] ? '=chl-gen' : ''))
         .join(' ');
     const pat = out.challenge.filter((c) => c.path.includes('/pat/'));
+    // The question the ticket does NOT answer. Measured 2026-08-29: this engine
+    // can hold `cf-chl-out` on every round and still be handed a fresh
+    // challenge every time, because the edge does not honour the clearance that
+    // came with it -- our own clearance replayed into a clean engine is refused
+    // (403/challenge) while CHROME's clearance replayed into the same engine is
+    // served (200, 2/2). So the ticket is a token, not a pass, and this is the
+    // column to read when the question is whether the door opened.
+    const origin = new URL(target).origin;
+    const own = out.documents.filter((d) => d.url.startsWith(origin));
+    const last = own.length ? own[own.length - 1] : null;
+    const served = !!last && last.status === 200 && !last.mitigated;
     console.log(`${engine}${headless ? ' (headless)' : ''} run ${i + 1}: doc=${docs} ` +
+        `served=${served} ` +
         `ticket=${ticket ? String(ticket['cf-chl-out']).slice(0, 12) : '(absent)'} ` +
         `rounds=[${rounds}] instances=${new Set(fo.map(instance)).size}` +
         (pat.length ? ` pat=${pat.map((c) => c.status).join(',')}` : '') +
         // Chrome-only: this engine reports no Set-Cookie to CDP at all, on
         // either the response headers or ExtraInfo, so a false here is an
-        // instrumentation gap and NOT a verdict. cf-chl-out is the verdict.
+        // instrumentation gap and NOT a verdict. `served` is the verdict.
         (out.cookies.length ? ` cookies=[${[...new Set(out.cookies)].join(',')}]` : ''));
 }
 
