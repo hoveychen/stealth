@@ -319,6 +319,24 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // distinct from `hidden` the way Chrome reports it. Upstream's
                 // hasVisibilityHiddenInherited() cannot express the !important
                 // case or tell `collapse` from `hidden`, so it is not used here.
+                // A CSS-wide keyword never reaches computedVisibility as one --
+                // it parses as no keyword at all and the walk carries on past
+                // it, which read `visibility: initial` back as the parent's
+                // `hidden`. Resolved here for the same reason `display` is:
+                // visibility has a path of its own that never sees
+                // `declaredValue`.
+                if (declaredDeclaration(style_manager, element, "visibility", wrapped)) |declaration| {
+                    if (cssWideKeyword(declaration.value)) |keyword| {
+                        // `initial` is the only one of the four that does not
+                        // end up at the parent: visibility inherits, so
+                        // `inherit`, `unset` and `revert` all do.
+                        if (keyword == .initial) return "visible";
+                        const parent = element.parentElement() orelse return "visible";
+                        const inherited = style_manager.computedVisibility(parent) orelse
+                            StyleManager.Visibility.visible;
+                        return inherited.keyword();
+                    }
+                }
                 const value = style_manager.computedVisibility(element) orelse
                     StyleManager.Visibility.visible;
                 return value.keyword();
@@ -425,17 +443,17 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // declaration is not the answer at all.
                 if ((on_width or on_height) and declaredInPixels(style_manager, element, normalized, wrapped)) {
                     const specified = if (declaredDeclaration(style_manager, element, normalized, wrapped)) |d| d.specified else null;
-                    switch (cascadedValue(style_manager, element, normalized, wrapped)) {
+                    switch (cascadedValue(style_manager, element, normalized, wrapped, surface)) {
                         .value => |value| if (usedLengthText(value, specified, frame)) |snapped| return snapped,
                         .unreportable, .none => {},
                     }
                 }
 
-                switch (cascadedValue(style_manager, element, normalized, wrapped)) {
+                switch (cascadedValue(style_manager, element, normalized, wrapped, surface)) {
                     .value => |value| return self.resolveCurrentColour(value, frame, surface),
                     .unreportable => {},
                     .none => if (chrome_logical.counterpart(normalized)) |other| {
-                        switch (cascadedValue(style_manager, element, other, .wrap(other))) {
+                        switch (cascadedValue(style_manager, element, other, .wrap(other), surface)) {
                             .value => |value| return self.resolveCurrentColour(value, frame, surface),
                             .unreportable, .none => {},
                         }
@@ -495,7 +513,7 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     return boxCentre(element, frame, wrapped.str());
                 }
             }
-            return getDefaultPropertyValue(self, wrapped, surface);
+            return getDefaultPropertyValue(self._element, wrapped, surface);
         }
         return "";
     };
@@ -510,8 +528,8 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
 /// not that declaration can be reported: an ancestor declaring
 /// `letter-spacing:2em` is the one that decides the answer, so a grandparent's
 /// `3px` must not show through it.
-fn cascadedValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) Declared {
-    switch (declaredValue(style_manager, element, property_name, wrapped)) {
+fn cascadedValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String, surface: Surface) Declared {
+    switch (declaredValue(style_manager, element, property_name, wrapped, surface)) {
         .value => |value| return .{ .value = value },
         .unreportable => return .unreportable,
         .none => {},
@@ -542,13 +560,132 @@ fn cascadedValue(style_manager: *StyleManager, element: *Element, property_name:
                 } else |_| {}
             }
         }
-        switch (declaredValue(style_manager, current, property_name, wrapped)) {
+        switch (declaredValue(style_manager, current, property_name, wrapped, surface)) {
             .value => |value| return .{ .value = value },
             .unreportable => return .unreportable,
             .none => {},
         }
     }
     return .none;
+}
+
+/// The CSS-wide keyword a declaration is, or null for an ordinary value. The
+/// comparison is case-insensitive because a declaration keeps the author's
+/// spelling and `INHERIT` is the same keyword.
+fn cssWideKeyword(value: []const u8) ?CssWide {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    const KEYWORDS = std.StaticStringMap(CssWide).initComptime(.{
+        .{ "inherit", .inherit },
+        .{ "initial", .initial },
+        .{ "unset", .unset },
+        .{ "revert", .revert },
+        .{ "revert-layer", .revert },
+    });
+    if (trimmed.len > "revert-layer".len) return null;
+    var lower_buf: ["revert-layer".len]u8 = undefined;
+    const lower = std.ascii.lowerString(lower_buf[0..trimmed.len], trimmed);
+    return KEYWORDS.get(lower);
+}
+
+/// `revert-layer` folds into `revert`: with no cascade layer to fall back to,
+/// the two were measured giving the same answer on every property and tag tried
+/// (scratch/b92/expr-wide-table.js).
+const CssWide = enum { inherit, initial, unset, revert };
+
+/// How deep a chain of `inherit` declarations is followed before the walk gives
+/// up. The same bound StyleManager puts on its own ancestor walks, and for the
+/// same reason: a page can nest deeper than the stack likes, and a cycle
+/// through a detached tree would otherwise not terminate.
+const MAX_CSS_WIDE_DEPTH = 32;
+
+/// What a CSS-wide keyword resolves to on the element that declared it.
+/// Measured on Chrome 151 over three tags x fourteen properties
+/// (scratch/b92/expr-wide-table.js, asserted by css/css_wide_keywords.html):
+///
+///   inherit   the PARENT's computed value, for a property that inherits and
+///             one that does not alike -- a child declaring `width: inherit`
+///             under a 123px parent computes 123px, and `display: inherit`
+///             under an `inline-block` parent computes inline-block.
+///   initial   the property's initial value, which is NOT the UA sheet's: a
+///             <li> declaring `display: initial` computes `inline`, where the
+///             UA rule would have said list-item.
+///   unset     `inherit` for a property that inherits and `initial` for one
+///             that does not, which is the one keyword that needs the
+///             inheritance table to tell which.
+///   revert    the value the element would report with the declaration never
+///             written, UA sheet and all -- so a <li> keeps list-item. That is
+///             exactly what the no-declaration path already answers.
+fn resolvedCssWide(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    wrapped: String,
+    keyword: CssWide,
+    surface: Surface,
+    depth: u8,
+) Declared {
+    // A chain this long is a page doing something strange, and the initial value
+    // is the answer that cannot be wrong about which ancestor it came from.
+    if (depth >= MAX_CSS_WIDE_DEPTH) {
+        return initialDeclared(property_name);
+    }
+
+    const resolved: CssWide = switch (keyword) {
+        .unset => if (chrome_inherited.inherits(property_name)) .inherit else .initial,
+        else => keyword,
+    };
+
+    switch (resolved) {
+        .initial => return initialDeclared(property_name),
+        // "As if never declared" is literally `.none`, and handing that back
+        // puts the value on the path a declaration-less element already takes:
+        // the ancestor walk for a property that inherits, the UA sheet for one
+        // that does not. Answering this element's own default instead would
+        // skip the inheritance -- `visibility: revert` under a hidden parent is
+        // `hidden` in Chrome, not the `visible` a default lookup returns.
+        .revert => return .none,
+        .inherit => {},
+        .unset => unreachable,
+    }
+
+    // The parent's COMPUTED value, which is its cascade when it declares one and
+    // its own default when it does not. The root has no parent to take one from,
+    // and Chrome answers the initial value there.
+    const parent = element.parentElement() orelse return initialDeclared(property_name);
+
+    if (declaredDeclaration(style_manager, parent, property_name, wrapped)) |parent_declaration| {
+        // The parent's own declaration may be a keyword in turn, and following
+        // it here is what keeps `inherit` on top of `inherit` from reporting the
+        // word.
+        if (cssWideKeyword(parent_declaration.value)) |parent_keyword| {
+            return resolvedCssWide(style_manager, parent, property_name, wrapped, parent_keyword, surface, depth + 1);
+        }
+    }
+
+    switch (cascadedValue(style_manager, parent, property_name, wrapped, surface)) {
+        .value => |value| return .{ .value = value },
+        // The parent has a declaration this engine cannot report. Reporting the
+        // initial value is no worse than reporting it for the parent itself,
+        // which is what the caller does with `unreportable`.
+        .unreportable => return .unreportable,
+        .none => return .{ .value = getDefaultPropertyValue(parent, wrapped, surface) },
+    }
+}
+
+/// The two properties whose recorded "default" is the UA sheet's answer for a
+/// div rather than the property's initial value. `initial` is the one keyword
+/// that has to tell those apart: it discards the UA sheet, so `display: initial`
+/// is `inline` even on a <li> and `unicode-bidi: initial` is `normal`. Measured
+/// with scratch/b92/expr-initial-delta.js, which asks all 475 names where
+/// `initial` and an undeclared element disagree -- these two are the whole list.
+const CSS_INITIAL_OVERRIDES = std.StaticStringMap([]const u8).initComptime(.{
+    .{ "display", "inline" },
+    .{ "unicode-bidi", "normal" },
+});
+
+fn initialDeclared(property_name: []const u8) Declared {
+    if (CSS_INITIAL_OVERRIDES.get(property_name)) |value| return .{ .value = value };
+    return .{ .value = chrome_initial_values.initial.get(property_name) orelse return .unreportable };
 }
 
 /// What one element was declared for a property: nothing, something this engine
@@ -566,11 +703,20 @@ const Declared = union(enum) {
 ///
 /// `var()` is substituted at computed-value time either way; the specified value
 /// `el.style` hands out keeps its var() text.
-fn declaredValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String) Declared {
+fn declaredValue(style_manager: *StyleManager, element: *Element, property_name: []const u8, wrapped: String, surface: Surface) Declared {
     const declaration = declaredDeclaration(style_manager, element, property_name, wrapped) orelse
         return flexShorthandDeclared(style_manager, element, property_name);
     const substituted = declaration.value;
     const frame = element.ownerFrame(style_manager.frame);
+
+    // A CSS-wide keyword is not a value -- it names where the value comes from,
+    // and by computed-value time it has come from there. Resolved here rather
+    // than at the top of the read, because here is where the element that
+    // DECLARED it is known: an ancestor's `inherit` means that ancestor's
+    // parent, not the descendant's.
+    if (cssWideKeyword(substituted)) |keyword| {
+        return resolvedCssWide(style_manager, element, property_name, wrapped, keyword, surface, 0);
+    }
 
     // `transform` computes to one matrix rather than to the list the author
     // wrote. A function this engine does not model answers `unreportable`, so
@@ -1419,7 +1565,7 @@ fn resolvedFontWeight(style_manager: *StyleManager, element: *Element, depth: u8
     if (depth >= MAX_COMPUTED_DEPTH) return initial_font_weight;
     const wrapped = comptime String.wrap("font-weight");
     const declared = found: {
-        switch (declaredValue(style_manager, element, "font-weight", wrapped)) {
+        switch (declaredValue(style_manager, element, "font-weight", wrapped, .computed)) {
             .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
             .unreportable, .none => {},
         }
@@ -1483,7 +1629,7 @@ const font_stretch_percentages = std.StaticStringMap([]const u8).initComptime(.{
 });
 
 fn computedFontStretch(style_manager: *StyleManager, element: *Element, wrapped: String) []const u8 {
-    const declared = switch (cascadedValue(style_manager, element, "font-stretch", wrapped)) {
+    const declared = switch (cascadedValue(style_manager, element, "font-stretch", wrapped, .computed)) {
         .value => |value| std.mem.trim(u8, value, &std.ascii.whitespace),
         .unreportable, .none => return "100%",
     };
@@ -1525,7 +1671,7 @@ fn usedBorderWidth(
 
     const style_manager = &element.ownerFrame(frame)._style_manager;
     const declared = found: {
-        switch (cascadedValue(style_manager, element, name, wrapped)) {
+        switch (cascadedValue(style_manager, element, name, wrapped, .computed)) {
             .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
             // Written, and this engine cannot report it: `medium`, the same as
             // a declaration Chrome's own parser drops.
@@ -1536,7 +1682,7 @@ fn usedBorderWidth(
         // `border-block-start-width` and `border-top-width` are one property
         // under two names, and this engine stores only the one the page wrote.
         if (chrome_logical.counterpart(name)) |other| {
-            switch (cascadedValue(style_manager, element, other, .wrap(other))) {
+            switch (cascadedValue(style_manager, element, other, .wrap(other), .computed)) {
                 .value => |value| break :found std.mem.trim(u8, value, &std.ascii.whitespace),
                 .unreportable, .none => {},
             }
@@ -1649,7 +1795,7 @@ fn leftAtCurrentColour(
 
     const element = self._element orelse return false;
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    return switch (cascadedValue(style_manager, element, longhand, .wrap(longhand))) {
+    return switch (cascadedValue(style_manager, element, longhand, .wrap(longhand), .computed)) {
         .none => true,
         .unreportable => false,
         .value => |value| std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, &std.ascii.whitespace), "currentcolor"),
@@ -1662,8 +1808,27 @@ fn leftAtCurrentColour(
 /// when nothing declares one, and then blockification -- a flex or grid parent
 /// turns its child element's outer display block-level, which is how Chrome
 /// exposes it and the reason innerText breaks a line there.
+/// The declared display before blockification, with a CSS-wide keyword resolved
+/// -- `display` has a resolution path of its own because the layout needs the
+/// answer too, so it never reaches `declaredValue` where the other properties
+/// have their keywords taken apart.
+fn resolvedDisplaySpecified(element: *Element, frame: *Frame) []const u8 {
+    const declared = frame._style_manager.computedDisplay(element) orelse
+        return getDefaultDisplay(element);
+    const keyword = cssWideKeyword(declared) orelse return declared;
+
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const wrapped = comptime String.wrap("display");
+    return switch (resolvedCssWide(style_manager, element, "display", wrapped, keyword, .computed, 0)) {
+        .value => |value| value,
+        // Nothing here can report, so the element keeps the display its tag
+        // would have had -- the answer it gave before any of this.
+        .unreportable, .none => getDefaultDisplay(element),
+    };
+}
+
 pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
-    const specified = frame._style_manager.computedDisplay(element) orelse getDefaultDisplay(element);
+    const specified = resolvedDisplaySpecified(element, frame);
 
     // Nothing below can change a display that is block-level already, and
     // asking would cost two cascade reads per element on a path that runs per
@@ -1700,13 +1865,13 @@ pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
 /// computed path knew that before this.
 pub fn cascadedComputedValue(element: *Element, name: []const u8, frame: *Frame) ?[]const u8 {
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    switch (cascadedValue(style_manager, element, name, .wrap(name))) {
+    switch (cascadedValue(style_manager, element, name, .wrap(name), .computed)) {
         .value => |value| return value,
         .unreportable => return null,
         .none => {},
     }
     const other = chrome_logical.counterpart(name) orelse return null;
-    return switch (cascadedValue(style_manager, element, other, .wrap(other))) {
+    return switch (cascadedValue(style_manager, element, other, .wrap(other), .computed)) {
         .value => |value| value,
         .unreportable, .none => null,
     };
@@ -2102,7 +2267,7 @@ fn cascadedOrUaInherited(element: *Element, frame: *Frame, name: []const u8, wra
     const style_manager = &element.ownerFrame(frame)._style_manager;
     var current: ?*Element = element;
     while (current) |el| : (current = el.parentElement()) {
-        switch (declaredValue(style_manager, el, name, wrapped)) {
+        switch (declaredValue(style_manager, el, name, wrapped, .computed)) {
             .value => |value| return std.mem.trim(u8, value, &std.ascii.whitespace),
             .unreportable => return null,
             .none => {},
@@ -2533,7 +2698,7 @@ fn fillsAtDisplay(display: []const u8) bool {
 fn cascadedKeyword(style_manager: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
     // Not `comptime .wrap`: a comptime String has to fit the small-string
     // optimisation's twelve bytes and `justify-items` is thirteen.
-    return switch (cascadedValue(style_manager, element, name, .wrap(name))) {
+    return switch (cascadedValue(style_manager, element, name, .wrap(name), .computed)) {
         .value => |value| value,
         .unreportable, .none => null,
     };
@@ -3284,6 +3449,16 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
         return std.mem.trim(u8, raw_value, &std.ascii.whitespace);
     }
     const value = try canonicaliseValue(arena, property_name, raw_value);
+
+    // A CSS-wide keyword is not a value of the property's grammar, so none of
+    // the rewrites below have anything to say about it. Chrome agrees byte for
+    // byte: `counter-increment: inherit` stays `inherit` where `chapter` grows
+    // the count it was written without (scratch/b92/expr-counter-wide.js).
+    // Without this the keyword was stored as `inherit 1`, which then no longer
+    // looked like a keyword to the computed path and leaked the word out.
+    if (cssWideKeyword(value) != null) {
+        return value;
+    }
 
     // Per CSSOM spec, unitless zero in length properties should serialize as "0px"
     if (std.mem.eql(u8, value, "0") and isLengthProperty(property_name)) {
@@ -5215,7 +5390,7 @@ fn isLengthProperty(name: []const u8) bool {
     return length_properties.has(name);
 }
 
-fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surface: Surface) []const u8 {
+fn getDefaultPropertyValue(element_opt: ?*Element, name: String, surface: Surface) []const u8 {
     // The UA stylesheet first, because it is what a browser cascades ahead of
     // the property's initial value and it is per-tag where the flat table is
     // not: <body> takes `margin: 8px`, <pre> a monospace 13px font, <hr> a grey
@@ -5223,7 +5398,7 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surfa
     // them. An element whose tag the UA sheet says nothing about is not a div
     // either -- a div carries UA rules of its own -- so a miss falls to the
     // recorded unknown-tag row rather than straight through.
-    if (self._element) |element| {
+    if (element_opt) |element| {
         // Per TYPE before per tag for an <input>, the same order uaValue uses.
         // Both lookups have to agree: the layout reads uaValue and this is what
         // getComputedStyle reports, and when only the first knew about types a
@@ -5242,7 +5417,7 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surfa
     switch (name.len) {
         5 => {
             if (name.eql(comptime .wrap("color"))) {
-                const element = self._element orelse return "";
+                const element = element_opt orelse return "";
                 return getDefaultColor(element);
             }
         },
@@ -5251,7 +5426,7 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surfa
                 return "1";
             }
             if (name.eql(comptime .wrap("display"))) {
-                const element = self._element orelse return "";
+                const element = element_opt orelse return "";
                 return getDefaultDisplay(element);
             }
             if (name.eql(comptime .wrap("z-index"))) {
@@ -6140,4 +6315,8 @@ test "WebApi: CSSStyleDeclaration position grammar" {
 
 test "WebApi: CSSStyleDeclaration position serialization" {
     try testing.htmlRunner("css/position_edge_relative_computed.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration css-wide keywords" {
+    try testing.htmlRunner("css/css_wide_keywords.html", .{});
 }
