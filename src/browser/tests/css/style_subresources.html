@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  What a stylesheet asks the server for.
+
+  Every other CSS test here reads a value back out of the CSSOM. This one reads
+  the wire: a page that pulls the HTML, the CSS and the scripts but never once
+  asks for the background image the CSS names is separable with a single
+  access-log query, and no amount of correct `getComputedStyle` hides it.
+  Measured against Chrome (tools/fingerprint/wire-census.mjs): of the twenty-six
+  paths a page can name, this engine asked for eleven.
+
+  The `never` rule is the control. Chrome does NOT fetch a url() whose rule
+  matches nothing, so over-fetching is its own tell and the absence below is
+  half the assertion.
+
+  Resource timing is the observation channel because a 404 leaves an entry too,
+  so nothing here needs the server to grow routes for bytes that are thrown
+  away regardless.
+-->
+<style>
+  @import url(/wire/subres-imported.css);
+  @font-face { font-family: SubresProbe; src: url(/wire/subres-font.woff2) format("woff2"); }
+
+  .subres-bg { background-image: url(/wire/subres-bg.png); }
+  .subres-list ul { list-style-image: url(/wire/subres-list.png); }
+  .subres-border { border-image-source: url(/wire/subres-border.png); }
+  .subres-cursor { cursor: url(/wire/subres-cursor.png), auto; }
+  .subres-mask { -webkit-mask-image: url(/wire/subres-mask.png); }
+  .subres-font { font-family: SubresProbe, serif; }
+
+  .subres-never { background-image: url(/wire/subres-never.png); }
+  @font-face { font-family: SubresUnused; src: url(/wire/subres-unused-font.woff2); }
+</style>
+
+<div class="subres-bg">bg</div>
+<div class="subres-list"><ul><li>item</li></ul></div>
+<div class="subres-border">border</div>
+<div class="subres-cursor">cursor</div>
+<div class="subres-mask">mask</div>
+<span class="subres-font">fonted</span>
+
+<script id="css_referenced_subresources" type=module>
+{
+  const WANTED = [
+    'subres-imported.css',
+    'subres-font.woff2',
+    'subres-bg.png',
+    'subres-list.png',
+    'subres-border.png',
+    'subres-cursor.png',
+    'subres-mask.png',
+  ];
+  const UNWANTED = ['subres-never.png', 'subres-unused-font.woff2'];
+
+  const asked = () => new Set(
+    performance.getEntriesByType('resource').map((e) => e.name.split('/').pop()));
+
+  const test = await testing.async();
+  // Short: the runner's own budget for one html file is a couple of seconds,
+  // and a poll that outruns it reports TestTimedOut, which says nothing about
+  // which path is missing.
+  const deadline = Date.now() + 600;
+  while (Date.now() < deadline) {
+    const seen = asked();
+    if (WANTED.every((w) => seen.has(w))) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  test.resolve(asked());
+
+  await test.done((seen) => {
+    // One string per assertion: a bare boolean red light only ever says
+    // "expected true got false", which does not name the path that is missing.
+    const missing = WANTED.filter((w) => !seen.has(w));
+    testing.expectEqual('missing: ', 'missing: ' + missing.join(','));
+
+    const spurious = UNWANTED.filter((u) => seen.has(u));
+    testing.expectEqual('spurious: ', 'spurious: ' + spurious.join(','));
+  });
+}
+</script>
