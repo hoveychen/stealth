@@ -85,10 +85,57 @@ var building: bool = false;
 /// Wraps the one call that has to get through. Not a general escape hatch: it
 /// is opened and closed around a single V8 call with no script in between, so
 /// nothing a page runs can be inside it.
+///
+/// Restores rather than closes, because these nest: reading an own property
+/// through `readOwnProperty` below runs the member's own getter, and a getter
+/// that hands back a wrapper builds one, prototype cut and all.
 pub fn whileBuilding(comptime call: anytype, args: anytype) @TypeOf(@call(.auto, call, args)) {
+    const was_building = building;
     building = true;
-    defer building = false;
+    defer building = was_building;
     return @call(.auto, call, args);
+}
+
+/// Reads one own property of an access-checked object, as the object itself
+/// would.
+///
+/// A handler that declines does *not* fall through to the own properties: V8's
+/// GetPropertyWithFailedAccessCheck consults the interceptor and, if it did not
+/// answer, reports the failed check -- which throws. (The *descriptor* lookup
+/// does fall through, which is why `Object.getOwnPropertyDescriptor(w,
+/// 'window')` needs no help. Measured both ways on this engine.) So a handler
+/// that wants to serve a safelisted member has to fetch it, and fetching it
+/// means opening the gate for the length of one lookup.
+///
+/// That keeps the member's identity, which matters: Chrome answers true for
+/// `w.postMessage === w.postMessage` and for `w.window === w.self`, and a
+/// handler that built a fresh answer each time would not.
+pub fn readOwnProperty(local: *const js.Local, object: js.Value, name: []const u8) !js.Value {
+    const key = js.simpleZigValueToJs(local.isolate, name, true, false);
+    const handle = whileBuilding(v8.v8__Object__Get, .{
+        @as(*const v8.Object, @ptrCast(object.handle)),
+        local.handle,
+        key,
+    }) orelse return error.JsException;
+    return .{ .local = local, .handle = handle };
+}
+
+/// The other half: a write that reaches the own setter. A refused setter cannot
+/// decline either -- same measurement, same reason -- and a cross-origin window
+/// has exactly one member a page may write.
+pub fn writeOwnProperty(local: *const js.Local, object: js.Value, name: []const u8, value: js.Value) !void {
+    const key = js.simpleZigValueToJs(local.isolate, name, true, false);
+    var out: v8.MaybeBool = undefined;
+    whileBuilding(v8.v8__Object__Set, .{
+        @as(*const v8.Object, @ptrCast(object.handle)),
+        local.handle,
+        key,
+        value.handle,
+        &out,
+    });
+    if (!out.has_value) {
+        return error.JsException;
+    }
 }
 
 /// Called by V8 before every property operation on an access-checked object.
@@ -104,13 +151,18 @@ pub export fn lp_access_check__allow(
     return building;
 }
 
-/// Called once per refused operation that the handler did not answer -- a
-/// symbol read, an `in`, a delete, a define. Blink's sentence for all of those
-/// is the bare one: [[HasProperty]] and [[Delete]] are not reads of any
-/// particular property as far as the access check is concerned, and a symbol
-/// never reaches a handler that only intercepts strings. Measured on Chrome 151
-/// (scratch/b90/expr-xo-messages.js); the named sentences come from the handler
-/// itself, in Window.zig.
+/// Called once per refused operation that the handler did not answer, and its
+/// job is to throw: V8 requires an exception pending when this returns, and a
+/// quiet return walks into Isolate::PushStackTraceAndDie.
+///
+/// What reaches it is the operations the handler has no callback for -- an
+/// `in` whose query declined, a delete, a define, an indexed delete -- and
+/// Blink's sentence for every one of those is the bare one, with no "Failed
+/// to ..." lead-in: [[HasProperty]] and [[Delete]] are not reads of any
+/// particular property as far as the access check is concerned. Measured on
+/// Chrome 151 (scratch/b90/expr-xo-messages.js, scratch/b91/expr-xo-symbols.js);
+/// every sentence that does name a property comes from the handler itself, in
+/// Window.zig.
 pub export fn lp_access_check__denied(
     _: ?*const v8.Object,
     _: c_int,

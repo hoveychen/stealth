@@ -1097,6 +1097,41 @@ const Unforgeable = struct {
     },
 };
 
+/// Whether this interface is guarded by a V8 access check rather than by a
+/// plain interceptor. Read from two places -- the named handler installs the
+/// check, the indexed one steps aside for it -- so it lives here.
+fn isAccessChecked(comptime JsApi: type) bool {
+    return @hasDecl(JsApi.Meta, "access_check") and JsApi.Meta.access_check;
+}
+
+/// The interface's `bridge.Indexed` member, if it declares one. An interface
+/// has at most one; the loop below finds it by type rather than by name
+/// because the member's declared name (`[]`) is not part of the contract.
+fn indexedMember(comptime JsApi: type) ?bridge.Indexed {
+    for (@typeInfo(JsApi).@"struct".decls) |d| {
+        const value = @field(JsApi, d.name);
+        if (@TypeOf(value) == bridge.Indexed) {
+            return value;
+        }
+    }
+    return null;
+}
+
+fn indexedConfiguration(member: bridge.Indexed) v8.IndexedPropertyHandlerConfiguration {
+    return .{
+        .getter = member.getter,
+        .enumerator = member.enumerator,
+        .setter = member.setter,
+        .query = member.query,
+        .deleter = member.deleter,
+        .definer = if (member.definer) |definer| @ptrCast(definer) else null,
+        .descriptor = null,
+        .index_of = null,
+        .data = null,
+        .flags = 0,
+    };
+}
+
 fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolate, template: *const v8.FunctionTemplate, define_on: ?*const v8.ObjectTemplate) void {
     const instance = v8.v8__FunctionTemplate__InstanceTemplate(template);
     const prototype = v8.v8__FunctionTemplate__PrototypeTemplate(template);
@@ -1215,30 +1250,29 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                 }
             },
             bridge.Indexed => {
-                var configuration: v8.IndexedPropertyHandlerConfiguration = .{
-                    .getter = value.getter,
-                    .enumerator = value.enumerator,
-                    .setter = value.setter,
-                    .query = value.query,
-                    .deleter = value.deleter,
-                    .definer = if (value.definer) |definer| @ptrCast(definer) else null,
-                    .descriptor = null,
-                    .index_of = null,
-                    .data = null,
-                    .flags = 0,
-                };
+                // Under an access check V8 takes the named and indexed handlers
+                // together, in the single call that installs the check, so the
+                // NamedIndexed arm below reaches over and installs this one too.
+                if (comptime isAccessChecked(JsApi)) {
+                    continue;
+                }
+                var configuration = indexedConfiguration(value);
                 v8.v8__ObjectTemplate__SetIndexedHandler(instance, &configuration);
             },
             bridge.NamedIndexed => {
-                // `access_check` swaps two things at once, and they go
+                // `access_check` swaps three things at once, and they go
                 // together. The flags lose kNonMasking, because the whole point
                 // is to be consulted BEFORE the own properties rather than
-                // after them; and the handler is installed through V8's access
-                // check rather than as a plain interceptor, because an
-                // interceptor is skipped on the paths this exists to close --
-                // `JSON.stringify`, `in` and `delete` over an own key. See
+                // after them; they lose kOnlyInterceptStrings too, because the
+                // alternative for a symbol is the failed-access-check callback,
+                // which must throw -- and Chrome answers
+                // `Object.prototype.toString.call(w)` with '[object Object]';
+                // and the handler is installed through V8's access check rather
+                // than as a plain interceptor, because an interceptor is
+                // skipped on the paths this exists to close -- `JSON.stringify`,
+                // `in` and `delete` over an own key. See
                 // browser/js/access_check.zig.
-                const guarded = comptime @hasDecl(JsApi.Meta, "access_check") and JsApi.Meta.access_check;
+                const guarded = comptime isAccessChecked(JsApi);
                 var configuration: v8.NamedPropertyHandlerConfiguration = .{
                     .getter = bridge.logReads(JsApi, name, value).getter,
                     .setter = value.setter,
@@ -1248,24 +1282,18 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     .definer = if (value.definer) |definer| @ptrCast(definer) else null,
                     .descriptor = if (value.descriptor) |descriptor| @ptrCast(descriptor) else null,
                     .data = null,
-                    .flags = if (guarded) v8.kOnlyInterceptStrings else v8.kOnlyInterceptStrings | v8.kNonMasking,
+                    .flags = if (guarded) 0 else v8.kOnlyInterceptStrings | v8.kNonMasking,
                 };
                 if (guarded) {
-                    // V8 takes both handlers; this interface has no indexed
-                    // members, so the indexed one is empty and every index goes
-                    // to the failure callback.
-                    const indexed: v8.IndexedPropertyHandlerConfiguration = .{
-                        .getter = null,
-                        .setter = null,
-                        .query = null,
-                        .deleter = null,
-                        .enumerator = null,
-                        .definer = null,
-                        .descriptor = null,
-                        .index_of = null,
-                        .data = null,
-                        .flags = 0,
-                    };
+                    // Both handlers go in together, so the interface's indexed
+                    // member -- which skipped its own install above -- is
+                    // picked up here. Without one every index lands on the
+                    // failure callback, whose sentence is the bare one; Chrome
+                    // names the index.
+                    var indexed = if (comptime indexedMember(JsApi)) |member|
+                        indexedConfiguration(member)
+                    else
+                        std.mem.zeroes(v8.IndexedPropertyHandlerConfiguration);
                     access_check.installHandler(instance, &configuration, &indexed);
                 } else {
                     v8.v8__ObjectTemplate__SetNamedHandler(instance, &configuration);

@@ -2008,6 +2008,14 @@ pub const CrossOriginWindow = struct {
         "opener", "parent", "blur",     "close",  "focus",  "postMessage",
     };
 
+    /// The own keys, in Chrome's order: the thirteen above, then `then`, then
+    /// the three well-known symbols. This is HTML's CrossOriginOwnPropertyKeys,
+    /// and it is what the enumerator answers -- under a failed access check V8
+    /// asks the handler for the key list and never looks at the own properties,
+    /// so without an enumerator `Reflect.ownKeys(w)` is empty where Chrome
+    /// answers seventeen.
+    const own_key_names = cross_origin_names ++ [_][]const u8{"then"};
+
     fn isCrossOriginName(name: []const u8) bool {
         for (cross_origin_names) |candidate| {
             if (std.mem.eql(u8, candidate, name)) {
@@ -2017,33 +2025,97 @@ pub const CrossOriginWindow = struct {
         return false;
     }
 
-    // `error.NotHandled` is how a handler says "keep looking", and under a
-    // failed access check V8 keeps looking at the object's own properties --
-    // which is where the fourteen live. That is what makes this a safelist
-    // rather than a reimplementation: the values, their descriptors and the
-    // identity of the four functions all stay where they were, and the handler
-    // only decides who may see them.
-    fn getDenied(_: *const CrossOriginWindow, name: []const u8, frame: *Frame) !?[]const u8 {
-        if (isCrossOriginName(name)) {
-            return error.NotHandled;
+    fn isOwnKeyName(name: []const u8) bool {
+        for (own_key_names) |candidate| {
+            if (std.mem.eql(u8, candidate, name)) {
+                return true;
+            }
         }
-        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "read a named property '{s}' from", name));
+        return false;
     }
 
-    fn setDenied(_: *CrossOriginWindow, name: []const u8, _: js.Value, frame: *Frame) !void {
-        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "set a named property '{s}' on", name));
+    /// True for the three symbols the proxy owns, which are the three a page
+    /// may read: `Object.prototype.toString.call(w)` reaches for @@toStringTag
+    /// and Chrome answers '[object Object]' rather than throwing, and the same
+    /// goes for @@hasInstance and @@isConcatSpreadable. Every other symbol is
+    /// refused (measured across eleven well-known ones,
+    /// scratch/b91/expr-xo-symbols2.js).
+    fn isOwnSymbol(symbol: js.PropertyName.Symbol) bool {
+        return switch (symbol.well_known) {
+            .to_string_tag, .has_instance, .is_concat_spreadable => true,
+            .other => false,
+        };
     }
 
-    // `'document' in w` is a denial too, and Blink's sentence for it is the bare
-    // one: no "Failed to ..." lead-in, because [[HasProperty]] is not a read of
-    // any particular property as far as the access check is concerned. Without
-    // this the `in` would fall through to the getter and answer the read
-    // sentence -- right kind of exception, wrong sentence.
-    fn queryDenied(_: *const CrossOriginWindow, name: []const u8, frame: *Frame) !u32 {
-        if (isCrossOriginName(name)) {
-            return error.NotHandled;
+    // A read of an own key is answered, and every other read throws. Declining
+    // is not an option: under a failed access check V8 asks the handler and, if
+    // it did not answer, reports the refusal -- there is no falling through to
+    // the own property the way the descriptor lookup falls through. So the
+    // fourteen names are fetched off the proxy itself, which is what keeps
+    // `w.postMessage === w.postMessage` and `w.window === w.self` true.
+    //
+    // `then` is one of the fourteen: it is not a cross-origin property, but its
+    // own value is undefined and Chrome hands that back rather than throwing
+    // (measured, scratch/b91/expr-xo-then.js) -- which is what stops `await w`
+    // from throwing. The three own symbols are undefined for the same reason.
+    fn getDenied(self: *CrossOriginWindow, name: js.PropertyName, frame: *Frame) !js.Value {
+        const local = frame.js.local.?;
+        switch (name) {
+            .string => |s| if (isOwnKeyName(s)) {
+                return js.access_check.readOwnProperty(local, try local.zigValueToJs(self, .{}), s);
+            },
+            .symbol => |symbol| if (isOwnSymbol(symbol)) {
+                return .{ .local = local, .handle = local.isolate.initUndefined() };
+            },
         }
-        return frame.js.fail(error.SecurityError, try blockedSentence(frame));
+        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "read", "from", try refusedName(frame, name)));
+    }
+
+    // `location` is the one name a cross-origin caller may write -- assigning
+    // to another origin's `location` is how a popup opener sends its child
+    // somewhere -- so the write is passed on to the own accessor's setter, the
+    // same way a read is passed on to its getter and for the same reason: a
+    // handler that declines is a handler that refused. Every other name throws,
+    // including the twelve that are readable and including `then` (measured,
+    // scratch/b91/expr-xo-set.js: `w.location = ...` is the only assignment
+    // that comes back without an exception, in sloppy mode and in strict).
+    fn setDenied(self: *CrossOriginWindow, name: js.PropertyName, value: js.Value, frame: *Frame) !void {
+        switch (name) {
+            .string => |s| if (std.mem.eql(u8, s, "location")) {
+                const local = frame.js.local.?;
+                return js.access_check.writeOwnProperty(local, try local.zigValueToJs(self, .{}), s, value);
+            },
+            .symbol => {},
+        }
+        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "set", "on", try refusedName(frame, name)));
+    }
+
+    // Two callers, one callback, and the difference between them is why this
+    // never throws:
+    //
+    //   `'document' in w`  V8 asks the query, gets "not mine", and reports the
+    //                      failed access check itself -- which throws the bare
+    //                      sentence, no "Failed to ..." lead-in, because
+    //                      [[HasProperty]] is not a read of any particular
+    //                      property as far as the check is concerned.
+    //   `Object.keys(w)`   V8 asks the enumerator for the seventeen keys and
+    //                      then asks the query about each one, to drop the
+    //                      non-enumerable. A "not mine" here is a dropped key,
+    //                      not a refusal -- so a query that threw for `then`
+    //                      would make `Object.keys(w)` throw, where Chrome
+    //                      answers [] (measured).
+    //
+    // So: answer for what a page may see, decline for everything else, and let
+    // V8 decide which of the two that means. DontEnum is the whole answer --
+    // every one of the seventeen is non-enumerable, and writability is not
+    // readable through the query, since the descriptor comes from the own
+    // property (see descriptorDenied).
+    fn queryDenied(_: *const CrossOriginWindow, name: js.PropertyName, _: *Frame) !u32 {
+        switch (name) {
+            .string => |s| if (isCrossOriginName(s)) return js.v8.DontEnum,
+            .symbol => |symbol| if (isOwnSymbol(symbol)) return js.v8.DontEnum,
+        }
+        return error.NotHandled;
     }
 
     // ...while `Object.getOwnPropertyDescriptor(w, 'document')` *is* a read of a
@@ -2056,11 +2128,12 @@ pub const CrossOriginWindow = struct {
     // `'then' in w` on the same object throws. Blink draws the line between
     // "which keys does this object own" and "may you ask about a property",
     // and `then` is on the first side only.
-    fn descriptorDenied(_: *const CrossOriginWindow, name: []const u8, frame: *Frame) !?[]const u8 {
-        if (isCrossOriginName(name) or std.mem.eql(u8, name, "then")) {
-            return error.NotHandled;
+    fn descriptorDenied(_: *const CrossOriginWindow, name: js.PropertyName, frame: *Frame) !?[]const u8 {
+        switch (name) {
+            .string => |s| if (isCrossOriginName(s) or std.mem.eql(u8, s, "then")) return error.NotHandled,
+            .symbol => |symbol| if (isOwnSymbol(symbol)) return error.NotHandled,
         }
-        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "read a named property '{s}' from", name));
+        return frame.js.fail(error.SecurityError, try deniedMessage(frame, "read", "from", try refusedName(frame, name)));
     }
 
     // `delete w.document` throws, and gets the bare sentence the same as `in`:
@@ -2071,22 +2144,102 @@ pub const CrossOriginWindow = struct {
     // descriptor lookup first, so the define is already refused there and a
     // definer callback never sees it (measured -- adding one changed nothing).
     //
-    // The deleter only sees names the proxy does not own -- it is [[NonMasking]]
-    // like the rest -- so `delete w.length` still succeeds where Chrome throws.
-    // Closing that needs the access check; see the note in
-    // frames/cross_origin_proxy_shape.html.
-    fn deleterDenied(_: *CrossOriginWindow, _: []const u8, frame: *Frame) !bool {
+    // Every key gets the bare sentence, safelisted or not, symbol or index --
+    // `delete w.window`, `delete w[Symbol.toStringTag]` and `delete w[0]` all
+    // print it (scratch/b91/expr-xo-symbols.js).
+    fn deleterDenied(_: *CrossOriginWindow, _: js.PropertyName, frame: *Frame) !bool {
         return frame.js.fail(error.SecurityError, try blockedSentence(frame));
     }
 
-    fn deniedMessage(frame: *Frame, comptime verb: []const u8, name: []const u8) ![]const u8 {
+    /// The seventeen own keys, for V8 to filter. Chrome's three readings come
+    /// out of this one list: `getOwnPropertyNames` keeps the strings,
+    /// `getOwnPropertySymbols` the symbols, and `Object.keys` keeps whatever
+    /// `queryDenied` calls enumerable, which is none of them.
+    fn ownKeys(_: *const CrossOriginWindow, frame: *Frame) !js.Array {
+        const local = frame.js.local.?;
+        const isolate = local.isolate.handle;
+
+        var keys = local.newArray(own_key_names.len + 3);
+        inline for (own_key_names, 0..) |name, i| {
+            _ = try keys.set(@intCast(i), name, .{});
+        }
+        // In Chrome's order, which is the brand first: it is the symbol the
+        // interface template writes before the member loop, so it sorts ahead
+        // of the two CrossOriginOwnPropertyKeys appends.
+        inline for (.{
+            js.v8.v8__Symbol__GetToStringTag,
+            js.v8.v8__Symbol__GetHasInstance,
+            js.v8.v8__Symbol__GetIsConcatSpreadable,
+        }, own_key_names.len..) |getSymbol, i| {
+            const value: js.Value = .{ .local = local, .handle = @ptrCast(getSymbol(isolate).?) };
+            _ = try keys.set(@intCast(i), value, .{});
+        }
+        return keys;
+    }
+
+    // An index is refused the same way a name is, in its own words: Chrome
+    // says "Failed to read an indexed property [0] from 'Window'" for `w[0]`,
+    // for `0 in w` and for `getOwnPropertyDescriptor(w, 0)` -- one getter
+    // answers all three, because V8 falls back to it when a handler has no
+    // query and no descriptor callback. `delete w[0]` has no deleter here and
+    // lands on the failure callback, which is where its bare sentence comes
+    // from. All measured, scratch/b91/expr-xo-symbols.js.
+    fn getIndexDenied(_: *const CrossOriginWindow, index: u32, frame: *Frame) !?[]const u8 {
+        return frame.js.fail(error.SecurityError, try indexedMessage(frame, "read", "from", index));
+    }
+
+    fn setIndexDenied(_: *CrossOriginWindow, index: u32, _: js.Value, frame: *Frame) !void {
+        return frame.js.fail(error.SecurityError, try indexedMessage(frame, "set", "on", index));
+    }
+
+    /// How Chrome names the refused key in the sentence.
+    ///
+    /// A string names itself. A symbol is named `[<description>]`, and a symbol
+    /// with no description is not named at all -- the sentence simply loses its
+    /// quoted part, "Failed to read a named property from 'Window'". So does
+    /// @@toPrimitive, which is how `String(w)` gets a nameless sentence: its
+    /// first lookup is that symbol.
+    ///
+    /// @@toPrimitive is matched on its description rather than by handle
+    /// because that is what Chrome does. A page-made
+    /// `Symbol("Symbol.toPrimitive")` is nameless there too, while
+    /// `Symbol("Symbol.iterator")` is named `[Symbol.iterator]` -- so the text
+    /// is the discriminator, not the identity (scratch/b91/expr-xo-symbols3.js).
+    /// Identity still decides who may *read*: the same forged
+    /// `Symbol("Symbol.toStringTag")` throws where the real one answers.
+    fn refusedName(frame: *Frame, name: js.PropertyName) !?[]const u8 {
+        const description = switch (name) {
+            .string => |s| return s,
+            .symbol => |symbol| symbol.description orelse return null,
+        };
+        if (std.mem.eql(u8, description, "Symbol.toPrimitive")) {
+            return null;
+        }
+        return try std.fmt.allocPrint(frame.call_arena, "[{s}]", .{description});
+    }
+
+    fn deniedMessage(frame: *Frame, comptime verb: []const u8, comptime preposition: []const u8, name: ?[]const u8) ![]const u8 {
         // call_arena, not local_arena: handleError reads the message back after
         // this frame is gone, and local_arena is reset before it gets there.
         // See Document.setDomain, which learned the same thing the hard way.
+        const blocked = try blockedSentence(frame);
+        const name_or_null = name orelse return std.fmt.allocPrint(
+            frame.call_arena,
+            "Failed to " ++ verb ++ " a named property " ++ preposition ++ " 'Window': {s}",
+            .{blocked},
+        );
         return std.fmt.allocPrint(
             frame.call_arena,
-            "Failed to " ++ verb ++ " 'Window': {s}",
-            .{ name, try blockedSentence(frame) },
+            "Failed to " ++ verb ++ " a named property '{s}' " ++ preposition ++ " 'Window': {s}",
+            .{ name_or_null, blocked },
+        );
+    }
+
+    fn indexedMessage(frame: *Frame, comptime verb: []const u8, comptime preposition: []const u8, index: u32) ![]const u8 {
+        return std.fmt.allocPrint(
+            frame.call_arena,
+            "Failed to " ++ verb ++ " an indexed property [{d}] " ++ preposition ++ " 'Window': {s}",
+            .{ index, try blockedSentence(frame) },
         );
     }
 
@@ -2176,10 +2329,22 @@ pub const CrossOriginWindow = struct {
             CrossOriginWindow.getDenied,
             CrossOriginWindow.setDenied,
             CrossOriginWindow.deleterDenied,
-            null,
+            CrossOriginWindow.ownKeys,
             CrossOriginWindow.queryDenied,
             null,
             CrossOriginWindow.descriptorDenied,
+            .{ .null_as_undefined = true },
+        );
+
+        // Installed alongside the named handler by the one call that turns the
+        // access check on -- see the NamedIndexed arm of Snapshot.attachClass.
+        // No enumerator: `Reflect.ownKeys(w)` has no index in it on Chrome.
+        pub const @"[]" = bridge.indexedReadWrite(
+            CrossOriginWindow.getIndexDenied,
+            CrossOriginWindow.setIndexDenied,
+            null,
+            null,
+            null,
             .{ .null_as_undefined = true },
         );
 
