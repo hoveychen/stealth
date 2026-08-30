@@ -22320,11 +22320,31 @@ that matters — "never fetching images at all is a server-visible tell" — and
 the same sentence applies to every row above. It was never extended past
 `<img>`.
 
-The same duplicate defect is there for the other two kinds, unfixed:
+*(Every row in that list has since been closed — `frame/style_resources.zig`
+and `frame/markup_resources.zig`, plus the `srcset`/`sizes`/`<picture>`
+selection. The list is kept as the measurement that named them.)*
+
+The same duplicate defect is there for the other two kinds:
 `scratch/b69/sub-cache-fixture.mjs` measures a second `<script src>` and a
 second `<link rel=stylesheet>` for one URL at 2 requests here and 1 in Chrome,
 while two `fetch()`es are 2 on both and an `<img>` followed by a `fetch()` is 2
 on both (a different destination is a different key).
+
+**What the census reads today**, with this chapter's image cache in and the
+absent-request work that followed it merged: `tools/fingerprint/wire-census.mjs`
+has 26 of 27 paths agreeing. The one that does not is `tail.js` — the script
+path, which runs through ScriptManager's async machinery rather than one
+synchronous fetch and has its own plan.
+
+The stylesheet half needed one more fix than it looked like. `_stylesheet_bodies`
+keyed on the resolved URL, and that string was allocated from the pooled session
+arena `loadExternalStylesheet` releases on the way out, so the map pointed at
+memory the next pooled fetch takes back. Two adjacent `<link>`s hit anyway;
+put a `<script src>` between them and the third misses, because the script's own
+fetch takes the block the key was living in. That is exactly the shape the
+census page has, and it is why the census still said `sheet.css 1 against 2`
+after the cache shipped. Duping the key moves it to 1
+(`stylesheet_cache_key_outlives_the_fetch`).
 
 ### Where the census does *not* fire, which is why it is filed as fidelity
 
