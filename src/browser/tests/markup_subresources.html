@@ -24,6 +24,17 @@
 <link rel="manifest" href="/wire/mk-app.webmanifest">
 <link rel="prefetch" href="/wire/mk-prefetch.png">
 
+<!--
+  srcset picks by devicePixelRatio, which this engine reports as 2
+  (Window.getDevicePixelRatio) -- so `2x` is the candidate, not `1x`, and a
+  Chrome arm left at scale 1 disagrees with the persona rather than with the
+  code. `sizes="100px"` keeps the width-descriptor case off the viewport:
+  100 CSS px x 2 = 200 device px, and the smallest candidate at least that
+  wide is the 400w one.
+-->
+<img src="/wire/mk-ss-fallback.png" srcset="/wire/mk-ss-1x.png 1x, /wire/mk-ss-2x.png 2x">
+<img src="/wire/mk-sz-fallback.png" srcset="/wire/mk-sz-400.png 400w, /wire/mk-sz-800.png 800w" sizes="100px">
+
 <script id="markup_subresources" type=module>
 {
   const WANTED = [
@@ -36,10 +47,21 @@
     'mk-captions.vtt',
     'mk-app.webmanifest',
     'mk-prefetch.png',
+    'mk-ss-2x.png',
+    'mk-sz-400.png',
   ];
   // preload="none" means the media itself is not touched until something
   // plays it; asking for it anyway is over-fetching, which is its own tell.
-  const UNWANTED = ['mk-movie.mp4'];
+  const UNWANTED = [
+    'mk-movie.mp4',
+    // The `src` is the fallback for a browser with no srcset support; a
+    // browser that picked a candidate must not ask for it as well, and asking
+    // for both is a request COUNT difference, which is the loudest kind.
+    'mk-ss-fallback.png',
+    'mk-ss-1x.png',
+    'mk-sz-fallback.png',
+    'mk-sz-800.png',
+  ];
 
   const asked = () => new Set(
     performance.getEntriesByType('resource').map((e) => e.name.split('/').pop()));

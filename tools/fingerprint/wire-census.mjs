@@ -153,7 +153,14 @@ async function census(engine) {
             '--no-first-run',
             '--no-default-browser-check',
             '--headless=new',
-            '--window-size=1920,1080',
+            // This engine's persona is a 1920x1080 CSS viewport at
+            // devicePixelRatio 2 (Window.getDevicePixelRatio). srcset picks by
+            // DPR, so a Chrome arm left at 1 answers `1x` where this engine
+            // answers `2x` and the row reads as a bug that is really the
+            // harness disagreeing with itself -- the same trap
+            // `chrome-arm-needs-persona-dpr` records for layout readings.
+            '--force-device-scale-factor=2',
+            '--window-size=3840,2160',
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
     } else {
         proc = spawn(LP_BIN, ['serve', '--host', '127.0.0.1', '--port', String(port)], {

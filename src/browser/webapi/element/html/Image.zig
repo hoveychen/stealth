@@ -6,6 +6,7 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
+const srcset = @import("srcset.zig");
 
 const Image = @This();
 
@@ -55,6 +56,15 @@ pub fn getSrc(self: *const Image, frame: *Frame) ![]const u8 {
         return "";
     }
     return element.asConstNode().resolveURLReflect(src, frame, .{});
+}
+
+/// Chrome reports the candidate it chose, not the `src` it fell back from --
+/// so a page that reads `currentSrc` after setting a srcset sees the same URL
+/// the request went to. See `selectedSource`.
+pub fn getCurrentSrc(self: *const Image, frame: *Frame) ![]const u8 {
+    const chosen = @constCast(self).selectedSource() orelse return "";
+    if (chosen.len == 0) return "";
+    return self.asConstElement().asConstNode().resolveURLReflect(chosen, frame, .{});
 }
 
 pub fn setSrc(self: *Image, value: []const u8, frame: *Frame) !void {
@@ -141,6 +151,32 @@ pub fn getComplete(_: *const Image) bool {
     return true;
 }
 
+/// Which URL this image actually asks the server for: the srcset candidate
+/// that fits the device, falling back to `src` when the attribute is absent or
+/// names nothing usable. See srcset.zig for the selection itself.
+///
+/// The `<picture>` case is NOT here. An `<img>` inside a `<picture>` takes its
+/// candidates from the preceding `<source>` siblings, and this runs from
+/// `Build.created`, before the parser has appended the element to anything --
+/// there is no parent to look at yet. Measured cost, one row of
+/// tools/fingerprint/wire-census.mjs: the fallback `<img src>` is fetched
+/// where Chrome fetches the source's candidate. One URL differs; the count
+/// does not.
+fn selectedSource(self: *Image) ?[]const u8 {
+    const element = self.asElement();
+    const src = element.getAttributeSafe(comptime .wrap("src"));
+    const set = element.getAttributeSafe(comptime .wrap("srcset")) orelse return src;
+    const sizes = element.getAttributeSafe(comptime .wrap("sizes")) orelse "";
+    return srcset.select(set, sizes, VIEWPORT_WIDTH, DEVICE_PIXEL_RATIO) orelse src;
+}
+
+// Both are fixed parts of the device profile: see Viewport.default and
+// Window.getDevicePixelRatio. Named here rather than reached for through the
+// frame because selection has to answer the same way from `Build.created`,
+// which runs before the element belongs to anything.
+const VIEWPORT_WIDTH: f64 = @floatFromInt(@import("../../../Viewport.zig").default.width);
+const DEVICE_PIXEL_RATIO: f64 = 2;
+
 /// Used in `Page.nodeIsReady`.
 pub fn imageAddedCallback(self: *Image, frame: *Frame) !void {
     // if we're planning on navigating to another frame, don't trigger load event.
@@ -148,9 +184,10 @@ pub fn imageAddedCallback(self: *Image, frame: *Frame) !void {
         return;
     }
 
-    const element = self.asElement();
-    // Exit if src not set.
-    const src = element.getAttributeSafe(comptime .wrap("src")) orelse return;
+    // The candidate wins over the `src`, and asking for BOTH would be a
+    // request-count difference rather than a URL one -- the loudest kind. See
+    // srcset.zig.
+    const src = self.selectedSource() orelse return;
     if (src.len == 0) return;
 
     // Request the bytes without decoding them. Never fetching images at all is
@@ -215,7 +252,7 @@ pub const JsApi = struct {
     pub const naturalWidth = bridge.accessor(Image.getNaturalWidth, null, .{});
     pub const naturalHeight = bridge.accessor(Image.getNaturalHeight, null, .{});
     pub const complete = bridge.accessor(Image.getComplete, null, .{});
-    pub const currentSrc = bridge.accessor(Image.getSrc, null, .{});
+    pub const currentSrc = bridge.accessor(Image.getCurrentSrc, null, .{});
     pub const referrerPolicy = reflect.referrerPolicy();
     pub const decoding = reflect.enumerated("decoding", &.{ "async", "sync", "auto" }, .{ .missing = "auto" });
     pub const fetchPriority = reflect.enumerated("fetchpriority", &.{ "high", "low", "auto" }, .{ .missing = "auto" });
