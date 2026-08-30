@@ -447,6 +447,35 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // reasons. See computedFontText.
                 return self.computedFontText(frame, surface, depth);
             }
+            // The computed `background` is its longhands with the layer's colour
+            // in front, every slot written, and a `/` before the size. The
+            // declared form chrome_shorthands measured drops the slots at their
+            // initial, which is why `background` stays on the declined list and
+            // gets a join of its own -- and why the recorded initial it used to
+            // fall back to was right only for an element with no background at
+            // all. Measured on Chrome 151 (css/background_computed_shorthand.html);
+            // all nine longhands already agreed there.
+            if (wrapped.eqlSlice("background")) {
+                if (self.computedBackgroundText(frame, surface, depth)) |value| {
+                    return value;
+                }
+            }
+            // `timeline-trigger` empties out once anything in the `animation-*`
+            // family is declared, whatever that declaration says -- an
+            // `animation-name: none` computes to `none` and still flips it.
+            // Twelve shapes measured on Chrome 151 (css/timeline_trigger_computed.html);
+            // `transition` and `opacity` leave it alone, so it is the family
+            // and not "the element has any declaration at all".
+            if (wrapped.eqlSlice("timeline-trigger")) {
+                switch (cascadedValue(style_manager, element, normalized, wrapped, .computed)) {
+                    .value => |value| return std.mem.trim(u8, value, &std.ascii.whitespace),
+                    .unreportable, .none => {},
+                }
+                if (declaresAnimationFamily(style_manager, element)) {
+                    return "";
+                }
+                return "none";
+            }
             // `flex` off a computed style is always its three longhands, and
             // it is `.unmodelled` in chrome_shorthands -- no distribution rule
             // was measured for the declared form -- so the generic join never
@@ -2046,6 +2075,61 @@ fn computedKeepsAll(name: []const u8) bool {
 /// empty is the declared serialisation saying "this cannot be written as one
 /// shorthand", which is an answer for `el.style` and not for a computed view:
 /// Chrome answers every one of these names off getComputedStyle.
+/// The computed `background`, or null when this element has more than one layer
+/// and the per-layer longhands are not resolved well enough to join.
+///
+/// One layer is the case the measurement covers, and the case a join can be
+/// trusted for: `background-repeat` is a keyword list with no quoting, so a
+/// comma in it is a second layer and nothing else.
+fn computedBackgroundText(
+    self: *const CSSStyleDeclaration,
+    frame: *Frame,
+    surface: Surface,
+    depth: u8,
+) ?[]const u8 {
+    const repeat = self.propertyValueAt("background-repeat", frame, surface, depth + 1);
+    if (std.mem.indexOfScalar(u8, repeat, ',') != null) {
+        return null;
+    }
+    const colour = self.propertyValueAt("background-color", frame, surface, depth + 1);
+    const image = self.propertyValueAt("background-image", frame, surface, depth + 1);
+    const attachment = self.propertyValueAt("background-attachment", frame, surface, depth + 1);
+    const pos_x = self.propertyValueAt("background-position-x", frame, surface, depth + 1);
+    const pos_y = self.propertyValueAt("background-position-y", frame, surface, depth + 1);
+    const size = self.propertyValueAt("background-size", frame, surface, depth + 1);
+    const origin = self.propertyValueAt("background-origin", frame, surface, depth + 1);
+    const clip = self.propertyValueAt("background-clip", frame, surface, depth + 1);
+    for ([_][]const u8{ colour, image, attachment, pos_x, pos_y, size, origin, clip }) |part| {
+        if (part.len == 0) return null;
+    }
+    return std.fmt.allocPrint(frame.local_arena, "{s} {s} {s} {s} {s} {s} / {s} {s} {s}", .{
+        colour, image, repeat, attachment, pos_x, pos_y, size, origin, clip,
+    }) catch null;
+}
+
+/// Whether anything in the `animation-*` family was declared on this element.
+/// The one reader is `timeline-trigger`, whose computed value Chrome empties
+/// out when the answer is yes -- see css/timeline_trigger_computed.html for the
+/// twelve shapes that pin it, including the ones that flip it while computing
+/// to their own initial values.
+fn declaresAnimationFamily(style_manager: *StyleManager, element: *Element) bool {
+    const NAMES = [_][]const u8{
+        "animation-name",            "animation-duration",
+        "animation-timing-function", "animation-delay",
+        "animation-iteration-count", "animation-direction",
+        "animation-fill-mode",       "animation-play-state",
+        "animation-composition",     "animation-timeline",
+        "animation-range-start",     "animation-range-end",
+    };
+    for (NAMES) |name| {
+        switch (cascadedValue(style_manager, element, name, .wrap(name), .computed)) {
+            .value, .unreportable => return true,
+            .none => {},
+        }
+    }
+    return false;
+}
+
 /// A computed shorthand that is just its longhands with spaces between them and
 /// nothing ever dropped. `flex` is the one that needs it: the generic join
 /// works off `chrome_shorthands`, which has no model for `flex` at all, and
@@ -6611,6 +6695,14 @@ test "WebApi: CSSStyleDeclaration computed animation shorthand" {
 
 test "WebApi: CSSStyleDeclaration computed flex shorthands" {
     try testing.htmlRunner("css/flex_computed_shorthands.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed timeline-trigger" {
+    try testing.htmlRunner("css/timeline_trigger_computed.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed background shorthand" {
+    try testing.htmlRunner("css/background_computed_shorthand.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration inheritance" {

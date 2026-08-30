@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The computed `background` shorthand.
+
+  `background` is the last name on `COMPUTED_JOIN_DECLINED`, and the note there
+  is right about the shape: the computed form puts the layer's colour FIRST and
+  writes every slot, where the declared form chrome_shorthands measured drops
+  the ones at their initial. What the note did not say is that the recorded
+  initial value it falls back to is only right for an element that declares
+  nothing -- every element with a background reads its neighbour's answer.
+
+  Measured on Chrome 151 headed (scratch/b69/expr-last-five.js), the order is
+  colour, image, repeat, attachment, position, `/`, size, origin, clip:
+
+    (nothing)                rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box
+    background: rgb(1,2,3)   rgb(1, 2, 3) none repeat scroll 0% 0% / auto padding-box border-box
+    background-color: …      the same -- a longhand and the shorthand agree
+    background: url(x)       rgba(0, 0, 0, 0) url("<absolute>") repeat scroll 0% 0% / auto padding-box border-box
+    the full form            rgb(1, 2, 3) url("<absolute>") no-repeat fixed 0% 0% / 10px 20px content-box padding-box
+
+  All nine longhands were already byte-identical to Chrome's in both non-trivial
+  rows, so the join is the whole fix -- the same shape as `flex`.
+
+  NOT here, measured and out of scope: **more than one layer.** Chrome joins the
+  layers with `, ` and puts the colour on the LAST one
+  (`url("a") repeat scroll 0% 0% / auto padding-box border-box, rgb(1, 2, 3)
+  url("b") repeat scroll 100% 100% / auto padding-box border-box`), and this
+  engine's per-layer longhands are not right yet either -- a two-layer
+  `background` leaves `background-size`, `-repeat`, `-attachment`, `-origin` and
+  `-clip` reading the literal `initial, initial` and the positions unresolved as
+  `left, right`. So the join is taken only when there is one layer, and a
+  multi-layer element keeps the old fallback rather than getting a confidently
+  wrong string.
+-->
+
+<body>
+
+<script id=computed_background_joins_its_longhands>
+{
+  const probe = (decl) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).background);
+    el.remove();
+    return got;
+  };
+  const url = 'url("' + testing.ORIGIN + '/wire/bg.png")';
+  const CASES = [
+    ['', 'rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box'],
+    ['background: rgb(1, 2, 3);', 'rgb(1, 2, 3) none repeat scroll 0% 0% / auto padding-box border-box'],
+    ['background-color: rgb(1, 2, 3);', 'rgb(1, 2, 3) none repeat scroll 0% 0% / auto padding-box border-box'],
+    ['background: url("/wire/bg.png");',
+      'rgba(0, 0, 0, 0) ' + url + ' repeat scroll 0% 0% / auto padding-box border-box'],
+    ['background: rgb(1, 2, 3) url("/wire/bg.png") no-repeat fixed left top / 10px 20px content-box padding-box;',
+      'rgb(1, 2, 3) ' + url + ' no-repeat fixed 0% 0% / 10px 20px content-box padding-box'],
+  ];
+  for (const [decl, expected] of CASES) {
+    testing.expectEqual('{' + decl + '} = ' + expected, '{' + decl + '} = ' + probe(decl));
+  }
+}
+</script>
+
+<script id=computed_background_leaves_two_layers_alone>
+{
+  // Not an assertion about the right answer -- it is one about not inventing a
+  // wrong one. With two layers the per-layer longhands are still unresolved
+  // here, so the shorthand is left to the recorded fallback rather than joined
+  // out of values that are not ready.
+  const el = document.createElement('div');
+  el.style.cssText = 'width:100px;height:50px;' +
+    'background: url("/wire/a.png") left top, rgb(1, 2, 3) url("/wire/b.png") right bottom;';
+  document.body.appendChild(el);
+  const cs = getComputedStyle(el);
+  testing.expectEqual(true, String(cs.backgroundImage).includes(','));
+  testing.expectEqual(
+    'rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box',
+    String(cs.background));
+  el.remove();
+}
+</script>
