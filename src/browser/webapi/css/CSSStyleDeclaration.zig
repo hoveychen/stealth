@@ -301,10 +301,15 @@ fn absoluteUrls(property_name: []const u8, value: []const u8, frame: *Frame) []c
 /// is NOT absolutised -- it is a token stream until something substitutes it.
 fn valueCarriesUrl(property_name: []const u8) bool {
     const names = [_][]const u8{
+        // Longhands.
         "background-image",   "border-image-source",           "content",
         "cursor",             "list-style-image",              "mask-border-source",
         "mask-image",         "offset-path",                   "shape-outside",
         "-webkit-mask-image", "-webkit-mask-box-image-source", "src",
+        // And the shorthands that write one back, which are rebuilt from the
+        // longhands and so never pass through this on their components.
+        "background",         "border-image",                  "list-style",
+        "mask",               "-webkit-mask",                  "offset",
     };
     for (names) |name| {
         if (std.ascii.eqlIgnoreCase(property_name, name)) return true;
