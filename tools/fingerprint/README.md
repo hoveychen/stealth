@@ -21966,3 +21966,49 @@ a cleared family. Measured by stealth-a9 in the same window:
 `--force-color-profile=display-p3` leave the headless canvas hash bit-identical
 to bare Chrome. Anyone quoting the served=true column has to verify the switch
 first.
+
+### Nine of the twenty arms were empty, and the two engines agree on nineteen families
+
+The caveat the previous section ended on was worth acting on rather than
+recording. One `run-expr` per arm over the same twenty-family probe, diffed
+against `none` (`scratch/b68/v1-verify-arms.sh`, readings in `v1-*.json`):
+
+**Eleven switches landed** — `minimumFontSize=24` (16px → 24px),
+`defaultFontSize=32`, `localStorageEnabled=false` (now throws), `preferredColorScheme=1`
+(prefers-dark true → false), `--disable-presentation-api`, `--disable-file-system`,
+`--disable-shared-workers`, `--disable-webgl2` (context → null),
+`--force-color-profile=generic-rgb` (p3 → false), `--disable-speech-api`, and
+`--disable-web-security`.
+
+**Nine were empty**, for four different reasons, and only one of them is a gap in
+the method:
+
+* `hide-scrollbars` and `databasesEnabled=false` remove something Chrome does not
+  have here — macOS overlay scrollbars reserve no gutter, and `openDatabase` is
+  already `undefined` in both engines. Nothing to subtract.
+* `force-dark`, `--disable-accelerated-2d-canvas`, `--disable-lcd-text` and
+  `--disable-smooth-scrolling` act below script. Nothing reads them, which means
+  the guard cannot read them either.
+* `--js-flags=--noexpose-wasm` and `--disable-permissions-api` are simply ignored;
+  V8's own spelling `--no-expose-wasm` is ignored too, so **WebAssembly cannot be
+  subtracted with a switch at all** — that family needs a knob and a passthru twin.
+* `--disable-remote-fonts` is undecided: the probe page carries no webfont.
+
+Which leaves the reading that closes the lever. The same probe run on this
+engine: **nineteen of the twenty families are byte-identical to Chrome** —
+`WebAssembly`, `document.fonts` (`loaded/0` on both), `FontFace`, the scrollbar
+numbers, default font sizes, `localStorage`, `openDatabase`, `indexedDB`,
+`navigator.permissions`, `navigator.presentation`, the three filesystem entry
+points, `SharedWorker`, the WebGL2 `VERSION` string, every field of
+`getContextAttributes()`, color-gamut and colorDepth, `speechSynthesis` (**zero
+voices on both**), `scrollBehavior`, `document.domain`, and `measureText` at
+143.9453125 to the last digit.
+
+The one difference is `prefers-color-scheme`: Chrome answers dark on this host,
+this engine answers light. `dark-scheme` is the arm that puts Chrome in our
+answer, and it is **served true 4/4**. Not a door either.
+
+So the capability-presence lever is measured out on cf-scrapingcourse: ten
+clean "this family is not weighed" readings, one weighed family we already
+satisfy, and the single surviving divergence confirmed harmless. The next
+reading has to come from a different channel — not from a twenty-first switch.
