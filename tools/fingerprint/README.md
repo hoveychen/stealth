@@ -21345,3 +21345,188 @@ byte-identical between the arms and the instance ids match exactly
 an explanation, and what is left is r2's extra ~185 bytes or r3's *contents*.
 The body is now readable on this arm, which is what `cf-r3-payload-segments`
 needs to look at those contents at all.
+
+## Kasada's payload has a size it will not take, and a list it will not read (B88, 2026-08-29)
+
+`hyatt-collector-overload`. A peer session had just opened cf-scrapingcourse by
+overloading Turnstile: put enough text on the widget realm's global and the
+guard fails open. The same instrument aimed at Kasada moved the `/tl` payload by
+zero bytes and won nothing in twenty runs, which says Kasada does not enumerate
+globals — it does not say Kasada cannot be overloaded. `x-hyatt-is-exhausted`
+asks for a new observation channel before this station is reopened, and
+"overload until it fails open" had never been swept here. This is that sweep.
+
+Everything below is read off the wire by `kasada-knob.mjs`: the size of the
+`/tl` POST and the `x-kpsdk-r` header on its response. `Runtime.enable` is never
+sent. The knobs live in `scratch/b88/` and every one of them was checked against
+a live page first (`scratch/b88/knob-alive.mjs`) — the harness wraps knobs in
+`try/catch`, so a knob that throws on a surface this engine lacks is
+indistinguishable from a knob that ran and changed nothing, and the second reads
+as "the guard does not collect this". Two knobs were dead on the first try
+(`document.cookie`'s accessor is not on document's immediate prototype; `stack`
+is an own property of each error instance, not an accessor on `Error.prototype`),
+and both would have printed a clean, wrong negative.
+
+### The verdict header has three states, not two
+
+`kasada-verdict-is-x-kpsdk-r` records two: Chrome gets `x-kpsdk-r: 1-B1VvW1U`,
+this engine gets no header. There is a third, and it is easy to mistake for a
+win. Hooking `TextEncoder.prototype.encode` and appending 64KB to the assembled
+body produces:
+
+```
+  lightpanda  none      postLen 19186-19194  r=(absent)   docs=429
+  lightpanda  pad-64k   postLen 84674-84706  r=1-AQ       docs=429
+  chrome      none      postLen 19602-19618  r=1-B1JufVU  docs=429->200
+  chrome      pad-64k   postLen 85106-85154  r=1-AQ       docs=429
+```
+
+A first tally counted any present header as a ticket and read `pad-64k` as 2/2 —
+this arm's first `x-kpsdk-r` in the whole chain. The Chrome control killed it in
+the next run: the same pad takes Chrome from cleared 2/2 to cleared 0/2, with
+exactly that token. So:
+
+| `x-kpsdk-r` | meaning | how it was pinned |
+|---|---|---|
+| `1-B1…` | cleared | Chrome baseline, `429->200` follows |
+| `1-AQ` | body did not decrypt or verify | pad the encoded body; both arms, both lose clearance |
+| absent | decrypted, scored, refused | **this engine's baseline** |
+
+Our baseline is the *third* state. The guard's POST is well-formed and the
+server reads it; it simply does not like the answer.
+
+### The POST has a ceiling, and it is not where the tell is
+
+Inflating the surfaces the guard's own decoded string heap names — voices,
+plugins/mimeTypes, languages, `performance.getEntries`, cookies — gives a clean
+staircase, and then a wall:
+
+```
+  lightpanda  none        postLen  19178-19194   200
+  lightpanda  surf-2k     postLen  26434-26458   200
+  lightpanda  surf-8k     postLen  49682-49706   200
+  lightpanda  surf-32k    postLen 142026         200
+  chrome      surf-64k    postLen 266738-266778  413
+  chrome      surf-128k   postLen 515250-515258  413
+  lightpanda  surf-200k   postLen 794202-794218  413
+```
+
+Between 142KB and 267KB the server stops taking it. Under the ceiling the POST
+is accepted with `cr=true` and no `1-AQ` — and still no ticket, at any dose. On
+the Chrome arm the same dose *costs* the ticket. **Volume never helps and
+eventually hurts**, in both directions, which closes the overload class here.
+Cloudflare's lever does not exist on this station.
+
+### What Kasada actually collects
+
+The staircase above is the useful part: `postLen` answers "is this surface in
+the payload at all" for about twenty seconds' work. One family per arm, same
+32KB dose, Chrome arm:
+
+| surface | postLen | in the payload | tampering costs the ticket |
+|---|---|---|---|
+| `navigator.plugins` / `mimeTypes` | 142442 | yes | **yes** |
+| `userAgent` / `appVersion` / `platform` / `vendor` | 216202 | yes (413) | — |
+| WebGL `getParameter` + `getSupportedExtensions` | 117914 | yes | no |
+| `Error` stacks | 85122 | yes | no |
+| timezone + `Date.prototype.toString` | 52394 | yes | no |
+| `speechSynthesis.getVoices` | 19626 | **no** | — |
+| `navigator.languages` | 19586 | **no** | — |
+| `performance.getEntries` / `getEntriesByType` | 19618 | **no** | — |
+| `document.cookie` | 19602 | **no** | — |
+| `mediaDevices.enumerateDevices` | 19618 | **no** | — |
+| `canvas.toDataURL` | 19586 | **no** | — |
+| `localStorage` | 19610 | **no** | — |
+| document element attributes | 19594 | **no** | — |
+| `userAgentData.getHighEntropyValues` | 19594 | **no** | — |
+
+Baseline is 19546–19634 across every run of the day, so ±50 is noise and every
+"yes" above is between +33KB and +196KB. The *collected* column is safe on one
+sample each; the *ticket* column is not, and only the plugins row was measured
+in a complete interleaved run of its own (0/2 against 2/2). The second round of
+the map run returned no POST on all ten arms at once — that is one rate-limit,
+not ten readings, and it is why the pace dropped after it.
+
+Two entries are worth naming. Kasada does not read `performance` entries at all,
+which is the exact surface Cloudflare's guard walks character by character —
+these two collectors are not the same family, and a fix aimed at one says
+nothing about the other. And `canvas.toDataURL` is not read either, though only
+that one entry point was patched, so `toBlob`/`getImageData` remain untested.
+
+### Every collected surface is already identical
+
+That map turns the door question into a much smaller one: only a surface the
+guard reads can be the thing it refuses us for. There are five. `plugins` /
+`mimeTypes` was dumped in full — items, prototype chain, own names, `for..in`
+order, the plugin↔mimeType cross-links, `String(collection)`,
+`pdfViewerEnabled` — and is **byte-identical**. The other four were dumped
+together (`scratch/b88/expr-collected-four.js`, both arms on the same https
+page, the Chrome arm carrying this fork's user agent): the whole navigator
+identity family, 83 WebGL parameters and 39 extensions on both `webgl` and
+`webgl2` including `WEBGL_debug_renderer_info`, four flavours of `Error.stack`
+with their descriptors, and the timezone/`Date` surface across a summer and a
+winter date. **Identical, to the byte** — and not vacuously so: the ANGLE
+renderer strings are real, the stacks carry matching line and column numbers,
+83 parameters came back on each side.
+
+So the paradox now has a measured floor under it rather than an assumed one:
+*every surface this station is shown to collect, this engine already answers
+exactly as Chrome does.*
+
+### A real tell, found and priced at zero
+
+Walking every function reachable from `globalThis` and asking
+`Function.prototype.toString` about it (`scratch/b88/expr-native-tostring.js`,
+11120 functions here, 11574 on Chrome) turns up four non-native entries on this
+arm and none on Chrome — two functions counted twice:
+
+```
+  WebAssembly.compileStreaming       function compileStreaming(source) {
+                                       return bytesOf(source, 'compileStreaming').then(...)
+  WebAssembly.instantiateStreaming   function instantiateStreaming(source, imports = undefined) {
+```
+
+They are written in JavaScript here, and that shows three separate ways —
+readable source text, a `prototype` own property, and `new` on them not
+throwing:
+
+```
+                        toString      own names                    new fn()
+  lightpanda            source        length,name,prototype        no-throw
+  chrome                [native code] length,name                  TypeError: fn is not a constructor
+  WebAssembly.compile   (identical on both arms — the control)
+```
+
+Kasada's decoded heap greps for precisely this family: `\[native code\]`,
+`patchedFuncStringErrMsg`, `^[a-z]+\s*\(\)\s*\{...\}`,
+`Function.__proto__.toString.call()`. So it looked like the door.
+
+It is not. Giving Chrome the identical shape (`wasm-js`), alongside a knob
+carrying only the `prototype` tell (`wasm-proto-only`) and a null control that
+deletes the slot and puts the same native function back (`wasm-redefine`):
+
+```
+  none             ticket 2/2  cleared 2/2  postLen 19546,19594
+  wasm-js          ticket 2/2  cleared 2/2  postLen 19586,19586
+  wasm-proto-only  ticket 2/2  cleared 2/2  postLen 19626,19594
+  wasm-redefine    ticket 2/2  cleared 2/2  postLen 19634,19570
+```
+
+`postLen` does not move either — the guard never reaches these two names.
+`WebAssembly` appears once in its 3087-line name table and neither streaming
+function appears at all. **A genuine fidelity defect, and causally not this
+door.** It is worth fixing on its own terms; it is not worth pricing as a door.
+
+### What this leaves
+
+The overload class is closed here, in both directions and with the sibling
+guard's mechanism explicitly tried. The collected-surface intersection is empty.
+Combined with the four causal negatives already on record and the guard's own
+source and payload plaintext, x-hyatt has now been refused an explanation on
+every channel that can be reached from inside the page.
+
+What the map does leave open is its own blind spot: `postLen` can only answer
+for surfaces that can be made *bigger*. Numbers cannot. Screen and window
+geometry, `hardwareConcurrency`, `deviceMemory`, storage quota and timing values
+are invisible to this oracle — though the geometry segment specifically is
+already excluded by `px-zero` taking 10/10 tickets on Chrome.
