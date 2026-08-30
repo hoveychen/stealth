@@ -592,6 +592,14 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
         return .unreportable;
     }
 
+    // A position keeps its percentages rather than resolving them, but it still
+    // has to come out as an offset from each axis's start edge -- which is a
+    // rewrite of the whole value, not of one token, so the generic length path
+    // below cannot do it either.
+    if (computedPositionText(style_manager, element, property_name, substituted)) |folded| {
+        return .{ .value = folded };
+    }
+
     if (computedColourText(frame.call_arena, property_name, substituted)) |folded| {
         return .{ .value = folded };
     }
@@ -862,12 +870,14 @@ fn percentageOfTheBox(property_name: []const u8) bool {
 /// stays `cover`. Both are assertions, so a later widening of this list cannot
 /// take them with it.
 ///
-/// `mask-position` is deliberately absent even though the same rule applies to
-/// it: measured, it never reaches this path -- `mask-position: left` still comes
-/// out `left center` with this map in place, and `mask-position: 30%` comes out
-/// `0% center`, wrong in the first slot too. It has an expansion of its own with
-/// a defect of its own, recorded rather than papered over by a name here that
-/// would do nothing.
+/// This is now a FALLBACK rather than the path a position normally takes:
+/// `computedPositionText` runs first and answers all four of the names below
+/// from a parsed position, which is the only way to get the edge-relative forms
+/// right. What is left here catches a value that parser cannot model.
+///
+/// `mask-position` is absent because it never arrives under that name -- it
+/// expands into the `-webkit-mask-position-x` / `-y` pair, which is exactly why
+/// adding it here would have done nothing.
 fn positionKeywordPercentage(property_name: []const u8, token: []const u8) ?[]const u8 {
     const PROPERTIES = std.StaticStringMap(void).initComptime(.{
         .{ "background-position", {} },
@@ -2601,37 +2611,194 @@ fn resolvedOrigin(
     const width = element.getClientWidthWithCache(frame, &visibility_cache) + edges.border_x;
     const height = element.getClientHeightWithCache(frame, &visibility_cache) + edges.border_y;
 
-    // The ordering and the missing-axis fill are the specified serialiser's job
-    // and it already does them: horizontal first, `center` for the axis left
-    // out, and a z offset staying third. Anything it refuses is a shape Chrome
-    // does not resolve either.
-    const ordered = (writeOrigin(frame.call_arena, value) catch null) orelse value;
-
-    var parts: [3][]const u8 = undefined;
-    var count: usize = 0;
-    var walk = shorthand.Components.init(ordered);
-    while (walk.next()) |part| {
-        if (count == parts.len) return null;
-        parts[count] = part;
-        count += 1;
-    }
-    if (count == 0) return null;
+    // Which axis each component sits on is the parser's answer, not the slot's:
+    // `bottom 20px right 10px` names its axes out of order and resolves the same
+    // as `right 10px bottom 20px`. The prefixed spellings are aliases and the
+    // parser is keyed on the real names.
+    const unprefixed = if (std.mem.startsWith(u8, property_name, "-webkit-"))
+        property_name["-webkit-".len..]
+    else
+        property_name;
+    const position = shorthand.parsePosition(unprefixed, value) orelse return null;
 
     var buf = std.Io.Writer.Allocating.init(frame.local_arena);
-    for (parts[0..count], 0..) |part, i| {
-        // The z offset is a length and nothing else, so it has no extent to
-        // take a percentage of.
-        const extent: ?f64 = switch (i) {
-            0 => width,
-            1 => height,
-            else => null,
-        };
-        const px = originComponentPx(style_manager, element, property_name, part, extent) orelse return null;
-        if (i != 0) buf.writer.writeAll(" ") catch return null;
+    const horizontal = originAxisPx(style_manager, element, property_name, position.horizontal, width) orelse return null;
+    const vertical = originAxisPx(style_manager, element, property_name, position.vertical, height) orelse return null;
+    units.writeNumber(&buf.writer, horizontal) catch return null;
+    buf.writer.writeAll("px ") catch return null;
+    units.writeNumber(&buf.writer, vertical) catch return null;
+    buf.writer.writeAll("px") catch return null;
+    if (position.z) |z| {
+        // A z offset is a plain length on no axis, so it has no extent to take a
+        // percentage of.
+        const px = originComponentPx(style_manager, element, property_name, z, null) orelse return null;
+        buf.writer.writeAll(" ") catch return null;
         units.writeNumber(&buf.writer, px) catch return null;
         buf.writer.writeAll("px") catch return null;
     }
     return buf.written();
+}
+
+/// A `<position>` as a computed style prints it, for the properties that keep
+/// their percentages instead of resolving them against a box: exactly two
+/// components, each an offset from its axis's START edge, because that is the
+/// only origin a single component can be read against.
+///
+/// Measured on Chrome 151 over 33 values (scratch/b92/expr-position-edge.js):
+///
+///   left / top      the offset itself, `0%` when the axis carries none
+///   center          `50%`
+///   right / bottom  the box minus the offset -- `100%` bare, and
+///                   `calc(100% - 10px)` with one
+///
+/// A percentage offset folds into that subtraction rather than staying in a
+/// calc (`right 30%` is `70%`, not `calc(100% - 30%)`) and so does a zero
+/// (`right 0px` is `100%`), because both are subtractions this can finish.
+/// Anything else keeps the calc, which is the only spelling a computed value has
+/// for "a percentage of a box nobody here has measured, minus a length".
+///
+/// `background-position` itself is absent because it never arrives: it is stored
+/// as its two longhands and joined back from them, so the axis each of THEM
+/// computes is the shorthand's answer. Chrome does the same -- its
+/// `background-position-x` for `right 10px` is `calc(100% - 10px)`, measured
+/// with scratch/b92/expr-position-longhand.js.
+///
+/// The two origins are absent for the opposite reason: they resolve their
+/// percentages against the border box and are answered by `resolvedOrigin`
+/// before this is reached.
+fn computedPositionText(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    value: []const u8,
+) ?[]const u8 {
+    const frame = element.ownerFrame(style_manager.frame);
+
+    if (shorthand.parsePositionAxis(property_name, value)) |axis| {
+        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+        if (!writeComputedPositionAxis(&buf.writer, style_manager, element, property_name, axis)) {
+            return null;
+        }
+        return buf.written();
+    }
+
+    if (!std.mem.eql(u8, property_name, "mask-position") and
+        !std.mem.eql(u8, property_name, "object-position"))
+    {
+        return null;
+    }
+    const position = shorthand.parsePosition(property_name, value) orelse return null;
+
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    if (!writeComputedPositionAxis(&buf.writer, style_manager, element, property_name, position.horizontal)) {
+        return null;
+    }
+    buf.writer.writeByte(' ') catch return null;
+    if (!writeComputedPositionAxis(&buf.writer, style_manager, element, property_name, position.vertical)) {
+        return null;
+    }
+    return buf.written();
+}
+
+fn writeComputedPositionAxis(
+    writer: *std.Io.Writer,
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    axis: shorthand.PositionAxis,
+) bool {
+    const edge = axis.edge orelse .start;
+    if (edge == .center) {
+        writer.writeAll("50%") catch return false;
+        return true;
+    }
+
+    const offset: ?PositionOffset = if (axis.offset) |token|
+        positionOffset(style_manager, element, property_name, token) orelse return false
+    else
+        null;
+
+    if (edge == .start) {
+        const measured = offset orelse {
+            writer.writeAll("0%") catch return false;
+            return true;
+        };
+        switch (measured) {
+            .percent => |pct| {
+                units.writeNumber(writer, pct) catch return false;
+                writer.writeAll("%") catch return false;
+            },
+            .pixels => |px| {
+                units.writeNumber(writer, px) catch return false;
+                writer.writeAll("px") catch return false;
+            },
+        }
+        return true;
+    }
+
+    const measured = offset orelse {
+        writer.writeAll("100%") catch return false;
+        return true;
+    };
+    switch (measured) {
+        .percent => |pct| {
+            units.writeNumber(writer, 100 - pct) catch return false;
+            writer.writeAll("%") catch return false;
+        },
+        .pixels => |px| {
+            if (px == 0) {
+                writer.writeAll("100%") catch return false;
+                return true;
+            }
+            writer.writeAll("calc(100% - ") catch return false;
+            units.writeNumber(writer, px) catch return false;
+            writer.writeAll("px)") catch return false;
+        },
+    }
+    return true;
+}
+
+/// An offset in the only two shapes a computed position carries it: a
+/// percentage of a box this cannot measure, or a length in pixels.
+const PositionOffset = union(enum) { percent: f64, pixels: f64 };
+
+fn positionOffset(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    token: []const u8,
+) ?PositionOffset {
+    const parsed = units.parse(token) catch return null;
+    if (parsed.unit == .percentage) return .{ .percent = parsed.value };
+    return switch (lengthFactor(style_manager, element, property_name, parsed.unit)) {
+        // `.verbatim` is `px` and the unitless zero, both of which are already
+        // the number of pixels they name.
+        .verbatim => .{ .pixels = parsed.value },
+        .pixels => |factor| .{ .pixels = parsed.value * factor },
+        .unresolvable => null,
+    };
+}
+
+/// One axis of an origin in pixels, measured from the box's own start edge --
+/// which is the only origin a single number can be read against. An offset from
+/// the END edge is the extent minus it, so `right 10px` on a 100px box is 90px.
+fn originAxisPx(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    axis: shorthand.PositionAxis,
+    extent: f64,
+) ?f64 {
+    const offset = if (axis.offset) |token|
+        originComponentPx(style_manager, element, property_name, token, extent) orelse return null
+    else
+        0;
+    return switch (axis.edge orelse .start) {
+        .start => offset,
+        // `center` takes no offset, so there is nothing to add to the middle.
+        .center => extent / 2,
+        .end => extent - offset,
+    };
 }
 
 /// One origin component in pixels. `extent` is the border box's size along that
@@ -3159,14 +3326,10 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
         }
     }
 
-    // An origin is written with its horizontal axis first, and with the axis
-    // the author left out filled in.
-    if (std.mem.eql(u8, property_name, "transform-origin") or
-        std.mem.eql(u8, property_name, "perspective-origin"))
-    {
-        if (try writeOrigin(arena, value)) |ordered| {
-            return ordered;
-        }
+    // A position is written with its horizontal axis first, with the axis the
+    // author left out filled in, and with a unitless zero spelled `0px`.
+    if (try writePosition(arena, property_name, value)) |ordered| {
+        return ordered;
     }
 
     // Canonicalize anchor-size() function: anchor name (dashed ident) comes before size keyword
@@ -3185,71 +3348,66 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
     return value;
 }
 
-/// Which axis an origin component names, or null for a length or a percentage,
-/// which takes whichever axis its slot gives it.
-const OriginAxis = enum { horizontal, vertical, either };
+/// The SPECIFIED value of a `<position>` as Chrome writes it: horizontal axis
+/// first, the axis the author left out filled in with `center`, and a unitless
+/// zero spelled `0px`. Measured over 33 values x the five properties that take
+/// one, on Chrome 151 (scratch/b92/expr-position-edge.js) -- `center left` is
+/// `left center`, `bottom 20px right 10px` is `right 10px bottom 20px`, `30%` is
+/// `30% center` and `right 0 bottom 0` is `right 0px bottom 0px`.
+///
+/// Nothing here counts the author's tokens. Each axis prints the edge and the
+/// offset it holds and only those, which is what makes one and two values both
+/// come back as two while three come back as three and four as four.
+///
+/// Null for a value `parsePosition` cannot model, which leaves it the bytes it
+/// arrived with -- the answer this engine gave before.
+fn writePosition(arena: Allocator, property_name: []const u8, value: []const u8) !?[]const u8 {
+    // A substitution stands in for text that arrives later, so which axis each
+    // component lands on is not knowable here.
+    if (hasVerbatimFunction(value)) return null;
 
-fn originAxis(part: []const u8) ?OriginAxis {
-    if (std.ascii.eqlIgnoreCase(part, "left") or std.ascii.eqlIgnoreCase(part, "right")) {
-        return .horizontal;
+    if (shorthand.parsePositionAxis(property_name, value)) |axis| {
+        var buf = std.Io.Writer.Allocating.init(arena);
+        errdefer buf.deinit();
+        const which = shorthand.positionAxisProperty(property_name).?;
+        try writePositionAxis(&buf.writer, axis, if (which == .vertical) .vertical else .horizontal);
+        return buf.written();
     }
-    if (std.ascii.eqlIgnoreCase(part, "top") or std.ascii.eqlIgnoreCase(part, "bottom")) {
-        return .vertical;
+
+    const position = shorthand.parsePosition(property_name, value) orelse return null;
+    var buf = std.Io.Writer.Allocating.init(arena);
+    errdefer buf.deinit();
+    try writePositionAxis(&buf.writer, position.horizontal, .horizontal);
+    try buf.writer.writeByte(' ');
+    try writePositionAxis(&buf.writer, position.vertical, .vertical);
+    if (position.z) |z| {
+        try buf.writer.writeByte(' ');
+        try buf.writer.writeAll(zeroWithUnit(z));
     }
-    if (std.ascii.eqlIgnoreCase(part, "center")) return .either;
-    return null;
+    return buf.written();
 }
 
-/// `transform-origin` and `perspective-origin` as Chrome writes them. Measured
-/// with tools/fingerprint/probes/expr-transform-serialize.js: both axes are
-/// always written, horizontal first, and a third component -- the z offset --
-/// stays where it is while the first two swap.
-///
-/// A lone component takes `center` on the other axis, and which side it goes
-/// depends on the axis the component itself names: `top` is `center top` where
-/// `right` is `right center` and `50%` is `50% center`.
-///
-/// Answers null for anything not of that shape, which keeps the value as
-/// written. That covers `transform-origin: top 20px`, which Chrome refuses
-/// outright: swapping it would invent `20px top`, a value with a different
-/// meaning that Chrome never writes, and keeping it is the wrong this engine
-/// already had.
-fn writeOrigin(arena: Allocator, value: []const u8) !?[]const u8 {
-    if (hasVerbatimFunction(value)) {
-        return null;
+fn writePositionAxis(
+    writer: *std.Io.Writer,
+    axis: shorthand.PositionAxis,
+    which: enum { horizontal, vertical },
+) !void {
+    var wrote = false;
+    if (axis.keyword(if (which == .horizontal) .horizontal else .vertical)) |word| {
+        try writer.writeAll(word);
+        wrote = true;
     }
-
-    var parts: [3][]const u8 = undefined;
-    var count: usize = 0;
-    var walk = shorthand.Components.init(value);
-    while (walk.next()) |part| {
-        if (count == parts.len) return null;
-        parts[count] = part;
-        count += 1;
+    if (axis.offset) |offset| {
+        if (wrote) try writer.writeByte(' ');
+        try writer.writeAll(zeroWithUnit(offset));
     }
-    // A `/` stops the walk, and an origin never carries one.
-    if (walk.stopped or count == 0) return null;
+}
 
-    if (count == 1) {
-        const filled: [2][]const u8 = if (originAxis(parts[0]) == .vertical)
-            .{ "center", parts[0] }
-        else
-            .{ parts[0], "center" };
-        return try std.mem.join(arena, " ", &filled);
-    }
-
-    // Only a vertical keyword in front of something that can hold the
-    // horizontal axis is out of order. A length second -- `top 20px` -- is the
-    // shape Chrome refuses, and is left alone rather than swapped.
-    const lead = originAxis(parts[0]);
-    const follow = originAxis(parts[1]);
-    if (lead != .vertical or (follow != .horizontal and follow != .either)) {
-        return null;
-    }
-
-    var out: [3][]const u8 = .{ parts[1], parts[0], undefined };
-    if (count == 3) out[2] = parts[2];
-    return try std.mem.join(arena, " ", out[0..count]);
+/// A unitless zero written the way Chrome writes it inside a position, where
+/// `normalizePropertyValue`'s whole-value rule cannot reach it: the zero is one
+/// component of several, so the value is never the two bytes that rule matches.
+fn zeroWithUnit(token: []const u8) []const u8 {
+    return if (std.mem.eql(u8, token, "0")) "0px" else token;
 }
 
 /// A shadow layer as Chrome writes it: the colour first, then the lengths in
@@ -5978,4 +6136,8 @@ test "WebApi: CSSStyleDeclaration position keywords" {
 
 test "WebApi: CSSStyleDeclaration position grammar" {
     try testing.htmlRunner("css/position_grammar_rejects.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration position serialization" {
+    try testing.htmlRunner("css/position_edge_relative_computed.html", .{});
 }

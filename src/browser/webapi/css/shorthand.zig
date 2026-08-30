@@ -1394,6 +1394,269 @@ pub fn refusesPosition(name: []const u8, value: []const u8) bool {
     return !isPosition(tokens[0..count], grammar);
 }
 
+/// One axis of a `<position>`, in the shape both of Chrome's serializations are
+/// written from: the edge an offset is measured from, and the offset itself.
+///
+/// Either half may be absent, and which are present is the whole of what decides
+/// how many values the specified value prints -- `left` is a bare edge, `30%` a
+/// bare offset, and `left 10px` in the three- and four-value forms is both. That
+/// is why one and two values both come back as two while four come back as four:
+/// nothing counts the author's tokens, each axis just prints what it has.
+pub const PositionAxis = struct {
+    edge: ?Edge = null,
+    /// The offset token exactly as the author wrote it; converting it needs
+    /// units and an element, neither of which belongs in this file.
+    offset: ?[]const u8 = null,
+
+    /// Named for the axis's own start rather than for a side, because the same
+    /// three answer both axes: `left` and `top` are `.start`, `right` and
+    /// `bottom` are `.end`.
+    pub const Edge = enum { start, center, end };
+
+    /// The keyword this edge is spelled with on the axis it sits on.
+    pub fn keyword(self: PositionAxis, axis: enum { horizontal, vertical }) ?[]const u8 {
+        return switch (self.edge orelse return null) {
+            .start => if (axis == .horizontal) "left" else "top",
+            .center => "center",
+            .end => if (axis == .horizontal) "right" else "bottom",
+        };
+    }
+};
+
+/// A `<position>` taken apart into its two axes, whatever order and arity the
+/// author wrote it in. `z` is transform-origin's third component, which is a
+/// plain length on no axis at all.
+pub const Position = struct {
+    horizontal: PositionAxis = .{},
+    vertical: PositionAxis = .{},
+    z: ?[]const u8 = null,
+};
+
+/// The value taken apart into its two axes, or null when this file cannot model
+/// it -- which is NOT the same question as `refusesPosition`, and deliberately
+/// so. That function decides what Chrome *accepts*, and it is measured against
+/// 230 readings; this one decides what can be re-serialised, and answering null
+/// leaves the caller printing what it printed before. Keeping them apart means a
+/// gap here can only ever cost fidelity, never turn a declaration Chrome takes
+/// into one this engine drops.
+///
+/// So the shapes below are the ones both agree on. A `center` carrying an offset
+/// is the one shape `refusesPosition` allows and this refuses: `center` is the
+/// middle of the box and has no edge to measure from, and no measurement says
+/// what Chrome prints for it.
+pub fn parsePosition(name: []const u8, value: []const u8) ?Position {
+    const grammar = positionGrammar(name) orelse return null;
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    if (cssWide(trimmed) != null) return null;
+    if (!judgeable(trimmed)) return null;
+
+    var tokens: [8][]const u8 = undefined;
+    var count: usize = 0;
+    var walk = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
+    while (walk.next()) |token| {
+        if (count == tokens.len) return null;
+        tokens[count] = token;
+        count += 1;
+    }
+
+    if (grammar == .position_and_z) {
+        // The z offset is a plain length after a one- or two-value position, so
+        // `left top 10px` is a position and a z here where the same three tokens
+        // are an edge-relative position on `background-position`.
+        if (count <= 2) return positionAxes(tokens[0..count], grammar, null);
+        if (count == 3 and isLength(tokens[2])) {
+            return positionAxes(tokens[0..2], grammar, tokens[2]);
+        }
+        return null;
+    }
+    return positionAxes(tokens[0..count], grammar, null);
+}
+
+fn positionAxes(tokens: []const []const u8, grammar: PositionGrammar, z: ?[]const u8) ?Position {
+    switch (tokens.len) {
+        1 => {
+            if (edgeToken(tokens[0])) |edge| {
+                return placeAxes(edge, null, .{ .axis = .either, .edge = .center }, null, z);
+            }
+            if (!isLengthPercentage(tokens[0])) return null;
+            // A lone offset is horizontal, and the axis it left out is centred.
+            return .{
+                .horizontal = .{ .offset = tokens[0] },
+                .vertical = .{ .edge = .center },
+                .z = z,
+            };
+        },
+        2 => {
+            const lead = edgeToken(tokens[0]);
+            const follow = edgeToken(tokens[1]);
+            if (lead != null and follow != null) {
+                // Two keywords are the `&&` half of the grammar: each takes the
+                // axis it names whichever slot it sits in, so `bottom left` is
+                // `left bottom` and `center left` is `left center`.
+                return placeAxes(lead.?, null, follow.?, null, z);
+            }
+            // With an offset in play the form is slot-ordered -- horizontal
+            // first, vertical second -- and an offset takes the axis of its slot
+            // rather than of a keyword.
+            if (lead == null) {
+                if (!isLengthPercentage(tokens[0])) return null;
+                const vertical: PositionAxis = if (follow) |edge| blk: {
+                    if (edge.axis == .horizontal) return null;
+                    break :blk .{ .edge = edge.edge };
+                } else if (isLengthPercentage(tokens[1]))
+                    .{ .offset = tokens[1] }
+                else
+                    return null;
+                return .{ .horizontal = .{ .offset = tokens[0] }, .vertical = vertical, .z = z };
+            }
+            if (!isLengthPercentage(tokens[1])) return null;
+            if (lead.?.axis == .vertical) return null;
+            return .{
+                .horizontal = .{ .edge = lead.?.edge },
+                .vertical = .{ .offset = tokens[1] },
+                .z = z,
+            };
+        },
+        // `left 10px top` -- one edge carrying an offset and one bare. The
+        // offset belongs to the edge in front of it, so it is in slot 1 or 2 and
+        // the edges are whatever is left.
+        3 => {
+            if (grammar != .bg_position) return null;
+            if (isLengthPercentage(tokens[1])) {
+                const first = edgeToken(tokens[0]) orelse return null;
+                const second = edgeToken(tokens[2]) orelse return null;
+                return placeAxes(first, tokens[1], second, null, z);
+            }
+            if (isLengthPercentage(tokens[2])) {
+                const first = edgeToken(tokens[0]) orelse return null;
+                const second = edgeToken(tokens[1]) orelse return null;
+                return placeAxes(first, null, second, tokens[2], z);
+            }
+            return null;
+        },
+        // `left 10px top 20px` -- both edges carry an offset.
+        4 => {
+            if (!isLengthPercentage(tokens[1]) or !isLengthPercentage(tokens[3])) return null;
+            const first = edgeToken(tokens[0]) orelse return null;
+            const second = edgeToken(tokens[2]) orelse return null;
+            return placeAxes(first, tokens[1], second, tokens[3], z);
+        },
+        else => return null,
+    }
+}
+
+/// Two edges, each with the offset it carries, put on the axes they name.
+/// `center` names neither, so it takes whichever axis the other one leaves --
+/// and when both are `center` the two halves are the same answer anyway.
+fn placeAxes(
+    first: TokenEdge,
+    first_offset: ?[]const u8,
+    second: TokenEdge,
+    second_offset: ?[]const u8,
+    z: ?[]const u8,
+) ?Position {
+    // `center` is the middle of the box, not an edge to measure from. The
+    // grammar check lets one through in the three-value form; nothing has
+    // measured what Chrome prints for it, so it is not modelled here.
+    if (first.axis == .either and first_offset != null) return null;
+    if (second.axis == .either and second_offset != null) return null;
+
+    const first_axis: PositionAxis = .{ .edge = first.edge, .offset = first_offset };
+    const second_axis: PositionAxis = .{ .edge = second.edge, .offset = second_offset };
+
+    if (first.axis == .horizontal) {
+        if (second.axis == .horizontal) return null;
+        return .{ .horizontal = first_axis, .vertical = second_axis, .z = z };
+    }
+    if (first.axis == .vertical) {
+        if (second.axis == .vertical) return null;
+        return .{ .horizontal = second_axis, .vertical = first_axis, .z = z };
+    }
+    // The first is `center`, so the second decides.
+    return switch (second.axis) {
+        .horizontal => .{ .horizontal = second_axis, .vertical = first_axis, .z = z },
+        else => .{ .horizontal = first_axis, .vertical = second_axis, .z = z },
+    };
+}
+
+/// Which axis a per-axis position longhand holds, or null for a property that
+/// is not one.
+///
+/// Both shorthands that take a `<position>` and expand are stored this way, and
+/// the two pairs are spelled differently only by history: `background-position`
+/// splits into `background-position-x` and `-y`, `mask-position` into the
+/// `-webkit-` prefixed pair. A value that reaches either pair has already been
+/// split, so what is left on each is one axis.
+pub const WhichAxis = enum { horizontal, vertical };
+
+pub fn positionAxisProperty(name: []const u8) ?WhichAxis {
+    const AXES = std.StaticStringMap(WhichAxis).initComptime(.{
+        .{ "background-position-x", .horizontal },
+        .{ "background-position-y", .vertical },
+        .{ "-webkit-mask-position-x", .horizontal },
+        .{ "-webkit-mask-position-y", .vertical },
+    });
+    return AXES.get(name);
+}
+
+/// One axis on its own, which is what `background-position-x` and its three
+/// siblings hold: an edge, an offset, or an edge and an offset. Chrome stores a
+/// position shorthand's two halves in exactly this shape and computes each half
+/// by itself -- `background-position: right 10px bottom 20px` puts `right 10px`
+/// in the x longhand, which computes to `calc(100% - 10px)` on its own and joins
+/// back into the shorthand's answer. Measured with
+/// scratch/b92/expr-position-longhand.js.
+///
+/// Null for the comma-separated multi-layer form these longhands also take.
+/// Nobody has measured that, and this file does not model a layer list.
+pub fn parsePositionAxis(name: []const u8, value: []const u8) ?PositionAxis {
+    const vertical = (positionAxisProperty(name) orelse return null) == .vertical;
+
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    if (cssWide(trimmed) != null) return null;
+    if (!judgeable(trimmed)) return null;
+
+    var tokens: [2][]const u8 = undefined;
+    var count: usize = 0;
+    var walk = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
+    while (walk.next()) |token| {
+        if (count == tokens.len) return null;
+        tokens[count] = token;
+        count += 1;
+    }
+
+    // An edge on this longhand has to name this longhand's own axis: `left` is
+    // not a `background-position-y`.
+    const wanted: Axis = if (vertical) .vertical else .horizontal;
+    if (count == 1) {
+        if (edgeToken(tokens[0])) |edge| {
+            if (edge.axis != wanted and edge.axis != .either) return null;
+            return .{ .edge = edge.edge };
+        }
+        if (!isLengthPercentage(tokens[0])) return null;
+        return .{ .offset = tokens[0] };
+    }
+    if (count != 2) return null;
+    const edge = edgeToken(tokens[0]) orelse return null;
+    // `center` takes no offset here for the same reason it takes none above.
+    if (edge.axis != wanted) return null;
+    if (!isLengthPercentage(tokens[1])) return null;
+    return .{ .edge = edge.edge, .offset = tokens[1] };
+}
+
+const TokenEdge = struct { axis: Axis, edge: PositionAxis.Edge };
+
+fn edgeToken(token: []const u8) ?TokenEdge {
+    if (std.ascii.eqlIgnoreCase(token, "left")) return .{ .axis = .horizontal, .edge = .start };
+    if (std.ascii.eqlIgnoreCase(token, "right")) return .{ .axis = .horizontal, .edge = .end };
+    if (std.ascii.eqlIgnoreCase(token, "top")) return .{ .axis = .vertical, .edge = .start };
+    if (std.ascii.eqlIgnoreCase(token, "bottom")) return .{ .axis = .vertical, .edge = .end };
+    if (std.ascii.eqlIgnoreCase(token, "center")) return .{ .axis = .either, .edge = .center };
+    return null;
+}
+
 const PositionGrammar = enum {
     /// `<position>`: one, two or four values.
     position,
