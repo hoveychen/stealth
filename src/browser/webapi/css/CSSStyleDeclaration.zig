@@ -1789,10 +1789,10 @@ fn computedFontStretch(style_manager: *StyleManager, element: *Element, wrapped:
 ///     `column-rule-width: medium` is 3px, where a border would be 0px.
 ///   * `-webkit-text-stroke-width` has two thirds of that scale.
 ///   * An element declaring no column rule answers **1.5px**, not the 3px its
-///     own `medium` resolves to. That is three DEVICE pixels: the same reading
-///     is 3px on every devicePixelRatio-1 Chrome measured (headless, headed
-///     under `--force-device-scale-factor=1`, headed under `=3`) and 1.5px on
-///     the dpr-2 headed one. This engine reports devicePixelRatio 2 as a fixed
+///     own `medium` resolves to. That is three DEVICE pixels: 3px on both dpr-1
+///     arms measured and 1.5px on both dpr-2 arms, with `devicePixelRatio` read
+///     back in the same run as the width every time, so the split is the ratio
+///     and not headedness. This engine reports devicePixelRatio 2 as a fixed
 ///     part of its device profile (`Window.getDevicePixelRatio`), so 1.5px is
 ///     the number that matches it.
 ///
