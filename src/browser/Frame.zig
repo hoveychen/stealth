@@ -3013,7 +3013,14 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         return self.queueElementEvent(Factory.protoOf(link), .@"error");
     }
 
-    self._stylesheet_bodies.put(self.arena, resolved, try self.arena.dupe(u8, response.body.items)) catch |err| {
+    // The KEY has to be duped too, not just the body. `resolved` was allocated
+    // from the pooled session arena this function releases on the way out, so
+    // storing it leaves the map pointing at memory the next pooled fetch takes
+    // back -- and the next fetch is often a `<script src>`, which is why two
+    // adjacent `<link>`s hit and two with a script between them missed
+    // (`stylesheet_cache_key_outlives_the_fetch`).
+    const key = self.arena.dupe(u8, resolved) catch resolved;
+    self._stylesheet_bodies.put(self.arena, key, try self.arena.dupe(u8, response.body.items)) catch |err| {
         // A cache that could not grow is a slower page, not a broken one.
         log.warn(.http, "stylesheet cache", .{ .err = err, .url = resolved });
     };

@@ -30,7 +30,47 @@
   await test.done((n) => {
     testing.expectEqual('dup-sheet.css entries: 1', 'dup-sheet.css entries: ' + n);
     // Both links still see the rules: a cache hit is a delivery, not a skip.
-    testing.expectEqual(2, document.styleSheets.length);
+    // Counted by href rather than off `document.styleSheets.length`, so the
+    // block below can add links of its own without moving this number.
+    const sheets = [...document.styleSheets]
+      .filter((s) => String(s.href || '').endsWith('/wire/dup-sheet.css')).length;
+    testing.expectEqual('dup-sheet.css sheets: 2', 'dup-sheet.css sheets: ' + sheets);
+  });
+}
+</script>
+
+<!--
+  ...and still one request when another sheet was fetched in between.
+
+  The cache keys on the resolved URL, and that string was allocated from the
+  pooled session arena `loadExternalStylesheet` releases on the way out -- so
+  the key pointed at memory the next stylesheet load takes back. Two adjacent
+  <link>s hit anyway, which is why the block above passed; put one more fetch
+  between them and the key has been overwritten by the time the third link
+  looks. Measured on tools/fingerprint/wire-census.mjs, whose page names its
+  sheet twice with the rest of the census in between: chrome 1, this engine 2.
+-->
+<link rel="stylesheet" href="/wire/reused-sheet.css">
+<link rel="stylesheet" href="/wire/other-sheet.css">
+<script src="/src/browser/tests/shape.js"></script>
+<link rel="stylesheet" href="/wire/reused-sheet.css">
+
+<script id="stylesheet_cache_key_outlives_the_fetch" type=module>
+{
+  const test = await testing.async();
+  const deadline = Date.now() + 600;
+  const count = (name) => performance.getEntriesByType('resource')
+    .filter((e) => e.name.endsWith(name)).length;
+  while (Date.now() < deadline && count('/wire/other-sheet.css') < 1) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  test.resolve(count('/wire/reused-sheet.css'));
+
+  await test.done((n) => {
+    testing.expectEqual('reused-sheet.css entries: 1', 'reused-sheet.css entries: ' + n);
+    const sheets = [...document.styleSheets]
+      .filter((s) => String(s.href || '').endsWith('/wire/reused-sheet.css')).length;
+    testing.expectEqual('reused-sheet.css sheets: 2', 'reused-sheet.css sheets: ' + sheets);
   });
 }
 </script>
