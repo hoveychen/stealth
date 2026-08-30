@@ -1333,6 +1333,177 @@ pub fn refusesDeclined(entry: Shorthand, value: []const u8) bool {
     return judgeable(value);
 }
 
+/// Whether the value fails the CSS `<position>` grammar of a property that
+/// takes one, in which case Chrome drops the declaration entirely --
+/// `getPropertyValue` answers the empty string and the computed value is the
+/// initial one.
+///
+/// This is a grammar and not a component check, which is why `refusesLonghand`
+/// above cannot do it: every token of `background-position: top 30%` is a
+/// component the property takes, and the declaration is invalid all the same
+/// because `top` names the vertical axis and `30%` then has nowhere to go. Of
+/// 230 readings over 46 values and these five properties, 99 disagreed with
+/// Chrome and every one of them was this -- Chrome dropping where this engine
+/// kept (scratch/b91/expr-position-grammar.js).
+///
+/// The five do not share one grammar. Measured, not read off a spec:
+///
+///   background-position   `<bg-position>`, the only one that still takes the
+///                         legacy three-value form (`left 10px top`).
+///   mask-position         plain `<position>`: one, two or four values, the
+///   object-position       three-value form refused. css-values-3 moved that
+///   perspective-origin    form out of `<position>` and Chrome followed; these
+///                         three refuse byte for byte alike.
+///   transform-origin      `<position>{1,2}` then an optional `<length>` z
+///                         offset -- so `left top 10px` and `10px 20px 30px`
+///                         are fine and no four-value form is.
+///
+/// `background-position-x` / `-y` are deliberately absent: their grammar is a
+/// comma list of edge-relative offsets, nobody has measured it, and a
+/// `<position>` check over it would refuse what Chrome takes. The shorthand is
+/// judged here before it expands into them.
+pub fn refusesPosition(name: []const u8, value: []const u8) bool {
+    const grammar = positionGrammar(name) orelse return false;
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return false;
+    if (cssWide(trimmed) != null) return false;
+    if (!judgeable(trimmed)) return false;
+
+    var tokens: [8][]const u8 = undefined;
+    var count: usize = 0;
+    var walk = std.mem.tokenizeAny(u8, trimmed, &std.ascii.whitespace);
+    while (walk.next()) |token| {
+        // Longer than any position, so it cannot be one. Counting past the
+        // buffer rather than refusing here keeps the arity check in one place.
+        if (count == tokens.len) return true;
+        tokens[count] = token;
+        count += 1;
+    }
+
+    if (grammar == .position_and_z) {
+        // The position half is one or two values -- not the four-value form the
+        // others take -- and the z offset is a plain <length> after it. Which
+        // is why `left top 10px` is fine here and refused everywhere else,
+        // while `left 10px top 20px` is the other way round.
+        if (count <= 2) return !isPosition(tokens[0..count], .position);
+        if (count == 3) {
+            return !(isLength(tokens[2]) and isPosition(tokens[0..2], .position));
+        }
+        return true;
+    }
+    return !isPosition(tokens[0..count], grammar);
+}
+
+const PositionGrammar = enum {
+    /// `<position>`: one, two or four values.
+    position,
+    /// `<bg-position>`: the above plus the legacy three-value form.
+    bg_position,
+    /// `<position>{1,2}` then an optional `<length>`.
+    position_and_z,
+};
+
+fn positionGrammar(name: []const u8) ?PositionGrammar {
+    const GRAMMARS = std.StaticStringMap(PositionGrammar).initComptime(.{
+        .{ "background-position", .bg_position },
+        .{ "mask-position", .position },
+        .{ "object-position", .position },
+        .{ "perspective-origin", .position },
+        .{ "transform-origin", .position_and_z },
+    });
+    return GRAMMARS.get(name);
+}
+
+const Axis = enum { horizontal, vertical, either, offset, none };
+
+/// Which half of a position a token can be, on its own.
+fn positionToken(token: []const u8) Axis {
+    if (std.ascii.eqlIgnoreCase(token, "left") or std.ascii.eqlIgnoreCase(token, "right")) {
+        return .horizontal;
+    }
+    if (std.ascii.eqlIgnoreCase(token, "top") or std.ascii.eqlIgnoreCase(token, "bottom")) {
+        return .vertical;
+    }
+    if (std.ascii.eqlIgnoreCase(token, "center")) return .either;
+    if (isLengthPercentage(token)) return .offset;
+    return .none;
+}
+
+fn isLengthPercentage(token: []const u8) bool {
+    const classes = classify(token);
+    return (classes.length or classes.percent) and !unknownUnit(token);
+}
+
+fn isLength(token: []const u8) bool {
+    const classes = classify(token);
+    return classes.length and !classes.percent and !unknownUnit(token);
+}
+
+fn isPosition(tokens: []const []const u8, grammar: PositionGrammar) bool {
+    switch (tokens.len) {
+        // Any single keyword or offset; the other axis is implied `center`.
+        1 => return positionToken(tokens[0]) != .none,
+        2 => {
+            const first = positionToken(tokens[0]);
+            const second = positionToken(tokens[1]);
+            if (first == .none or second == .none) return false;
+            // `center left` is legal and `30% left` is not, so this is not
+            // "each token fits an axis" -- it is the `&&` half of the grammar,
+            // where a keyword may lead only if the other half is a keyword too.
+            // An offset takes its axis from its slot, so it can only ever be
+            // horizontal first and vertical second.
+            if (first == .offset and (second == .horizontal or second == .vertical)) {
+                return second == .vertical;
+            }
+            if (second == .offset) return first != .vertical;
+            return !sameAxis(first, second);
+        },
+        // `left 10px top` -- one edge with an offset and one bare. Only
+        // `<bg-position>` still has it.
+        3 => {
+            if (grammar != .bg_position) return false;
+            // The offset belongs to the edge before it, so it is in slot 1 or
+            // slot 2 and the two edges are whatever is left.
+            if (positionToken(tokens[1]) == .offset) {
+                return edgePair(tokens[0], tokens[2]);
+            }
+            if (positionToken(tokens[2]) == .offset) {
+                return edgePair(tokens[0], tokens[1]);
+            }
+            return false;
+        },
+        // `left 10px top 20px` -- both edges carry an offset, so both must be
+        // keywords and `center` cannot be one: it takes no offset.
+        4 => {
+            if (positionToken(tokens[1]) != .offset or positionToken(tokens[3]) != .offset) {
+                return false;
+            }
+            const first = positionToken(tokens[0]);
+            const second = positionToken(tokens[2]);
+            if (first == .either or second == .either) return false;
+            return (first == .horizontal or first == .vertical) and !sameAxis(first, second);
+        },
+        else => return false,
+    }
+}
+
+/// Two edges naming different axes, `center` standing in for whichever is left.
+/// An offset cannot be one: in the three- and four-value forms an offset always
+/// belongs to the edge in front of it.
+fn edgePair(a: []const u8, b: []const u8) bool {
+    const first = positionToken(a);
+    const second = positionToken(b);
+    if (first == .none or second == .none or first == .offset or second == .offset) {
+        return false;
+    }
+    return !sameAxis(first, second);
+}
+
+fn sameAxis(a: Axis, b: Axis) bool {
+    if (a == .either or b == .either) return false;
+    return a == b;
+}
+
 /// Whether this engine can say anything about the value at all. It cannot when
 /// a component is a function whose name `classify` does not know -- `calc()` is
 /// the live one, because Chrome evaluates it and this engine substitutes it, so
