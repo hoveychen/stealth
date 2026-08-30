@@ -21530,3 +21530,42 @@ for surfaces that can be made *bigger*. Numbers cannot. Screen and window
 geometry, `hardwareConcurrency`, `deviceMemory`, storage quota and timing values
 are invisible to this oracle — though the geometry segment specifically is
 already excluded by `px-zero` taking 10/10 tickets on Chrome.
+
+### The POST is early, and being early is not why it is refused (B88)
+
+One difference survives every dump: the two arms put `/tl` on the wire in
+windows that do not overlap. Across ~40 runs this engine posts at 790–1378ms
+after navigation and Chrome at 1646–2323ms. The guard uses XHR for it on both
+arms, so deferring that one `send` moves us into Chrome's window without
+touching a single thing the guard collects.
+
+It does nothing. With a Chrome arm interleaved as a window anchor:
+
+```
+  lightpanda none            tl@1077-3306ms   ticket 0/3
+  lightpanda tl-delay-0      tl@1082-2229ms   ticket 0/3   (patch, no delay -- the control)
+  lightpanda tl-delay-800    tl@1796-2558ms   ticket 0/3
+  lightpanda tl-delay-1200   tl@2198-2641ms   ticket 0/3
+  chrome     none            tl@1795-2107ms   ticket 3/3, cleared 3/3
+```
+
+The dosed arms sit inside and past Chrome's window; one `none` run drifted to
+3306ms on its own and was refused too.
+
+**And a caution about how nearly this went the other way.** The first pass at
+this ran without the Chrome anchor, and the `none` arm came back **2/3 with real
+`429->200` clearances** — on the same pinned binary that had read 0/2, 0/2 and
+0/3 earlier in the afternoon. Five of that run's twelve runs won tickets, spread
+evenly across all four arms. Twenty minutes later, interleaved and anchored:
+
+```
+  lightpanda none  ticket 0/5   postLen 19154-19202
+  chrome     none  ticket 5/5   postLen 19618-19682
+```
+
+That is `antibot-stations-pass-in-windows` at full amplitude, inside one
+afternoon, on an engine that did not change. Any x-hyatt arm read without a
+same-window anchor is worth nothing — including the "no ticket at any dose"
+columns on this engine earlier in this chapter, which is why the overload
+argument rests on the Chrome arm *losing* clearance rather than on this arm
+failing to gain it.
