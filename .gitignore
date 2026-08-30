@@ -10,6 +10,9 @@ zig-out
 # `zig build --prefix zig-out-rel` is where it puts it. Ignored for the same
 # reason zig-out is: `git add -A` otherwise stages 90MB of it.
 zig-out-rel
+# `zig build install --prefix zig-out-dbg` is where the Debug build the
+# instrumentation drivers need goes -- 258MB, same reason.
+zig-out-dbg
 lightpanda.id
 /src/html5ever/target/
 src/snapshot.bin

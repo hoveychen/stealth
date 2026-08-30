@@ -198,6 +198,29 @@ property_reads: (if (lp.IS_DEBUG) std.StringHashMapUnmanaged(PropertyReadStat) e
 // which answer the script branched on before it stopped asking.
 property_read_seq: (if (lp.IS_DEBUG) u32 else void) = if (lp.IS_DEBUG) 0 else {},
 
+// The last `RECENT_READS` members read, newest last, as a ring.
+//
+// `property_reads` answers "was this member reached, and when first" -- which
+// is the wrong shape for the question the encode log raises. A guard that hands
+// `TextEncoder` a four-character number has computed that number from something
+// it read moments earlier, and the member it read is almost always one it had
+// already read before, so its `first_seq` is far away and says nothing. This
+// keeps the run-up instead: `recordTextEncode` copies the tail of this ring
+// into the encode it is recording, so the dump can name what the page had just
+// asked for.
+//
+// Debug-only and, like `property_reads`, written on every accessor call, so it
+// is a ring rather than a list: fixed cost, no allocation, no growth.
+// A run of the same member collapses into one slot with a count. Without that
+// the ring is worthless here: the guard builds an SVG subtree before the encode
+// this was written for, and sixty `appendChild` calls in a row would fill every
+// slot with one name.
+// Allocated from the arena on the first read rather than inlined, because at
+// `RECENT_READS` slots the array is tens of kilobytes and `Context` is not a
+// struct to grow by that much even in Debug.
+recent_reads: (if (lp.IS_DEBUG) []RecentRead else void) = if (lp.IS_DEBUG) &.{} else {},
+recent_reads_next: (if (lp.IS_DEBUG) usize else void) = if (lp.IS_DEBUG) 0 else {},
+
 // Every string the page handed to `TextEncoder.encode`, in call order.
 //
 // A guard's telemetry leaves the page encrypted, so comparing what two engines
@@ -1602,12 +1625,23 @@ const PropertyReadStat = struct {
 // with is the `String.length` a JS-side hook on the other engine reports -- and
 // the two differ by one per non-ASCII character, which for a page encoding a
 // pixel buffer is thousands. `bytes` keeps the UTF-8 length that Zig sees.
+// One slot of the run-up ring: a member and how many times in a row it was
+// read. See `recent_reads`.
+const RecentRead = struct {
+    name: []const u8,
+    count: u32,
+};
+
 const EncodedText = struct {
     len: usize,
     bytes: usize,
     hash: u32,
     head: []const u8,
     tail: []const u8,
+    // What the page had just read when it encoded this, newest last, and how
+    // far the read counter had got. See `recent_reads`.
+    run_up: []const RecentRead,
+    at_seq: u32,
 };
 
 // djb2 over UTF-16 code units, which is what the JS twin computes:
@@ -1659,6 +1693,17 @@ fn utf16Djb2(text: []const u8) struct { hash: u32, units: usize } {
 const MAX_ENCODED_TEXTS = 256;
 const ENCODED_TEXT_EDGE = 32768;
 
+// How much run-up the ring holds, and how much of it a short encode keeps.
+//
+// The four values this was built for arrive back to back, so the interesting
+// window is the reads before the first of them -- and at 128 slots that window
+// was filled entirely by the widget drawing its own SVG checkbox, which is not
+// a probe at all. With runs collapsed a realm's whole life fits: the guard's
+// walk through the widget document collapses to well under this. Only short
+// strings keep a copy, so the cost is four snapshots, not one per encode.
+const RECENT_READS = 4096;
+const RUN_UP_MAX_LEN = 24;
+
 // Called from `TextEncoder.encode` before the string goes anywhere.
 pub fn recordTextEncode(self: *Context, text: []const u8) void {
     if (comptime lp.IS_DEBUG == false) return;
@@ -1676,7 +1721,40 @@ pub fn recordTextEncode(self: *Context, text: []const u8) void {
         .hash = digest.hash,
         .head = head,
         .tail = tail,
+        .run_up = if (text.len <= RUN_UP_MAX_LEN) self.recentReads(allocator) else &.{},
+        .at_seq = self.property_read_seq,
     }) catch return;
+}
+
+// The ring in order, oldest first, with the slots never written left out.
+fn recentReads(self: *const Context, allocator: Allocator) []const RecentRead {
+    if (self.recent_reads.len == 0) return &.{};
+    const out = allocator.alloc(RecentRead, self.recent_reads.len) catch return &.{};
+    var n: usize = 0;
+    for (0..self.recent_reads.len) |i| {
+        const slot = self.recent_reads[(self.recent_reads_next + i) % self.recent_reads.len];
+        if (slot.count == 0) continue;
+        out[n] = slot;
+        n += 1;
+    }
+    return out[0..n];
+}
+
+// `name` has to outlive the context's dump, so this takes the copy the map
+// owns rather than whatever slice the caller had.
+fn noteRecentRead(self: *Context, name: []const u8) void {
+    if (self.recent_reads.len == 0) {
+        self.recent_reads = self.arena.allocator().alloc(RecentRead, RECENT_READS) catch return;
+        @memset(self.recent_reads, .{ .name = "", .count = 0 });
+    }
+    const last = (self.recent_reads_next + self.recent_reads.len - 1) % self.recent_reads.len;
+    const slot = &self.recent_reads[last];
+    if (slot.count > 0 and std.mem.eql(u8, slot.name, name)) {
+        slot.count +|= 1;
+        return;
+    }
+    self.recent_reads[self.recent_reads_next] = .{ .name = name, .count = 1 };
+    self.recent_reads_next = (self.recent_reads_next + 1) % self.recent_reads.len;
 }
 
 // `Number.prototype.toString(36)`, which is how the JS twin prints the hash.
@@ -1715,7 +1793,9 @@ fn dumpTextEncodes(self: *Context) void {
             .hash = base36(e.hash, &hash_buf),
             .head = e.head,
             .tail = e.tail,
+            .at_seq = e.at_seq,
         });
+        dumpRunUp(self.id, realm, i, e.run_up);
         dumpChunks(self.id, realm, i, "head", e.head);
         if (e.tail.ptr != e.head.ptr) {
             dumpChunks(self.id, realm, i, "tail", e.tail);
@@ -1730,6 +1810,24 @@ fn dumpTextEncodes(self: *Context) void {
 // differ somewhere in between are exactly what this instrument exists to
 // compare, and a truncated field cannot show that.
 const ENCODED_CHUNK = 900;
+
+// One line per member, oldest first, rather than one joined field: the joined
+// form is what the writer truncates, and the tail of the run-up -- the reads
+// closest to the encode -- is the half that matters.
+fn dumpRunUp(context_id: usize, realm: []const u8, seq: usize, run_up: []const RecentRead) void {
+    for (run_up, 0..) |slot, i| {
+        log.debug(.text_encode, "text encode run-up", .{
+            .context = context_id,
+            .realm = realm,
+            .seq = seq,
+            // Counts back from the encode, so `back=1` is the last read before
+            // it however short the run-up turned out to be.
+            .back = run_up.len - i,
+            .property = slot.name,
+            .repeats = slot.count,
+        });
+    }
+}
 
 fn dumpChunks(context_id: usize, realm: []const u8, seq: usize, comptime side: []const u8, text: []const u8) void {
     var start: usize = 0;
@@ -1755,6 +1853,7 @@ fn dumpChunks(context_id: usize, realm: []const u8, seq: usize, comptime side: [
 // increment.
 pub fn recordPropertyRead(self: *Context, comptime key: []const u8) void {
     if (comptime lp.IS_DEBUG == false) return;
+    self.noteRecentRead(key);
     const gop = self.property_reads.getOrPut(self.arena.allocator(), key) catch return;
     if (gop.found_existing) {
         gop.value_ptr.count += 1;
@@ -1786,6 +1885,7 @@ pub fn recordPropertyReadDynamic(self: *Context, key: []const u8, comptime bare:
     const gop = self.property_reads.getOrPut(allocator, key) catch return;
     if (gop.found_existing) {
         gop.value_ptr.count += 1;
+        self.noteRecentRead(gop.key_ptr.*);
         return;
     }
     gop.key_ptr.* = self.arena.dupe(u8, key) catch {
@@ -1797,6 +1897,7 @@ pub fn recordPropertyReadDynamic(self: *Context, key: []const u8, comptime bare:
     };
     gop.value_ptr.* = .{ .count = 1, .first_seq = self.property_read_seq };
     self.property_read_seq += 1;
+    self.noteRecentRead(gop.key_ptr.*);
 }
 
 // Emitted in first-read order, not hash order: the sequence is the point.
