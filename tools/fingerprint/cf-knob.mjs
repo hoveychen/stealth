@@ -85,6 +85,9 @@ const knobSrc = body ? (wire ? 'globalThis.__CFK_WIRE = true;\n' : '') + body : 
 const runs = Number(arg('--runs', 2));
 const basePort = Number(arg('--port', 9470));
 const target = arg('--url', 'https://www.scrapingcourse.com/antibot-challenge');
+// The station's own origin, so `served` is read off the page's documents and
+// not off the widget's.
+const origin = new URL(target).origin;
 const settle = Number(arg('--settle', 22000));
 const outPath = arg('--out', null);
 const headless = process.argv.includes('--headless');
@@ -161,7 +164,7 @@ async function once(port) {
     // The widget is the document that builds the ~90KB payload the two arms
     // disagree on, so which targets were scripted is the difference between a
     // family that was tested and a family that only looks tested.
-    const out = { documents: [], challenge: [], beacons: [], targets: 0, scripted: [] };
+    const out = { documents: [], pageDocs: [], challenge: [], beacons: [], targets: 0, scripted: [] };
     try {
         const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
         const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
@@ -281,7 +284,16 @@ async function once(port) {
             seenRequests.add(m.params.requestId);
             const r = m.params.response;
             const url = String(r.url);
-            if (m.params.type === 'Document') out.documents.push(r.status);
+            if (m.params.type === 'Document') {
+                out.documents.push(r.status);
+                // The same column cf-verdict grew, for the same reason: a
+                // ticket is not a pass. `cf-mitigated: challenge` is what a
+                // managed challenge carries and the served page does not, so a
+                // knob that "works" has to be read here and not off the ticket.
+                if (url.startsWith(origin)) {
+                    out.pageDocs.push({ status: r.status, mitigated: (r.headers || {})['cf-mitigated'] || null });
+                }
+            }
             if (!isChallenge(url)) return;
             const h = r.headers || {};
             const sent = posted.get(m.params.requestId) || {};
@@ -411,8 +423,11 @@ for (let i = 0; i < runs; i++) {
     const ticket = fo.find((c) => c.chlOut);
     const rounds = fo.map((c, n) => `r${n + 1}:${c.postUnknown ? '?' : c.postLen}B` +
         (c.chlOut ? '=TICKET' : c.chlGen ? '=gen' : '')).join(' ');
+    const lastPage = out.pageDocs.length ? out.pageDocs[out.pageDocs.length - 1] : null;
+    const served = !!lastPage && lastPage.status === 200 && !lastPage.mitigated;
     console.log(`${engine}${headless ? ' (headless)' : ''} knob=${knobName} run ${i + 1}: ` +
         `doc=${out.documents.join('->') || '(none)'} ` +
+        `served=${served} ` +
         `ticket=${ticket ? String(ticket.chlOut).slice(0, 10) : '(absent)'} ` +
         `targets=${out.targets} beacons=${out.beacons.length} rounds=[${rounds}]`);
     console.log(`      scripted: ${out.scripted.join(' | ') || '(none)'}`);
