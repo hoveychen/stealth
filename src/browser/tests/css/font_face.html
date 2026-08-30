@@ -180,3 +180,54 @@
   }
 }
 </script>
+
+<script id="local_matches_a_face_name_not_a_family_name" type=module>
+  // What `local()` actually looks up. Cloudflare's widget builds its font list
+  // out of `FontFace.load` -- 55 calls in one challenge, measured off the
+  // engine's own prop_read log -- so this is the lookup that decides which
+  // families the guard is told about.
+  //
+  // It is NOT a family lookup. Measured on a headed Chrome 151 with
+  // scratch/b94/expr-localfont.js: `local("Skia")` FAILS while
+  // `local("Skia Regular")` and `local("Skia-Regular")` succeed, and the same
+  // holds for `PingFang HK`, `Times` and `Menlo`. What resolves is a face's
+  // full name or its PostScript name. Families whose regular face happens to
+  // carry the family's own name -- Arial, Geneva, Luminari, InaiMathi -- match
+  // either way, which is why a family-keyed lookup looked right for so long.
+  //
+  // Matching is case-insensitive; the whitespace inside the quotes is not
+  // normalised (` Arial` and `Arial  Bold` both fail).
+  const state = await testing.async();
+
+  const resolves = async (n) => {
+    const f = new FontFace('probe-local', 'local("' + n + '")');
+    try { await f.load(); return true; } catch (e) { return false; }
+  };
+
+  // Left column is Chrome 151's answer for the same string.
+  const CASES = [
+    [false, 'Skia'], [true, 'Skia Regular'], [true, 'Skia-Regular'],
+    [true, 'InaiMathi'], [true, 'InaiMathi Bold'], [true, 'InaiMathi-Bold'],
+    [false, 'PingFang HK'], [true, 'PingFang HK Light'], [true, 'PingFangHK-Light'],
+    [true, 'Apple Symbols'], [true, 'AppleSymbols'],
+    [true, 'Galvji'], [true, 'Galvji-Bold'],
+    [true, 'Geneva'], [true, 'Luminari'],
+    [true, 'Helvetica'], [true, 'Helvetica Bold'], [true, 'Helvetica-Bold'],
+    [false, 'Times'], [true, 'Times Roman'], [true, 'Times-Roman'], [true, 'Times New Roman'],
+    [true, 'Arial'], [true, 'Arial Bold'],
+    [false, 'Menlo'], [true, 'Menlo Regular'], [true, 'Menlo-Regular'],
+    [true, 'arial'], [true, 'MENLO-REGULAR'], [true, 'times roman'],
+    [false, ' Arial'], [false, 'Arial '], [false, 'Arial  Bold'],
+    [false, 'NoSuchFamilyQZX'],
+  ];
+
+  const wrong = [];
+  for (const [want, name] of CASES) {
+    if (await resolves(name) !== want) wrong.push(name + '=' + !want);
+  }
+  state.resolve(wrong.join(' '));
+
+  await state.done((got) => {
+    testing.expectEqual('', got);
+  });
+</script>
