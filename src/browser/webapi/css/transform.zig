@@ -488,8 +488,60 @@ fn eq(a: []const u8, comptime b: []const u8) bool {
 /// a percentage in a slot whose grammar has none answer null and take the whole
 /// declaration with them, which is the same refusal `resolvesHere` makes for
 /// every other property.
+/// The digits a DIMENSION keeps: at most seven after the decimal point, as
+/// WRITTEN. A slice of the input, so nothing is allocated and nothing is
+/// re-printed.
+///
+/// This is a rule about the text and not about the value, which is what the
+/// measurements say and what a numeric truncation could not reproduce:
+/// `rotate(1e-9rad)` keeps its `1e-09` while `rotate(0.000000001rad)` -- the
+/// same double -- comes out `0`. So an exponent form is exempt, because it has
+/// no decimal digits to cut.
+///
+/// Measured on Chrome 151, scratch/b75/expr-number-retention.js,
+/// expr-truncation-boundary.js and expr-token-kinds.js, read through cos and
+/// through a translation because those turn a dropped digit into a printable
+/// difference:
+///
+///   * the cut is at the seventh decimal -- pi/2 in radians written to 6dp gives
+///     `3.26795e-07`, to 7dp `2.67949e-08`, and to 8, 9, 12 and 17dp the same
+///     answer as 7dp; `0.00000012px` and `0.0000001234px` are both `1e-07` and
+///     `0.000000001px` is `0`;
+///   * it truncates, it does not round -- `89.99999985deg` and `89.99999989deg`
+///     both give `3.49066e-09`, which is `89.9999998`; rounding would have given
+///     the `1.74533e-09` that `89.99999995deg` gives;
+///   * decimal places and not significant digits -- `36089.9999999deg` keeps its
+///     seventh decimal, which is twelve significant digits;
+///   * a DIMENSION and nothing else. A bare `<number>` keeps everything
+///     (`scale(0.000000001)` is `1e-09` where `translateX(0.000000001px)` is
+///     `0`), and so does a `<percentage>` (`translateX(0.000123456789%)` on a
+///     100px box is `0.000123457`, not the `0.0001234` the same digits in `px`
+///     give).
+///
+/// Applied before any unit conversion, because the cut is in the written unit:
+/// `89.9999999deg` keeps its seventh DEGREE decimal, which is nothing like a
+/// seventh decimal of the radians it becomes.
+///
+/// It is also what keeps the exact-right-angle path honest, in both directions.
+/// `rotate(90deg)` keeps its 90 and `quarterTurns` still sees a right angle;
+/// `rotate(1.5707963267948966rad)` becomes `1.5707963`, which is NOT one, and
+/// Chrome answers `2.67949e-08` for it. Write the same angle with an exponent
+/// and nothing is cut -- `rotate(1.5707963267948966e0rad)` is an exact
+/// `matrix(0, 1, -1, 0, 0, 0)` in Chrome, and this keeps it one here.
+fn dimensionDigits(text: []const u8) []const u8 {
+    const dot = std.mem.indexOfScalar(u8, text, '.') orelse return text;
+    for (text[dot + 1 ..]) |c| {
+        if (c == 'e' or c == 'E') return text;
+    }
+    const decimals = text.len - dot - 1;
+    if (decimals <= 7) return text;
+    return text[0 .. dot + 1 + 7];
+}
+
 fn parseScalar(arg: []const u8, percent: Percent, basis: Basis) ?f64 {
     if (arg.len > 1 and arg[arg.len - 1] == '%') {
+        // A percentage is not a dimension and keeps every digit -- measured, see
+        // dimensionDigits.
         const number = std.fmt.parseFloat(f64, arg[0 .. arg.len - 1]) catch return null;
         return switch (percent) {
             .refused => null,
@@ -508,13 +560,15 @@ fn parseScalar(arg: []const u8, percent: Percent, basis: Basis) ?f64 {
     };
     for (angles) |suffix| {
         if (arg.len > suffix[0].len and std.ascii.endsWithIgnoreCase(arg, suffix[0])) {
-            const number = std.fmt.parseFloat(f64, arg[0 .. arg.len - suffix[0].len]) catch return null;
+            const digits = dimensionDigits(arg[0 .. arg.len - suffix[0].len]);
+            const number = std.fmt.parseFloat(f64, digits) catch return null;
             return number * suffix[1];
         }
     }
     if (arg.len > 2 and std.ascii.endsWithIgnoreCase(arg, "px")) {
-        return std.fmt.parseFloat(f64, arg[0 .. arg.len - 2]) catch null;
+        return std.fmt.parseFloat(f64, dimensionDigits(arg[0 .. arg.len - 2])) catch null;
     }
+    // A bare `<number>`, which keeps every digit the author wrote.
     return std.fmt.parseFloat(f64, arg) catch null;
 }
 

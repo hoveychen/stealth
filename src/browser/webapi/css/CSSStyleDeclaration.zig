@@ -926,7 +926,16 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
     // the initial `none` is reported instead of a spelling Chrome never prints.
     if (std.mem.eql(u8, property_name, "transform")) {
         const basis = transformBasis(element, frame) orelse return .unreportable;
-        const folded = transform.computedValue(frame.call_arena, substituted, basis) catch null;
+        // The author's text, not the print. `value` has already been through
+        // writeCssNumber, which keeps six significant digits -- so computing
+        // from it makes `rotate(1.5707963267948966rad)` a rotation of `1.5708`
+        // radians and answers `-3.67321e-06` where Chrome answers `2.67949e-08`.
+        // See StyleManager.Declaration.raw and transform.authorDigits.
+        const source = if (std.mem.eql(u8, substituted, declaration.value))
+            declaration.raw orelse substituted
+        else
+            substituted;
+        const folded = transform.computedValue(frame.call_arena, source, basis) catch null;
         return if (folded) |matrix| .{ .value = matrix } else .unreportable;
     }
 
@@ -1019,6 +1028,10 @@ fn declaredDeclaration(style_manager: *StyleManager, element: *Element, property
         .value = substituted,
         .important = declaration.important,
         .specified = if (std.mem.eql(u8, substituted, declaration.value)) declaration.specified else null,
+        // Both extra fields describe the text `value` was printed FROM, so a
+        // substitution that changed the text invalidates them together: what a
+        // var() resolved to is not what the author wrote around it.
+        .raw = if (std.mem.eql(u8, substituted, declaration.value)) declaration.raw else null,
     };
 }
 
@@ -4082,12 +4095,12 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
     if (shorthand.systemFontExpansion(normalized, value)) |expansion| {
         var changed = false;
         for (expansion.names, expansion.values) |name, longhand| {
-            changed = try self.storeLonghand(name, longhand, null, important, frame) or changed;
+            changed = try self.storeLonghand(name, longhand, null, null, important, frame) or changed;
         }
         // Chrome rebuilds `font` from the longhands on every read; this engine
         // answers a kept-whole shorthand from storage, so the text it will
         // answer goes in beside them.
-        return try self.storeLonghand(normalized, shorthand.system_font_shorthand, null, important, frame) or changed;
+        return try self.storeLonghand(normalized, shorthand.system_font_shorthand, null, null, important, frame) or changed;
     }
 
     // The rest of the `font` grammar, which the table still calls unmodelled --
@@ -4102,7 +4115,7 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
         .wide => |wide| {
             var changed = false;
             for (wide.expansion.names, wide.expansion.values) |name, longhand| {
-                changed = try self.storeLonghand(name, longhand, null, important, frame) or changed;
+                changed = try self.storeLonghand(name, longhand, null, null, important, frame) or changed;
             }
             return changed;
         },
@@ -4110,7 +4123,7 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
             var changed = false;
             for (expansion.names, expansion.values) |name, longhand| {
                 const canonical = try normalizePropertyValue(frame.local_arena, name, longhand);
-                changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), important, frame) or changed;
+                changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), authorText(frame.local_arena, name, longhand, canonical), important, frame) or changed;
             }
             // No `font` entry beside them, unlike the system-keyword branch
             // above: `font` joins now (shorthand.isFont), so every read rebuilds
@@ -4130,7 +4143,7 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
         var changed = false;
         for (expansion.names, expansion.values) |name, longhand| {
             const canonical = try normalizePropertyValue(frame.local_arena, name, longhand);
-            changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), important, frame) or changed;
+            changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), authorText(frame.local_arena, name, longhand, canonical), important, frame) or changed;
         }
         return changed;
     }
@@ -4153,7 +4166,7 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
             var changed = false;
             for (expansion.names, expansion.values) |name, longhand| {
                 const canonical = try normalizePropertyValue(frame.local_arena, name, longhand);
-                changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), important, frame) or changed;
+                changed = try self.storeLonghand(name, canonical, specifiedNumber(longhand), authorText(frame.local_arena, name, longhand, canonical), important, frame) or changed;
             }
             return changed;
         }
@@ -4166,10 +4179,17 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
 
     // Normalize the value for canonical serialization
     const normalized_value = try normalizePropertyValue(frame.local_arena, normalized, value);
-    return self.storeLonghand(normalized, normalized_value, specifiedNumber(value), important, frame);
+    return self.storeLonghand(
+        normalized,
+        normalized_value,
+        specifiedNumber(value),
+        authorText(frame.local_arena, normalized, value, normalized_value),
+        important,
+        frame,
+    );
 }
 
-fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_value: []const u8, specified: ?f64, important: bool, frame: *Frame) !bool {
+fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_value: []const u8, specified: ?f64, raw: ?[]const u8, important: bool, frame: *Frame) !bool {
 
     // Find existing property
     if (self.findProperty(.wrap(normalized))) |existing| {
@@ -4191,6 +4211,7 @@ fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_
         }
         existing._value = try String.init(frame.arena, normalized_value, .{});
         existing._specified = specified;
+        existing._raw = if (raw) |r| try String.init(frame.arena, r, .{}) else null;
         existing._important = important;
         return true;
     }
@@ -4201,6 +4222,7 @@ fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_
         ._name = try String.init(frame.arena, normalized, .{}),
         ._value = try String.init(frame.arena, normalized_value, .{}),
         ._specified = specified,
+        ._raw = if (raw) |r| try String.init(frame.arena, r, .{}) else null,
         ._important = important,
     });
     self._properties.append(&prop._node);
@@ -5288,6 +5310,35 @@ pub fn specifiedNumber(raw_value: []const u8) ?f64 {
     }
     const parsed = units.parse(trimmed) catch return null;
     return @as(f32, @floatCast(parsed.value));
+}
+
+/// Whether a property's own consumers need the author's text and not its
+/// canonical print.
+///
+/// A list and not a blanket yes, because keeping the text means duplicating it
+/// into an arena for every declaration on every page, and only a property that
+/// COMPUTES from its own numbers can tell the difference. Chrome truncates a
+/// number to seven decimals and prints six significant digits, so the two texts
+/// start disagreeing at `rotate(1.5707963rad)` -- transform.authorDigits carries
+/// the measurements. The list grows when a second consumer turns up.
+fn keepsAuthorText(name: []const u8) bool {
+    return std.mem.eql(u8, name, "transform");
+}
+
+/// The author's text to keep beside `canonical`, or null when there is nothing
+/// worth keeping -- a property with no consumer for it, or one whose canonical
+/// print is already what the author wrote.
+///
+/// The text counterpart of `specifiedNumber`, and there for the same reason: one
+/// f64 cannot carry `rotate(45deg) translateX(3px)`, and the print cannot be
+/// parsed back into what the author wrote.
+pub fn authorText(arena: Allocator, name: []const u8, raw: []const u8, canonical: []const u8) ?[]const u8 {
+    if (!keepsAuthorText(name)) return null;
+    const trimmed = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (std.mem.eql(u8, trimmed, canonical)) return null;
+    // Duped because `raw` points into whatever buffer the declaration was parsed
+    // out of and this outlives it; `canonical` is already arena-owned.
+    return arena.dupe(u8, trimmed) catch null;
 }
 
 fn writeCssNumber(writer: *std.Io.Writer, text: []const u8) !void {
@@ -6616,6 +6667,10 @@ pub const Property = struct {
     /// token. `_value` is the six-significant-figure print of it and cannot be
     /// parsed back into it -- see specifiedNumber.
     _specified: ?f64 = null,
+    /// The TEXT the author wrote, for a property whose value is a function and
+    /// whose numbers therefore do not fit in `_specified`. See
+    /// StyleManager.Declaration.raw.
+    _raw: ?String = null,
     _node: std.DoublyLinkedList.Node,
 
     pub fn fromNodeLink(n: *std.DoublyLinkedList.Node) *Property {

@@ -24459,3 +24459,113 @@ per-pass cost cannot be extrapolated from an engine that re-walks a subtree per
 read, so `layout-pass-cost-prototype` writes a pass that nothing reads from and
 times it first. `standards-root-box-height` is the precedent for why that order
 matters -- 18 of 19 rows correct and dead on cost.
+
+## The pass is right and 51x too expensive (B75, 2026-08-31)
+
+`layout-pass-cost-prototype` wrote the pass, timed it, and it is dead on cost —
+the second entry beside `standards-root-box-height` in the column of things this
+engine can compute correctly and cannot afford. Everything below is from
+`zig-out-rel-b75` in `.worktrees/layout-pass-cost-prototype` (ReleaseFast,
+pinned) and the whole change is kept as
+`probes/b75-layout-pass-prototype.patch` plus the branch
+`prd/layout-pass-cost-prototype`. It was **not merged**.
+
+### The pass was not a second layout algorithm
+
+`contentHeight` already walks the children in order, pays out the collapsed
+margin group in front of each one, and advances a running `total` by the child's
+whole box. **That `total` IS the child's offset inside the content box being
+filled** — the number `calculateDocumentPosition` has never had. So the pass is a
+sink threaded through the walk that exists: hand it the absolute origin of the box
+being filled and it can name where every child ends up. An optional parameter and
+not a field on the Frame, because the height readers (`clientHeight`,
+`scrollHeight`) call the same walk starting at an element whose own origin is
+unknown.
+
+Two things the height half gets away with and a position cannot, both isolated on
+`scratch/b75/page/index.html` (15 static shapes, 45 boxes, Chrome at device
+scale 2, compared by `scratch/b75/compare.mjs`):
+
+* **`<body>`'s UA margin is invisible to the stacking walk.** `verticalMargins`
+  asks `marginPx`; only `containerMarginPx` carries the 8px fallback, and it is
+  used in exactly one place (the root container's own box). Every box in the table
+  was 8px short in x.
+* **the root's margin was escaping.** `<html>` has no border or padding, so
+  `marginEscapes` let `<body>`'s top margin leave through it instead of landing
+  inside — every y 8 short too. The root element's box establishes the initial
+  block formatting context and there is nothing outside it for a margin to move:
+  Chrome reports `<html>` at 0,0 and `<body>` at 8,8. Neither is observable today,
+  because the root's `clientHeight` and `scrollHeight` both short-circuit to the
+  viewport before that total is used.
+
+The two are separable in the reading rather than stacked guesses: x depends only
+on the first and y on both, and x moved on its own.
+
+**41 of 45 positions came out byte-identical to Chrome.** The four that differ are
+four things the walk does not do rather than four it does wrong, each an
+independent addition on top of a static position: a relative offset (off by
+exactly the declared `7,9`), auto margins (off by exactly `(400-200)/2`), a float,
+and an absolute — and the engine already places the last of those correctly
+through its own declaration, which is why the walk skips it. Stacking, margin
+collapse, container padding, container border, both together, `margin-left`,
+nesting, a declared-height container, a padded child and a line of text before a
+block are all exact.
+
+### The cost, and where it is
+
+Each row is the warmest of three back-to-back passes over the settled document.
+`measured` counts entries into `dimensionsIn` — one per box for a walk that visits
+each node once, so the ratio is re-measurement. `sinkless` is the same walk with
+the position sink removed.
+
+| page | boxes placed | `measured` | per box | one pass | sinkless | us per measurement |
+|---|---|---|---|---|---|---|
+| synthetic, 800 flat divs | 802 | 804 | **1.0** | 2.3 ms | 2.0 ms | **2.9** |
+| sony | 386 | 2 962 | 7.7 | 291 ms | 214 ms | 98 |
+| macys | 1 574 | 8 851 | 5.6 | 836 ms | 766 ms | 94 |
+| homedepot | 1 125 | 26 739 | **23.8** | **5 265 ms** | 4 880 ms | **197** |
+
+Against the pass counts a cache would need (59 / 53 / 15, measured last chapter)
+and the four-to-six seconds `getBoundingClientRect` costs **today**:
+
+| station | 1 pass | x passes | today's rect cost | verdict |
+|---|---|---|---|---|
+| homedepot | 5 265 ms | **311 s** | 6 057 ms | **51x worse** |
+| macys | 836 ms | **44.3 s** | 4 131 ms | **11x worse** |
+| sony | 291 ms | 4.4 s | 4 276 ms | break-even |
+
+The CDP timeout is 30 seconds and homedepot's whole route already takes about 22.
+A cached single pass is not a net win that also buys positions — on the two big
+stations it is a net **loss** of one and two orders of magnitude, and on the third
+it is a wash. And these are **lower** bounds: the probe blocks the page for six
+whole-document walks per tick, so the later ticks measure a starved DOM —
+homedepot placed 1 125 boxes where an undisturbed settle has 3 154 elements.
+
+### Three things the readings rule out, and the one they leave
+
+* **not the positions.** The sinkless column is 92-93% of the total. The position
+  half is 7% — 385ms of homedepot's 5 265. What is unaffordable is *one pass over
+  the document*, which is a fact about the height machinery and predates this
+  work.
+* **not the algorithm's shape.** On plain markup the pass is flatly linear and
+  *inside* the 2-5us per node the plan set as the target: 202 boxes 678us, 402
+  1 329, 802 2 646, 1 602 4 662, 3 202 9 196 — 3.4, 3.3, 3.3, 2.9, 2.9 us each,
+  five sizes, one shape (`scratch/b75/make-scale-pages.mjs`).
+* **not the cascade, and not depth.** 802 boxes under 0, 500, 2 000 and 8 000
+  stylesheet rules cost 2 506, 3 198, 2 761 and 2 790us — no trend. And a
+  400-deep nest never places more than 65 boxes, because
+  `MAX_CONTAINING_BLOCK_DEPTH` is 64, so depth cannot be the term either.
+
+What is left is the per-box cost on real markup: **197us to measure one box on
+homedepot against 2.9us on a bare div**, times 23.8 measurements per box. That is
+68x on the measurement and 24x on the count, and both are properties of
+`dimensionsIn` meeting a real page — percentages, inline runs, replaced elements,
+declared sizes in units that need resolving — not of anything the pass added.
+
+So the honest next step is not another pass and not a memo (`b73`'s memo and
+`b72`'s two attempts are already in `probes/`). It is making a single box
+measurement cheap on real markup, which is the same lever that would pay off the
+four-to-six seconds `getBoundingClientRect` costs today whether positions are ever
+computed or not. Until that moves, in-flow positions stay at `5k, 5k` — and the
+`in-flow-block-position` reading stands: **26 of 27 offsets wrong, every element's
+x equal to its y, and one expression sees it.**
