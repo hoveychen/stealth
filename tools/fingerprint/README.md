@@ -23941,3 +23941,8 @@ right.** `.md\:flex`, `.w-1\/2`, `.top-\[13px\]`, `.\!mt-0`, `.bg-black\/50`,
 a `\30 ` unicode escape and an escaped space — twelve shapes, both arms
 identical. An earlier version of the probe reported an escape difference and
 that was the probe's own double-escaping, not the engine's.
+
+The sweep read 22/29, back to the session's baseline: the two stations that moved
+are `dd-datadome` and `dd-hermes`, both swinging back to `pass` from the
+`datadome-challenge` they were giving every binary an hour earlier. No
+Cloudflare station moved and x-hyatt is still refused. 1583/1583.
