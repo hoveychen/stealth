@@ -16,11 +16,13 @@ The pair reads its OWN edge: `border-top:6px` alone answers `6,0` and
 `border-left:9px` alone `0,9`, so neither is the other's fallback and neither is
 half of `border_x`.
 
-Two shapes measured and deliberately NOT asserted here, because a second defect
-decides them: `border-width:3.5px` and `3.6px` answer 4 in Chrome and 3 here,
-since Chrome's USED border width snaps to the device pixel grid (3.6px computes
-to 3.5px there and 3px here). That is `viewport-client-box-rules` P6 and it
-moves offsetWidth too, so fixing it here would be fixing it in the wrong place.
+Two shapes used to be measured and deliberately NOT asserted here, because a
+second defect decided them: `border-width:3.5px` and `3.6px` answered 4 in
+Chrome and 3 here, since Chrome's USED border width snaps to the device pixel
+grid. That defect is fixed -- the used width is floored onto the device pixel in
+`usedBorderWidth`, see css/computed_border_width.html -- so both are asserted
+below, and they are the pair that says this accessor rounds a fractional used
+width rather than reading a whole one.
 -->
 
 <script id=client_top_left_are_the_border>
@@ -56,6 +58,11 @@ moves offsetWidth too, so fixing it here would be fixing it in the wrong place.
     // still answers 1 -- its used width is not zero.
     ['3,3', 'border:3.4px solid'],
     ['1,1', 'border:0.4px solid'],
+    // The half-pixel used widths, which is where this accessor's rounding
+    // shows: 3.5px and 3.6px both use 3.5px, and 3.5 rounds up.
+    ['4,4', 'border:3.5px solid'],
+    ['4,4', 'border:3.6px solid'],
+    ['2,2', 'border:1.5px solid'],
     // A box with no border box at all has no border to report.
     ['0,0', 'border:4px solid;display:none'],
     ['0,0', 'border:4px solid;display:inline'],

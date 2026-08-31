@@ -2659,6 +2659,30 @@ fn deviceFloor(px: f64) f64 {
     return @floor(px * DEVICE_PIXEL_RATIO) / DEVICE_PIXEL_RATIO;
 }
 
+/// A used border, outline or column-rule width, which lands on the DEVICE pixel
+/// too -- floored, and with a floor of one device pixel so a border a page
+/// asked for never disappears.
+///
+/// Measured over thirty widths at each of `--force-device-scale-factor=1` and
+/// `=2`, in runs that reported `devicePixelRatio` in the same object as the
+/// widths (scratch/b72/expr-border-grid.js, readings in
+/// scratch/b72/ch-dsf{1,2}.json). The two columns are `max(floor(w), 1)` and
+/// `max(floor(2w)/2, 0.5)`, and fifteen of the thirty separate them: `4.6px` is
+/// `4px` at one factor and `4.5px` at the other, `1.5px` is `1px` and `1.5px`.
+///
+/// Say the factor out loud when re-measuring this. The engine used to answer the
+/// dsf=1 column while announcing `devicePixelRatio: 2`, and the test that pinned
+/// it there cited a Chrome run whose factor was never written down -- a reading
+/// of a device grid taken without saying which device is a reading of nothing.
+///
+/// This is not `layoutUnit`'s 1/64th grid: a used border width is quantised
+/// before the layout sees it, which is why `3.5px` and `3.6px` give the same box
+/// rather than boxes 0.1px apart.
+pub fn usedWidthUnit(px: f64) f64 {
+    if (px <= 0) return 0;
+    return @max(deviceFloor(px), 1 / DEVICE_PIXEL_RATIO);
+}
+
 /// How many measurements may be in flight at once, counting every route in --
 /// including the ones that do not carry `depth`. Well past any real page's
 /// nesting, and small enough that a cycle unwinds long before the stack ends.

@@ -2205,9 +2205,19 @@ fn usedBorderWidth(
     // else is a value Chrome's parser would have dropped.
     if (!std.mem.endsWith(u8, declared, "px")) return "3px";
     const number = std.fmt.parseFloat(f64, declared[0 .. declared.len - 2]) catch return "3px";
+    return usedWidthText(number, frame);
+}
+
+/// One used border/outline/rule width as a computed style prints it: floored
+/// onto the device pixel, never down to nothing, and written to six significant
+/// figures like every other computed length. See Element.usedWidthUnit for the
+/// grid and the two scale factors it was measured at.
+fn usedWidthText(number: f64, frame: *Frame) []const u8 {
     if (number <= 0) return "0px";
-    const whole: i64 = @intFromFloat(@floor(number));
-    return std.fmt.allocPrint(frame.local_arena, "{d}px", .{@max(whole, 1)}) catch "3px";
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    units.writeNumber(&buf.writer, Element.usedWidthUnit(number)) catch return "3px";
+    buf.writer.writeAll("px") catch return "3px";
+    return buf.written();
 }
 
 /// The border family writes all three components off a computed view, where the
