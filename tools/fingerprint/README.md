@@ -23505,3 +23505,154 @@ two binaries at `px-wayfair`, three rounds each, both arms answered
 `px-challenge` every time; `dd-datadome` is the station the previous chapter
 already showed passing one round in four with the guard's window half shut.
 Neither difference is the binary. Both closed doors are where they were.
+
+## A border is measured in device pixels, and we were counting whole ones (B72, 2026-08-30)
+
+`getComputedStyle(el).borderTopWidth` is a **used** value: not the length the
+page wrote, but the width the border is actually drawn at. This engine floored
+it to a whole CSS pixel with a floor of one, which is Chrome's rule one grid too
+coarse. Chrome floors onto the **device** pixel, with a floor of one device
+pixel — half a CSS pixel at the ratio 2 this engine's persona claims.
+
+| declared | Chrome dsf=1 | Chrome dsf=2 | before | after |
+|---|---|---|---|---|
+| `0.4px` | `1px` | `0.5px` | `1px` | `0.5px` |
+| `0.9px` | `1px` | `0.5px` | `1px` | `0.5px` |
+| `1.4px` | `1px` | `1px` | `1px` | `1px` |
+| `1.5px` | `1px` | `1.5px` | `1px` | `1.5px` |
+| `3.6px` | `3px` | `3.5px` | `3px` | `3.5px` |
+| `4.6px` | `4px` | `4.5px` | `4px` | `4.5px` |
+| `10.9px` | `10px` | `10.5px` | `10px` | `10.5px` |
+
+The width is not only what the computed style prints. `clientTop` rounds it,
+`offsetWidth` and `getBoundingClientRect().width` carry it twice, and all four
+move together: `border-width:3.6px` on a 100px box was `3px 3 106 106` here and
+is `3.5px 4 107 107` in Chrome. Fifteen of thirty widths differed across the
+four readings; all thirty agree now, 32 of 32 cases byte-identical
+(`scratch/b72/expr-border-grid.js`).
+
+### The old expectations were a reading taken at the wrong scale factor
+
+`css/computed_border_width.html` asserted `4.6px` → `4px` and cited a Chrome 151
+run. That citation was true and the expectation was still wrong: **the run's
+scale factor was never written down, and it was dsf=1.** Every one of the old
+cells matches the dsf=1 column exactly, which is what says the earlier
+measurement was taken there rather than that Chrome changed its mind.
+
+So the engine was announcing `devicePixelRatio: 2` while laying out borders on
+the whole CSS pixel — two readings a page gets in one expression. Both tests now
+assert `devicePixelRatio` beside the widths: a reading of a device grid taken
+without saying which device is a reading of nothing.
+
+`client_top_left.html` had two cases measured and deliberately left unasserted
+for exactly this defect (`3.5px` and `3.6px`, Chrome 4 and this engine 3). They
+are asserted now, and they are the pair that says `clientTop` rounds a
+fractional used width rather than reading a whole one.
+
+### The neighbours were not on the wrong grid — they were on no grid
+
+Pointing the same probe at the rest of the family found something worse.
+`outline-width`, `column-rule-width`, `row-rule-width` and
+`-webkit-column-rule-width` take a length through a path of their own that
+resolved `thin`/`medium`/`thick` and then handed the author's text straight
+back: `outline-width:4.6px` computed to `4.6px`, `0.1px` to `0.1px`. Not the
+wrong grid — no truncation at all, and a number Chrome cannot print at any scale
+factor. Chrome floors all four exactly as it does a border. 24 of 32 readings
+differed; all 32 agree now.
+
+`-webkit-text-stroke-width` is measured **not** to snap — `4.6px` stays `4.6px`
+at dpr 2 — which fits the scale of its own its keywords already showed
+(`0.666667px` / `2px` / `3.33333px`). So the grid is a field on `RuleWidthScale`
+and not a property of the family, and the test asserts the stroke's eight
+non-snapping readings beside the other four names' 32, so a later change that
+snaps everything has something to fail against.
+
+Readings: `scratch/b72/expr-rule-grid.js` and `expr-rule-grid2.js` against
+Chrome 151 at `--force-device-scale-factor=2`, `devicePixelRatio` reported in
+the same object as the widths (`scratch/b72/ch-rule-dsf2.json`,
+`ch-rule2-dsf2.json`).
+
+## The root's box is inside the window, not around it (B72, 2026-08-30)
+
+The root element got the viewport as its **content** box. Everything it wore
+then hung outside the window it is laid out in: a `<html style="border:7px
+solid">` in a 400x200 frame answered `offsetWidth` 414 — a box wider than the
+frame holding it, which no browser can produce.
+
+The `<body>` inherited the mistake twice. It was sized off the *viewport* rather
+than off the root's content box, so it stayed 384 wide whatever the root wore;
+and it was sized through a **constant 16** rather than its own margin, so
+`body{margin:20px}` also stayed 384 where Chrome says 360.
+
+Three rules, measured over eleven served documents at dpr 2 (`scratch/b72/qc/`,
+read with `scratch/b72/expr-root-box.js`, Chrome readings in
+`ch-rootbox2.json`):
+
+* **the root's content box is the viewport less its own margin, border and
+  padding.** A declared `width` still names the content box as anywhere else —
+  `width:300px;border:7px` is `offsetWidth` 314, and it still fits inside 400.
+* **the body's is the ROOT's content box** less the body's own margin, border
+  and padding. `body{margin:0}` is 400 wide, `margin:20px` is 360, and a body
+  with `margin:8px;border:4px;padding:6px` is 364 content / 376 client / 384
+  offset.
+* **`clientWidth` and `scrollWidth` on the scrolling element report the
+  WINDOW.** Half of that swap was already here — the `<body>` answers it in
+  quirks mode — and the root half had been left out on the reasoning that "an
+  undeclared root's box is the viewport anyway". It is. A root with a padding is
+  not, and Chrome still answers 400 for a padding box that is really 396.
+  `<html style="width:300px">` answers 400 as well, which is the reading that
+  says the root reports the window rather than a box that happens to match it.
+
+| reading | Chrome | before | after |
+|---|---|---|---|
+| root `border:7px` → `offsetWidth` | 400 | **414** | 400 |
+| root `border:7px` → body `clientWidth` | 370 | **384** | 370 |
+| root `padding:5px` → root `clientWidth` | 400 | **410** | 400 |
+| root `margin:3px` → root `offsetWidth` | 394 | **414** | 394 |
+| root `width:300px` → root `scrollWidth` | 400 | **300** | 400 |
+| `body{margin:20px}` → body `offsetWidth` | 360 | **384** | 360 |
+| quirks root `border:7px` → root `clientWidth` | 386 | **400** | 386 |
+
+Six size readings per document (`clientWidth`, `offsetWidth` and `scrollWidth`
+off each root container), eleven documents, so 66 widths and 66 heights.
+**The widths go 25/66 identical to 66/66.** Re-running B70's own eight served
+quirks/standards documents, they go **36/48 to 47/48** — the one left is a
+`display:inline` body's `offsetWidth`, which is ink and not this. On the
+TOP-LEVEL document, where
+there is no iframe element to take a box from, the twelve width readings across
+the two modes go **7/12 identical to 12/12** — including the quirks
+`body.scrollWidth` 1904-against-1920 that had been sitting unattributed since
+B96 measured it (`scratch/b72/expr-top-box.js`).
+
+`scrollWidth`'s root-container branch was a guard that outlived what it guarded:
+it existed because the root box once carried the artificial constants 1920 and
+100_000_000, and it dropped the padding every other element adds and answered
+the box in the two cases Chrome answers the window.
+
+### The UA body margin had to reach the layout
+
+`body { margin: 8px }` lives in the per-tag table `getComputedStyle` reads, not
+in the cascade the box walks — which is why a constant stood in for it, and why
+an undeclared `<body>` answers 0 through `marginPx`. `containerMarginPx` asks
+the cascade and falls back to the tag's own margin, the same shape
+`usedBorderWidth` already uses for the UA border. Narrow on purpose: making
+`marginPx` itself consult the table would move margin collapsing and content
+height for every element on a page, and nothing measured here asks for that.
+
+### The heights are still wrong, and are deliberately not asserted
+
+Every reading that still differs after this change is a **height** — 44 of the
+66 over the eleven documents, where 48 differed before. This engine
+stretches an `auto`-height `<html>` and `<body>` to fill the viewport where
+Chrome sizes them to their content: `body.offsetHeight` reads 184 in a 200px
+frame holding one 20px div where Chrome reads 20, and a document 400px tall
+reads the same 184 where Chrome reads 400. The change here moves those numbers
+(184 → 170 for a bordered root) without making any of them right.
+
+That is `content-height-memoised-subtree`'s, and it is why
+`frames/root_box_edges.html` asserts widths only — asserting the heights would
+be pinning this engine's behaviour rather than a browser's. `getScrollHeight`
+now says the same thing where it used to cite the guard this change deleted:
+the heights are not a swap at all, since Chrome answers the viewport for a short
+document and the content for a tall one (200 and 430 for the same frame), so the
+reading is `max(viewport, content)` and the content half does not exist yet.
