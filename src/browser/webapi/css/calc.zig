@@ -214,7 +214,40 @@ const Parser = struct {
         }
     }
 
-    /// `primary := '(' sum ')' | 'calc(' sum ')' | <number> | <dimension>`
+    /// A bare identifier inside a math function, which is a number in exactly
+    /// five spellings and a refusal in every other.
+    ///
+    /// Measured over seventeen rows (scratch/b98/expr-b98-calc-idents.js):
+    /// Chrome keeps `e`, `pi`, `infinity`, `-infinity` and `NaN`
+    /// case-insensitively, and drops the declaration for `garbage`, `auto`,
+    /// `inherit`, `var` and a bare exponent like `1e`. Treating every
+    /// identifier as a refusal is what took `calc(1px * infinity)` away when
+    /// this refusal first landed.
+    ///
+    /// `e` and `pi` fold into the term as the numbers they are --
+    /// `calc(1px * pi)` reads back `calc(3.14159px)`. The other three keep the
+    /// author's text instead: printing them the way Chrome does
+    /// (`calc(infinity * 1px)`) is a serialisation rule of its own, and
+    /// answering `calc(infpx)` would be worse than not answering.
+    fn constant(self: *Parser, name: []const u8, end: usize) Error!Folded {
+        const value: f64 = if (std.ascii.eqlIgnoreCase(name, "e"))
+            std.math.e
+        else if (std.ascii.eqlIgnoreCase(name, "pi"))
+            std.math.pi
+        else if (std.ascii.eqlIgnoreCase(name, "infinity") or
+            std.ascii.eqlIgnoreCase(name, "-infinity") or
+            std.ascii.eqlIgnoreCase(name, "nan"))
+            return error.Unmodelled
+        else
+            return error.Invalid;
+
+        self.index = end;
+        var folded: Folded = .{};
+        try folded.add(.none, value);
+        return folded;
+    }
+
+    /// `primary := '(' sum ')' | 'calc(' sum ')' | <constant> | <number> | <dimension>`
     fn primary(self: *Parser) Error!Folded {
         self.skipSpace();
         if (self.index >= self.text.len) return error.Invalid;
@@ -242,7 +275,7 @@ const Parser = struct {
                 self.index += 1;
                 return inner;
             }
-            return error.Invalid;
+            return self.constant(self.text[self.index..end], end);
         }
 
         const start = self.index;
