@@ -126,6 +126,13 @@ at all. A wrong number and a missing declaration are not the same failure.
      'transform: translate3d(0, 50px, 0) scale3d(1, 1, 1) rotateX(0) rotateY(0) rotateZ(0) skew(0, 0)'],
     // A unitless non-zero is still a refusal.
     ['none', 'transform: rotate(1)'],
+    // A perspective depth under a pixel is a pixel, so a zero one is not the
+    // division by zero it looks like. Measured over eight depths; a negative
+    // one is still refused.
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -1, 0, 0, 0, 1)', 'transform: perspective(0)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -1, 0, 0, 0, 1)', 'transform: perspective(0.5px)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -0.5, 0, 0, 0, 1)', 'transform: perspective(2px)'],
+    ['none', 'transform: perspective(-1px)'],
   ];
   const wrong = [];
   for (const [want, decl] of CASES) {

@@ -566,8 +566,13 @@ fn matrixFor(name: []const u8, n: []const f64) ?Parsed {
         return .{ .matrix = m, .three_d = false };
     }
     if (eq(name, "perspective")) {
-        if (n.len != 1 or n[0] == 0) return null;
-        m.m[2][3] = -1 / n[0];
+        if (n.len != 1 or n[0] < 0) return null;
+        // A depth under one pixel is one pixel, so `perspective(0)` is not the
+        // division by zero it looks like -- it is the same matrix
+        // `perspective(1px)` gives. Measured over eight depths: 0, 0px, 0.25px,
+        // 0.5px and 1px all answer -1, 2px answers -0.5, and a negative depth
+        // is still a refusal.
+        m.m[2][3] = -1 / @max(n[0], 1);
         return .{ .matrix = m, .three_d = true };
     }
     return null;
