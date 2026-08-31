@@ -24569,3 +24569,85 @@ four-to-six seconds `getBoundingClientRect` costs today whether positions are ev
 computed or not. Until that moves, in-flow positions stay at `5k, 5k` — and the
 `in-flow-block-position` reading stands: **26 of 27 offsets wrong, every element's
 x equal to its y, and one expression sees it.**
+
+## The seven-decimal cut is transform's, not CSS's (B75, 2026-08-31)
+
+`transform` computed from the six-significant-figure print its own store had
+already made, so `rotate(1.5707963267948966rad)` was a rotation of `1.5708`
+radians. Fixed by keeping the author's text beside the print (merge
+`dd0905819`); the rule that decides what "the author's text" means is measured
+in `css/transform_number_format.html`'s comment and `transform.dimensionDigits`.
+**A `<dimension>` inside a transform keeps at most seven digits after the decimal
+point, as WRITTEN; a `<number>` and a `<percentage>` keep all of them, and an
+exponent form has no decimals to cut** -- `rotate(1e-9rad)` keeps its `1e-09`
+where `rotate(0.000000001rad)`, the same double, comes out `0`.
+
+The obvious follow-up is whether that cut is a fact about CSS numbers, in which
+case the length family carries the same defect and
+`specified-value-keeps-precision`'s float32 model was only ever measured at large
+magnitudes. **It is not.** The discriminating pair `0.000000001px` / `1e-9px`
+over twelve length-valued properties -- `outline-offset`, `letter-spacing`,
+`word-spacing`, `text-indent`, `border-top-width`, `padding-top`, `margin-top`,
+`width`, `perspective`, `flex-basis`, `stroke-width`, `column-gap`
+(`scratch/b75/expr-dimension-elsewhere.js`, Chrome 151 at device scale 2) --
+answers the SAME thing for both spellings everywhere: `1e-09px` on the nine that
+keep a specified number, `0px` on `width` and `border-top-width` (which snap to
+the grid) and `0.5px` on `outline-offset` (which rounds to an integer-ish used
+value). Zero of twelve show the pair disagreeing.
+
+So `keepsAuthorText` naming `transform` alone is a measurement and not a
+narrowing: the cut lives in Blink's parse of a transform function's arguments,
+not in its CSS number tokenizer. Nothing else has to change, and a future reader
+does not have to re-open it.
+
+## An unexplored channel: how long a geometry read TAKES (B75, 2026-08-31)
+
+Not a finding, a lead with numbers on it -- recorded because it is a *channel*
+and not a candidate value, and the chapters above say that is what the two
+remaining doors need.
+
+The cost work in this chapter measured the engine's side of a geometry read for
+its own sake. Turned round, the same numbers are something a PAGE can read:
+anything that brackets `getBoundingClientRect` with `performance.now()` sees how
+long this engine takes, and no amount of making the returned NUMBERS match Chrome
+changes that.
+
+Both arms on the same 801-box synthetic page, 20 000 calls each
+(`scratch/b75/expr-geometry-read-timing.js`; Chrome at device scale 2, and 20 000
+rather than 200 because `performance.now()` is coarsened and 200 calls round to
+zero on the Chrome side):
+
+| read | Chrome us/call | this engine | ratio |
+|---|---|---|---|
+| `getBoundingClientRect` | 0.235 | 8.78 | **37x** |
+| `offsetHeight` | 0.115 | 7.51 | **65x** |
+| `offsetTop` | 0.230 | 1.69 | 7x |
+| `clientWidth` | 0.110 | 2.10 | 19x |
+| `getComputedStyle().width` | 0.290 | 3.46 | 12x |
+| `nodeName` (control, no layout) | 0.015 | 0.105 | 7x |
+
+**Read the control first.** 7x of every row is general binding and interpreter
+overhead, not layout -- so the layout-specific excess is about 5x for a rect and
+9x for `offsetHeight`, on flat markup. What makes it worth writing down is that
+those two grow with the page while the control does not: on a live homedepot the
+same rect read averages **25ms** (238 calls, 6057ms, `count-position-reads.mjs`),
+which is five orders of magnitude off the 0.235us above, because `dimensionsIn`
+is entered 23.8 times per box there.
+
+What would make this actionable, and what has NOT been done:
+
+  * the Chrome side on a REAL page. The 0.235us is flat synthetic markup; nobody
+    has timed Chrome's rect on homedepot, so the honest statement today is "we
+    are 5-9x above our own baseline on synthetic markup and unmeasured against
+    Chrome on real markup", not "we are 100000x slower";
+  * whether either remaining guard times anything. `kasada-collection-map` says
+    Kasada reads five faces and does not read performance entries;
+    `cf-widget-timing-is-not-a-gate` causally negated a timing difference on cf
+    once already -- but that was about us being FASTER than Chrome, which is a
+    different claim from a layout read costting milliseconds.
+
+So this is a channel to probe (inject a timing harness into both arms on a live
+station -- `chrome-inject-needs-page-enable`, and use a beacon, per
+`live-station-probe-beats-example-com`), not a defect to fix. If it turns out to
+be nothing, the same numbers still price the layout work: it is the same lever
+the layout-pass verdict above names.
