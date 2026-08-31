@@ -2722,6 +2722,26 @@ fn marginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, 
     return 0;
 }
 
+/// One of `<body>`'s used margins.
+///
+/// `marginPx` answers 0 for a margin nobody declared, which is right for an
+/// ordinary element and wrong for this one: the UA sheet's `body { margin: 8px }`
+/// is what makes a document's body box narrower than its viewport, and it is
+/// what `getComputedStyle(body).marginLeft` has reported all along. So a
+/// declaration wins where there is one and the UA sheet answers where there is
+/// not -- the order the computed style already resolves in, which is the whole
+/// point: the box and the computed style beside it now read the same cascade.
+fn bodyMarginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) f64 {
+    if (CSSStyleDeclaration.marginPercentagePx(self, name, frame, containing, depth)) |px| {
+        return px;
+    }
+    if (CSSStyleDeclaration.specifiedPx(self, name, frame)) |px| return px;
+    if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
+        return CSS.parseDimensionViewport(declared, frame) orelse 0;
+    }
+    return body_ua_margin;
+}
+
 /// The margins that currently adjoin each other and will become one gap.
 ///
 /// Collapsing is not "keep the larger": a negative margin pulls the neighbour
@@ -3222,9 +3242,30 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
                     .height = @floatFromInt(viewport.height),
                 };
             };
-            const inset: f64 = if (tag == .body) 2 * body_ua_margin else 0;
-            if (width == null) width = @max(0, box.width - inset);
-            if (height == null) height = @max(0, box.height - inset);
+            // The margins the page declared, not the UA's 8px. Every modern
+            // reset opens with `body { margin: 0 }` and Chrome's body is then
+            // the whole viewport: on www.scrapingcourse.com its body is 1920
+            // where this one answered 1904. Measured in one document at four
+            // settings (probes/expr-b96-body-margin.js) --
+            // `documentElement.clientWidth - body.clientWidth` is 0, 6, 16 and
+            // 40 for margins of 0px, 3px, 8px and 20px, which is twice the
+            // margin every time.
+            //
+            // The 8px has not gone anywhere; it is in the cascade, where
+            // `getComputedStyle(body).marginLeft` was already reading it. That
+            // is the point: the box used to subtract a constant beside a
+            // computed style that said something else, and a guard reading both
+            // at once saw a box that did not follow its own margin.
+            var inset_x: f64 = 0;
+            var inset_y: f64 = 0;
+            if (tag == .body) {
+                inset_x = self.bodyMarginPx("margin-left", frame, &containing, depth) +
+                    self.bodyMarginPx("margin-right", frame, &containing, depth);
+                inset_y = self.bodyMarginPx("margin-top", frame, &containing, depth) +
+                    self.bodyMarginPx("margin-bottom", frame, &containing, depth);
+            }
+            if (width == null) width = @max(0, box.width - inset_x);
+            if (height == null) height = @max(0, box.height - inset_y);
         } else if (tag == .canvas) {
             // A canvas is the one replaced element here with an intrinsic
             // RATIO, and it comes from the BUFFER: the width/height content
