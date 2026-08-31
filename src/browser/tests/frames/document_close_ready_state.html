@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Ending the parse settles readiness. Before close() the written document is
+  still `loading`; close() runs it through `interactive` (readystatechange,
+  then DOMContentLoaded) and on to `complete` (readystatechange, then the load
+  event). Measured against Chrome 151, which reports exactly this order.
+
+  The listeners go on AFTER open(), because the document open steps remove the
+  listeners registered on the document before them.
+-->
+<script id=close_settles_ready_state>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  doc.open();
+
+  const seen = [];
+  doc.addEventListener('readystatechange', () => { seen.push('rsc=' + doc.readyState); });
+  doc.addEventListener('DOMContentLoaded', () => { seen.push('DCL'); });
+
+  doc.write('<p>written</p>');
+  const duringWrite = doc.readyState;
+  doc.close();
+
+  testing.expectEqual(
+    'during write loading, after close complete, trace rsc=interactive | DCL | rsc=complete',
+    'during write ' + duringWrite + ', after close ' + doc.readyState + ', trace ' + seen.join(' | '),
+  );
+}
+</script>
+
+<!--
+  A fresh about:blank iframe is already complete; only open() makes it load
+  again. This pins the state on both sides of the cycle so a fix that simply
+  reported `complete` everywhere would not pass.
+-->
+<script id=ready_state_around_the_cycle>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  const fresh = doc.readyState;
+  doc.open();
+  const opened = doc.readyState;
+  doc.write('<p>written</p>');
+  doc.close();
+
+  testing.expectEqual(
+    'fresh complete, opened loading, closed complete',
+    'fresh ' + fresh + ', opened ' + opened + ', closed ' + doc.readyState,
+  );
+}
+</script>
+
+<!--
+  A script written into the document sees the document mid-parse: readyState is
+  `loading` while it runs, and `complete` once close() has ended the parse.
+-->
+<script id=written_script_sees_loading>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  doc.write('<script>window.__rs = document.readyState;<\/script>');
+  doc.close();
+
+  testing.expectEqual(
+    'script saw loading, document ended complete',
+    'script saw ' + iframe.contentWindow.__rs + ', document ended ' + doc.readyState,
+  );
+}
+</script>

@@ -1045,6 +1045,14 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
                 // creator's policy container, including the referrer policy
                 self.referrer_policy = parent.referrer_policy;
             }
+            if (is_about_blank) {
+                // An about:blank child was reached from its creator, and says
+                // so: Chrome reports the creating document's URL here. srcdoc
+                // does not -- measured empty on both arms. (The creator's
+                // referrer policy is not applied to this value; every reading
+                // behind it was taken under the default policy.)
+                self._referrer = try self.arena.dupe(u8, parent.url);
+            }
         } else if (self.window._opener) |opener| {
             self.origin = opener._frame.origin;
             if (is_about_blank) {
@@ -1486,6 +1494,25 @@ pub fn abortTransfers(self: *Frame) void {
     }
     const http_client = &self._session.browser.http_client;
     http_client.abortOwner(&self._http_owner);
+}
+
+// The document open steps replace the document's URL with the ENTRY
+// document's -- the URL of the document whose script called open(), not the
+// one this frame was loaded from. Every surface that reports the document's
+// address follows it: document.URL, document.documentURI and location. The
+// base URL does not; an about:blank child already inherited its creator's.
+pub fn adoptDocumentUrl(self: *Frame, url: []const u8) !void {
+    if (std.mem.eql(u8, self.url, url)) {
+        return;
+    }
+    self.url = try self.arena.dupeZ(u8, url);
+
+    // A fresh Location, not a mutated one: window.location has to be at a
+    // unique address or the identity map hands out the same v8::Object.
+    const location = try Location.init(self.url, self);
+    location.acquireRef();
+    self.window._location.releaseRef(self._page);
+    self.window._location = location;
 }
 
 pub fn documentIsLoaded(self: *Frame) void {
