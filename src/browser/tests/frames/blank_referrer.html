@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  An `about:blank` child inherits its creator's policy container, and its
+  referrer comes from the same place: Chrome 151 reports the creating
+  document's URL from `document.referrer` inside a script-created iframe, with
+  or without an explicit `src="about:blank"`. We reported the empty string,
+  which is what a document reached by typing its address reports -- nobody's
+  child.
+
+  `about:srcdoc` is not the same case and stays empty on both.
+-->
+<script id=blank_child_reports_its_creator>
+{
+  const here = document.URL;
+
+  const implicit = document.createElement('iframe');
+  document.documentElement.appendChild(implicit);
+
+  const explicit = document.createElement('iframe');
+  explicit.src = 'about:blank';
+  document.documentElement.appendChild(explicit);
+
+  testing.expectEqual(
+    'implicit ' + here + ', explicit ' + here,
+    'implicit ' + implicit.contentDocument.referrer + ', explicit ' + explicit.contentDocument.referrer,
+  );
+}
+</script>
+
+<script id=srcdoc_child_reports_nothing>
+{
+  const iframe = document.createElement('iframe');
+  iframe.srcdoc = '<p>s</p>';
+  document.documentElement.appendChild(iframe);
+
+  testing.expectEqual('referrer ""', 'referrer "' + iframe.contentDocument.referrer + '"');
+}
+</script>
+
+<!--
+  And the referrer survives the document being opened and rewritten -- open()
+  replaces the URL, not the referrer.
+-->
+<script id=referrer_survives_open>
+{
+  const here = document.URL;
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  doc.write('<p>written</p>');
+  doc.close();
+
+  testing.expectEqual('referrer ' + here, 'referrer ' + doc.referrer);
+}
+</script>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  `document.close()` ends the parse of a script-created document, and ending a
+  parse is what fires the frame's load event. A guard that builds itself a
+  realm with the standard idiom
+
+      iframe.onload = ...; doc.write(...); doc.close();
+
+  never hears back otherwise: the callback is registered before the write and
+  the close is the only thing that could ever call it.
+
+  Chrome 151 fires it synchronously, inside close(), once per open/close cycle.
+-->
+<script id=close_fires_iframe_load>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  let fired = 0;
+  iframe.addEventListener('load', () => { fired++; });
+
+  const doc = iframe.contentDocument;
+  doc.write('<p>written</p>');
+  doc.close();
+
+  testing.expectEqual('load fired 1x', 'load fired ' + fired + 'x');
+}
+</script>
+
+<!--
+  Closing a document that is already closed ends nothing, so it fires nothing.
+-->
+<script id=second_close_fires_nothing>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  let fired = 0;
+  iframe.addEventListener('load', () => { fired++; });
+
+  const doc = iframe.contentDocument;
+  doc.write('<p>written</p>');
+  doc.close();
+  const afterFirst = fired;
+  doc.close();
+
+  testing.expectEqual('1 then 1', afterFirst + ' then ' + fired);
+}
+</script>
+
+<!--
+  A second open/write/close cycle is a second parse, so it fires a second time.
+-->
+<script id=two_cycles_fire_twice>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  let fired = 0;
+  iframe.addEventListener('load', () => { fired++; });
+
+  const doc = iframe.contentDocument;
+  doc.write('<p>one</p>');
+  doc.close();
+  doc.open();
+  doc.write('<p>two</p>');
+  doc.close();
+
+  testing.expectEqual('load fired 2x, body <p>two</p>', 'load fired ' + fired + 'x, body ' + doc.body.innerHTML);
+}
+</script>

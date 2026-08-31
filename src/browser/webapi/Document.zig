@@ -1654,7 +1654,12 @@ fn writeInternal(self: *Document, text: []const []const u8, append_newline: bool
         break :blk joined.items;
     };
 
-    if (self._current_script == null or frame._load_state != .parsing) {
+    // A script-created parser always streams: `open()` puts the frame back
+    // into .parsing (so that `close()` has a parse to end), and the write of a
+    // script running inside that parse belongs at its insertion point, not
+    // spliced in after the script element the way a parser-blocking inline
+    // script's write is.
+    if (self._script_created_parser != null or self._current_script == null or frame._load_state != .parsing) {
         if (self._script_created_parser == null or looksLikeNewDocument(html)) {
             _ = try self.open(frame);
         }
@@ -1797,6 +1802,33 @@ pub fn open(self: *Document, call_frame: *Frame) !*Document {
     self._script_created_parser = Parser.Streaming.init(frame.arena, doc_node, frame, .{ .allow_declarative_shadow = true });
     try self._script_created_parser.?.start();
     frame._parse_mode = .document;
+
+    // The document being opened takes the ENTRY document's URL -- the URL of
+    // the document whose script is calling, not its own. A parent writing into
+    // its about:blank iframe leaves that iframe claiming the parent's address,
+    // which is what the realm a guard builds this way answers when asked where
+    // it is. The bridge hands us the receiver's frame, so ask V8 who is
+    // actually running. Cross-origin is supposed to throw SecurityError before
+    // reaching here; we don't raise it, but we won't hand a document an address
+    // from an origin it cannot claim either.
+    const entry = frame.js.getIncumbent();
+    if (entry != frame and frame.isSameOrigin(entry.url)) {
+        frame.adoptDocumentUrl(entry.url) catch |err| {
+            log.warn(.dom, "document.open url", .{ .err = err, .url = entry.url });
+        };
+    }
+
+    if (frame._load_state == .complete) {
+        // The frame is parsing again, which is what gives close() something to
+        // end: ending it is what settles readyState and fires the frame's load
+        // event. A frame that already reported in to its parent has to be
+        // allowed to report again -- the second parse fires its own load event
+        // on the iframe element -- but it delays nothing this time, because the
+        // parent's own load is long over.
+        frame._load_state = .parsing;
+        frame._parent_notified = false;
+        frame._delays_parent_load = false;
+    }
 
     return self;
 }
