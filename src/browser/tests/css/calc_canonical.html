@@ -279,6 +279,48 @@
 }
 </script>
 
+<script id="comparison_functions_keep_their_shape_and_fold_their_arguments">
+{
+  // `min()` / `max()` / `clamp()` are not folded into a sum -- they are a term
+  // of their own, because which argument wins is not known until the units
+  // resolve. What Chrome does instead is fold each argument on its own and
+  // leave the argument ORDER alone: `min(1px, 1em)` and `min(1em, 1px)` both
+  // come back as written, which is what says this is not a sort.
+  //
+  // Measured on Chrome 151 with scratch/b98/expr-b98-compare-fns.js.
+  const rows = [
+    // The arguments fold; the order does not move.
+    ['width: min(1px, 1em)', 'min(1px, 1em)'],
+    ['width: min(1em, 1px)', 'min(1em, 1px)'],
+    ['width: max(1em, 1px)', 'max(1em, 1px)'],
+    ['width: min(1px + 1em, 2em)', 'min(1em + 1px, 2em)'],
+    ['width: min(2px + 3px, 2em)', 'min(5px, 2em)'],
+    ['width: min(1px, 1em, 1rem)', 'min(1px, 1em, 1rem)'],
+    ['width: clamp(1em, 1px, 1vh)', 'clamp(1em, 1px, 1vh)'],
+    // One argument is not a comparison at all, so it collapses.
+    ['width: min(1px)', 'calc(1px)'],
+    ['width: max(2em)', 'calc(2em)'],
+    // Nor is a clamp whose three arguments can already be ordered.
+    ['width: clamp(1px, 2px, 3px)', 'calc(2px)'],
+    // A nested comparison of the same kind is the same comparison.
+    ['width: min(min(1px, 2px), 1em)', 'min(1px, 1em)'],
+    // The function name is lowercased like every other.
+    ['width: MIN(1px, 1em)', 'min(1px, 1em)'],
+    // Inside a calc() it is one term among the units, and it sorts last.
+    ['width: calc(min(1px, 1em) + 1rem)', 'calc(1rem + min(1px, 1em))'],
+  ];
+  const want = [];
+  const got = [];
+  for (const [decl, expected] of rows) {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    want.push(decl + ' -> ' + expected);
+    got.push(decl + ' -> ' + el.style.getPropertyValue('width'));
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
 <script id="calc_comparison_functions_are_left_where_they_stand">
 {
   // Not this plan. `min()` / `max()` / `clamp()` keep their function shape
