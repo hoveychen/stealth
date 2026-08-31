@@ -24569,3 +24569,33 @@ four-to-six seconds `getBoundingClientRect` costs today whether positions are ev
 computed or not. Until that moves, in-flow positions stay at `5k, 5k` — and the
 `in-flow-block-position` reading stands: **26 of 27 offsets wrong, every element's
 x equal to its y, and one expression sees it.**
+
+## The seven-decimal cut is transform's, not CSS's (B75, 2026-08-31)
+
+`transform` computed from the six-significant-figure print its own store had
+already made, so `rotate(1.5707963267948966rad)` was a rotation of `1.5708`
+radians. Fixed by keeping the author's text beside the print (merge
+`dd0905819`); the rule that decides what "the author's text" means is measured
+in `css/transform_number_format.html`'s comment and `transform.dimensionDigits`.
+**A `<dimension>` inside a transform keeps at most seven digits after the decimal
+point, as WRITTEN; a `<number>` and a `<percentage>` keep all of them, and an
+exponent form has no decimals to cut** -- `rotate(1e-9rad)` keeps its `1e-09`
+where `rotate(0.000000001rad)`, the same double, comes out `0`.
+
+The obvious follow-up is whether that cut is a fact about CSS numbers, in which
+case the length family carries the same defect and
+`specified-value-keeps-precision`'s float32 model was only ever measured at large
+magnitudes. **It is not.** The discriminating pair `0.000000001px` / `1e-9px`
+over twelve length-valued properties -- `outline-offset`, `letter-spacing`,
+`word-spacing`, `text-indent`, `border-top-width`, `padding-top`, `margin-top`,
+`width`, `perspective`, `flex-basis`, `stroke-width`, `column-gap`
+(`scratch/b75/expr-dimension-elsewhere.js`, Chrome 151 at device scale 2) --
+answers the SAME thing for both spellings everywhere: `1e-09px` on the nine that
+keep a specified number, `0px` on `width` and `border-top-width` (which snap to
+the grid) and `0.5px` on `outline-offset` (which rounds to an integer-ish used
+value). Zero of twelve show the pair disagreeing.
+
+So `keepsAuthorText` naming `transform` alone is a measurement and not a
+narrowing: the cut lives in Blink's parse of a transform function's arguments,
+not in its CSS number tokenizer. Nothing else has to change, and a future reader
+does not have to re-open it.
