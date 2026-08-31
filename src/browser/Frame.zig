@@ -1045,6 +1045,14 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
                 // creator's policy container, including the referrer policy
                 self.referrer_policy = parent.referrer_policy;
             }
+            if (is_about_blank) {
+                // An about:blank child was reached from its creator, and says
+                // so: Chrome reports the creating document's URL here. srcdoc
+                // does not -- measured empty on both arms. (The creator's
+                // referrer policy is not applied to this value; every reading
+                // behind it was taken under the default policy.)
+                self._referrer = try self.arena.dupe(u8, parent.url);
+            }
         } else if (self.window._opener) |opener| {
             self.origin = opener._frame.origin;
             if (is_about_blank) {
