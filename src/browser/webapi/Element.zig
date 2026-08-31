@@ -3123,6 +3123,29 @@ fn attributeUnsignedOr(self: *Element, comptime name: []const u8, fallback: u32)
 /// recursing: measuring one item's flex base size asks its siblings for theirs,
 /// and a sibling asked with the distribution still on would ask back.
 pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool) Dimensions {
+    return self.dimensionsIn(frame, measure_text_width, depth, distribute_flex, null);
+}
+
+/// The same measurement, told the containing block's content width instead of
+/// having to go and find it.
+///
+/// A caller that is already laying this element out inside a box it measured
+/// KNOWS that width, and handing it over is the difference between O(n) and
+/// O(n·depth) for a subtree walk: without it, every child starts its own
+/// measurement, reaches the fill branch below, and re-measures the whole
+/// ancestor chain to find the width its parent had in hand.
+///
+/// Measured on a live www.homedepot.com, which reads `offsetHeight` off 513
+/// elements per load (scratch/b73/count-root-reads.mjs): 6022ms of engine time
+/// in those reads before, 1783ms after. On a synthetic page the shape of the
+/// cost is visible directly -- 883 nodes nested 20 deep cost more per read (33ms)
+/// than 2403 flat ones (9ms), which is the ancestor walk and not the node count.
+///
+/// Only correct when the width really is this element's containing block's: the
+/// callers are the content-extent walks, whose children are in-flow or floated
+/// and therefore contained by the box being measured. An out-of-flow child is
+/// contained by something else and those walks skip it.
+pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool, containing_width: ?f64) Dimensions {
     // A backstop the `depth` parameter cannot be: not every path down carries
     // it. A percentage width resolves through the computed-value machinery,
     // which reaches back for the containing block's box through
@@ -3174,7 +3197,11 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     // element and then shared: a percentage padding needs it, and so does the
     // fill branch below. Measuring it per asker cost 5^n down a chain of
     // percentage-padded elements -- see CSSStyleDeclaration.boxEdgesSharing.
-    var containing: ?f64 = null;
+    //
+    // Seeded when the caller already knows it -- see `dimensionsIn` -- which is
+    // what keeps a subtree walk from re-measuring the ancestor chain once per
+    // child.
+    var containing: ?f64 = containing_width;
 
     // What a declared width and height name: the content box, or the border box
     // when `box-sizing` says so. Only asked on this path -- see Dimensions.
@@ -3858,7 +3885,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
             if (!extent.counts(CSSStyleDeclaration.flowKind(el, frame))) continue;
             if (el.atomicInlineHalves(frame)) |halves| {
-                const box = el.getElementDimensions(frame);
+                const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
                 flow.placeAtomic(halves.above, halves.below, box.width + box.padding_x + box.border_x);
                 continue;
             }
@@ -3873,7 +3900,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 placed = true;
             }
 
-            const box = el.getElementDimensions(frame);
+            const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
             const margins = el.verticalMargins(frame, &margin_containing, depth);
             group.join(margins.top);
             // What the child HOLDS. `box.height` is only the child's own
@@ -3895,12 +3922,17 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             // README, and the loop's own comment for why it is asserted the
             // other way round now. The cost is about 9% of a warm suite run.
             //
-            // `depth` bounds it at MAX_CONTAINING_BLOCK_DEPTH, and the child's
-            // box still comes from `getElementDimensions`: carrying the depth
-            // into it was measured to change nothing either way
+            // `depth` bounds it at MAX_CONTAINING_BLOCK_DEPTH. The child's box
+            // is measured with `dimensionsIn` and handed the width it is being
+            // laid into, which is the only thing that makes this walk
+            // affordable: measuring the child through `getElementDimensions`
+            // instead starts it at depth 0, and it then re-measures the whole
+            // ancestor chain to find the width this frame already has. Carrying
+            // the depth ALONE was measured to change nothing
             // (probes/b72-depth-carry-attempt.patch), and so was a memo on the
-            // Frame (probes/b72-memo-attempt.patch), because neither was what
-            // the suite had been measuring.
+            // Frame (probes/b72-memo-attempt.patch) -- it is the seeded width
+            // that moves it, 6022ms of homedepot's offsetHeight reads down to
+            // 1783 (scratch/b73/count-root-reads.mjs).
             var inner = box.height;
             if (!box.explicit_height and depth < MAX_CONTAINING_BLOCK_DEPTH) {
                 inner = @max(inner, el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1));
