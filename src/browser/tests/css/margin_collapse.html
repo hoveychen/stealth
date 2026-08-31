@@ -101,3 +101,106 @@ that carries the collapse.
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<!--
+Where an escaped margin ENDS UP, which the block above does not ask.
+
+A margin that escapes a parent with no edge on that side does not stop there: it
+keeps escaping, through every edgeless ancestor, until it reaches one with a
+border, a padding or a block formatting context. Wherever it stops it collapses
+with whatever margins it meets, and that gap is inside THAT box. This engine
+dropped the margin at the first parent instead, so a wrapper's escaped 30px
+simply disappeared rather than becoming the gap between it and its sibling: six
+of the twelve shapes below were 30 to 50px short.
+
+Measured on a headed Chrome 151 at dpr 2 through this file's own harness -- the
+same absolutely positioned 400px host, the same two readings -- because the
+numbers are assertions here and a value measured in a different container is a
+value measured somewhere else. Probe: scratch/b73/expr-escape-cases.js, readings
+in scratch/b73/ch-escape-cases.json.
+
+The six that already passed are kept as the boundary: an edge or a formatting
+context stops the margin, and so does TEXT, because a line box is content and
+nothing below it can get out.
+-->
+
+<script id=an_escaped_margin_collapses_where_it_stops>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const p = wrap.querySelector('[data-p]');
+    const out = [p.offsetHeight, p.getBoundingClientRect().height].join(' ');
+    wrap.remove();
+    return out;
+  };
+
+  const B = 'height:20px;background:#000';
+  const M = B + ';margin:30px 0';
+
+  // markup, then: offsetHeight, rect height
+  const CASES = [
+    // The margin escapes an edgeless parent, so the parent is just the block.
+    ['<div data-p><div style="' + M + '"></div></div>', '20 20'],
+    // ...and keeps escaping through a second edgeless wrapper.
+    ['<div data-p><div><div style="' + M + '"></div></div></div>', '20 20'],
+    // A padding stops it, and it sits inside the content: 30 + 20 + 30.
+    ['<div data-p style="padding:1px"><div style="' + M + '"></div></div>', '82 82'],
+    // So does a border.
+    ['<div data-p style="border:1px solid #000"><div style="' + M + '"></div></div>', '82 82'],
+    // So does a block formatting context, with no edge at all.
+    ['<div data-p style="overflow:hidden"><div style="' + M + '"></div></div>', '80 80'],
+    // Two edgeless wrappers side by side. Each is 20 tall on its own; the
+    // margins that escape them meet in the gap between them and collapse to the
+    // larger, so the padded parent is 1 + 30 + 20 + 30 + 20 + 10 + 1.
+    ['<div data-p style="padding:1px">' +
+     '<div><div style="' + M + '"></div></div>' +
+     '<div><div style="' + B + ';margin:10px 0"></div></div></div>', '112 112'],
+    // An escaped margin collapses WITH a plain sibling's rather than adding to
+    // it: max(5, 30) between the two, not 35.
+    ['<div data-p style="padding:1px">' +
+     '<div style="' + B + ';margin-bottom:5px"></div>' +
+     '<div><div style="' + M + '"></div></div></div>', '102 102'],
+    // A self-collapsing box reached through a wrapper: both of its margins
+    // adjoin the same gap, so the two blocks around it are 30 apart, not 60.
+    ['<div data-p style="padding:1px">' +
+     '<div style="' + B + '"></div>' +
+     '<div><div style="margin:30px 0"></div></div>' +
+     '<div style="' + B + '"></div></div>', '72 72'],
+    // A self-collapsing FIRST child does not end the leading run: its own two
+    // margins and the next sibling's top margin all adjoin, so what leaves the
+    // wrapper is max(30, 30, 50).
+    ['<div data-p style="padding:1px">' +
+     '<div><div style="margin:30px 0"></div>' +
+     '<div style="' + B + ';margin-top:50px"></div></div></div>', '72 72'],
+    // TEXT ends the run: the line box is content, so the 30px below it stays
+    // inside the wrapper. 1 + 18.5 + 30 + 20 + 1, which rounds to 71 for
+    // offsetHeight and keeps the half for the rect.
+    ['<div data-p style="padding:1px">' +
+     '<div>x<div style="' + B + ';margin-top:30px"></div></div></div>', '71 70.5'],
+    // An OUT-OF-FLOW first child is not in the run at all, so what escapes is
+    // the next in-flow child's 30 and not the absolute's 99.
+    ['<div data-p style="padding:1px">' +
+     '<div><div style="position:absolute;margin-top:99px"></div>' +
+     '<div style="' + B + ';margin-top:30px"></div></div></div>', '52 52'],
+    // Three levels of margin-top collapse into one gap, and it is the largest
+    // of them: 40, not 5 and not 57.
+    ['<div data-p style="padding:1px">' +
+     '<div style="margin-top:5px"><div style="margin-top:40px">' +
+     '<div style="' + B + ';margin-top:12px"></div></div></div></div>', '62 62'],
+  ];
+
+  const wrong = [];
+  for (const [html, want] of CASES) {
+    const got = measure(html);
+    if (got !== want) wrong.push(html + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>

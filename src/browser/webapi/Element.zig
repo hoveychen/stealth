@@ -2795,6 +2795,14 @@ const MarginGroup = struct {
         }
     }
 
+    /// Two runs of margins that turn out to adjoin each other become one run.
+    /// Used where a child's ESCAPED margins meet the run its own margins are in:
+    /// they are the same gap, so 30 escaping into a 10 is 30 and not 40.
+    fn joinGroup(self: *MarginGroup, other: MarginGroup) void {
+        self.positive = @max(self.positive, other.positive);
+        self.negative = @min(self.negative, other.negative);
+    }
+
     fn gap(self: MarginGroup) f64 {
         return self.positive + self.negative;
     }
@@ -3643,7 +3651,7 @@ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_ca
         return dims.height + dims.padding_y;
     }
 
-    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0)) + dims.padding_y;
+    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0).total) + dims.padding_y;
 }
 
 pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
@@ -3809,7 +3817,7 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 
     if (dims.inline_box) return 0;
 
-    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0)) + dims.padding_y);
+    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0).total) + dims.padding_y);
 }
 
 // The height of the direct child elements stacked vertically, the counterpart
@@ -3830,8 +3838,20 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 // is 55.5 (a line, a block, a line) where stacking the block alone says 18.5.
 // Both measured at dpr 2 with
 // tools/fingerprint/scratch/expr-inline-content-lines.js.
-fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8) f64 {
+fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8) ContentHeight {
     var total: f64 = 0;
+    // The margins that LEAVE through this box's two block edges. They are not
+    // part of its height -- that is what escaping means -- but they are part of
+    // the gap outside it, so the caller has to be told. Dropping them was worth
+    // 30 to 50px on six of the twelve shapes in css/margin_collapse.html: a
+    // wrapper's escaped 30 simply vanished instead of becoming the gap between
+    // it and its sibling.
+    //
+    // Reported from here rather than walked for separately, because the walk
+    // that finds them is this one: the escaped group is exactly the value of
+    // `group` at the moment a pay-out is SKIPPED.
+    var escaped_top: MarginGroup = .{};
+    var escaped_bottom: MarginGroup = .{};
 
     const font = self.resolveFont(frame);
     const strut = self.lineBoxHalves(frame, font.family, font.size);
@@ -3894,7 +3914,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             // adjoining, so the group has to be settled before the lines land.
             const lines = flow.flush();
             if (lines > 0) {
-                if (placed or !escapes.top) total += group.gap();
+                if (placed or !escapes.top) total += group.gap() else escaped_top = group;
                 group = .{};
                 total += lines;
                 placed = true;
@@ -3934,18 +3954,32 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             // that moves it, 6022ms of homedepot's offsetHeight reads down to
             // 1783 (scratch/b73/count-root-reads.mjs).
             var inner = box.height;
+            // What LEAVES the child through its own two edges, which adjoins
+            // the run this box's margins are in. Empty unless the child has no
+            // edge on that side to stop it -- `marginEscapes` inside the
+            // recursion is what decides that -- so a padded or bordered child
+            // reports nothing and keeps its gaps to itself.
+            var held: ContentHeight = .{};
             if (!box.explicit_height and depth < MAX_CONTAINING_BLOCK_DEPTH) {
-                inner = @max(inner, el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1));
+                held = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1);
+                inner = @max(inner, held.total);
             }
+            group.joinGroup(held.escaped_top);
             if (inner == 0 and box.padding_y == 0 and box.border_y == 0) {
                 // Self-collapsing: there is nothing between this box's two
                 // margins, so they join the same group and it contributes no
                 // height of its own. An empty <div style="margin:10px 0">
                 // between two blocks leaves them 10 apart, not 20.
+                //
+                // Whatever escaped it joins that same group, from both sides:
+                // a wrapper whose only content is an empty margined box is
+                // itself self-collapsing, and the 30px inside it is the one gap
+                // its two neighbours end up sharing.
                 group.join(margins.bottom);
+                group.joinGroup(held.escaped_bottom);
                 continue;
             }
-            if (placed or !escapes.top) total += group.gap();
+            if (placed or !escapes.top) total += group.gap() else escaped_top = group;
             group = .{};
             // The child's WHOLE box. `box.height` is its content height, and
             // its padding and border are inside this parent however much they
@@ -3956,6 +3990,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             total += inner + box.padding_y + box.border_y;
             placed = true;
             group.join(margins.bottom);
+            group.joinGroup(held.escaped_bottom);
             continue;
         }
         if (node.is(CData.Text)) |text| {
@@ -3965,15 +4000,15 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
 
     const trailing = flow.flush();
     if (trailing > 0) {
-        if (placed or !escapes.top) total += group.gap();
+        if (placed or !escapes.top) total += group.gap() else escaped_top = group;
         group = .{};
         total += trailing;
     }
     // Whatever is left is the bottom margin of the last thing in the box, and
     // it leaves through the bottom edge on the same terms the first one came in
     // through the top.
-    if (!escapes.bottom) total += group.gap();
-    return total;
+    if (!escapes.bottom) total += group.gap() else escaped_bottom = group;
+    return .{ .total = total, .escaped_top = escaped_top, .escaped_bottom = escaped_bottom };
 }
 
 /// Where an atomic inline sits on the line, or null when the element is not one.
@@ -4043,6 +4078,14 @@ fn hasInlineBaseline(self: *Element, frame: *Frame, depth: u8) bool {
 /// float is out of its parent's height and still inside the parent's scrollable
 /// overflow, so a block holding one reads 0 of clientHeight and 18 of
 /// scrollHeight. Measured; an `absolute` child is out of both.
+/// What a box holds: its content height, and the margins that left through its
+/// two block edges on the way out. See `contentHeight`.
+const ContentHeight = struct {
+    total: f64 = 0,
+    escaped_top: MarginGroup = .{},
+    escaped_bottom: MarginGroup = .{},
+};
+
 const Extent = enum {
     /// clientWidth, clientHeight and the box a computed width and height report.
     in_flow,
