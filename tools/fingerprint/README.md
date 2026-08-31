@@ -23633,3 +23633,9 @@ from 6. The one left is `box-sizing`, which Chrome computes as `border-box` on
 that page and this engine as `content-box` — the reset declares it through
 `*, ::before, ::after`, and that is a selector question rather than a box one.
 Filed separately.
+
+The sweep read 19/29 against 21/29, and both stations that moved are the ones
+that have been moving all evening on unchanged binaries: `dd-leboncoin`, which
+an alternating A/B answered `datadome-challenge` 3/3 on BOTH arms minutes later,
+and `x-hyatt`, whose ticket window had shut — twenty spaced visits on the
+unchanged binary got no `x-kpsdk-r` at all in the same hour. 1583/1583.
