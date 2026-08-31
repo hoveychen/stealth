@@ -79,6 +79,52 @@ the property does not resolve is printed as the folded calc().
 }
 </script>
 
+<script id=calc_that_comes_out_negative_is_clamped>
+{
+  // A calc() is allowed to come out negative where a bare negative length
+  // would be refused outright, so the clamp is a used-value rule -- and the
+  // properties it applies to are exactly the ones that refuse the bare
+  // negative. Measured on Chrome 151 over sixteen properties
+  // (scratch/b98/expr-b98-calc-negative.js): the nine that clamp are the nine
+  // in chrome_bounds.no_negative, and the four that keep the minus -- margin,
+  // `top`, `letter-spacing`, `text-indent` -- are the ones absent from it. So
+  // this needs no list of its own.
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;font-size:20px"><p style="' + decl + '">x</p></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+  const CASES = [
+    ['0px', 'width:calc(10px - 30px)', 'width'],
+    ['0px', 'height:calc(10px - 30px)', 'height'],
+    ['0px', 'padding-top:calc(10px - 30px)', 'paddingTop'],
+    ['0px', 'padding-left:calc(10px - 30px)', 'paddingLeft'],
+    ['0px', 'font-size:calc(10px - 30px)', 'fontSize'],
+    ['0px', 'line-height:calc(10px - 30px)', 'lineHeight'],
+    ['0px', 'min-width:calc(10px - 30px)', 'minWidth'],
+    ['0px', 'max-width:calc(10px - 30px)', 'maxWidth'],
+    ['0px', 'flex-basis:calc(10px - 30px)', 'flexBasis'],
+    ['0px', 'border-top-left-radius:calc(10px - 30px)', 'borderTopLeftRadius'],
+    // The other direction, which is what stops this becoming "negatives are
+    // impossible": these four keep the minus sign in Chrome.
+    ['-20px', 'margin-top:calc(10px - 30px)', 'marginTop'],
+    ['-20px', 'margin-left:calc(10px - 30px)', 'marginLeft'],
+    ['-20px', 'top:calc(10px - 30px)', 'top'],
+    ['-20px', 'letter-spacing:calc(10px - 30px)', 'letterSpacing'],
+    ['-20px', 'text-indent:calc(10px - 30px)', 'textIndent'],
+  ];
+  const wrong = [];
+  for (const [want, decl, prop] of CASES) {
+    const got = probe(decl, prop);
+    if (got !== want) wrong.push(decl + ' -> ' + prop + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
+
 <script id=calc_over_numbers_stays_a_number>
 {
   // A calc() whose terms carry no unit is not a length and does not gain a

@@ -29,6 +29,7 @@
 
 const std = @import("std");
 const units = @import("../../css/units.zig");
+const chrome_value_case = @import("chrome_value_case.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -246,13 +247,38 @@ const Parser = struct {
 
         const start = self.index;
         const end = numberEnd(self.text, start) orelse return error.Invalid;
-        const parsed = units.parse(self.text[start..end]) catch return error.Invalid;
+        const token = self.text[start..end];
+        const parsed = units.parse(token) catch return unitVerdict(token);
         self.index = end;
         var value: Folded = .{};
         try value.add(parsed.unit, parsed.value);
         return value;
     }
 };
+
+/// What a token `units.parse` refused means, which is two different things.
+///
+/// Chrome has sixty units and units.zig resolves twenty-two of them, so "not a
+/// unit this engine knows" is not the same as "not a unit". `calc(100svh -
+/// 3.5rem)` is a declaration every browser keeps and this one cannot fold;
+/// `calc(10px + 2foo)` is one every browser drops. Refusing both threw away a
+/// real declaration on tailwindcss.com, found by counting that page's 1415
+/// calc()s on either side of the change (scratch/b98/expr-b98-calc-inventory.js).
+///
+/// The sixty are already written down: chrome_value_case.units is the measured
+/// spelling table, so a suffix in it is a real unit whatever this engine can do
+/// with it.
+fn unitVerdict(token: []const u8) Error {
+    var end = token.len;
+    while (end > 0 and (std.ascii.isAlphabetic(token[end - 1]) or token[end - 1] == '%')) end -= 1;
+    const suffix = token[end..];
+    if (suffix.len == 0) return error.Invalid;
+    var lower: [16]u8 = undefined;
+    if (suffix.len > lower.len) return error.Invalid;
+    const folded = std.ascii.lowerString(lower[0..suffix.len], suffix);
+    if (chrome_value_case.units.has(folded)) return error.Unmodelled;
+    return error.Invalid;
+}
 
 /// The end of an identifier starting at `start`, or null when there is not one
 /// there. Only used to spot a function name, so a leading digit disqualifies.

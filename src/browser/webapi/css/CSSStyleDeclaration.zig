@@ -44,6 +44,7 @@ const chrome_input_type_values = @import("chrome_input_type_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
 const calc = @import("calc.zig");
+const chrome_bounds = @import("chrome_bounds.zig");
 const shorthand = @import("shorthand.zig");
 const supports = @import("supports.zig");
 const font_metrics = @import("../../font_metrics.zig");
@@ -1384,7 +1385,17 @@ fn writeLengthText(element: *Element, style_manager: *StyleManager, property_nam
     const frame = element.ownerFrame(style_manager.frame);
     var buf = std.Io.Writer.Allocating.init(frame.call_arena);
     const snaps = had_percentage or usedLengthProperty(property_name);
-    units.writeNumber(&buf.writer, if (snaps) Element.layoutUnit(px) else px) catch return null;
+    // A calc() is the one way a negative length reaches a property that refuses
+    // one, since the sign is not in the text anywhere -- `width: calc(10px -
+    // 30px)` is a valid declaration where `width: -20px` is not. Chrome clamps
+    // it at zero, and on exactly the properties that refuse the bare negative:
+    // measured over sixteen (scratch/b98/expr-b98-calc-negative.js), the nine
+    // that clamp are the nine in `no_negative` and the five that keep the minus
+    // -- the margins, `top`, `letter-spacing`, `text-indent` -- are the ones
+    // absent from it. So the existing table answers this and there is no second
+    // list to keep in step.
+    const floored = if (px < 0 and chrome_bounds.no_negative.has(property_name)) 0 else px;
+    units.writeNumber(&buf.writer, if (snaps) Element.layoutUnit(floored) else floored) catch return null;
     buf.writer.writeAll("px") catch return null;
     return buf.written();
 }

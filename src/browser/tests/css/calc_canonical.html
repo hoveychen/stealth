@@ -160,6 +160,40 @@
 }
 </script>
 
+<script id="calc_keeps_a_unit_this_engine_does_not_model">
+{
+  // The other side of the refusal, and the reason it cannot just be "a unit
+  // units.zig does not know". Chrome has sixty units and this engine resolves
+  // twenty-two of them, so `calc(100svh - 3.5rem)` is a declaration every
+  // browser keeps and this engine cannot fold -- while `calc(10px + 2foo)` is
+  // one every browser drops. Told apart by the measured spelling table in
+  // chrome_value_case.units, which is where the sixty are written down.
+  //
+  // Found on a real page, not invented: tailwindcss.com writes
+  // `max-height: calc(100svh - 3.5rem)`, and the first version of the refusal
+  // threw it away -- one declaration out of the 1415 calc()s that page holds
+  // (scratch/b98/expr-b98-calc-inventory.js).
+  const rows = [
+    ['max-height: calc(100svh - 3.5rem)', 'max-height', 'calc(100svh - 3.5rem)'],
+    ['width: calc(100dvh - 1px)', 'width', 'calc(100dvh - 1px)'],
+    ['width: calc(1lh + 1px)', 'width', 'calc(1lh + 1px)'],
+    ['width: calc(1cqw + 1px)', 'width', 'calc(1cqw + 1px)'],
+    // Still refused, so the escape hatch has not swallowed the refusal.
+    ['width: calc(10px + 2foo)', 'width', ''],
+    ['width: calc(1px + 1nonsense)', 'width', ''],
+  ];
+  const want = [];
+  const got = [];
+  for (const [decl, name, expected] of rows) {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    want.push(decl + ' -> ' + expected);
+    got.push(decl + ' -> ' + el.style.getPropertyValue(name));
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
 <script id="calc_inside_a_shorthand_and_a_position">
 {
   // A shorthand folds each component on its own, which is the context where
