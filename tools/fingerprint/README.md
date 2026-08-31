@@ -24081,3 +24081,137 @@ stations have moved on their own — see the two tables above it.
 
 `cf-scrapingcourse` is still `cf-challenge` and `x-hyatt` still `refused-429`.
 Both closed doors are exactly where they were.
+
+## The root containers are as tall as what they hold, and that reading costs a station (B73, 2026-08-31)
+
+`root-container-content-height` had one exec cut left in it, and it is the one
+the plan was opened for: an `auto` height on `<html>` or `<body>` was **the
+viewport**, so `getComputedStyle(body).height` was a per-document *constant*.
+`184px` in a 200px frame for an empty body, for one holding a 20px div and for
+one holding a 900px div alike. Cloudflare's widget dumps a whole computed style
+off the `<body>`, so that constant travels in every challenge payload — and on
+example.com Chrome answers `98.0781px` where this engine answered `756px`.
+
+### What Chrome does, over nineteen served documents
+
+Measured on a headed Chrome 151 at dpr 2, each document in a 400x200 borderless
+iframe (`scratch/b73/expr-height-row.js`, readings in
+`scratch/b73/ch-support-row.json`, now pinned in
+`frames/root_box_heights.html`). Four rules:
+
+* **standards `<body>`**: the height is what it holds, and its children's
+  margins *escape* it — `child_margin` holds a 20px div wearing 30px margins and
+  the body is 20 tall, not 80. clientHeight/scrollHeight add its padding,
+  offsetHeight adds its border, the computed `height` is the content box.
+* **standards `<html>`**: the height is the `<body>`'s **margin box**, plus its
+  own padding and border for offsetHeight — 36px of computed height and 50 of
+  offsetHeight under a 7px border. An empty body gives **8**, not 16: a
+  self-collapsing box's own two margins collapse into one.
+* **standards, the accessors on `<html>`**: it is the scrolling element, so
+  clientHeight is the **viewport** (200 for all nineteen, the mirror of the width
+  rule in `frames/root_box_edges.html`) and scrollHeight is the scrolling
+  **area** — `max(viewport, the root's border box)`, 200 for every short document
+  and 430 for the tall one.
+* **quirks**: the `<body>` fills instead, and the swap in `cssomViewport` puts
+  the viewport on *its* clientHeight and the root's own box on the root's. A
+  quirks body still **grows** past the fill when it holds more —
+  `quirks_overflow` is 900 of offsetHeight, not 184 — and both containers grow
+  with it.
+
+Two readings deliberately not asserted, measured so the next hop does not have
+to: `html,body{height:100%}` is body `200/200/200/200px` and root
+`200/200/`**208**`/200px` (the body's margin box hanging 8px past a root that is
+exactly the viewport, which needs a scrolling area built from descendant bounds
+rather than the root's own border box), and `body{min-height:100vh}` is root
+`200/216/216/216px`.
+
+### The change, and the one row it does not reach
+
+Three cuts, all small: leave the height `null` in `dimensionsAt`'s html/body
+branch unless the document is quirks; drop the html/body shortcut in
+`clientHeightOf` so both containers go through the content pass in **both** modes
+(the quirks fill becomes a floor rather than an answer, which is what makes a
+quirks body grow); and give the scrolling element the scrolling area in
+`getScrollHeight`, taking the same CSSOM swap clientHeight already took.
+
+One more rule fell out of the measurement: **a first child's margin cannot escape
+through the root element**, because the root's own margins do not collapse (CSS
+2.1 8.3.1). That is the whole of the 16px between the root's height and the
+body's.
+
+**Eighteen of the nineteen rows go byte-identical**, from a table that disagreed
+everywhere. The nineteenth is `child_margin`, and it is a different defect: an
+escaped margin *vanishes* here instead of collapsing into the box that stops it.
+Measured on both arms with `scratch/b73/expr-margin-escape-table.js` — 15 shapes,
+7 identical, and the plain-div cases agree at one, two and three levels of
+nesting, so this is margin collapsing and not the root containers. It is
+`escaped-margin-reaches-its-stop`, and it is also the last 32px between our
+example.com body height (66px with this change, 756 without) and Chrome's 98.
+
+### And then it costs ak-homedepot
+
+`--only ak-` on the same route, three times: **4/4 on main, 0/4 with the change**.
+Every failure is one crash and its tail — `ak-homedepot` takes `timeout:
+Runtime.enable` at 55s and the three stations after it time out on
+`Page.navigate` (`results/b73-only-ak-*.json`). Alone, homedepot passes in
+**38.8s** where main takes **28.4s**, which is a coin flip against a 30-second
+CDP timeout, not a pass.
+
+The reason is in `scratch/b73/count-root-reads.mjs`, which hooks the three height
+getters on a live page and reports calls and engine time per accessor:
+
+| | calls | engine time |
+|---|---|---|
+| main, `root:clientHeight` | 117 | **0.3 ms** |
+| main, `other:offsetHeight` | 513 | 6166 ms |
+| with the change, `root:clientHeight` | 108–143 | **15381 ms** |
+| with the change, `root:scrollHeight` | 1 | **7087 ms** |
+
+A homedepot page load reads the root containers' height about 120 times. The
+reading was a constant and is now a walk of the whole document, and one walk is
+60–140ms there. Note the middle row: the engine *already* spends 6.2 seconds
+inside 513 ordinary `offsetHeight` reads on that page, with one single read
+measured at **3.9 seconds**. The root containers did not create the cost model;
+they are just the biggest subtree in it.
+
+**A memo does not fix it.** Four slots on the Frame (`<html>`/`<body>` times the
+two extents) keyed on a new `Page.layout_version` — bumped by `domChanged` and by
+`StyleManager.sheetModified`, which between them cover tree mutations, inline
+style writes (the declaration syncs itself back through `setAttribute`) and every
+stylesheet mutation. On a synthetic page ten reads went 98ms → 0. On homedepot it
+changed nothing and the station still failed: a page that is building itself
+invalidates between nearly every read. Reverted rather than kept — a cache that
+does not hit is a staleness risk with no upside.
+
+### What did come out of it: the ancestor chain was being re-measured per child
+
+`contentHeight` measured every child through `getElementDimensions`, which starts
+that child at depth 0; the child then reaches the fill branch in `dimensionsAt`
+and re-measures the **whole ancestor chain** to recover a width the walk it is
+inside of already had. `dimensionsIn` is `dimensionsAt` told that width.
+`CSSStyleDeclaration.containingWidth` already opens with `if (containing.*)
+|width| return width;`, so seeding it is enough to delete the walk.
+
+Measured before → after, every value byte-identical:
+
+* five `offsetHeight` reads over a whole served document, three ~2400-node pages
+  (`scratch/b73/expr-subtree-read-cost.js`): 20-deep **81ms → 17**, flat
+  **52 → 24**, mixed **60 → 43**;
+* homedepot's 510 `offsetHeight` reads: **11.8ms per read → 9.6**, three paired
+  runs.
+
+That is `containing-width-carried-down`, and it stands on its own — it is a
+general layout-cost fix, it changes no reading, and `--only ak-` is 4/4 with it
+(homedepot 26.2s). It is **not** enough to pay for the root-container reading:
+with both changes in, homedepot still stalls.
+
+### Where this leaves it
+
+The root-container height work is correct, pinned against Chrome, and **not
+merged**: it sits on `prd/standards-root-box-height` (commits `9f263fcfb` and
+`f5d0d211e`) with `frames/root_box_heights.html` green at 18/19 and the suite at
+1583/1583. What blocks it is not a bug in it — it is that this engine has no
+incremental layout, so every height reading pays for its whole subtree, and the
+root containers' subtree is the document. The honest next step is not another
+memo: it is either making a subtree measurement cheap enough that 120 of them fit
+in a page load, or finding a reading that is content-shaped without being a walk.
