@@ -22,6 +22,49 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
+/// What a percentage inside a transform function resolves against: the
+/// element's own BORDER box. Attributed rather than assumed -- on a 100x50 <p>,
+/// `translate(50%, 50%)` answers 50,25 in Chrome, `padding:10px` moves it to
+/// 60,35, `border:5px` to 55,30, and `box-sizing:border-box` puts it back at
+/// 50,25 (scratch/b74/expr-test-shape-percent.js).
+///
+/// `zero` is the basis of a box that has no reference box of its own -- a
+/// non-replaced inline element -- where every percentage resolves to nothing
+/// while the lengths beside it still translate. An element with no box at all
+/// never gets here: `transform` computes to `none` there, percentage or not.
+pub const Basis = struct {
+    width: f64,
+    height: f64,
+
+    pub const zero: Basis = .{ .width = 0, .height = 0 };
+};
+
+/// What one argument's percentage is a percentage OF. `refused` is a percentage
+/// the grammar does not allow at all, which takes the whole declaration with it
+/// -- measured on both engines for `translateZ(50%)`, `rotate(50%)`,
+/// `skewX(50%)` and `perspective(50%)`.
+const Percent = enum { refused, width, height, number };
+
+/// Which extent a percentage in argument `index` of `name` resolves against.
+fn percentBasis(name: []const u8, index: usize) Percent {
+    if (eq(name, "translate") or eq(name, "translate3d")) {
+        return switch (index) {
+            0 => .width,
+            1 => .height,
+            // translate3d's third argument is a z offset, and z has no extent.
+            else => .refused,
+        };
+    }
+    if (eq(name, "translatex")) return if (index == 0) .width else .refused;
+    if (eq(name, "translatey")) return if (index == 0) .height else .refused;
+    // A scale is a ratio, so its percentage is just the number over a hundred
+    // and needs no box: `scale(50%)` is `matrix(0.5, 0, 0, 0.5, 0, 0)` on an
+    // element of any size.
+    if (eq(name, "scale") or eq(name, "scalex") or eq(name, "scaley") or
+        eq(name, "scalez") or eq(name, "scale3d")) return .number;
+    return .refused;
+}
+
 /// Column-major, the order `matrix3d()` lists: m[column][row].
 const Matrix = struct {
     m: [4][4]f64,
@@ -54,8 +97,8 @@ const Matrix = struct {
 ///
 /// `none` answers `none`, which is what Chrome answers and what an element with
 /// no transform reads anyway.
-pub fn computedValue(arena: Allocator, value: []const u8) !?[]const u8 {
-    var it = ListIterator.init(value) orelse return null;
+pub fn computedValue(arena: Allocator, value: []const u8, basis: Basis) !?[]const u8 {
+    var it = ListIterator.init(value, basis) orelse return null;
     if (it.is_none) return "none";
 
     var matrix: Matrix = .identity;
@@ -95,12 +138,12 @@ pub fn computedValue(arena: Allocator, value: []const u8) !?[]const u8 {
 /// functions holding their neutral values, so `none` to `rotate(90deg)` is a
 /// rotation from zero. The one exception is a `matrix`, `matrix3d` or
 /// `perspective` opposite a `none`, which has no such neutral form here.
-pub fn interpolatedValue(arena: Allocator, from: []const u8, to: []const u8, fraction: f64) !?[]const u8 {
+pub fn interpolatedValue(arena: Allocator, from: []const u8, to: []const u8, fraction: f64, basis: Basis) !?[]const u8 {
     var start: [MAX_FUNCTIONS]Function = undefined;
     var end: [MAX_FUNCTIONS]Function = undefined;
 
-    const start_count = collect(from, &start) orelse return null;
-    const end_count = collect(to, &end) orelse return null;
+    const start_count = collect(from, &start, basis) orelse return null;
+    const end_count = collect(to, &end, basis) orelse return null;
 
     if (start_count == 0 and end_count == 0) return "none";
     if (start_count == 0) {
@@ -177,8 +220,8 @@ const MAX_FUNCTIONS = 32;
 /// A whole `<transform-list>` into `out`, answering how many functions it held.
 /// `none` is zero of them. Null for a list this file does not model, or one
 /// longer than `out`.
-fn collect(value: []const u8, out: *[MAX_FUNCTIONS]Function) ?usize {
-    var it = ListIterator.init(value) orelse return null;
+fn collect(value: []const u8, out: *[MAX_FUNCTIONS]Function, basis: Basis) ?usize {
+    var it = ListIterator.init(value, basis) orelse return null;
     if (it.is_none) return 0;
 
     var count: usize = 0;
@@ -203,6 +246,7 @@ fn collect(value: []const u8, out: *[MAX_FUNCTIONS]Function) ?usize {
 /// wants to interpolate read the list the same way.
 const ListIterator = struct {
     text: []const u8,
+    basis: Basis,
     i: usize = 0,
     is_none: bool = false,
 
@@ -210,10 +254,10 @@ const ListIterator = struct {
 
     /// Null when there is no list at all -- an empty value, which is not the
     /// same as `none`.
-    fn init(value: []const u8) ?ListIterator {
+    fn init(value: []const u8, basis: Basis) ?ListIterator {
         const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
         if (trimmed.len == 0) return null;
-        return .{ .text = trimmed, .is_none = std.ascii.eqlIgnoreCase(trimmed, "none") };
+        return .{ .text = trimmed, .basis = basis, .is_none = std.ascii.eqlIgnoreCase(trimmed, "none") };
     }
 
     fn next(self: *ListIterator) Item {
@@ -228,7 +272,7 @@ const ListIterator = struct {
 
         const close = std.mem.indexOfScalarPos(u8, text, self.i, ')') orelse return .refused;
         var args: [MAX_ARGS]f64 = undefined;
-        const count = parseArgs(text[self.i + 1 .. close], &args) orelse return .refused;
+        const count = parseArgs(name, text[self.i + 1 .. close], &args, self.basis) orelse return .refused;
         self.i = close + 1;
 
         return .{ .function = .{ .name = name, .args = args, .count = count } };
@@ -260,14 +304,14 @@ const Function = struct {
 /// The comma-separated arguments as the numbers the matrix wants, answering
 /// how many there were. Null for an argument this file does not model, which
 /// takes the whole declaration with it.
-fn parseArgs(args: []const u8, out: *[MAX_ARGS]f64) ?usize {
+fn parseArgs(name: []const u8, args: []const u8, out: *[MAX_ARGS]f64, basis: Basis) ?usize {
     var count: usize = 0;
     var it = std.mem.splitScalar(u8, args, ',');
     while (it.next()) |raw| {
         if (count == out.len) return null;
         const arg = std.mem.trim(u8, raw, &std.ascii.whitespace);
         if (arg.len == 0) return null;
-        out[count] = parseScalar(arg) orelse return null;
+        out[count] = parseScalar(arg, percentBasis(name, count), basis) orelse return null;
         count += 1;
     }
     return count;
@@ -439,10 +483,22 @@ fn eq(a: []const u8, comptime b: []const u8) bool {
 }
 
 /// One argument as the number the matrix wants: an angle becomes radians, a
-/// length its pixel count, a bare number itself. A unit this does not know --
-/// `em`, `%` -- answers null and takes the whole declaration with it, which is
-/// the same refusal `resolvesHere` makes for every other property.
-fn parseScalar(arg: []const u8) ?f64 {
+/// length its pixel count, a bare number itself, and a percentage whatever
+/// `basis` says it is a percentage of. A unit this does not know -- `em` -- and
+/// a percentage in a slot whose grammar has none answer null and take the whole
+/// declaration with them, which is the same refusal `resolvesHere` makes for
+/// every other property.
+fn parseScalar(arg: []const u8, percent: Percent, basis: Basis) ?f64 {
+    if (arg.len > 1 and arg[arg.len - 1] == '%') {
+        const number = std.fmt.parseFloat(f64, arg[0 .. arg.len - 1]) catch return null;
+        return switch (percent) {
+            .refused => null,
+            .width => number / 100 * basis.width,
+            .height => number / 100 * basis.height,
+            .number => number / 100,
+        };
+    }
+
     const Suffix = struct { []const u8, f64 };
     const angles = [_]Suffix{
         .{ "deg", std.math.pi / 180.0 },
