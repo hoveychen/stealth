@@ -24215,3 +24215,50 @@ incremental layout, so every height reading pays for its whole subtree, and the
 root containers' subtree is the document. The honest next step is not another
 memo: it is either making a subtree measurement cheap enough that 120 of them fit
 in a page load, or finding a reading that is content-shaped without being a walk.
+
+## An escaped margin was going nowhere (B73, 2026-08-31)
+
+`css/margin_collapse.html` already asserted that a first child's top margin
+*escapes* a parent with no edge on that side. What it never asked is where the
+margin then **goes**, and the answer is: it keeps escaping, through every
+edgeless ancestor, until it reaches one with a border, a padding or a block
+formatting context — and there it collapses with whatever margins it meets. That
+gap belongs to *that* box.
+
+This engine dropped it at the first parent. Which is invisible in the shape the
+old assertions used, because both arms answer 20 for a wrapper holding a 20px div
+with 30px margins — Chrome because the margin went further up, this engine
+because the margin was gone. The difference shows one level out:
+
+| shape (a 20px block with 30px margins inside it) | Chrome | before |
+|---|---|---|
+| two edgeless wrappers side by side, in a padded parent | 112 | 42 |
+| one edgeless wrapper beside a plain sibling with a 5px margin | 102 | 47 |
+| an empty margined box reached through a wrapper, between two blocks | 72 | 42 |
+| a self-collapsing first child, then a sibling with a 50px top margin | 72 | 22 |
+| an out-of-flow first child, then one with a 30px top margin | 52 | 22 |
+| `margin-top` 5, then 40, then 12, three levels deep | 62 | 27 |
+
+Twelve shapes measured on a headed Chrome 151 at dpr 2, through that file's own
+harness so the container is the same one the assertions run in
+(`scratch/b73/expr-escape-cases.js`, readings in `ch-escape-cases.json`). Six
+were already right and stay as the boundary — an edge, a formatting context, and
+**text**, because a line box is content and nothing below it can get out. Twelve
+of twelve now.
+
+The fix is not a second walk. `contentHeight` reports the two escaped groups
+alongside the height, because **the escaped group is exactly the value of `group`
+at the moment a pay-out is skipped** — and whether it is skipped is what
+`escapes.top` / `escapes.bottom` already decide. The parent joins them into the
+run its own margins are in (`MarginGroup.joinGroup`: two runs that adjoin are one
+run, so 30 meeting a 10 is 30). The self-collapsing branch joins **both** into
+the same group, which is what makes a wrapper whose only content is an empty
+margined box read as one gap rather than two.
+
+No extra tree walking, and the measured cost is flat: homedepot's 510
+`offsetHeight` reads are 10.0ms each against 9.5–9.7 before, two paired runs.
+
+Residual, stated in the code rather than measured: `marginEscapes` never asks
+about `height`, and the spec only lets a *bottom* margin collapse through a box
+whose height is `auto`. Every shape here has an auto-height parent, so nothing
+above distinguishes the two.
