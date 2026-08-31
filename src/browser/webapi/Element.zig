@@ -2731,6 +2731,20 @@ pub fn verticalMargins(self: *Element, frame: *Frame, containing: *?f64, depth: 
     };
 }
 
+/// One margin of a root container, which is the one place the UA sheet's own
+/// margins have to reach the layout. `body { margin: 8px }` lives in the per-tag
+/// table `getComputedStyle` reads and not in the cascade this walks, so an
+/// undeclared <body> answers 0 through `marginPx` -- and the root branch used to
+/// paper over that with a constant, which is why `body { margin: 20px }` still
+/// measured as though it were 8. Ask the cascade first and fall back to the
+/// tag's own margin, the same shape `usedBorderWidth` uses for the UA border.
+fn containerMarginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) f64 {
+    if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame) != null) {
+        return self.marginPx(name, frame, containing, depth);
+    }
+    return if (self.getTag() == .body) body_ua_margin else 0;
+}
+
 /// One margin in px, from the cascade, so a stylesheet rule counts.
 fn marginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) f64 {
     if (CSSStyleDeclaration.marginPercentagePx(self, name, frame, containing, depth)) |px| {
@@ -3237,7 +3251,22 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
         // them, which the sentinel never was.
         if (tag == .html or tag == .body) {
             const owner = self.ownerFrame(frame);
-            const box: Dimensions = if (owner.iframe) |iframe|
+            // The space this element's MARGIN box is laid into. For the root
+            // that is the viewport; for the <body> it is the ROOT's content
+            // box, which is not the same thing the moment the root wears a
+            // border or a padding.
+            //
+            // `box.width - 2 * body_ua_margin` used to stand for both, and it
+            // was wrong twice over: it read the viewport for an element that is
+            // not laid out in it, and it stood in a constant for a margin the
+            // page can declare. A `<html style="border:7px solid">` in a 400px
+            // frame left its <body> 384 wide where Chrome says 370, and
+            // `body{margin:20px}` stayed 384 where Chrome says 360.
+            const available: Dimensions = if (tag == .body) blk: {
+                const root = owner.document.getDocumentElement() orelse break :blk .{ .width = 0, .height = 0 };
+                if (root == self) break :blk .{ .width = 0, .height = 0 };
+                break :blk root.dimensionsAt(frame, measure_text_width, depth + 1, true);
+            } else if (owner.iframe) |iframe|
                 iframe.asElement().dimensionsAt(frame, measure_text_width, depth + 1, true)
             else blk: {
                 const viewport = owner._page.getViewport();
@@ -3246,9 +3275,37 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
                     .height = @floatFromInt(viewport.height),
                 };
             };
-            const inset: f64 = if (tag == .body) 2 * body_ua_margin else 0;
-            if (width == null) width = @max(0, box.width - inset);
-            if (height == null) height = @max(0, box.height - inset);
+
+            // And this element's own edges come out of it, the way they do for
+            // any other `auto`-width block: the root's border box is the
+            // viewport, not the viewport plus a border hanging outside the
+            // window. Measured over nine served documents,
+            // scratch/b72/expr-root-box.js against Chrome 151.
+            //
+            // The edges are asked for here rather than read off `dims` because
+            // the y-only path never fills them: `getElementHeight` clears
+            // `measure_text_width`, and the block above that measures them is
+            // behind it.
+            const edges = if (comptime measure_text_width)
+                CSSStyleDeclaration.BoxEdges{
+                    .padding_x = dims.padding_x,
+                    .padding_y = dims.padding_y,
+                    .border_x = dims.border_x,
+                    .border_y = dims.border_y,
+                }
+            else
+                CSSStyleDeclaration.boxEdgesSharing(self, frame, &containing, depth);
+            const margin_x = self.containerMarginPx("margin-left", frame, &containing, depth) +
+                self.containerMarginPx("margin-right", frame, &containing, depth);
+            const margin_y = self.containerMarginPx("margin-top", frame, &containing, depth) +
+                self.containerMarginPx("margin-bottom", frame, &containing, depth);
+
+            if (width == null) {
+                width = @max(0, available.width - margin_x - edges.border_x - edges.padding_x);
+            }
+            if (height == null) {
+                height = @max(0, available.height - margin_y - edges.border_y - edges.padding_y);
+            }
         } else if (tag == .canvas) {
             // A canvas is the one replaced element here with an intrinsic
             // RATIO, and it comes from the BUFFER: the width/height content
@@ -3414,7 +3471,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
 /// the fraction, because a computed `width` is built off it and Chrome prints
 /// `1619.97px` there rather than an integer.
 pub fn getClientWidth(self: *Element, frame: *Frame) f64 {
-    if (self.quirksViewport(frame)) |view| {
+    if (self.cssomViewport(frame)) |view| {
         return @floatFromInt(view.width);
     }
     var visibility_cache: VisibilityCache = .{};
@@ -3425,9 +3482,17 @@ pub fn getClientWidth(self: *Element, frame: *Frame) f64 {
 ///
 /// The rule SWAPS with the document's mode: the root element answers the
 /// viewport in standards mode, and the HTML body element answers it in quirks
-/// mode. The root half was already right here, because an undeclared root's box
-/// is the viewport anyway. The body half was not -- this reported the body's own
-/// padding box in both modes.
+/// mode. Only the body half used to be here, on the reasoning that "an
+/// undeclared root's box is the viewport anyway" -- true, and it stops being
+/// true the moment the root is not undeclared. A `<html style="padding:5px">` in
+/// a 400px frame has a 396px padding box and Chrome still answers 400 for its
+/// clientWidth, and `<html style="width:300px">` answers 400 as well: the root
+/// reports the window it is in, never itself. Measured over nine served
+/// documents, scratch/b72/expr-root-box.js against Chrome 151, and the two
+/// shapes that separate the readings are in frames/root_box_edges.html.
+///
+/// In QUIRKS mode the root does report its own box (386 for a 400px frame whose
+/// root wears a 7px border), which is the other half of the same swap.
 ///
 /// Found on an `about:blank` iframe, which is always quirks: Chrome 151 answers
 /// 300 for `body.clientWidth` in a 300px frame where this answered 284, while
@@ -3440,13 +3505,21 @@ pub fn getClientWidth(self: *Element, frame: *Frame) f64 {
 /// Only `clientWidth` and `clientHeight` take it. `getClientWidthWithCache` is
 /// deliberately left alone: `offsetWidth` and the resolved computed `width` are
 /// built off it, and Chrome keeps both of those on the body's real box.
-fn quirksViewport(self: *Element, frame: *Frame) ?Viewport {
-    if (self.getTag() != .body) {
+fn cssomViewport(self: *Element, frame: *Frame) ?Viewport {
+    const tag = self.getTag();
+    if (tag != .body and tag != .html) {
         return null;
     }
     const owner = self.ownerFrame(frame);
     const document = owner.document;
-    if (!document.isQuirksMode()) {
+    const quirks = document.isQuirksMode();
+    if (tag == .html) {
+        if (quirks) return null;
+        // The document's own root, not any `<html>` a page nested deeper.
+        if (document.getDocumentElement() != self) return null;
+        return owner.viewport();
+    }
+    if (!quirks) {
         return null;
     }
     // "The HTML body element" is the document's own body, not any `<body>` a
@@ -3487,7 +3560,7 @@ fn clientWidthOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_cac
 }
 
 pub fn getClientHeight(self: *Element, frame: *Frame) f64 {
-    if (self.quirksViewport(frame)) |view| {
+    if (self.cssomViewport(frame)) |view| {
         return @floatFromInt(view.height);
     }
     var visibility_cache: VisibilityCache = .{};
@@ -3660,9 +3733,16 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
     const dims = self.getElementDimensions(frame);
 
     const tag = self.getTag();
-    // As in getScrollWidth: the root containers carry artificial giant
-    // defaults, and page-level overflow checks read them. Rounded there too,
-    // and for the same reason.
+    // The width half of this took the CSSOM swap -- the scrolling element
+    // reports the viewport -- and the height half deliberately did not. The
+    // heights are not a swap: Chrome answers the viewport for a short document
+    // and the CONTENT for a tall one (200 and 430 for the same frame, measured
+    // in scratch/b72/ch-rootbox2.json), so the reading is `max(viewport,
+    // content)` and this engine cannot supply the content half yet -- an
+    // `auto`-height root container is stretched to its viewport here rather
+    // than sized to what it holds. That is `content-height-memoised-subtree`.
+    // Until it lands, the viewport is the answer for both, which is what
+    // `dims.height` already is.
     if (tag == .html or tag == .body) {
         return @round(dims.height);
     }
@@ -3900,18 +3980,22 @@ pub fn getScrollWidth(self: *Element, frame: *Frame) f64 {
 
     const dims = self.getElementDimensions(frame);
 
-    const tag = self.getTag();
-    // The root containers carry artificial giant defaults (1920 and
-    // 100_000_000, see getElementDimensions). Stacking their children on
-    // top would inflate a value sites read to detect page overflow.
+    // The scrolling element reports the VIEWPORT here, exactly as it does for
+    // clientWidth -- and it is the same swap, so the root answers it in
+    // standards mode and the <body> in quirks. Measured over nine served
+    // documents: a `<html style="width:300px">` in a 400px frame answers
+    // scrollWidth 400, which is the reading that says this is the window's
+    // scrolling area and not a box that happens to match it
+    // (scratch/b72/expr-root-box.js, frames/root_box_edges.html).
     //
-    // Rounded like every other exit from here: scrollWidth is a `long` in the
-    // IDL, so a fraction is not a wrong answer but an impossible one. This exit
-    // was the only one that did not round, and it is the one the two elements a
-    // page reads most often go through -- a `<body>` with a fractional box
-    // answered 100.3984375.
-    if (tag == .html or tag == .body) {
-        return @round(dims.width);
+    // What used to be here was `@round(dims.width)` for BOTH root containers in
+    // BOTH modes, guarding against the artificial giant defaults the root box
+    // once carried (1920 and 100_000_000). Those are gone -- the root is laid
+    // out in its frame's viewport now -- and the guard outlived them, dropping
+    // the padding every other element adds and answering the box in the two
+    // cases Chrome answers the window.
+    if (self.cssomViewport(frame)) |view| {
+        return @floatFromInt(view.width);
     }
 
     if (dims.inline_box) return 0;

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+The root element's box fits INSIDE the viewport. Its border, padding and margin
+come out of the space it has, the way they do for any other block with an `auto`
+width -- so a `<html style="border:7px solid">` in a 400px frame has a 400px
+border box and a 386px content box, and the <body> laid out in it is 370 wide,
+not 384.
+
+This engine gave the root the viewport as its CONTENT box and then let the
+border and padding stick out past it: `documentElement.offsetWidth` read 414 in
+a 400px frame, which is a box wider than the window it is in -- and every
+descendant inherited the extra, so the <body> stayed 384 whatever the root wore.
+
+Two rules, both measured on Chrome 151 at dpr 2 over eleven served documents
+(scratch/b72/qc/, read with scratch/b72/expr-root-box.js, readings in
+scratch/b72/ch-rootbox2.json):
+
+  * the root's content width is the viewport less its own margin, border and
+    padding -- unless it declares a `width`, which names the content box as
+    usual (`width:300px;border:7px` is offsetWidth 314, still inside the 400);
+  * the <body>'s content width is the ROOT's content width less the body's own
+    margin, border and padding. The 16px this engine subtracted is only the UA
+    margin's value: `body{margin:20px}` is 360 wide and `margin:0` is 400.
+
+And one accessor rule, which is the exact mirror of the quirks-mode one already
+in `quirksViewport`: in STANDARDS mode `documentElement.clientWidth` answers the
+VIEWPORT, not the root's own padding box. The two agreed for as long as the root
+had no border or padding to tell them apart -- `root_box_padding` is where they
+separate, Chrome answering 400 for a padding box that is really 396. In quirks
+mode the root answers its real box (386) and the body answers the viewport.
+
+HEIGHTS ARE NOT ASSERTED HERE, and they are still wrong: this engine stretches
+an `auto`-height <html> and <body> to fill the viewport where Chrome sizes them
+to their content, so `body.offsetHeight` reads 184 in a 200px frame holding one
+20px div where Chrome reads 20. That is a different defect with its own plan
+(`content-height-memoised-subtree`); the fix here moves the height numbers but
+cannot make them right, and asserting them would be asserting that engine's
+behaviour rather than a browser's.
+-->
+
+<iframe id=f_border src="support/root_box_border.html" style="width:400px;height:200px;border:0"></iframe>
+<iframe id=f_padding src="support/root_box_padding.html" style="width:400px;height:200px;border:0"></iframe>
+<iframe id=f_margin src="support/root_box_margin.html" style="width:400px;height:200px;border:0"></iframe>
+<iframe id=f_width src="support/root_box_width.html" style="width:400px;height:200px;border:0"></iframe>
+<iframe id=f_body_margin src="support/root_box_body_margin.html" style="width:400px;height:200px;border:0"></iframe>
+<iframe id=f_body_edges src="support/root_box_body_edges.html" style="width:400px;height:200px;border:0"></iframe>
+<iframe id=f_plain src="support/root_box_plain.html" style="width:400px;height:200px;border:0"></iframe>
+<iframe id=f_quirks_border src="support/root_box_quirks_border.html" style="width:400px;height:200px;border:0"></iframe>
+<iframe id=f_quirks_padding src="support/root_box_quirks_padding.html" style="width:400px;height:200px;border:0"></iframe>
+
+<script id=root_box_fits_inside_the_viewport>
+testing.onload(() => {
+  const read = (id) => {
+    const d = document.getElementById(id).contentDocument;
+    const r = d.documentElement, b = d.body;
+    return [d.compatMode, 'root', r.clientWidth, r.offsetWidth, r.scrollWidth,
+            'body', b.clientWidth, b.offsetWidth, b.scrollWidth].join(' ');
+  };
+
+  // id, then compatMode / root client-offset-scroll width / body
+  // client-offset-scroll width, as Chrome 151 answers them. `scrollWidth`
+  // takes the SAME swap clientWidth does -- the scrolling element reports the
+  // viewport, the other one its own padding box -- which is why every
+  // standards row reads 400 for the root and every quirks row 400 for the body.
+  const CASES = [
+    // The root's border comes out of the viewport, and the body sees what is
+    // left: 400 - 14 = 386 content, less the body's 16 of margin.
+    ['f_border', 'CSS1Compat root 400 400 400 body 370 370 370'],
+    // Padding too -- and this is the case that separates clientWidth from the
+    // root's real padding box, which is 396 here.
+    ['f_padding', 'CSS1Compat root 400 400 400 body 360 360 360'],
+    // A margin shrinks the BORDER box: 400 - 6 = 394 offsetWidth.
+    ['f_margin', 'CSS1Compat root 400 394 400 body 364 364 364'],
+    // A declared width names the content box as it does anywhere else, so the
+    // border is added to it -- 300 + 14 -- and it still fits. The scrolling
+    // area is still the window's, which is what says the root reports the
+    // viewport rather than a box that happens to equal it.
+    ['f_width', 'CSS1Compat root 400 314 400 body 284 284 284'],
+    // The body's own margin, not a constant 16.
+    ['f_body_margin', 'CSS1Compat root 400 400 400 body 360 360 360'],
+    // ...and its own border and padding: content 400 - 16 - 8 - 12 = 364,
+    // clientWidth adds the padding back and offsetWidth the border as well.
+    // scrollWidth is the padding box too, so it agrees with clientWidth.
+    ['f_body_edges', 'CSS1Compat root 400 400 400 body 376 384 376'],
+    // Nothing declared, which is where the two arms already agreed.
+    ['f_plain', 'CSS1Compat root 400 400 400 body 384 384 384'],
+    // Quirks inverts the pair: the root answers its own box and the body
+    // answers the viewport.
+    ['f_quirks_border', 'BackCompat root 386 400 386 body 400 370 400'],
+    ['f_quirks_padding', 'BackCompat root 386 400 386 body 400 360 400'],
+  ];
+
+  const wrong = [];
+  for (const [id, want] of CASES) {
+    const got = read(id);
+    if (got !== want) wrong.push(id + ': want [' + want + '], got [' + got + ']');
+  }
+  testing.expectEqual('', wrong.join(' | '));
+});
+</script>
+</body>
