@@ -20,6 +20,9 @@
 //     column-major order. `rotateZ` is 2D by that rule and measured as such.
 const std = @import("std");
 
+const calc = @import("calc.zig");
+const units = @import("../../css/units.zig");
+
 const Allocator = std.mem.Allocator;
 
 /// What a percentage inside a transform function resolves against: the
@@ -35,8 +38,42 @@ const Allocator = std.mem.Allocator;
 pub const Basis = struct {
     width: f64,
     height: f64,
+    /// CSS pixels per unit for the lengths that need the element or the
+    /// viewport before they mean anything. Null for a unit the caller could
+    /// not resolve, which refuses that argument exactly as before -- so a
+    /// caller that fills none of them keeps the old behaviour.
+    ///
+    /// The absolute units are deliberately absent: `units.absoluteLengthFactor`
+    /// answers those with no context at all, so asking the caller for them
+    /// would be asking it to pass through a constant.
+    factors: Factors = .{},
 
     pub const zero: Basis = .{ .width = 0, .height = 0 };
+};
+
+pub const Factors = struct {
+    em: ?f64 = null,
+    rem: ?f64 = null,
+    ex: ?f64 = null,
+    ch: ?f64 = null,
+    vh: ?f64 = null,
+    vw: ?f64 = null,
+    vmin: ?f64 = null,
+    vmax: ?f64 = null,
+
+    fn of(self: Factors, unit: units.Unit) ?f64 {
+        return switch (unit) {
+            .em => self.em,
+            .rem => self.rem,
+            .ex => self.ex,
+            .ch => self.ch,
+            .vh => self.vh,
+            .vw => self.vw,
+            .vmin => self.vmin,
+            .vmax => self.vmax,
+            else => null,
+        };
+    }
 };
 
 /// What one argument's percentage is a percentage OF. `refused` is a percentage
@@ -270,7 +307,10 @@ const ListIterator = struct {
         if (self.i >= text.len or text[self.i] != '(') return .refused;
         const name = text[name_start..self.i];
 
-        const close = std.mem.indexOfScalarPos(u8, text, self.i, ')') orelse return .refused;
+        // The MATCHING paren, not the first one. A math-function argument brings
+        // parens of its own, so `translateX(calc(10px + 5px))` cut at the first
+        // `)` left an unbalanced `calc(10px + 5px` that nothing could parse.
+        const close = matchingParen(text, self.i) orelse return .refused;
         var args: [MAX_ARGS]f64 = undefined;
         const count = parseArgs(name, text[self.i + 1 .. close], &args, self.basis) orelse return .refused;
         self.i = close + 1;
@@ -301,20 +341,57 @@ const Function = struct {
     }
 };
 
+/// The index of the `)` matching the `(` at `open`.
+fn matchingParen(text: []const u8, open: usize) ?usize {
+    var depth: usize = 0;
+    var i = open;
+    while (i < text.len) : (i += 1) {
+        switch (text[i]) {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if (depth == 0) return i;
+            },
+            else => {},
+        }
+    }
+    return null;
+}
+
 /// The comma-separated arguments as the numbers the matrix wants, answering
 /// how many there were. Null for an argument this file does not model, which
 /// takes the whole declaration with it.
+///
+/// The split is at depth zero: `min(1px, 1em)` is one argument with a comma in
+/// it, and splitting on every comma made it two arguments neither of which
+/// parses.
 fn parseArgs(name: []const u8, args: []const u8, out: *[MAX_ARGS]f64, basis: Basis) ?usize {
     var count: usize = 0;
-    var it = std.mem.splitScalar(u8, args, ',');
-    while (it.next()) |raw| {
-        if (count == out.len) return null;
-        const arg = std.mem.trim(u8, raw, &std.ascii.whitespace);
-        if (arg.len == 0) return null;
-        out[count] = parseScalar(arg, percentBasis(name, count), basis) orelse return null;
-        count += 1;
+    var depth: usize = 0;
+    var start: usize = 0;
+    for (args, 0..) |c, i| {
+        switch (c) {
+            '(' => depth += 1,
+            ')' => depth -|= 1,
+            ',' => if (depth == 0) {
+                if (!takeArg(name, args[start..i], out, &count, basis)) return null;
+                start = i + 1;
+            },
+            else => {},
+        }
     }
+    if (depth != 0) return null;
+    if (!takeArg(name, args[start..], out, &count, basis)) return null;
     return count;
+}
+
+fn takeArg(name: []const u8, raw: []const u8, out: *[MAX_ARGS]f64, count: *usize, basis: Basis) bool {
+    if (count.* == out.len) return false;
+    const arg = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (arg.len == 0) return false;
+    out[count.*] = parseScalar(arg, scalarType(name, count.*), percentBasis(name, count.*), basis) orelse return false;
+    count.* += 1;
+    return true;
 }
 
 fn matrixFor(name: []const u8, n: []const f64) ?Parsed {
@@ -538,7 +615,136 @@ fn dimensionDigits(text: []const u8) []const u8 {
     return text[0 .. dot + 1 + 7];
 }
 
-fn parseScalar(arg: []const u8, percent: Percent, basis: Basis) ?f64 {
+/// Whether the token is a `calc()` call rather than a plain value.
+fn isCalcCall(arg: []const u8) bool {
+    const trimmed = std.mem.trim(u8, arg, &std.ascii.whitespace);
+    if (trimmed.len < 6 or trimmed[trimmed.len - 1] != ')') return false;
+    return std.ascii.eqlIgnoreCase(trimmed[0..5], "calc(");
+}
+
+/// One length token as a number and a unit, or null when it is not one. The
+/// units this file already handles by hand -- `px`, the four angles, a bare
+/// number -- are declined here so the branches above keep their measured
+/// digit-for-digit behaviour (see `dimensionDigits`).
+fn lengthUnit(arg: []const u8) ?units.Parsed {
+    const parsed = units.parse(arg) catch return null;
+    return switch (parsed.unit) {
+        .none, .percentage, .px, .deg, .rad, .grad, .turn => null,
+        else => parsed,
+    };
+}
+
+/// A length in CSS pixels, or null when this engine cannot resolve that unit
+/// here.
+fn pixelsOf(value: f64, unit: units.Unit, basis: Basis) ?f64 {
+    if (units.absoluteLengthFactor(unit)) |factor| return value * factor;
+    const factor = basis.factors.of(unit) orelse return null;
+    return value * factor;
+}
+
+/// A `calc()` or comparison argument, resolved to the number the surrounding
+/// function wants.
+///
+/// The fold gives one term per unit, so this is the same sum the declaration
+/// path does: absolute lengths are already px by then, the rest go through the
+/// basis, an angle folds in radians the way the bare angles above do, and a
+/// percentage takes whichever extent this argument's slot resolves against.
+/// Null for anything with a term it cannot finish, which refuses the argument
+/// and, as before, the whole declaration with it.
+fn mathScalar(arg: []const u8, kind: Scalar, percent: Percent, basis: Basis) ?f64 {
+    // A comparison is resolved from its parts rather than folded, which is what
+    // keeps this allocation-free: `calc.foldBodyIn` would have to write the
+    // function's text somewhere, and there is nothing to write it into here.
+    if (calc.callOf(arg)) |call| {
+        var pixels: [8]f64 = undefined;
+        for (0..call.len) |i| {
+            pixels[i] = mathScalar(call.arg(i), kind, percent, basis) orelse
+                parseScalar(call.arg(i), kind, percent, basis) orelse return null;
+        }
+        if (call.len == 0) return null;
+        return switch (call.kind) {
+            .min => blk: {
+                var m = pixels[0];
+                for (pixels[1..call.len]) |v| m = @min(m, v);
+                break :blk m;
+            },
+            .max => blk: {
+                var m = pixels[0];
+                for (pixels[1..call.len]) |v| m = @max(m, v);
+                break :blk m;
+            },
+            .clamp => if (call.len == 3) @max(pixels[0], @min(pixels[1], pixels[2])) else null,
+        };
+    }
+
+    // Only an actual `calc()`. Without this the fold would also swallow a plain
+    // `10px`, and the branches below it keep every digit the author wrote --
+    // which is measured behaviour this must not walk over.
+    if (!isCalcCall(arg)) return null;
+    const folded = calc.foldBody(arg) catch return null;
+    if (folded.fn_len != 0) return null;
+    var total: f64 = 0;
+    for (folded.terms[0..folded.len]) |term| {
+        total += switch (term.unit) {
+            .px => if (kind == .length) term.value else return null,
+            // A bare number is the whole answer in a number slot and not a
+            // length anywhere else.
+            .none => if (kind == .number) term.value else return null,
+            .percentage => switch (percent) {
+                .refused => return null,
+                .width => term.value / 100 * basis.width,
+                .height => term.value / 100 * basis.height,
+                .number => term.value / 100,
+            },
+            .deg, .grad, .turn, .rad => if (kind == .angle) switch (term.unit) {
+                .deg => term.value * std.math.pi / 180.0,
+                .grad => term.value * std.math.pi / 200.0,
+                .turn => term.value * 2 * std.math.pi,
+                else => term.value,
+            } else return null,
+            else => if (kind == .length)
+                pixelsOf(term.value, term.unit, basis) orelse return null
+            else
+                return null,
+        };
+    }
+    return total;
+}
+
+/// What kind of value an argument slot takes, which nothing here used to ask.
+///
+/// `parseScalar` accepted `px` for every function, so `matrix(1, 0, 0, 1, 10px,
+/// 0)`, `scale(2px)`, `rotate(45px)`, `rotate(45)`, `translateX(45)`,
+/// `skewX(10px)` and `perspective(100)` were all stored where Chrome drops the
+/// declaration -- eight of thirteen measured rows wrong before any of this, and
+/// widening the accepted lengths would have made it nine.
+///
+/// Read off Chrome 151 by putting one token of each type in each slot of each
+/// function and seeing which survive (scratch/b98/expr-b98-transform-slot-types.js
+/// and expr-b98-rotate3d.js). Five groups came out, and they are these.
+const Scalar = enum { number, length, angle };
+
+fn scalarType(name: []const u8, index: usize) Scalar {
+    if (eq(name, "matrix") or eq(name, "matrix3d")) return .number;
+    if (eq(name, "rotate3d")) return if (index == 3) .angle else .number;
+    if (std.ascii.startsWithIgnoreCase(name, "rotate") or
+        std.ascii.startsWithIgnoreCase(name, "skew")) return .angle;
+    if (std.ascii.startsWithIgnoreCase(name, "scale")) return .number;
+    // What is left is the translate family and `perspective`, which take a
+    // length. Whether a percentage comes with it is `percentBasis`'s question,
+    // and the two disagree on purpose: `translateZ` is a length that refuses
+    // one.
+    return .length;
+}
+
+fn parseScalar(arg: []const u8, kind: Scalar, percent: Percent, basis: Basis) ?f64 {
+    // A math function is resolved before anything else looks at the token: its
+    // answer is a length, an angle or a number like any other argument, and
+    // every one of its terms goes through the same table the bare units below
+    // do. This is why `translateX(calc(1px + 1em))` works exactly as far as
+    // `translateX(1em)` does and no further.
+    if (mathScalar(arg, kind, percent, basis)) |value| return value;
+
     if (arg.len > 1 and arg[arg.len - 1] == '%') {
         // A percentage is not a dimension and keeps every digit -- measured, see
         // dimensionDigits.
@@ -559,16 +765,28 @@ fn parseScalar(arg: []const u8, percent: Percent, basis: Basis) ?f64 {
         .{ "rad", 1 },
     };
     for (angles) |suffix| {
+        if (kind != .angle) break;
         if (arg.len > suffix[0].len and std.ascii.endsWithIgnoreCase(arg, suffix[0])) {
             const digits = dimensionDigits(arg[0 .. arg.len - suffix[0].len]);
             const number = std.fmt.parseFloat(f64, digits) catch return null;
             return number * suffix[1];
         }
     }
-    if (arg.len > 2 and std.ascii.endsWithIgnoreCase(arg, "px")) {
-        return std.fmt.parseFloat(f64, dimensionDigits(arg[0 .. arg.len - 2])) catch null;
+    if (kind == .length) {
+        if (arg.len > 2 and std.ascii.endsWithIgnoreCase(arg, "px")) {
+            return std.fmt.parseFloat(f64, dimensionDigits(arg[0 .. arg.len - 2])) catch null;
+        }
+        // Every other length. The absolute ones convert with no context; the
+        // font-relative and viewport ones come from the basis, and a unit the
+        // caller left null is refused the way it was before this existed.
+        if (lengthUnit(arg)) |parsed| {
+            return pixelsOf(parsed.value, parsed.unit, basis);
+        }
     }
-    // A bare `<number>`, which keeps every digit the author wrote.
+    // A bare `<number>`, which keeps every digit the author wrote -- and only
+    // where a number is what the slot takes. `rotate(45)` and `translateX(45)`
+    // are both refusals in Chrome and were both stored here.
+    if (kind != .number) return null;
     return std.fmt.parseFloat(f64, arg) catch null;
 }
 
