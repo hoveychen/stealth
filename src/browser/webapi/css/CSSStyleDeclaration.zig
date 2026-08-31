@@ -2917,6 +2917,12 @@ pub fn usesBorderBox(element: *Element, frame: *Frame) bool {
 /// `border-left-width` against `border-left-style`: a border that draws nothing
 /// is 0 however it was written, an undeclared width beside a style is `medium`
 /// (3px), and the keywords resolve to 1, 3 and 5.
+/// One border edge in px, for the readings that want a single side rather than
+/// the axis pair `BoxEdges` carries. `clientTop` and `clientLeft` are the two.
+pub fn borderEdgePx(element: *Element, comptime side: []const u8, frame: *Frame) f64 {
+    return borderPx(element, side, frame);
+}
+
 fn borderPx(element: *Element, comptime side: []const u8, frame: *Frame) f64 {
     const style_manager = &element.ownerFrame(frame)._style_manager;
     // The UA sheet before `none`: an <iframe> draws a 2px inset border and an

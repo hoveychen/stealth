@@ -67,12 +67,24 @@ the constant it replaced it is a number a browser does report.
     testing.expectEqual('300px', hs.width);
     testing.expectEqual('150px', hs.height);
 
-    // clientWidth/clientHeight read the same box, so a script that measures
-    // one against the other does not see two different documents.
+    // clientWidth/clientHeight do NOT read the same box the computed width
+    // does, and the two are meant to disagree here. An about:blank document is
+    // always quirks mode, and CSSOM View makes the HTML body element answer the
+    // VIEWPORT there rather than its own padding box -- so Chrome reports
+    // `width: 284px` and `clientWidth: 300` off the same body, on headless and
+    // headed alike (scratch/b70/expr-blank-margin.js; the whole rule over eight
+    // served documents in scratch/b70/expr-qc-served.js).
+    //
+    // These two lines used to read 284 and 134, matching the computed width on
+    // the reasoning in the comment above rather than on a measurement. The
+    // paragraph at the top of this file cites Chrome for `body 284x134`, and
+    // that citation is right -- it is the computed width, which is unchanged.
     testing.expectEqual(300, d.documentElement.clientWidth);
     testing.expectEqual(150, d.documentElement.clientHeight);
-    testing.expectEqual(284, d.body.clientWidth);
-    testing.expectEqual(134, d.body.clientHeight);
+    testing.expectEqual(300, d.body.clientWidth);
+    testing.expectEqual(150, d.body.clientHeight);
+    // The body's own box is still its own: offsetWidth keeps the 284.
+    testing.expectEqual(284, d.body.offsetWidth);
 }
 </script>
 

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`clientTop` and `clientLeft` are the width of the top and left BORDER, rounded
+to an integer. Both answered a hard-coded 0 here, with a comment saying the
+layout does not apply borders -- which stopped being true: `borderPx` reads the
+UA sheet and the author cascade, `offsetWidth` and `getBoundingClientRect` have
+carried the border for a while, and only these two accessors were left behind.
+
+Every expectation is a reading from headed Chrome 151, taken with
+scratch/b70/expr-client-tl.js and scratch/b70/expr-border-used.js.
+
+The pair reads its OWN edge: `border-top:6px` alone answers `6,0` and
+`border-left:9px` alone `0,9`, so neither is the other's fallback and neither is
+half of `border_x`.
+
+Two shapes measured and deliberately NOT asserted here, because a second defect
+decides them: `border-width:3.5px` and `3.6px` answer 4 in Chrome and 3 here,
+since Chrome's USED border width snaps to the device pixel grid (3.6px computes
+to 3.5px there and 3px here). That is `viewport-client-box-rules` P6 and it
+moves offsetWidth too, so fixing it here would be fixing it in the wrong place.
+-->
+
+<script id=client_top_left_are_the_border>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'width:400px';
+  document.body.appendChild(host);
+
+  const probe = (css) => {
+    const d = document.createElement('div');
+    d.style.cssText = 'width:100px;height:20px;' + css;
+    host.appendChild(d);
+    const got = d.clientTop + ',' + d.clientLeft;
+    d.remove();
+    return got;
+  };
+
+  const CASES = [
+    ['0,0', ''],
+    ['4,4', 'border:4px solid'],
+    // Each accessor reads its own edge, not a shared or halved one.
+    ['7,11', 'border:solid;border-top-width:7px;border-left-width:11px;border-right-width:2px;border-bottom-width:3px'],
+    ['6,0', 'border-top:6px solid'],
+    ['0,9', 'border-left:9px solid'],
+    // A border that draws nothing is 0 wide however the page wrote it, which
+    // the used border width already knows.
+    ['0,0', 'border:5px none'],
+    // The three keywords, whose used widths are 1, 3 and 5.
+    ['1,1', 'border:thin solid'],
+    ['3,3', 'border:medium solid'],
+    ['5,5', 'border:thick solid'],
+    // A fraction rounds, and a border too thin to round up to a whole pixel
+    // still answers 1 -- its used width is not zero.
+    ['3,3', 'border:3.4px solid'],
+    ['1,1', 'border:0.4px solid'],
+    // A box with no border box at all has no border to report.
+    ['0,0', 'border:4px solid;display:none'],
+    ['0,0', 'border:4px solid;display:inline'],
+    // ...but a non-block box that does generate one still reports it.
+    ['4,4', 'border:4px solid;display:table'],
+  ];
+  for (const [want, css] of CASES) {
+    testing.expectEqual(css + ' -> ' + want, css + ' -> ' + probe(css));
+  }
+
+  host.remove();
+}
+</script>
+
+<script id=client_top_left_on_the_root_and_body>
+{
+  // The two elements whose boxes are special everywhere else are not special
+  // here: measured on Chrome 151, a bordered <html> answers clientTop 7 and a
+  // bordered <body> answers 5.
+  const root = document.documentElement;
+  const body = document.body;
+  const rootPrev = root.getAttribute('style') || '';
+  const bodyPrev = body.getAttribute('style') || '';
+
+  root.setAttribute('style', 'border-top:7px solid;border-left:7px solid');
+  testing.expectEqual('7,7', root.clientTop + ',' + root.clientLeft);
+
+  root.setAttribute('style', rootPrev);
+  body.setAttribute('style', 'border:5px solid');
+  testing.expectEqual('5,5', body.clientTop + ',' + body.clientLeft);
+
+  body.setAttribute('style', bodyPrev);
+  testing.expectEqual('0,0', root.clientTop + ',' + root.clientLeft);
+}
+</script>

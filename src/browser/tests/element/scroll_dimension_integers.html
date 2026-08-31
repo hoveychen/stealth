@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`scrollWidth` and `scrollHeight` are `long` in the IDL: a browser cannot return
+a fraction from either. This engine could, and did -- `getScrollWidth` rounds on
+its ordinary path but returns `dims.width` straight for the two root tags, so a
+`<body>` or `<html>` with a fractional box answered things like
+100.3984375 and 1985.1484375 (scratch/b70/expr-scroll-int.js).
+
+That is a stronger tell than a wrong number is: no real browser can produce it
+at all, and `Number.isInteger(document.body.scrollWidth)` is one expression.
+
+Asserted as the RULE rather than against Chrome's numbers, because the values
+themselves depend on the viewport, which differs between the arms -- and because
+two of these shapes also sit on the sealed body-height defect
+(content-height-memoised-subtree P4), which this does not touch. Chrome 151
+answers an integer for every case below.
+-->
+
+<script id=scroll_dimensions_are_never_fractional>
+{
+  const isInt = (n) => Number.isInteger(n);
+  const four = (el) => [el.scrollWidth, el.scrollHeight, el.clientWidth, el.clientHeight];
+  const report = (label, el) => {
+    const v = four(el);
+    testing.expectEqual(
+      label + ' all integers: true',
+      label + ' all integers: ' + v.every(isInt) + (v.every(isInt) ? '' : ' got ' + v.join(' ')));
+  };
+
+  const body = document.body;
+  const root = document.documentElement;
+  const bodyPrev = body.getAttribute('style') || '';
+  const rootPrev = root.getAttribute('style') || '';
+
+  // The <body>, whose fractional box used to come back unrounded.
+  for (const css of [
+    'margin:0;width:100.4px;height:10.7px',
+    'margin:0;width:100px;height:10px;padding:0.3px',
+    'margin:0;width:100.4px;border:0.7px solid',
+    'margin:0;display:inline',
+  ]) {
+    body.setAttribute('style', css);
+    report('body ' + css, body);
+  }
+  body.setAttribute('style', bodyPrev);
+
+  // The root element, on the same path.
+  for (const css of [
+    'width:200.6px;height:30.2px',
+    'width:200px;height:30px;padding:0.45px',
+  ]) {
+    root.setAttribute('style', css);
+    report('root ' + css, root);
+  }
+  root.setAttribute('style', rootPrev);
+
+  // And an ordinary element, which already rounded -- kept so a change to the
+  // rounding cannot quietly move it the other way.
+  const host = document.createElement('div');
+  host.style.cssText = 'width:400px';
+  document.body.appendChild(host);
+  for (const css of [
+    'width:100.4px;height:10.7px',
+    'width:100px;padding:0.3px',
+    'width:100.4px;height:10.7px;overflow:scroll',
+  ]) {
+    const d = document.createElement('div');
+    d.style.cssText = css;
+    d.innerHTML = '<span>x</span>';
+    host.appendChild(d);
+    report('div ' + css, d);
+    d.remove();
+  }
+  host.remove();
+}
+</script>
