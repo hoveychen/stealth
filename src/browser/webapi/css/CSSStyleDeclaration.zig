@@ -1320,9 +1320,14 @@ fn twoAxisPosition(property_name: []const u8) bool {
 fn computedCalcText(style_manager: *StyleManager, element: *Element, property_name: []const u8, value: []const u8) ?[]const u8 {
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
     if (trimmed.len < 6) return null;
-    if (!std.ascii.eqlIgnoreCase(trimmed[0..5], "calc(")) return null;
     if (trimmed[trimmed.len - 1] != ')') return null;
-    const folded = calc.foldBody(trimmed[5 .. trimmed.len - 1]) catch return null;
+    const open = std.mem.indexOfScalar(u8, trimmed, '(') orelse return null;
+    // One math function and nothing else. `min(1px, 1em)` is as much a whole
+    // value as `calc(1px)` is, and the two resolve through the same walk.
+    if (!std.ascii.eqlIgnoreCase(trimmed[0..open], "calc") and
+        calc.callOf(trimmed) == null) return null;
+    const frame = element.ownerFrame(style_manager.frame);
+    const folded = calc.foldBodyIn(frame.call_arena, trimmed) catch return null;
 
     // The alpha family is the one place a percentage is a hundredth rather than
     // a share of something: `opacity: calc(50%)` computes to `0.5`, the same
@@ -1339,33 +1344,87 @@ fn computedCalcText(style_manager: *StyleManager, element: *Element, property_na
         return writeNumberText(element, style_manager, property_name, alpha, false);
     }
 
-    var total: f64 = 0;
-    var unitless = true;
-    var had_percentage = false;
+    const sum = resolveFolded(style_manager, element, property_name, folded) orelse return null;
+    if (sum.stays_a_calc) return foldedText(element, style_manager, folded);
+    return writeNumberText(element, style_manager, property_name, sum.total, !sum.unitless) orelse
+        writeLengthText(element, style_manager, property_name, sum.total, sum.had_percentage);
+}
+
+const Resolved = struct {
+    total: f64,
+    unitless: bool,
+    had_percentage: bool,
+    /// A percentage the property does not resolve until layout cannot be added
+    /// to anything, so the sum stays a sum and is printed as one.
+    stays_a_calc: bool = false,
+};
+
+/// A folded math value in pixels: every unit term through `lengthFactor`, and
+/// every comparison term resolved and compared. Null when any part of it
+/// cannot be finished, which leaves the declaration where it was.
+fn resolveFolded(style_manager: *StyleManager, element: *Element, property_name: []const u8, folded: calc.Folded) ?Resolved {
+    var out: Resolved = .{ .total = 0, .unitless = true, .had_percentage = false };
     for (folded.terms[0..folded.len]) |term| {
-        if (term.unit == .percentage) had_percentage = true;
+        if (term.unit == .percentage) out.had_percentage = true;
         switch (lengthFactor(style_manager, element, property_name, term.unit)) {
             .unresolvable => return null,
             .verbatim => switch (term.unit) {
                 // `px` is already the computed unit, and a bare number on a
                 // property that takes one IS the computed value.
                 .px => {
-                    total += term.value;
-                    unitless = false;
+                    out.total += term.value;
+                    out.unitless = false;
                 },
-                .none => total += term.value,
-                // A percentage that is its own computed value cannot be added
-                // to anything, so the sum stays a sum.
-                else => return foldedText(element, style_manager, folded),
+                .none => out.total += term.value,
+                else => {
+                    out.stays_a_calc = true;
+                    return out;
+                },
             },
             .pixels => |factor| {
-                total += term.value * factor;
-                unitless = false;
+                out.total += term.value * factor;
+                out.unitless = false;
             },
         }
     }
-    return writeNumberText(element, style_manager, property_name, total, !unitless) orelse
-        writeLengthText(element, style_manager, property_name, total, had_percentage);
+    for (folded.fns[0..folded.fn_len]) |text| {
+        out.total += resolveComparison(style_manager, element, property_name, text) orelse return null;
+        out.unitless = false;
+    }
+    return out;
+}
+
+/// A `min()` / `max()` / `clamp()` in pixels.
+///
+/// Each argument resolves on its own and then the answer is picked, which is
+/// the whole reason the fold could not settle it earlier: `min(1px, 1em)` is
+/// the px only once the element's font size is known, and `max(1em, 1px)` is
+/// the em on the same element.
+fn resolveComparison(style_manager: *StyleManager, element: *Element, property_name: []const u8, text: []const u8) ?f64 {
+    const call = calc.callOf(text) orelse return null;
+    const frame = element.ownerFrame(style_manager.frame);
+    var pixels: [8]f64 = undefined;
+    for (0..call.len) |i| {
+        const arg = calc.foldBodyIn(frame.call_arena, call.arg(i)) catch return null;
+        const resolved = resolveFolded(style_manager, element, property_name, arg) orelse return null;
+        if (resolved.stays_a_calc) return null;
+        pixels[i] = resolved.total;
+    }
+    if (call.len == 0) return null;
+    return switch (call.kind) {
+        .min => blk: {
+            var m = pixels[0];
+            for (pixels[1..call.len]) |v| m = @min(m, v);
+            break :blk m;
+        },
+        .max => blk: {
+            var m = pixels[0];
+            for (pixels[1..call.len]) |v| m = @max(m, v);
+            break :blk m;
+        },
+        // `clamp(lo, mid, hi)` is `max(lo, min(mid, hi))`, per css-values-4.
+        .clamp => if (call.len == 3) @max(pixels[0], @min(pixels[1], pixels[2])) else null,
+    };
 }
 
 /// The folded calc(), printed. Used when a term cannot be reduced any further.

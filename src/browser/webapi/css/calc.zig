@@ -455,6 +455,55 @@ fn numberEnd(text: []const u8, start: usize) ?usize {
 
 pub const Kind = enum { min, max, clamp };
 
+/// A comparison taken apart again, for a caller that can resolve units.
+///
+/// The fold stores a comparison as the text it will be printed as, because the
+/// declaration path has nothing to resolve it with. The computed path does, so
+/// it reads the parts back out rather than the fold carrying a second
+/// representation it would only need at one of its two call sites.
+pub const Call = struct {
+    kind: Kind,
+    args: [max_args][]const u8 = undefined,
+    len: usize = 0,
+
+    pub fn arg(self: *const Call, index: usize) []const u8 {
+        return self.args[index];
+    }
+};
+
+const max_args = 8;
+
+/// The value as a bare comparison, or null when it is anything else.
+pub fn callOf(value: []const u8) ?Call {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0 or trimmed[trimmed.len - 1] != ')') return null;
+    const open = std.mem.indexOfScalar(u8, trimmed, '(') orelse return null;
+    const kind = comparisonKind(trimmed[0..open]) orelse return null;
+
+    var call: Call = .{ .kind = kind };
+    const body = trimmed[open + 1 .. trimmed.len - 1];
+    var depth: usize = 0;
+    var start: usize = 0;
+    for (body, 0..) |c, i| {
+        switch (c) {
+            '(' => depth += 1,
+            ')' => depth -|= 1,
+            ',' => if (depth == 0) {
+                if (call.len == max_args) return null;
+                call.args[call.len] = std.mem.trim(u8, body[start..i], &std.ascii.whitespace);
+                call.len += 1;
+                start = i + 1;
+            },
+            else => {},
+        }
+    }
+    if (depth != 0) return null;
+    if (call.len == max_args) return null;
+    call.args[call.len] = std.mem.trim(u8, body[start..], &std.ascii.whitespace);
+    call.len += 1;
+    return call;
+}
+
 fn comparisonKind(name: []const u8) ?Kind {
     inline for (@typeInfo(Kind).@"enum".fields) |field| {
         if (std.ascii.eqlIgnoreCase(name, field.name)) return @field(Kind, field.name);
