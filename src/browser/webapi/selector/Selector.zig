@@ -334,6 +334,36 @@ pub const PseudoClass = union(enum) {
     defined,
     state: []const u8, // :state() - a member of the element's CustomStateSet
 
+    // Parsed so the rule survives, matched where it is cheap to be right.
+    //
+    // Measured on Chrome 151 with
+    // tools/fingerprint/probes/expr-b96-selector-constructs.js: each of these
+    // keeps a selector list alive there, and rejecting one used to delete the
+    // whole rule -- every declaration in it, for every element the OTHER
+    // selectors in the list matched.
+    //
+    // `open` reads the attribute, which is the whole definition for the
+    // elements this engine has. `autofill` and the two `user-*` validity
+    // states need a user: nothing here fills a field or types in one, so they
+    // match nothing, which is also what they do on a freshly loaded page.
+    autofill,
+    user_valid,
+    user_invalid,
+    open,
+    /// `:dir(ltr)`. Kept as the argument text; the match reads the element's
+    /// own `dir`.
+    dir: []const u8,
+    /// The three shadow-host forms. A stylesheet in this engine is the
+    /// document's, never a shadow root's, and `:host` outside a shadow tree
+    /// matches nothing in Chrome either -- so they parse and match nothing.
+    host,
+    host_fn: []const Selector,
+    host_context: []const Selector,
+    /// `&` in a selector, which is a nesting reference. Nothing here resolves
+    /// nesting, so it matches nothing rather than guessing which element it
+    /// would have meant.
+    nesting,
+
     // Functional
     lang: []const u8,
     not: []const Selector, // :not() - CSS Level 4: supports full selectors and comma-separated lists
@@ -345,6 +375,10 @@ pub const PseudoClass = union(enum) {
 pub const NthPattern = struct {
     a: i32, // coefficient (e.g., 2 in "2n+1")
     b: i32, // offset (e.g., 1 in "2n+1")
+
+    /// `:nth-child(2n+1 of .a)` counts only the siblings the list matches.
+    /// Null is the ordinary form, which counts all of them.
+    of: ?[]const Selector = null,
 
     // Common patterns:
     // odd: a=2, b=1

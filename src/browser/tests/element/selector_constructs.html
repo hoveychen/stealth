@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Which selector constructs keep a rule alive, one construct at a time.
+
+`SelectorParser.parseList` propagates a failure from any compound and
+`StyleManager.addRawRule` is `... catch return`, so a construct this engine does
+not recognise does not cost a few matches -- it deletes the whole rule, every
+declaration in it, for every element the OTHER selectors in the list matched.
+`*,::before,::after{box-sizing:border-box}` was the first one found that way
+(selector_list_pseudo_element.html); this is the sweep that followed it.
+
+Sixty-seven constructs, each measured on Chrome 151 by putting it in a list
+beside an id selector and reading a property back off the id
+(tools/fingerprint/probes/expr-b96-selector-constructs.js). Twelve were
+dropped here and kept there:
+
+  `:nth-child(2n+1 of .a)` `:autofill` `:user-valid` `:open` `:dir(ltr)`
+  `:host` `:host(.a)` `:host-context(.a)` `*|div` `div:is(&)`
+  `::highlight(x)` `::view-transition-group(x)`
+
+Two go the other way and are NOT fixed here, because neither is about the
+selector parser:
+
+  * `[data-x="y" s]` -- Chrome drops the rule and this engine keeps it. The
+    flag is parsed and honoured here; whatever makes Chrome refuse it lives in
+    its CSS parser, and matching that would mean rejecting a selector this
+    engine understands.
+  * `[data-x` (unclosed) -- the `[` swallows the `{ ... }` that follows, so the
+    rule has no declaration block left. That is the sheet tokenizer's business,
+    not the selector's, and CSS Syntax does say an unexpected EOF closes every
+    open construct.
+-->
+
+<script id=which_constructs_keep_a_rule>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+  const probe = document.createElement('div');
+  probe.id = 'selprobe';
+  host.appendChild(probe);
+
+  // `letter-spacing`, because nothing else declares it: `3px` means the rule
+  // survived the selector under test and `normal` means it was dropped.
+  const withList = (selector) => {
+    const sheet = document.createElement('style');
+    sheet.textContent = `#selprobe, ${selector} { letter-spacing: 3px }`;
+    document.head.appendChild(sheet);
+    const seen = getComputedStyle(probe).letterSpacing;
+    sheet.remove();
+    return seen;
+  };
+
+  const kept = [
+    ['child', '.a > .b'],
+    ['adjacent', '.a + .b'],
+    ['sibling', '.a ~ .b'],
+    ['descendant', '.a .b'],
+    ['is', ':is(.a, .b)'],
+    ['where', ':where(.a, .b)'],
+    ['not', ':not(.a)'],
+    ['notList', ':not(.a, .b)'],
+    ['has', ':has(.a)'],
+    ['hasRelative', ':has(> .a)'],
+    ['nestedIs', ':is(:not(.a), .b)'],
+    ['root', ':root'],
+    ['empty', ':empty'],
+    ['firstChild', ':first-child'],
+    ['lastOfType', ':last-of-type'],
+    ['onlyChild', ':only-child'],
+    ['nthChildOf', ':nth-child(2n+1 of .a)'],
+    ['nthChildEven', ':nth-child(even)'],
+    ['nthLastChild', ':nth-last-child(3)'],
+    ['checked', ':checked'],
+    ['disabled', ':disabled'],
+    ['required', ':required'],
+    ['optional', ':optional'],
+    ['invalid', ':invalid'],
+    ['inRange', ':in-range'],
+    ['placeholderShown', ':placeholder-shown'],
+    ['readOnly', ':read-only'],
+    ['indeterminate', ':indeterminate'],
+    ['defaultPseudo', ':default'],
+    ['autofill', ':autofill'],
+    ['userValid', ':user-valid'],
+    ['open', ':open'],
+    ['anyLink', ':any-link'],
+    ['focusVisible', ':focus-visible'],
+    ['focusWithin', ':focus-within'],
+    ['lang', ':lang(en)'],
+    ['dir', ':dir(ltr)'],
+    ['defined', ':defined'],
+    ['host', ':host'],
+    ['hostFn', ':host(.a)'],
+    ['hostContext', ':host-context(.a)'],
+    ['scope', ':scope'],
+    ['attrExists', '[data-x]'],
+    ['attrEq', '[data-x=y]'],
+    ['attrQuoted', '[data-x="y"]'],
+    ['attrCaseI', '[data-x="y" i]'],
+    ['attrDash', '[data-x|=y]'],
+    ['attrTilde', '[data-x~=y]'],
+    ['attrPrefix', '[data-x^=y]'],
+    ['attrSuffix', '[data-x$=y]'],
+    ['attrSubstr', '[data-x*=y]'],
+    ['attrNs', '[*|data-x]'],
+    ['universalNs', '*|div'],
+    ['escapedHash', '#a\\\\.b'],
+    ['unicodeEscape', '.\\\\30 a'],
+    ['nestingAmp', 'div:is(&)'],
+    ['highlightFn', '::highlight(x)'],
+    ['viewTransitionGroup', '::view-transition-group(x)'],
+  ];
+  const dropped = [
+    ['columnCombinator', '.a || .b'],
+    ['localLink', ':local-link'],
+    ['targetWithin', ':target-within'],
+    ['escapedClass', '.a\\\\:b'],
+    ['unknownClass', ':nonsense-class'],
+    ['unknownFn', ':nonsense-fn(x)'],
+    ['badSyntax', '>>>'],
+  ];
+  for (const [label, selector] of kept) {
+    testing.expectEqual(`kept ${label}: 3px`, `kept ${label}: ${withList(selector)}`);
+  }
+  for (const [label, selector] of dropped) {
+    testing.expectEqual(`dropped ${label}: normal`, `dropped ${label}: ${withList(selector)}`);
+  }
+
+  // The two Chrome drops and this engine keeps, asserted as they are rather
+  // than as Chrome's -- both for reasons outside the selector parser, written
+  // out in the comment at the top of this file. Asserted so that a change to
+  // either one is visible here rather than in a sweep.
+  testing.expectEqual('residual [data-x="y" s]: 3px',
+    'residual [data-x="y" s]: ' + withList('[data-x="y" s]'));
+  testing.expectEqual('residual unclosed bracket: 3px',
+    'residual unclosed bracket: ' + withList('[data-x'));
+
+  host.remove();
+}
+</script>
+
+<script id=the_new_pseudo_classes_match_what_they_should>
+{
+  // Parsing is most of the point, but the ones with a cheap definition are
+  // matched rather than stubbed, and the stubs are asserted as stubs so a
+  // later session can see which is which.
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0');
+  document.body.appendChild(host);
+  host.innerHTML = '<details id=det-open open><summary>s</summary>x</details>' +
+    '<details id=det-shut><summary>s</summary>x</details>' +
+    '<div id=dir-ltr dir=ltr>x</div><div id=dir-rtl dir=rtl>x</div><div id=dir-none>x</div>' +
+    '<input id=inp>';
+  const $ = (id) => document.getElementById(id);
+
+  testing.expectEqual('details[open] matches :open: true', 'details[open] matches :open: ' + $('det-open').matches(':open'));
+  testing.expectEqual('details without open: false', 'details without open: ' + $('det-shut').matches(':open'));
+  testing.expectEqual('dir=ltr matches :dir(ltr): true', 'dir=ltr matches :dir(ltr): ' + $('dir-ltr').matches(':dir(ltr)'));
+  testing.expectEqual('dir=ltr matches :dir(rtl): false', 'dir=ltr matches :dir(rtl): ' + $('dir-ltr').matches(':dir(rtl)'));
+  testing.expectEqual('dir=rtl matches :dir(rtl): true', 'dir=rtl matches :dir(rtl): ' + $('dir-rtl').matches(':dir(rtl)'));
+  // The stubs: nothing here autofills a field, types in one, or is a shadow
+  // host, and `&` has no nesting to resolve.
+  testing.expectEqual('input matches :autofill: false', 'input matches :autofill: ' + $('inp').matches(':autofill'));
+  testing.expectEqual('input matches :user-valid: false', 'input matches :user-valid: ' + $('inp').matches(':user-valid'));
+  testing.expectEqual('div matches :host: false', 'div matches :host: ' + $('dir-none').matches(':host'));
+  testing.expectEqual('div matches :is(&): false', 'div matches :is(&): ' + $('dir-none').matches(':is(&)'));
+
+  // `:nth-child(An+B of S)` counts only the siblings S matches.
+  const list = document.createElement('div');
+  list.innerHTML = '<p class=x>1</p><p>2</p><p class=x>3</p><p class=x>4</p><p>5</p>';
+  host.appendChild(list);
+  const xs = [...list.children].map((el, i) => el.matches(':nth-child(2 of .x)') ? String(i) : '').filter(Boolean);
+  testing.expectEqual('second .x is child 2: 2', 'second .x is child 2: ' + xs.join(','));
+  const firstOf = [...list.children].map((el, i) => el.matches(':nth-child(1 of .x)') ? String(i) : '').filter(Boolean);
+  testing.expectEqual('first .x is child 0: 0', 'first .x is child 0: ' + firstOf.join(','));
+
+  host.remove();
+}
+</script>
