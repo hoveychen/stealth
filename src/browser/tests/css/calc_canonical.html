@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<head>
+  <script src="../testing.js"></script>
+</head>
+
+<!--
+  A `calc()` is folded and sorted before it is stored.
+
+  Chrome does not keep the expression the author wrote. It reduces the sum to
+  one term per unit, converts every absolute length to px, sorts the terms, and
+  prints that: `calc(1px + 1em)` reads back as `calc(1em + 1px)` and
+  `calc(1px + 2px)` as `calc(3px)`. This engine echoed the author's text, and
+  refused the whole value at computed time -- so every calc() on every page was
+  a declaration that did nothing.
+
+  Measured on Chrome 151 with scratch/b98/expr-b98-calc.js and
+  scratch/b98/expr-b98-calc-existing.js, 69 rows over the two arms, of which 68
+  differed. The rules those runs pinned down, one block each below:
+
+    fold      absolute units all become px and same-unit terms add up; a zero
+              term folds away against its own unit but survives against another
+    order     percentage first, then dimensions alphabetically by unit, and a
+              negative term after the first prints as ` - n`
+    arithmetic  `*` and `/` by a number are carried out, parentheses are
+              distributed, a nested calc() is flattened
+    refusal   the seven shapes Chrome drops outright, which this engine kept
+    context   a shorthand folds each component on its own, and the position
+              axis Chrome fills in is still filled in
+
+  The last block is the part that is deliberately NOT this plan: the comparison
+  functions keep their own shape and have their own rules. It is pinned as it
+  stands so the fold work is not credited with a min() it did not touch.
+-->
+
+<div id="calc-anchor"></div>
+
+<script id="calc_folds_a_sum_into_one_term_per_unit">
+{
+  const rows = [
+    ['width: calc(1px + 2px)', 'calc(3px)'],
+    ['width: calc(10px - 3px)', 'calc(7px)'],
+    ['width: calc(2em + 3em)', 'calc(5em)'],
+    // A zero folds away against a term in its own unit and survives against
+    // one in another, which is what says the fold is per unit and not a
+    // simplification pass over the whole sum.
+    ['width: calc(1px + 0px)', 'calc(1px)'],
+    ['width: calc(0px + 0em)', 'calc(0em + 0px)'],
+    // Every absolute unit is one unit: q, cm, in, pt and pc all land in px.
+    ['width: calc(1q + 1cm)', 'calc(38.7402px)'],
+    ['width: calc(1in + 1pt + 1pc)', 'calc(113.333px)'],
+    // The fold happens after the tokens are canonicalised, not instead of it.
+    ['width: calc(10px + 5PX)', 'calc(15px)'],
+    ['width: CALC(10px + 5px)', 'calc(15px)'],
+    ['width: calc( 10px + 5px )', 'calc(15px)'],
+    ['width: calc(1E2px)', 'calc(100px)'],
+  ];
+  const want = [];
+  const got = [];
+  for (const [decl, expected] of rows) {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    const name = decl.slice(0, decl.indexOf(':')).trim();
+    want.push(decl + ' -> ' + expected);
+    got.push(decl + ' -> ' + el.style.getPropertyValue(name));
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="calc_terms_come_back_in_canonical_order">
+{
+  // Percentage first, then dimensions in alphabetical order by unit name. The
+  // pairs written both ways round are here so the rule reads as an order and
+  // not as "the author's order is kept when it happens to be right".
+  const rows = [
+    ['width: calc(1px + 1em)', 'calc(1em + 1px)'],
+    ['width: calc(1em + 1px)', 'calc(1em + 1px)'],
+    ['width: calc(1px + 1%)', 'calc(1% + 1px)'],
+    ['width: calc(1% + 1px)', 'calc(1% + 1px)'],
+    ['width: calc(1px + 1em + 1rem)', 'calc(1em + 1px + 1rem)'],
+    ['width: calc(1rem + 1px + 1em)', 'calc(1em + 1px + 1rem)'],
+    ['width: calc(1vh + 1px + 1%)', 'calc(1% + 1px + 1vh)'],
+    ['width: calc(1ch + 1em)', 'calc(1ch + 1em)'],
+    ['width: calc(1ex + 1px)', 'calc(1ex + 1px)'],
+    // A term that came out negative prints as a subtraction after the first
+    // term and keeps its sign when it is the first.
+    ['width: calc(1px - 1em)', 'calc(-1em + 1px)'],
+    ['width: calc(1em + -2px)', 'calc(1em - 2px)'],
+    ['width: calc(100% - 10px)', 'calc(100% - 10px)'],
+    ['border-radius: calc(10px + 5%)', 'calc(5% + 10px)'],
+  ];
+  const want = [];
+  const got = [];
+  for (const [decl, expected] of rows) {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    const name = decl.slice(0, decl.indexOf(':')).trim();
+    want.push(decl + ' -> ' + expected);
+    got.push(decl + ' -> ' + el.style.getPropertyValue(name));
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="calc_carries_out_its_arithmetic">
+{
+  // Multiplication and division by a number happen at parse time, parentheses
+  // are distributed, and a nested calc() disappears into its parent.
+  const rows = [
+    ['width: calc(2 * 1em + 1px)', 'calc(2em + 1px)'],
+    ['width: calc(1em * 2)', 'calc(2em)'],
+    ['width: calc(1em / 2)', 'calc(0.5em)'],
+    ['width: calc(100% / 3)', 'calc(33.3333%)'],
+    ['width: calc((1px + 1em) * 2)', 'calc(2em + 2px)'],
+    ['width: calc((1px + 2px) * (1 + 1))', 'calc(6px)'],
+    ['width: calc(1px * 2 * 3)', 'calc(6px)'],
+    ['width: calc(-1 * 1em)', 'calc(-1em)'],
+    ['width: calc(calc(1px + 1em) + 1rem)', 'calc(1em + 1px + 1rem)'],
+  ];
+  const want = [];
+  const got = [];
+  for (const [decl, expected] of rows) {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    const name = decl.slice(0, decl.indexOf(':')).trim();
+    want.push(decl + ' -> ' + expected);
+    got.push(decl + ' -> ' + el.style.getPropertyValue(name));
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="calc_refuses_what_chrome_refuses">
+{
+  // Eight shapes Chrome drops. Two of them are about whitespace, which is a
+  // real distinction and not a typo: `+` and `-` need a space on both sides,
+  // because a bare `+1px` is one token and `1px+1px` has no operator in it at
+  // all. This engine stored every one of the eight.
+  const decls = [
+    'width: calc(1px + 1)',
+    'width: calc(1px * 1px)',
+    'width: calc(1px + 1deg)',
+    'width: calc()',
+    'width: calc(1px +1px)',
+    'width: calc(1px+1px)',
+    'width: calc(10px + 2foo)',
+    'z-index: calc(1px + 1)',
+  ];
+  const want = [];
+  const got = [];
+  for (const decl of decls) {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    const name = decl.slice(0, decl.indexOf(':')).trim();
+    want.push(decl + ' -> len=0 spec=""');
+    got.push(decl + ' -> len=' + el.style.length +
+             ' spec=' + JSON.stringify(el.style.getPropertyValue(name)));
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="calc_inside_a_shorthand_and_a_position">
+{
+  // Two contexts where the fold is not the last thing that happens to the
+  // value. A shorthand folds each component on its own, and the axis Chrome
+  // fills in for a one-value position is still filled in afterwards.
+  const rows = [
+    ['padding: calc(1em + 1px) calc(2px + 3px)', 'padding', 'calc(1em + 1px) calc(5px)'],
+    ['margin: calc(10px + 5px)', 'margin', 'calc(15px)'],
+    ['border-radius: calc(10px + 5px)', 'border-radius', 'calc(15px)'],
+    ['background-position: calc(1em + 1px)', 'background-position', 'calc(1em + 1px) center'],
+  ];
+  const want = [];
+  const got = [];
+  for (const [decl, name, expected] of rows) {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    want.push(decl + ' -> ' + expected);
+    got.push(decl + ' -> ' + el.style.getPropertyValue(name));
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="calc_comparison_functions_are_left_where_they_stand">
+{
+  // Not this plan. `min()` / `max()` / `clamp()` keep their function shape
+  // rather than folding into a sum, `round()` and `abs()` over constants are
+  // carried out, and a division by zero has a spelling of its own. All five
+  // are pinned as this engine answers them today, with Chrome's answer beside
+  // them, so the fold work has a line to move and cannot be credited with
+  // moving it by accident.
+  const rows = [
+    ['width: min(1px, 1em)', 'min(1px, 1em)', 'min(1px, 1em)'],
+    ['width: max(1em, 1px)', 'max(1em, 1px)', 'max(1em, 1px)'],
+    ['width: clamp(1em, 1px, 1vh)', 'clamp(1em, 1px, 1vh)', 'clamp(1em, 1px, 1vh)'],
+    ['width: min(1px + 1em, 2em)', 'min(1px + 1em, 2em)', 'min(1em + 1px, 2em)'],
+    ['width: round(1.5px, 1px)', 'round(1.5px, 1px)', 'calc(2px)'],
+    ['width: abs(-1px)', 'abs(-1px)', 'calc(1px)'],
+    ['width: calc(1px / 0)', 'calc(1px / 0)', 'calc(infinity * 1px)'],
+  ];
+  const want = [];
+  const got = [];
+  for (const [decl, ours, chrome] of rows) {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    want.push(decl + ' -> ' + ours + '   (Chrome: ' + chrome + ')');
+    got.push(decl + ' -> ' + el.style.getPropertyValue('width') +
+             '   (Chrome: ' + chrome + ')');
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>

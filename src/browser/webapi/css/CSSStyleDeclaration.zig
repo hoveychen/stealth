@@ -7069,6 +7069,10 @@ test "WebApi: CSSStyleDeclaration alpha value percentage" {
     try testing.htmlRunner("css/alpha_value_percentage.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration calc canonical form" {
+    try testing.htmlRunner("css/calc_canonical.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration computed initial values" {
     try testing.htmlRunner("css/computed_initial_values.html", .{});
 }
