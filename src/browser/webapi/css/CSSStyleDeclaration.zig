@@ -7341,6 +7341,10 @@ test "WebApi: CSSStyleDeclaration rule width keywords" {
     try testing.htmlRunner("css/rule_width_keywords.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration font smoothing keywords" {
+    try testing.htmlRunner("css/font_smoothing_keywords.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration computed animation shorthand" {
     try testing.htmlRunner("css/animation_computed_shorthand.html", .{});
 }
