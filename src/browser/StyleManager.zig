@@ -23,6 +23,7 @@ const Frame = @import("Frame.zig");
 
 const units = @import("css/units.zig");
 const CssParser = @import("css/Parser.zig");
+const Tokenizer = @import("css/Tokenizer.zig");
 const MediaQuery = @import("css/MediaQuery.zig");
 const Element = @import("webapi/Element.zig");
 
@@ -36,6 +37,7 @@ const chrome_per_tag_values = @import("webapi/css/chrome_per_tag_values.zig");
 const CSSStyleDeclaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const CSSStyleProperty = @import("webapi/css/CSSStyleDeclaration.zig").Property;
 const shorthand = @import("webapi/css/shorthand.zig");
+const supports_condition = @import("webapi/css/supports.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -135,6 +137,12 @@ pub fn deinit(self: *StyleManager) void {
 /// `applyInnerRules` frames. 32 is well past anything seen in the wild.
 const MAX_AT_RULE_NESTING: u8 = 32;
 
+/// Hard cap on nested *style* rule depth (css-nesting-1), for the same reason
+/// as `MAX_AT_RULE_NESTING`. Lower than that cap because each level here also
+/// grows the resolved selector by a `:is(…)` wrapper, so the cost is in the
+/// selector text as well as the stack.
+const MAX_NESTING_DEPTH: u8 = 16;
+
 fn parseSheet(self: *StyleManager, build_arena: Allocator, sheet: *CSSStyleSheet) !void {
     if (sheet._css_rules) |css_rules| {
         for (css_rules._rules.items) |rule| {
@@ -144,6 +152,7 @@ fn parseSheet(self: *StyleManager, build_arena: Allocator, sheet: *CSSStyleSheet
                 // `insertRule` / `replaceSync` participates in the cascade
                 // when its query matches the viewport.
                 .media => try self.applyMediaAtRule(build_arena, rule._text, 0, NO_LAYER),
+                .supports => try self.applySupportsAtRule(build_arena, rule._text, 0, NO_LAYER),
                 .layer_block, .layer_statement => try self.applyLayerAtRule(build_arena, rule._text, 0, NO_LAYER),
                 // Off the stored source for the same reason `@media` is: this
                 // reads the rule as the page wrote it, so a keyframe added
@@ -175,15 +184,17 @@ fn parseSheet(self: *StyleManager, build_arena: Allocator, sheet: *CSSStyleSheet
         switch (parsed_rule) {
             .style => |s| try self.addRawRule(build_arena, s.selector, s.block, NO_LAYER),
             .at_rule => |a| {
-                // Only `@media` and `@layer` participate in the cascade
-                // here. Other at-rules (`@supports`, `@font-face`, …) don't
-                // carry top-level declarations relevant to the visibility
-                // filter and stay skipped as before. `@keyframes` is skipped
-                // by the cascade too -- it declares nothing on any element --
-                // but it is indexed by name, because a computed animated
-                // property is read out of it.
+                // Only the conditional group rules participate in the cascade
+                // here. The rest (`@font-face`, `@page`, …) don't carry
+                // top-level declarations relevant to the visibility filter and
+                // stay skipped as before. `@keyframes` is skipped by the
+                // cascade too -- it declares nothing on any element -- but it
+                // is indexed by name, because a computed animated property is
+                // read out of it.
                 if (std.ascii.eqlIgnoreCase(a.keyword, "media")) {
                     try self.applyMediaAtRule(build_arena, a.text, 0, NO_LAYER);
+                } else if (std.ascii.eqlIgnoreCase(a.keyword, "supports")) {
+                    try self.applySupportsAtRule(build_arena, a.text, 0, NO_LAYER);
                 } else if (std.ascii.eqlIgnoreCase(a.keyword, "layer")) {
                     try self.applyLayerAtRule(build_arena, a.text, 0, NO_LAYER);
                 } else if (isKeyframesKeyword(a.keyword)) {
@@ -208,6 +219,29 @@ fn applyMediaAtRule(self: *StyleManager, build_arena: Allocator, text: []const u
     const query = std.mem.trim(u8, block.prelude, &std.ascii.whitespace);
 
     if (MediaQuery.matches(query, self.frame.viewport()) == false) {
+        return;
+    }
+
+    try self.applyInnerRules(build_arena, block.body, depth + 1, layer);
+}
+
+/// Apply an `@supports` at-rule by evaluating its condition and, if it holds,
+/// parsing the inner block as if its declarations lived at the top level. Same
+/// shape as `applyMediaAtRule`, and for the same reason: the block is a
+/// conditional group rule, so what it holds is ordinary rules.
+///
+/// Every `@supports` block used to be dropped here -- the keyword was simply
+/// not in the dispatch -- which showed up as a page's grid layout never being
+/// applied. Measured against Chrome 151: the four spellings a page actually
+/// writes (`(display: grid)`, `not (…)`, `selector(…)`, a functional value)
+/// were all dropped.
+fn applySupportsAtRule(self: *StyleManager, build_arena: Allocator, text: []const u8, depth: u8, layer: u16) Allocator.Error!void {
+    if (depth >= MAX_AT_RULE_NESTING) {
+        return;
+    }
+
+    const block = atRuleBlock(text, "@supports") orelse return;
+    if (!supports_condition.matches(build_arena, block.prelude)) {
         return;
     }
 
@@ -280,6 +314,8 @@ fn applyInnerRules(self: *StyleManager, build_arena: Allocator, inner: []const u
             .at_rule => |nested| {
                 if (std.ascii.eqlIgnoreCase(nested.keyword, "media")) {
                     try self.applyMediaAtRule(build_arena, nested.text, depth, layer);
+                } else if (std.ascii.eqlIgnoreCase(nested.keyword, "supports")) {
+                    try self.applySupportsAtRule(build_arena, nested.text, depth, layer);
                 } else if (std.ascii.eqlIgnoreCase(nested.keyword, "layer")) {
                     try self.applyLayerAtRule(build_arena, nested.text, depth, layer);
                 } else if (isKeyframesKeyword(nested.keyword)) {
@@ -578,6 +614,10 @@ fn stampRuleList(self: *StyleManager, rules: *RuleList) void {
 }
 
 fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []const u8, block_text: []const u8, layer: u16) !void {
+    return self.addRawRuleAtDepth(build_arena, selector_text, block_text, layer, 0);
+}
+
+fn addRawRuleAtDepth(self: *StyleManager, build_arena: Allocator, selector_text: []const u8, block_text: []const u8, layer: u16, depth: u8) !void {
     if (selector_text.len == 0) return;
 
     var props = RuleProperties{};
@@ -715,8 +755,16 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
     props.longhands = longhands.items;
     try self.indexLonghands(props);
 
-    if (!props.isRelevant()) return;
+    // Not an early return any more: a rule whose own block declares nothing
+    // relevant can still hold nested rules that do. `.a { & { … } }` is exactly
+    // that shape, and it is the one Tailwind emits.
+    if (props.isRelevant()) try self.indexRule(build_arena, props, selector_text, layer);
 
+    return self.addNestedRules(build_arena, selector_text, block_text, layer, depth);
+}
+
+/// Bucket one rule's selectors so element matching can find them.
+fn indexRule(self: *StyleManager, build_arena: Allocator, props: RuleProperties, selector_text: []const u8, layer: u16) !void {
     const selectors = SelectorParser.parseList(self.arena.allocator(), selector_text) catch return;
     for (selectors) |selector| {
         const rightmost = if (selector.segments.len > 0) selector.segments[selector.segments.len - 1].compound else selector.first;
@@ -751,6 +799,188 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
         }
     }
 }
+
+/// Add the style rules nested inside `block_text` (css-nesting-1), each with
+/// `&` resolved against `parent_selector`.
+///
+/// After the parent, not before: nested rules come later in document order, and
+/// document order is the cascade's last tie-break.
+///
+/// A conditional group rule nested inside a style rule (`.a { @media … { … } }`)
+/// goes through `addNestedAtRule` rather than `applyMediaAtRule`, because the
+/// two put the inner block somewhere different: at the top level it holds
+/// rules, and inside a style rule it holds *declarations belonging to the
+/// enclosing selector* -- plus, optionally, further nested rules.
+// Explicit rather than inferred because this and `addRawRuleAtDepth` call each
+// other, and two inferred error sets in a cycle is a compile error.
+fn addNestedRules(self: *StyleManager, build_arena: Allocator, parent_selector: []const u8, block_text: []const u8, layer: u16, depth: u8) Allocator.Error!void {
+    if (depth >= MAX_NESTING_DEPTH) return;
+    // A declaration block with no brace in it holds no nested rule, and that is
+    // the overwhelming majority of them.
+    if (std.mem.indexOfScalar(u8, block_text, '{') == null) return;
+
+    var it = CssParser.parseNestedRules(block_text);
+    while (it.next()) |nested| {
+        switch (nested) {
+            .style => |rule| {
+                const resolved = nestedSelectorText(self.arena.allocator(), parent_selector, rule.selector) catch continue;
+                if (resolved.len == 0) continue;
+                try self.addRawRuleAtDepth(build_arena, resolved, rule.block, layer, depth + 1);
+            },
+            .at_rule => |a| try self.addNestedAtRule(build_arena, parent_selector, a, layer, depth),
+        }
+    }
+}
+
+/// One at-rule nested inside a style rule. Handing its block back to
+/// `addRawRuleAtDepth` under the parent's selector is the whole trick: that is
+/// what "these declarations belong to the enclosing selector" means, and it
+/// carries `&` resolution and deeper nesting along with it.
+///
+/// Measured missing on Chrome 151, all seven rows of it
+/// (scratch/b97/expr-b97-nested-at-rules.js): every declaration under a nested
+/// `@media` / `@supports` / `@layer` was being dropped.
+///
+/// The at-rules absent from this dispatch are absent because Chrome applies
+/// nothing for them either: `@container` finds no container-type ancestor,
+/// `@starting-style` is not in a transition, and an unknown at-rule is dropped.
+/// All three were measured as already matching, which is why adding them would
+/// be a guess rather than a fix.
+fn addNestedAtRule(self: *StyleManager, build_arena: Allocator, parent_selector: []const u8, at_rule: CssParser.AtRule, layer: u16, depth: u8) Allocator.Error!void {
+    if (std.ascii.eqlIgnoreCase(at_rule.keyword, "media")) {
+        const block = atRuleBlock(at_rule.text, "@media") orelse return;
+        const query = std.mem.trim(u8, block.prelude, &std.ascii.whitespace);
+        if (MediaQuery.matches(query, self.frame.viewport()) == false) return;
+        return self.addRawRuleAtDepth(build_arena, parent_selector, block.body, layer, depth + 1);
+    }
+
+    if (std.ascii.eqlIgnoreCase(at_rule.keyword, "supports")) {
+        const block = atRuleBlock(at_rule.text, "@supports") orelse return;
+        if (supports_condition.matches(build_arena, block.prelude) == false) return;
+        return self.addRawRuleAtDepth(build_arena, parent_selector, block.body, layer, depth + 1);
+    }
+
+    if (std.ascii.eqlIgnoreCase(at_rule.keyword, "layer")) {
+        // Block form only. A statement form here (`.a { @layer x; }`) declares
+        // an ordering and has nothing nested under it to place.
+        const block = atRuleBlock(at_rule.text, "@layer") orelse return;
+        const prelude = std.mem.trim(u8, block.prelude, &std.ascii.whitespace);
+        if (prelude.len != 0 and isValidLayerName(prelude) == false) return;
+        const id = if (prelude.len == 0)
+            try self.internAnonymousLayer(build_arena, layer)
+        else
+            try self.registerLayerPath(build_arena, layer, prelude);
+        return self.addRawRuleAtDepth(build_arena, parent_selector, block.body, id, depth + 1);
+    }
+}
+
+/// The selector a nested rule matches, with `&` standing in for the parent.
+///
+/// `&` becomes `:is(<parent>)` rather than the parent's own text: a parent that
+/// is a selector list has to collapse into one compound for the nested selector
+/// to mean what it says, and `:is()` is how css-nesting-1 spells that. It keeps
+/// the specificity right for free, since `:is()` takes its arguments' maximum,
+/// which is what `computeSpecificity` already does with it.
+///
+/// A part carrying no `&` is a *descendant* of the parent -- css-nesting-1
+/// prepends an implied one -- and every part of a list gets its own, so `#a,
+/// #b` nested under `.p` is `:is(.p) #a, :is(.p) #b` and not a prefix on the
+/// first alone.
+///
+/// Returns an empty slice for a selector with nothing left to match, which the
+/// caller treats as a rule to drop. Deliberately not `?[]const u8`: an optional
+/// slice return crashes the Zig 0.16 compiler backend, the same way it does in
+/// `shorthand.valueClasses`.
+fn nestedSelectorText(arena: Allocator, parent: []const u8, nested: []const u8) ![]const u8 {
+    var out = std.Io.Writer.Allocating.init(arena);
+    var parts: TopLevelParts = .init(nested);
+    var written: usize = 0;
+    while (parts.next()) |part| {
+        const trimmed = std.mem.trim(u8, part, &std.ascii.whitespace);
+        if (trimmed.len == 0) continue;
+        if (written != 0) try out.writer.writeAll(", ");
+        written += 1;
+        try writeWithParent(&out.writer, parent, trimmed);
+    }
+    if (written == 0) return "";
+    return out.written();
+}
+
+fn writeWithParent(writer: *std.Io.Writer, parent: []const u8, part: []const u8) !void {
+    var tokenizer: Tokenizer = .{ .input = part };
+    var depth: usize = 0;
+    var copied: usize = 0;
+    var saw_ampersand = false;
+
+    while (true) {
+        const at = tokenizer.position;
+        const token = tokenizer.next() orelse break;
+        switch (token) {
+            .parenthesis_block, .function, .square_bracket_block, .curly_bracket_block => depth += 1,
+            .close_parenthesis, .close_square_bracket, .close_curly_bracket => {
+                if (depth > 0) depth -= 1;
+            },
+            // An `&` inside `:is(&)` or `[a=&]` belongs to whatever encloses it.
+            .delim => |c| if (c == '&' and depth == 0) {
+                try writer.writeAll(part[copied..at]);
+                try writeParentRef(writer, parent);
+                copied = tokenizer.position;
+                saw_ampersand = true;
+            },
+            else => {},
+        }
+    }
+
+    if (!saw_ampersand) {
+        try writeParentRef(writer, parent);
+        try writer.writeByte(' ');
+    }
+    try writer.writeAll(part[copied..]);
+}
+
+fn writeParentRef(writer: *std.Io.Writer, parent: []const u8) !void {
+    try writer.writeAll(":is(");
+    try writer.writeAll(parent);
+    try writer.writeByte(')');
+}
+
+/// Splits a selector on the commas that separate its parts, ignoring the ones
+/// inside `:is(…)` or an attribute selector. Tokenizer-driven so a comma in a
+/// quoted attribute value cannot split anything.
+const TopLevelParts = struct {
+    input: []const u8,
+    tokenizer: Tokenizer,
+    start: usize = 0,
+    finished: bool = false,
+
+    fn init(input: []const u8) TopLevelParts {
+        return .{ .input = input, .tokenizer = .{ .input = input } };
+    }
+
+    fn next(self: *TopLevelParts) ?[]const u8 {
+        if (self.finished) return null;
+        var depth: usize = 0;
+        while (true) {
+            const at = self.tokenizer.position;
+            const token = self.tokenizer.next() orelse {
+                self.finished = true;
+                return self.input[self.start..];
+            };
+            switch (token) {
+                .parenthesis_block, .function, .square_bracket_block, .curly_bracket_block => depth += 1,
+                .close_parenthesis, .close_square_bracket, .close_curly_bracket => {
+                    if (depth > 0) depth -= 1;
+                },
+                .comma => if (depth == 0) {
+                    const part = self.input[self.start..at];
+                    self.start = self.tokenizer.position;
+                    return part;
+                },
+                else => {},
+            }
+        }
+    }
+};
 
 pub fn sheetRemoved(self: *StyleManager) void {
     self.dirty = true;

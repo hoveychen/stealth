@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<head>
+  <script src="../testing.js"></script>
+</head>
+
+<!--
+  `@supports` and `CSS.supports()` are one question asked through two doors.
+
+  Before this test the engine answered neither: every `@supports` block was
+  dropped whole (the at-rule keyword was not in StyleManager's dispatch), and
+  `CSS.supports()` returned `true` for every input including nonsense. Those
+  are opposite errors -- one drops rules Chrome applies, the other claims
+  support for properties that do not exist -- so the table below carries both
+  directions on every row.
+
+  Every expected value in CASES was measured on Chrome 151, not derived:
+  scratch/b97/expr-b97-supports-boundary.js and the b96 condition probe, run
+  through tools/fingerprint/run-expr.mjs against a real page. 112 rows, of
+  which 42 are false in Chrome. The one row where the two doors disagree is
+  `display: grid` -- a bare declaration with no parentheses is not a
+  `<supports-condition>`, so the at-rule drops it, but the one-argument
+  `CSS.supports()` has a second branch that parses its argument as a
+  declaration (CSSOM §CSS.supports), so the API says true.
+
+  Deliberately-unmodelled rows are listed in the residual block at the bottom
+  rather than being left out of the table, so that a future change which
+  happens to fix one of them fails here and gets noticed.
+-->
+
+<style>
+  /* The four `@supports` spellings that were dropped whole. */
+  @supports (display: grid) {
+    #sup-basic { letter-spacing: 3px; }
+  }
+  @supports not (display: nonsense-xyz) {
+    #sup-not { letter-spacing: 3px; }
+  }
+  @supports selector(:has(.a)) {
+    #sup-selector { letter-spacing: 3px; }
+  }
+  @supports (color: color-mix(in srgb, red, blue)) {
+    #sup-function { letter-spacing: 3px; }
+  }
+  /* The other direction: a condition Chrome refuses must drop its block. */
+  @supports (nonsense-prop: 1) {
+    #sup-unknown-prop { letter-spacing: 3px; }
+  }
+  @supports (display: nonsense-xyz) {
+    #sup-unknown-value { letter-spacing: 3px; }
+  }
+  @supports not (display: grid) {
+    #sup-negated-true { letter-spacing: 3px; }
+  }
+  /* Nesting inside `@supports`: the inner at-rule is evaluated in turn. */
+  @supports (display: grid) {
+    @media (min-width: 1px) {
+      #sup-nested-media { letter-spacing: 3px; }
+    }
+    @supports (color: red) {
+      #sup-nested-supports { letter-spacing: 3px; }
+    }
+    @supports (nonsense-prop: 1) {
+      #sup-nested-miss { letter-spacing: 3px; }
+    }
+  }
+  /* `@supports` inside `@media`, and inside `@layer` so the layer is kept. */
+  @media (min-width: 1px) {
+    @supports (display: grid) {
+      #sup-inside-media { letter-spacing: 3px; }
+    }
+  }
+  @layer sup {
+    @supports (display: grid) {
+      #sup-inside-layer { letter-spacing: 3px; }
+    }
+  }
+
+  /* CSS nesting with an explicit `&`. `& { … }` inside `.nest-host` is
+     `.nest-host` itself, where a bare nested selector like `#x { … }` is a
+     descendant of it and so does not match the host. */
+  .nest-host {
+    letter-spacing: 1px;
+  }
+  .nest-amp {
+    & { letter-spacing: 3px; }
+  }
+  .nest-amp-compound {
+    & .nest-child { letter-spacing: 3px; }
+  }
+  .nest-amp-suffix {
+    &.nest-extra { letter-spacing: 3px; }
+  }
+  .nest-bare-descendant {
+    letter-spacing: 1px;
+    #nest-bare-inner { letter-spacing: 3px; }
+  }
+  /* An `&` block whose own declarations sit beside nested ones. */
+  .nest-mixed {
+    letter-spacing: 1px;
+    & { letter-spacing: 3px; }
+  }
+  /* `&` inside a conditional at-rule. */
+  @supports (display: grid) {
+    .nest-in-supports {
+      & { letter-spacing: 3px; }
+    }
+  }
+</style>
+
+<div id="sup-basic"></div>
+<div id="sup-not"></div>
+<div id="sup-selector"></div>
+<div id="sup-function"></div>
+<div id="sup-unknown-prop"></div>
+<div id="sup-unknown-value"></div>
+<div id="sup-negated-true"></div>
+<div id="sup-nested-media"></div>
+<div id="sup-nested-supports"></div>
+<div id="sup-nested-miss"></div>
+<div id="sup-inside-media"></div>
+<div id="sup-inside-layer"></div>
+
+<div id="nest-amp" class="nest-host nest-amp"></div>
+<div id="nest-amp-parent" class="nest-amp-compound">
+  <div id="nest-amp-child" class="nest-child"></div>
+</div>
+<div id="nest-amp-suffix-hit" class="nest-amp-suffix nest-extra"></div>
+<div id="nest-amp-suffix-miss" class="nest-amp-suffix"></div>
+<div id="nest-bare" class="nest-bare-descendant">
+  <div id="nest-bare-inner"></div>
+</div>
+<div id="nest-mixed" class="nest-mixed"></div>
+<div id="nest-in-supports" class="nest-in-supports"></div>
+
+<script id="supports_at_rule_applies_its_block">
+{
+  // A joined string rather than one boolean per row: a failing boolean prints
+  // "expected true got false" and names nothing, where this prints the row.
+  const want = [
+    'sup-basic 3px', 'sup-not 3px', 'sup-selector 3px', 'sup-function 3px',
+    'sup-unknown-prop normal', 'sup-unknown-value normal',
+    'sup-negated-true normal',
+    'sup-nested-media 3px', 'sup-nested-supports 3px', 'sup-nested-miss normal',
+    'sup-inside-media 3px', 'sup-inside-layer 3px',
+  ];
+  const got = want.map((row) => {
+    const id = row.split(' ')[0];
+    return id + ' ' + getComputedStyle($('#' + id)).letterSpacing;
+  });
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="supports_nesting_ampersand_is_the_parent">
+{
+  const want = [
+    'nest-amp 3px',
+    'nest-amp-child 3px',
+    'nest-amp-suffix-hit 3px',
+    'nest-amp-suffix-miss normal',
+    // A bare nested selector is a descendant of the parent, so the parent
+    // itself keeps the outer declaration.
+    'nest-bare 1px',
+    'nest-bare-inner 3px',
+    'nest-mixed 3px',
+    'nest-in-supports 3px',
+  ];
+  const got = want.map((row) => {
+    const id = row.split(' ')[0];
+    return id + ' ' + getComputedStyle($('#' + id)).letterSpacing;
+  });
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="supports_at_rule_inside_a_style_rule">
+{
+  // The third nesting shape, and the one a compiled Tailwind sheet is full of:
+  // a conditional group rule *inside* a style rule. Declarations written
+  // directly in its block belong to the enclosing selector, which is why the
+  // block is handed back to the same code that reads a declaration block.
+  //
+  // Measured on Chrome 151 with scratch/b97/expr-b97-nested-at-rules.js. The
+  // four `normal` rows are cases neither engine applies -- `@container` with
+  // no container-type ancestor, `@starting-style` outside a transition, an
+  // unknown at-rule, and a query that does not match -- and they are here so a
+  // change that starts applying one of them fails.
+  const D = 'letter-spacing: 3px';
+  const CASES = [
+    ['mediaInRule', `.atc { @media (min-width: 1px) { ${D} } }`, 'probe', '3px'],
+    ['mediaInRuleMiss', `.atc { @media (min-width: 9999px) { ${D} } }`, 'probe', 'normal'],
+    ['supportsInRule', `.atc { @supports (display: grid) { ${D} } }`, 'probe', '3px'],
+    ['supportsInRuleMiss', `.atc { @supports (nonsense-prop: 1) { ${D} } }`, 'probe', 'normal'],
+    ['layerInRule', `.atc { @layer inner { ${D} } }`, 'probe', '3px'],
+    ['mediaInRuleAmp', `.atc { @media (min-width: 1px) { & { ${D} } } }`, 'probe', '3px'],
+    ['mediaInRuleChild', `.atc { @media (min-width: 1px) { .kid { ${D} } } }`, 'kid', '3px'],
+    ['containerInRule', `.atc { @container (min-width: 1px) { ${D} } }`, 'probe', 'normal'],
+    ['startingStyleInRule', `.atc { @starting-style { ${D} } }`, 'probe', 'normal'],
+    ['unknownAtInRule', `.atc { @totally-unknown { ${D} } }`, 'probe', 'normal'],
+    // A declaration beside the at-rule has to survive it, and lose to it when
+    // the condition holds because the at-rule's copy comes later.
+    ['siblingDecl', `.atc { letter-spacing: 1px; @media (min-width: 1px) { ${D} } }`, 'probe', '3px'],
+    ['siblingDeclMiss', `.atc { letter-spacing: 1px; @media (min-width: 9999px) { ${D} } }`, 'probe', '1px'],
+    ['nestedThenMedia', `.atc { & { @media (min-width: 1px) { ${D} } } }`, 'probe', '3px'],
+  ];
+
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+  const probe = document.createElement('div');
+  probe.className = 'atc';
+  host.appendChild(probe);
+  const kid = document.createElement('div');
+  kid.className = 'kid';
+  probe.appendChild(kid);
+  const targets = { probe: probe, kid: kid };
+
+  const bad = [];
+  for (const [label, css, target, want] of CASES) {
+    const sheet = document.createElement('style');
+    sheet.textContent = css;
+    document.head.appendChild(sheet);
+    const got = getComputedStyle(targets[target]).letterSpacing;
+    sheet.remove();
+    if (got !== want) bad.push(`${label} got ${got} want ${want}`);
+  }
+  host.remove();
+  testing.expectEqual('', bad.join('\n'));
+}
+</script>
+
+<script id="supports_condition_grammar_both_doors">
+{
+  // [condition, does the at-rule apply its block, what CSS.supports() answers]
+  // All three columns measured on Chrome 151.
+  const CASES = [
+    ["(   )", false, false],
+    ["(  display  :  grid  )", true, true],
+    ["((display: grid) or (nonsense-prop: 1))", true, true],
+    ["((display: grid))", true, true],
+    ["()", false, false],
+    ["(--: 1)", false, false],
+    ["(--x: 1)", true, true],
+    ["(--x: anything at all)", true, true],
+    ["(--x:)", true, true],
+    ["(-moz-appearance: none)", false, false],
+    ["(-moz-user-select: none)", false, false],
+    ["(-ms-appearance: none)", false, false],
+    ["(-o-transform: none)", false, false],
+    ["(-webkit-appearance: none)", true, true],
+    ["(-webkit-line-clamp: 2)", true, true],
+    ["(-webkit-nonsense: 1)", false, false],
+    ["(-webkit-transform: none)", true, true],
+    ["(: grid)", false, false],
+    ["(DISPLAY: GRID)", true, true],
+    ["(all: initial)", true, true],
+    ["(anchor-name: --a)", true, true],
+    ["(aspect-ratio: 1/1)", true, true],
+    ["(background: url(x) no-repeat)", true, true],
+    ["(color: #gggggg)", false, false],
+    ["(color: color-mix(in srgb, red, blue))", true, true],
+    ["(color: nonsense-color)", false, false],
+    ["(color: red)", true, true],
+    ["(color: rgb(0 0 0 / 50%))", true, true],
+    ["(color: var(--x))", true, true],
+    ["(container-type: inline-size)", true, true],
+    ["(content-visibility: auto)", true, true],
+    ["(display)", false, false],
+    ["(display: block)", true, true],
+    ["(display: grid !important)", true, true],
+    ["(display: grid)", true, true],
+    // Two-component values Chrome takes, so a keyword check that looked at
+    // each identifier in turn would have to accept these; that is why the
+    // check only fires on a value that is one identifier alone.
+    ["(display: inline flex)", true, true],
+    ["(display: block flow)", true, true],
+    ["(display: grid) (color: red)", false, false],
+    ["(display: grid) and", false, false],
+    ["(display: grid) and (color: red)", true, true],
+    ["(display: grid) and (color: red) or (width: 1px)", false, false],
+    ["(display: grid) and (nonsense-prop: 1)", false, false],
+    ["(display: grid) and nonsense-fn(x)", false, false],
+    ["(display: grid) or nonsense-fn(x)", true, true],
+    ["(display: inherit)", true, true],
+    ["(display: nonsense-xyz)", false, false],
+    ["(display: nonsense-xyz) or (color: red)", true, true],
+    ["(display: revert-layer)", true, true],
+    ["(display: unset)", true, true],
+    ["(display:)", false, false],
+    ["(field-sizing: content)", true, true],
+    ["(font: 12px monospace)", true, true],
+    ["(gap: 1px)", true, true],
+    ["(inset: 0)", true, true],
+    ["(nonsense-prop: 1)", false, false],
+    ["(nonsense-prop: 1) and (display: grid)", false, false],
+    ["(nonsense-prop: 1) or (display: grid)", true, true],
+    ["(opacity: 50%)", true, true],
+    ["(overflow-anchor: none)", true, true],
+    ["(position: sticky)", true, true],
+    ["(scrollbar-color: auto)", true, true],
+    ["(text-wrap: balance)", true, true],
+    ["(transform: translate(1px))", true, true],
+    ["(view-transition-name: a)", true, true],
+    ["(width: -1px)", false, false],
+    ["(width: 1)", false, false],
+    ["(width: 1PX)", true, true],
+    ["(width: 1e1px)", true, true],
+    ["(width: 1nonsense)", false, false],
+    ["(width: 1px !important)", true, true],
+    ["(width: 1px)", true, true],
+    ["(width: calc(1px + 1em))", true, true],
+    ["(width: initial)", true, true],
+    ["(width: px)", false, false],
+    ["(width: var(--x, 1px))", true, true],
+    ["(z-index: 1.5)", false, false],
+    ["(zoom: 1)", true, true],
+    ["and (display: grid)", false, false],
+    // The one row where the two doors disagree, and the reason the API cannot
+    // simply forward to the condition evaluator.
+    ["display: grid", false, true],
+    ["font-format(collection)", true, true],
+    ["font-format(nonsense)", false, false],
+    ["font-format(woff)", true, true],
+    ["font-format(woff2)", true, true],
+    ["font-tech(color-COLRv1)", true, true],
+    ["font-tech(nonsense)", false, false],
+    ["font-tech(palettes)", true, true],
+    ["font-tech(variations)", true, true],
+    ["nonsense-fn()", false, false],
+    ["nonsense-fn(x)", false, false],
+    ["not (display: grid)", false, false],
+    ["not (display: grid) and (color: red)", false, false],
+    ["not (display: nonsense-xyz)", true, true],
+    ["not (nonsense-prop: 1)", true, true],
+    ["not not (display: grid)", false, false],
+    ["not selector(:nonsense-class)", true, true],
+    // `<general-enclosed>` is plain false, not a propagating "unknown": the
+    // spec's three-valued logic would make this false, and Chrome says true.
+    // Measured with scratch/b97/expr-b97-general-enclosed.js, and the reason
+    // the evaluator needs no tri-state.
+    ["not nonsense-fn(x)", true, true],
+    ["not (display)", true, true],
+    ["not ()", true, true],
+    ["not (nonsense stuff here)", true, true],
+    ["(nonsense-prop: 1) or nonsense-fn(x)", false, false],
+    ["nonsense-fn(x) or (display: grid)", true, true],
+    ["nonsense-fn(x) and (display: grid)", false, false],
+    ["(display: grid) or (display)", true, true],
+    ["not (display: grid !important)", false, false],
+    ["(display: grid !important) and (color: red)", true, true],
+    // `anchor-name` is not in the `any_identifier` table, so a dashed ident
+    // and a made-up one are told apart by the leading `--` rather than by the
+    // property.
+    ["(anchor-name: none)", true, true],
+    ["(anchor-name: nonsense-name)", false, false],
+    // These two are in `any_identifier`: the value is an author's own name, so
+    // no keyword list can refuse it.
+    ["(font-family: nonsense-family)", true, true],
+    ["(will-change: nonsense-thing)", true, true],
+    ["selector(&)", true, true],
+    ["selector()", false, false],
+    ["selector(*)", true, true],
+    ["selector(.a > .b)", true, true],
+    ["selector(.a:hover)", true, true],
+    ["selector(::before)", true, true],
+    ["selector(::nonsense-elem)", false, false],
+    ["selector(:has(.a))", true, true],
+    ["selector(:is(.a, .b))", true, true],
+    ["selector(:nonsense())", false, false],
+    ["selector(:nonsense-class)", false, false],
+    ["selector(:nth-child(2n of .a))", true, true],
+    ["selector(div >)", false, false],
+    ["selector(div)", true, true],
+  ];
+
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const probe = document.createElement('div');
+  probe.id = 'supports-grammar-probe';
+  host.appendChild(probe);
+
+  const atRuleApplies = (condition) => {
+    const sheet = document.createElement('style');
+    sheet.textContent = '@supports ' + condition +
+      ' { #supports-grammar-probe { letter-spacing: 3px } }';
+    document.head.appendChild(sheet);
+    const applied = getComputedStyle(probe).letterSpacing === '3px';
+    sheet.remove();
+    return applied;
+  };
+
+  const bad = [];
+  for (const [condition, wantAt, wantApi] of CASES) {
+    const gotAt = atRuleApplies(condition);
+    let gotApi;
+    try {
+      gotApi = CSS.supports(condition);
+    } catch (e) {
+      gotApi = 'throws:' + e.name;
+    }
+    if (gotAt !== wantAt || gotApi !== wantApi) {
+      bad.push(`${condition} :: at-rule ${gotAt} want ${wantAt} / api ${gotApi} want ${wantApi}`);
+    }
+  }
+  host.remove();
+  testing.expectEqual('', bad.join('\n'));
+}
+</script>
+
+<script id="supports_two_argument_api">
+{
+  // The two-argument form asks about one declaration and takes no condition
+  // grammar, so parentheses in the property name are not a condition.
+  const rows = [
+    ['display', 'grid', true],
+    ['display', 'nonsense-xyz', false],
+    ['nonsense-prop', '1', false],
+    ['-webkit-appearance', 'none', true],
+    ['-moz-appearance', 'none', false],
+    ['--x', '1', true],
+    ['width', '1nonsense', false],
+    ['width', '1px', true],
+    ['(display', 'grid)', false],
+  ];
+  const bad = [];
+  for (const [name, value, want] of rows) {
+    const got = CSS.supports(name, value);
+    if (got !== want) bad.push(`${name}:${value} got ${got} want ${want}`);
+  }
+  testing.expectEqual('', bad.join('\n'));
+}
+</script>
+
+<script id="supports_residual_unmodelled">
+{
+  // Rows where Chrome 151 and this engine still disagree, recorded so the
+  // disagreement is a stated limit rather than a silent one. Each needs a
+  // capability the repo does not have:
+  //
+  //   (transform: nonsense(1px))  Chrome false, we true. Rejecting it needs a
+  //       list of CSS function names per property; no table in this repo has
+  //       one, and inventing one risks refusing a function Chrome takes.
+  //   selector(::-webkit-anything)  Chrome false, we true. In a stylesheet an
+  //       unknown `-webkit-` pseudo-element is a wildcard that keeps the rule
+  //       (measured in the b96 selector sweep), so the selector parser cannot
+  //       be the one to refuse it, and `selector()` is stricter than the
+  //       selector list it shares a grammar with.
+  //   selector([attr=v s])  Chrome false, we true. The case-sensitivity flag
+  //       is not modelled at the selector layer either.
+  //   (display: 1px), (display: grid grid)  Chrome false, we true. Both need
+  //       `display`'s own grammar: which value *classes* it takes, and how
+  //       many components. `chrome_shorthands.value_classes` answers the first
+  //       question only for longhands some shorthand expands to, and nothing
+  //       expands to `display`; `chrome_arity.one_component` cannot hold it
+  //       because `display: inline flex` is a real two-component value. Both
+  //       tables were checked for a `display` entry and neither has one, so
+  //       closing these needs the class sweep widened past shorthand
+  //       longhands -- which would change what every declaration in the engine
+  //       is graded against, not just `@supports`.
+  const residual = [
+    ['(transform: nonsense(1px))', true],
+    ['selector(::-webkit-anything)', true],
+    ['selector([attr=v s])', true],
+    ['(display: 1px)', true],
+    ['(display: grid grid)', true],
+  ];
+  const bad = [];
+  for (const [condition, ours] of residual) {
+    const got = CSS.supports(condition);
+    if (got !== ours) bad.push(`${condition} now answers ${got}, residual said ${ours}`);
+  }
+  testing.expectEqual('', bad.join('\n'));
+}
+</script>
