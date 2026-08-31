@@ -32,6 +32,7 @@ const Location = @import("Location.zig");
 const Parser = @import("../parser/Parser.zig");
 const collections = @import("collections.zig");
 const Selector = @import("selector/Selector.zig");
+const TreeWalker = @import("TreeWalker.zig");
 const DOMTreeWalker = @import("DOMTreeWalker.zig");
 const DOMNodeIterator = @import("DOMNodeIterator.zig");
 const DOMImplementation = @import("DOMImplementation.zig");
@@ -1781,6 +1782,32 @@ pub fn open(self: *Document, call_frame: *Frame) !*Document {
 
     // If we aren't parsing, then open clears the document.
     const doc_node = self.asNode();
+
+    // Before any of the old document is thrown away: remove every event
+    // listener registered on the document, its Window and its descendants. A
+    // handler hung on the document before a write is gone by the time the
+    // write is parsed -- Chrome was measured doing this to all three, and to
+    // the `on*` slots with them. The iframe ELEMENT's listeners live in the
+    // parent document and are untouched, which is what lets the
+    // onload/write/close idiom work at all.
+    {
+        const arena = call_frame.call_arena;
+        var targets: std.AutoHashMapUnmanaged(usize, void) = .empty;
+        defer targets.deinit(arena);
+
+        // A short allocation failure here would leave listeners standing on
+        // whatever had not been collected yet, which is the state we are
+        // already in; clearing what we did collect is strictly better.
+        blk: {
+            targets.put(arena, @intFromPtr(frame.window.asEventTarget()), {}) catch break :blk;
+            targets.put(arena, @intFromPtr(self.asEventTarget()), {}) catch break :blk;
+            var tw: TreeWalker.FullExcludeSelf = .init(doc_node, .{});
+            while (tw.next()) |node| {
+                targets.put(arena, @intFromPtr(node.asEventTarget()), {}) catch break :blk;
+            }
+        }
+        frame._event_manager.base.removeAllForTargets(&targets);
+    }
 
     {
         // Remove all children from document
