@@ -23693,3 +23693,9 @@ persona's dpr=2 on the same served page:
 | the pseudo-element list (22 rows) | 13 | **22** |
 | where box-sizing comes from (9 rows) | 5 | **9** |
 | the body box (13 rows) | 12 | **13** |
+
+The sweep read 20/29 and the one station that moved is `dd-leboncoin`, back to
+`pass` from the `datadome-challenge` an alternating A/B had shown it giving BOTH
+binaries an hour earlier — the same oscillation, this time in the pleasant
+direction. No Cloudflare station moved, and the three closed cf doors are where
+they were. 1583/1583.
