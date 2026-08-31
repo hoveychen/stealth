@@ -21,6 +21,7 @@ const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const units = @import("../css/units.zig");
 const HighlightRegistry = @import("css/highlights.zig").HighlightRegistry;
+const supports_condition = @import("css/supports.zig");
 const typed_om = @import("css/typed_om.zig");
 
 const CSS = @This();
@@ -102,10 +103,17 @@ pub fn escape(value: []const u8, frame: *Frame) ![]const u8 {
     return result;
 }
 
-pub fn supports(property_or_condition: []const u8, value: ?[]const u8) bool {
-    _ = property_or_condition;
-    _ = value;
-    return true;
+/// Two overloads in one entry point, and they ask different questions. With a
+/// value, the arguments are one declaration and no condition grammar applies,
+/// so `CSS.supports('(display', 'grid)')` is false. With one argument the text
+/// is a `<supports-condition>`, falling back to a bare `<declaration>` -- which
+/// is why `CSS.supports('display: grid')` is true while the at-rule spelled the
+/// same way drops its block. Both measured; see css/supports.zig.
+pub fn supports(property_or_condition: []const u8, value: ?[]const u8, frame: *Frame) bool {
+    if (value) |v| {
+        return supports_condition.declaration(property_or_condition, v);
+    }
+    return supports_condition.conditionOrDeclaration(frame.call_arena, property_or_condition);
 }
 
 fn escapeLen(comptime is_first: bool, c: u8) usize {
@@ -318,4 +326,8 @@ test "WebApi: CSS" {
 
 test "WebApi: CSS namespace" {
     try testing.htmlRunner("css/css_namespace.html", .{});
+}
+
+test "WebApi: CSS supports" {
+    try testing.htmlRunner("css/supports_condition.html", .{});
 }

@@ -342,9 +342,28 @@ pub fn parseStylesheet(input: []const u8) RulesIterator {
     return RulesIterator.init(input);
 }
 
+/// The rules nested inside a style rule's declaration block (css-nesting-1).
+/// `parseDeclarationsList` skips over them, so the two iterators together read
+/// the whole block: one yields `letter-spacing: 1px`, the other yields
+/// `& { … }`.
+///
+/// Same walk as `parseStylesheet` with one difference, which is why it is a
+/// flag rather than a second iterator: inside a declaration block a `;` ends
+/// the thing before it, so a declaration cannot run into the selector of the
+/// rule that follows it. At the top level of a stylesheet a stray `;` is not a
+/// separator and gets absorbed into the prelude, which is the behaviour
+/// `parseStylesheet` has to keep.
+pub fn parseNestedRules(input: []const u8) RulesIterator {
+    var it = RulesIterator.init(input);
+    it.semicolon_separates = true;
+    return it;
+}
+
 pub const RulesIterator = struct {
     input: []const u8,
     stream: TokenStream,
+    /// See `parseNestedRules`.
+    semicolon_separates: bool = false,
 
     pub fn init(input: []const u8) RulesIterator {
         return .{
@@ -402,6 +421,13 @@ pub const RulesIterator = struct {
 
             if (selector_start == null and (isWhitespaceOrComment(peeked.token) or isSemicolon(peeked.token))) {
                 _ = self.stream.next();
+                continue;
+            }
+
+            if (self.semicolon_separates and isSemicolon(peeked.token)) {
+                _ = self.stream.next();
+                selector_start = null;
+                selector_end = null;
                 continue;
             }
 
