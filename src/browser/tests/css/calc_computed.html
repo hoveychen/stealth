@@ -125,6 +125,49 @@ the property does not resolve is printed as the folded calc().
 }
 </script>
 
+<script id=comparison_functions_resolve_and_compare>
+{
+  // A comparison resolves the same way the sum around it does -- each argument
+  // to pixels through lengthFactor -- and then picks. Which is why it could not
+  // be folded at parse time: `min(1px, 1em)` is 1px only once the font size is
+  // known, and on a 16px element it is the px that wins while `max` takes the
+  // em.
+  //
+  // Measured on Chrome 151 with scratch/b98/expr-b98-compare-fns.js in this
+  // file's own DOM: a 400px-wide, 20px-font containing block.
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;font-size:20px"><p style="' + decl + '">x</p></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+  const CASES = [
+    ['1px', 'font-size:16px;width:min(1px, 1em)', 'width'],
+    ['16px', 'font-size:16px;width:max(1em, 1px)', 'width'],
+    ['1px', 'font-size:16px;width:min(1px, 1em, 1rem)', 'width'],
+    // clamp(lo, mid, hi) is max(lo, min(mid, hi)): the 1px middle is below the
+    // 1em floor, so the floor wins.
+    ['16px', 'font-size:16px;width:clamp(1em, 1px, 1vh)', 'width'],
+    ['17px', 'font-size:16px;width:min(1px + 1em, 2em)', 'width'],
+    // A percentage argument resolves against the containing block like any
+    // other percentage: 10% of 400px beats 1em.
+    ['40px', 'font-size:16px;width:max(10%, 1em)', 'width'],
+    ['1px', 'font-size:16px;padding-left:min(1px, 1em)', 'paddingLeft'],
+    ['32px', 'font-size:16px;padding-left:max(10px, 2em)', 'paddingLeft'],
+    // The comparison as one term of a sum.
+    ['17px', 'font-size:16px;width:calc(min(1px, 1em) + 1rem)', 'width'],
+  ];
+  const wrong = [];
+  for (const [want, decl, prop] of CASES) {
+    const got = probe(decl, prop);
+    if (got !== want) wrong.push(decl + ' -> ' + prop + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
+
 <script id=calc_over_numbers_stays_a_number>
 {
   // A calc() whose terms carry no unit is not a length and does not gain a
