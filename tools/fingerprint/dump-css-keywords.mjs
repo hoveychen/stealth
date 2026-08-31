@@ -47,6 +47,31 @@ const outPath = path.join(repo, 'src/browser/webapi/css/chrome_keywords.zig');
 const MDN_DATA = '2.24.0';
 const MDN_FILES = ['properties.json', 'syntaxes.json', 'types.json'];
 
+// The other half of the pool, and the reason there are two.
+//
+// mdn-data describes the standard, so a property Chrome has and the standard
+// does not is simply absent from it -- and because the pool is built out of the
+// syntaxes mdn-data carries, an identifier only that property takes is never
+// offered to Chrome at all. An identifier that is never offered reads exactly
+// like one Chrome rejected, and the table then makes this engine STRICTER than
+// Chrome: the declaration is dropped on the floor.
+//
+// That is not hypothetical. `-webkit-font-smoothing: antialiased` is in
+// Cloudflare's own widget stylesheet; mdn-data 2.24.0 has no
+// `-webkit-font-smoothing` entry and the string `antialiased` appears in no
+// syntax in it, so the keyword was never a candidate and the widget's rule came
+// out of this engine 37 characters shorter than out of Chrome -- one whole
+// declaration missing, on every page that uses the property.
+//
+// `css_value_keywords.json5` is Blink's own list of every CSS value keyword it
+// has, which makes it the exact ceiling: a keyword Chrome accepts anywhere
+// cannot be missing from the pool. Chrome still decides every (property,
+// keyword) pair, so this only widens what gets offered.
+const BLINK_KEYWORDS_REF = '82774a71a48bef8a53c33ba2ad92406b4a909735';
+const BLINK_KEYWORDS_URL =
+    `https://raw.githubusercontent.com/chromium/chromium/${BLINK_KEYWORDS_REF}` +
+    '/third_party/blink/renderer/core/css/css_value_keywords.json5';
+
 // Accepted by every property, so they are checked separately rather than
 // stored 474 times. Verified against Chrome below.
 const CSS_WIDE = ['inherit', 'initial', 'revert', 'revert-layer', 'unset'];
@@ -95,7 +120,28 @@ async function candidatePool() {
             for (const m of bare.matchAll(/[a-zA-Z][a-zA-Z0-9-]*/g)) pool.add(m[0]);
         }
     }
+    for (const name of await blinkKeywords()) pool.add(name);
     return [...pool].sort();
+}
+
+// Blink's own keyword names. The file is json5 with `//` comments and entries
+// that are bare string literals inside `data: [...]`, plus the occasional
+// object with a `name` field, and some entries commented out -- so the comments
+// come off first or a disabled keyword would be read as a live one.
+//
+// `-internal-` names are dropped: `CSSValueKeywordsWriter` restricts them to
+// parser modes an author stylesheet never uses, so Chrome rejects every one of
+// them here and they would only lengthen a cross product that is already
+// 682 x 2000.
+async function blinkKeywords() {
+    const res = await fetch(BLINK_KEYWORDS_URL);
+    if (!res.ok) throw new Error(`${BLINK_KEYWORDS_URL}: HTTP ${res.status}`);
+    const text = (await res.text()).replace(/\/\/[^\n]*/g, '');
+    const data = text.slice(text.indexOf('data:'));
+    const names = new Set();
+    for (const m of data.matchAll(/"([^"]+)"/g)) names.add(m[1]);
+    for (const m of data.matchAll(/name\s*:\s*"([^"]+)"/g)) names.add(m[1]);
+    return [...names].filter((n) => !n.startsWith('-internal-'));
 }
 
 const PROBE = (properties, candidates) => `(() => {
@@ -263,7 +309,9 @@ try {
         `// Measured from ${userAgent}`,
         `// ${listed.computed.length} computed longhands and ${listed.extra.length} shorthands/aliases probed`,
         `// against ${candidates.length} candidate`,
-        `// identifiers (every bare identifier in any mdn-data ${MDN_DATA} value syntax):`,
+        `// identifiers (every bare identifier in any mdn-data ${MDN_DATA} value syntax,`,
+        `// plus every keyword name in Blink's own css_value_keywords.json5 at`,
+        `// ${BLINK_KEYWORDS_REF}):`,
         `// ${pairs} accepted (property, keyword) pairs over ${perProperty.length} properties, of`,
         `// which ${noKeywords} take no bare identifier at all beyond the CSS-wide ones (an`,
         '// empty list is a rejection, where a name missing from the table entirely has',
@@ -275,10 +323,15 @@ try {
         '// declaration rather than the way mdn-data offered it: the pool is spec-spelled',
         '// (`currentColor`, `ButtonFace`, `crispEdges`, `A4`) and every one of those 59',
         '// keywords comes back in lower case. Absence from this table is only',
-        '// evidence that Chrome rejected the identifier when it was measured -- a',
-        '// keyword Chrome takes but mdn-data does not list was never offered to it and',
-        '// would read as rejected here, so regenerate against a newer mdn-data rather',
-        '// than hand-adding a name.',
+        '// evidence that Chrome rejected the identifier when it was measured, so an',
+        '// entry is never hand-added -- regenerate instead.',
+        '//',
+        '// The pool used to be mdn-data alone, which made the table stricter than',
+        '// Chrome for every property the standard does not describe: mdn-data has no',
+        '// `-webkit-font-smoothing`, so `antialiased` was in no syntax, was never',
+        '// offered, and read as rejected. Blink\'s own keyword file is the second half',
+        '// for exactly that reason -- it is the ceiling on what Chrome can accept, so a',
+        '// missing keyword now means Chrome said no.',
         '',
         'const std = @import("std");',
         '',
