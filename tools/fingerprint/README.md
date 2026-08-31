@@ -24987,3 +24987,69 @@ B76), `chrome_arity` (fixed here), `chrome_shorthands.value_classes` (open, and
 the reason six declarations above are still wrong). `dump-css-units.mjs` is the
 counter-example worth copying: it brute-forces all 475 254 alphabetic spellings
 up to four letters rather than trusting a list, and has no ceiling at all.
+
+## Half of a gradient's colours were already right (B77, 2026-08-31)
+
+`getComputedStyle` is the surface Cloudflare's collector walks — 736 property
+names, read one at a time — so a computed value this engine spells differently
+is a reading a guard already has. `background-image` was one of them.
+
+`color: red` computes to `rgb(255, 0, 0)` here, and has for a long time:
+`computedColourText` folds a named colour on the computed surface. It takes the
+*whole* value, though, and refuses anything carrying a `(`, a `#`, a comma or a
+space — because what reaches it as a colour is a bare keyword. So
+`background-image: linear-gradient(red, blue)` went straight past it and
+computed to itself, where Chrome answers
+`linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))`.
+
+What makes it a gap rather than a design is the other half of the same gradient:
+`linear-gradient(#ff0000, #0000ff)` and `linear-gradient(rgb(1, 2, 3), hsl(0,
+100%, 50%))` were *already* folded, by `canonicaliseValue`'s token walk, which
+folds a hash or a colour call wherever it finds one. Only the bare keyword was
+left as written — the one spelling a hand-written stylesheet is most likely to
+use.
+
+Two measurements decided the shape of the fix, and both of them ruled out the
+obvious implementation:
+
+* **Chrome does not fold at specified time.** `el.style.backgroundImage` reads
+  back `linear-gradient(red, blue)` in Chrome, exactly as this engine already
+  answered it. Putting the fold in `canonicaliseValue` — where the hash fold
+  lives — would have been a fresh divergence on the inline surface to close one
+  on the computed surface.
+* **Depth is not the rule.** `counter(red)`, `counters(red, ".")`,
+  `repeat(2, [red] 1fr)`, `styleset(red)`, `swash(red)` and `url(.../red)` all
+  put `red` inside a call, and Chrome folds none of them: there it is a counter
+  name, a line name, a feature name, a path. A blanket "an identifier inside a
+  call that spells a colour is a colour" would have thrown away six real values
+  to fix eleven.
+
+So the walk carries a stack of enclosing function names and folds only inside
+the fourteen measured to hold a `<color>`: the six gradient functions, their
+four `-webkit-` spellings, `-webkit-gradient`'s inner `from`/`to`/`color-stop`,
+and `drop-shadow`. The property is not part of the question — measured,
+`linear-gradient(red, blue)` folds under `background-image`, `mask-image`,
+`border-image-source` and the `background` shorthand alike.
+
+`src/browser/tests/css/computed_colour_in_function.html`, 25 rows, red before
+and green after; every expectation measured on Chrome 151 first
+(`scratch/b77/expr-foldassert.js`, `expr-foldwhere.js`, `expr-foldrest.js`). The
+eleven that differed were colour-only, and the ten negative controls agreed
+before the fix as well as after. Full suite 1596/1596.
+
+One expectation in the test was wrong on the first run and the engine was right:
+`url(red)` computes to an absolute URL against the document, and the Chrome
+reading had been taken on a `data:` page where there is no document to resolve
+against. The control now uses an absolute URL. That is
+[[generated-tables-can-be-wrong]] in its third form — a hand-written
+expectation, measured on the wrong page.
+
+**Still open in the same family, each needing more than the fold** and so
+deliberately not hidden behind it: `image-set(linear-gradient(red, blue) 1x)`
+(Chrome also answers `1dppx`), `filter: drop-shadow(0px 0px red)` (Chrome also
+reorders the colour to the front and pads to three lengths), `-webkit-gradient`
+(Chrome rewrites `left top` to `0% 0%`), the prefixed gradients' inserted
+default direction (`-webkit-linear-gradient(red, blue)` gains a `top`),
+`color-mix()` and `light-dark()` (evaluated, not folded), `box-shadow` and
+`text-shadow` computed shape, and `getComputedStyle(el).webkitTextStroke`, which
+this engine answers `undefined` where Chrome answers `1px rgb(255, 0, 0)`.
