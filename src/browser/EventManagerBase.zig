@@ -305,6 +305,46 @@ pub fn removeListener(self: *EventManagerBase, list: *std.DoublyLinkedList, list
     }
 }
 
+/// Removes every listener registered on any of `targets`, addEventListener and
+/// `on*` handler alike. HTML's document open steps want this for the document,
+/// its Window and its descendants at once, which is why it takes a set: both
+/// stores are keyed by target, so each is walked once against the set rather
+/// than once per target.
+///
+/// The set holds `@intFromPtr(target)`, matching `lookup`'s key.
+pub fn removeAllForTargets(self: *EventManagerBase, targets: *const std.AutoHashMapUnmanaged(usize, void)) void {
+    var it = self.lookup.iterator();
+    while (it.next()) |kv| {
+        if (targets.contains(kv.key_ptr.event_target) == false) {
+            continue;
+        }
+        // Emptying the list is enough; `lookup` keeps the (now empty) list, the
+        // same state `removeEventListener` leaves behind.
+        const list = kv.value_ptr.*;
+        var node = list.first;
+        while (node) |n| {
+            node = n.next;
+            self.removeListener(list, @alignCast(@fieldParentPtr("node", n)));
+        }
+    }
+
+    // The handler store is a hash map, so its entries are collected before any
+    // of them is removed rather than removed mid-iteration.
+    var doomed: std.ArrayList(global_event_handlers.Key) = .empty;
+    var handler_it = self.attr_listeners.iterator();
+    while (handler_it.next()) |kv| {
+        if (targets.contains(@intFromPtr(kv.key_ptr.target))) {
+            doomed.append(self.arena, kv.key_ptr.*) catch |err| {
+                log.err(.dom, "collect handlers to remove", .{ .err = err });
+                return;
+            };
+        }
+    }
+    for (doomed.items) |key| {
+        _ = self.attr_listeners.remove(key);
+    }
+}
+
 /// Check if there are any listeners registered for a target/type combination.
 ///
 /// The list has to be walked rather than merely found: `removeListener` unlinks

@@ -23,7 +23,7 @@ const js = @import("../js/js.zig");
 
 const EventTarget = @import("EventTarget.zig");
 
-const Key = struct {
+pub const Key = struct {
     target: *EventTarget,
     handler: Handler,
     // No `Key.fuse` here: upstream packs the handler tag into the top 7 bits of

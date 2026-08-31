@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  HTML's document open steps say, before anything is parsed:
+
+    Remove all event listeners registered on document, its Window object, and
+    all its descendant elements.
+
+  Chrome 151 does all three, and nulls the `onXXX` slots with them. We kept
+  every one, which a guard sees in one read: hang a handler on the document,
+  write into it, and ours calls back where Chrome does not.
+
+  Each block dispatches a plain event of its own making -- nothing to do with
+  parsing or readiness -- before and after open(), and counts the hits. The
+  "before" count is there so a block that never wired anything up cannot pass
+  by accident.
+-->
+<script id=open_removes_document_listeners>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  let hits = 0;
+  doc.addEventListener('ping', () => { hits++; });
+  doc.dispatchEvent(new iframe.contentWindow.Event('ping'));
+  const before = hits;
+  doc.open();
+  doc.dispatchEvent(new iframe.contentWindow.Event('ping'));
+
+  testing.expectEqual('before 1, after 1', 'before ' + before + ', after ' + hits);
+}
+</script>
+
+<script id=open_removes_window_listeners>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  const win = iframe.contentWindow;
+  let hits = 0;
+  win.addEventListener('ping', () => { hits++; });
+  win.dispatchEvent(new win.Event('ping'));
+  const before = hits;
+  doc.open();
+  win.dispatchEvent(new win.Event('ping'));
+
+  testing.expectEqual('before 1, after 1', 'before ' + before + ', after ' + hits);
+}
+</script>
+
+<!--
+  The descendant elements are thrown away by open(), so the only way to see
+  whether their listeners went with them is to hold one by reference across the
+  call and dispatch at it afterwards.
+-->
+<script id=open_removes_descendant_listeners>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  const el = doc.body;
+  let hits = 0;
+  el.addEventListener('ping', () => { hits++; });
+  el.dispatchEvent(new iframe.contentWindow.Event('ping'));
+  const before = hits;
+  doc.open();
+  el.dispatchEvent(new iframe.contentWindow.Event('ping'));
+
+  testing.expectEqual('before 1, after 1', 'before ' + before + ', after ' + hits);
+}
+</script>
+
+<!--
+  An `onXXX` property is a listener too, and reading the property back is a
+  cheaper tell than dispatching at it.
+-->
+<script id=open_clears_handler_properties>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  const win = iframe.contentWindow;
+  const body = doc.body;
+  doc.onclick = () => {};
+  win.onresize = () => {};
+  body.onclick = () => {};
+
+  const shape = () => typeof doc.onclick + '/' + typeof win.onresize + '/' + typeof body.onclick;
+  const before = shape();
+  doc.open();
+
+  // `typeof null` is "object"; Chrome answers a literal null on all three.
+  testing.expectEqual(
+    'before function/function/function, after object/object/object',
+    'before ' + before + ', after ' + shape(),
+  );
+}
+</script>
+
+<!--
+  What open() must NOT take with it: a listener on the IFRAME ELEMENT lives in
+  the parent document, and it is the one the whole idiom is built around.
+-->
+<script id=open_leaves_the_iframe_element_alone>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  let loads = 0;
+  iframe.addEventListener('load', () => { loads++; });
+
+  const doc = iframe.contentDocument;
+  doc.open();
+  doc.write('<p>written</p>');
+  doc.close();
+
+  testing.expectEqual('load fired 1x', 'load fired ' + loads + 'x');
+}
+</script>
