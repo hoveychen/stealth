@@ -24275,3 +24275,98 @@ Residual, stated in the code rather than measured: `marginEscapes` never asks
 about `height`, and the spec only lets a *bottom* margin collapse through a box
 whose height is `auto`. Every shape here has an auto-height parent, so nothing
 above distinguishes the two.
+
+## x-hyatt's ticket comes first, and its rate is too low to test anything with (B74, 2026-08-31)
+
+B96 saw three `x-kpsdk-r` tickets on this engine in one sitting and wrote down
+that "x-hyatt now gets a ticket sometimes", with the observation that every
+ticket run was `doc=429->200` and every ticketless one was `doc=429` — 59
+observations, no exception. Two readings fit that: the ticket *causes* the
+recovery, or the edge had already decided before any JS ran and the ticket is
+that decision surfacing on the POST. The second would mean the page environment
+is not what is being judged at all.
+
+The second is wrong, and the whole line dies on arithmetic rather than on a
+missing lead.
+
+### The ticket comes first; the 200 is the reload it permits
+
+Ten alternating pairs, order flipped every round, back to back
+(`scratch/b74/rounds.sh` driving `hyatt-tl-timeline.mjs`, per-run timelines in
+`scratch/b74/out/`). Chrome took a ticket in **10 of 10**:
+
+| | ticket at | reload request at | document 200 at |
+|---|---|---|---|
+| median of 10 Chrome runs | 1897ms | ticket + 3ms | 2743ms |
+| spread | 1830–2558 | ticket + 1…6 | 2640–4165 |
+
+The reload leaves within six milliseconds of the ticket arriving, every time.
+So "ticket" and "429->200" are **one event seen twice**, not two signals whose
+correlation means anything. B96's 59-observation co-occurrence is fully spent by
+this and carries no further information.
+
+### Nothing before the POST differs between the arms
+
+Across 50 runs of this engine and 10 of Chrome, everything upstream of the POST
+is the same shape:
+
+| | this engine (n=50) | Chrome (n=10) |
+|---|---|---|
+| `x-kpsdk-r` on the 429 document | `1-AA`, all 50 | `1-AA`, all 10 |
+| 429 body | 690 bytes, all 50 | 690 bytes, all 10 |
+| guard program served | 291 705 – 326 884 B | 293 222 – 316 095 B |
+| `/tl` post length | 19 122 – 19 226 | 19 586 – 19 650 |
+| `/tl` response | `200 text/plain len=0`, `x-kpsdk-r` absent, all 50 | `200 application/json` len=15, ticket, all 10 |
+
+The 429 carries the same `1-AA` state to both arms and the program sizes
+overlap (they are re-randomised per delivery), so **the edge is not pre-judging
+at the document request** — the decision happens entirely on the `/tl` POST. The
+post-length gap is the already-attributed ~440B one, of which 330B is global
+creation order, negated in both directions.
+
+And the one surviving log of a run where *this engine* took a ticket
+(`/tmp/b96-hyatt-base-5.log`) reads `tl=200 application/json; charset=utf-8
+len=15 cr=true r=1-B1EFfHU`, `doc=429->200`. So there is no third "envelope
+rejected" response shape: `text/plain len=0` is a refusal and `json len=15` is a
+grant, and **the same binary has been handed both**. Nothing in this client's
+content flips it.
+
+### The rate, and why the line closes
+
+Measured today, one hour, same binary (`scratch/b73/lp-rel-escmargin`):
+
+| | tickets |
+|---|---|
+| Chrome, headed | **10 / 10** |
+| this engine, order-balanced alternating rounds | 0 / 10 |
+| this engine, single-arm back-to-back burst of 40 | **0 / 40** |
+
+B96's "the ticket favours the first visit of a burst" did not reproduce: this
+engine led five of the ten pairs and every one of the forty burst runs, and took
+nothing. Cumulatively this engine is about **5 tickets in 157 visits (~3%)**
+across three sittings (B84 2/37, B96 3/70, here 0/50) against a reference arm at
+90–100%.
+
+**That rate is the finding.** Separating 3% from 6% at α=0.05 and 80% power needs
+roughly 750 runs per arm — about 6½ hours of wall clock per arm at 32s a run —
+so an engine change that *doubled* our ticket rate is not measurable in any
+schedule this file can run. `x-kpsdk-r` remains a good oracle in the one
+direction that has resolution: subtracting from Chrome's ~100%, which is what
+B84's eight-knob table already used. It is not usable as an A/B judge on our
+side, and B96's "worth re-running the reverse-biased design when the window is
+open" is not worth running — there is no window to catch, only a low rate.
+
+Two smaller things fell out. Our think time — guard program fully downloaded to
+POST sent — is **159–270ms (median 212)** against Chrome's **920–980ms**, tighter
+on Chrome's side than load noise explains (±3%, which looks like a timer rather
+than work). That reproduces and sharpens B84's timing gap, and B84 already
+negated it causally by holding our POST back into Chrome's window; one run here
+had a think time of 835ms and still took nothing. And Chrome drops the 429's body
+the instant the challenge script reloads, so `Network.getResponseBody` has to be
+called on `loadingFinished` rather than after the settle — a deferred read
+returns "No resource with given identifier" on exactly the arm that matters.
+
+**What this does to the door map:** x-hyatt stays a real door — the reference arm
+walks in and this engine does not. What changes is the instrument, not the
+verdict: the row should read *reference ~100%, this engine ~3%, and the ticket
+rate cannot referee a change of ours*.
