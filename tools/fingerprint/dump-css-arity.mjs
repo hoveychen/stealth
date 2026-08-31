@@ -32,7 +32,20 @@
 // content-box`. The other half is routinely not a value at all on its own:
 // `align-items: first baseline` and `justify-content: safe center` hang off a
 // modifier Chrome refuses alone. So the second half is drawn from *every*
-// identifier mdn-data carries, accepted or not.
+// identifier there is, accepted or not.
+//
+// Both halves of the offer are a ceiling, and both of them were once too low.
+// A property is listed only when Chrome refused everything it was shown, so an
+// offer that never reaches a property's real two-component grammar reads
+// exactly like Chrome refusing it, and the engine then throws away a
+// declaration Chrome keeps -- the one kind of wrong this family of tables
+// exists never to be. Measured: `scroll-marker-group: after links` was missing
+// because `links` is a Blink keyword no mdn-data syntax mentions, and
+// `clip-path: circle() padding-box`, `shape-outside: circle() border-box` and
+// `border-shape: circle() circle()` were all missing because no generic value
+// was a function call. `transform` was the same defect, noticed once and
+// patched at the other end with a hand-written exemption in
+// `CSSStyleDeclaration.tooManyComponents`.
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -54,6 +67,16 @@ const PAGE = 'data:text/html,<!doctype html><title>arity</title><body>';
 const MDN_DATA = '2.24.0';
 const MDN_FILES = ['properties.json', 'syntaxes.json', 'types.json'];
 
+// mdn-data describes the standard, so a keyword Chrome has and the standard
+// does not was never offered to it -- and "never offered" is indistinguishable
+// from "refused" in a table measured as a negative. Blink's own list of every
+// CSS value keyword it has is the exact ceiling instead. Same file and same pin
+// dump-css-keywords.mjs widened its pool with.
+const BLINK_KEYWORDS_REF = '82774a71a48bef8a53c33ba2ad92406b4a909735';
+const BLINK_KEYWORDS_URL =
+    `https://raw.githubusercontent.com/chromium/chromium/${BLINK_KEYWORDS_REF}` +
+    '/third_party/blink/renderer/core/css/css_value_keywords.json5';
+
 // One value of every shape a component can be, so the pair sweep offers a
 // property something of the kind it takes even before its keywords are known.
 //
@@ -62,24 +85,38 @@ const MDN_FILES = ['properties.json', 'syntaxes.json', 'types.json'];
 // one-component and then refuses a declaration Chrome keeps: `"abcd"` earns
 // its place because an OpenType tag is *four* characters, so `"s"` alone left
 // `font-feature-settings: "liga" 1` unreachable and the property in the table.
-// Widening this list is always safe; narrowing it is not.
+//
+// Widening this list is safe with one exception, which is why `var()`, `env()`
+// and `attr()` are not in it: a declaration holding one of those parses for
+// every property there is -- Chrome keeps the text and substitutes later -- so
+// offering one would empty the table rather than widen the pool, and every real
+// refusal in it would be lost. Narrowing is never safe.
 const GENERIC = ['1px', '10%', '2', '1000', '-1px', '0', '1em', '1fr', '1deg',
     '0.5s', 'red', '#00ff00', 'url(a)', 'calc(1px)', '"s"', '"abcd"', 'a',
-    'auto', 'none'];
+    'auto', 'none',
+    // The shapes the nineteen above never offered. A function call is the one
+    // that mattered: without it `clip-path`, `shape-outside`, `border-shape`
+    // and `transform` all read as one-component.
+    '1x', '96dpi', '1Hz', '--a', 'linear-gradient(red,blue)', 'translate(1px)',
+    'circle()', 'path("M 0 0")', '[a]', '2n+1', 'counter(a)', 'min(1px,2px)',
+    'U+0-7F', 'image-set(url(a) 1x)', 'cubic-bezier(0,0,1,1)', 'steps(1)'];
 
 // A property with hundreds of accepted identifiers is a colour or an enum, and
 // neither has a two-component grammar hiding in the tail of its list. The cap
 // keeps the anchor set from growing with the pool; the sample is spread across
 // the sorted list rather than taken off the front, so it is not all `a`-words.
+// Measured against the widened pool: raising it to 32 changes not one row, so
+// the cap is not a ceiling the way the two pools above were.
 const KEYWORD_CAP = 16;
 
 const CHUNK = 4; // properties per Runtime.evaluate
 
 const zigString = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
-// Every bare identifier in a value syntax, the same pool dump-css-keywords.mjs
-// measures against: type references and function names are stripped, since
-// neither is a value a property takes on its own.
+// Every bare identifier in a value syntax plus every keyword name Blink has,
+// the same pool dump-css-keywords.mjs measures against: type references and
+// function names are stripped, since neither is a value a property takes on
+// its own.
 async function candidatePool() {
     const base = `https://unpkg.com/mdn-data@${MDN_DATA}/css/`;
     const docs = await Promise.all(MDN_FILES.map(async (f) => {
@@ -97,7 +134,27 @@ async function candidatePool() {
             for (const m of bare.matchAll(/[a-zA-Z][a-zA-Z0-9-]*/g)) pool.add(m[0]);
         }
     }
+    for (const name of await blinkKeywords()) pool.add(name);
     return [...pool].sort();
+}
+
+// Blink's own keyword names. The file is json5 with `//` comments and entries
+// that are bare string literals inside `data: [...]`, plus the occasional
+// object with a `name` field, and some entries commented out -- so the comments
+// come off first or a disabled keyword would be read as a live one.
+//
+// `-internal-` names are dropped: they are restricted to parser modes an author
+// stylesheet never uses, so Chrome rejects every one of them here and they
+// would only lengthen a cross product that is already large.
+async function blinkKeywords() {
+    const res = await fetch(BLINK_KEYWORDS_URL);
+    if (!res.ok) throw new Error(`${BLINK_KEYWORDS_URL}: HTTP ${res.status}`);
+    const text = (await res.text()).replace(/\/\/[^\n]*/g, '');
+    const data = text.slice(text.indexOf('data:'));
+    const names = new Set();
+    for (const m of data.matchAll(/"([^"]+)"/g)) names.add(m[1]);
+    for (const m of data.matchAll(/name\s*:\s*"([^"]+)"/g)) names.add(m[1]);
+    return [...names].filter((n) => !n.startsWith('-internal-'));
 }
 
 const PROBE = (properties, candidates) => `(() => {
@@ -228,8 +285,10 @@ try {
         `// offered is one half the property visibly takes -- one of ${GENERIC.length} generic`,
         `// values, or one of up to ${KEYWORD_CAP} identifiers it accepts alone -- against a`,
         `// second half drawn from every one of the ${candidates.length} identifiers mdn-data`,
-        `// ${MDN_DATA} carries, since a modifier like the \`first\` of \`first baseline\` is`,
-        '// refused on its own and no pool of accepted values would reach it.',
+        `// ${MDN_DATA} and Blink's own css_value_keywords.json5 at`,
+        `// ${BLINK_KEYWORDS_REF.slice(0, 10)} carry between them, since a modifier like the`,
+        '// `first` of `first baseline` is refused on its own and no pool of',
+        '// accepted values would reach it.',
         '//',
         '// How many things a declaration may hold. The value classes and',
         '// `chrome_bounds` are both asked one component at a time, so `margin-top:',
