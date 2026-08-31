@@ -23235,3 +23235,138 @@ is a different KIND of finding from everything the last twenty chapters have
 been grinding on, all of which asked whether a number matched.
 
 Filed as `doc-open-into-blank-iframe`, ordered so the hang is closed first.
+
+## The close that ended nothing, and the document that did not know where it was (B71, 2026-08-30)
+
+B70 filed three divergences in the `document.open()` / `write` / `close()` path
+and ordered the hang first. All three are closed. Eleven readings
+(`scratch/b70/expr-doc-open.js`, headed Chrome 151 against a ReleaseFast build
+of this engine, both arms on the same served page) went from five agreeing to
+**eleven agreeing, byte for byte**.
+
+### One early return held all three
+
+`close()` did finish the streaming parser. What it could not do was tell the
+frame, because `Frame.documentIsComplete` opens with
+
+```zig
+if (self._load_state == .complete) return;
+```
+
+and a script-created `about:blank` iframe is `.complete` from the moment it is
+created — it has nothing to load. So the completion path was skipped whole:
+`readyState` stayed at `loading` forever, no `readystatechange` and no
+`DOMContentLoaded` fired, and the frame's `load` event never reached the iframe
+element.
+
+That last one is the one that costs a page. The standard way to build yourself
+a realm is
+
+```js
+iframe.onload = () => { /* the realm is ready */ };
+doc.write(...);
+doc.close();
+```
+
+and the callback on the first line is the only thing the third line could ever
+call. It is the same shape as `decodeAudioData` returning a promise that never
+settled — the finding that eventually opened ak-macys — and not a value that
+failed to match.
+
+The fix is one state: `open()` puts the frame back into `.parsing`, which is
+honest, since it is parsing again. Everything downstream then runs for the
+second time, in the order Chrome was measured reporting it:
+
+| | Chrome 151 | before | after |
+|---|---|---|---|
+| trace, listeners attached after `open()` | `rsc=interactive \| DCL \| rsc=complete` | *(empty)* | `rsc=interactive \| DCL \| rsc=complete` |
+| `readyState` after `close()` | `complete` | `loading` | `complete` |
+| iframe `load` fired | 1 | 0 | 1 |
+| second `close()` | 1 | 0 | 1 |
+| two open/write/close cycles | 2 | 0 | 2 |
+| window events after `close()` | `doc:DCL \| win:load \| win:pageshow` | *(empty)* | `doc:DCL \| win:load \| win:pageshow` |
+
+A frame that already reported in to its parent has to be allowed to report
+again — this parse fires its own load event — but it delays nothing, because the
+parent's own load is long over. Both of those are one line each next to the
+state change.
+
+One companion was needed. `.parsing` is also the state that means "an inline
+script is writing into the document currently being parsed", where a write is
+spliced in after the script element instead of streamed. A script-created parser
+always streams, so `writeInternal` now says that outright rather than inferring
+it from the frame not being in `.parsing`.
+
+### The bridge cannot tell you who is calling
+
+HTML's document open steps set the document's URL to the **entry** document's —
+the URL of the document whose script called `open()`, not the one the frame was
+loaded from. So a page that writes into its own `about:blank` iframe leaves that
+iframe claiming the page's address, on `document.URL`, `document.documentURI`
+and `location.href` alike, including to a script written into the document. Ours
+said `about:blank` on all three: the realm a guard builds this way was asked
+where it is, and answered nowhere.
+
+The first attempt did nothing, and the reason is worth writing down. A bound
+method's `*Frame` argument is the **receiver's** frame, not the caller's — for
+`iframeDoc.open()` that is the iframe's own frame, which is exactly the
+`about:blank` we were trying to replace. An instrumented run said so in one
+line: `differ = false, call_url = about:blank`. V8's incumbent context is the
+one that knows who is running, and `postMessage` was already using it to name
+its `source` window.
+
+The base URL is not part of this and does not move: an `about:blank` child
+already inherited its creator's base URL, so relative links in the written
+markup already resolved against the parent. A test pins that they still do.
+
+### The referrer, which was not in the plan
+
+Attributing `document.referrer` in the same corner turned up a separate,
+pre-existing gap: an `about:blank` iframe reported the empty string, which is
+what a document reached by typing its address reports. Chrome reports the
+creating document's URL, with or without an explicit `src="about:blank"`.
+`about:srcdoc` was measured empty on both arms and stays empty; the
+`window.open` case has no reading, because headless Chrome blocks the popup.
+`Frame._referrer` feeds `document.referrer` and nothing else, so this moves one
+reading and no traffic.
+
+### What is still different, measured
+
+The probe written to check the fix caught something the plan had not named. In
+Chrome, listeners registered on the document **before** an implicit `open()` are
+gone afterwards; ours survive and fire. HTML's open steps have an explicit
+"remove all event listeners registered on document, its Window object, and all
+its descendant elements" — and Chrome does all three, plus nulling the
+`onXXX` slots:
+
+| dispatch a plain event before / after `open()` | Chrome 151 | this engine |
+|---|---|---|
+| listener on the document | 1 / 1 | 1 / 2 |
+| listener on the window | 1 / 1 | 1 / 2 |
+| listener on a descendant element, held by reference | 1 / 1 | 1 / 2 |
+| `doc.onclick` after `open()` | `null` | `function` |
+
+This is a behavioural tell, not a value: a guard that hangs a
+`readystatechange` handler on the document and then writes into it hears from
+us and not from Chrome. Filed as `doc-open-removes-listeners`.
+
+### The door did not move
+
+Two full sweeps back to back on the same route, same build mode, the only
+difference being the binary (`results/b71-sweep-base.json`,
+`results/b71-sweep-fixed.json`): 19/29 before, 20/29 after, and the one station
+that moved was `dd-datadome`. Alternating the two binaries at that station
+alone, three rounds each, says what that is worth:
+
+| round | before | after |
+|---|---|---|
+| 1 | challenge | **pass** |
+| 2 | challenge | challenge |
+| 3 | challenge | challenge |
+
+One pass in four, and DataDome is the family already known to open and close in
+windows — B70 spent a three-round alternation proving three DataDome stations
+were rejecting BOTH arms at the time. So: 19/29, unchanged.
+`cf-scrapingcourse` is still `cf-challenge` and `x-hyatt` is still
+`refused-429` in both columns. Three hangs and a wrong address are closed
+because they were wrong, not because a guard has admitted anything.
