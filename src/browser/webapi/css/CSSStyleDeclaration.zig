@@ -6507,6 +6507,13 @@ pub fn setNamed(self: *CSSStyleDeclaration, name: []const u8, value: []const u8,
     if (method_names.has(name)) {
         return error.NotHandled;
     }
+    // A custom property is not a named property of a declaration; see
+    // `getNamed`. `style['--y'] = '2'` lands on the object as an ordinary
+    // expando and the declaration block never hears about it, so `--y` stays
+    // unset and `length` stays where it was.
+    if (isCustomProperty(name)) {
+        return error.NotHandled;
+    }
     const dash_case = camelCaseToDashCase(name, &frame.buf);
     try self.setProperty(dash_case, value, null, frame);
 }
@@ -6553,6 +6560,21 @@ pub fn getNamed(self: *CSSStyleDeclaration, name: []const u8, frame: *Frame) ![]
         return error.NotHandled;
     }
 
+    // A custom property is reachable through `getPropertyValue`, `setProperty`
+    // and `item()` -- which still lists it, and `length` still counts it -- but
+    // it is not an own property of the declaration. Measured on Chrome 151
+    // (scratch/b97/expr-b97-bracket-access.js): after
+    // `setProperty('--x','1')`, `style['--x']` is `undefined`, `'--x' in style`
+    // is false and there is no descriptor for it.
+    //
+    // The dashed-name branch below is what used to answer here, because a
+    // custom property is the one thing left that can be stored under a name
+    // `isAliasSpelling` does not know -- every other such name is now refused
+    // outright by `storeProperty`.
+    if (isCustomProperty(name)) {
+        return error.NotHandled;
+    }
+
     const is_alias = isAliasSpelling(name);
     if (!is_alias and std.mem.indexOfScalar(u8, name, '-') == null) {
         return error.NotHandled;
@@ -6583,6 +6605,12 @@ fn aliasNames(_: *const CSSStyleDeclaration, exec: *const js.Execution) !js.Arra
 
 fn queryAlias(self: *const CSSStyleDeclaration, name: []const u8, frame: *Frame) !u32 {
     if (method_names.has(name)) {
+        return error.NotHandled;
+    }
+    // Not an own property, so it has no descriptor and `in` says no. Same rule
+    // as `getNamed`, and it has to be here too or `'--x' in style` and
+    // `Object.getOwnPropertyDescriptor` would disagree with the read.
+    if (isCustomProperty(name)) {
         return error.NotHandled;
     }
     if (isAliasSpelling(name)) {
@@ -6949,6 +6977,10 @@ test "WebApi: CSSStyleDeclaration surface" {
 
 test "WebApi: CSSStyleDeclaration refuses unknown" {
     try testing.htmlRunner("css/declaration_refuses_unknown.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration custom property is not named" {
+    try testing.htmlRunner("css/custom_property_not_named.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration computed initial values" {

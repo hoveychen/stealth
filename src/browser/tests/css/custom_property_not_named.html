@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<head>
+  <script src="../testing.js"></script>
+</head>
+
+<!--
+  A custom property is not a named property of a CSSStyleDeclaration.
+
+  Chrome reaches `--x` only through `getPropertyValue` / `setProperty` /
+  `item()`. It is never an own property: `style['--x']` is `undefined`,
+  `'--x' in style` is false, and `style['--y'] = '2'` sets nothing. This
+  engine's named interceptor answered the stored value for any dashed name,
+  so `style.setProperty('--x','1'); style['--x']` came back `"1"` -- one
+  expression, and it separates the engine from every real browser.
+
+  Three questions get confused here, so all three are pinned side by side.
+  Measured on Chrome 151 with scratch/b97/expr-b97-bracket-access.js:
+
+    style['color'] / style['webkitTransform']  a real IDL attribute -> value
+    style['-webkit-transform']                 a dashed name Chrome owns -> value
+    style['-moz-user-select']                  a dashed name it does not -> undefined
+    style['--x']                               a custom property -> undefined
+
+  The indexed side is deliberately the other way: `item()` DOES list `--x`,
+  and `style.length` counts it. That asymmetry is the whole finding, and the
+  test asserts both halves so a fix cannot close one by breaking the other.
+-->
+
+<div id="cp-anchor"></div>
+
+<script id="custom_property_is_not_an_own_property">
+{
+  const el = document.createElement('div');
+  el.style.setProperty('color', 'red');
+  el.style.setProperty('-webkit-transform', 'rotate(45deg)');
+  el.style.setProperty('--x', '1');
+  el.style.setProperty('--long-name', 'abc');
+
+  const s = el.style;
+  const want = [
+    "style['color'] \"red\"",
+    "style['webkitTransform'] \"rotate(45deg)\"",
+    "style['-webkit-transform'] \"rotate(45deg)\"",
+    "style['-moz-user-select'] undefined",
+    "style['--x'] undefined",
+    "style['--long-name'] undefined",
+    "style['--unset'] undefined",
+    "'--x' in style false",
+    "'color' in style true",
+    "'-webkit-transform' in style true",
+    "hasOwnProperty('--x') false",
+    "descriptor('--x') undefined",
+    "keys includes --x false",
+    // The indexed side keeps it, which is what makes this a naming rule and
+    // not the property going missing.
+    "style.length 4",
+    "item list \"color|transform|--x|--long-name\"",
+    "getPropertyValue('--x') \"1\"",
+  ];
+  const show = (v) => (v === undefined ? 'undefined' : JSON.stringify(v));
+  const items = [];
+  for (let i = 0; i < s.length; i++) items.push(s.item(i));
+  const got = [
+    "style['color'] " + show(s['color']),
+    "style['webkitTransform'] " + show(s['webkitTransform']),
+    "style['-webkit-transform'] " + show(s['-webkit-transform']),
+    "style['-moz-user-select'] " + show(s['-moz-user-select']),
+    "style['--x'] " + show(s['--x']),
+    "style['--long-name'] " + show(s['--long-name']),
+    "style['--unset'] " + show(s['--unset']),
+    "'--x' in style " + ('--x' in s),
+    "'color' in style " + ('color' in s),
+    "'-webkit-transform' in style " + ('-webkit-transform' in s),
+    "hasOwnProperty('--x') " + Object.prototype.hasOwnProperty.call(s, '--x'),
+    "descriptor('--x') " + show(Object.getOwnPropertyDescriptor(s, '--x')),
+    'keys includes --x ' + Object.keys(s).includes('--x'),
+    'style.length ' + s.length,
+    'item list ' + JSON.stringify(items.join('|')),
+    "getPropertyValue('--x') " + show(s.getPropertyValue('--x')),
+  ];
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="assigning_a_custom_property_by_name_sets_nothing">
+{
+  // The write side of the same rule. Chrome takes the assignment as an
+  // ordinary expando on the object and the declaration block never hears
+  // about it, so nothing is stored and `length` stays 0.
+  const el = document.createElement('div');
+  el.style['--y'] = '2';
+  const want = [
+    "getPropertyValue('--y') \"\"",
+    'length 0',
+    'cssText ""',
+  ];
+  const got = [
+    "getPropertyValue('--y') " + JSON.stringify(el.style.getPropertyValue('--y')),
+    'length ' + el.style.length,
+    'cssText ' + JSON.stringify(el.style.cssText),
+  ];
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="custom_property_still_works_through_the_named_methods">
+{
+  // The rule is about *naming*, so everything that is not a named property
+  // access has to keep working -- otherwise this trades one difference for a
+  // worse one. `--x` set in a stylesheet and read back through
+  // getComputedStyle is the path a page actually uses.
+  const sheet = document.createElement('style');
+  sheet.textContent = '#cp-probe { --sheet-var: 7px; width: var(--sheet-var) }';
+  document.head.appendChild(sheet);
+  const el = document.createElement('div');
+  el.id = 'cp-probe';
+  document.body.appendChild(el);
+
+  el.style.setProperty('--inline-var', 'blue');
+  const want = [
+    "inline getPropertyValue \"blue\"",
+    'inline removeProperty then length 0',
+    "computed --sheet-var \"7px\"",
+  ];
+  const got = [
+    'inline getPropertyValue ' + JSON.stringify(el.style.getPropertyValue('--inline-var')),
+    'inline removeProperty then length ' + (function () {
+      el.style.removeProperty('--inline-var');
+      return el.style.length;
+    })(),
+    'computed --sheet-var ' + JSON.stringify(getComputedStyle(el).getPropertyValue('--sheet-var')),
+  ];
+  el.remove();
+  sheet.remove();
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
