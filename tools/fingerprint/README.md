@@ -23322,3 +23322,59 @@ in this session had shown falling. That fall was DataDome's window, not a
 regression: alternating the two arms three rounds each on those two stations
 while it was shut, the BASELINE binary passed 1 of 6 and the patched one 0 of 6,
 and both were back by the time of this sweep.
+
+## matchMedia compared the serialisation, not the query (B96, 2026-08-30)
+
+`window.matchMedia(q)` stores the *canonical* form of `q` — that is what `.media`
+reports, and it is right that it does. `matches` then read that stored text
+back. The canonical form writes every number to six significant figures, so
+every threshold was rounded to six figures before it was ever compared.
+
+x-hyatt's Kasada script reads `devicePixelRatio` eight times and then spends
+**314 `(min|max)-resolution: …)` queries binary-searching the same number to
+twenty bits**, reading only `.matches` and never `.media`. Its rungs pass the
+sixth figure within a dozen steps, and from there on every one of them was being
+answered against `2.00000`.
+
+### Where each arm changes its mind
+
+Bisected on both arms rather than sampled, at the persona's dpr=2, on a real
+page (`probes/expr-b96-resolution-boundary.js` — it halves the interval the way
+the guard does and reports the last matching double):
+
+| crossover | Chrome 151 | before | after |
+|---|---|---|---|
+| `min-resolution` dppx | `2.0000001192092896` | `2.000005` | `2.0000001192092896` |
+| `min-resolution` dpi | `192.00001144409183` | `192.0005` | `192.00001144409183` |
+| `min-width` px | `1920.015625` | `1920.0049438476562` | `1920.015625` |
+| `(min-resolution: 75.59055118110236dpcm)` | true | **false** | true |
+| the same ratio in dppx, dpi, dpcm | `true,true,true` | `true,true,**false**` | `true,true,true` |
+
+Three findings fell out of the bisection, each measured at two settings before
+it went into the engine:
+
+* **A `<resolution>` is a float32.** Chrome's crossover sits exactly where a
+  double rounds to the next float — `1 + 2^-23` at dpr 1, `2 + 2^-23` at dpr 2,
+  in dppx and in dpi both. Nothing else lands on that number.
+* **The unit conversion multiplies by the factor, it does not divide by its
+  reciprocal.** Chrome's dpi crossover is `192 + 192 · 2^-24`, and only
+  `value * (1/96)` carries that double to exactly `2 + 2^-23`; `value / 96`
+  lands one ulp above and answers false where Chrome answers true. A one-ulp
+  detail, and it is the difference between matching the boundary and missing it
+  by one rung of a twenty-bit search.
+* **A `<length>` bound tolerates one 1/64 px unit.** The last matching
+  `(min-width: …)` is exactly `innerWidth + 1/64` and the next double does not
+  match — at 1920 and at 813, on both axes, and the plain `(width: …)` form
+  takes a unit on either side. So the bound is NOT rounded to a float32 either:
+  an f32 at 1920 steps by 1/8192 and could not tell those two doubles apart.
+
+Reading the whole probe back afterwards, **40 of its 42 rows are identical to
+Chrome**. The two that are not are both `dpcm` crossovers, and they are left
+alone deliberately: Chrome's tie there is ±0.005 dppx — five hundred times
+ours, the same width at dpr 1 and dpr 2, and not explained by float32, by the
+factor, or by the conversion order. Modelling a rounding nobody can account for
+would be inventing a constant, so it is recorded instead: `dpcm` is the one
+spelling where the two arms still part company, at the fourth significant
+figure.
+
+1583/1583.

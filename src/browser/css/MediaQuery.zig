@@ -404,6 +404,30 @@ const MONOCHROME_BITS: u32 = 0;
 // compare against it without either side being rounded first.
 const DEVICE_PIXEL_RATIO: f64 = 2;
 
+/// How far a `<length>` bound may sit past the viewport and still compare
+/// equal: one unit of the 1/64 px grid a LayoutUnit is stored on.
+///
+/// Measured on Chrome 151 by bisecting the crossover
+/// (tools/fingerprint/probes/expr-b96-resolution-boundary.js) at two viewport
+/// widths and on both axes: the last matching `(min-width: …)` is exactly
+/// `innerWidth + 1/64` and the first that does not is the next double after it
+/// (1920 → 1920.015625, 813 → 813.015625); `(max-width: …)` is the mirror; and
+/// the plain `(width: …)` form takes a unit on either side. It is the
+/// comparison's tolerance rather than one feature's.
+const LAYOUT_UNIT_PX: f64 = 1.0 / 64.0;
+
+fn lengthAtLeast(actual: f64, bound: f64) bool {
+    return actual + LAYOUT_UNIT_PX >= bound;
+}
+
+fn lengthAtMost(actual: f64, bound: f64) bool {
+    return actual - LAYOUT_UNIT_PX <= bound;
+}
+
+fn lengthEquals(actual: f64, bound: f64) bool {
+    return @abs(actual - bound) <= LAYOUT_UNIT_PX;
+}
+
 fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
     if (name.len > 32) {
         return false;
@@ -413,27 +437,27 @@ fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
     const lname = std.ascii.lowerString(&buf, name);
     if (std.mem.eql(u8, lname, "min-width")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.width >= px;
+        return lengthAtLeast(@floatFromInt(viewport.width), px);
     }
     if (std.mem.eql(u8, lname, "max-width")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.width <= px;
+        return lengthAtMost(@floatFromInt(viewport.width), px);
     }
     if (std.mem.eql(u8, lname, "width")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.width == px;
+        return lengthEquals(@floatFromInt(viewport.width), px);
     }
     if (std.mem.eql(u8, lname, "min-height")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.height >= px;
+        return lengthAtLeast(@floatFromInt(viewport.height), px);
     }
     if (std.mem.eql(u8, lname, "max-height")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.height <= px;
+        return lengthAtMost(@floatFromInt(viewport.height), px);
     }
     if (std.mem.eql(u8, lname, "height")) {
         const px = parseLengthPx(value) orelse return false;
-        return viewport.height == px;
+        return lengthEquals(@floatFromInt(viewport.height), px);
     }
     if (std.mem.eql(u8, lname, "orientation")) {
         if (std.ascii.eqlIgnoreCase(value, "landscape")) return viewport.width >= viewport.height;
@@ -449,27 +473,27 @@ fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
     const device_height = viewport.screenHeight();
     if (std.mem.eql(u8, lname, "min-device-width")) {
         const px = parseLengthPx(value) orelse return false;
-        return device_width >= px;
+        return lengthAtLeast(@floatFromInt(device_width), px);
     }
     if (std.mem.eql(u8, lname, "max-device-width")) {
         const px = parseLengthPx(value) orelse return false;
-        return device_width <= px;
+        return lengthAtMost(@floatFromInt(device_width), px);
     }
     if (std.mem.eql(u8, lname, "device-width")) {
         const px = parseLengthPx(value) orelse return false;
-        return device_width == px;
+        return lengthEquals(@floatFromInt(device_width), px);
     }
     if (std.mem.eql(u8, lname, "min-device-height")) {
         const px = parseLengthPx(value) orelse return false;
-        return device_height >= px;
+        return lengthAtLeast(@floatFromInt(device_height), px);
     }
     if (std.mem.eql(u8, lname, "max-device-height")) {
         const px = parseLengthPx(value) orelse return false;
-        return device_height <= px;
+        return lengthAtMost(@floatFromInt(device_height), px);
     }
     if (std.mem.eql(u8, lname, "device-height")) {
         const px = parseLengthPx(value) orelse return false;
-        return device_height == px;
+        return lengthEquals(@floatFromInt(device_height), px);
     }
 
     // `<ratio>` compares as a fraction, so it is done by cross-multiplication
@@ -710,13 +734,29 @@ fn parseRatio(text: []const u8) ?f64 {
     return num / den;
 }
 
-fn compareOp(lhs: f64, op: RangeOp, rhs: f64) bool {
+/// `slack` is the tolerance the feature's own comparison carries -- one
+/// LAYOUT_UNIT_PX for a `<length>`, nothing for anything else. The strict
+/// operators take it from the non-strict ones by negation rather than from a
+/// second measurement: `a < b` is exactly `!(a >= b)`, so a bound that the
+/// range form calls "not at least" has to be the one the legacy `min-` form
+/// calls "below".
+fn compareOp(lhs: f64, op: RangeOp, rhs: f64, slack: f64) bool {
     return switch (op) {
-        .lt => lhs < rhs,
-        .le => lhs <= rhs,
-        .gt => lhs > rhs,
-        .ge => lhs >= rhs,
-        .eq => lhs == rhs,
+        .lt => !(lhs + slack >= rhs),
+        .le => lhs - slack <= rhs,
+        .gt => !(lhs - slack <= rhs),
+        .ge => lhs + slack >= rhs,
+        .eq => @abs(lhs - rhs) <= slack,
+    };
+}
+
+/// How much the comparison for this feature tolerates. Only the lengths have
+/// any: `resolution` is compared at float32 precision instead (see
+/// `parseResolutionDppx`), and the counts and ratios are exact.
+fn rangeSlack(feature: RangeFeature) f64 {
+    return switch (feature) {
+        .width, .height, .device_width, .device_height => LAYOUT_UNIT_PX,
+        .resolution, .color, .color_index, .monochrome, .aspect_ratio, .device_aspect_ratio => 0,
     };
 }
 
@@ -805,11 +845,11 @@ fn evalRange(text: []const u8, viewport: Viewport) ?bool {
         const rhs = trimWsAndComments(parts[1]);
         if (parseRangeFeature(lhs)) |feature| {
             const bound = parseRangeBound(feature, rhs) orelse return false;
-            return compareOp(rangeFeatureValue(feature, viewport), ops[0], bound);
+            return compareOp(rangeFeatureValue(feature, viewport), ops[0], bound, rangeSlack(feature));
         }
         if (parseRangeFeature(rhs)) |feature| {
             const bound = parseRangeBound(feature, lhs) orelse return false;
-            return compareOp(rangeFeatureValue(feature, viewport), flipOp(ops[0]), bound);
+            return compareOp(rangeFeatureValue(feature, viewport), flipOp(ops[0]), bound, rangeSlack(feature));
         }
         return false;
     }
@@ -822,7 +862,8 @@ fn evalRange(text: []const u8, viewport: Viewport) ?bool {
     const low = parseRangeBound(feature, trimWsAndComments(parts[0])) orelse return false;
     const high = parseRangeBound(feature, trimWsAndComments(parts[2])) orelse return false;
     const value = rangeFeatureValue(feature, viewport);
-    return compareOp(value, flipOp(ops[0]), low) and compareOp(value, ops[1], high);
+    const slack = rangeSlack(feature);
+    return compareOp(value, flipOp(ops[0]), low, slack) and compareOp(value, ops[1], high, slack);
 }
 
 fn sameDirection(a: RangeOp, b: RangeOp) bool {
@@ -882,10 +923,21 @@ fn parseResolutionDppx(value: []const u8) ?f64 {
     if (split.value < 0) return null;
     const unit = std.mem.trim(u8, split.rest, &std.ascii.whitespace);
 
-    if (std.ascii.eqlIgnoreCase(unit, "dppx") or std.ascii.eqlIgnoreCase(unit, "x")) return split.value;
+    // Rounded to a float32 at the end, and only at the end: Chrome's crossover
+    // sits exactly where a double rounds to the next float. Bisected at dpr 1
+    // and dpr 2 both (probes/expr-b96-resolution-boundary.js) -- at dpr 2 the
+    // last matching `min-resolution` is `2 + 2^-23` and the next double does
+    // not match, which is the double-to-float tie and nothing else.
+    //
+    // The other units MULTIPLY by the factor rather than dividing by its
+    // reciprocal, and that is measured too, not a preference: Chrome's dpi
+    // crossover is `192 + 192 * 2^-24`, and only `value * (1/96)` carries that
+    // double to exactly `2 + 2^-23`. `value / 96` lands one ulp above it and
+    // answers false where Chrome answers true.
+    if (std.ascii.eqlIgnoreCase(unit, "dppx") or std.ascii.eqlIgnoreCase(unit, "x")) return toFloat32(split.value);
     // CSS fixes 1in at 96px, and an inch is 2.54cm.
-    if (std.ascii.eqlIgnoreCase(unit, "dpi")) return split.value / 96.0;
-    if (std.ascii.eqlIgnoreCase(unit, "dpcm")) return split.value * 2.54 / 96.0;
+    if (std.ascii.eqlIgnoreCase(unit, "dpi")) return toFloat32(split.value * (1.0 / 96.0));
+    if (std.ascii.eqlIgnoreCase(unit, "dpcm")) return toFloat32(split.value * (2.54 / 96.0));
     return null;
 }
 
@@ -1025,7 +1077,16 @@ fn parseLengthPx(value: []const u8) ?f64 {
     else
         return null;
 
-    return toFloat32(px);
+    // NOT rounded to a float32: the bound is compared at full precision and the
+    // tolerance is LAYOUT_UNIT_PX. Chrome's crossover is exactly
+    // `innerWidth + 1/64` with the NEXT DOUBLE not matching, and a float32
+    // bound cannot tell those two apart -- an f32 at 1920 steps by 1/8192, so
+    // both round to the same number and both would match.
+    //
+    // The clamping toFloat32 did is not lost: an exponent past the float range
+    // still cannot match (`1e400px` is an infinity that nothing is above) and
+    // one below it is still zero.
+    return px;
 }
 
 /// A CSS length is a float32 in Chrome, which is visible at both ends: an

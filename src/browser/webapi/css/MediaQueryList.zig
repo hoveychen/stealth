@@ -30,6 +30,12 @@ pub const Proto = EventTarget;
 _proto: *EventTarget,
 _media: []const u8,
 
+/// The query as the page wrote it. `_media` is the canonical form and it is
+/// LOSSY -- a number in it is written to six significant figures -- so it is
+/// what `media` reports and never what `matches` reads. A guard bisecting
+/// `devicePixelRatio` walks past the sixth figure within a dozen steps.
+_query: []const u8,
+
 pub fn deinit(self: *MediaQueryList) void {
     _ = self;
 }
@@ -49,7 +55,7 @@ pub fn getMedia(self: *const MediaQueryList) []const u8 {
 /// -- matching `Window.innerWidth` / `innerHeight`. A `(max-width: 400px)` query
 /// matches inside a 300x65 frame on a 1920-wide page, measured on Chrome 151.
 pub fn getMatches(self: *const MediaQueryList, frame: *Frame) bool {
-    return MediaQuery.matches(self._media, frame.viewport());
+    return MediaQuery.matches(self._query, frame.viewport());
 }
 
 // TODO: `change` events need to fire on every listener registered here (and
