@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+What scrollWidth counts of a box's children depends on how they are arranged,
+and this engine used to lay every child on one row and add them up. Three 400px
+block children in a 400px box answered 1200 where Chrome answers 400.
+
+The summing was kept for a reason its own comment gave: a page that appends
+children until `scrollWidth` passes a threshold -- the marquee idiom -- never
+terminates if the metric ignores what was just inserted. That reason was
+measured rather than reasoned about, on Chrome 151 at the persona's dpr=2, on a
+real https page with `box-sizing` pinned per box
+(tools/fingerprint/probes/expr-b96-scroll-width.js):
+
+  * with BLOCK children, Chrome's loop does not terminate either -- 50 appends
+    of a 100px div into a 200px box and `scrollWidth` is still 200. So no page
+    is written that way, and the summing was protecting a shape that does not
+    exist.
+  * with the inline-block strip a marquee actually uses, Chrome DOES sum: 3
+    appends and `scrollWidth` is 300. That is the case to keep.
+
+Chrome's full table, `sw` off the parent:
+
+  | arrangement                        | Chrome | this engine, before |
+  |------------------------------------|--------|---------------------|
+  | 3 block children, 400px            |    400 |                1200 |
+  | ... overflowing a 200px box        |    400 |                1200 |
+  | ... in a padded box                |    410 |                1210 |
+  | 3 inline-blocks, white-space:nowrap |  1200 |                1200 |
+  | 3 inline-blocks, wrapping          |    400 |                1200 |
+  | flex row                            |  1200 |                1200 |
+  | flex row, flex-wrap:wrap            |   400 |                1200 |
+  | flex column                         |   400 |                1200 |
+  | grid, default (rows)                |   400 |                1200 |
+  | grid, grid-auto-flow:column         |  1200 |                1200 |
+  | 3 floats too wide to share a line   |   400 |                1200 |
+  | 3 narrow floats that do share one   |   200 |                 200 |
+
+So the rule is not "sum" and not "max" but which of the two the arrangement
+calls for, and the row cases are the ones a layout mode names: a flex row that
+cannot wrap, a grid flowing in columns, and inline-level children under
+`white-space: nowrap`.
+-->
+
+<script id=block_children_do_not_add_up>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+  const BS = 'box-sizing:content-box';
+  const W = BS + ';width:400px;height:20px';
+  const N = BS + ';width:50px;height:20px';
+
+  const sw = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const p = wrap.querySelector('[data-p]');
+    const out = p.scrollWidth;
+    wrap.remove();
+    return out;
+  };
+
+  // Block children stack, so the scrollable area is one child wide.
+  testing.expectEqual('one block child: 400',
+    'one block child: ' + sw(`<div data-p style="${BS};width:400px"><div style="${W}"></div></div>`));
+  testing.expectEqual('three block children: 400',
+    'three block children: ' + sw(`<div data-p style="${BS};width:400px"><div style="${W}"></div><div style="${W}"></div><div style="${W}"></div></div>`));
+  // ...including when they overflow, which is when the number is read.
+  testing.expectEqual('three overflowing block children: 400',
+    'three overflowing block children: ' + sw(`<div data-p style="${BS};width:200px"><div style="${W}"></div><div style="${W}"></div><div style="${W}"></div></div>`));
+  // The scrollable area still includes the padding.
+  testing.expectEqual('three block children in a padded box: 410',
+    'three block children in a padded box: ' + sw(`<div data-p style="${BS};width:400px;padding:5px"><div style="${W}"></div><div style="${W}"></div><div style="${W}"></div></div>`));
+  // Narrow children never reach the container's own width.
+  testing.expectEqual('three narrow block children: 400',
+    'three narrow block children: ' + sw(`<div data-p style="${BS};width:400px"><div style="${N}"></div><div style="${N}"></div><div style="${N}"></div></div>`));
+
+  host.remove();
+}
+</script>
+
+<script id=a_row_still_adds_up>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+  const BS = 'box-sizing:content-box';
+  const W = BS + ';width:400px;height:20px';
+  const N = BS + ';width:50px;height:20px';
+
+  const sw = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const p = wrap.querySelector('[data-p]');
+    const out = p.scrollWidth;
+    wrap.remove();
+    return out;
+  };
+
+  // The three arrangements Chrome sums for.
+  testing.expectEqual('inline-blocks under nowrap: 1200',
+    'inline-blocks under nowrap: ' + sw(`<div data-p style="${BS};width:200px;white-space:nowrap"><div style="display:inline-block;${W}"></div><div style="display:inline-block;${W}"></div><div style="display:inline-block;${W}"></div></div>`));
+  testing.expectEqual('flex row: 1200',
+    'flex row: ' + sw(`<div data-p style="${BS};width:200px;display:flex"><div style="${W};flex:0 0 auto"></div><div style="${W};flex:0 0 auto"></div><div style="${W};flex:0 0 auto"></div></div>`));
+  testing.expectEqual('grid flowing in columns: 1200',
+    'grid flowing in columns: ' + sw(`<div data-p style="${BS};width:200px;display:grid;grid-auto-flow:column"><div style="${W}"></div><div style="${W}"></div><div style="${W}"></div></div>`));
+
+  // ...and the four that look like rows and are not.
+  testing.expectEqual('inline-blocks that wrap: 400',
+    'inline-blocks that wrap: ' + sw(`<div data-p style="${BS};width:200px"><div style="display:inline-block;${W}"></div><div style="display:inline-block;${W}"></div><div style="display:inline-block;${W}"></div></div>`));
+  testing.expectEqual('flex row with flex-wrap: 400',
+    'flex row with flex-wrap: ' + sw(`<div data-p style="${BS};width:200px;display:flex;flex-wrap:wrap"><div style="${W};flex:0 0 auto"></div><div style="${W};flex:0 0 auto"></div><div style="${W};flex:0 0 auto"></div></div>`));
+  testing.expectEqual('flex column: 400',
+    'flex column: ' + sw(`<div data-p style="${BS};width:200px;display:flex;flex-direction:column"><div style="${W};flex:0 0 auto"></div><div style="${W};flex:0 0 auto"></div><div style="${W};flex:0 0 auto"></div></div>`));
+  testing.expectEqual('grid in rows: 400',
+    'grid in rows: ' + sw(`<div data-p style="${BS};width:200px;display:grid"><div style="${W}"></div><div style="${W}"></div><div style="${W}"></div></div>`));
+
+  // Floats are the pair that separates "in a row" from "fits in a row": three
+  // 400px floats in a 200px box each take their own line, three 50px ones
+  // share one and still do not reach the container's width.
+  testing.expectEqual('floats too wide to share a line: 400',
+    'floats too wide to share a line: ' + sw(`<div data-p style="${BS};width:200px"><div style="float:left;${W}"></div><div style="float:left;${W}"></div><div style="float:left;${W}"></div></div>`));
+  testing.expectEqual('narrow floats sharing a line: 200',
+    'narrow floats sharing a line: ' + sw(`<div data-p style="${BS};width:200px"><div style="float:left;${N}"></div><div style="float:left;${N}"></div><div style="float:left;${N}"></div></div>`));
+
+  host.remove();
+}
+</script>
+
+<script id=what_names_a_row>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+  const BS = 'box-sizing:content-box';
+  const W = BS + ';width:400px;height:20px';
+
+  const sw = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const p = wrap.querySelector('[data-p]');
+    const out = p.scrollWidth;
+    wrap.remove();
+    return out;
+  };
+  const strip = (ws, child) =>
+    `<div data-p style="${BS};width:200px;white-space:${ws}"><div style="${child}"></div><div style="${child}"></div><div style="${child}"></div></div>`;
+
+  // Which `white-space` values hold the line together. Measured rather than
+  // taken from the spec, because the branch is going into an engine: `nowrap`
+  // and `pre` sum, the other four wrap.
+  const INLINE = 'display:inline-block;' + W;
+  testing.expectEqual('nowrap: 1200', 'nowrap: ' + sw(strip('nowrap', INLINE)));
+  testing.expectEqual('pre: 1200', 'pre: ' + sw(strip('pre', INLINE)));
+  testing.expectEqual('pre-wrap: 400', 'pre-wrap: ' + sw(strip('pre-wrap', INLINE)));
+  testing.expectEqual('pre-line: 400', 'pre-line: ' + sw(strip('pre-line', INLINE)));
+  testing.expectEqual('break-spaces: 400', 'break-spaces: ' + sw(strip('break-spaces', INLINE)));
+  testing.expectEqual('normal: 400', 'normal: ' + sw(strip('normal', INLINE)));
+
+  // ...and none of them puts BLOCK children on a line.
+  testing.expectEqual('block children under nowrap: 400',
+    'block children under nowrap: ' + sw(strip('nowrap', W)));
+  testing.expectEqual('block children under pre: 400',
+    'block children under pre: ' + sw(strip('pre', W)));
+  // One block child among inline ones breaks the line for all of them.
+  testing.expectEqual('a block child among inline ones: 400',
+    'a block child among inline ones: ' + sw(`<div data-p style="${BS};width:200px;white-space:nowrap"><div style="${INLINE}"></div><div style="${W}"></div><div style="${INLINE}"></div></div>`));
+
+  // `row-reverse` lays the items along the axis and still answers 200: the
+  // overflow goes off the LEFT edge, which scrollWidth does not reach. It is
+  // the one arrangement whose children contribute nothing.
+  testing.expectEqual('flex row-reverse: 200',
+    'flex row-reverse: ' + sw(`<div data-p style="${BS};width:200px;display:flex;flex-direction:row-reverse"><div style="${W};flex:0 0 auto"></div><div style="${W};flex:0 0 auto"></div><div style="${W};flex:0 0 auto"></div></div>`));
+  testing.expectEqual('flex column-reverse: 400',
+    'flex column-reverse: ' + sw(`<div data-p style="${BS};width:200px;display:flex;flex-direction:column-reverse"><div style="${W};flex:0 0 auto"></div><div style="${W};flex:0 0 auto"></div><div style="${W};flex:0 0 auto"></div></div>`));
+  testing.expectEqual('grid-auto-flow column dense: 1200',
+    'grid-auto-flow column dense: ' + sw(`<div data-p style="${BS};width:200px;display:grid;grid-auto-flow:column dense"><div style="${W}"></div><div style="${W}"></div><div style="${W}"></div></div>`));
+
+  host.remove();
+}
+</script>
+
+<script id=the_marquee_idiom_still_terminates>
+{
+  // The loop the summing was kept for, in the shape a page writes it. Chrome
+  // takes three cells to pass a 200px box; a metric that ignored the inserted
+  // cells would spin to the cap.
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+
+  const strip = document.createElement('div');
+  strip.setAttribute('style', 'width:200px;white-space:nowrap;overflow:auto');
+  host.appendChild(strip);
+  let n = 0;
+  while (strip.scrollWidth <= 200 && n < 50) {
+    const cell = document.createElement('span');
+    cell.setAttribute('style', 'display:inline-block;width:100px;height:20px');
+    strip.appendChild(cell);
+    n++;
+  }
+  testing.expectEqual('marquee cells: 3, scrollWidth 300',
+    'marquee cells: ' + n + ', scrollWidth ' + strip.scrollWidth);
+
+  host.remove();
+}
+</script>
