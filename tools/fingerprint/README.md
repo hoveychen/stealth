@@ -23021,3 +23021,30 @@ arms, on all three stations** (`scratch/b70/ab-dd.sh`, log in
 `scratch/b70/ab/`). The window closed; the binary did not change. A block of
 runs from one arm followed by a block from the other would have said the
 opposite, which is the whole reason the arms alternate.
+
+### And the guard's own input is unchanged by it
+
+The sweep is a coarse instrument for this. The fine one is the encoder channel:
+`JSON.stringify(getComputedStyle(el))` is one of the fifteen things the widget
+encodes, and it is the largest surface any guard in this file reads. Three
+readings on the live station, all in one sitting:
+
+| arm | computed-style segment |
+|---|---|
+| headed Chrome 151 (`report-encodes`, `served=true`) | `len=30918 h=t3o0bu` |
+| this engine, merged (`1d80f94be`) | `len=30918 h=t3o0bu` |
+| this engine, pre-merge (`126dbb122`) | **`len=30918 h=t3o0bu`** |
+
+Byte-identical to Chrome — and byte-identical **before** the change as well. The
+element the widget stringifies is not animated, so its `transform` read `none`
+on both arms either way, and this fix does not touch what the guard is handed.
+The segment was closed by the computed-style work of the sessions before this
+one; B69 measured it at `30902 15ewidm` and it has been Chrome's since some
+point between then and `126dbb122`.
+
+Which is the honest shape of the result. Of the nine things the widget encodes,
+five are now byte-identical (the widget's own CSS rules, the font probe list,
+the two `0|0|0|…` buffers, `readPixels`, and this one). The four that are not
+are the three larger pixel buffers — measured not weighed — and the four short
+values, which B95 showed are computed inside the guard's bytecode VM rather than
+collected from the page at all. There is nothing left on this channel to fix.
