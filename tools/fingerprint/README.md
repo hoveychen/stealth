@@ -23378,3 +23378,33 @@ spelling where the two arms still part company, at the fourth significant
 figure.
 
 1583/1583.
+
+### The sweep reading, and one thing in it that is not about this change
+
+The sweep came back 21/29 against 22/29, and all three stations that moved are
+ones that move on their own: dd-datadome and dd-hermes flipped back to
+`datadome-challenge` (they had flipped the other way an hour earlier on an
+unchanged binary, and an alternating A/B in the shut window had the BASELINE
+passing 1 of 6), and **x-hyatt passed** -- the first time in this file's history.
+
+That last one was chased rather than claimed. `kasada-verdict.mjs` reads
+`x-kpsdk-r` off the `/tl` POST, which is the guard's own answer in about ten
+seconds instead of the station's pass/refuse at the end of a chain. Twenty-five
+alternating pairs, two designs:
+
+| design | base | patched |
+|---|---|---|
+| base first (15 pairs) | **3 tickets** (`1-B1NUBHs`, `1-B1JbVXI`, `1-B1EFfHU`) | 0 |
+| patched first (10 pairs) | 0 | 0 |
+
+Every ticket of the three went to the arm that visited FIRST in its pair, and no
+ticket at all was issued during the ten pairs where the patched arm led. So the
+open window is what the first design measured, not the binary, and the second
+design ran entirely inside a shut one. **No arm-level conclusion is available**
+— this change is not shown to cost a ticket and is not shown to win one.
+
+What IS new and belongs to nobody's change: **this engine now gets an x-hyatt
+ticket sometimes.** B53 measured 0/3 there and the door map has said "real door,
+reference passes and we do not" ever since. Three `x-kpsdk-r: 1-B1…` responses
+in one sitting, with `doc=429->200` beside them, say the rate is no longer zero.
+Worth re-running the reverse-biased design the next time the window is open.
