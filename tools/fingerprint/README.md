@@ -23208,3 +23208,30 @@ Neither is a door: the station work in the chapters above closed the
 capability-presence and collected-value levers on cf-scrapingcourse from both
 directions. They are named, reproducible, off-site-testable defects on a surface
 every guard in this file measures, obtained from a corner nothing had looked at.
+
+### The same corner has a hang in it
+
+Fixing the boxes left four differences on the `about:blank` probe, two of them
+the harness (the arms do not share a viewport, so the top document's body and
+root numbers are not comparable). The other two are on
+`document.open()`/`write`/`close()` — the idiom a guard uses to build itself a
+realm — and pulling on them gave six, every one of them spec'd
+(`scratch/b70/expr-doc-open.js`, eleven readings, five already identical):
+
+| | Chrome 151 | this engine |
+|---|---|---|
+| `document.URL` after `open()` | the ENTRY document's URL | `about:blank` |
+| ...after `write` | same | `about:blank` |
+| ...after `close()` | same | `about:blank` |
+| `readyState` after `close()` | `complete` | **`loading`, permanently** |
+| iframe `load` fires on `close()` | **1, synchronously** | **0** |
+| `document.URL` seen by a script written in | the entry document's URL | `about:blank` |
+
+The third row is the interesting one and it is not a value difference at all.
+A guard that writes `iframe.onload = …; doc.write(…); doc.close()` never gets
+its callback here. That is the shape of the defect that held ak-macys shut for
+six sessions — `decodeAudioData` returning a promise that never settled — and it
+is a different KIND of finding from everything the last twenty chapters have
+been grinding on, all of which asked whether a number matched.
+
+Filed as `doc-open-into-blank-iframe`, ordered so the hang is closed first.
