@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<head>
+  <script src="../testing.js"></script>
+</head>
+
+<!--
+  An `<alpha-value>` written as a percentage is stored as a number.
+
+  Chrome divides by 100 while parsing, so `opacity: 50%` reads back through
+  `el.style.opacity` as `"0.5"` -- the percentage is gone before anything else
+  sees it. This engine kept the author's text, and then `%` looked to the
+  computed path like a length it could not resolve against a containing block,
+  so the declaration fell back to the initial value: `opacity: 50%` was a
+  declaration that did nothing at all.
+
+  Measured on Chrome 151 with scratch/b98/expr-b98-alpha.js, 105 rows over the
+  six properties whose grammar takes an `<alpha-value>`. What that run pinned
+  down, and why the assertions are split the way they are:
+
+    - the *number* path is already right, all 47 of its rows: the clamp lands
+      at computed time and not on the specified value, `5e-1` comes back
+      `0.5`, `0.3333333333` comes back `0.333333`, and a bad value is refused.
+      Third block below is that guardrail -- a fix here must not touch it.
+    - the *percentage* path was wrong in all 48 of its rows, uniformly across
+      the six properties and the eight spellings.
+    - `fill-opacity: 50px` and its three siblings were kept where Chrome
+      refuses them, while `opacity: 50px` was already refused. Four properties
+      missing a value class, not a whole family.
+    - `calc(50%)` agrees on the specified value and differs on the computed
+      one, which belongs to the calc plan. Pinned here as it stands so that
+      work has a starting line and this one does not quietly move it.
+-->
+
+<div id="alpha-anchor"></div>
+
+<script id="alpha_value_percentage_is_stored_as_a_number">
+{
+  // Every spelling a percentage can take, against every property that takes
+  // an <alpha-value>. Chrome's answer is value/100 written by the ordinary CSS
+  // number writer, which is why `33.333%` is `0.33333` and not `0.333330`.
+  const props = ['opacity', 'fill-opacity', 'stroke-opacity',
+                 'stop-opacity', 'flood-opacity', 'shape-image-threshold'];
+  const rows = [
+    ['50%', '0.5'],
+    ['100%', '1'],
+    ['0%', '0'],
+    ['33.333%', '0.33333'],
+    ['1e2%', '1'],
+    ['.5%', '0.005'],
+    ['+50%', '0.5'],
+    ['50.0%', '0.5'],
+  ];
+  const want = [];
+  const got = [];
+  for (const p of props) {
+    for (const [written, expected] of rows) {
+      const el = document.createElement('div');
+      el.setAttribute('style', p + ': ' + written);
+      want.push(p + ': ' + written + ' -> ' + expected);
+      got.push(p + ': ' + written + ' -> ' + el.style.getPropertyValue(p));
+    }
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="alpha_value_percentage_reaches_the_computed_value">
+{
+  // The half that made this more than a serialisation difference: with the
+  // percentage stored as a number the computed value is the number too, and
+  // the existing clamp applies to it -- `150%` computes to `1`, `-10%` to `0`,
+  // exactly as `1.5` and `-0.1` already did.
+  const rows = [
+    ['opacity: 50%', 'opacity', '0.5'],
+    ['opacity: 150%', 'opacity', '1'],
+    ['opacity: -10%', 'opacity', '0'],
+    ['opacity: 0%', 'opacity', '0'],
+    ['fill-opacity: 50%', 'fill-opacity', '0.5'],
+    ['stroke-opacity: .5%', 'stroke-opacity', '0.005'],
+    ['stop-opacity: 33.333%', 'stop-opacity', '0.33333'],
+    ['flood-opacity: 100%', 'flood-opacity', '1'],
+    ['shape-image-threshold: 50%', 'shape-image-threshold', '0.5'],
+    ['shape-image-threshold: 150%', 'shape-image-threshold', '1'],
+  ];
+  const want = [];
+  const got = [];
+  for (const [decl, name, expected] of rows) {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    el.setAttribute('style', decl);
+    want.push(decl + ' -> ' + expected);
+    got.push(decl + ' -> ' + getComputedStyle(el).getPropertyValue(name));
+    el.remove();
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="alpha_value_refuses_a_length">
+{
+  // `opacity: 50px` was already refused; the four SVG-side properties were
+  // not, and one of them went as far as reporting `50px` as a computed
+  // opacity. Both surfaces asserted, because the store-time refusal is what
+  // makes the computed answer the initial value again.
+  const props = ['opacity', 'fill-opacity', 'stroke-opacity',
+                 'stop-opacity', 'flood-opacity', 'shape-image-threshold'];
+  const want = [];
+  const got = [];
+  for (const p of props) {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    el.setAttribute('style', p + ': 50px');
+    const initial = p === 'shape-image-threshold' ? '0' : '1';
+    want.push(p + ': 50px -> len=0 spec="" comp=' + initial);
+    got.push(p + ': 50px -> len=' + el.style.length +
+             ' spec=' + JSON.stringify(el.style.getPropertyValue(p)) +
+             ' comp=' + getComputedStyle(el).getPropertyValue(p));
+    el.remove();
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="alpha_value_number_path_is_unchanged">
+{
+  // The guardrail. Every one of these already matched Chrome before the
+  // percentage rewrite existed, and the rewrite has no business touching any
+  // of them: the clamp stays at computed time, the number writer keeps its six
+  // significant digits, and a non-numeric value stays refused.
+  const rows = [
+    ['opacity: 0.5', 'opacity', '0.5', '0.5'],
+    ['opacity: 1.5', 'opacity', '1.5', '1'],
+    ['opacity: -0.1', 'opacity', '-0.1', '0'],
+    ['opacity: 0.3333333333', 'opacity', '0.333333', '0.333333'],
+    ['opacity: 5e-1', 'opacity', '0.5', '0.5'],
+    ['opacity: 50', 'opacity', '50', '1'],
+    ['opacity: nonsense', 'opacity', '', '1'],
+    ['fill-opacity: 1.5', 'fill-opacity', '1.5', '1'],
+    ['shape-image-threshold: nonsense', 'shape-image-threshold', '', '0'],
+  ];
+  const want = [];
+  const got = [];
+  for (const [decl, name, spec, comp] of rows) {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    el.setAttribute('style', decl);
+    want.push(decl + ' -> spec=' + JSON.stringify(spec) + ' comp=' + comp);
+    got.push(decl + ' -> spec=' + JSON.stringify(el.style.getPropertyValue(name)) +
+             ' comp=' + getComputedStyle(el).getPropertyValue(name));
+    el.remove();
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="alpha_value_in_a_colour_function_is_unchanged">
+{
+  // A percentage alpha inside a colour function already came out as a number,
+  // through a different path entirely. If a fix to the six properties reaches
+  // in here it has gone too wide.
+  const rows = [
+    ['color: rgb(0 0 0 / 50%)', 'rgba(0, 0, 0, 0.5)'],
+    ['color: rgb(0, 0, 0, 50%)', 'rgba(0, 0, 0, 0.5)'],
+    ['color: hsl(0 0% 0% / 50%)', 'rgba(0, 0, 0, 0.5)'],
+  ];
+  const want = [];
+  const got = [];
+  for (const [decl, expected] of rows) {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    want.push(decl + ' -> ' + expected);
+    got.push(decl + ' -> ' + el.style.getPropertyValue('color'));
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="alpha_value_calc_is_left_where_it_stands">
+{
+  // Not this plan's ground: `calc(50%)` on an alpha property agrees with
+  // Chrome on the specified value and differs on the computed one, because
+  // this engine does not evaluate a calc() at all. Pinned as it stands so the
+  // percentage rewrite is not credited with a calc it did not fix, and so the
+  // calc work has a line to move.
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  el.setAttribute('style', 'opacity: calc(50%)');
+  const want = 'spec="calc(50%)" comp=1 (Chrome: comp 0.5)';
+  const got = 'spec=' + JSON.stringify(el.style.getPropertyValue('opacity')) +
+              ' comp=' + getComputedStyle(el).opacity + ' (Chrome: comp 0.5)';
+  el.remove();
+  testing.expectEqual(want, got);
+}
+</script>

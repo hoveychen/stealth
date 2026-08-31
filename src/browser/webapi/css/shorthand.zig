@@ -1315,10 +1315,39 @@ pub fn refusesLonghand(name: []const u8, value: []const u8) bool {
 /// taking it away builds clean, with nothing else changed.
 const color_classes = [_]table.Class{ .colour, .function };
 
+/// The same gap on the SVG side of the `<alpha-value>` family, and the same
+/// remedy. `opacity` and `shape-image-threshold` were measured because the two
+/// `-webkit-` aliases expand to them; nothing expands to `fill-opacity`,
+/// `stroke-opacity`, `stop-opacity` or `flood-opacity`, so they were never
+/// graded and `fill-opacity: 50px` was stored here -- and reported as a
+/// computed `50px`, which is not a value any browser prints for an opacity.
+///
+/// Copied across rather than measured separately only because the measurement
+/// says they are the same property twice over: on the generator's own twelve
+/// token battery plus eighteen shapes an `<alpha-value>` can take
+/// (scratch/b98/expr-b98-alpha-classes.js, Chrome 151), all six answer
+/// identically on all thirty -- `1%` `2` `0.5` `-0.1` `1.5` `50%` `5e-1`
+/// `calc(...)` `var()` and the CSS-wide keywords kept, everything else dropped,
+/// with no exception in either direction. Their keyword tables are empty too,
+/// which is what makes grading them safe: there is no real keyword left for the
+/// grammar check to mistake for a refusal.
+const alpha_classes = [_]table.Class{ .percent, .number };
+
 fn valueClasses(longhand: []const u8) []const table.Class {
     if (table.value_classes.get(longhand)) |classes| return classes;
     if (std.mem.eql(u8, longhand, "color")) return &color_classes;
+    if (isSvgAlphaProperty(longhand)) return &alpha_classes;
     return &.{};
+}
+
+fn isSvgAlphaProperty(name: []const u8) bool {
+    const names = [_][]const u8{
+        "fill-opacity", "stroke-opacity", "stop-opacity", "flood-opacity",
+    };
+    for (names) |candidate| {
+        if (std.mem.eql(u8, name, candidate)) return true;
+    }
+    return false;
 }
 
 fn gradedName(name: []const u8) []const u8 {
