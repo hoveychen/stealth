@@ -7016,6 +7016,10 @@ test "WebApi: CSSStyleDeclaration custom property is not named" {
     try testing.htmlRunner("css/custom_property_not_named.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration alpha value percentage" {
+    try testing.htmlRunner("css/alpha_value_percentage.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration computed initial values" {
     try testing.htmlRunner("css/computed_initial_values.html", .{});
 }
