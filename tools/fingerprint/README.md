@@ -23963,3 +23963,59 @@ The patches are kept verbatim rather than half-merged:
 `position.html` and why — note that the loops that hang read **widths** while
 the change is to **heights**, so the answer is not obvious and is worth reading
 off a log rather than reasoning about.
+
+## Sixty-seven selector constructs, twelve of which deleted rules (B96, 2026-08-31)
+
+The pseudo-element finding above is a special case of a general one:
+`parseList` propagates a failure from any compound and `addRawRule` is
+`... catch return`, so a construct this engine does not recognise costs the
+**whole rule** — every declaration in it, for every element the other selectors
+in the list matched. That is worth a sweep rather than one fix at a time.
+
+`probes/expr-b96-selector-constructs.js` puts each construct in a list beside an
+id selector — `#probe, <under test> { letter-spacing: 3px }` — and reads the
+property back. Sixty-seven constructs, Chrome 151 against this engine:
+
+| dropped here, kept in Chrome | what it is |
+|---|---|
+| `:nth-child(2n+1 of .a)` | the `of S` clause |
+| `:autofill` `:user-valid` `:open` | newer state pseudo-classes |
+| `:dir(ltr)` | directionality |
+| `:host` `:host(.a)` `:host-context(.a)` | the shadow-host family |
+| `*|div` | a namespace-qualified type selector |
+| `div:is(&)` | a nesting reference |
+| `::highlight(x)` `::view-transition-group(x)` | functional pseudo-elements |
+
+All twelve now parse. Where a match has a cheap definition it is implemented —
+`:open` is the attribute, `:dir()` reads the element's own `dir`, and
+`:nth-child(An+B of S)` counts only the siblings `S` matches. The rest match
+nothing on purpose and say so: nothing here autofills a field or types in one,
+a stylesheet here is the document's and never a shadow root's, and there is no
+nesting for `&` to resolve. **Parsing is the fix; matching is a bonus** — a
+construct that parses costs the page nothing, and one that does not costs it
+every declaration in the rule.
+
+Two go the other way and are left alone, asserted as residuals in
+`element/selector_constructs.html` rather than quietly:
+
+* `[data-x="y" s]` — Chrome drops the rule, this engine honours the flag.
+  Whatever refuses it lives in Chrome's CSS parser; matching that would mean
+  rejecting a selector this engine understands.
+* `[data-x` unclosed — the `[` swallows the `{ … }` after it, so nothing is left
+  to be a declaration block. That is the sheet tokenizer, and CSS Syntax does
+  say an unexpected EOF closes every open construct.
+
+Read back: **65 of the 67 rows are Chrome's, up from 53.**
+
+One negative worth recording, because it was the first thing checked and it
+would have been the biggest: **the escapes Tailwind generates were already
+right.** `.md\:flex`, `.w-1\/2`, `.top-\[13px\]`, `.\!mt-0`, `.bg-black\/50`,
+`.data-\[state\=open\]\:block`, the `group-hover\:` and `peer-checked\:` forms,
+a `\30 ` unicode escape and an escaped space — twelve shapes, both arms
+identical. An earlier version of the probe reported an escape difference and
+that was the probe's own double-escaping, not the engine's.
+
+The sweep read 22/29, back to the session's baseline: the two stations that moved
+are `dd-datadome` and `dd-hermes`, both swinging back to `pass` from the
+`datadome-challenge` they were giving every binary an hour earlier. No
+Cloudflare station moved and x-hyatt is still refused. 1583/1583.
