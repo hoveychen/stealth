@@ -7332,6 +7332,10 @@ test "WebApi: CSSStyleDeclaration arity pool ceiling" {
     try testing.htmlRunner("css/arity_pool_ceiling.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration computed colour in function" {
+    try testing.htmlRunner("css/computed_colour_in_function.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration calc canonical form" {
     try testing.htmlRunner("css/calc_canonical.html", .{});
 }
