@@ -23506,6 +23506,139 @@ two binaries at `px-wayfair`, three rounds each, both arms answered
 already showed passing one round in four with the guard's window half shut.
 Neither difference is the binary. Both closed doors are where they were.
 
+## matchMedia compared the serialisation, not the query (B96, 2026-08-30)
+
+`window.matchMedia(q)` stores the *canonical* form of `q` — that is what `.media`
+reports, and it is right that it does. `matches` then read that stored text
+back. The canonical form writes every number to six significant figures, so
+every threshold was rounded to six figures before it was ever compared.
+
+x-hyatt's Kasada script reads `devicePixelRatio` eight times and then spends
+**314 `(min|max)-resolution: …)` queries binary-searching the same number to
+twenty bits**, reading only `.matches` and never `.media`. Its rungs pass the
+sixth figure within a dozen steps, and from there on every one of them was being
+answered against `2.00000`.
+
+### Where each arm changes its mind
+
+Bisected on both arms rather than sampled, at the persona's dpr=2, on a real
+page (`probes/expr-b96-resolution-boundary.js` — it halves the interval the way
+the guard does and reports the last matching double):
+
+| crossover | Chrome 151 | before | after |
+|---|---|---|---|
+| `min-resolution` dppx | `2.0000001192092896` | `2.000005` | `2.0000001192092896` |
+| `min-resolution` dpi | `192.00001144409183` | `192.0005` | `192.00001144409183` |
+| `min-width` px | `1920.015625` | `1920.0049438476562` | `1920.015625` |
+| `(min-resolution: 75.59055118110236dpcm)` | true | **false** | true |
+| the same ratio in dppx, dpi, dpcm | `true,true,true` | `true,true,**false**` | `true,true,true` |
+
+Three findings fell out of the bisection, each measured at two settings before
+it went into the engine:
+
+* **A `<resolution>` is a float32.** Chrome's crossover sits exactly where a
+  double rounds to the next float — `1 + 2^-23` at dpr 1, `2 + 2^-23` at dpr 2,
+  in dppx and in dpi both. Nothing else lands on that number.
+* **The unit conversion multiplies by the factor, it does not divide by its
+  reciprocal.** Chrome's dpi crossover is `192 + 192 · 2^-24`, and only
+  `value * (1/96)` carries that double to exactly `2 + 2^-23`; `value / 96`
+  lands one ulp above and answers false where Chrome answers true. A one-ulp
+  detail, and it is the difference between matching the boundary and missing it
+  by one rung of a twenty-bit search.
+* **A `<length>` bound tolerates one 1/64 px unit.** The last matching
+  `(min-width: …)` is exactly `innerWidth + 1/64` and the next double does not
+  match — at 1920 and at 813, on both axes, and the plain `(width: …)` form
+  takes a unit on either side. So the bound is NOT rounded to a float32 either:
+  an f32 at 1920 steps by 1/8192 and could not tell those two doubles apart.
+
+Reading the whole probe back afterwards, **40 of its 42 rows are identical to
+Chrome**. The two that are not are both `dpcm` crossovers, and they are left
+alone deliberately: Chrome's tie there is ±0.005 dppx — five hundred times
+ours, the same width at dpr 1 and dpr 2, and not explained by float32, by the
+factor, or by the conversion order. Modelling a rounding nobody can account for
+would be inventing a constant, so it is recorded instead: `dpcm` is the one
+spelling where the two arms still part company, at the fourth significant
+figure.
+
+1583/1583.
+
+### The sweep reading, and one thing in it that is not about this change
+
+The sweep came back 21/29 against 22/29, and all three stations that moved are
+ones that move on their own: dd-datadome and dd-hermes flipped back to
+`datadome-challenge` (they had flipped the other way an hour earlier on an
+unchanged binary, and an alternating A/B in the shut window had the BASELINE
+passing 1 of 6), and **x-hyatt passed** -- the first time in this file's history.
+
+That last one was chased rather than claimed. `kasada-verdict.mjs` reads
+`x-kpsdk-r` off the `/tl` POST, which is the guard's own answer in about ten
+seconds instead of the station's pass/refuse at the end of a chain. Twenty-five
+alternating pairs, two designs:
+
+| design | base | patched |
+|---|---|---|
+| base first (15 pairs) | **3 tickets** (`1-B1NUBHs`, `1-B1JbVXI`, `1-B1EFfHU`) | 0 |
+| patched first (10 pairs) | 0 | 0 |
+
+Every ticket of the three went to the arm that visited FIRST in its pair, and no
+ticket at all was issued during the ten pairs where the patched arm led. So the
+open window is what the first design measured, not the binary, and the second
+design ran entirely inside a shut one. **No arm-level conclusion is available**
+— this change is not shown to cost a ticket and is not shown to win one.
+
+What IS new and belongs to nobody's change: **this engine now gets an x-hyatt
+ticket sometimes.** B53 measured 0/3 there and the door map has said "real door,
+reference passes and we do not" ever since. Three `x-kpsdk-r: 1-B1…` responses
+in one sitting, with `doc=429->200` beside them, say the rate is no longer zero.
+Worth re-running the reverse-biased design the next time the window is open.
+
+## The body box did not follow its own margin (B96, 2026-08-30)
+
+`<body>`'s box was the viewport less a hardcoded 16px — the UA stylesheet's
+`body { margin: 8px }`, doubled — whatever the page said its margin was. Every
+modern page says something else: a Tailwind-style reset opens with
+`body { margin: 0 }`, and on www.scrapingcourse.com that put Chrome's body at
+1920 against this engine's 1904.
+
+The sixteen pixels are not the interesting part. `getComputedStyle(body).marginLeft`
+answered `0px` on both arms — correctly, from the cascade — right next to a box
+that had subtracted 8px twice anyway. **A box that does not follow the margin
+beside it is a shape no browser produces**, and it is one expression to check:
+`body.clientWidth + 2 * parseFloat(getComputedStyle(body).marginLeft) === documentElement.clientWidth`.
+
+Measured on Chrome 151 in one document, setting the margin inline and reading
+back (`probes/expr-b96-body-margin.js`), `documentElement.clientWidth -
+body.clientWidth`:
+
+| body margin | Chrome | before | after |
+|---|---|---|---|
+| as found (`margin: 0` from the page's reset) | 0 | 16 | 0 |
+| `0px` | 0 | 16 | 0 |
+| `3px` | 6 | 16 | 6 |
+| `8px` | 16 | 16 | 16 |
+| `20px` | 40 | 16 | 40 |
+
+Twice the margin, every time, and this engine answered 16 for all five.
+
+The fix reads the margin the cascade already holds. The UA's 8px has not gone
+anywhere — it is *in* that cascade, which is where `getComputedStyle` was
+reading it all along; the box just stopped being the one place with its own copy.
+The one wrinkle is that `marginPx` answers 0 for a margin nobody declared, which
+is right for an ordinary element and wrong for the one tag whose UA margin is
+load-bearing, so `<body>` falls through to the UA sheet in the same order the
+computed style resolves in.
+
+Reading the whole body-box probe back: **12 of its 13 rows are Chrome's**, up
+from 6. The one left is `box-sizing`, which Chrome computes as `border-box` on
+that page and this engine as `content-box` — the reset declares it through
+`*, ::before, ::after`, and that is a selector question rather than a box one.
+Filed separately.
+
+The sweep read 19/29 against 21/29, and both stations that moved are the ones
+that have been moving all evening on unchanged binaries: `dd-leboncoin`, which
+an alternating A/B answered `datadome-challenge` 3/3 on BOTH arms minutes later,
+and `x-hyatt`, whose ticket window had shut — twenty spaced visits on the
+unchanged binary got no `x-kpsdk-r` at all in the same hour. 1583/1583.
 ## A border is measured in device pixels, and we were counting whole ones (B72, 2026-08-30)
 
 `getComputedStyle(el).borderTopWidth` is a **used** value: not the length the
@@ -23629,15 +23762,24 @@ it existed because the root box once carried the artificial constants 1920 and
 100_000_000, and it dropped the padding every other element adds and answered
 the box in the two cases Chrome answers the window.
 
-### The UA body margin had to reach the layout
+### The margin half of this was landing at the same time, from B96
 
-`body { margin: 8px }` lives in the per-tag table `getComputedStyle` reads, not
-in the cascade the box walks — which is why a constant stood in for it, and why
-an undeclared `<body>` answers 0 through `marginPx`. `containerMarginPx` asks
-the cascade and falls back to the tag's own margin, the same shape
-`usedBorderWidth` already uses for the UA border. Narrow on purpose: making
-`marginPx` itself consult the table would move margin collapsing and content
-height for every element on a page, and nothing measured here asks for that.
+The second rule needed the body's own margin where a constant 16 had been, and
+`prd/body-box-margin` — the chapter two above this one — was fixing exactly that
+on exactly these lines while this branch was open. Both halves are measured and
+they agree, so the merge keeps B96's `bodyMarginPx` and this branch's
+`containerMarginPx` became two lines: the `<body>` is the one tag whose UA
+margin is load-bearing and goes through B96's helper, and `<html>` has no UA
+margin and asks `marginPx` like anything else.
+
+Worth naming as a near miss. Two sessions found the same 16px from opposite
+ends — B96 from `body.clientWidth` being 1904 where Chrome says 1920 on
+scrapingcourse, this one from a bordered root leaving its body 384 wide — and
+the halves are only compatible because both were measured rather than reasoned
+about. Neither is narrow enough: `marginPx` itself still answers 0 for an
+undeclared margin, which is right for an ordinary element, and making it consult
+the per-tag table would move margin collapsing and content height for every
+element on a page. Nothing measured on either branch asks for that.
 
 ### The heights are still wrong, and are deliberately not asserted
 

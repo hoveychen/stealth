@@ -2731,18 +2731,14 @@ pub fn verticalMargins(self: *Element, frame: *Frame, containing: *?f64, depth: 
     };
 }
 
-/// One margin of a root container, which is the one place the UA sheet's own
-/// margins have to reach the layout. `body { margin: 8px }` lives in the per-tag
-/// table `getComputedStyle` reads and not in the cascade this walks, so an
-/// undeclared <body> answers 0 through `marginPx` -- and the root branch used to
-/// paper over that with a constant, which is why `body { margin: 20px }` still
-/// measured as though it were 8. Ask the cascade first and fall back to the
-/// tag's own margin, the same shape `usedBorderWidth` uses for the UA border.
+/// One margin of a root container. The <body> is the one tag whose UA margin is
+/// load-bearing, so it goes through `bodyMarginPx`; `<html>` has none and asks
+/// the cascade like anything else.
 fn containerMarginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) f64 {
-    if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame) != null) {
-        return self.marginPx(name, frame, containing, depth);
-    }
-    return if (self.getTag() == .body) body_ua_margin else 0;
+    return if (self.getTag() == .body)
+        self.bodyMarginPx(name, frame, containing, depth)
+    else
+        self.marginPx(name, frame, containing, depth);
 }
 
 /// One margin in px, from the cascade, so a stylesheet rule counts.
@@ -2758,6 +2754,26 @@ fn marginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, 
         if (CSS.parseDimensionViewport(declared, frame)) |px| return px;
     }
     return 0;
+}
+
+/// One of `<body>`'s used margins.
+///
+/// `marginPx` answers 0 for a margin nobody declared, which is right for an
+/// ordinary element and wrong for this one: the UA sheet's `body { margin: 8px }`
+/// is what makes a document's body box narrower than its viewport, and it is
+/// what `getComputedStyle(body).marginLeft` has reported all along. So a
+/// declaration wins where there is one and the UA sheet answers where there is
+/// not -- the order the computed style already resolves in, which is the whole
+/// point: the box and the computed style beside it now read the same cascade.
+fn bodyMarginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) f64 {
+    if (CSSStyleDeclaration.marginPercentagePx(self, name, frame, containing, depth)) |px| {
+        return px;
+    }
+    if (CSSStyleDeclaration.specifiedPx(self, name, frame)) |px| return px;
+    if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
+        return CSS.parseDimensionViewport(declared, frame) orelse 0;
+    }
+    return body_ua_margin;
 }
 
 /// The margins that currently adjoin each other and will become one gap.
@@ -3285,6 +3301,19 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
             // viewport, not the viewport plus a border hanging outside the
             // window. Measured over nine served documents,
             // scratch/b72/expr-root-box.js against Chrome 151.
+            //
+            // The MARGIN half of that arrived from `prd/body-box-margin`, which
+            // landed on these same lines: the body's inset is the margin the
+            // page declared and not the UA's 8px doubled. Every modern reset
+            // opens with `body { margin: 0 }` and Chrome's body is then the
+            // whole viewport -- on www.scrapingcourse.com its body is 1920
+            // where this one answered 1904 -- and
+            // `documentElement.clientWidth - body.clientWidth` is 0, 6, 16 and
+            // 40 for margins of 0px, 3px, 8px and 20px, twice the margin every
+            // time (probes/expr-b96-body-margin.js). The 8px is still there; it
+            // is in the cascade, where `getComputedStyle(body).marginLeft` was
+            // reading it all along, which is what `bodyMarginPx` asks. The root
+            // has no UA margin, so it asks `marginPx` directly.
             //
             // The edges are asked for here rather than read off `dims` because
             // the y-only path never fills them: `getElementHeight` clears

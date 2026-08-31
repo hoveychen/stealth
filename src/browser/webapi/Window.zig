@@ -892,11 +892,15 @@ pub fn reportError(self: *Window, err: js.Value, frame: *Frame) !void {
 
 pub fn matchMedia(_: *const Window, query: []const u8, frame: *Frame) !*MediaQueryList {
     // `media` is the canonical form of the query, not the text handed in — see
-    // the serialisation section of css/MediaQuery.zig. `matches` still reads
-    // the same query either way, so the stored text is the canonical one.
+    // the serialisation section of css/MediaQuery.zig. Both are kept, because
+    // the canonical form rounds every number in it to six significant figures:
+    // `matches` reading it back answered `(min-resolution: 2.00000011920929dppx)`
+    // against 2.00000, which is one rung of the ladder Kasada bisects
+    // devicePixelRatio with (measured, probes/expr-b96-resolution-boundary.js).
     return frame._factory.eventTarget(MediaQueryList{
         ._proto = undefined,
         ._media = try MediaQuery.serialize(frame.arena, query),
+        ._query = try frame.arena.dupe(u8, query),
     });
 }
 

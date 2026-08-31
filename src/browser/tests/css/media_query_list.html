@@ -523,3 +523,84 @@
   }
 }
 </script>
+
+<script id=matches_reads_the_query_not_its_serialisation>
+{
+  // `matchMedia` stores the CANONICAL text and `matches` used to evaluate that,
+  // so every threshold was rounded to six significant digits before it was ever
+  // compared. Kasada bisects `devicePixelRatio` to twenty bits on x-hyatt --
+  // 314 `(min|max)-resolution: …)` queries reading only `.matches` -- and the
+  // rungs past the sixth digit were all being answered against the same rounded
+  // number.
+  //
+  // The boundaries below are Chrome 151's, bisected on both arms at the
+  // persona's dpr=2 with tools/fingerprint/probes/expr-b96-resolution-boundary.js.
+  const dpr = window.devicePixelRatio;
+  testing.expectEqual('dpr: 2', 'dpr: ' + dpr);
+
+  // A `<resolution>` is compared at float32 precision: Chrome's crossover sits
+  // exactly where a double rounds to the next float, at dpr 1 and at dpr 2
+  // both.
+  const m = (q) => window.matchMedia(q).matches;
+  testing.expectEqual('at the float32 tie: true',
+    'at the float32 tie: ' + m('(min-resolution: 2.0000001192092896dppx)'));
+  testing.expectEqual('just past it: false',
+    'just past it: ' + m('(min-resolution: 2.00000011920929dppx)'));
+  testing.expectEqual('dpi at the same tie: true',
+    'dpi at the same tie: ' + m('(min-resolution: 192.00001144409183dpi)'));
+  testing.expectEqual('dpi just past it: false',
+    'dpi just past it: ' + m('(min-resolution: 192.00001144409185dpi)'));
+
+  // The same quantity in three spellings has to answer the same way. 2dppx is
+  // 192dpi is 75.59055118110236dpcm, and the third one used to answer false
+  // because the serialiser rounded it to 75.5906 first.
+  testing.expectEqual('three spellings: true,true,true',
+    'three spellings: ' +
+      [m('(min-resolution: 2dppx)'), m('(min-resolution: 192dpi)'),
+       m('(min-resolution: 75.59055118110236dpcm)')].join(','));
+
+  // The three thresholds B53 measured the two arms disagreeing on, at dpr 1.
+  // All three are below 2dppx, so all three match here -- what matters is that
+  // they are read at full precision rather than rounded to 2.00000.
+  testing.expectEqual('B53 trio: true,true,true',
+    'B53 trio: ' +
+      [m('(min-resolution: 1.0000038146972656dppx)'),
+       m('(min-resolution: 1.0000044107437134dppx)'),
+       m('(min-resolution: 37.795257568359375dpcm)')].join(','));
+}
+</script>
+
+<script id=a_length_bound_tolerates_one_layout_unit>
+{
+  // A `<length>` bound is compared on the 1/64 px grid a LayoutUnit is stored
+  // on, and the comparison tolerates one unit either way. Measured on Chrome
+  // 151 at two viewport widths (1920 and 813): the last matching `min-width` is
+  // exactly `width + 1/64`, the last matching `max-width` is `width - 1/64`,
+  // and the plain `width` form tolerates both sides.
+  const w = window.innerWidth;
+  const U = 1 / 64;
+  const m = (q) => window.matchMedia(q).matches;
+  testing.expectEqual('min-width at +1/64: true',
+    'min-width at +1/64: ' + m(`(min-width: ${w + U}px)`));
+  testing.expectEqual('min-width just past it: false',
+    'min-width just past it: ' + m(`(min-width: ${w + U * 1.0001}px)`));
+  testing.expectEqual('max-width at -1/64: true',
+    'max-width at -1/64: ' + m(`(max-width: ${w - U}px)`));
+  testing.expectEqual('max-width just past it: false',
+    'max-width just past it: ' + m(`(max-width: ${w - U * 1.0001}px)`));
+  testing.expectEqual('width at +1/64: true',
+    'width at +1/64: ' + m(`(width: ${w + U}px)`));
+  testing.expectEqual('width at -1/64: true',
+    'width at -1/64: ' + m(`(width: ${w - U}px)`));
+  testing.expectEqual('width just past +1/64: false',
+    'width just past +1/64: ' + m(`(width: ${w + U * 1.0001}px)`));
+
+  // ...and the same rule on the other axis, so the tolerance is the
+  // comparison's and not one feature's.
+  const h = window.innerHeight;
+  testing.expectEqual('min-height at +1/64: true',
+    'min-height at +1/64: ' + m(`(min-height: ${h + U}px)`));
+  testing.expectEqual('min-height just past it: false',
+    'min-height just past it: ' + m(`(min-height: ${h + U * 1.0001}px)`));
+}
+</script>
