@@ -1,0 +1,127 @@
+diff --git a/src/browser/webapi/Element.zig b/src/browser/webapi/Element.zig
+index 8f83811bd..b91b643c7 100644
+--- a/src/browser/webapi/Element.zig
++++ b/src/browser/webapi/Element.zig
+@@ -3336,7 +3336,12 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width:
+             if (width == null) {
+                 width = @max(0, available.width - margin_x - edges.border_x - edges.padding_x);
+             }
+-            if (height == null) {
++            // PROBE (root-container-content-height P2): in STANDARDS mode leave
++            // the height for the content pass below, the way every other
++            // element's is. Quirks keeps the viewport, which is measured: a
++            // quirks <body> DOES fill it.
++            const fills_viewport = owner.document.isQuirksMode();
++            if (height == null and fills_viewport) {
+                 height = @max(0, available.height - margin_y - edges.border_y - edges.padding_y);
+             }
+         } else if (tag == .canvas) {
+@@ -3612,11 +3617,17 @@ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_ca
+     if (dims.inline_box) return 0;
+ 
+     const tag = self.getTag();
+-    if (tag == .html or tag == .body or dims.explicit_height) {
++    // PROBE (root-container-content-height P2): the root containers only take
++    // the shortcut when they really do fill the viewport, which is the quirks
++    // rendering. In standards mode they are sized by their content, like
++    // anything else with an `auto` height.
++    const fills_viewport = (tag == .html or tag == .body) and
++        self.ownerFrame(frame).document.isQuirksMode();
++    if (fills_viewport or dims.explicit_height) {
+         return dims.height + dims.padding_y;
+     }
+ 
+-    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width)) + dims.padding_y;
++    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0)) + dims.padding_y;
+ }
+ 
+ pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
+@@ -3776,13 +3787,18 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
+     // than sized to what it holds. That is `content-height-memoised-subtree`.
+     // Until it lands, the viewport is the answer for both, which is what
+     // `dims.height` already is.
++    // PROBE (root-container-content-height P2): `max(viewport, content)` for
++    // the scrolling element, which is the reading Chrome gives -- 200 for a
++    // short document in a 200px frame and 430 for a tall one.
+     if (tag == .html or tag == .body) {
+-        return @round(dims.height);
++        const viewport: f64 = @floatFromInt(self.ownerFrame(frame).viewport().height);
++        const content = @max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0)) + dims.padding_y;
++        return @round(@max(viewport, content));
+     }
+ 
+     if (dims.inline_box) return 0;
+ 
+-    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width)) + dims.padding_y);
++    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0)) + dims.padding_y);
+ }
+ 
+ // The height of the direct child elements stacked vertically, the counterpart
+@@ -3803,7 +3819,7 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
+ // is 55.5 (a line, a block, a line) where stacking the block alone says 18.5.
+ // Both measured at dpr 2 with
+ // tools/fingerprint/scratch/expr-inline-content-lines.js.
+-fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64) f64 {
++fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8) f64 {
+     var total: f64 = 0;
+ 
+     const font = self.resolveFont(frame);
+@@ -3831,7 +3847,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+     // The children share one containing block, so the width a percentage margin
+     // takes its share of is measured once for all of them.
+     var margin_containing: ?f64 = content_width;
+-    const escapes = self.marginEscapes(frame, &margin_containing, 0);
++    const escapes = self.marginEscapes(frame, &margin_containing, depth);
+     var group: MarginGroup = .{};
+     var placed = false;
+ 
+@@ -3858,7 +3874,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+             if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
+             if (!extent.counts(CSSStyleDeclaration.flowKind(el, frame))) continue;
+             if (el.atomicInlineHalves(frame)) |halves| {
+-                const box = el.getElementDimensions(frame);
++                const box = el.dimensionsAt(frame, true, depth + 1, true);
+                 flow.placeAtomic(halves.above, halves.below, box.width + box.padding_x + box.border_x);
+                 continue;
+             }
+@@ -3873,9 +3889,20 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+                 placed = true;
+             }
+ 
+-            const box = el.getElementDimensions(frame);
+-            const margins = el.verticalMargins(frame, &margin_containing, 0);
++            const box = el.dimensionsAt(frame, true, depth + 1, true);
++            const margins = el.verticalMargins(frame, &margin_containing, depth);
+             group.join(margins.top);
++            // PROBE (root-container-content-height P3): what the child HOLDS,
++            // which is the term B86 reverted. The difference from the three
++            // shapes B86 measured is the DEPTH: the child's box is measured at
++            // `depth + 1` rather than through `getElementDimensions`, which
++            // restarts at 0 -- and a restart at 0 is exactly the "reaches back
++            // up for its containing block and walks down again" B86 named as
++            // the cause.
++            var inner = box.height;
++            if (!box.explicit_height and depth < MAX_CONTAINING_BLOCK_DEPTH) {
++                inner = @max(inner, el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1));
++            }
+             // What the child HOLDS is still missing here, and knowingly so: see
+             // the note on `content-height-child-box` in the fingerprint README.
+             // Recursing into `el.contentHeight` is the obvious fix and it is
+@@ -3884,7 +3911,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+             // back up for its containing block and the walk goes down and up
+             // and down again. That is the same shape element/box_measure_loops
+             // exists for.
+-            if (box.height == 0 and box.padding_y == 0 and box.border_y == 0) {
++            if (inner == 0 and box.padding_y == 0 and box.border_y == 0) {
+                 // Self-collapsing: there is nothing between this box's two
+                 // margins, so they join the same group and it contributes no
+                 // height of its own. An empty <div style="margin:10px 0">
+@@ -3900,7 +3927,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+             // its own offsetHeight is `height + padding_y + border_y`. Reading
+             // only the middle of it made a parent disagree with its own child:
+             // a padded child answers 22 for itself and the parent answered 12.
+-            total += box.height + box.padding_y + box.border_y;
++            total += inner + box.padding_y + box.border_y;
+             placed = true;
+             group.join(margins.bottom);
+             continue;

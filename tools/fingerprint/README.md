@@ -23891,6 +23891,79 @@ binaries an hour earlier — the same oscillation, this time in the pleasant
 direction. No Cloudflare station moved, and the three closed cf doors are where
 they were. 1583/1583.
 
+## The 373 was one stalled page, not 373 failures (B72, 2026-08-31)
+
+`content-height-memoised-subtree` was closed by its third reading: a
+per-measurement memo made the nested test pass and the suite **worse** — "373
+`ExecutionTerminated`, spread across pages that have nothing to do with layout
+(`cookie_store`, `indexeddb`, `url`, `media_devices`)". That number was read as
+a cost curve. It is not one.
+
+Re-run with the whole `watchdog stall` line in view, the suite reports:
+
+```
+watchdog stalls: 1
+      stalled_ms = 30205
+ExecutionTerminated: 371
+```
+
+**One** stall, 30.2 seconds, in `element/position.html`. Everything after it in
+the same binary is collateral — which is exactly why the failures land on
+`cookie_store` and `url` and `streams`, pages that have nothing to do with
+layout. The 373 and the 371 are the same artefact counted twice, and the real
+signal is a single page hanging.
+
+Why that page: `position.html` holds two **marquee loops**, and a marquee loop
+is written to run until a metric *grows*.
+
+```js
+while (lane.scrollWidth < track.offsetWidth * 2 && guard < 50) {
+  lane.innerHTML += lane.innerHTML;
+}
+```
+
+Seven doublings normally. Any change that stops the metric climbing turns it
+into an exponential DOM builder with a guard of 50 — 2^50 nodes. So a layout
+change does not have to be *slow* to hang the suite; it only has to make one
+number stop moving.
+
+### Four more shapes, all measured, all the same 371
+
+This is `root-container-content-height`, opened because the root containers'
+`auto` height is the largest measured box divergence left: on example.com
+`getComputedStyle(body).height` is `98.0781px` in Chrome and `756px` here, and
+`documentElement.offsetHeight` 396 against 1080. Cloudflare's widget dumps
+`getComputedStyle` over the `<body>`, so that number travels in the payload of
+every page it challenges.
+
+| shape | suite |
+|---|---|
+| root containers take their height from `contentHeight` (standards mode only), nothing else changed | **0 ExecutionTerminated**, 1581/1583 |
+| …plus the reverted per-child recursion, with `depth` carried so the child's box is measured at `depth + 1` instead of restarting at 0 through `getElementDimensions` | 371 |
+| …plus a `contentHeight` memo on the **Frame** (not `call_arena`), held across nested entries by keeping `_layout_depth` up for the whole walk, sentinel before the walk, cleared at 0 | 371 |
+| …plus the same memo one level down, on `dimensionsAt` itself | 371 |
+
+Three findings in that table:
+
+* **the cost wall is not at the root.** Asking the root containers for their
+  content height is free; the first row is a clean suite. What is not free is
+  the per-child recursion, and that is the term B86 reverted.
+* **"restarts at depth 0" is not the mechanism.** B86's diagnosis named the
+  containing-block walk restarting, and carrying the depth changes nothing.
+* **neither is the memo.** B86's stated blocker for a shared memo was that it
+  would have to live in `call_arena`, which is released between JS calls —
+  `Frame.arena` is the frame's own lifetime and has no such problem, so the memo
+  was built and it also changes nothing. Which follows, once the 371 is read
+  correctly: the suite was never measuring the memo. It was measuring one hang.
+
+The patches are kept verbatim rather than half-merged:
+`probes/b72-depth-carry-attempt.patch` (rows 1–2) and
+`probes/b72-memo-attempt.patch` (rows 3–4). The next step is
+`content-height-marquee-stall`: find which metric stops growing in
+`position.html` and why — note that the loops that hang read **widths** while
+the change is to **heights**, so the answer is not obvious and is worth reading
+off a log rather than reasoning about.
+
 ## Sixty-seven selector constructs, twelve of which deleted rules (B96, 2026-08-31)
 
 The pseudo-element finding above is a special case of a general one:
