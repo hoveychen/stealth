@@ -23505,3 +23505,89 @@ two binaries at `px-wayfair`, three rounds each, both arms answered
 `px-challenge` every time; `dd-datadome` is the station the previous chapter
 already showed passing one round in four with the guard's window half shut.
 Neither difference is the binary. Both closed doors are where they were.
+
+## matchMedia compared the serialisation, not the query (B96, 2026-08-30)
+
+`window.matchMedia(q)` stores the *canonical* form of `q` — that is what `.media`
+reports, and it is right that it does. `matches` then read that stored text
+back. The canonical form writes every number to six significant figures, so
+every threshold was rounded to six figures before it was ever compared.
+
+x-hyatt's Kasada script reads `devicePixelRatio` eight times and then spends
+**314 `(min|max)-resolution: …)` queries binary-searching the same number to
+twenty bits**, reading only `.matches` and never `.media`. Its rungs pass the
+sixth figure within a dozen steps, and from there on every one of them was being
+answered against `2.00000`.
+
+### Where each arm changes its mind
+
+Bisected on both arms rather than sampled, at the persona's dpr=2, on a real
+page (`probes/expr-b96-resolution-boundary.js` — it halves the interval the way
+the guard does and reports the last matching double):
+
+| crossover | Chrome 151 | before | after |
+|---|---|---|---|
+| `min-resolution` dppx | `2.0000001192092896` | `2.000005` | `2.0000001192092896` |
+| `min-resolution` dpi | `192.00001144409183` | `192.0005` | `192.00001144409183` |
+| `min-width` px | `1920.015625` | `1920.0049438476562` | `1920.015625` |
+| `(min-resolution: 75.59055118110236dpcm)` | true | **false** | true |
+| the same ratio in dppx, dpi, dpcm | `true,true,true` | `true,true,**false**` | `true,true,true` |
+
+Three findings fell out of the bisection, each measured at two settings before
+it went into the engine:
+
+* **A `<resolution>` is a float32.** Chrome's crossover sits exactly where a
+  double rounds to the next float — `1 + 2^-23` at dpr 1, `2 + 2^-23` at dpr 2,
+  in dppx and in dpi both. Nothing else lands on that number.
+* **The unit conversion multiplies by the factor, it does not divide by its
+  reciprocal.** Chrome's dpi crossover is `192 + 192 · 2^-24`, and only
+  `value * (1/96)` carries that double to exactly `2 + 2^-23`; `value / 96`
+  lands one ulp above and answers false where Chrome answers true. A one-ulp
+  detail, and it is the difference between matching the boundary and missing it
+  by one rung of a twenty-bit search.
+* **A `<length>` bound tolerates one 1/64 px unit.** The last matching
+  `(min-width: …)` is exactly `innerWidth + 1/64` and the next double does not
+  match — at 1920 and at 813, on both axes, and the plain `(width: …)` form
+  takes a unit on either side. So the bound is NOT rounded to a float32 either:
+  an f32 at 1920 steps by 1/8192 and could not tell those two doubles apart.
+
+Reading the whole probe back afterwards, **40 of its 42 rows are identical to
+Chrome**. The two that are not are both `dpcm` crossovers, and they are left
+alone deliberately: Chrome's tie there is ±0.005 dppx — five hundred times
+ours, the same width at dpr 1 and dpr 2, and not explained by float32, by the
+factor, or by the conversion order. Modelling a rounding nobody can account for
+would be inventing a constant, so it is recorded instead: `dpcm` is the one
+spelling where the two arms still part company, at the fourth significant
+figure.
+
+1583/1583.
+
+### The sweep reading, and one thing in it that is not about this change
+
+The sweep came back 21/29 against 22/29, and all three stations that moved are
+ones that move on their own: dd-datadome and dd-hermes flipped back to
+`datadome-challenge` (they had flipped the other way an hour earlier on an
+unchanged binary, and an alternating A/B in the shut window had the BASELINE
+passing 1 of 6), and **x-hyatt passed** -- the first time in this file's history.
+
+That last one was chased rather than claimed. `kasada-verdict.mjs` reads
+`x-kpsdk-r` off the `/tl` POST, which is the guard's own answer in about ten
+seconds instead of the station's pass/refuse at the end of a chain. Twenty-five
+alternating pairs, two designs:
+
+| design | base | patched |
+|---|---|---|
+| base first (15 pairs) | **3 tickets** (`1-B1NUBHs`, `1-B1JbVXI`, `1-B1EFfHU`) | 0 |
+| patched first (10 pairs) | 0 | 0 |
+
+Every ticket of the three went to the arm that visited FIRST in its pair, and no
+ticket at all was issued during the ten pairs where the patched arm led. So the
+open window is what the first design measured, not the binary, and the second
+design ran entirely inside a shut one. **No arm-level conclusion is available**
+— this change is not shown to cost a ticket and is not shown to win one.
+
+What IS new and belongs to nobody's change: **this engine now gets an x-hyatt
+ticket sometimes.** B53 measured 0/3 there and the door map has said "real door,
+reference passes and we do not" ever since. Three `x-kpsdk-r: 1-B1…` responses
+in one sitting, with `doc=429->200` beside them, say the rate is no longer zero.
+Worth re-running the reverse-biased design the next time the window is open.
