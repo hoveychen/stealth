@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A selector list with a pseudo-element in it used to take the whole rule down.
+`::before` reached `pseudoClass`, which strips one colon and then wants an
+identifier, found a second colon and returned `error.InvalidPseudoClass`;
+`parseList` propagates that, and `StyleManager.addRawRule` drops the rule.
+
+The rule that dropped is the one nearly every modern page opens with. Tailwind's
+preflight is `*,::before,::after{box-sizing:border-box;border-width:0;border-style:solid}`,
+so on www.scrapingcourse.com every element lost `box-sizing: border-box` --
+Chrome computed `border-box` for the body and this engine `content-box`, and a
+`width:100px;padding:10px;border:5px` box measured 90 there and 120 here.
+
+Chrome's rule, measured a name at a time
+(tools/fingerprint/probes/expr-b96-pseudo-element-list.js -- each case is a
+stylesheet whose list is `#probe, <the selector under test>`, read back off a
+property with no other declaration):
+
+  | in the list                  | Chrome keeps the rule |
+  |------------------------------|-----------------------|
+  | `::before` `::after`         | yes                   |
+  | `::first-line` `::first-letter` | yes                |
+  | `::placeholder` `::marker` `::backdrop` `::selection` | yes |
+  | `::file-selector-button` `::cue` | yes               |
+  | `::part(x)` `::slotted(x)`   | yes                   |
+  | `:before` `:first-line` (legacy one-colon) | yes      |
+  | `::-webkit-anything`, known or not | yes              |
+  | `::-moz-nonsense-xyz`        | **no**                |
+  | `::totally-unknown-thing`    | **no**                |
+  | `:totally-unknown-class`     | no                    |
+  | `>>>`                        | no                    |
+
+So a pseudo-element Chrome knows keeps the list alive and one it does not know
+kills it, exactly as an unknown pseudo-class does. And the pseudo-element itself
+still matches no element: `#probe::before` sets nothing on `#probe`.
+-->
+
+<script id=a_pseudo_element_does_not_kill_the_list>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+  const probe = document.createElement('div');
+  probe.id = 'pseudo-probe';
+  probe.setAttribute('style', 'width:100px');
+  host.appendChild(probe);
+
+  // letter-spacing, because nothing else declares it: `normal` means the rule
+  // was dropped and `3px` means it landed.
+  const withList = (selector) => {
+    const sheet = document.createElement('style');
+    sheet.textContent = `#pseudo-probe, ${selector} { letter-spacing: 3px }`;
+    document.head.appendChild(sheet);
+    const seen = getComputedStyle(probe).letterSpacing;
+    sheet.remove();
+    return seen;
+  };
+
+  const kept = [
+    '::before', '::after', '::first-line', '::first-letter', '::placeholder',
+    '::marker', '::backdrop', '::selection', '::file-selector-button', '::cue',
+    '::part(x)', '::slotted(x)', ':before', ':after', ':first-line', ':first-letter',
+    '::-webkit-scrollbar', '::-webkit-nonsense-xyz',
+  ];
+  for (const selector of kept) {
+    testing.expectEqual(`kept [${selector}]: 3px`, `kept [${selector}]: ${withList(selector)}`);
+  }
+
+  const dropped = [
+    '::totally-unknown-thing', '::-moz-nonsense-xyz', ':totally-unknown-class', '>>>',
+  ];
+  for (const selector of dropped) {
+    testing.expectEqual(`dropped [${selector}]: normal`, `dropped [${selector}]: ${withList(selector)}`);
+  }
+
+  host.remove();
+}
+</script>
+
+<script id=a_pseudo_element_matches_no_element>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+  const probe = document.createElement('div');
+  probe.id = 'pseudo-probe-2';
+  host.appendChild(probe);
+
+  const sheet = document.createElement('style');
+  sheet.textContent = '#pseudo-probe-2::before { letter-spacing: 3px }';
+  document.head.appendChild(sheet);
+  testing.expectEqual('the element itself: normal',
+    'the element itself: ' + getComputedStyle(probe).letterSpacing);
+  sheet.remove();
+
+  // ...and it does not match through querySelector either.
+  testing.expectEqual('querySelector: null',
+    'querySelector: ' + host.querySelector('#pseudo-probe-2::before'));
+  testing.expectEqual('matches: false',
+    'matches: ' + probe.matches('#pseudo-probe-2::before'));
+
+  host.remove();
+}
+</script>
+
+<script id=the_preflight_rule_lands>
+{
+  // The whole point, in the shape the web writes it.
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+  const box = document.createElement('div');
+  box.setAttribute('style', 'width:100px;padding:10px;border:5px solid');
+  host.appendChild(box);
+
+  const sheet = document.createElement('style');
+  sheet.textContent = '*,::before,::after{box-sizing:border-box}';
+  document.head.appendChild(sheet);
+  testing.expectEqual('preflight box-sizing: border-box',
+    'preflight box-sizing: ' + getComputedStyle(box).boxSizing);
+  testing.expectEqual('preflight clientWidth: 90',
+    'preflight clientWidth: ' + box.clientWidth);
+  testing.expectEqual('preflight offsetWidth: 100',
+    'preflight offsetWidth: ' + box.offsetWidth);
+  sheet.remove();
+
+  host.remove();
+}
+</script>

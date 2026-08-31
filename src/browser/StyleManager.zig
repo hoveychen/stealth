@@ -1315,7 +1315,11 @@ fn getBucketKey(compound: Selector.Compound) ?BucketKey {
                     else => {},
                 }
             },
-            .universal, .attribute => {},
+            // A compound holding a pseudo-element matches no element, so which
+            // bucket it lands in cannot matter -- but it must not be dropped
+            // either, because the compounds BESIDE it in the list are the
+            // reason it parses at all.
+            .universal, .attribute, .pseudo_element => {},
         }
     }
 
@@ -1459,6 +1463,10 @@ fn countCompoundSpecificity(compound: Selector.Compound, ids: *u32, classes: *u3
             .class => classes.* += 1,
             .tag, .tag_name => elements.* += 1,
             .universal => {}, // zero specificity
+            // A pseudo-element counts as an element, the way a type selector
+            // does -- per Selectors 4, and it costs nothing to be right about
+            // it here since nothing matches through one anyway.
+            .pseudo_element => elements.* += 1,
             .attribute => classes.* += 1,
             .pseudo_class => |pc| {
                 switch (pc) {

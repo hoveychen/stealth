@@ -23639,3 +23639,57 @@ that have been moving all evening on unchanged binaries: `dd-leboncoin`, which
 an alternating A/B answered `datadome-challenge` 3/3 on BOTH arms minutes later,
 and `x-hyatt`, whose ticket window had shut — twenty spaced visits on the
 unchanged binary got no `x-kpsdk-r` at all in the same hour. 1583/1583.
+
+## One pseudo-element in a list dropped the whole rule (B96, 2026-08-30)
+
+`*, ::before, ::after { box-sizing: border-box; border-width: 0; border-style: solid }`
+is the opening line of Tailwind's preflight, and therefore of a large share of
+the web. This engine dropped it.
+
+`::before` reached `Parser.pseudoClass`, which strips one colon and then wants an
+identifier; it found the second colon and returned `error.InvalidPseudoClass`.
+`parseList` propagates that, and `StyleManager.addRawRule` turns a selector error
+into a rule that never existed — taking the `*` down with the `::before`. So on
+www.scrapingcourse.com every element lost `box-sizing: border-box`: Chrome
+computed `border-box` for the body where this engine computed `content-box`, and
+a `width:100px;padding:10px;border:5px` box measured 90 there and 120 here.
+
+### Chrome's rule, measured a name at a time
+
+`probes/expr-b96-pseudo-element-list.js` puts each selector in a list beside an
+id selector — `#probe, <under test> { letter-spacing: 3px }` — and reads the
+property back off `#probe`. `3px` means the rule survived, `normal` means it was
+dropped:
+
+| in the list | Chrome |
+|---|---|
+| `::before` `::after` `::first-line` `::first-letter` | kept |
+| `::placeholder` `::marker` `::backdrop` `::selection` | kept |
+| `::file-selector-button` `::cue` | kept |
+| `::part(x)` `::slotted(x)` | kept |
+| `:before` `:after` `:first-line` `:first-letter` (one colon) | kept |
+| `::-webkit-scrollbar` **and `::-webkit-nonsense-xyz`** | kept |
+| `::-moz-nonsense-xyz` | **dropped** |
+| `::totally-unknown-thing` | **dropped** |
+| `:totally-unknown-class` | dropped |
+| `>>>` | dropped |
+
+So a pseudo-element Chrome knows keeps the list alive and one it does not know
+kills it, exactly as an unknown pseudo-class does — and `-webkit-` is a wildcard
+where `-moz-` is not. That is the whole specification of the fix, and none of it
+was guessed: the `-webkit-` line in particular is the kind of thing a
+reasonable implementation gets wrong in both directions.
+
+The compound itself still matches nothing. `#probe::before` sets nothing on
+`#probe`, `querySelector('#probe::before')` is null and `matches()` is false —
+all three measured on Chrome, all three now true here. A pseudo-element parses
+so that its neighbours survive, and for no other reason.
+
+Three probes read back after the change, all against headed Chrome 151 at the
+persona's dpr=2 on the same served page:
+
+| probe | before | after |
+|---|---|---|
+| the pseudo-element list (22 rows) | 13 | **22** |
+| where box-sizing comes from (9 rows) | 5 | **9** |
+| the body box (13 rows) | 12 | **13** |

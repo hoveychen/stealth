@@ -452,6 +452,11 @@ fn matchesPart(el: *Node.Element, part: Part, scope: *Node, frame: *Frame) bool 
         .universal => return true,
         .pseudo_class => |pseudo| return matchesPseudoClass(el, pseudo, scope, frame),
         .attribute => |attr| return matchesAttribute(el, attr, frame),
+        // A pseudo-element is a box no element owns, so no element is it:
+        // `#x::before` sets nothing on `#x` and `querySelector` finds nothing,
+        // both measured on Chrome. It parses only so that the selectors beside
+        // it in a list survive.
+        .pseudo_element => return false,
     }
 }
 

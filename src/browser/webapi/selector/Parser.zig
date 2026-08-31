@@ -320,7 +320,10 @@ fn parsePart(self: *Parser, arena: Allocator) !Part {
             break :blk .universal;
         },
         '[' => .{ .attribute = try self.attribute(arena) },
-        ':' => .{ .pseudo_class = try self.pseudoClass(arena) },
+        ':' => blk: {
+            if (try self.pseudoElement()) break :blk .pseudo_element;
+            break :blk .{ .pseudo_class = try self.pseudoClass(arena) };
+        },
         'a'...'z', 'A'...'Z', '_', '\\', 0x80...0xFF => blk: {
             // Use parseIdentifier for full escape support
             const tag_name = try self.parseIdentifier(arena, error.InvalidTagSelector);
@@ -403,6 +406,88 @@ fn consumeUntilCommaOrParen(self: *Parser) []const u8 {
     const result = input[0..i];
     self.input = input[i..];
     return result;
+}
+
+/// The pseudo-elements Chrome keeps a selector list alive for, measured one
+/// name at a time (tools/fingerprint/probes/expr-b96-pseudo-element-list.js):
+/// each was put in a list beside an id selector and the rule read back. A name
+/// on this list keeps the rule; `::totally-unknown-thing` and
+/// `::-moz-nonsense-xyz` both kill it, the way an unknown pseudo-CLASS does.
+const known_pseudo_elements = [_][]const u8{
+    "before",               "after",          "first-line",  "first-letter",
+    "placeholder",          "marker",         "backdrop",    "selection",
+    "file-selector-button", "cue",            "part",        "slotted",
+    "grammar-error",        "spelling-error", "target-text", "highlight",
+    "view-transition",
+};
+
+/// The four that predate the `::` spelling and are still written with one
+/// colon. Chrome takes `:before` in a list exactly as it takes `::before`
+/// (measured); every other one-colon name goes to `pseudoClass`, where an
+/// unknown one is still an error.
+const legacy_pseudo_elements = [_][]const u8{ "before", "after", "first-line", "first-letter" };
+
+/// Consumes a pseudo-element if one is here, and answers whether it did.
+///
+/// The parse has to happen before `pseudoClass` gets the colon, because
+/// `pseudoClass` strips exactly one and then wants an identifier -- on
+/// `::before` it found the second colon and returned an error, which
+/// `parseList` propagates and `StyleManager.addRawRule` turns into a dropped
+/// rule. That is how `*,::before,::after{box-sizing:border-box}` -- the opening
+/// line of nearly every modern reset -- took the `*` down with it.
+///
+/// An unknown name is left alone rather than consumed: the caller then fails
+/// the way it always did, which is what Chrome does with one.
+fn pseudoElement(self: *Parser) !bool {
+    var rest = self.input;
+    if (rest.len < 2 or rest[0] != ':') return false;
+
+    const double = rest[1] == ':';
+    rest = rest[(if (double) @as(usize, 2) else 1)..];
+
+    var i: usize = 0;
+    while (i < rest.len) : (i += 1) {
+        const c = rest[i];
+        if (!std.ascii.isAlphanumeric(c) and c != '-') break;
+    }
+    if (i == 0) return false;
+    const name = rest[0..i];
+
+    const known = blk: {
+        // Any `-webkit-` name at all, known to this build or not: Chrome takes
+        // `::-webkit-nonsense-xyz` and rejects `::-moz-nonsense-xyz`, measured.
+        if (double and std.ascii.startsWithIgnoreCase(name, "-webkit-")) break :blk true;
+        const table: []const []const u8 = if (double) &known_pseudo_elements else &legacy_pseudo_elements;
+        for (table) |candidate| {
+            if (std.ascii.eqlIgnoreCase(name, candidate)) break :blk true;
+        }
+        break :blk false;
+    };
+    if (!known) return false;
+
+    self.input = rest[i..];
+    // `::part(x)` and `::slotted(x)` carry an argument. Nothing here matches
+    // either way, so the argument is skipped rather than parsed -- but it has
+    // to be skipped, or the `)` is left for the next part to choke on.
+    if (self.peek() == '(') {
+        var depth: usize = 0;
+        var j: usize = 0;
+        while (j < self.input.len) : (j += 1) {
+            switch (self.input[j]) {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if (depth == 0) {
+                        self.input = self.input[j + 1 ..];
+                        return true;
+                    }
+                },
+                else => {},
+            }
+        }
+        return error.InvalidPseudoClass;
+    }
+    return true;
 }
 
 fn pseudoClass(self: *Parser, arena: Allocator) !Selector.PseudoClass {
