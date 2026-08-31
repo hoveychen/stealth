@@ -22,6 +22,7 @@ const lp = @import("lightpanda");
 const js = @import("../js/js.zig");
 const dump = @import("../dump.zig");
 const Frame = @import("../Frame.zig");
+const Viewport = @import("../Viewport.zig");
 const Factory = @import("../Factory.zig");
 const StyleManager = @import("../StyleManager.zig");
 
@@ -3389,8 +3390,48 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
 /// the fraction, because a computed `width` is built off it and Chrome prints
 /// `1619.97px` there rather than an integer.
 pub fn getClientWidth(self: *Element, frame: *Frame) f64 {
+    if (self.quirksViewport(frame)) |view| {
+        return @floatFromInt(view.width);
+    }
     var visibility_cache: VisibilityCache = .{};
     return @round(self.getClientWidthWithCache(frame, &visibility_cache));
+}
+
+/// The viewport, when this element is the one CSSOM View makes answer with it.
+///
+/// The rule SWAPS with the document's mode: the root element answers the
+/// viewport in standards mode, and the HTML body element answers it in quirks
+/// mode. The root half was already right here, because an undeclared root's box
+/// is the viewport anyway. The body half was not -- this reported the body's own
+/// padding box in both modes.
+///
+/// Found on an `about:blank` iframe, which is always quirks: Chrome 151 answers
+/// 300 for `body.clientWidth` in a 300px frame where this answered 284, while
+/// `offsetWidth` and `getBoundingClientRect` agreed at 284 on both arms
+/// (scratch/b70/expr-qc-served.js). The body's own box is irrelevant there --
+/// Chrome answers the viewport through a margin, a border, an explicit
+/// `width:100px` and a `display:inline` body alike, which is why this is asked
+/// before any of them are measured.
+///
+/// Only `clientWidth` and `clientHeight` take it. `getClientWidthWithCache` is
+/// deliberately left alone: `offsetWidth` and the resolved computed `width` are
+/// built off it, and Chrome keeps both of those on the body's real box.
+fn quirksViewport(self: *Element, frame: *Frame) ?Viewport {
+    if (self.getTag() != .body) {
+        return null;
+    }
+    const owner = self.ownerFrame(frame);
+    const document = owner.document;
+    if (!document.isQuirksMode()) {
+        return null;
+    }
+    // "The HTML body element" is the document's own body, not any `<body>` a
+    // page happens to have deeper in the tree.
+    const body = document.getBody() orelse return null;
+    if (body.asElement() != self) {
+        return null;
+    }
+    return owner.viewport();
 }
 
 pub fn getClientWidthWithCache(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache) f64 {
@@ -3422,6 +3463,9 @@ fn clientWidthOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_cac
 }
 
 pub fn getClientHeight(self: *Element, frame: *Frame) f64 {
+    if (self.quirksViewport(frame)) |view| {
+        return @floatFromInt(view.height);
+    }
     var visibility_cache: VisibilityCache = .{};
     return @round(self.getClientHeightWithCache(frame, &visibility_cache));
 }
@@ -3593,9 +3637,10 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 
     const tag = self.getTag();
     // As in getScrollWidth: the root containers carry artificial giant
-    // defaults, and page-level overflow checks read them.
+    // defaults, and page-level overflow checks read them. Rounded there too,
+    // and for the same reason.
     if (tag == .html or tag == .body) {
-        return dims.height;
+        return @round(dims.height);
     }
 
     if (dims.inline_box) return 0;
@@ -3835,8 +3880,14 @@ pub fn getScrollWidth(self: *Element, frame: *Frame) f64 {
     // The root containers carry artificial giant defaults (1920 and
     // 100_000_000, see getElementDimensions). Stacking their children on
     // top would inflate a value sites read to detect page overflow.
+    //
+    // Rounded like every other exit from here: scrollWidth is a `long` in the
+    // IDL, so a fraction is not a wrong answer but an impossible one. This exit
+    // was the only one that did not round, and it is the one the two elements a
+    // page reads most often go through -- a `<body>` with a fractional box
+    // answered 100.3984375.
     if (tag == .html or tag == .body) {
-        return dims.width;
+        return @round(dims.width);
     }
 
     if (dims.inline_box) return 0;
@@ -4077,14 +4128,43 @@ fn positionStyle(self: *Element, frame: *Frame) []const u8 {
     return style.getPropertyValue("position", frame);
 }
 
-pub fn getClientTop(_: *Element) f64 {
-    // Border width - in our dummy layout, we don't apply borders to layout
-    return 0.0;
+/// `clientTop` and `clientLeft` are the width of the top and left border,
+/// rounded to an integer -- the offset from the border box's edge to the
+/// padding box's.
+///
+/// They answered a hard-coded 0, with a comment saying the layout does not
+/// apply borders. That stopped being true: `borderPx` reads the UA sheet as
+/// well as the author cascade, and `offsetWidth` and `getBoundingClientRect`
+/// have carried the border for a while. These two accessors were the ones left
+/// behind, which is a difference a page sees in one read -- Chrome 151 answers
+/// 7 and 11 for `border-top:7px;border-left:11px` where this answered 0 and 0
+/// (scratch/b70/expr-client-tl.js, fifteen shapes).
+///
+/// Each reads its OWN edge: `border-top:6px` alone is `6,0` and
+/// `border-left:9px` alone `0,9`, so neither is half of the `border_x` /
+/// `border_y` pair the box model carries.
+pub fn getClientTop(self: *Element, frame: *Frame) f64 {
+    return self.clientBorderEdge(frame, "border-top");
 }
 
-pub fn getClientLeft(_: *Element) f64 {
-    // Border width - in our dummy layout, we don't apply borders to layout
-    return 0.0;
+pub fn getClientLeft(self: *Element, frame: *Frame) f64 {
+    return self.clientBorderEdge(frame, "border-left");
+}
+
+/// One border edge as `clientTop`/`clientLeft` report it. Zero for an element
+/// with no border box at all -- `display:none` and a non-replaced
+/// `display:inline` both answer 0 in Chrome even with a border declared, while
+/// `display:table` answers the border, so the test is the box and not the
+/// keyword.
+fn clientBorderEdge(self: *Element, frame: *Frame, comptime side: []const u8) f64 {
+    var visibility_cache: VisibilityCache = .{};
+    if (!self.checkVisibilityCached(&visibility_cache, frame)) {
+        return 0.0;
+    }
+    if (CSSStyleDeclaration.isInlineBox(self, frame)) {
+        return 0.0;
+    }
+    return @round(CSSStyleDeclaration.borderEdgePx(self, side, frame));
 }
 
 // Calculates document position by counting all nodes that appear before this one

@@ -1,0 +1,93 @@
+<html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+NO DOCTYPE ON PURPOSE. This file is in quirks mode, which is the whole point of
+it: `document.compatMode` has to read `BackCompat` for any of the assertions
+below to mean anything, and the first one checks that.
+
+CSSOM View gives `clientWidth`/`clientHeight` a special case that SWAPS with the
+mode:
+
+  "If the element is the root element and the document is not in quirks mode,
+   or if the element is the HTML body element and the document IS in quirks
+   mode, return the viewport width/height excluding scrollbars."
+
+The root half was already right here. The body half was not: this engine
+answered the body's own padding box in both modes. Found on an `about:blank`
+iframe -- which is always quirks -- where Chrome 151 answers 300 for
+`body.clientWidth` in a 300px frame and this engine answered 284, while
+`offsetWidth` and `getBoundingClientRect` agreed at 284 on both arms. So it was
+this rule and not the layout (scratch/b70/expr-qc-served.js, eight served
+documents; scratch/b70/expr-blank-margin.js isolates the single reading).
+
+Asserted against `innerWidth`/`innerHeight` rather than against Chrome's
+numbers, because the rule is "the viewport" and the two arms do not share one.
+Chrome satisfies exactly this form: on a quirks page its body client box equals
+its inner size, and on a standards page it does not.
+
+Two neighbouring shapes are measured and deliberately NOT asserted, because
+this change does not touch either and a test should not claim them:
+
+  * a bordered root. Chrome answers 386x186 for a 7px-bordered <html> in a
+    400x200 frame -- the border box is the viewport and the content is inset --
+    where this engine answers 400x200 for the client box and 414x214 for the
+    offset box, adding the border outside the viewport instead.
+  * the top-level body's offset box. Chrome answers innerWidth-16 for a body
+    with `margin:8px`; this engine answers the whole viewport there, though it
+    gets the same case right inside an iframe.
+-->
+
+<script id=quirks_body_client_box_is_the_viewport>
+{
+  testing.expectEqual('BackCompat', document.compatMode);
+
+  const body = document.body;
+  const prev = body.getAttribute('style') || '';
+  const check = (label) => {
+    testing.expectEqual(
+      label + ': ' + window.innerWidth + 'x' + window.innerHeight,
+      label + ': ' + body.clientWidth + 'x' + body.clientHeight);
+  };
+
+  check('bare body');
+
+  // The body's own box is irrelevant in quirks mode -- Chrome answers the
+  // viewport through a margin, a border, an explicit width, and a body whose
+  // content overflows the frame. Every one of these measured.
+  for (const css of [
+    'margin:8px',
+    'margin:8px;border:5px solid',
+    'margin:8px;width:100px',
+    'margin:8px;padding:20px',
+    'margin:8px;display:inline',
+  ]) {
+    body.setAttribute('style', css);
+    check(css);
+  }
+  body.setAttribute('style', prev);
+}
+</script>
+
+<script id=quirks_body_client_box_is_not_its_offset_box>
+{
+  // Only clientWidth/clientHeight take the viewport. offsetWidth stays the
+  // body's real box, which is what made the defect visible: on Chrome the two
+  // disagree in quirks mode and this engine had them agreeing. Asserted as
+  // "they differ" rather than with a number, because the body's offset box on
+  // a top-level document is a separate defect (see the comment above).
+  const body = document.body;
+  const prev = body.getAttribute('style') || '';
+  body.setAttribute('style', 'margin:8px;width:100px');
+
+  testing.expectEqual(
+    'client is the viewport: true',
+    'client is the viewport: ' + (body.clientWidth === window.innerWidth));
+  testing.expectEqual(
+    'offset is the declared 100px box: 100',
+    'offset is the declared 100px box: ' + body.offsetWidth);
+
+  body.setAttribute('style', prev);
+}
+</script>
