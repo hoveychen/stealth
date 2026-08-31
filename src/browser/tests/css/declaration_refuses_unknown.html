@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<head>
+  <script src="../testing.js"></script>
+</head>
+
+<!--
+  Whether a declaration written into `style=` survives it.
+
+  Chrome refuses a declaration whose property it does not have, and one whose
+  value does not fit the property; this engine kept both, so
+  `el.setAttribute('style','nonsense-prop: 1'); el.style.length` answered 1
+  where every browser answers 0. One expression, and no page writes it by
+  accident.
+
+  The predicate is the same one `@supports (p: v)` answers -- measured, not
+  assumed: over these 56 declarations Chrome's `@supports` verdict and its
+  inline retention agree on 56 of 56 (scratch/b97/expr-b97-decl-oracle.js
+  against scratch/b97/expr-b97-supports-boundary.js). That is why this reuses
+  `css/supports.zig` rather than growing a second table.
+
+  The assertion is `style.length === 0` rather than the value read back, so
+  that canonicalisation and shorthand expansion -- `calc(1px + 1em)` becoming
+  `calc(1em + 1px)`, `inset: 0` becoming four longhands -- cannot make this
+  test fail for something it is not about. Every expected value below was
+  measured on Chrome 151.
+-->
+
+<div id="host"></div>
+
+<script id="inline_declaration_refusal_matches_chrome">
+{
+  // [declaration, does Chrome keep it]
+  const CASES = [
+    ['display: grid', true],
+    ['display: block', true],
+    ['display: nonsense-xyz', false],
+    ['nonsense-prop: 1', false],
+    ['color: red', true],
+    ['color: color-mix(in srgb, red, blue)', true],
+    ['width: 1px', true],
+    ['width: 1nonsense', false],
+    ['width: calc(1px + 1em)', true],
+    // Vendor prefixes are a property-table lookup, not a wildcard: Chrome owns
+    // the two -webkit- ones below and none of the -moz- / -ms- / -o- ones.
+    ['-webkit-appearance: none', true],
+    ['-webkit-transform: none', true],
+    ['-webkit-line-clamp: 2', true],
+    ['-webkit-nonsense: 1', false],
+    ['-moz-appearance: none', false],
+    ['-ms-appearance: none', false],
+    ['-o-transform: none', false],
+    ['-moz-user-select: none', false],
+    // A custom property takes any value; what it needs is a name.
+    ['--x: 1', true],
+    ['--x: anything at all', true],
+    ['--:1', false],
+    ['container-type: inline-size', true],
+    ['aspect-ratio: 1/1', true],
+    ['position: sticky', true],
+    ['gap: 1px', true],
+    ['inset: 0', true],
+    ['all: initial', true],
+    ['background: url(x) no-repeat', true],
+    ['font: 12px monospace', true],
+    // `var()` cannot be wrong yet -- substitution has not happened.
+    ['color: var(--x)', true],
+    ['width: var(--x, 1px)', true],
+    ['display: inherit', true],
+    ['display: unset', true],
+    ['display: revert-layer', true],
+    ['width: initial', true],
+    ['color: nonsense-color', false],
+    ['color: #gggggg', false],
+    ['width: px', false],
+    ['width: 1', false],
+    ['width: -1px', false],
+    ['width: 1e1px', true],
+    ['width: 1PX', true],
+    ['z-index: 1.5', false],
+    ['opacity: 50%', true],
+    ['color: rgb(0 0 0 / 50%)', true],
+    ['transform: translate(1px)', true],
+    // Newer properties, here because a stale property table would refuse them
+    // and this test would be the thing that says so.
+    ['field-sizing: content', true],
+    ['anchor-name: --a', true],
+    ['text-wrap: balance', true],
+    ['scrollbar-color: auto', true],
+    ['zoom: 1', true],
+    ['view-transition-name: a', true],
+    ['content-visibility: auto', true],
+    ['overflow-anchor: none', true],
+  ];
+
+  const bad = [];
+  for (const [decl, want] of CASES) {
+    const el = document.createElement('div');
+    // Through the attribute, which is the path a page takes, rather than
+    // setProperty -- the two are not obliged to agree.
+    el.setAttribute('style', decl);
+    const got = el.style.length !== 0;
+    if (got !== want) bad.push(`${decl} :: kept ${got} want ${want}`);
+  }
+  testing.expectEqual('', bad.join('\n'));
+}
+</script>
+
+<script id="inline_declaration_refusal_residuals">
+{
+  // Three rows Chrome refuses and this engine still keeps, recorded so the
+  // gap is a stated limit rather than a silent one. All three need `display`'s
+  // and `transform`'s own grammar -- which value classes the property takes,
+  // how many components it holds, and which functions it names. The generated
+  // tables answer the first two only for longhands some shorthand expands to,
+  // and nothing expands to `display`; there is no table of CSS function names
+  // at all. Same three residuals as css/supports_condition.html, because it is
+  // the same oracle.
+  const residual = [
+    ['display: grid grid', true],
+    ['display: 1px', true],
+    ['transform: nonsense(1px)', true],
+  ];
+  const bad = [];
+  for (const [decl, ours] of residual) {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    const got = el.style.length !== 0;
+    if (got !== ours) bad.push(`${decl} now ${got}, residual said ${ours}`);
+  }
+  testing.expectEqual('', bad.join('\n'));
+}
+</script>
+
+<script id="inline_declaration_refusal_does_not_reach_the_cascade">
+{
+  // A refused declaration leaves nothing behind anywhere: not in the
+  // enumeration, not in `cssText`, and not in the computed value. The last one
+  // is the point -- a declaration this engine kept was also being applied.
+  const el = document.createElement('div');
+  el.setAttribute('style', 'nonsense-prop: 1; letter-spacing: 4px; display: nonsense-xyz');
+  document.body.appendChild(el);
+  const rows = [
+    'length 1',
+    'cssText letter-spacing: 4px;',
+    'nonsense-prop ',
+    'display ',
+    'computed-display block',
+    'computed-letter-spacing 4px',
+  ];
+  const got = [
+    'length ' + el.style.length,
+    'cssText ' + el.style.cssText,
+    'nonsense-prop ' + el.style.getPropertyValue('nonsense-prop'),
+    'display ' + el.style.getPropertyValue('display'),
+    'computed-display ' + getComputedStyle(el).display,
+    'computed-letter-spacing ' + getComputedStyle(el).letterSpacing,
+  ];
+  el.remove();
+  testing.expectEqual(rows.join('\n'), got.join('\n'));
+}
+</script>

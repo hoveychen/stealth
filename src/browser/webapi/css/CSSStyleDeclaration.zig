@@ -44,6 +44,7 @@ const chrome_input_type_values = @import("chrome_input_type_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
 const shorthand = @import("shorthand.zig");
+const supports = @import("supports.zig");
 const font_metrics = @import("../../font_metrics.zig");
 const transform = @import("transform.zig");
 const animation_timing = @import("animation_timing.zig");
@@ -3850,6 +3851,21 @@ fn setPropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, value:
 fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: []const u8, important: bool, frame: *Frame) !bool {
     const normalized = normalizePropertyName(property_name, &frame.buf);
 
+    // Chrome drops a declaration whose property it does not have, and one whose
+    // value does not fit that property. This engine kept both, so
+    // `el.setAttribute('style', 'nonsense-prop: 1'); el.style.length` answered
+    // 1 where every browser answers 0 -- and `display: nonsense-xyz` was worse
+    // than a surface reading, because it reached the cascade and
+    // `getComputedStyle(el).display` answered `nonsense-xyz`.
+    //
+    // Asked through the `@supports` oracle rather than a second table, because
+    // it is measurably the same predicate: over the 56 declarations in
+    // tests/css/declaration_refuses_unknown.html, Chrome's `@supports (p: v)`
+    // verdict and its inline retention agree on 56 of 56.
+    if (supports.declaration(normalized, value) == false) {
+        return false;
+    }
+
     // Chrome does not keep a shorthand: it stores the longhands and rebuilds
     // every read of the shorthand from them. A shorthand whose value does not
     // fit its grammar -- and one the tables do not model -- falls through and
@@ -6929,6 +6945,10 @@ test "normalizePropertyValue: anchor() canonical order" {
 
 test "WebApi: CSSStyleDeclaration surface" {
     try testing.htmlRunner("css/declaration_surface.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration refuses unknown" {
+    try testing.htmlRunner("css/declaration_refuses_unknown.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration computed initial values" {
