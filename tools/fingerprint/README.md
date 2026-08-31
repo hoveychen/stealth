@@ -24370,3 +24370,92 @@ returns "No resource with given identifier" on exactly the arm that matters.
 walks in and this engine does not. What changes is the instrument, not the
 verdict: the row should read *reference ~100%, this engine ~3%, and the ticket
 rate cannot referee a change of ours*.
+
+## A percentage in transform threw the declaration away, and every in-flow box's position is still 5px times a node count (B74, 2026-08-31)
+
+Two things came out of asking `transform-number-format` P6 for its ground truth,
+and the second is larger than the plan that found it.
+
+### translate(-50%, -50%) computed to none
+
+`parseScalar` in `css/transform.zig` refused a `%` outright, and that refusal
+takes the whole declaration -- so nine of nine percentage forms were lost, the
+centering idiom included. Measured on a 100x50 `<p>`, Chrome 151 at dpr 2
+(`scratch/b74/expr-test-shape-percent.js`), against this engine before the fix:
+
+| declaration | Chrome | before |
+|---|---|---|
+| `translateX(50%)` | `matrix(1, 0, 0, 1, 50, 0)` | `none` |
+| `translate(-50%, -50%)` | `matrix(1, 0, 0, 1, -50, -25)` | `none` |
+| `translate(10px, 50%)` | `matrix(1, 0, 0, 1, 10, 25)` | `none` |
+| `translate3d(50%, 25%, 10px)` | `matrix3d(…, 50, 12.5, 10, 1)` | `none` |
+| `scale(50%)` | `matrix(0.5, 0, 0, 0.5, 0, 0)` | `none` |
+| `translateZ(50%)` | `none` | `none` |
+
+The last row is the control that makes the rest a reading rather than a guess:
+`translateZ`, `rotate`, `skewX` and `perspective` have no percentage in their
+grammar and answer `none` on both engines, so this was not a blanket refusal of
+percentages -- it was the absence of the ones that are allowed.
+
+**The basis is the border box, attributed one property at a time.** On the same
+100x50 `<p>`, `translate(50%, 50%)` is 50,25; `padding:10px` moves it to 60,35;
+`border:5px` to 55,30; both to 65,40; and `box-sizing:border-box` puts it back at
+50,25. `transform-origin` has been measuring that same box through
+`resolvedOrigin` for a while, so `transformBasis` reads it the same way.
+
+Two boundaries came with it. A **non-replaced inline** element has a box but no
+reference box: Chrome answers `matrix(1, 0, 0, 1, 0, 0)` for `translate(50%, 50%)`
+on a `display:inline` `<p>` whose inline box measures 8x19 -- not 4,9.5 -- while
+an `<img>` at the same display *is* transformable and uses its 400x50. And an
+element with **no box at all** reports `none` for ANY transform in Chrome,
+percentage or not: `display:none` with `translateX(50px)` answered a matrix here,
+which was a second defect the display:none row forced out. 27 of 27 readings now
+match, against 5 of 27 before -- the five that already agreed being the four
+grammar refusals and the display:none row.
+
+### The larger thing: no in-flow box has ever had a position
+
+`out-of-flow-position` fixed absolute and fixed boxes in August and deferred the
+rest with a reason: static and relative positions need block stacking, "and the
+height half is not done -- without correct heights you cannot stack a correct y".
+That premise has since expired. `block-height-from-content`,
+`content-height-child-box`, `sibling-margin-collapse`,
+`escaped-margin-reaches-its-stop` and `root-container-content-height` all landed.
+
+Measured across fifteen shapes, 27 rows, each child reported as its offset from
+its container's border box so the number is independent of the page the probe
+runs on (`scratch/b74/expr-inflow-position-matrix.js`):
+
+- **Every box size matches Chrome** -- the collapsed-margin container at 400x70,
+  the auto-height line at 18.5, the container after a float at 400x20, the
+  inline-block row at 400x34, text-then-block at 400x48.5.
+- **26 of 27 positions do not.** The one that does is the absolute row.
+
+Ours are always `5k, 5k`: `calculateDocumentPosition` and
+`calculateSiblingPosition` in `Element.zig` have **byte-identical bodies**, both
+returning five pixels times a node count, so **every element's x equals its y**.
+One expression sees that.
+
+So the inputs are all correct and only the stacking step is missing. What decides
+whether it can be built is cost, and that was measured before any of it:
+
+| station | `getBoundingClientRect` calls | ms inside them | geometry reads | mutations | **layout passes a cache would need** |
+|---|---|---|---|---|---|
+| homedepot | 238 | 6057 | 1 664 | 2 670 | **59** |
+| macys | 7 199 | 4131 | 49 055 | 39 398 | **53** |
+| sony | 254 | 4276 | 281 | 2 017 | **15** |
+
+Two readings, both from `scratch/b74/count-position-reads.mjs` and
+`count-read-clusters.mjs` on a pinned ReleaseFast build. The left half is the
+budget: with positions **not** computed, `getBoundingClientRect` alone already
+costs four to six seconds against a 30s CDP timeout. The right half is the
+architecture: a cached single pass has to recompute only on the first read after
+a mutation, and that is 53 passes for macys' 49 055 reads -- a 925x reduction.
+Summing preceding siblings per read, which is what the obvious implementation
+does, multiplies the four-to-six seconds instead.
+
+That is enough to choose the architecture and not enough to commit to it: the
+per-pass cost cannot be extrapolated from an engine that re-walks a subtree per
+read, so `layout-pass-cost-prototype` writes a pass that nothing reads from and
+times it first. `standards-root-box-height` is the precedent for why that order
+matters -- 18 of 19 rows correct and dead on cost.
