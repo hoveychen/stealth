@@ -22930,3 +22930,94 @@ difference remains: Chrome's `presentationTime` sits about 23ms past its
 `loadEventEnd` and `domComplete` coincide when nothing presents. Inventing a
 delay would be inventing a constant; the paint pair in this engine already
 reports `presentationTime === startTime` for the same reason.
+
+## The keyframes were in the document, just not in the cascade (B70, 2026-08-30)
+
+`transform` was the last of the 475 enumerated computed properties to disagree
+with Chrome outside the column-rule family. Chrome reports an interpolated
+matrix for an animated element; this engine reported `none` — for everything,
+including the shapes that have no clock in them at all.
+
+### Why nothing could have resolved it
+
+`StyleManager.parseSheet` skipped `@keyframes` outright, and the comment saying
+so was right about the reason: a keyframes rule declares nothing on any element,
+so it takes no part in the cascade. The consequence was the part nobody had
+followed through. `animation-name` resolves to a rule *by name*, and with no
+index there was no name resolution anywhere on the computed-style path — the
+rules existed only as CSSOM objects, reachable from `document.styleSheets` and
+from nowhere else.
+
+The index now lives beside the cascade rather than inside it, rebuilt with the
+rules and fed from all three places a rule arrives: a materialised CSSOM sheet
+(off `rule._text`, the way `@media` already was), a `<style>` element's text,
+and nested inside `@media` or `@layer`. Going through `document.styleSheets`
+from the computed path was the alternative and was not taken: that read
+materialises the CSSOM, which is a side effect a style read should not have.
+
+### The clock is held, not read
+
+The first working version read `performance.now()` per property. That is wrong
+in a way worth writing down, because it is a tell the old `none` did not have:
+
+| | Chrome 151 | live clock | held clock |
+|---|---|---|---|
+| read `transform`, burn 250ms, read again | same matrix | **two matrices** | same matrix |
+| 10s linear rotation, degrees turned over that burn | 0 | **5.3** | 0 |
+
+A browser sets the document timeline once per rendering frame, and every style
+resolution inside that frame sees the same instant. An animation that advances
+between two reads of one synchronous script is something no browser does. The
+timeline is now sampled once and held on the `Frame`, released where this
+engine's `requestAnimationFrame` callbacks run — the timer dispatch, which is
+the closest thing it has to a frame boundary.
+
+### Interpolation is per function, not per matrix
+
+`rotate(0deg)` to `rotate(90deg)` halfway is `rotate(45deg)`, not the average of
+the two matrices, so the scalars have to survive the parse — `parseFunction`
+split into `parseArgs` plus `matrixFor`, and a `ListIterator` both readers
+share. A `none` on one side is not a shape mismatch: it stands for the other
+side's functions holding their neutral values, which is what makes the common
+one-ended `@keyframes spin { 100% { transform: rotate(360deg) } }` interpolate
+from zero instead of refusing. Lists of genuinely different shapes — including
+`scale(2)` against `scale(2, 3)`, the same transform written two ways — fall to
+matrix decomposition in Chrome and are refused here, reporting the interval's
+start, which is a value the animation really passes through.
+
+### Twenty-six shapes, all byte-identical
+
+Nine static phases (`scratch/b69/expr-anim-static.js`), thirteen more for the
+webkit spellings, `@keyframes` inside `@media`, duplicate names and the
+fill/direction corners (`scratch/b70/expr-anim-extra.js`), and four for the
+animation declared in a stylesheet rule rather than a style attribute
+(`scratch/b70/expr-anim-sheet.js`). Every one identical between headed Chrome
+151 and this engine.
+
+One of the thirteen contradicted the guess it was written to confirm.
+`animation: 0s linear 0s 2 alternate forwards` on a 0→100px translate reads
+`matrix(1, 0, 0, 1, 0, 0)`, not `100`: a forwards fill shows the end of the
+*last iteration*, and under `alternate` iteration 1 runs backwards, so an even
+count finishes where the animation started. The implementation already did
+this; the expectation written beside it did not.
+
+The one remaining difference on the 475-name sweep is `transform` itself, and it
+cannot be closed: both arms answer a pure rotation matrix with no translation,
+sampled at two different instants.
+
+### It did not open anything, and it did not close anything either
+
+cf-scrapingcourse, three runs on the merged ReleaseFast binary: `served=false`
+3/3, `r3` still 88–90KB. Consistent with the earlier finding that this station
+does not judge collected values.
+
+The full sweep read **19/29** against 22/29 on the two before it, and all three
+of the missing stations were DataDome — `dd-datadome`, `dd-leboncoin`,
+`dd-hermes`. That is exactly the shape a change-caused regression would have,
+and it is not one. Alternating the pre-merge binary (`126dbb122`) against the
+merged one (`1d80f94be`) station by station inside one sitting — three rounds,
+eighteen runs, alternating arm by arm — **every single run is refused, on both
+arms, on all three stations** (`scratch/b70/ab-dd.sh`, log in
+`scratch/b70/ab/`). The window closed; the binary did not change. A block of
+runs from one arm followed by a block from the other would have said the
+opposite, which is the whole reason the arms alternate.
