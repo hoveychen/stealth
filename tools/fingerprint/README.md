@@ -24062,3 +24062,22 @@ experiment also hit two calls in `inlineInk` that were never part of it — and
 the comment above one of them records sixty nested `<span>`s taking the engine
 out with a SIGBUS mid-sweep. They were restored and the suite re-run. A bisect
 that edits by pattern has to check what else matches the pattern.
+
+### The sweep reading for the content-height term (B72)
+
+20/29 against the 22/29 this session's earlier arm read, both ReleaseFast, hours
+apart on the same address. Two stations differed and both are DataDome —
+`dd-datadome` and `dd-hermes`, `pass` → `datadome-challenge`. Alternated at each,
+two rounds each arm, `--only`:
+
+| station | previous binary | with the term |
+|---|---|---|
+| dd-datadome | 0/2 pass | 0/2 pass |
+| dd-hermes | 0/2 pass | 0/2 pass |
+
+**8 of 8 challenged, on both arms.** The window is shut for both binaries; the
+delta is not the change. That is the third time tonight the same three DataDome
+stations have moved on their own — see the two tables above it.
+
+`cf-scrapingcourse` is still `cf-challenge` and `x-hyatt` still `refused-429`.
+Both closed doors are exactly where they were.
