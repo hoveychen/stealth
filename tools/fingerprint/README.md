@@ -23235,3 +23235,85 @@ is a different KIND of finding from everything the last twenty chapters have
 been grinding on, all of which asked whether a number matched.
 
 Filed as `doc-open-into-blank-iframe`, ordered so the hang is closed first.
+
+## scrollWidth counted a stack as a row (B96, 2026-08-30)
+
+`Element.contentWidth` laid every visible in-flow child end to end and added
+their widths up, whatever the layout mode. Three 400px block children in a 400px
+box therefore answered `scrollWidth: 1200` where Chrome answers 400, and so did
+every other arrangement that stacks.
+
+Two things had to be checked before touching it, because the summing had a
+stated reason. The first was whether the layout mode could be seen at all: the
+comment said no, and it was written before `CSSStyleDeclaration.resolvedDisplay`
+existed. It can now.
+
+The second was the reason itself — a page that appends children until
+`scrollWidth` passes a threshold, the infinite-marquee idiom, never terminating
+if the metric ignores what was just inserted. That one was measured rather than
+reasoned about (`probes/expr-b96-scroll-width.js`, Chrome 151 at the persona's
+dpr=2, on a real https page with `box-sizing` pinned per box so the page's own
+Tailwind reset could not answer for it):
+
+* with **block** children Chrome's loop does not terminate either — fifty
+  appends of a 100px div into a 200px box and `scrollWidth` is still 200. The
+  summing was defending a shape no page can be written in.
+* with the **inline-block strip under `white-space: nowrap`** a marquee actually
+  uses, Chrome sums: three appends and `scrollWidth` is 300. That is the case to
+  keep, and both engines already agreed on it.
+
+### What names a row
+
+| arrangement (200px parent, three 400px children) | Chrome | before | after |
+|---|---|---|---|
+| three block children | 400 | 1200 | 400 |
+| ...in a padded box | 410 | 1210 | 410 |
+| `white-space: nowrap` + inline-blocks | 1200 | 1200 | 1200 |
+| `white-space: pre` + inline-blocks | 1200 | 1200 | 1200 |
+| the other four white-space values | 400 | 1200 | 400 |
+| `nowrap` + BLOCK children | 400 | 1200 | 400 |
+| `nowrap` + one block among inline-blocks | 400 | 1200 | 400 |
+| `display: flex` | 1200 | 1200 | 1200 |
+| `flex-wrap: wrap` | 400 | 1200 | 400 |
+| `flex-direction: column` | 400 | 1200 | 400 |
+| `flex-direction: row-reverse` | **200** | 1200 | 200 |
+| `display: grid` | 400 | 1200 | 400 |
+| `grid-auto-flow: column` (and `column dense`) | 1200 | 1200 | 1200 |
+| three floats too wide to share a line | 400 | 1200 | 400 |
+| three narrow floats that do share one | 200 | 200 | 200 |
+
+`row-reverse` is the row that contributes nothing: its items overflow off the
+LEFT edge, where `scrollWidth` cannot reach.
+
+Two of the branches are asked rather than re-derived. `wrapsText` already
+answers "does a line too long for its box break", and it has to be the one
+asked: `white-space` is a *shorthand*, so a cascade read under that name finds
+nothing at all — the first version of this read it directly, got `null` for every
+element, and stacked the marquee strip that should have summed.
+
+### The case that a green filter would have missed
+
+The first version also stacked a wrapping block container outright, and the full
+suite caught it as a 30-second watchdog stall in
+`src/browser/tests/element/position.html` — a test whose loop doubles its markup
+until `scrollWidth` passes twice the track. Chrome terminates that loop on the
+seventh doubling (7280 there, 7168 here, asserted step for step), because the
+lane's content is `<span>item</span>` repeated with no whitespace between the
+spans: one unbreakable run, which overflows rather than wrapping.
+
+So where a line may break is the distinction, not inline-level versus block:
+adjacent `inline-block` children are each a break opportunity and wrap, adjacent
+inline BOXES with nothing between them are one run and overflow. `.inline_row`
+(under `nowrap`) asks for inline-level children; `.unbreakable_run` (a wrapping
+block container) asks for inline boxes.
+
+Reading the whole probe back afterwards, **30 of the 32 rows are byte-identical
+to Chrome**, up from 14. The two that are not are named rather than folded in:
+
+* `absolute3` — three absolutely positioned children at `left: 0/400/800` answer
+  1200 in Chrome and 200 here. `Extent.counts` excludes `.positioned` from both
+  extents deliberately, and changing it moves `scrollHeight` too.
+* `bodyScrollWidth` — 1920 in Chrome, 1904 here. `<body>` takes its own exit
+  above this code.
+
+1583/1583.

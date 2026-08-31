@@ -3898,22 +3898,34 @@ pub fn getScrollWidth(self: *Element, frame: *Frame) f64 {
     return @round(@max(dims.width, self.contentWidth(frame, &visibility_cache, .scrollable)) + dims.padding_x);
 }
 
-// The width of the direct child elements laid end to end on a single row.
+// How far the direct child elements reach past this element's left content
+// edge: the sum of their widths when they share a row, and the widest of them
+// when they stack.
 //
-// The dummy layout engine has no line-breaking, and an element only overflows
-// horizontally when its children don't wrap (white-space:nowrap, a flex row, an
-// inline-block strip), so the single-row assumption covers the case that
-// matters. We can't detect the layout mode to do better: getStyle() sees only
-// the inline `style=` attribute, and the computed cascade resolves stylesheet
-// rules for `display:none` and `visibility` alone.
+// It used to be the sum unconditionally, on the grounds that the layout mode
+// could not be seen from here -- getStyle() saw only the inline `style=`
+// attribute. `CSSStyleDeclaration.childArrangement` can see it now, and the
+// difference was not small: three 400px block children in a 400px box answered
+// 1200 where Chrome answers 400, and every stacking arrangement was wrong the
+// same way (a flex column, a wrapping flex row, a grid in rows, floats too wide
+// to share a line, inline-blocks with nothing holding the line together).
+//
+// The sum was also kept for a second reason, and that one was measured before
+// it was dropped: a page that appends children until `scrollWidth` passes a
+// threshold -- the infinite-marquee idiom -- never terminates if the metric
+// ignores what was just inserted. Measured on Chrome 151
+// (tools/fingerprint/probes/expr-b96-scroll-width.js), Chrome's loop does not
+// terminate either when the children are blocks: fifty 100px divs appended into
+// a 200px box and `scrollWidth` is still 200. No page is written that way. The
+// shape a marquee actually uses -- a `white-space: nowrap` strip of
+// inline-blocks -- is a row here as it is there, and both engines take three
+// cells to pass 200px.
 //
 // Only direct children are measured, never the whole subtree. This runs on
 // every scrollWidth read, and recursing would make an element's cost O(subtree)
-// rather than O(fan-out).
-//
-// Growing with the child count is the point: JS that appends content until
-// `scrollWidth` passes a threshold (the infinite-marquee idiom) never
-// terminates when the metric ignores what it just inserted.
+// rather than O(fan-out). The extra per-child cascade read the row question
+// needs is only paid under `.inline_row`, which is the only arrangement whose
+// answer depends on the children's own displays.
 //
 // Text children are not measured, matching contentHeight. Estimating a text run
 // from its length would need a per-character advance, which in turn has to track
@@ -3922,7 +3934,17 @@ pub fn getScrollWidth(self: *Element, frame: *Frame) f64 {
 // few words already exceed the default box. Element children are what content
 // grown by script actually consists of.
 fn contentWidth(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent) f64 {
+    const arrangement = CSSStyleDeclaration.childArrangement(self, frame);
+    if (arrangement == .reversed_row) {
+        return 0;
+    }
+
     var total: f64 = 0;
+    var widest: f64 = 0;
+    // Whether the children are still the kind this arrangement puts on one
+    // line. Only the two arrangements that ask pay for the answer, and only
+    // until the first child that says no.
+    var share_a_line = true;
 
     // The cache arrives seeded by the caller's own visibility walk, and
     // siblings share that ancestor chain, so the loop costs one own-element
@@ -3932,11 +3954,25 @@ fn contentWidth(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
         if (node.is(Element)) |el| {
             if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
             if (!extent.counts(CSSStyleDeclaration.flowKind(el, frame))) continue;
-            total += el.getElementDimensions(frame).width;
+            const width = el.getElementDimensions(frame).width;
+            total += width;
+            widest = @max(widest, width);
+            if (share_a_line) {
+                share_a_line = switch (arrangement) {
+                    .inline_row => CSSStyleDeclaration.isInlineLevel(el, frame),
+                    .unbreakable_run => CSSStyleDeclaration.isInlineBox(el, frame),
+                    else => true,
+                };
+            }
         }
     }
 
-    return total;
+    return switch (arrangement) {
+        .row => total,
+        .inline_row, .unbreakable_run => if (share_a_line) total else widest,
+        .stacked => widest,
+        .reversed_row => unreachable,
+    };
 }
 
 pub fn getOffsetHeight(self: *Element, frame: *Frame) f64 {

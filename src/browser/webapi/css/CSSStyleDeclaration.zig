@@ -2491,6 +2491,113 @@ pub fn flowKind(element: *Element, frame: *Frame) FlowKind {
     return .in_flow;
 }
 
+/// Where an element's children go relative to one another, for the one
+/// question that needs it: how much a box's children can put to the right of
+/// its own edge.
+///
+/// Measured on Chrome 151 at the persona's dpr=2, on a real page with
+/// `box-sizing` pinned per box
+/// (tools/fingerprint/probes/expr-b96-scroll-width.js), reading `scrollWidth`
+/// off a 200px parent holding three 400px children:
+///
+///   | display / declaration              | scrollWidth |
+///   |------------------------------------|-------------|
+///   | `flex`                             |        1200 |
+///   | `flex` + `flex-wrap: wrap`         |         400 |
+///   | `flex` + `flex-direction: column`  |         400 |
+///   | `flex` + `row-reverse`             |     **200** |
+///   | `grid`                             |         400 |
+///   | `grid` + `grid-auto-flow: column`  |        1200 |
+///   | block + `white-space: nowrap`/`pre`|        1200 |
+///   | block + the other four white-spaces|         400 |
+///   | block, inline children that wrap   |         400 |
+///
+/// `row-reverse` is the reason `.reversed_row` exists rather than folding into
+/// `.stacked`: its items overflow off the LEFT edge, where `scrollWidth` cannot
+/// reach, so the children contribute nothing at all and the box answers its own
+/// width. `direction: rtl` presumably does the same and is not measured here.
+pub const ChildArrangement = enum {
+    /// One row that cannot wrap: what the children put to the right is the sum
+    /// of their widths.
+    row,
+    /// A row for as long as every child is inline-level. One block-level child
+    /// breaks the line and the whole box stacks -- measured: an inline-block,
+    /// a block and an inline-block under `nowrap` answer 400, not 1200.
+    inline_row,
+    /// A wrapping block container, where only a run of inline BOXES adds up.
+    ///
+    /// The distinction is where a line may break. Adjacent `inline-block`
+    /// children are each a break opportunity, so they wrap and the box answers
+    /// its own width (measured: 400, not 1200). Adjacent inline boxes with no
+    /// whitespace between them are one unbreakable run, so they overflow and
+    /// the box answers the sum -- which is the marquee idiom real pages use,
+    /// asserted step for step against Chrome in
+    /// src/browser/tests/element/position.html (`<span>item</span>` doubled
+    /// seven times, Chrome 7280 and this engine 7168).
+    ///
+    /// This engine has no line breaking, so the run is assumed unbroken. That
+    /// is the old bargain and it is only ever wrong the way it was already
+    /// wrong: inline children separated by whitespace would wrap in Chrome.
+    unbreakable_run,
+    /// Stacked, so the widest child is the extent rather than the total.
+    stacked,
+    /// A row running the other way: the overflow is to the left, and nothing
+    /// the children do reaches `scrollWidth`.
+    reversed_row,
+};
+
+pub fn childArrangement(element: *Element, frame: *Frame) ChildArrangement {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const display = resolvedDisplay(element, frame);
+
+    if (std.mem.eql(u8, display, "flex") or std.mem.eql(u8, display, "inline-flex")) {
+        if (cascadedKeyword(style_manager, element, "flex-wrap")) |wrap| {
+            // Anything but `nowrap` -- `wrap` and `wrap-reverse` -- puts the
+            // items on more than one line, and then the widest one is as far
+            // right as any of them reaches.
+            if (!std.ascii.eqlIgnoreCase(wrap, "nowrap")) return .stacked;
+        }
+        const direction = cascadedKeyword(style_manager, element, "flex-direction") orelse return .row;
+        if (std.ascii.eqlIgnoreCase(direction, "row-reverse")) return .reversed_row;
+        if (std.ascii.startsWithIgnoreCase(direction, "column")) return .stacked;
+        return .row;
+    }
+
+    if (std.mem.eql(u8, display, "grid") or std.mem.eql(u8, display, "inline-grid")) {
+        // A grid fills rows unless told to fill columns; `dense` is a packing
+        // hint that can accompany either.
+        const flow = cascadedKeyword(style_manager, element, "grid-auto-flow") orelse return .stacked;
+        return if (std.ascii.indexOfIgnoreCase(flow, "column") != null) .row else .stacked;
+    }
+
+    // A block container. Its children share a line only while they are
+    // inline-level, and only while nothing wraps them onto the next one.
+    //
+    // `wrapsText` is that second question and it is asked, not re-derived:
+    // `white-space` is a shorthand, so a cascade read under that name finds
+    // nothing at all -- what the declaration leaves behind is
+    // `text-wrap-mode`, which is what `wrapsText` reads. The four white-space
+    // values that wrap and the two that do not fall out of it exactly, and
+    // they were measured on Chrome anyway
+    // (tools/fingerprint/probes/expr-b96-scroll-width.js: `nowrap` and `pre`
+    // answer 1200, `normal`, `pre-wrap`, `pre-line` and `break-spaces` answer
+    // 400).
+    if (wrapsText(element, frame)) return .unbreakable_run;
+    return .inline_row;
+}
+
+/// Whether this element's box sits on a line with its siblings rather than
+/// starting one of its own. `resolvedDisplay` has already blockified the
+/// displays that stop being inline-level -- a float, an `absolute` -- so this
+/// is the list and nothing else.
+pub fn isInlineLevel(element: *Element, frame: *Frame) bool {
+    const display = resolvedDisplay(element, frame);
+    inline for (.{ "inline", "inline-block", "inline-flex", "inline-grid", "inline-table" }) |name| {
+        if (std.mem.eql(u8, display, name)) return true;
+    }
+    return false;
+}
+
 /// Whether this element's box takes its width from its containing block rather
 /// than from its own content.
 ///
