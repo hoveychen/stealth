@@ -109,16 +109,43 @@ the property does not resolve is printed as the folded calc().
 
 <script id=calc_holding_an_unresolved_percentage_prints_the_calc>
 {
-  // `border-radius`'s percentage is its own computed value -- it is a share of
+  // A corner radius's percentage is its own computed value -- it is a share of
   // the box, and the box is not known until layout -- so Chrome cannot reduce
   // this to a length and prints the folded calc() instead. Which is the reason
   // the fold has to happen even for a value that never becomes a number: the
-  // computed value IS the folded text, terms sorted and all.
-  const host = document.createElement('div');
-  document.body.appendChild(host);
-  host.innerHTML = '<div style="width:400px;font-size:20px"><p style="border-radius:calc(10px + 5%)">x</p></div>';
-  const got = String(getComputedStyle(host.firstChild.firstChild).borderRadius);
-  host.remove();
-  testing.expectEqual('calc(5% + 10px)', got);
+  // computed value IS the folded text, terms sorted and all. Same for `top`,
+  // whose percentage is reported as written whether the element is rendered or
+  // not.
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;font-size:20px"><p style="' + decl + '">x</p></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+  const CASES = [
+    ['calc(5% + 10px)', 'border-top-left-radius:calc(10px + 5%)', 'borderTopLeftRadius'],
+    ['calc(5% + 10px)', 'top:calc(10px + 5%)', 'top'],
+    ['calc(5% + 10px)', 'left:calc(5% + 10px)', 'left'],
+    // The pin. Written through the *shorthand* the same value reads back as
+    // the initial 0px, and not because of anything above: the shorthand
+    // expander declines a value it cannot classify, so `border-radius:
+    // calc(...)` is stored whole under the shorthand's own name, where there is
+    // no percentage rule -- while `border-radius: 5%` expands into the four
+    // corners and comes back right. The blindness is `shorthand.judgeable`,
+    // which refuses any value calling a function it has no class for, and a
+    // calc()'s class depends on what is inside it. It is the same blindness
+    // that keeps `background-position: calc(...)` from gaining its second axis
+    // (see calc_canonical.html), it is shared by every shorthand, and it is
+    // its own piece of work.
+    ['0px', 'border-radius:calc(10px + 5%)', 'borderTopLeftRadius'],
+  ];
+  const wrong = [];
+  for (const [want, decl, prop] of CASES) {
+    const got = probe(decl, prop);
+    if (got !== want) wrong.push(decl + ' -> ' + prop + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
 }
 </script>

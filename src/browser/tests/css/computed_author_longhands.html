@@ -148,14 +148,12 @@ which is at least a px number and not the author's text.
   // Half of the containing block, which here is the undeclared div filling the
   // 1904px body. margin_percentage.html carries the rest of these.
   testing.expectEqual('952px', probe('margin-left:50%', 'marginLeft'));
-  // `width` has its own branch below the cascade -- the synthetic layout
-  // metrics -- so an unresolvable width lands there rather than on the initial
-  // value, and what that branch answers for a block in normal flow is its
-  // containing block's width. Chrome evaluates the calc() and says 15px; this
-  // engine has no evaluator, so what it reports is the width the box would
-  // have had with no declaration at all. Either way it is a px number and not
-  // the author's calc(), which is what this assertion is here for.
-  testing.expectEqual('1904px', probe('width:calc(10px + 5px)', 'width'));
+  // A calc() resolves now, so this is Chrome's own 15px rather than the width
+  // the box would have had with no declaration at all. The assertion used to
+  // read `1904px` and its comment said why: there was no evaluator, so an
+  // unresolvable width fell through to the synthetic layout metrics. See
+  // tests/css/calc_computed.html.
+  testing.expectEqual('15px', probe('width:calc(10px + 5px)', 'width'));
 
   // The guard is about the shape of the value, not the property: an absolute
   // length in the same declaration still comes through.
