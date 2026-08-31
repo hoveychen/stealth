@@ -173,6 +173,62 @@
 }
 </script>
 
+<script id="supports_at_rule_inside_a_style_rule">
+{
+  // The third nesting shape, and the one a compiled Tailwind sheet is full of:
+  // a conditional group rule *inside* a style rule. Declarations written
+  // directly in its block belong to the enclosing selector, which is why the
+  // block is handed back to the same code that reads a declaration block.
+  //
+  // Measured on Chrome 151 with scratch/b97/expr-b97-nested-at-rules.js. The
+  // four `normal` rows are cases neither engine applies -- `@container` with
+  // no container-type ancestor, `@starting-style` outside a transition, an
+  // unknown at-rule, and a query that does not match -- and they are here so a
+  // change that starts applying one of them fails.
+  const D = 'letter-spacing: 3px';
+  const CASES = [
+    ['mediaInRule', `.atc { @media (min-width: 1px) { ${D} } }`, 'probe', '3px'],
+    ['mediaInRuleMiss', `.atc { @media (min-width: 9999px) { ${D} } }`, 'probe', 'normal'],
+    ['supportsInRule', `.atc { @supports (display: grid) { ${D} } }`, 'probe', '3px'],
+    ['supportsInRuleMiss', `.atc { @supports (nonsense-prop: 1) { ${D} } }`, 'probe', 'normal'],
+    ['layerInRule', `.atc { @layer inner { ${D} } }`, 'probe', '3px'],
+    ['mediaInRuleAmp', `.atc { @media (min-width: 1px) { & { ${D} } } }`, 'probe', '3px'],
+    ['mediaInRuleChild', `.atc { @media (min-width: 1px) { .kid { ${D} } } }`, 'kid', '3px'],
+    ['containerInRule', `.atc { @container (min-width: 1px) { ${D} } }`, 'probe', 'normal'],
+    ['startingStyleInRule', `.atc { @starting-style { ${D} } }`, 'probe', 'normal'],
+    ['unknownAtInRule', `.atc { @totally-unknown { ${D} } }`, 'probe', 'normal'],
+    // A declaration beside the at-rule has to survive it, and lose to it when
+    // the condition holds because the at-rule's copy comes later.
+    ['siblingDecl', `.atc { letter-spacing: 1px; @media (min-width: 1px) { ${D} } }`, 'probe', '3px'],
+    ['siblingDeclMiss', `.atc { letter-spacing: 1px; @media (min-width: 9999px) { ${D} } }`, 'probe', '1px'],
+    ['nestedThenMedia', `.atc { & { @media (min-width: 1px) { ${D} } } }`, 'probe', '3px'],
+  ];
+
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;top:0;left:0;width:400px');
+  document.body.appendChild(host);
+  const probe = document.createElement('div');
+  probe.className = 'atc';
+  host.appendChild(probe);
+  const kid = document.createElement('div');
+  kid.className = 'kid';
+  probe.appendChild(kid);
+  const targets = { probe: probe, kid: kid };
+
+  const bad = [];
+  for (const [label, css, target, want] of CASES) {
+    const sheet = document.createElement('style');
+    sheet.textContent = css;
+    document.head.appendChild(sheet);
+    const got = getComputedStyle(targets[target]).letterSpacing;
+    sheet.remove();
+    if (got !== want) bad.push(`${label} got ${got} want ${want}`);
+  }
+  host.remove();
+  testing.expectEqual('', bad.join('\n'));
+}
+</script>
+
 <script id="supports_condition_grammar_both_doors">
 {
   // [condition, does the at-rule apply its block, what CSS.supports() answers]

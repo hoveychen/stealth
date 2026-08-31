@@ -806,11 +806,11 @@ fn indexRule(self: *StyleManager, build_arena: Allocator, props: RuleProperties,
 /// After the parent, not before: nested rules come later in document order, and
 /// document order is the cascade's last tie-break.
 ///
-/// At-rules inside a style rule (`.a { @media … { … } }`) are not handled here.
-/// The nesting this closes is the one that was measured missing -- `.a { & { …
-/// } }` -- and a conditional group rule inside a style rule needs the condition
-/// and the `&` resolution to compose, which is a second feature rather than a
-/// line in this one.
+/// A conditional group rule nested inside a style rule (`.a { @media … { … } }`)
+/// goes through `addNestedAtRule` rather than `applyMediaAtRule`, because the
+/// two put the inner block somewhere different: at the top level it holds
+/// rules, and inside a style rule it holds *declarations belonging to the
+/// enclosing selector* -- plus, optionally, further nested rules.
 // Explicit rather than inferred because this and `addRawRuleAtDepth` call each
 // other, and two inferred error sets in a cycle is a compile error.
 fn addNestedRules(self: *StyleManager, build_arena: Allocator, parent_selector: []const u8, block_text: []const u8, layer: u16, depth: u8) Allocator.Error!void {
@@ -821,13 +821,56 @@ fn addNestedRules(self: *StyleManager, build_arena: Allocator, parent_selector: 
 
     var it = CssParser.parseNestedRules(block_text);
     while (it.next()) |nested| {
-        const rule = switch (nested) {
-            .style => |s| s,
-            .at_rule => continue,
-        };
-        const resolved = nestedSelectorText(self.arena.allocator(), parent_selector, rule.selector) catch continue;
-        if (resolved.len == 0) continue;
-        try self.addRawRuleAtDepth(build_arena, resolved, rule.block, layer, depth + 1);
+        switch (nested) {
+            .style => |rule| {
+                const resolved = nestedSelectorText(self.arena.allocator(), parent_selector, rule.selector) catch continue;
+                if (resolved.len == 0) continue;
+                try self.addRawRuleAtDepth(build_arena, resolved, rule.block, layer, depth + 1);
+            },
+            .at_rule => |a| try self.addNestedAtRule(build_arena, parent_selector, a, layer, depth),
+        }
+    }
+}
+
+/// One at-rule nested inside a style rule. Handing its block back to
+/// `addRawRuleAtDepth` under the parent's selector is the whole trick: that is
+/// what "these declarations belong to the enclosing selector" means, and it
+/// carries `&` resolution and deeper nesting along with it.
+///
+/// Measured missing on Chrome 151, all seven rows of it
+/// (scratch/b97/expr-b97-nested-at-rules.js): every declaration under a nested
+/// `@media` / `@supports` / `@layer` was being dropped.
+///
+/// The at-rules absent from this dispatch are absent because Chrome applies
+/// nothing for them either: `@container` finds no container-type ancestor,
+/// `@starting-style` is not in a transition, and an unknown at-rule is dropped.
+/// All three were measured as already matching, which is why adding them would
+/// be a guess rather than a fix.
+fn addNestedAtRule(self: *StyleManager, build_arena: Allocator, parent_selector: []const u8, at_rule: CssParser.AtRule, layer: u16, depth: u8) Allocator.Error!void {
+    if (std.ascii.eqlIgnoreCase(at_rule.keyword, "media")) {
+        const block = atRuleBlock(at_rule.text, "@media") orelse return;
+        const query = std.mem.trim(u8, block.prelude, &std.ascii.whitespace);
+        if (MediaQuery.matches(query, self.frame.viewport()) == false) return;
+        return self.addRawRuleAtDepth(build_arena, parent_selector, block.body, layer, depth + 1);
+    }
+
+    if (std.ascii.eqlIgnoreCase(at_rule.keyword, "supports")) {
+        const block = atRuleBlock(at_rule.text, "@supports") orelse return;
+        if (supports_condition.matches(build_arena, block.prelude) == false) return;
+        return self.addRawRuleAtDepth(build_arena, parent_selector, block.body, layer, depth + 1);
+    }
+
+    if (std.ascii.eqlIgnoreCase(at_rule.keyword, "layer")) {
+        // Block form only. A statement form here (`.a { @layer x; }`) declares
+        // an ordering and has nothing nested under it to place.
+        const block = atRuleBlock(at_rule.text, "@layer") orelse return;
+        const prelude = std.mem.trim(u8, block.prelude, &std.ascii.whitespace);
+        if (prelude.len != 0 and isValidLayerName(prelude) == false) return;
+        const id = if (prelude.len == 0)
+            try self.internAnonymousLayer(build_arena, layer)
+        else
+            try self.registerLayerPath(build_arena, layer, prelude);
+        return self.addRawRuleAtDepth(build_arena, parent_selector, block.body, id, depth + 1);
     }
 }
 
