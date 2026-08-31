@@ -194,6 +194,69 @@
 }
 </script>
 
+<script id="calc_keeps_the_numeric_constants">
+{
+  // CSS math has a closed set of bare identifiers that are numbers, and every
+  // other identifier is a reason to drop the declaration. Refusing all of them
+  // is what this block exists to stop: the first version of the calc refusal
+  // did exactly that and took `calc(1px * infinity)` with it.
+  //
+  // Measured over seventeen rows (scratch/b98/expr-b98-calc-idents.js). `e` and
+  // `pi` are real numbers and fold into the term; `infinity` and `NaN` keep the
+  // author's text here, because printing them the way Chrome does
+  // (`calc(infinity * 1px)`) is a serialisation rule of its own and not this
+  // one. Both spellings are case-insensitive and Chrome re-cases them, which is
+  // why the kept text is asserted rather than just the length.
+  const kept = [
+    ['width: calc(1px * e)', 'calc(2.71828px)'],
+    ['width: calc(e * 1px)', 'calc(2.71828px)'],
+    ['width: calc(1px * pi)', 'calc(3.14159px)'],
+    ['width: calc(pi * 1px)', 'calc(3.14159px)'],
+    ['width: calc(2 * pi * 1px)', 'calc(6.28319px)'],
+  ];
+  // Kept, but not folded: asserted as "the declaration survives" so the block
+  // does not pin a serialisation this plan is not doing.
+  const survives = [
+    'width: calc(1px * infinity)',
+    'width: calc(1px * -infinity)',
+    'width: calc(1px * NaN)',
+    'width: calc(1px * nan)',
+    'width: calc(1px * INFINITY)',
+  ];
+  // Refused, and already refused correctly -- the fix must not widen into these.
+  const refused = [
+    'width: calc(1px + garbage)',
+    'width: calc(1px * garbage)',
+    'width: calc(garbage)',
+    'width: calc(1px * auto)',
+    'width: calc(1px * inherit)',
+    'width: calc(1px * var)',
+    'width: calc(1e)',
+    'width: calc(1px * 2e)',
+  ];
+  const want = [];
+  const got = [];
+  const read = (decl) => {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    return el.style.getPropertyValue('width');
+  };
+  for (const [decl, expected] of kept) {
+    want.push(decl + ' -> ' + expected);
+    got.push(decl + ' -> ' + read(decl));
+  }
+  for (const decl of survives) {
+    want.push(decl + ' -> kept');
+    got.push(decl + ' -> ' + (read(decl) === '' ? 'dropped' : 'kept'));
+  }
+  for (const decl of refused) {
+    want.push(decl + ' -> dropped');
+    got.push(decl + ' -> ' + (read(decl) === '' ? 'dropped' : 'kept'));
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
 <script id="calc_inside_a_shorthand_and_a_position">
 {
   // A shorthand folds each component on its own, which is the context where
