@@ -69,7 +69,7 @@
   check('outline-width:medium;outline-style:none;', 'outlineWidth', '3px');
   check('border-width:medium;border-style:none;', 'borderTopWidth', '0px');
 
-  // ...and a length still passes through.
+  // ...and a whole-pixel length still passes through.
   check('column-rule-width:10px;column-rule-style:none;', 'columnRuleWidth', '10px');
 
   for (let i = 0; i < rows.length; i += 2) {
@@ -109,5 +109,68 @@
   // and a border with no style is not drawn at all.
   testing.expectEqual('1.5px 1.5px 1.5px 3px 0px', seen);
   testing.expectEqual(2, devicePixelRatio);
+}
+</script>
+
+<!--
+  A FRACTIONAL length lands on the same device pixel grid a used border width
+  does -- floored, with a floor of one device pixel -- and these four echoed the
+  author's text instead: `outline-width:4.6px` computed to `4.6px` where Chrome
+  says `4.5px`, and `0.1px` stayed `0.1px` where Chrome draws half a pixel.
+
+  `-webkit-text-stroke-width` is the one that does NOT: it echoes the length
+  unrounded at any ratio, which fits the scale of its own the keywords already
+  showed. So the grid is a property of the four, not of the family.
+
+  Measured on Chrome 151 at `--force-device-scale-factor=2`, with
+  devicePixelRatio reported in the same object as the widths
+  (scratch/b72/expr-rule-grid.js and expr-rule-grid2.js, readings in
+  scratch/b72/ch-rule-dsf2.json and ch-rule2-dsf2.json). Same grid and same
+  measurement as css/computed_border_width.html's; see Element.usedWidthUnit.
+-->
+
+<script id=fractional_rule_width_is_a_device_pixel>
+{
+  const probe = (decl, prop) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:20px;' + decl;
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el)[prop]);
+    el.remove();
+    return got;
+  };
+
+  // width, then what the four snapping names compute it to.
+  const CASES = [
+    ['0px', '0px'],
+    ['0.1px', '0.5px'],
+    ['0.4px', '0.5px'],
+    ['1.4px', '1px'],
+    ['1.5px', '1.5px'],
+    ['3.6px', '3.5px'],
+    ['4.6px', '4.5px'],
+    ['10.9px', '10.5px'],
+  ];
+  const NAMES = [
+    ['outline-width', 'outlineWidth'],
+    ['column-rule-width', 'columnRuleWidth'],
+    ['row-rule-width', 'rowRuleWidth'],
+    ['-webkit-column-rule-width', 'webkitColumnRuleWidth'],
+  ];
+
+  const wrong = [];
+  for (const [width, want] of CASES) {
+    for (const [name, prop] of NAMES) {
+      const got = probe(name + ':' + width + ';', prop);
+      if (got !== want) wrong.push(name + ':' + width + ': want ' + want + ', got ' + got);
+    }
+    // The stroke width keeps the author's number at the same ratio.
+    const stroke = probe('-webkit-text-stroke-width:' + width + ';', 'webkitTextStrokeWidth');
+    if (stroke !== width) {
+      wrong.push('-webkit-text-stroke-width:' + width + ': want ' + width + ', got ' + stroke);
+    }
+  }
+  testing.expectEqual(2, devicePixelRatio);
+  testing.expectEqual('', wrong.join(' | '));
 }
 </script>
