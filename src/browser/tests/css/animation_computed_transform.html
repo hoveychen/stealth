@@ -25,6 +25,19 @@ single task, which is the tell a live `performance.now()` read would leave.
   @keyframes halfq { 0% { transform: rotate(0deg); } 50% { transform: rotate(90deg); } 100% { transform: rotate(180deg); } }
   @keyframes to360 { 100% { transform: rotate(360deg); } }
   @keyframes shifted { 0% { transform: translateX(0px); } 100% { transform: translateX(100px); } }
+  @keyframes sheetq { from { transform: rotate(0deg); } to { transform: rotate(90deg); } }
+
+  .sheet-backwards { animation: 3s linear 999s 1 normal backwards sheetq; }
+  .sheet-forwards { animation: 0s linear 0s 1 normal forwards sheetq; }
+  .sheet-longhands {
+    animation-name: sheetq;
+    animation-duration: 0s;
+    animation-fill-mode: forwards;
+  }
+  .sheet-and-declared {
+    animation: 3s linear 999s 1 normal backwards sheetq;
+    transform: scale(2);
+  }
 </style>
 
 <script id=static_animation_phases_compute_a_matrix>
@@ -205,5 +218,32 @@ single task, which is the tell a live `performance.now()` read would leave.
   testing.expectEqual(
     'matrix(1, 0, 0, 1, 0, 0)',
     probe('animation: 5s steps(4) 0s 1 normal both paused shifted;'));
+}
+</script>
+
+<script id=animation_declared_in_a_stylesheet_rule>
+{
+  // Every case above declares the animation in a style attribute. A real page
+  // -- the Cloudflare challenge page included -- declares it in a rule, which
+  // is a different path into the cascade. All four readings measured on headed
+  // Chrome 151 (scratch/b70/expr-anim-sheet.js).
+  const probe = (cls) => {
+    const el = document.createElement('div');
+    el.className = cls;
+    el.style.cssText = 'width:100px;height:50px;';
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).transform);
+    el.remove();
+    return got;
+  };
+
+  testing.expectEqual('matrix(1, 0, 0, 1, 0, 0)', probe('sheet-backwards'));
+  testing.expectEqual('matrix(0, 1, -1, 0, 0, 0)', probe('sheet-forwards'));
+  // The longhands written out rather than the shorthand.
+  testing.expectEqual('matrix(0, 1, -1, 0, 0, 0)', probe('sheet-longhands'));
+  // The element declares a transform of its own AND is animated. The animation
+  // wins outright: `scale(2)` is only the underlying value, and this animation
+  // declares both its ends so nothing asks for it.
+  testing.expectEqual('matrix(1, 0, 0, 1, 0, 0)', probe('sheet-and-declared'));
 }
 </script>
