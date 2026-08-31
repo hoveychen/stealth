@@ -249,24 +249,68 @@ pub fn getComputedValue(self: *const CSSStyleDeclaration, property_name: []const
     return self.propertyValue(property_name, frame, .computed);
 }
 
-/// The six properties whose `<alpha-value>` is brought into [0,1] at
-/// computed-value time.
+/// The six properties whose grammar is an `<alpha-value>`.
 ///
-/// Only at computed time: `el.style.opacity` still reads back what the author
-/// wrote. Measured on Chrome 151 with probes/expr-b85-clamped-props.js over
-/// twenty-two properties with a range in their grammar -- exactly these six
-/// clamp, and the near neighbours that look like they should do not.
-/// `flex-grow: 1.015625` computes to `1.01562` with no upper bound, and a
-/// negative one is rejected at parse rather than clamped.
-fn clampAlphaValue(property_name: []const u8, value: []const u8) ?[]const u8 {
+/// Measured on Chrome 151 with probes/expr-b85-clamped-props.js over twenty-two
+/// properties with a range in their grammar -- exactly these six clamp, and the
+/// near neighbours that look like they should do not. `flex-grow: 1.015625`
+/// computes to `1.01562` with no upper bound, and a negative one is rejected at
+/// parse rather than clamped.
+fn isAlphaValueProperty(property_name: []const u8) bool {
     const ALPHA = [_][]const u8{
         "opacity",      "fill-opacity",  "stroke-opacity",
         "stop-opacity", "flood-opacity", "shape-image-threshold",
     };
-    const matches = for (ALPHA) |name| {
-        if (std.ascii.eqlIgnoreCase(property_name, name)) break true;
-    } else false;
-    if (!matches) return null;
+    for (ALPHA) |name| {
+        if (std.ascii.eqlIgnoreCase(property_name, name)) return true;
+    }
+    return false;
+}
+
+/// An `<alpha-value>` written as a percentage is stored as the number it stands
+/// for: Chrome divides by 100 while parsing, so `opacity: 50%` reads back
+/// through `el.style.opacity` as `"0.5"` and the percentage is gone before the
+/// cascade ever sees it.
+///
+/// Which is why this belongs at store time and not on the computed view. Left
+/// as a percentage the value reached `resolvesHere`, which sees a `%` on a
+/// property whose percentages do not resolve against anything it models and
+/// reports `unreportable` -- so `opacity: 50%` was a declaration that did
+/// nothing at all, computing to the initial `1`. Turning it into a number here
+/// fixes both surfaces at once, and the existing clamp then applies to it
+/// unchanged: `150%` becomes `1.5` and still computes to `1`.
+///
+/// Measured over the six properties and eight spellings
+/// (scratch/b98/expr-b98-alpha.js): `50%`->`0.5`, `.5%`->`0.005`,
+/// `1e2%`->`1`, `33.333%`->`0.33333`. The print is the ordinary CSS number
+/// writer's, six significant digits, which is why the third of those is not
+/// `0.333330`.
+///
+/// Null for anything that is not one bare percentage token: a `calc(50%)` keeps
+/// its text in Chrome too, and a value with a space or a `(` in it is not this.
+fn alphaPercentageAsNumber(arena: Allocator, property_name: []const u8, value: []const u8) !?[]const u8 {
+    if (!isAlphaValueProperty(property_name)) return null;
+    if (value.len < 2 or value[value.len - 1] != '%') return null;
+    const number = value[0 .. value.len - 1];
+    for (number) |c| {
+        if (!std.ascii.isDigit(c) and c != '.' and c != '+' and c != '-' and
+            c != 'e' and c != 'E') return null;
+    }
+    const parsed = std.fmt.parseFloat(f64, number) catch return null;
+
+    var buf = std.Io.Writer.Allocating.init(arena);
+    errdefer buf.deinit();
+    const limit: f64 = std.math.floatMax(f32);
+    try typed_om.writeNumber(&buf.writer, std.math.clamp(parsed / 100, -limit, limit));
+    return buf.written();
+}
+
+/// The `<alpha-value>` brought into [0,1] at computed-value time.
+///
+/// Only at computed time: `el.style.opacity` still reads back what the author
+/// wrote, give or take the percentage rewrite above.
+fn clampAlphaValue(property_name: []const u8, value: []const u8) ?[]const u8 {
+    if (!isAlphaValueProperty(property_name)) return null;
 
     const parsed = units.parse(value) catch return null;
     if (parsed.unit != .none) return null;
@@ -4293,6 +4337,11 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
     // looked like a keyword to the computed path and leaked the word out.
     if (cssWideKeyword(value) != null) {
         return value;
+    }
+
+    // An `<alpha-value>` percentage is stored as the number it stands for.
+    if (try alphaPercentageAsNumber(arena, property_name, value)) |number| {
+        return number;
     }
 
     // Per CSSOM spec, unitless zero in length properties should serialize as "0px"
