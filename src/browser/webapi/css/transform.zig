@@ -113,6 +113,24 @@ const Matrix = struct {
         .{ 0, 0, 0, 1 },
     } };
 
+    /// Whether the composed matrix is a plain 2D one, which is what decides
+    /// between `matrix()` and `matrix3d()` in the serialisation.
+    ///
+    /// Measured, and it is the MATRIX that decides rather than which functions
+    /// were written: `translateZ(0)`, `rotateX(0)` and `rotate3d(1, 1, 1, 0)`
+    /// are each three-dimensional functions that compose to the identity, and
+    /// Chrome prints `matrix(1, 0, 0, 1, 0, 0)` for all three. `perspective(2em)`
+    /// and `translate3d(1em, 2em, 3em)` leave real z content behind and get
+    /// `matrix3d`. Reading the flag off the function names answered `matrix3d`
+    /// for the first three.
+    fn isAffine(self: Matrix) bool {
+        const m = self.m;
+        return m[0][2] == 0 and m[0][3] == 0 and
+            m[1][2] == 0 and m[1][3] == 0 and
+            m[2][0] == 0 and m[2][1] == 0 and m[2][3] == 0 and
+            m[2][2] == 1 and m[3][2] == 0 and m[3][3] == 1;
+    }
+
     fn multiply(a: Matrix, b: Matrix) Matrix {
         var out: Matrix = .{ .m = @splat(@splat(0)) };
         for (0..4) |col| {
@@ -156,7 +174,7 @@ pub fn computedValue(arena: Allocator, value: []const u8, basis: Basis) !?[]cons
     }
 
     if (!seen) return null;
-    return try write(arena, matrix, three_d);
+    return try write(arena, matrix, three_d and !matrix.isAffine());
 }
 
 /// The matrix `from` folds to when it has travelled `fraction` of the way to
@@ -215,7 +233,7 @@ fn foldPair(arena: Allocator, from: []const Function, to: []const Function, frac
         three_d = three_d or parsed.three_d;
     }
 
-    return try write(arena, matrix, three_d);
+    return try write(arena, matrix, three_d and !matrix.isAffine());
 }
 
 /// The list a `none` stands for when it is interpolated against `functions`:
@@ -689,7 +707,7 @@ fn mathScalar(arg: []const u8, kind: Scalar, percent: Percent, basis: Basis) ?f6
             .px => if (kind == .length) term.value else return null,
             // A bare number is the whole answer in a number slot and not a
             // length anywhere else.
-            .none => if (kind == .number) term.value else return null,
+            .none => if (kind == .number or term.value == 0) term.value else return null,
             .percentage => switch (percent) {
                 .refused => return null,
                 .width => term.value / 100 * basis.width,
@@ -783,11 +801,16 @@ fn parseScalar(arg: []const u8, kind: Scalar, percent: Percent, basis: Basis) ?f
             return pixelsOf(parsed.value, parsed.unit, basis);
         }
     }
-    // A bare `<number>`, which keeps every digit the author wrote -- and only
-    // where a number is what the slot takes. `rotate(45)` and `translateX(45)`
-    // are both refusals in Chrome and were both stored here.
+    // A bare `<number>`, which keeps every digit the author wrote.
+    const number = std.fmt.parseFloat(f64, arg) catch return null;
+    // Zero is the one number that stands in for a dimension in any slot: an
+    // angle of `0` and a length of `0` are both accepted where `rotate(1)` and
+    // `translateX(45)` are refusals. Measured, and found by counting how many
+    // elements keep a matrix on discord.com -- it writes `rotateX(0)` on
+    // thirty-nine of them, and a table without this turned every one to `none`.
+    if (number == 0) return 0;
     if (kind != .number) return null;
-    return std.fmt.parseFloat(f64, arg) catch null;
+    return number;
 }
 
 fn write(arena: Allocator, matrix: Matrix, three_d: bool) ![]const u8 {

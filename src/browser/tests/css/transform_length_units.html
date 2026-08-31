@@ -93,6 +93,49 @@ at all. A wrong number and a missing declaration are not the same failure.
 }
 </script>
 
+<script id=transform_takes_a_unitless_zero_in_any_slot>
+{
+  // Zero is the one number that stands in for a dimension anywhere, and the
+  // argument-type table has to let it through or it refuses real pages:
+  // discord.com ships `rotateX(0) rotateY(0) rotateZ(0deg)` on 39 elements, and
+  // the first version of that table turned every one of them into `none`.
+  //
+  // Found by counting how many elements end up with a matrix on a real page
+  // rather than by another probe -- the slot-type sweep used `2` for its number
+  // token and so never asked. A unitless NON-zero is still refused, which is
+  // what keeps this an allowance for zero and not a hole.
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;height:200px;font-size:20px">' +
+      '<div style="font-size:20px;width:100px;height:50px;' + decl + '">x</div></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild).transform);
+    host.remove();
+    return got;
+  };
+  const CASES = [
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: rotate(0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: rotateX(0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: rotate(0.0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: skew(0, 0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: translateX(0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: translateZ(0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: rotate3d(1, 1, 1, 0)'],
+    // The shape discord actually writes.
+    ['matrix(1, 0, 0, 1, 0, 50)',
+     'transform: translate3d(0, 50px, 0) scale3d(1, 1, 1) rotateX(0) rotateY(0) rotateZ(0) skew(0, 0)'],
+    // A unitless non-zero is still a refusal.
+    ['none', 'transform: rotate(1)'],
+  ];
+  const wrong = [];
+  for (const [want, decl] of CASES) {
+    const got = probe(decl);
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
+
 <script id=transform_resolves_a_math_function_argument>
 {
   // A calc() argument was refused for the same reason a bare `em` was, so it
