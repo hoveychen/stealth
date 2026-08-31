@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="testing.js"></script>
+</head>
+<body>
+
+<script id=long_frame_from_a_task type=module>
+  {
+    // A long animation frame that is not the load frame.
+    //
+    // The entry filed from navigation milestones (performance.html,
+    // `long_animation_frame`) describes the parse: it opens at responseStart
+    // and closes at domComplete. That is the whole of Chrome's answer on a
+    // document that loads slowly and then sits still, and it is not Chrome's
+    // answer inside the Cloudflare widget, whose navigation is over in 85ms
+    // (measured, scratch/b96/knob-widget-timeline.js: responseStart 65.96,
+    // domComplete 85.13, loadEventEnd 85.14) and which still carries an entry
+    // of startTime 89.7 / duration 686.6. That frame brackets ONE message
+    // listener -- `scripts: [{ invoker: "DOMWindow.onmessage", invokerType:
+    // "event-listener", startTime: 92.2, duration: 678.7 }]` -- which ran long
+    // after the document had finished loading.
+    //
+    // So a document that finishes loading and then blocks is a second kind of
+    // long frame, and the realm the cf-scrapingcourse guard walks
+    // `getEntries()` in is the one that only has that kind.
+    // The spin has to start AFTER the load event, or it lands inside the
+    // window the load frame is derived from and the entry filed is that one:
+    // this document blocking for 120ms while it is still loading pushes
+    // domComplete past the threshold on its own, and counting entries would
+    // then pass without a task frame ever being filed.
+    const state = await testing.async();
+    const spin = () => {
+      const before = performance.getEntriesByType('long-animation-frame').length;
+      setTimeout(() => {
+        const until = Date.now() + 120;
+        while (Date.now() < until) { /* spin */ }
+        // Read from a LATER task: the frame is only over once the engine runs
+        // out of ready work, so a timer queued from inside the spin can still
+        // be drained in the same frame and would see the entry unfiled.
+        setTimeout(() => state.resolve(before), 60);
+      }, 0);
+    };
+    if (document.readyState === 'complete') {
+      spin();
+    } else {
+      window.addEventListener('load', spin);
+    }
+
+    await state.done((before) => {
+      const loaf = performance.getEntriesByType('long-animation-frame');
+      testing.expectEqual('long-animation-frame count: ' + (before + 1),
+        'long-animation-frame count: ' + loaf.length);
+      const e = loaf[loaf.length - 1];
+      testing.expectEqual('PerformanceLongAnimationFrameTiming', e.constructor.name);
+      testing.expectEqual('long-animation-frame', e.entryType);
+      // The frame is the task, so it opens after the document was done and it
+      // is at least as long as the work inside it.
+      const nav = performance.getEntriesByType('navigation')[0];
+      testing.expectEqual('frame opens after load: true',
+        'frame opens after load: ' + (e.startTime >= nav.loadEventEnd));
+      // Not `>= 120`: the spin bounds itself with Date.now(), whose
+      // millisecond resolution can let it out a fraction early, and the
+      // timeline is coarsened on the way back -- measured at 119.4 for a spin
+      // of 120. Well clear of the 50ms that made it an entry is the assertion
+      // worth making.
+      testing.expectEqual('duration over 100: true',
+        'duration over 100: ' + (e.duration > 100));
+      // Nothing here renders, so the render pass would begin where the work
+      // ended -- and Chrome's own invariant, that the frame's end is its
+      // paint, still holds.
+      testing.expectEqual('paintTime is frame end: true',
+        'paintTime is frame end: ' + (e.paintTime === e.startTime + e.duration));
+      testing.expectEqual('renderStart is frame end: true',
+        'renderStart is frame end: ' + (e.renderStart === e.startTime + e.duration));
+      testing.expectEqual('styleAndLayoutStart tracks renderStart: true',
+        'styleAndLayoutStart tracks renderStart: ' + (e.styleAndLayoutStart === e.renderStart));
+      testing.expectEqual('presented after paint: true',
+        'presented after paint: ' + (e.presentationTime >= e.paintTime));
+      testing.expectEqual('scripts: 0', 'scripts: ' + e.scripts.length);
+      testing.expectEqual(performance.getEntries()[0].navigationId, e.navigationId);
+    });
+  }
+</script>
+
+</body>
+</html>

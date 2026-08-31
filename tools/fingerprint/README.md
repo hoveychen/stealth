@@ -22922,6 +22922,62 @@ page and still does not exist in the realm the guard reads. Closing that would
 mean filing a frame for a long post-load task, which is a second model and a
 second set of milestones to justify — not a tweak to this one.
 
+### The second model: a frame that is a turn of the loop (B96, 2026-08-30)
+
+The milestones came first, before the model. `scratch/b96/knob-widget-timeline.js`
+is a cf-knob that beacons the widget document's own navigation entry back out of
+the widget realm, and it says the widget's load is not slow at all:
+
+| widget document, Chrome 151 | ms |
+|---|---|
+| `responseStart` | 65.96 |
+| `responseEnd` | 79.10 |
+| `domComplete` | 85.13 |
+| `loadEventEnd` | 85.14 |
+| `first-paint` | **779.68** |
+| `long-animation-frame` | **89.70 + 686.61** |
+
+So the entry is not derived from the load at all — the load is over in 85ms and
+the frame starts 4ms *after* it. What it brackets is in the entry itself:
+`scripts: [{ invoker: "DOMWindow.onmessage", invokerType: "event-listener",
+startTime: 92.2, duration: 678.7 }]`. One message listener, 678ms of it, long
+after the document finished loading. `renderStart` is 771.05 and the first paint
+is 779.68, which is why the frame is 686ms long: it ends where the checkbox is
+finally drawn.
+
+**Does this engine have such a frame at all?** Not as one task. An instrumented
+ReleaseFast build logging every scheduler callback over a live challenge
+(`scratch/b96/task-lengths.mjs`) found 78 tasks past 5ms and the longest single
+one at **51ms** — six `Worker.receiveMessage` callbacks of 48/41/25/10/51/46ms
+where Chrome has one listener of 678. Filing per *task* would have filed
+nothing, or one entry by a millisecond. This engine is not blocked the way
+Chrome is here; it is faster, and the pre-existing reading that the widget
+settles four times sooner says the same thing.
+
+What it does have is the turn of the loop. `Env.runMacrotasks` enters one realm
+and drains that realm's queue with nothing scheduled in between, which is the
+closest thing here to the interval Chrome calls a frame. Timing that instead,
+over the same live challenge, the widget realm ran **two** turns past 50ms —
+104ms and 83ms — and the top document ran none (its longest was 19ms). So the
+model files where Chrome files and stays quiet where Chrome is quiet, without
+anything invented: `startTime` and `duration` are a clock read either side of
+the drain, `renderStart`, `paintTime` and `presentationTime` are all the end of
+it, because nothing renders and a render pass would begin and end there.
+
+After, read back out of the widget realm with the same
+`scratch/b95/widget-entries.mjs` discipline:
+
+| realm | before | after |
+|---|---|---|
+| top document | `long-animation-frame:114+124` | `long-animation-frame:114+124` |
+| widget document | *(none)* | **`long-animation-frame:676+139`** |
+
+The entry type now exists in the realm the guard walks `getEntries()` in. How
+many is not fixed — the instrumented run above had two turns past the threshold
+and this one filed one — and either way it is shorter than Chrome's single long
+frame, because this engine really did do that work in less time. What did not
+happen is a ticket.
+
 After, on www.scrapingcourse.com: one entry on each arm, same key order, same
 invariants (`paintTime === startTime + duration`, `presentationTime >=
 paintTime`, `renderStart` inside the frame, no `scripts`). One honest
