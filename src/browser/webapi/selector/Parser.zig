@@ -317,7 +317,23 @@ fn parsePart(self: *Parser, arena: Allocator) !Part {
         '.' => .{ .class = try self.class(arena) },
         '*' => blk: {
             self.input = self.input[1..];
+            // `*|div` and `*|*`: a namespace prefix, and in an HTML document
+            // every element is in the one namespace, so "any namespace" is the
+            // same set. Chrome keeps a rule holding `*|div` (measured) and this
+            // used to fail at the `|`. The prefix is consumed and the rest of
+            // the compound parsed as if it were not there.
+            if (self.peek() == '|') {
+                self.input = self.input[1..];
+                break :blk try self.parsePart(arena);
+            }
             break :blk .universal;
+        },
+        // A nesting reference. Nothing here resolves nesting, so it parses and
+        // matches nothing -- see Selector.PseudoClass.nesting. Chrome keeps a
+        // rule holding one; this used to fail at the `&`.
+        '&' => blk: {
+            self.input = self.input[1..];
+            break :blk .{ .pseudo_class = .nesting };
         },
         '[' => .{ .attribute = try self.attribute(arena) },
         ':' => blk: {
@@ -408,17 +424,44 @@ fn consumeUntilCommaOrParen(self: *Parser) []const u8 {
     return result;
 }
 
+/// A parenthesised selector list argument, consumed through its `)`.
+///
+/// `:not()`, `:is()` and `:where()` each grew their own copy of this loop
+/// before there were four of them; the new callers use this one rather than
+/// making it five.
+fn selectorListArgument(self: *Parser, arena: Allocator) ![]const Selector.Selector {
+    var selectors: std.ArrayList(Selector.Selector) = .empty;
+    _ = self.skipSpaces();
+    while (true) {
+        if (self.peek() == ')') break;
+        if (self.peek() == 0) return error.InvalidPseudoClass;
+        const selector = try parse(arena, self.consumeUntilCommaOrParen());
+        try selectors.append(arena, selector);
+        _ = self.skipSpaces();
+        if (self.peek() == ',') {
+            self.input = self.input[1..];
+            _ = self.skipSpaces();
+            continue;
+        }
+        break;
+    }
+    if (self.peek() != ')') return error.InvalidPseudoClass;
+    self.input = self.input[1..];
+    return selectors.items;
+}
+
 /// The pseudo-elements Chrome keeps a selector list alive for, measured one
 /// name at a time (tools/fingerprint/probes/expr-b96-pseudo-element-list.js):
 /// each was put in a list beside an id selector and the rule read back. A name
 /// on this list keeps the rule; `::totally-unknown-thing` and
 /// `::-moz-nonsense-xyz` both kill it, the way an unknown pseudo-CLASS does.
 const known_pseudo_elements = [_][]const u8{
-    "before",               "after",          "first-line",  "first-letter",
-    "placeholder",          "marker",         "backdrop",    "selection",
-    "file-selector-button", "cue",            "part",        "slotted",
-    "grammar-error",        "spelling-error", "target-text", "highlight",
-    "view-transition",
+    "before",               "after",                 "first-line",                 "first-letter",
+    "placeholder",          "marker",                "backdrop",                   "selection",
+    "file-selector-button", "cue",                   "part",                       "slotted",
+    "grammar-error",        "spelling-error",        "target-text",                "highlight",
+    "view-transition",      "view-transition-group", "view-transition-image-pair", "view-transition-old",
+    "view-transition-new",
 };
 
 /// The four that predate the `::` spelling and are still written with one
@@ -522,17 +565,11 @@ fn pseudoClass(self: *Parser, arena: Allocator) !Selector.PseudoClass {
         self.input = self.input[1..]; // Skip '('
 
         if (std.mem.eql(u8, name, "nth-child")) {
-            const pattern = try self.parseNthPattern();
-            if (self.peek() != ')') return error.InvalidPseudoClass;
-            self.input = self.input[1..];
-            return .{ .nth_child = pattern };
+            return .{ .nth_child = try self.parseNthArgument(arena) };
         }
 
         if (std.mem.eql(u8, name, "nth-last-child")) {
-            const pattern = try self.parseNthPattern();
-            if (self.peek() != ')') return error.InvalidPseudoClass;
-            self.input = self.input[1..];
-            return .{ .nth_last_child = pattern };
+            return .{ .nth_last_child = try self.parseNthArgument(arena) };
         }
 
         if (std.mem.eql(u8, name, "nth-of-type")) {
@@ -697,6 +734,30 @@ fn pseudoClass(self: *Parser, arena: Allocator) !Selector.PseudoClass {
             return .{ .state = state };
         }
 
+        // `:dir(ltr)`. The argument is kept as written; the match reads the
+        // element's own `dir`, and an argument that is neither `ltr` nor `rtl`
+        // matches nothing rather than failing the rule.
+        if (std.mem.eql(u8, name, "dir")) {
+            _ = self.skipSpaces();
+            const dir_start = self.input;
+            var dir_i: usize = 0;
+            while (dir_i < dir_start.len and dir_start[dir_i] != ')') : (dir_i += 1) {}
+            if (dir_i == 0 or self.peek() == 0) return error.InvalidPseudoClass;
+            const dir = try arena.dupe(u8, std.mem.trim(u8, dir_start[0..dir_i], &std.ascii.whitespace));
+            self.input = dir_start[dir_i..];
+            if (self.peek() != ')') return error.InvalidPseudoClass;
+            self.input = self.input[1..];
+            return .{ .dir = dir };
+        }
+
+        // `:host(.a)` and `:host-context(.a)`. Parsed for the sake of the
+        // selectors beside them; see Selector.PseudoClass.
+        if (std.mem.eql(u8, name, "host") or std.mem.eql(u8, name, "host-context")) {
+            const is_context = name.len != 4;
+            const selectors = try self.selectorListArgument(arena);
+            return if (is_context) .{ .host_context = selectors } else .{ .host_fn = selectors };
+        }
+
         if (std.mem.eql(u8, name, "lang")) {
             _ = self.skipSpaces();
             const lang_start = self.input;
@@ -720,6 +781,8 @@ fn pseudoClass(self: *Parser, arena: Allocator) !Selector.PseudoClass {
         4 => {
             if (fastEql(name, "root")) return .root;
             if (fastEql(name, "link")) return .link;
+            if (fastEql(name, "host")) return .host;
+            if (fastEql(name, "open")) return .open;
         },
         5 => {
             if (fastEql(name, "modal")) return .modal;
@@ -742,6 +805,7 @@ fn pseudoClass(self: *Parser, arena: Allocator) !Selector.PseudoClass {
             if (fastEql(name, "defined")) return .defined;
         },
         8 => {
+            if (fastEql(name, "autofill")) return .autofill;
             if (fastEql(name, "disabled")) return .disabled;
             if (fastEql(name, "required")) return .required;
             if (fastEql(name, "optional")) return .optional;
@@ -752,6 +816,7 @@ fn pseudoClass(self: *Parser, arena: Allocator) !Selector.PseudoClass {
             if (fastEql(name, "read-only")) return .read_only;
         },
         10 => {
+            if (fastEql(name, "user-valid")) return .user_valid;
             if (fastEql(name, "only-child")) return .only_child;
             if (fastEql(name, "last-child")) return .last_child;
             if (fastEql(name, "read-write")) return .read_write;
@@ -760,6 +825,7 @@ fn pseudoClass(self: *Parser, arena: Allocator) !Selector.PseudoClass {
             if (fastEql(name, "first-child")) return .first_child;
         },
         12 => {
+            if (fastEql(name, "user-invalid")) return .user_invalid;
             if (fastEql(name, "only-of-type")) return .only_of_type;
             if (fastEql(name, "last-of-type")) return .last_of_type;
             if (fastEql(name, "focus-within")) return .focus_within;
@@ -778,6 +844,29 @@ fn pseudoClass(self: *Parser, arena: Allocator) !Selector.PseudoClass {
     }
 
     return error.UnknownPseudoClass;
+}
+
+/// `An+B`, plus the `of <selector-list>` clause that `:nth-child()` and
+/// `:nth-last-child()` take and the `-of-type` pair do not, consumed through
+/// the closing `)`.
+///
+/// Chrome keeps a rule whose list holds `:nth-child(2n+1 of .a)` (measured);
+/// this used to fail at the `o`, which deleted the rule.
+fn parseNthArgument(self: *Parser, arena: Allocator) !Selector.NthPattern {
+    var pattern = try self.parseNthPattern();
+    _ = self.skipSpaces();
+    const rest = self.input;
+    const is_of = rest.len >= 2 and (rest[0] == 'o' or rest[0] == 'O') and
+        (rest[1] == 'f' or rest[1] == 'F') and
+        (rest.len == 2 or !std.ascii.isAlphanumeric(rest[2]));
+    if (is_of) {
+        self.input = rest[2..];
+        pattern.of = try self.selectorListArgument(arena);
+        return pattern;
+    }
+    if (self.peek() != ')') return error.InvalidPseudoClass;
+    self.input = self.input[1..];
+    return pattern;
 }
 
 fn parseNthPattern(self: *Parser) !Selector.NthPattern {

@@ -745,10 +745,28 @@ fn matchesPseudoClass(el: *Node.Element, pseudo: Selector.PseudoClass, scope: *N
         .first_of_type => return isFirstOfType(el),
         .last_of_type => return isLastOfType(el),
         .only_of_type => return isFirstOfType(el) and isLastOfType(el),
-        .nth_child => |pattern| return matchesNthChild(el, pattern),
-        .nth_last_child => |pattern| return matchesNthLastChild(el, pattern),
+        .nth_child => |pattern| return matchesNthChild(el, pattern, scope, frame),
+        .nth_last_child => |pattern| return matchesNthLastChild(el, pattern, scope, frame),
         .nth_of_type => |pattern| return matchesNthOfType(el, pattern),
         .nth_last_of_type => |pattern| return matchesNthLastOfType(el, pattern),
+
+        // Parsed so the rule survives; see Selector.PseudoClass.
+        //
+        // `open` is the attribute and nothing else, which is the whole
+        // definition for `<details>` and `<dialog>`. The other three need a
+        // user: nothing here autofills a field or types in one, so they match
+        // what they match on a page nobody has touched -- nothing. `:host` and
+        // its two functional forms are a shadow root's, and a stylesheet here
+        // is the document's.
+        .autofill, .user_valid, .user_invalid => return false,
+        .open => return el.hasAttributeSafe(.wrap("open")),
+        .dir => |want| {
+            const have = el.getDir();
+            if (have.len == 0) return false;
+            return std.ascii.eqlIgnoreCase(have, want);
+        },
+        .host, .host_fn, .host_context => return false,
+        .nesting => return false,
 
         // Custom elements
         .defined => {
@@ -940,13 +958,13 @@ fn isLastOfType(el: *Node.Element) bool {
     return true;
 }
 
-fn matchesNthChild(el: *Node.Element, pattern: Selector.NthPattern) bool {
-    const index = getChildIndex(el) orelse return false;
+fn matchesNthChild(el: *Node.Element, pattern: Selector.NthPattern, scope: *Node, frame: *Frame) bool {
+    const index = getChildIndex(el, pattern.of, scope, frame) orelse return false;
     return matchesNthPattern(index, pattern);
 }
 
-fn matchesNthLastChild(el: *Node.Element, pattern: Selector.NthPattern) bool {
-    const index = getChildIndexFromEnd(el) orelse return false;
+fn matchesNthLastChild(el: *Node.Element, pattern: Selector.NthPattern, scope: *Node, frame: *Frame) bool {
+    const index = getChildIndexFromEnd(el, pattern.of, scope, frame) orelse return false;
     return matchesNthPattern(index, pattern);
 }
 
@@ -960,14 +978,26 @@ fn matchesNthLastOfType(el: *Node.Element, pattern: Selector.NthPattern) bool {
     return matchesNthPattern(index, pattern);
 }
 
-fn getChildIndex(el: *Node.Element) ?usize {
+/// The element's position among its siblings, counting from 1.
+///
+/// `of` is `:nth-child(An+B of S)`: only the siblings S matches are counted,
+/// and an element S does not match has no position at all. Null there is the
+/// ordinary form, where every element sibling counts.
+fn getChildIndex(el: *Node.Element, of: ?[]const Selector.Selector, scope: *Node, frame: *Frame) ?usize {
+    if (of) |list| {
+        if (!matchesAny(el, list, scope, frame)) return null;
+    }
     const node = el.asNode();
     var index: usize = 1;
     var sibling = node.previousSibling();
 
     while (sibling) |s| {
-        if (s.is(Node.Element)) |_| {
-            index += 1;
+        if (s.is(Node.Element)) |sibling_el| {
+            if (of) |list| {
+                if (matchesAny(sibling_el, list, scope, frame)) index += 1;
+            } else {
+                index += 1;
+            }
         }
         sibling = s.previousSibling();
     }
@@ -975,19 +1005,35 @@ fn getChildIndex(el: *Node.Element) ?usize {
     return index;
 }
 
-fn getChildIndexFromEnd(el: *Node.Element) ?usize {
+fn getChildIndexFromEnd(el: *Node.Element, of: ?[]const Selector.Selector, scope: *Node, frame: *Frame) ?usize {
+    if (of) |list| {
+        if (!matchesAny(el, list, scope, frame)) return null;
+    }
     const node = el.asNode();
     var index: usize = 1;
     var sibling = node.nextSibling();
 
     while (sibling) |s| {
-        if (s.is(Node.Element)) |_| {
-            index += 1;
+        if (s.is(Node.Element)) |sibling_el| {
+            if (of) |list| {
+                if (matchesAny(sibling_el, list, scope, frame)) index += 1;
+            } else {
+                index += 1;
+            }
         }
         sibling = s.nextSibling();
     }
 
     return index;
+}
+
+/// Whether any selector in the list matches the element, which is what a
+/// selector-list argument means everywhere it appears.
+fn matchesAny(el: *Node.Element, list: []const Selector.Selector, scope: *Node, frame: *Frame) bool {
+    for (list) |selector| {
+        if (matches(el.asNode(), selector, scope, frame)) return true;
+    }
+    return false;
 }
 
 fn getTypeIndex(el: *Node.Element) ?usize {
