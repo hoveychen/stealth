@@ -23316,4 +23316,9 @@ to Chrome**, up from 14. The two that are not are named rather than folded in:
 * `bodyScrollWidth` — 1920 in Chrome, 1904 here. `<body>` takes its own exit
   above this code.
 
-1583/1583.
+1583/1583, and the sweep is 22/29 with **no station changed** against the
+session's baseline — including dd-datadome and dd-hermes, which an earlier sweep
+in this session had shown falling. That fall was DataDome's window, not a
+regression: alternating the two arms three rounds each on those two stations
+while it was shut, the BASELINE binary passed 1 of 6 and the patched one 0 of 6,
+and both were back by the time of this sweep.
