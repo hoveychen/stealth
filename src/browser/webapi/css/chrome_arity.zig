@@ -2,11 +2,13 @@
 //
 // Measured from Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36
 // 475 computed longhands and 236 shorthands/aliases probed. Each pair
-// offered is one half the property visibly takes -- one of 19 generic
+// offered is one half the property visibly takes -- one of 35 generic
 // values, or one of up to 16 identifiers it accepts alone -- against a
-// second half drawn from every one of the 1050 identifiers mdn-data
-// 2.24.0 carries, since a modifier like the `first` of `first baseline` is
-// refused on its own and no pool of accepted values would reach it.
+// second half drawn from every one of the 1461 identifiers mdn-data
+// 2.24.0 and Blink's own css_value_keywords.json5 at
+// 82774a71a4 carry between them, since a modifier like the
+// `first` of `first baseline` is refused on its own and no pool of
+// accepted values would reach it.
 //
 // How many things a declaration may hold. The value classes and
 // `chrome_bounds` are both asked one component at a time, so `margin-top:
@@ -60,7 +62,6 @@ pub const one_component = std.StaticStringMap(void).initComptime(.{
     .{ "-webkit-box-orient", {} },
     .{ "-webkit-box-pack", {} },
     .{ "-webkit-box-sizing", {} },
-    .{ "-webkit-clip-path", {} },
     .{ "-webkit-column-break-after", {} },
     .{ "-webkit-column-break-before", {} },
     .{ "-webkit-column-break-inside", {} },
@@ -109,7 +110,6 @@ pub const one_component = std.StaticStringMap(void).initComptime(.{
     .{ "-webkit-ruby-position", {} },
     .{ "-webkit-shape-image-threshold", {} },
     .{ "-webkit-shape-margin", {} },
-    .{ "-webkit-shape-outside", {} },
     .{ "-webkit-tap-highlight-color", {} },
     .{ "-webkit-text-combine", {} },
     .{ "-webkit-text-emphasis-color", {} },
@@ -119,7 +119,6 @@ pub const one_component = std.StaticStringMap(void).initComptime(.{
     .{ "-webkit-text-size-adjust", {} },
     .{ "-webkit-text-stroke-color", {} },
     .{ "-webkit-text-stroke-width", {} },
-    .{ "-webkit-transform", {} },
     .{ "-webkit-transform-origin-x", {} },
     .{ "-webkit-transform-origin-y", {} },
     .{ "-webkit-transform-origin-z", {} },
@@ -147,7 +146,6 @@ pub const one_component = std.StaticStringMap(void).initComptime(.{
     .{ "animation-play-state", {} },
     .{ "animation-timeline", {} },
     .{ "animation-timing-function", {} },
-    .{ "animation-trigger", {} },
     .{ "app-region", {} },
     .{ "appearance", {} },
     .{ "backface-visibility", {} },
@@ -182,7 +180,6 @@ pub const one_component = std.StaticStringMap(void).initComptime(.{
     .{ "border-right-color", {} },
     .{ "border-right-style", {} },
     .{ "border-right-width", {} },
-    .{ "border-shape", {} },
     .{ "border-top-color", {} },
     .{ "border-top-style", {} },
     .{ "border-top-width", {} },
@@ -199,7 +196,6 @@ pub const one_component = std.StaticStringMap(void).initComptime(.{
     .{ "caret-shape", {} },
     .{ "clear", {} },
     .{ "clip", {} },
-    .{ "clip-path", {} },
     .{ "clip-rule", {} },
     .{ "color", {} },
     .{ "color-interpolation", {} },
@@ -401,7 +397,6 @@ pub const one_component = std.StaticStringMap(void).initComptime(.{
     .{ "scroll-margin-left", {} },
     .{ "scroll-margin-right", {} },
     .{ "scroll-margin-top", {} },
-    .{ "scroll-marker-group", {} },
     .{ "scroll-padding-block-end", {} },
     .{ "scroll-padding-block-start", {} },
     .{ "scroll-padding-bottom", {} },
@@ -417,7 +412,6 @@ pub const one_component = std.StaticStringMap(void).initComptime(.{
     .{ "scrollbar-width", {} },
     .{ "shape-image-threshold", {} },
     .{ "shape-margin", {} },
-    .{ "shape-outside", {} },
     .{ "shape-rendering", {} },
     .{ "speak", {} },
     .{ "stop-color", {} },
@@ -455,7 +449,6 @@ pub const one_component = std.StaticStringMap(void).initComptime(.{
     .{ "timeline-trigger-name", {} },
     .{ "timeline-trigger-source", {} },
     .{ "top", {} },
-    .{ "transform", {} },
     .{ "transform-box", {} },
     .{ "transform-style", {} },
     .{ "transition-behavior", {} },
@@ -526,6 +519,8 @@ pub const comma_lists = std.StaticStringMap(void).initComptime(.{
     .{ "-webkit-transition-duration", {} },
     .{ "-webkit-transition-property", {} },
     .{ "-webkit-transition-timing-function", {} },
+    .{ "anchor-name", {} },
+    .{ "anchor-scope", {} },
     .{ "animation", {} },
     .{ "animation-composition", {} },
     .{ "animation-delay", {} },
@@ -585,6 +580,7 @@ pub const comma_lists = std.StaticStringMap(void).initComptime(.{
     .{ "scroll-timeline-axis", {} },
     .{ "scroll-timeline-name", {} },
     .{ "stroke-dasharray", {} },
+    .{ "timeline-scope", {} },
     .{ "timeline-trigger", {} },
     .{ "timeline-trigger-activation-range", {} },
     .{ "timeline-trigger-activation-range-end", {} },
@@ -600,6 +596,7 @@ pub const comma_lists = std.StaticStringMap(void).initComptime(.{
     .{ "transition-duration", {} },
     .{ "transition-property", {} },
     .{ "transition-timing-function", {} },
+    .{ "trigger-scope", {} },
     .{ "view-timeline", {} },
     .{ "view-timeline-axis", {} },
     .{ "view-timeline-inset", {} },

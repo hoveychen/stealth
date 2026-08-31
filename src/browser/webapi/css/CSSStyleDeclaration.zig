@@ -6284,7 +6284,7 @@ fn twoValueRule(name: []const u8) ?TwoValueRule {
 
 /// Whether the declaration holds more than the property takes. Two counts over
 /// the same components: the two-value rule above, and `chrome_arity`, which is
-/// the wider of them -- 461 measured property names that take no second
+/// the wider of them -- 452 measured property names that take no second
 /// component at all, so `margin-top: 1px 2px` and `width: 1px / 2px` are both
 /// thrown away where every other test in this engine passes them (each half is
 /// a `<length>` `margin-top` takes).
@@ -6303,19 +6303,23 @@ fn tooManyComponents(name: []const u8, value: []const u8) bool {
     if (std.mem.indexOf(u8, value, "/*") != null) return false;
     if (std.ascii.indexOfIgnoreCase(value, "var(") != null) return false;
 
-    // A `<transform-list>` is one value however many functions it holds. The
-    // arity sweep that built the table never offered `transform` two of them --
-    // only identifier and generic-value pairs -- so it reads as one-component,
-    // and `rotate(0deg) scale(1)` was thrown away as a declaration holding too
-    // much. That is a style the page loses, not only a serialisation
-    // difference. Measured (expr-transform-serialize.js): Chrome keeps a list
-    // of calls and refuses one with anything else in it, which is what the
-    // count below still answers -- `rotate(45deg) 5px` is not exempted here.
-    if (std.mem.eql(u8, name, "transform") and isTransformList(value)) {
+    // A `<transform-list>` is one value however many functions it holds, and no
+    // count of components can say that, so it is answered here rather than by
+    // the table. It used to be answered by the table *and* here: the arity
+    // sweep offered `transform` only identifier and generic-value pairs, never
+    // two calls, so it read as one-component and `rotate(0deg) scale(1)` was
+    // thrown away as a declaration holding too much -- a style the page loses,
+    // not only a serialisation difference. The sweep now offers a call, so
+    // `transform` is no longer in the table and the refusal it used to supply
+    // has to be stated. Measured (expr-transform-serialize.js,
+    // scratch/b77/expr-assertions.js): Chrome keeps a list of calls and refuses
+    // one with anything else in it, so `rotate(45deg) 5px` is still counted.
+    const is_transform = std.mem.eql(u8, name, "transform");
+    if (is_transform and isTransformList(value)) {
         return false;
     }
 
-    const holds: usize = if (chrome_arity.one_component.has(name))
+    const holds: usize = if (is_transform or chrome_arity.one_component.has(name))
         1
     else if (twoValueRule(name) != null)
         2
