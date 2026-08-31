@@ -43,6 +43,7 @@ const chrome_per_tag_values = @import("chrome_per_tag_values.zig");
 const chrome_input_type_values = @import("chrome_input_type_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
+const calc = @import("calc.zig");
 const shorthand = @import("shorthand.zig");
 const supports = @import("supports.zig");
 const font_metrics = @import("../../font_metrics.zig");
@@ -4327,7 +4328,7 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
     if (isCustomProperty(property_name)) {
         return std.mem.trim(u8, raw_value, &std.ascii.whitespace);
     }
-    const value = try canonicaliseValue(arena, property_name, raw_value);
+    var value = try canonicaliseValue(arena, property_name, raw_value);
 
     // A CSS-wide keyword is not a value of the property's grammar, so none of
     // the rewrites below have anything to say about it. Chrome agrees byte for
@@ -4342,6 +4343,19 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
     // An `<alpha-value>` percentage is stored as the number it stands for.
     if (try alphaPercentageAsNumber(arena, property_name, value)) |number| {
         return number;
+    }
+
+    // A `calc()` is folded and its terms sorted before anything else looks at
+    // the value, so the rules below -- the position axes, the pair shortening,
+    // the shadow order -- see the shape the value will be stored in. An
+    // `error.Invalid` span is left alone here: dropping the declaration is
+    // storeProperty's job, through the same `@supports` oracle every other
+    // refusal goes through.
+    if (calc.rewrite(arena, value) catch |err| switch (err) {
+        error.Invalid => @as(?[]const u8, null),
+        else => |e| return e,
+    }) |folded| {
+        value = folded;
     }
 
     // Per CSSOM spec, unitless zero in length properties should serialize as "0px"

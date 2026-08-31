@@ -33,6 +33,7 @@ const Allocator = std.mem.Allocator;
 
 const Tokenizer = @import("../../css/Tokenizer.zig");
 const Selector = @import("../selector/Selector.zig");
+const calc = @import("calc.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const shorthand = @import("shorthand.zig");
@@ -392,6 +393,19 @@ fn valueSupported(property: []const u8, value: []const u8) bool {
     }
     for (chrome_keywords.css_wide) |keyword| {
         if (eqlIgnoreCase(bare, keyword)) return true;
+    }
+
+    // A `calc()` whose types do not work out is dropped whatever property it is
+    // on: `width: calc(1px + 1)`, `calc(1px * 1px)`, `calc(1px + 1deg)` and
+    // `calc(10px + 2foo)` are all refused by Chrome, and so are the two
+    // whitespace shapes -- `calc(1px +1px)` and `calc(1px+1px)` -- where the
+    // sign belongs to the next token rather than to an operator. Measured.
+    //
+    // Ahead of the value-class check because that one declines any value with a
+    // function in it: `judgeable` cannot grade what it cannot classify, which
+    // is why every one of these was stored here before.
+    if (calc.valueIsInvalid(bare)) {
+        return false;
     }
 
     if (identifierOutsideKeywordList(property, bare)) {

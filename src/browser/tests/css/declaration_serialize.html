@@ -1109,10 +1109,13 @@ function withStyle(text) {
     testing.expectEqual('', block.style.getPropertyValue('border-radius'));
     testing.expectEqual('5px', block.style.getPropertyValue('padding'));
 
-    // And a value this engine cannot judge is kept whole rather than refused.
-    // Chrome evaluates the calc and this engine does not, so the reading is
-    // wrong either way -- keeping it is the wrong answer that is not a refusal.
-    testing.expectEqual('calc(10px + 5px)',
+    // A calc() is folded before it is stored, so what comes back is the sum
+    // and not the author's two terms. This assertion used to read
+    // `calc(10px + 5px)` and said so in its own comment: the engine could not
+    // judge the value, so it kept it whole, which was the wrong answer that
+    // was not a refusal. Chrome's answer is `calc(15px)` -- measured, see
+    // tests/css/calc_canonical.html.
+    testing.expectEqual('calc(15px)',
         set('border-radius', 'calc(10px + 5px)').style.getPropertyValue('border-radius'));
 }
 </script>
@@ -1239,10 +1242,11 @@ function withStyle(text) {
     testing.expectEqual(false, set('width', '10PX') === '');
     testing.expectEqual(false, set('width', '10Q') === '');
 
-    // A unit inside a value this engine cannot judge is still not judged.
-    // Chrome refuses this one; keeping it is the wrong answer that is not a
-    // refusal.
-    testing.expectEqual('calc(10px + 2foo)', set('width', 'calc(10px + 2foo)'));
+    // A unit inside a calc() is judged with the rest of it now, so an unknown
+    // one takes the whole declaration with it the way Chrome does. This used
+    // to assert the value was kept, and said in its own comment that keeping
+    // it was the wrong answer.
+    testing.expectEqual('', set('width', 'calc(10px + 2foo)'));
 }
 </script>
 
