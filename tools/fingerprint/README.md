@@ -23457,3 +23457,51 @@ were rejecting BOTH arms at the time. So: 19/29, unchanged.
 `cf-scrapingcourse` is still `cf-challenge` and `x-hyatt` is still
 `refused-429` in both columns. Three hangs and a wrong address are closed
 because they were wrong, not because a guard has admitted anything.
+
+## open() throws the document away, and Chrome throws the listeners away with it (B71, 2026-08-30)
+
+The probe written to check B71's `close()` fix caught something the plan had
+not named, which is the only reason it was found: the trace of a written
+document showed OUR document's `readystatechange` and `DOMContentLoaded`
+listeners firing where Chrome's showed nothing at all. The listeners had been
+registered before the implicit `open()`, and Chrome had already removed them.
+
+HTML's document open steps, before anything is parsed:
+
+> Remove all event listeners registered on document, its Window object, and all
+> its descendant elements.
+
+We removed none of them. The measurement turns on nothing but the listener
+store — register a listener, dispatch a self-made event at it, call `open()`,
+dispatch the same event again:
+
+| dispatch before / after `open()` | Chrome 151 | before | after |
+|---|---|---|---|
+| listener on the document | 1 / 1 | 1 / 2 | 1 / 1 |
+| listener on the window | 1 / 1 | 1 / 2 | 1 / 1 |
+| listener on a descendant element, held by reference | 1 / 1 | 1 / 2 | 1 / 1 |
+| `doc.onclick` / `win.onresize` / `body.onclick` after `open()` | `null` ×3 | `function` ×3 | `null` ×3 |
+
+The `on*` slots are the same store from the DOM's point of view and Chrome
+clears them too, so the removal covers both: `EventManagerBase.lookup` for the
+`addEventListener` listeners and `attr_listeners` for the handler functions.
+
+Both stores are keyed by target, so the removal takes a **set** of targets and
+walks each store once, rather than walking the stores once per target — a
+`document.open()` on a real page would otherwise be quadratic in the node
+count. The handler store's matching entries are collected before any of them is
+removed, since removing mid-iteration from a hash map is not safe.
+
+What is deliberately NOT in the set is the iframe **element**. Its listeners
+live in the parent document, and it is the one the whole idiom is built around:
+`iframe.onload = ...; doc.write(...); doc.close()`. A test pins that the load
+event still arrives.
+
+### The two stations that moved, and did not
+
+The sweep read 18/29 against 20/29 for the binary without this change, and the
+two stations that differed were `dd-datadome` and `px-wayfair`. Alternating the
+two binaries at `px-wayfair`, three rounds each, both arms answered
+`px-challenge` every time; `dd-datadome` is the station the previous chapter
+already showed passing one round in four with the guard's window half shut.
+Neither difference is the binary. Both closed doors are where they were.
