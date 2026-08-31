@@ -228,9 +228,10 @@ what is left refused is the `ex` and the `calc()`.
   // a percentage margin never looks at a height.
   testing.expectEqual('200px', probe('margin-top:50%', 'marginTop'));
   testing.expectEqual('100px', probe('padding-top:25%', 'paddingTop'));
-  // `ex` used to be here: it was unresolvable, so it fell through to the
-  // initial value. It resolves now (see ex_ch_are_font_metrics), and what is
-  // left in this block is `calc()`, which still needs an evaluator.
-  testing.expectEqual('0px', probe('padding-top:calc(10px + 5px)', 'paddingTop'));
+  // `ex` used to be here, and so did `calc()`. Both resolve now -- `ex` in
+  // ex_ch_are_font_metrics, and the calc in tests/css/calc_computed.html -- so
+  // this block no longer has anything that falls through, and the row is kept
+  // as the guard that it does not start falling through again.
+  testing.expectEqual('15px', probe('padding-top:calc(10px + 5px)', 'paddingTop'));
 }
 </script>

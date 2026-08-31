@@ -43,6 +43,8 @@ const chrome_per_tag_values = @import("chrome_per_tag_values.zig");
 const chrome_input_type_values = @import("chrome_input_type_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
+const calc = @import("calc.zig");
+const chrome_bounds = @import("chrome_bounds.zig");
 const shorthand = @import("shorthand.zig");
 const supports = @import("supports.zig");
 const font_metrics = @import("../../font_metrics.zig");
@@ -961,6 +963,14 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
         return .{ .value = folded };
     }
 
+    // A `calc()` resolves the same way a bare length does, one term at a time,
+    // and has to be asked before computedLengthText -- that walk refuses
+    // anything with a paren in it, which is why every calc() reached the guard
+    // below and came back as the initial value.
+    if (computedCalcText(style_manager, element, property_name, substituted)) |folded| {
+        return .{ .value = folded };
+    }
+
     // A length resolves at computed-value time, so the unit the author wrote is
     // one a computed style never carries: `padding-top:2em` on a 20px element
     // is `40px` in every browser, and so is `12pt`.
@@ -1285,6 +1295,124 @@ fn twoAxisPosition(property_name: []const u8) bool {
 /// a number. The two percentages that need no containing block are resolved:
 /// `font-size` against the parent's size and `line-height` against the element's
 /// own.
+/// A whole-value `calc()` resolved against the element, or null when it is not
+/// one or cannot be finished.
+///
+/// The terms are already folded to one per unit by the time a declaration is
+/// stored (see calc.zig), so this is the same walk `computedLengthText` does
+/// over a bare length -- ask `lengthFactor` what a unit is worth here and add
+/// the products up. Three answers rather than one, measured on Chrome 151 with
+/// scratch/b98/expr-b98-calc-computed.js:
+///
+///   a length    the ordinary case: `padding-top: calc(2em + 1px)` on a 20px
+///               element is `41px`
+///   a number    every term unitless, so nothing gains a `px`: `z-index:
+///               calc(1 + 1)` is `2` and `opacity: calc(0.25 + 0.25)` is `0.5`
+///   the calc()  a percentage the property does not resolve at computed-value
+///               time takes the whole sum with it, and Chrome prints the
+///               *folded* text: `border-radius: calc(10px + 5%)` computes to
+///               `calc(5% + 10px)`. Which is the reason the fold matters even
+///               for a value that never becomes a number.
+///
+/// Only a value that is one calc() and nothing else. A multi-component value
+/// like `padding: calc(1em + 1px) calc(5px)` keeps the behaviour it had, so
+/// this cannot make a list worse while the single case is being got right.
+fn computedCalcText(style_manager: *StyleManager, element: *Element, property_name: []const u8, value: []const u8) ?[]const u8 {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len < 6) return null;
+    if (!std.ascii.eqlIgnoreCase(trimmed[0..5], "calc(")) return null;
+    if (trimmed[trimmed.len - 1] != ')') return null;
+    const folded = calc.foldBody(trimmed[5 .. trimmed.len - 1]) catch return null;
+
+    // The alpha family is the one place a percentage is a hundredth rather than
+    // a share of something: `opacity: calc(50%)` computes to `0.5`, the same
+    // answer a bare `50%` gets from normalizePropertyValue.
+    if (isAlphaValueProperty(property_name)) {
+        var alpha: f64 = 0;
+        for (folded.terms[0..folded.len]) |term| {
+            switch (term.unit) {
+                .none => alpha += term.value,
+                .percentage => alpha += term.value / 100,
+                else => return null,
+            }
+        }
+        return writeNumberText(element, style_manager, property_name, alpha, false);
+    }
+
+    var total: f64 = 0;
+    var unitless = true;
+    var had_percentage = false;
+    for (folded.terms[0..folded.len]) |term| {
+        if (term.unit == .percentage) had_percentage = true;
+        switch (lengthFactor(style_manager, element, property_name, term.unit)) {
+            .unresolvable => return null,
+            .verbatim => switch (term.unit) {
+                // `px` is already the computed unit, and a bare number on a
+                // property that takes one IS the computed value.
+                .px => {
+                    total += term.value;
+                    unitless = false;
+                },
+                .none => total += term.value,
+                // A percentage that is its own computed value cannot be added
+                // to anything, so the sum stays a sum.
+                else => return foldedText(element, style_manager, folded),
+            },
+            .pixels => |factor| {
+                total += term.value * factor;
+                unitless = false;
+            },
+        }
+    }
+    return writeNumberText(element, style_manager, property_name, total, !unitless) orelse
+        writeLengthText(element, style_manager, property_name, total, had_percentage);
+}
+
+/// The folded calc(), printed. Used when a term cannot be reduced any further.
+fn foldedText(element: *Element, style_manager: *StyleManager, folded: calc.Folded) ?[]const u8 {
+    const frame = element.ownerFrame(style_manager.frame);
+    var buf = std.Io.Writer.Allocating.init(frame.call_arena);
+    calc.write(&buf.writer, folded) catch return null;
+    return buf.written();
+}
+
+/// A unitless computed value, printed the way a bare one of the same property
+/// would be -- as an integer where the property takes an `<integer>`. Null when
+/// the value carries a unit, which leaves the length printer to it.
+fn writeNumberText(element: *Element, style_manager: *StyleManager, property_name: []const u8, value: f64, has_unit: bool) ?[]const u8 {
+    if (has_unit) return null;
+    const frame = element.ownerFrame(style_manager.frame);
+    var buf = std.Io.Writer.Allocating.init(frame.call_arena);
+    if (isIntegerProperty(property_name)) {
+        buf.writer.print("{d}", .{@as(i32, @intFromFloat(std.math.clamp(value, std.math.minInt(i32), std.math.maxInt(i32))))}) catch return null;
+    } else {
+        units.writeNumber(&buf.writer, value) catch return null;
+    }
+    return buf.written();
+}
+
+/// A resolved length, printed with the same grid rule a bare one takes: a
+/// percentage resolves against a used length and so lands on the layout grid,
+/// and so does anything at all on a property that reports a used value.
+fn writeLengthText(element: *Element, style_manager: *StyleManager, property_name: []const u8, px: f64, had_percentage: bool) ?[]const u8 {
+    const frame = element.ownerFrame(style_manager.frame);
+    var buf = std.Io.Writer.Allocating.init(frame.call_arena);
+    const snaps = had_percentage or usedLengthProperty(property_name);
+    // A calc() is the one way a negative length reaches a property that refuses
+    // one, since the sign is not in the text anywhere -- `width: calc(10px -
+    // 30px)` is a valid declaration where `width: -20px` is not. Chrome clamps
+    // it at zero, and on exactly the properties that refuse the bare negative:
+    // measured over sixteen (scratch/b98/expr-b98-calc-negative.js), the nine
+    // that clamp are the nine in `no_negative` and the five that keep the minus
+    // -- the margins, `top`, `letter-spacing`, `text-indent` -- are the ones
+    // absent from it. So the existing table answers this and there is no second
+    // list to keep in step.
+    const floored = if (px < 0 and chrome_bounds.no_negative.has(property_name)) 0 else px;
+    units.writeNumber(&buf.writer, if (snaps) Element.layoutUnit(floored) else floored) catch return null;
+    buf.writer.writeAll("px") catch return null;
+    return buf.written();
+}
+
 fn computedLengthText(style_manager: *StyleManager, element: *Element, property_name: []const u8, value: []const u8, specified: ?f64) ?[]const u8 {
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
     if (trimmed.len == 0) return null;
@@ -4349,7 +4477,7 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
     if (isCustomProperty(property_name)) {
         return std.mem.trim(u8, raw_value, &std.ascii.whitespace);
     }
-    const value = try canonicaliseValue(arena, property_name, raw_value);
+    var value = try canonicaliseValue(arena, property_name, raw_value);
 
     // A CSS-wide keyword is not a value of the property's grammar, so none of
     // the rewrites below have anything to say about it. Chrome agrees byte for
@@ -4364,6 +4492,19 @@ pub fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_v
     // An `<alpha-value>` percentage is stored as the number it stands for.
     if (try alphaPercentageAsNumber(arena, property_name, value)) |number| {
         return number;
+    }
+
+    // A `calc()` is folded and its terms sorted before anything else looks at
+    // the value, so the rules below -- the position axes, the pair shortening,
+    // the shadow order -- see the shape the value will be stored in. An
+    // `error.Invalid` span is left alone here: dropping the declaration is
+    // storeProperty's job, through the same `@supports` oracle every other
+    // refusal goes through.
+    if (calc.rewrite(arena, value) catch |err| switch (err) {
+        error.Invalid => @as(?[]const u8, null),
+        else => |e| return e,
+    }) |folded| {
+        value = folded;
     }
 
     // Per CSSOM spec, unitless zero in length properties should serialize as "0px"
@@ -7122,6 +7263,14 @@ test "WebApi: CSSStyleDeclaration custom property is not named" {
 
 test "WebApi: CSSStyleDeclaration alpha value percentage" {
     try testing.htmlRunner("css/alpha_value_percentage.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration calc canonical form" {
+    try testing.htmlRunner("css/calc_canonical.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration calc computed value" {
+    try testing.htmlRunner("css/calc_computed.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration computed initial values" {

@@ -177,17 +177,19 @@
 
 <script id="alpha_value_calc_is_left_where_it_stands">
 {
-  // Not this plan's ground: `calc(50%)` on an alpha property agrees with
-  // Chrome on the specified value and differs on the computed one, because
-  // this engine does not evaluate a calc() at all. Pinned as it stands so the
-  // percentage rewrite is not credited with a calc it did not fix, and so the
-  // calc work has a line to move.
+  // This was the line the calc work had to move, and it moved: `calc(50%)`
+  // keeps its text as the specified value in Chrome and computes to `0.5`,
+  // and both halves match now. The specified half belongs to this plan -- a
+  // calc() is not the bare percentage that gets divided by a hundred at store
+  // time -- and the computed half to tests/css/calc_computed.html, where the
+  // alpha family is the one place a percentage inside a calc() is a hundredth
+  // rather than a share of a box.
   const el = document.createElement('div');
   document.body.appendChild(el);
   el.setAttribute('style', 'opacity: calc(50%)');
-  const want = 'spec="calc(50%)" comp=1 (Chrome: comp 0.5)';
+  const want = 'spec="calc(50%)" comp=0.5';
   const got = 'spec=' + JSON.stringify(el.style.getPropertyValue('opacity')) +
-              ' comp=' + getComputedStyle(el).opacity + ' (Chrome: comp 0.5)';
+              ' comp=' + getComputedStyle(el).opacity;
   el.remove();
   testing.expectEqual(want, got);
 }
