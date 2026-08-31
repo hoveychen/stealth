@@ -1,0 +1,251 @@
+diff --git a/src/browser/Frame.zig b/src/browser/Frame.zig
+index c73b1a13f..76ad61f7d 100644
+--- a/src/browser/Frame.zig
++++ b/src/browser/Frame.zig
+@@ -194,6 +194,25 @@ _image_cache: std.StringHashMapUnmanaged(*ImageCacheEntry) = .empty,
+ /// an inline child's -- and not every one of those routes carries a depth, so
+ /// this counts them all. See Element.MAX_LAYOUT_REENTRY.
+ _layout_depth: u16 = 0,
++
++/// PROBE (root-container-content-height P4): what each subtree's content height
++/// came to, for the duration of ONE top-level measurement. Lives on the Frame
++/// rather than beside the walk because a nested `clientHeight` reaches this
++/// through `getElementDimensions` and the computed-value machinery, and a memo
++/// created inside `clientHeightOf` starts empty there -- which is the reading
++/// that closed `content-height-memoised-subtree`. Backed by `arena` and NOT by
++/// `call_arena`: the latter is released between JS calls and a map kept across
++/// that boundary would be a use-after-free.
++///
++/// Cleared when `_layout_depth` unwinds to 0, which is the end of one
++/// measurement and the only point at which the DOM can have moved under it.
++_content_height_memo: std.AutoHashMapUnmanaged(Element.ContentHeightKey, f64) = .empty,
++
++/// PROBE (root-container-content-height P5): the same idea one level down --
++/// each element's BOX for the duration of one measurement. The height memo
++/// alone changed nothing (371 ExecutionTerminated either way), which says the
++/// multiplication is in the box walk and not in the height walk.
++_dimensions_memo: std.AutoHashMapUnmanaged(Element.DimensionsKey, Element.Dimensions) = .empty,
+ _element_namespace_uris: Element.NamespaceUriLookup = .empty,
+ _element_prefixes: Element.PrefixLookup = .empty,
+ _svg_animated_enumerations: AnimatedEnumeration.Lookup = .empty,
+diff --git a/src/browser/webapi/Element.zig b/src/browser/webapi/Element.zig
+index 8f83811bd..e70c72664 100644
+--- a/src/browser/webapi/Element.zig
++++ b/src/browser/webapi/Element.zig
+@@ -3134,8 +3134,25 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width:
+     if (frame._layout_depth >= MAX_LAYOUT_REENTRY) {
+         return .{ .width = 0, .height = 0 };
+     }
++    // PROBE (root-container-content-height P5): one box per element per
++    // measurement. The sentinel goes in before the walk so a re-entrant ask --
++    // a child reaching back up for its containing block, whose walk comes back
++    // down here -- is answered instead of recursed.
++    const memo_key: DimensionsKey = .{
++        .element = self,
++        .measure_text_width = measure_text_width,
++        .distribute_flex = distribute_flex,
++    };
++    if (frame._dimensions_memo.get(memo_key)) |remembered| return remembered;
++    frame._dimensions_memo.put(frame.arena, memo_key, .{ .width = 0, .height = 0 }) catch {};
+     frame._layout_depth += 1;
+-    defer frame._layout_depth -= 1;
++    defer {
++        frame._layout_depth -= 1;
++        if (frame._layout_depth == 0) {
++            frame._dimensions_memo.clearRetainingCapacity();
++            frame._content_height_memo.clearRetainingCapacity();
++        }
++    }
+ 
+     var dims: Dimensions = .{ .width = 0, .height = 0 };
+ 
+@@ -3198,6 +3215,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width:
+         dims.explicit_height = true;
+         dims.width = layoutUnit(dims.width);
+         dims.height = layoutUnit(dims.height);
++        frame._dimensions_memo.put(frame.arena, memo_key, dims) catch {};
+         return dims;
+     }
+ 
+@@ -3336,7 +3354,12 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width:
+             if (width == null) {
+                 width = @max(0, available.width - margin_x - edges.border_x - edges.padding_x);
+             }
+-            if (height == null) {
++            // PROBE (root-container-content-height P2): in STANDARDS mode leave
++            // the height for the content pass below, the way every other
++            // element's is. Quirks keeps the viewport, which is measured: a
++            // quirks <body> DOES fill it.
++            const fills_viewport = owner.document.isQuirksMode();
++            if (height == null and fills_viewport) {
+                 height = @max(0, available.height - margin_y - edges.border_y - edges.padding_y);
+             }
+         } else if (tag == .canvas) {
+@@ -3492,6 +3515,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width:
+     // box whose intrinsic size is not spelled out above.
+     dims.width = layoutUnit(width orelse 0);
+     dims.height = layoutUnit(height orelse 0);
++    frame._dimensions_memo.put(frame.arena, memo_key, dims) catch {};
+     return dims;
+ }
+ 
+@@ -3612,11 +3636,17 @@ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_ca
+     if (dims.inline_box) return 0;
+ 
+     const tag = self.getTag();
+-    if (tag == .html or tag == .body or dims.explicit_height) {
++    // PROBE (root-container-content-height P2): the root containers only take
++    // the shortcut when they really do fill the viewport, which is the quirks
++    // rendering. In standards mode they are sized by their content, like
++    // anything else with an `auto` height.
++    const fills_viewport = (tag == .html or tag == .body) and
++        self.ownerFrame(frame).document.isQuirksMode();
++    if (fills_viewport or dims.explicit_height) {
+         return dims.height + dims.padding_y;
+     }
+ 
+-    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width)) + dims.padding_y;
++    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0)) + dims.padding_y;
+ }
+ 
+ pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
+@@ -3776,13 +3806,18 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
+     // than sized to what it holds. That is `content-height-memoised-subtree`.
+     // Until it lands, the viewport is the answer for both, which is what
+     // `dims.height` already is.
++    // PROBE (root-container-content-height P2): `max(viewport, content)` for
++    // the scrolling element, which is the reading Chrome gives -- 200 for a
++    // short document in a 200px frame and 430 for a tall one.
+     if (tag == .html or tag == .body) {
+-        return @round(dims.height);
++        const viewport: f64 = @floatFromInt(self.ownerFrame(frame).viewport().height);
++        const content = @max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0)) + dims.padding_y;
++        return @round(@max(viewport, content));
+     }
+ 
+     if (dims.inline_box) return 0;
+ 
+-    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width)) + dims.padding_y);
++    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0)) + dims.padding_y);
+ }
+ 
+ // The height of the direct child elements stacked vertically, the counterpart
+@@ -3803,7 +3838,26 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
+ // is 55.5 (a line, a block, a line) where stacking the block alone says 18.5.
+ // Both measured at dpr 2 with
+ // tools/fingerprint/scratch/expr-inline-content-lines.js.
+-fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64) f64 {
++fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8) f64 {
++    // PROBE (root-container-content-height P4): hold `_layout_depth` up for the
++    // whole walk, so every box measured underneath -- including one reached
++    // back through the computed-value machinery -- sees a depth above zero and
++    // shares one memo. Unwinding to zero is the end of the measurement and the
++    // only point at which the DOM can have moved, so that is where it clears.
++    if (frame._layout_depth >= MAX_LAYOUT_REENTRY) return 0;
++    const key: ContentHeightKey = .{ .element = self, .extent = extent };
++    if (frame._content_height_memo.get(key)) |remembered| return remembered;
++    frame._layout_depth += 1;
++    defer {
++        frame._layout_depth -= 1;
++        if (frame._layout_depth == 0) frame._content_height_memo.clearRetainingCapacity();
++    }
++    // A sentinel before the walk, so a re-entrant ask -- a child reaching back
++    // up for its containing block, which reaches back down for this -- is
++    // ANSWERED rather than recursed. Zero is the honest answer there: the box
++    // is not measured yet.
++    frame._content_height_memo.put(frame.arena, key, 0) catch {};
++
+     var total: f64 = 0;
+ 
+     const font = self.resolveFont(frame);
+@@ -3831,7 +3885,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+     // The children share one containing block, so the width a percentage margin
+     // takes its share of is measured once for all of them.
+     var margin_containing: ?f64 = content_width;
+-    const escapes = self.marginEscapes(frame, &margin_containing, 0);
++    const escapes = self.marginEscapes(frame, &margin_containing, depth);
+     var group: MarginGroup = .{};
+     var placed = false;
+ 
+@@ -3858,7 +3912,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+             if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
+             if (!extent.counts(CSSStyleDeclaration.flowKind(el, frame))) continue;
+             if (el.atomicInlineHalves(frame)) |halves| {
+-                const box = el.getElementDimensions(frame);
++                const box = el.dimensionsAt(frame, true, depth + 1, true);
+                 flow.placeAtomic(halves.above, halves.below, box.width + box.padding_x + box.border_x);
+                 continue;
+             }
+@@ -3873,9 +3927,20 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+                 placed = true;
+             }
+ 
+-            const box = el.getElementDimensions(frame);
+-            const margins = el.verticalMargins(frame, &margin_containing, 0);
++            const box = el.dimensionsAt(frame, true, depth + 1, true);
++            const margins = el.verticalMargins(frame, &margin_containing, depth);
+             group.join(margins.top);
++            // PROBE (root-container-content-height P3): what the child HOLDS,
++            // which is the term B86 reverted. The difference from the three
++            // shapes B86 measured is the DEPTH: the child's box is measured at
++            // `depth + 1` rather than through `getElementDimensions`, which
++            // restarts at 0 -- and a restart at 0 is exactly the "reaches back
++            // up for its containing block and walks down again" B86 named as
++            // the cause.
++            var inner = box.height;
++            if (!box.explicit_height and depth < MAX_CONTAINING_BLOCK_DEPTH) {
++                inner = @max(inner, el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1));
++            }
+             // What the child HOLDS is still missing here, and knowingly so: see
+             // the note on `content-height-child-box` in the fingerprint README.
+             // Recursing into `el.contentHeight` is the obvious fix and it is
+@@ -3884,7 +3949,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+             // back up for its containing block and the walk goes down and up
+             // and down again. That is the same shape element/box_measure_loops
+             // exists for.
+-            if (box.height == 0 and box.padding_y == 0 and box.border_y == 0) {
++            if (inner == 0 and box.padding_y == 0 and box.border_y == 0) {
+                 // Self-collapsing: there is nothing between this box's two
+                 // margins, so they join the same group and it contributes no
+                 // height of its own. An empty <div style="margin:10px 0">
+@@ -3900,7 +3965,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+             // its own offsetHeight is `height + padding_y + border_y`. Reading
+             // only the middle of it made a parent disagree with its own child:
+             // a padded child answers 22 for itself and the parent answered 12.
+-            total += box.height + box.padding_y + box.border_y;
++            total += inner + box.padding_y + box.border_y;
+             placed = true;
+             group.join(margins.bottom);
+             continue;
+@@ -3920,6 +3985,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
+     // it leaves through the bottom edge on the same terms the first one came in
+     // through the top.
+     if (!escapes.bottom) total += group.gap();
++    frame._content_height_memo.put(frame.arena, key, total) catch {};
+     return total;
+ }
+ 
+@@ -3990,6 +4056,23 @@ fn hasInlineBaseline(self: *Element, frame: *Frame, depth: u8) bool {
+ /// float is out of its parent's height and still inside the parent's scrollable
+ /// overflow, so a block holding one reads 0 of clientHeight and 18 of
+ /// scrollHeight. Measured; an `absolute` child is out of both.
++/// What `Frame._content_height_memo` is keyed by. The extent is part of it
++/// because `.in_flow` and `.scrollable` count a float differently, so the two
++/// are genuinely different answers for the same element.
++pub const ContentHeightKey = struct {
++    element: *Element,
++    extent: Extent,
++};
++
++/// PROBE (root-container-content-height P5): what `Frame._dimensions_memo` is
++/// keyed by. Both flags are part of the answer -- the y-only path measures no
++/// text width, and a flex item's width is the container's to give.
++pub const DimensionsKey = struct {
++    element: *Element,
++    measure_text_width: bool,
++    distribute_flex: bool,
++};
++
+ const Extent = enum {
+     /// clientWidth, clientHeight and the box a computed width and height report.
+     in_flow,
