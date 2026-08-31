@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The document open steps set the document's URL to the ENTRY document's URL --
+  the URL of the document whose script called open(), not the URL the frame was
+  loaded from. So a parent that writes into its own about:blank iframe leaves
+  that iframe's document claiming the parent's URL, on every surface that
+  reports it: document.URL, document.documentURI and location.href.
+
+  Chrome 151 was measured doing exactly this; before open() all three still say
+  about:blank, which is what the first block pins.
+-->
+<script id=url_before_open_is_about_blank>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  testing.expectEqual(
+    'URL about:blank, documentURI about:blank, location about:blank',
+    'URL ' + doc.URL + ', documentURI ' + doc.documentURI + ', location ' + iframe.contentWindow.location.href,
+  );
+}
+</script>
+
+<script id=open_adopts_the_entry_url>
+{
+  const here = document.URL;
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  doc.open();
+
+  testing.expectEqual(
+    'URL ' + here + ', documentURI ' + here + ', location ' + here,
+    'URL ' + doc.URL + ', documentURI ' + doc.documentURI + ', location ' + iframe.contentWindow.location.href,
+  );
+}
+</script>
+
+<!--
+  write() without an explicit open() runs the same steps, so it adopts the same
+  URL, and the URL survives close().
+-->
+<script id=implicit_open_adopts_the_entry_url>
+{
+  const here = document.URL;
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  doc.write('<p>written</p>');
+  const afterWrite = doc.URL;
+  doc.close();
+
+  testing.expectEqual(
+    'after write ' + here + ', after close ' + here,
+    'after write ' + afterWrite + ', after close ' + doc.URL,
+  );
+}
+</script>
+
+<!--
+  And a script written into the document sees it, which is the reading that
+  matters: a guard building a realm this way asks the realm where it is.
+-->
+<script id=written_script_sees_the_entry_url>
+{
+  const here = document.URL;
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  doc.write('<script>window.__seen = document.URL + " ~ " + location.href;<\/script>');
+  doc.close();
+
+  testing.expectEqual(here + ' ~ ' + here, iframe.contentWindow.__seen);
+}
+</script>
+
+<!--
+  baseURI was already the parent's URL (an about:blank child inherits its
+  creator's base URL), and open() must not disturb it or the relative URLs that
+  resolve against it.
+-->
+<script id=base_url_is_unchanged>
+{
+  const iframe = document.createElement('iframe');
+  document.documentElement.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  const before = doc.baseURI;
+  doc.write('<a id=a href="rel.html"></a>');
+  doc.close();
+
+  testing.expectEqual(
+    'base ' + before + ', link ' + new URL('rel.html', document.baseURI).href,
+    'base ' + doc.baseURI + ', link ' + doc.getElementById('a').href,
+  );
+}
+</script>

@@ -1803,6 +1803,21 @@ pub fn open(self: *Document, call_frame: *Frame) !*Document {
     try self._script_created_parser.?.start();
     frame._parse_mode = .document;
 
+    // The document being opened takes the ENTRY document's URL -- the URL of
+    // the document whose script is calling, not its own. A parent writing into
+    // its about:blank iframe leaves that iframe claiming the parent's address,
+    // which is what the realm a guard builds this way answers when asked where
+    // it is. The bridge hands us the receiver's frame, so ask V8 who is
+    // actually running. Cross-origin is supposed to throw SecurityError before
+    // reaching here; we don't raise it, but we won't hand a document an address
+    // from an origin it cannot claim either.
+    const entry = frame.js.getIncumbent();
+    if (entry != frame and frame.isSameOrigin(entry.url)) {
+        frame.adoptDocumentUrl(entry.url) catch |err| {
+            log.warn(.dom, "document.open url", .{ .err = err, .url = entry.url });
+        };
+    }
+
     if (frame._load_state == .complete) {
         // The frame is parsing again, which is what gives close() something to
         // end: ending it is what settles readyState and fires the frame's load
