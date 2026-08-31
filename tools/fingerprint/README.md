@@ -23591,3 +23591,51 @@ ticket sometimes.** B53 measured 0/3 there and the door map has said "real door,
 reference passes and we do not" ever since. Three `x-kpsdk-r: 1-B1…` responses
 in one sitting, with `doc=429->200` beside them, say the rate is no longer zero.
 Worth re-running the reverse-biased design the next time the window is open.
+
+## The body box did not follow its own margin (B96, 2026-08-30)
+
+`<body>`'s box was the viewport less a hardcoded 16px — the UA stylesheet's
+`body { margin: 8px }`, doubled — whatever the page said its margin was. Every
+modern page says something else: a Tailwind-style reset opens with
+`body { margin: 0 }`, and on www.scrapingcourse.com that put Chrome's body at
+1920 against this engine's 1904.
+
+The sixteen pixels are not the interesting part. `getComputedStyle(body).marginLeft`
+answered `0px` on both arms — correctly, from the cascade — right next to a box
+that had subtracted 8px twice anyway. **A box that does not follow the margin
+beside it is a shape no browser produces**, and it is one expression to check:
+`body.clientWidth + 2 * parseFloat(getComputedStyle(body).marginLeft) === documentElement.clientWidth`.
+
+Measured on Chrome 151 in one document, setting the margin inline and reading
+back (`probes/expr-b96-body-margin.js`), `documentElement.clientWidth -
+body.clientWidth`:
+
+| body margin | Chrome | before | after |
+|---|---|---|---|
+| as found (`margin: 0` from the page's reset) | 0 | 16 | 0 |
+| `0px` | 0 | 16 | 0 |
+| `3px` | 6 | 16 | 6 |
+| `8px` | 16 | 16 | 16 |
+| `20px` | 40 | 16 | 40 |
+
+Twice the margin, every time, and this engine answered 16 for all five.
+
+The fix reads the margin the cascade already holds. The UA's 8px has not gone
+anywhere — it is *in* that cascade, which is where `getComputedStyle` was
+reading it all along; the box just stopped being the one place with its own copy.
+The one wrinkle is that `marginPx` answers 0 for a margin nobody declared, which
+is right for an ordinary element and wrong for the one tag whose UA margin is
+load-bearing, so `<body>` falls through to the UA sheet in the same order the
+computed style resolves in.
+
+Reading the whole body-box probe back: **12 of its 13 rows are Chrome's**, up
+from 6. The one left is `box-sizing`, which Chrome computes as `border-box` on
+that page and this engine as `content-box` — the reset declares it through
+`*, ::before, ::after`, and that is a selector question rather than a box one.
+Filed separately.
+
+The sweep read 19/29 against 21/29, and both stations that moved are the ones
+that have been moving all evening on unchanged binaries: `dd-leboncoin`, which
+an alternating A/B answered `datadome-challenge` 3/3 on BOTH arms minutes later,
+and `x-hyatt`, whose ticket window had shut — twenty spaced visits on the
+unchanged binary got no `x-kpsdk-r` at all in the same hour. 1583/1583.

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+The <body> box was the viewport less a hardcoded 16px -- `body { margin: 8px }`
+from the UA stylesheet, doubled -- whatever the page said its margin was. Every
+modern page says something else: a Tailwind-style reset opens with
+`body { margin: 0 }`, and on www.scrapingcourse.com that made Chrome's body 1920
+wide against this engine's 1904.
+
+Worse than the sixteen pixels, the engine contradicted itself in one expression.
+`getComputedStyle(document.body).marginLeft` answered `0px` -- correctly, from
+the cascade -- next to a box that had subtracted 8px twice anyway. A box that
+does not follow the margin beside it is a shape no browser produces.
+
+Measured on Chrome 151 in one document, setting the margin inline and reading
+back (tools/fingerprint/probes -- the probe is `expr-b96-body-margin.js`):
+
+  | body margin | documentElement.clientWidth - body.clientWidth |
+  |-------------|-----------------------------------------------|
+  | 0px         | 0                                             |
+  | 3px         | 6                                             |
+  | 8px         | 16                                            |
+  | 20px        | 40                                            |
+
+Exactly twice the margin, every time. This engine answered 16 for all four.
+-->
+
+<script id=body_box_follows_its_margin>
+{
+  const body = document.body;
+  const html = document.documentElement;
+  const before = body.getAttribute('style');
+
+  const deltaAt = (margin) => {
+    body.style.margin = margin;
+    return html.clientWidth - body.clientWidth;
+  };
+
+  // The UA default is still the UA default: nothing here replaces the 8px, it
+  // just stops being the only answer.
+  body.style.margin = '';
+  testing.expectEqual('unstyled body: 16', 'unstyled body: ' + (html.clientWidth - body.clientWidth));
+  testing.expectEqual('margin 0px: 0', 'margin 0px: ' + deltaAt('0px'));
+  testing.expectEqual('margin 3px: 6', 'margin 3px: ' + deltaAt('3px'));
+  testing.expectEqual('margin 8px: 16', 'margin 8px: ' + deltaAt('8px'));
+  testing.expectEqual('margin 20px: 40', 'margin 20px: ' + deltaAt('20px'));
+  // Only the horizontal margins move a horizontal box.
+  testing.expectEqual('margin 0 20px: 40', 'margin 0 20px: ' + deltaAt('0px 20px'));
+  testing.expectEqual('margin 20px 0: 0', 'margin 20px 0: ' + deltaAt('20px 0px'));
+
+  // ...and the box agrees with the computed style beside it, which is the
+  // reading a guard takes: one expression, two answers that have to add up.
+  body.style.margin = '0px';
+  testing.expectEqual('computed margin and box agree: true',
+    'computed margin and box agree: ' +
+      (body.clientWidth + 2 * parseFloat(getComputedStyle(body).marginLeft) === html.clientWidth));
+  body.style.margin = '11px';
+  testing.expectEqual('and again at 11px: true',
+    'and again at 11px: ' +
+      (body.clientWidth + 2 * parseFloat(getComputedStyle(body).marginLeft) === html.clientWidth));
+
+  if (before === null) body.removeAttribute('style'); else body.setAttribute('style', before);
+}
+</script>
+
+<script id=a_stylesheet_margin_moves_it_too>
+{
+  // The margin a page actually writes comes from a stylesheet rule, not from
+  // the style attribute, and the box has to read the cascade rather than the
+  // inline declaration alone.
+  const body = document.body;
+  const html = document.documentElement;
+  const sheet = document.createElement('style');
+  sheet.textContent = 'body { margin: 5px }';
+  document.head.appendChild(sheet);
+  testing.expectEqual('stylesheet margin 5px: 10', 'stylesheet margin 5px: ' + (html.clientWidth - body.clientWidth));
+  sheet.remove();
+  testing.expectEqual('back to the UA default: 16', 'back to the UA default: ' + (html.clientWidth - body.clientWidth));
+}
+</script>
