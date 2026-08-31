@@ -2697,6 +2697,20 @@ pub fn performance(self: *Frame) *Performance {
     return self.window._performance;
 }
 
+/// The loop just finished running everything this frame's task queue had ready,
+/// starting at `opened` on this document's timeline. Past Chrome's threshold
+/// that run is a `long-animation-frame` entry; under it, nothing.
+///
+/// A failure to record is logged and dropped, like `recordResourceTiming`: the
+/// page ran its work either way, and failing the tick because the bookkeeping
+/// failed would cost it the next one.
+pub fn taskFrameEnded(self: *Frame, opened: f64) void {
+    const perf = self.performance();
+    perf.taskFrameEnded(opened, perf.now(), &self.js.execution) catch |err| {
+        log.warn(.js, "long animation frame", .{ .err = err });
+    };
+}
+
 /// The document timeline, in seconds, as a computed animated value reads it.
 ///
 /// HELD, not read: a browser sets the timeline once per rendering frame and

@@ -76,6 +76,10 @@ _nav_phase: NavPhase = .none,
 _paint_entries: bool = false,
 _loaf_entry: bool = false,
 
+// How many `long-animation-frame` entries this document has filed, against
+// LONG_ANIMATION_FRAME_BUFFER.
+_loaf_count: u16 = 0,
+
 // Nothing fires it — the resource buffer never fills because nothing fills it
 // — but the accessor pair is on Chrome's Performance.prototype and reads back
 // what a script sets.
@@ -722,26 +726,14 @@ fn ensureImplicitEntries(self: *Performance, exec: *const Execution) !void {
         const opened = self._nav.response_start;
         const closed = self._nav.dom_complete;
         if (closed - opened > LONG_ANIMATION_FRAME_MS) {
-            const loaf = try exec._factory.chained(.{
-                Entry{
-                    ._name = "long-animation-frame",
-                    ._start_time = opened,
-                    ._duration = closed - opened,
-                    ._type = undefined,
-                },
-                timing.PerformanceLongAnimationFrameTiming{
-                    ._proto = undefined,
-                    // The parser is done here, so this is where a style and
-                    // layout pass would begin.
-                    ._render_start = self._nav.dom_interactive,
-                    // Chrome's own invariant, read off the entry above:
-                    // paintTime is exactly the end of the frame.
-                    ._paint_time = closed,
-                    ._presentation_time = @max(closed, self._nav.load_event_end),
-                },
-            });
-            loaf._proto._type = .{ .@"long-animation-frame" = loaf };
-            try self._entries.append(exec.arena, loaf._proto);
+            try self.fileLongAnimationFrame(.{
+                .opened = opened,
+                .closed = closed,
+                // The parser is done here, so this is where a style and layout
+                // pass would begin.
+                .render_start = self._nav.dom_interactive,
+                .presented = @max(closed, self._nav.load_event_end),
+            }, exec);
         }
     }
 
@@ -770,6 +762,80 @@ fn ensureImplicitEntries(self: *Performance, exec: *const Execution) !void {
         }
     };
     std.sort.block(*Entry, self._entries.items, {}, Sort.lessThan);
+}
+
+const LongAnimationFrame = struct {
+    opened: f64,
+    closed: f64,
+    render_start: f64,
+    presented: f64,
+};
+
+/// Files one `long-animation-frame` entry. Appended in whatever order the
+/// frames end in; `ensureImplicitEntries` sorts the buffer by startTime on
+/// every read, which is what puts it among the entries filed lazily there.
+fn fileLongAnimationFrame(self: *Performance, frame: LongAnimationFrame, exec: *const Execution) !void {
+    const loaf = try exec._factory.chained(.{
+        Entry{
+            ._name = "long-animation-frame",
+            ._start_time = frame.opened,
+            ._duration = frame.closed - frame.opened,
+            ._type = undefined,
+        },
+        timing.PerformanceLongAnimationFrameTiming{
+            ._proto = undefined,
+            ._render_start = frame.render_start,
+            // Chrome's own invariant, read off a real entry: paintTime is
+            // exactly the end of the frame.
+            ._paint_time = frame.closed,
+            ._presentation_time = frame.presented,
+        },
+    });
+    loaf._proto._type = .{ .@"long-animation-frame" = loaf };
+    self._loaf_count += 1;
+    try self._entries.append(exec.arena, loaf._proto);
+}
+
+/// This realm ran its queued tasks from `opened` to `closed` without going
+/// back to the loop in between, which is the closest this engine has to an
+/// animation frame. Past the threshold that is a long one.
+///
+/// The frame the load leaves behind is not the only one Chrome files, and on
+/// the document that matters it is not the one it files at all: inside the
+/// Cloudflare widget the navigation is over in 85ms (measured,
+/// scratch/b96/knob-widget-timeline.js -- responseStart 65.96, domComplete
+/// 85.13) and the entry Chrome carries there is startTime 89.7 / duration
+/// 686.6, bracketing a single `DOMWindow.onmessage` listener that ran for
+/// 678.7ms after the document had finished loading. Deriving the entry from
+/// navigation milestones can never produce that one, and the guard walks
+/// `getEntries()` in exactly that realm.
+///
+/// One or two of these are filed there now, and how many varies with the run:
+/// an instrumented build timing every turn of the loop over a live challenge
+/// saw two past the threshold (104ms and 83ms), and a later run of the finished
+/// change left one entry (`long-animation-frame:676+139`). Either way it is
+/// shorter than Chrome's one long frame, because this engine really does spread
+/// that work over more, shorter turns.
+pub fn taskFrameEnded(self: *Performance, opened: f64, closed: f64, exec: *const Execution) !void {
+    if (self._nav_phase == .none) {
+        // No document, so no timeline to file against: `ensureImplicitEntries`
+        // returns before it sorts, and the entry would never be seen.
+        return;
+    }
+    if (closed - opened <= LONG_ANIMATION_FRAME_MS) {
+        return;
+    }
+    if (self._loaf_count >= LONG_ANIMATION_FRAME_BUFFER) {
+        return;
+    }
+    try self.fileLongAnimationFrame(.{
+        .opened = opened,
+        .closed = closed,
+        // Nothing renders, so a style and layout pass would begin where the
+        // work ended -- and end there too.
+        .render_start = closed,
+        .presented = closed,
+    }, exec);
 }
 
 pub fn mark(
@@ -1146,6 +1212,14 @@ pub const MemoryInfo = struct {
 /// a fast local document leaves no `long-animation-frame` entry in either
 /// engine's buffer.
 const LONG_ANIMATION_FRAME_MS: f64 = 50;
+
+/// How many `long-animation-frame` entries one document will file. Only the
+/// load frame is derived from milestones; the rest come one per blocked run of
+/// the realm's task queue, and a page that blocks for good would otherwise grow
+/// the buffer for as long as it is open. Chrome's buffers are bounded too --
+/// the number is ours, chosen to sit above what a page files in practice (the
+/// Cloudflare widget files two, measured) rather than read off Chrome.
+const LONG_ANIMATION_FRAME_BUFFER = 200;
 
 pub const Entry = struct {
     _duration: f64 = 0.0,
@@ -1698,6 +1772,13 @@ pub const PerformanceNavigation = struct {
 const testing = @import("../../testing.zig");
 test "WebApi: Performance" {
     try testing.htmlRunner("performance.html", .{});
+}
+
+test "WebApi: Performance long animation frame from a task" {
+    // Its own document: performance.html asserts the load frame is the only
+    // long frame on that page, and a task that blocks for 120ms would be a
+    // second one.
+    try testing.htmlRunner("performance_long_frame.html", .{});
 }
 
 test "WebApi: Performance resource entries" {

@@ -596,7 +596,25 @@ pub fn runMacrotasks(self: *Env) !void {
         var hs: js.HandleScope = undefined;
         const entered = ctx.enter(&hs);
         defer entered.exit();
-        try ctx.scheduler.run();
+
+        // One turn of the loop for one realm is the closest this engine has to
+        // an animation frame: the queue is drained with nothing scheduled
+        // between the tasks, and whatever they did is over when it empties. A
+        // turn that ran long is what Chrome files a `long-animation-frame` for
+        // -- see Performance.taskFrameEnded, and the widget realm it exists
+        // for.
+        switch (ctx.global) {
+            .frame => |frame| {
+                const opened = frame.performance().now();
+                try ctx.scheduler.run();
+                frame.taskFrameEnded(opened);
+            },
+            // Chrome files no long animation frames in a worker: the entry
+            // describes a rendering frame and a worker has none (measured,
+            // `probe-shapes-worker` -- a Chrome worker does not even have the
+            // interface object).
+            .worker => try ctx.scheduler.run(),
+        }
     }
 }
 
