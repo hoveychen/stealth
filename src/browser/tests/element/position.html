@@ -393,12 +393,43 @@
   lane.innerHTML += lane.innerHTML;
   testing.expectEqual(37, lane.scrollHeight);
 
+  // And the loop itself does NOT terminate -- in Chrome either, which is the
+  // reason this is asserted the other way round now.
+  //
+  // `track` is an unsized block holding `lane`, so a parent that counts what
+  // its child holds grows in step with it: `track.offsetHeight` IS
+  // `lane.scrollHeight` at every iteration and the target is always twice it.
+  // Measured verbatim on Chrome 151 with
+  // scratch/b72/expr-scrollheight-marquee.js -- twelve doublings, the two
+  // numbers equal at every one of them (19/37, 74, 148, 296, ... 151552), and
+  // `terminated=false`.
+  //
+  // It used to assert `guard < 50`, and it passed only because a parent here
+  // does NOT count its child's content (`content-height-child-box`): the lane
+  // grew, the track did not, and the metric eventually cleared a target that
+  // was standing still. So this assertion pinned the defect, and any change
+  // that fixes the defect turns the loop into a 2^50-node builder and hangs the
+  // whole binary on a 30-second watchdog -- which is what
+  // `content-height-memoised-subtree` read as "the suite is worse: 373
+  // ExecutionTerminated". One stall, not 373 failures.
+  //
+  // Its width-axis sibling `clientWidthMarqueeLoop` below already carries this
+  // same finding for its own axis, measured the same way. This is the half that
+  // was missed.
+  //
+  // The guard is 4 rather than 50 because doubling the markup 50 times is 2^50
+  // nodes: a non-terminating loop has to be affordable to assert. Four
+  // doublings is 16 nodes and settles it -- the condition is structurally
+  // always true, `track.offsetHeight` BEING `lane.scrollHeight` at every step --
+  // and the probe above ran twelve of them against Chrome for the longer look.
+  // At twelve here the test's own 4096 nodes cost `WebApi: Element` three
+  // seconds; at four it costs 0.2, which is the engine's actual share.
   let guard = 0;
-  while (lane.scrollHeight < track.offsetHeight * 2 && guard < 50) {
+  while (lane.scrollHeight < track.offsetHeight * 2 && guard < 4) {
     lane.innerHTML += lane.innerHTML;
     guard++;
   }
-  testing.expectTrue(guard < 50);
+  testing.expectEqual(4, guard);
 }
 </script>
 <script id="scrollPosition">

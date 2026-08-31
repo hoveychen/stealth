@@ -24019,3 +24019,65 @@ The sweep read 22/29, back to the session's baseline: the two stations that move
 are `dd-datadome` and `dd-hermes`, both swinging back to `pass` from the
 `datadome-challenge` they were giving every binary an hour earlier. No
 Cloudflare station moved and x-hyatt is still refused. 1583/1583.
+### …and then it landed (B72)
+
+The term went in. `contentHeight` asks each child what it holds, bounded by
+`MAX_CONTAINING_BLOCK_DEPTH`, and `element/position.html`'s scrollHeight marquee
+loop is asserted the way its width-axis sibling already was — it does not
+terminate, and Chrome does not terminate it either.
+
+| reading | Chrome | before | after |
+|---|---|---|---|
+| wrapper around a 12px div | 12 12 | **0 12** | 12 12 |
+| two wrappers deep | 12 12 | **0 0** | 12 12 |
+| `overflow:hidden;padding:5px` wrapper | 22 22 | **10 22** | 22 22 |
+| 16 levels deep | 12 12 | **0 0** | 12 12 |
+| 40 wrappers wide | 480 480 | **0 0** | 480 480 |
+
+B86's own probe agrees: `probes/expr-b86-nested-depth.js` reads twelve at every
+level of a 1, 2, 4, 16 and 64-deep chain and 480 for the wide parent, which is
+what it was written to check and what it had never once answered. The three
+shapes `css/child_box_height.html` measured and deliberately left unasserted are
+asserted.
+
+**Cost: a warm suite goes 44s → 46s.** `WebApi: Element` stays out of the
+slowest five. (At a guard of 12 rather than 4 the corrected marquee test's own
+4096 nodes put it back in at 4.5s — that is the test, not the engine: the same
+binary with a guard of 4 reads 1.56s against a 1.35s baseline.)
+
+Four other changes were measured on the way here and **none of them landed**,
+because each was measured to change nothing:
+
+* carrying `depth` into the child's box instead of `getElementDimensions`;
+* a `contentHeight` memo on the Frame, held across nested entries;
+* the same memo one level down on `dimensionsAt`;
+* sizing the root containers from their content (that one does something, and
+  it is `root-container-content-height`'s, still open — it is why
+  `getComputedStyle(body).height` on example.com is still `756px` here against
+  Chrome's `98.0781px`).
+
+One caution the bisect turned up the hard way: a blind search-and-replace of
+`el.dimensionsAt(frame, true, depth + 1, true)` while stripping the depth
+experiment also hit two calls in `inlineInk` that were never part of it — and
+the comment above one of them records sixty nested `<span>`s taking the engine
+out with a SIGBUS mid-sweep. They were restored and the suite re-run. A bisect
+that edits by pattern has to check what else matches the pattern.
+
+### The sweep reading for the content-height term (B72)
+
+20/29 against the 22/29 this session's earlier arm read, both ReleaseFast, hours
+apart on the same address. Two stations differed and both are DataDome —
+`dd-datadome` and `dd-hermes`, `pass` → `datadome-challenge`. Alternated at each,
+two rounds each arm, `--only`:
+
+| station | previous binary | with the term |
+|---|---|---|
+| dd-datadome | 0/2 pass | 0/2 pass |
+| dd-hermes | 0/2 pass | 0/2 pass |
+
+**8 of 8 challenged, on both arms.** The window is shut for both binaries; the
+delta is not the change. That is the third time tonight the same three DataDome
+stations have moved on their own — see the two tables above it.
+
+`cf-scrapingcourse` is still `cf-challenge` and `x-hyatt` still `refused-429`.
+Both closed doors are exactly where they were.
