@@ -1654,7 +1654,12 @@ fn writeInternal(self: *Document, text: []const []const u8, append_newline: bool
         break :blk joined.items;
     };
 
-    if (self._current_script == null or frame._load_state != .parsing) {
+    // A script-created parser always streams: `open()` puts the frame back
+    // into .parsing (so that `close()` has a parse to end), and the write of a
+    // script running inside that parse belongs at its insertion point, not
+    // spliced in after the script element the way a parser-blocking inline
+    // script's write is.
+    if (self._script_created_parser != null or self._current_script == null or frame._load_state != .parsing) {
         if (self._script_created_parser == null or looksLikeNewDocument(html)) {
             _ = try self.open(frame);
         }
@@ -1797,6 +1802,18 @@ pub fn open(self: *Document, call_frame: *Frame) !*Document {
     self._script_created_parser = Parser.Streaming.init(frame.arena, doc_node, frame, .{ .allow_declarative_shadow = true });
     try self._script_created_parser.?.start();
     frame._parse_mode = .document;
+
+    if (frame._load_state == .complete) {
+        // The frame is parsing again, which is what gives close() something to
+        // end: ending it is what settles readyState and fires the frame's load
+        // event. A frame that already reported in to its parent has to be
+        // allowed to report again -- the second parse fires its own load event
+        // on the iframe element -- but it delays nothing this time, because the
+        // parent's own load is long over.
+        frame._load_state = .parsing;
+        frame._parent_notified = false;
+        frame._delays_parent_load = false;
+    }
 
     return self;
 }
