@@ -3227,8 +3227,10 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
     if (width == null or height == null) {
         const tag = self.getTag();
 
-        // A document's root containers fill its viewport, and its viewport is
-        // the iframe element's box when it has one. What used to be here were
+        // A document's root containers are laid out IN its viewport -- inside
+        // it, not equal to it, see the two paragraphs on `available` below --
+        // and its viewport is the iframe element's box when it has one. What
+        // used to be here were
         // two constants for every document at any depth -- 1920 wide and
         // 100_000_000 tall, so that calculateDocumentPosition's 100px-per-level
         // stacking always had room -- and both went straight out through
@@ -3242,13 +3244,15 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
         // widget reads: it dumps a computed style over the <body> of a 0x0
         // about:blank iframe.
         //
-        // A body filling the viewport is the *quirks* rendering, and an
-        // about:blank document is in quirks mode (`document.compatMode` reads
-        // BackCompat, measured). A standards-mode Chrome sizes a body to its
-        // content instead -- 0px for an empty one -- which this faux layout has
-        // no way to compute for the top-level document. The viewport is the
-        // wrong half of a real browser's two answers there, but it is one of
-        // them, which the sentinel never was.
+        // The HEIGHT that comes out of here is still the viewport's, and that
+        // is only half right. A body filling the viewport is the *quirks*
+        // rendering, and an about:blank document is in quirks mode
+        // (`document.compatMode` reads BackCompat, measured). A standards-mode
+        // Chrome sizes a body to its CONTENT instead -- 0px for an empty one,
+        // 20px for one holding a 20px div -- which this faux layout has no way
+        // to compute yet; that is `content-height-memoised-subtree`. The
+        // viewport is the wrong half of a real browser's two answers there, but
+        // it is one of them, which the sentinel never was.
         if (tag == .html or tag == .body) {
             const owner = self.ownerFrame(frame);
             // The space this element's MARGIN box is laid into. For the root
