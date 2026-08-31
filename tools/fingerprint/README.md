@@ -24968,6 +24968,18 @@ after; the red light named the value (`inline clip-path: circle() padding-box =
 (refused)`). Every expectation in it was measured on Chrome 151 first
 (`scratch/b77/expr-assertions.js`, 52 readings). Full suite 1595/1595.
 
+**Swept after the merge** (`e6bb70c9c`, ReleaseFast `zig-out-b77`, six groups in
+separate processes): **21 of 29 stations pass**, and the eight that do not are
+station for station the same eight as before the change — `cf-scrapingcourse`,
+`cf-nopecha`, `cf-zeroclover`, `dd-datadome`, `dd-g2`, `dd-saks`,
+`dd-allopneus`, `x-hyatt`. One caution for the next reader: the `dd-` group came
+back `0/8` on its first run, `timeout: Runtime.enable` on `dd-datadome` and
+`timeout: Page.navigate` on the seven behind it. That is
+`sweep-timeout-tail-is-one-crash` again, and it was transient rather than a
+regression — `dd-datadome` alone answers `datadome-challenge` 2/2 on this build
+*and* 2/2 on the previous one, and the other seven all answer normally when run
+one at a time.
+
 **None of this opens a door.** It is one more instance of a class: a generated
 table whose candidate pool is narrower than Chrome, which records "never asked"
 as "Chrome refused". Three instances are now known — `chrome_keywords` (fixed,
