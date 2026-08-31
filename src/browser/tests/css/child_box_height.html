@@ -80,16 +80,19 @@ task and not this one-line field.
     // two margins around it stay two. 22 + 10 + 12, the outer two escaping.
     ['<div data-p><div data-k style="height:12px;padding:5px;margin:10px 0"></div>' +
      '<div style="height:12px;margin:10px 0"></div></div>', '44 22'],
-    // Still open, measured, not asserted -- the parent loses what the child's
-    // own children put in it, so these read '0 12', '0 0' and '10 22' here
-    // against Chrome's '12 12', '12 12' and '22 22':
+    // What the child's own children put in it, which used to be the three
+    // shapes this file measured and did NOT assert -- they read '0 12', '0 0'
+    // and '10 22' here against Chrome's '12 12', '12 12' and '22 22'. The term
+    // is in now: contentHeight asks each child what IT holds.
     //
-    //   <div data-p><div data-k><div style="height:12px"></div></div></div>
-    //   <div data-p><div data-k><div><div style="height:12px"></div></div></div></div>
-    //   <div data-p><div data-k style="overflow:hidden;padding:5px">
-    //     <div style="height:12px"></div></div></div>
-    //
-    // See the note above for why the one-line fix is not the fix.
+    // That term was written and reverted three times before this
+    // (`content-height-memoised-subtree`) on a reading of the suite that turned
+    // out to be one hung page rather than a cost -- see the B72 chapter in the
+    // fingerprint README. It costs about 9% of a warm suite run.
+    ['<div data-p><div data-k><div style="height:12px"></div></div></div>', '12 12'],
+    ['<div data-p><div data-k><div><div style="height:12px"></div></div></div></div>', '12 12'],
+    ['<div data-p><div data-k style="overflow:hidden;padding:5px">' +
+     '<div style="height:12px"></div></div></div>', '22 22'],
   ];
 
   const wrong = [];

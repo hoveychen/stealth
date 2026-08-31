@@ -3616,7 +3616,7 @@ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_ca
         return dims.height + dims.padding_y;
     }
 
-    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width)) + dims.padding_y;
+    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0)) + dims.padding_y;
 }
 
 pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
@@ -3782,7 +3782,7 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 
     if (dims.inline_box) return 0;
 
-    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width)) + dims.padding_y);
+    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0)) + dims.padding_y);
 }
 
 // The height of the direct child elements stacked vertically, the counterpart
@@ -3803,7 +3803,7 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 // is 55.5 (a line, a block, a line) where stacking the block alone says 18.5.
 // Both measured at dpr 2 with
 // tools/fingerprint/scratch/expr-inline-content-lines.js.
-fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64) f64 {
+fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8) f64 {
     var total: f64 = 0;
 
     const font = self.resolveFont(frame);
@@ -3831,7 +3831,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
     // The children share one containing block, so the width a percentage margin
     // takes its share of is measured once for all of them.
     var margin_containing: ?f64 = content_width;
-    const escapes = self.marginEscapes(frame, &margin_containing, 0);
+    const escapes = self.marginEscapes(frame, &margin_containing, depth);
     var group: MarginGroup = .{};
     var placed = false;
 
@@ -3874,17 +3874,38 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             }
 
             const box = el.getElementDimensions(frame);
-            const margins = el.verticalMargins(frame, &margin_containing, 0);
+            const margins = el.verticalMargins(frame, &margin_containing, depth);
             group.join(margins.top);
-            // What the child HOLDS is still missing here, and knowingly so: see
-            // the note on `content-height-child-box` in the fingerprint README.
-            // Recursing into `el.contentHeight` is the obvious fix and it is
-            // measured NOT to be safe -- `WebApi: Element` ends in
-            // ExecutionTerminated, because a child measured from here reaches
-            // back up for its containing block and the walk goes down and up
-            // and down again. That is the same shape element/box_measure_loops
-            // exists for.
-            if (box.height == 0 and box.padding_y == 0 and box.border_y == 0) {
+            // What the child HOLDS. `box.height` is only the child's own
+            // content box, so without this a wrapper around a 12px div is 0
+            // here and 12 in Chrome, at every depth -- 16 levels down and 40
+            // wrappers wide alike (scratch/b72/expr-child-box-nested.js: five
+            // shapes, byte-identical to Chrome now, four of the five zero
+            // before).
+            //
+            // This term was written and reverted three times
+            // (`content-height-memoised-subtree`) on the reading that it made
+            // `WebApi: Element` end in ExecutionTerminated. It does not. What
+            // it does is make `element/position.html`'s scrollHeight marquee
+            // loop stop terminating -- correctly, and Chrome does not terminate
+            // it either -- and that loop doubles its markup 50 times, so the
+            // page hangs and one 30-second watchdog stall takes the rest of the
+            // binary with it. That cascade is what was counted as "373
+            // ExecutionTerminated"; see the B72 chapter in the fingerprint
+            // README, and the loop's own comment for why it is asserted the
+            // other way round now. The cost is about 9% of a warm suite run.
+            //
+            // `depth` bounds it at MAX_CONTAINING_BLOCK_DEPTH, and the child's
+            // box still comes from `getElementDimensions`: carrying the depth
+            // into it was measured to change nothing either way
+            // (probes/b72-depth-carry-attempt.patch), and so was a memo on the
+            // Frame (probes/b72-memo-attempt.patch), because neither was what
+            // the suite had been measuring.
+            var inner = box.height;
+            if (!box.explicit_height and depth < MAX_CONTAINING_BLOCK_DEPTH) {
+                inner = @max(inner, el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1));
+            }
+            if (inner == 0 and box.padding_y == 0 and box.border_y == 0) {
                 // Self-collapsing: there is nothing between this box's two
                 // margins, so they join the same group and it contributes no
                 // height of its own. An empty <div style="margin:10px 0">
@@ -3900,7 +3921,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             // its own offsetHeight is `height + padding_y + border_y`. Reading
             // only the middle of it made a parent disagree with its own child:
             // a padded child answers 22 for itself and the parent answered 12.
-            total += box.height + box.padding_y + box.border_y;
+            total += inner + box.padding_y + box.border_y;
             placed = true;
             group.join(margins.bottom);
             continue;
