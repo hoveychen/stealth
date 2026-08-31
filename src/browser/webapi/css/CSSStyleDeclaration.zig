@@ -517,7 +517,7 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
             // collapsing it to 0px -- has no counterpart here: measured on
             // Chrome 151, `column-rule-style: none` leaves the width at 3px.
             if (ruleWidthScale(normalized)) |scale| {
-                return computedRuleWidth(style_manager, element, normalized, wrapped, scale);
+                return computedRuleWidth(style_manager, element, normalized, wrapped, scale, frame);
             }
             // The used surface only. The CSS Typed OM reports the computed
             // width, which `border-style: none` does not collapse -- see
@@ -1869,12 +1869,19 @@ const RuleWidthScale = struct {
     // Null leaves the undeclared answer to the recorded table, which is already
     // right for `outline-width` (3px) and `-webkit-text-stroke-width` (0px).
     undeclared: ?[]const u8,
+    // Whether a fractional LENGTH is floored onto the device pixel, the way a
+    // used border width is. True for the four that draw a rule, false for
+    // `-webkit-text-stroke-width`, which echoes the author's number unrounded:
+    // `4.6px` computes to `4.5px` on the four and stays `4.6px` on the stroke,
+    // measured at dpr 2 (scratch/b72/expr-rule-grid{,2}.js). That split is why
+    // this is a field and not a property of the family.
+    device_grid: bool,
 };
 
 fn ruleWidthScale(name: []const u8) ?RuleWidthScale {
-    const BORDER: RuleWidthScale = .{ .thin = "1px", .medium = "3px", .thick = "5px", .undeclared = null };
-    const RULE: RuleWidthScale = .{ .thin = "1px", .medium = "3px", .thick = "5px", .undeclared = "1.5px" };
-    const STROKE: RuleWidthScale = .{ .thin = "0.666667px", .medium = "2px", .thick = "3.33333px", .undeclared = null };
+    const BORDER: RuleWidthScale = .{ .thin = "1px", .medium = "3px", .thick = "5px", .undeclared = null, .device_grid = true };
+    const RULE: RuleWidthScale = .{ .thin = "1px", .medium = "3px", .thick = "5px", .undeclared = "1.5px", .device_grid = true };
+    const STROKE: RuleWidthScale = .{ .thin = "0.666667px", .medium = "2px", .thick = "3.33333px", .undeclared = null, .device_grid = false };
     const NAMES = [_]struct { []const u8, RuleWidthScale }{
         .{ "outline-width", BORDER },
         .{ "column-rule-width", RULE },
@@ -2102,6 +2109,7 @@ fn computedRuleWidth(
     name: []const u8,
     wrapped: String,
     scale: RuleWidthScale,
+    frame: *Frame,
 ) []const u8 {
     const declared = found: {
         switch (cascadedValue(style_manager, element, name, wrapped, .computed)) {
@@ -2132,6 +2140,14 @@ fn computedRuleWidth(
     if (std.ascii.eqlIgnoreCase(declared, "thin")) return scale.thin;
     if (std.ascii.eqlIgnoreCase(declared, "medium")) return scale.medium;
     if (std.ascii.eqlIgnoreCase(declared, "thick")) return scale.thick;
+    // A length the four rule-drawing names carry is a USED width and lands on
+    // the device pixel, same as a border's. The stroke width is the exception
+    // and keeps the author's number; see RuleWidthScale.device_grid.
+    if (scale.device_grid and std.mem.endsWith(u8, declared, "px")) {
+        if (std.fmt.parseFloat(f64, declared[0 .. declared.len - 2])) |number| {
+            return usedWidthText(number, frame);
+        } else |_| {}
+    }
     return declared;
 }
 
@@ -2205,9 +2221,19 @@ fn usedBorderWidth(
     // else is a value Chrome's parser would have dropped.
     if (!std.mem.endsWith(u8, declared, "px")) return "3px";
     const number = std.fmt.parseFloat(f64, declared[0 .. declared.len - 2]) catch return "3px";
+    return usedWidthText(number, frame);
+}
+
+/// One used border/outline/rule width as a computed style prints it: floored
+/// onto the device pixel, never down to nothing, and written to six significant
+/// figures like every other computed length. See Element.usedWidthUnit for the
+/// grid and the two scale factors it was measured at.
+fn usedWidthText(number: f64, frame: *Frame) []const u8 {
     if (number <= 0) return "0px";
-    const whole: i64 = @intFromFloat(@floor(number));
-    return std.fmt.allocPrint(frame.local_arena, "{d}px", .{@max(whole, 1)}) catch "3px";
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    units.writeNumber(&buf.writer, Element.usedWidthUnit(number)) catch return "3px";
+    buf.writer.writeAll("px") catch return "3px";
+    return buf.written();
 }
 
 /// The border family writes all three components off a computed view, where the

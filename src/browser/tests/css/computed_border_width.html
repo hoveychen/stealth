@@ -12,10 +12,27 @@ widths (readings in tools/fingerprint/scratch/b78-bw-{ch,lp}.json):
     was declared -- all 22 cells of those two rows, and the same through a
     `border-top: 4px none rgb(1,2,3)` shorthand and through a stylesheet rule.
   * With any other style the keywords resolve (`thin` 1px, `medium` 3px, `thick`
-    5px), nothing declared is `medium`, a length is truncated to whole pixels
-    (`4.6px` -> `4px`) but a declared length above zero never truncates away
-    (`0.4px` -> `1px`), and a declaration the parser rejects falls back to
-    `medium` (`50%` -> `3px`).
+    5px), nothing declared is `medium`, a length is truncated DOWN TO A DEVICE
+    PIXEL (`4.6px` -> `4.5px`, see below) but a declared length above zero never
+    truncates away (`0.4px` -> `0.5px`), and a declaration the parser rejects
+    falls back to `medium` (`50%` -> `3px`).
+
+That truncation used to read "to whole pixels", asserting `4.6px` -> `4px` and
+`0.4px` -> `1px`, and both cells were a reading taken at the wrong scale factor.
+Chrome floors a used border width onto the DEVICE pixel and gives a non-zero one
+a floor of one device pixel, so the answer moves with devicePixelRatio, and this
+engine's persona claims 2. Re-measured over thirty widths at both factors in one
+command each, with the ratio reported in the same object as the widths
+(scratch/b72/expr-border-grid.js, readings in scratch/b72/ch-dsf{1,2}.json):
+
+    `--force-device-scale-factor=1`   max(floor(w), 1)        4.6px -> 4px
+    `--force-device-scale-factor=2`   max(floor(2w)/2, 0.5)   4.6px -> 4.5px
+
+Fifteen of the thirty widths separate the two, and the old expectations match
+the dsf=1 column exactly -- which is what says the earlier run was taken there
+and not that Chrome changed. `devicePixelRatio` is the discriminator and it is
+why it is asserted here: an engine that answers 2 while laying out on the whole
+CSS pixel is a pair a page can read in one expression.
 
 This engine leaked the keywords verbatim -- `getComputedStyle(el).borderTopWidth`
 reading `thin` is a shape Chrome never prints -- and the live Cloudflare
@@ -59,8 +76,8 @@ Wrong either way, and `3px` at least has a shape Chrome prints.
     // Drawn: a length is truncated, but a non-zero one never to nothing.
     ['border-top-style:solid;border-top-width:0px', '0px'],
     ['border-top-style:solid;border-top-width:4px', '4px'],
-    ['border-top-style:solid;border-top-width:4.6px', '4px'],
-    ['border-top-style:solid;border-top-width:0.4px', '1px'],
+    ['border-top-style:solid;border-top-width:4.6px', '4.5px'],
+    ['border-top-style:solid;border-top-width:0.4px', '0.5px'],
     ['border-top-style:solid;border-top-width:1em', '10px'],
     // Drawn: a rejected declaration is medium, not zero.
     ['border-top-style:solid;border-top-width:50%', '3px'],
@@ -171,6 +188,82 @@ Measured on Chrome 151 with tools/fingerprint/scratch/expr-empty-edges.js.
     if (got !== want) wrong.push(tag + ': want [' + want + '], got [' + got + ']');
   }
   host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The whole grid, and the three readings that move with it. The used width is not
+only what `getComputedStyle` prints: it is a border of the box, so `clientTop`
+(which rounds it), `offsetWidth` and `getBoundingClientRect().width` (which
+carry it twice) all move together, and a fix that touched the printed value
+alone would leave the box a whole pixel wide in fifteen of these thirty rows.
+
+Each row is `computed clientTop offsetWidth rectWidth` for a
+`width:100px;height:20px;border-style:solid` div, read off Chrome 151 at
+`--force-device-scale-factor=2` -- this engine's persona ratio -- in the run that
+also reported `devicePixelRatio: 2` (scratch/b72/ch-dsf2.json). The `.5`
+computed values and the odd `clientTop`s are the whole point: 3.5px and 3.6px
+both answer `3.5px 4`, which no whole-CSS-pixel model can produce.
+-->
+
+<script id=used_border_width_device_grid>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'width:400px';
+  document.body.appendChild(host);
+
+  const probe = (width) => {
+    const d = document.createElement('div');
+    d.style.cssText = 'width:100px;height:20px;border-style:solid;border-width:' + width;
+    host.appendChild(d);
+    const cs = getComputedStyle(d);
+    const got = [cs.borderTopWidth, d.clientTop, d.offsetWidth,
+                 d.getBoundingClientRect().width].join(' ');
+    d.remove();
+    return got;
+  };
+
+  const CASES = [
+    ['0px', '0px 0 100 100'],
+    // Below one device pixel, and the border still draws: the floor is one
+    // device pixel, which is half a CSS pixel at this ratio.
+    ['0.1px', '0.5px 1 101 101'],
+    ['0.25px', '0.5px 1 101 101'],
+    ['0.4px', '0.5px 1 101 101'],
+    ['0.5px', '0.5px 1 101 101'],
+    ['0.6px', '0.5px 1 101 101'],
+    ['0.9px', '0.5px 1 101 101'],
+    // From here the floor does the work, one device pixel at a time.
+    ['1px', '1px 1 102 102'],
+    ['1.4px', '1px 1 102 102'],
+    ['1.5px', '1.5px 2 103 103'],
+    ['1.6px', '1.5px 2 103 103'],
+    ['2.5px', '2.5px 3 105 105'],
+    ['3.4px', '3px 3 106 106'],
+    ['3.5px', '3.5px 4 107 107'],
+    ['3.6px', '3.5px 4 107 107'],
+    ['4px', '4px 4 108 108'],
+    ['4.6px', '4.5px 5 109 109'],
+    ['4.75px', '4.5px 5 109 109'],
+    ['5.5px', '5.5px 6 111 111'],
+    ['7.3px', '7px 7 114 114'],
+    ['10.9px', '10.5px 11 121 121'],
+    // The keywords are whole numbers already and the grid leaves them alone.
+    ['thin', '1px 1 102 102'],
+    ['medium', '3px 3 106 106'],
+    ['thick', '5px 5 110 110'],
+  ];
+
+  const wrong = [];
+  for (const [width, want] of CASES) {
+    const got = probe(width);
+    if (got !== want) wrong.push(width + ': want [' + want + '], got [' + got + ']');
+  }
+  host.remove();
+  // The grid above is a DEVICE pixel's, so the reading is only meaningful
+  // beside the ratio the engine claims -- see the chapter above.
+  testing.expectEqual(2, window.devicePixelRatio);
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
