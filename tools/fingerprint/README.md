@@ -23656,3 +23656,34 @@ now says the same thing where it used to cite the guard this change deleted:
 the heights are not a swap at all, since Chrome answers the viewport for a short
 document and the content for a tall one (200 and 430 for the same frame), so the
 reading is `max(viewport, content)` and the content half does not exist yet.
+
+### The sweep reading for both of the above (B72)
+
+Both binaries ReleaseFast, the baseline one built from main's code (`f281f19c5`,
+which differs from the tip only by a README chapter), each arm on its own CDP
+port, and a peer session was sweeping the same IP concurrently — worth saying,
+because everything that moved is a station that moves on its own.
+
+| | base | patched |
+|---|---|---|
+| full sweep | **22/29** | **19/29** |
+
+Three stations differed and all three are DataDome: `dd-datadome`,
+`dd-leboncoin` and `dd-hermes`, each `pass` → `datadome-challenge`. Alternating
+the two binaries at each of them, three rounds each, `--only` so no other
+station's traffic is in the way:
+
+| station | base | patched |
+|---|---|---|
+| dd-datadome | 0/3 pass | 0/3 pass |
+| dd-leboncoin | 0/3 pass | 0/3 pass |
+| dd-hermes | 0/3 pass | 0/3 pass |
+
+**18 of 18 challenged, on both arms** — including the baseline binary that had
+passed all three an hour earlier in its own sweep. The window is shut for both;
+the difference is not the binary. Same shape B71 measured on the same three
+stations, and the same protocol: a whole-sweep delta only names which stations
+to re-run, and no station's result counts until it has been alternated.
+
+`cf-scrapingcourse` is still `cf-challenge` and `x-hyatt` still `refused-429`,
+on both arms, all four readings. Both closed doors are exactly where they were.
