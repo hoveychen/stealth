@@ -1688,10 +1688,69 @@ fn _documentIsComplete(self: *Frame) !void {
         log.debug(.frame, "load", .{ .url = self.url, .type = self._type });
     }
 
+    self.probeLayoutPassCost();
+
     // Last, after every other subresource, which is where Chrome puts it.
     self.requestFavicon();
 
     self.notifyParentLoadComplete();
+}
+
+/// What `LIGHTPANDA_LAYOUT_PASS_PROBE` asked for, read once.
+///
+/// An environment variable and not a flag: the pass behind it is a prototype
+/// being priced (the `layout-pass-cost-prototype` plan), nothing on the page can
+/// see it either way, and it should leave no CLI surface behind if the price
+/// turns out to be too high. Same shape as LIGHTPANDA_DISABLE_CORE_DUMP.
+///
+/// `dump` additionally logs every position the pass computed, which is how the
+/// table is checked against the ground truth the parent plan measured
+/// (`scratch/b74/expr-inflow-position-matrix.js`) without any accessor reading
+/// it.
+const LayoutPassProbe = enum { off, time, dump };
+var layout_pass_probe: ?LayoutPassProbe = null;
+
+/// Time one document-wide layout pass and report what it cost.
+///
+/// Costs a loaded enum when the probe is off, which is what keeps this out of
+/// the way of an antibot sweep. The table is filled and then dropped on the
+/// floor: no reader is wired to it yet, on purpose.
+fn probeLayoutPassCost(self: *Frame) void {
+    const mode = layout_pass_probe orelse blk: {
+        const raw = std.c.getenv("LIGHTPANDA_LAYOUT_PASS_PROBE");
+        const resolved: LayoutPassProbe = if (raw) |r|
+            (if (std.mem.eql(u8, std.mem.span(r), "dump")) .dump else .time)
+        else
+            .off;
+        layout_pass_probe = resolved;
+        break :blk resolved;
+    };
+    if (mode == .off) return;
+
+    const root = self.document.getDocumentElement() orelse return;
+    var table: Element.PositionTable = .{};
+    const started_us = lp.datetime.microTimestamp(.boot);
+    const placed = Element.layoutPassPositions(root, self, &table);
+    const elapsed_us = lp.datetime.microTimestamp(.boot) - started_us;
+    log.warn(.telemetry, "layout pass cost", .{
+        .url = self.url,
+        .placed = placed,
+        .us = elapsed_us,
+        .ns_per_node = if (placed == 0) 0 else (elapsed_us * std.time.ns_per_us) / placed,
+    });
+
+    if (mode == .dump) {
+        var it = table.iterator();
+        while (it.next()) |entry| {
+            const element = entry.key_ptr.*;
+            log.warn(.telemetry, "layout pass position", .{
+                .tag = element.getTagNameDump(),
+                .id = element.getId(),
+                .x = entry.value_ptr.x,
+                .y = entry.value_ptr.y,
+            });
+        }
+    }
 }
 
 fn notifyParentLoadComplete(self: *Frame) void {
