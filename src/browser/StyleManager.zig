@@ -672,12 +672,10 @@ fn addRawRuleAtDepth(self: *StyleManager, build_arena: Allocator, selector_text:
         // (probes/expr-b81-font-shorthand-layout.js, the `sheet` case).
         if (shorthand.systemFontExpansion(name, val)) |expansion| {
             for (expansion.names, expansion.values) |longhand_name, longhand_value| {
-                try longhands.append(self.arena.allocator(), .{
-                    .name = longhand_name,
-                    .value = canonicalValue(self.arena.allocator(), longhand_name, longhand_value),
-                    .important = decl.important,
-                    .specified = CSSStyleDeclaration.specifiedNumber(longhand_value),
-                });
+                try longhands.append(
+                    self.arena.allocator(),
+                    namedDeclaration(self.arena.allocator(), longhand_name, longhand_value, decl.important),
+                );
                 carryFontProp(&props, longhand_name, longhand_value, decl.important);
             }
             continue;
@@ -700,12 +698,10 @@ fn addRawRuleAtDepth(self: *StyleManager, build_arena: Allocator, selector_text:
             },
             .parsed => |expansion| {
                 for (expansion.names, expansion.values) |longhand_name, longhand_value| {
-                    try longhands.append(self.arena.allocator(), .{
-                        .name = longhand_name,
-                        .value = canonicalValue(self.arena.allocator(), longhand_name, longhand_value),
-                        .important = decl.important,
-                        .specified = CSSStyleDeclaration.specifiedNumber(longhand_value),
-                    });
+                    try longhands.append(
+                        self.arena.allocator(),
+                        namedDeclaration(self.arena.allocator(), longhand_name, longhand_value, decl.important),
+                    );
                     carryFontProp(&props, longhand_name, longhand_value, decl.important);
                 }
                 continue;
@@ -719,12 +715,10 @@ fn addRawRuleAtDepth(self: *StyleManager, build_arena: Allocator, selector_text:
         // longhand.
         if (shorthand.grammarExpansion(self.arena.allocator(), name, val) catch null) |expansion| {
             for (expansion.names, expansion.values) |longhand_name, longhand_value| {
-                try longhands.append(self.arena.allocator(), .{
-                    .name = longhand_name,
-                    .value = canonicalValue(self.arena.allocator(), longhand_name, longhand_value),
-                    .important = decl.important,
-                    .specified = CSSStyleDeclaration.specifiedNumber(longhand_value),
-                });
+                try longhands.append(
+                    self.arena.allocator(),
+                    namedDeclaration(self.arena.allocator(), longhand_name, longhand_value, decl.important),
+                );
             }
             continue;
         }
@@ -732,24 +726,20 @@ fn addRawRuleAtDepth(self: *StyleManager, build_arena: Allocator, selector_text:
         if (shorthand.lookup(name)) |entry| {
             if (shorthand.expand(self.arena.allocator(), entry, val) catch null) |expansion| {
                 for (expansion.names, expansion.values) |longhand_name, longhand_value| {
-                    try longhands.append(self.arena.allocator(), .{
-                        .name = longhand_name,
-                        .value = canonicalValue(self.arena.allocator(), longhand_name, longhand_value),
-                        .important = decl.important,
-                        .specified = CSSStyleDeclaration.specifiedNumber(longhand_value),
-                    });
+                    try longhands.append(
+                        self.arena.allocator(),
+                        namedDeclaration(self.arena.allocator(), longhand_name, longhand_value, decl.important),
+                    );
                 }
                 continue;
             }
         }
 
         const lowered = try lowerDuped(self.arena.allocator(), name);
-        try longhands.append(self.arena.allocator(), .{
-            .name = lowered,
-            .value = canonicalValue(self.arena.allocator(), lowered, val),
-            .important = decl.important,
-            .specified = CSSStyleDeclaration.specifiedNumber(val),
-        });
+        try longhands.append(
+            self.arena.allocator(),
+            namedDeclaration(self.arena.allocator(), lowered, val, decl.important),
+        );
     }
     props.custom = custom.items;
     props.longhands = longhands.items;
@@ -1630,6 +1620,7 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
             .value = try arena.dupe(u8, property._value.str()),
             .important = property._important,
             .specified = property._specified,
+            .raw = if (property._raw) |*raw| try arena.dupe(u8, raw.str()) else null,
         };
         // This path reads a materialised CSSOM declaration, whose shorthands
         // the declaration's own parser already expanded -- unlike the raw one,
@@ -1736,6 +1727,13 @@ pub const Declaration = struct {
     /// token. `value` is its six-significant-figure print, which the layout is
     /// not allowed to read back -- CSSStyleDeclaration.specifiedNumber says why.
     specified: ?f64 = null,
+    /// The TEXT the author wrote, for the properties whose value is a function
+    /// and whose numbers therefore cannot be carried in `specified` -- one f64
+    /// does not hold `rotate(45deg) translateX(3px)`. Same reason as `specified`
+    /// and the same rule: `value` is the print, this is what to compute from.
+    /// Null when there is nothing to keep, which is every property that has no
+    /// consumer for it -- see `keepsAuthorText`.
+    raw: ?[]const u8 = null,
 };
 
 const RuleProperties = struct {
@@ -1802,7 +1800,27 @@ pub const NamedDeclaration = struct {
     important: bool,
     /// As Declaration.specified: the author's number beside its print.
     specified: ?f64 = null,
+    /// As Declaration.raw: the author's text beside its print.
+    raw: ?[]const u8 = null,
 };
+
+/// One longhand as the cascade keeps it: the canonical print to read back, the
+/// author's number where a single token carried one, and the author's text where
+/// a function's numbers cannot fit in that.
+///
+/// Written once and called from each expansion branch rather than repeated: the
+/// five branches held byte-identical initialisers, and the whole point of the
+/// two extra fields is that every branch has to fill them the same way.
+fn namedDeclaration(arena: Allocator, name: []const u8, raw: []const u8, important: bool) NamedDeclaration {
+    const canonical = canonicalValue(arena, name, raw);
+    return .{
+        .name = name,
+        .value = canonical,
+        .important = important,
+        .specified = CSSStyleDeclaration.specifiedNumber(raw),
+        .raw = CSSStyleDeclaration.authorText(arena, name, raw, canonical),
+    };
+}
 
 const Rule = struct {
     selector: Selector.Selector, // Single selector, not a list
@@ -1899,6 +1917,13 @@ pub fn inlineStyleDeclaration(self: *StyleManager, el: *Element, property_name: 
         .value = property._value.str(),
         .important = property._important,
         .specified = property._specified,
+        // Captured BY POINTER. `String` is a German string: a short one lives
+        // in the struct's own bytes, so `str()` on a by-value capture of the
+        // optional hands out a slice into a temporary that dies with the `if`.
+        // Measured: `scale(1e-6)` (11 bytes, inline) came back as
+        // `qqqqqqqqqqqqqqo` and refused to parse, while
+        // `rotate(1.5707963267948966rad)` (31 bytes, heap) was fine.
+        .raw = if (property._raw) |*raw| raw.str() else null,
     };
 }
 
@@ -2527,6 +2552,7 @@ fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8,
                     .value = declaration.value,
                     .important = declaration.important,
                     .specified = declaration.specified,
+                    .raw = declaration.raw,
                 };
                 priority.* = p;
                 important.* = declaration.important;

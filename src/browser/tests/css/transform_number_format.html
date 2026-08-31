@@ -38,14 +38,53 @@
   there and not here. Matching it would mean reproducing Blink's trigonometry,
   not its serialisation.
 
-  NOT here, measured and out of scope: `rotate(89.9999999deg)` prints
-  `1.74533e-09` in Chrome and `0` here, and `rotate(1.5707963267948966rad)` is
-  exactly `matrix(0, 1, -1, 0, 0, 0)` there and `-0.000004` here. Both are the
-  same third defect: this engine's declaration store keeps the number ROUNDED to
-  six significant digits and every computation downstream reads the rounded one,
-  while Chrome rounds only on the way out -- its `el.style.transform` reads back
-  `rotate(1.5708rad)` too. That one is a change to the number store, not to the
-  transform code, and it has its own plan.
+  The third defect, and the block below is it: this engine's declaration store
+  keeps the number ROUNDED to six significant digits and every computation
+  downstream reads the rounded one, while Chrome rounds only on the way out --
+  its `el.style.transform` reads back `rotate(1.5708rad)` too. So the fix is two
+  texts, not a different print: the canonical one for reading back and the
+  author's for computing with.
+
+  What Chrome keeps of the author's number is measured rather than assumed, with
+  `scratch/b75/expr-number-retention.js`, `expr-truncation-boundary.js` and
+  `expr-token-kinds.js`, read through cos and through a translation because those
+  turn a dropped digit into a printable difference. **A `<dimension>` keeps at
+  most seven digits after the decimal point, as WRITTEN; a `<number>` and a
+  `<percentage>` keep all of them.** Four readings, Chrome 151:
+
+    * the cut is at the seventh decimal -- pi/2 in radians written to 6dp gives
+      `3.26795e-07`, to 7dp `2.67949e-08`, and to 8, 9, 12 and 17dp the same
+      `2.67949e-08` as 7dp; `0.00000012px` and `0.0000001234px` are both
+      `1e-07`, and `0.000000001px` is `0`;
+    * it TRUNCATES, it does not round -- `89.99999985deg` and `89.99999989deg`
+      both give `3.49066e-09`, which is `89.9999998`; rounding would have given
+      the `1.74533e-09` that `89.99999995deg` gives;
+    * decimal places and not significant digits -- `36089.9999999deg` still
+      keeps its seventh decimal, which is twelve significant digits, and
+      `89.9999985deg` (seven decimals exactly) loses nothing. That row is the
+      one reading NOT asserted below: Chrome answers `1.74534e-09` there and
+      this engine `1.74538e-09`, which is not the retention rule (both kept the
+      digit) but Chrome reducing an angle of 36 thousand degrees differently --
+      the same kind of residual as the 45-degree composition above, and the same
+      reason for leaving it: it would mean reproducing Blink's trigonometry;
+    * it is a rule about the TEXT and not the value, and it applies to a
+      dimension only. `rotate(1e-9rad)` keeps its `1e-09` where
+      `rotate(0.000000001rad)` -- the same double -- comes out `0`, so an
+      exponent form is exempt. `scale(0.000000001)` is `1e-09` where
+      `translateX(0.000000001px)` is `0`, and `translateX(0.000123456789%)` on a
+      100px box is `0.000123457` where the same digits in `px` give `0.0001234`.
+
+  That last row is why this is a slice of the author's text and not a rounding
+  of the parsed double: a numeric truncation cannot tell `1e-9rad` from
+  `0.000000001rad`, and an earlier version of this fix that did it numerically
+  turned `scale(0.000123456789)` into `0.0001234` and `scale(1e-6)` into nothing
+  at all. The two blocks above caught it.
+
+  An earlier version of this comment said Chrome answers exactly
+  `matrix(0, 1, -1, 0, 0, 0)` for `rotate(1.5707963267948966rad)`. It does not,
+  and the block below is the correction: it answers `2.67949e-08`, because the
+  angle it computes from is `1.5707963` and that is not a right angle. Only an
+  angle whose SEVEN-DECIMAL form is a right angle gets the exact matrix.
 -->
 
 <body>
@@ -128,6 +167,110 @@
   ];
   for (const [t, expected] of CASES) {
     testing.expectEqual(t + ' = ' + expected, t + ' = ' + probe(t));
+  }
+}
+</script>
+
+<script id=a_number_keeps_seven_decimals_of_what_the_author_wrote>
+{
+  // The reading that separates "the store rounded it" from "the print rounded
+  // it": cos of an angle a hair off a right angle. A six-significant-digit
+  // store answers -3.67321e-06 for all of these, because that is cos(1.5708).
+  const computed = (t) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;transform: ' + t + ';';
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).transform);
+    el.remove();
+    return got;
+  };
+  const CASES = [
+    // Seven decimals survive; everything past them does not, so these three
+    // spellings of pi/2 all compute from 1.5707963.
+    ['rotate(1.5707963267948966rad)', 'matrix(2.67949e-08, 1, -1, 2.67949e-08, 0, 0)'],
+    ['rotate(1.5707963rad)', 'matrix(2.67949e-08, 1, -1, 2.67949e-08, 0, 0)'],
+    // ...and one written to six keeps only six.
+    ['rotate(1.570796rad)', 'matrix(3.26795e-07, 1, -1, 3.26795e-07, 0, 0)'],
+    // The same in degrees, which is what says the cut is in the unit as
+    // WRITTEN and not in radians after conversion.
+    ['rotate(89.9999999deg)', 'matrix(1.74533e-09, 1, -1, 1.74533e-09, 0, 0)'],
+    ['rotate(89.999999deg)', 'matrix(1.74533e-08, 1, -1, 1.74533e-08, 0, 0)'],
+    // Truncation, not rounding: rounding would make this one 89.9999999.
+    ['rotate(89.99999985deg)', 'matrix(3.49066e-09, 1, -1, 3.49066e-09, 0, 0)'],
+    ['rotate(89.99999989deg)', 'matrix(3.49066e-09, 1, -1, 3.49066e-09, 0, 0)'],
+    ['rotate(89.99999995deg)', 'matrix(1.74533e-09, 1, -1, 1.74533e-09, 0, 0)'],
+    // Seven decimals exactly: nothing to drop.
+    ['rotate(89.9999985deg)', 'matrix(2.61799e-08, 1, -1, 2.61799e-08, 0, 0)'],
+    // A right angle is still exact -- its seven-decimal form IS a right angle.
+    ['rotate(90deg)', 'matrix(0, 1, -1, 0, 0, 0)'],
+    ['rotate(90.0000000deg)', 'matrix(0, 1, -1, 0, 0, 0)'],
+  ];
+  for (const [t, expected] of CASES) {
+    testing.expectEqual(t + ' = ' + expected, t + ' = ' + computed(t));
+  }
+}
+</script>
+
+<script id=reading_a_declaration_back_still_prints_six_significant_digits>
+{
+  // The half that must NOT change. Chrome hands the author's number to the
+  // layout and the six-digit print to the page, so keeping the number cannot
+  // start leaking digits into `el.style`.
+  const inline_ = (t) => {
+    const el = document.createElement('div');
+    el.style.transform = t;
+    return String(el.style.transform);
+  };
+  const CASES = [
+    ['rotate(1.5707963267948966rad)', 'rotate(1.5708rad)'],
+    ['rotate(89.9999999deg)', 'rotate(90deg)'],
+    ['rotate(89.99999985deg)', 'rotate(90deg)'],
+    ['translateX(465.5466592px)', 'translateX(465.547px)'],
+    ['scale(1.234567891)', 'scale(1.23457)'],
+  ];
+  for (const [t, expected] of CASES) {
+    testing.expectEqual(t + ' -> ' + expected, t + ' -> ' + inline_(t));
+  }
+}
+</script>
+
+<script id=only_a_dimension_loses_digits>
+{
+  // The rows that say the rule is about the text of a DIMENSION and not about
+  // the value: same double, two spellings, two answers -- and a bare number or
+  // a percentage carrying the same digits keeps all of them.
+  const computed = (t) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:100px;height:50px;transform: ' + t + ';';
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el).transform);
+    el.remove();
+    return got;
+  };
+  const CASES = [
+    // A length is cut at the seventh decimal...
+    ['translateX(0.00000012px)', 'matrix(1, 0, 0, 1, 1e-07, 0)'],
+    ['translateX(0.0000001234px)', 'matrix(1, 0, 0, 1, 1e-07, 0)'],
+    ['translateX(0.000000001px)', 'matrix(1, 0, 0, 1, 0, 0)'],
+    ['translateX(0.000123456789px)', 'matrix(1, 0, 0, 1, 0.0001234, 0)'],
+    // ...but an exponent form has no decimals to cut.
+    ['translateX(1e-9px)', 'matrix(1, 0, 0, 1, 1e-09, 0)'],
+    ['rotate(1e-9rad)', 'matrix(1, 1e-09, -1e-09, 1, 0, 0)'],
+    ['rotate(0.000000001rad)', 'matrix(1, 0, 0, 1, 0, 0)'],
+    // ...and written with an exponent, pi/2 stays an exact right angle where the
+    // plain decimal spelling of the same double does not.
+    ['rotate(1.5707963267948966e0rad)', 'matrix(0, 1, -1, 0, 0, 0)'],
+    ['rotate(15.707963267948966e-1rad)', 'matrix(0, 1, -1, 0, 0, 0)'],
+    // A bare <number> is not a dimension and keeps everything.
+    ['scale(0.000000001)', 'matrix(1e-09, 0, 0, 1e-09, 0, 0)'],
+    ['scale(0.0000001234)', 'matrix(1.234e-07, 0, 0, 1.234e-07, 0, 0)'],
+    // Neither is a <percentage>. The box is 100px wide, so this translation is
+    // 0.000123456789px -- and it keeps digits the same value in `px` loses.
+    ['translateX(0.000123456789%)', 'matrix(1, 0, 0, 1, 0.000123457, 0)'],
+    ['translateX(12.3456789012%)', 'matrix(1, 0, 0, 1, 12.3457, 0)'],
+  ];
+  for (const [t, expected] of CASES) {
+    testing.expectEqual(t + ' = ' + expected, t + ' = ' + computed(t));
   }
 }
 </script>
