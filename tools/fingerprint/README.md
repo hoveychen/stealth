@@ -24872,3 +24872,11 @@ weighed long ago -- and the widget's own stylesheet, 37 characters, which is the
 chapter above this one and is now fixed. **The guard's plaintext is very nearly
 equal, and the station still refuses us**, which is where
 `cfsc-does-not-judge-collected-values` said this would end.
+
+**Re-measured after the keyword fix** (`e31f378d1`, ReleaseFast): the widget's
+own stylesheet comes out of this engine at **20696 characters, byte-identical to
+Chrome's**, and the off-site probe that found it is 30 readings, 0 differing.
+Six of the fifteen encodes now match byte for byte. What is left in the guard's
+plaintext is three pixel-buffer families -- right length, wrong content, knob-
+tested as not weighed years of chapters ago -- and four short values that this
+chapter shows Cloudflare does not weigh. The station is still `served=false`.
