@@ -1,0 +1,564 @@
+From 9f263fcfb5733ec4f33aa8201be4870b635a91ef Mon Sep 17 00:00:00 2001
+From: hoveychen <1111905+hoveychen@users.noreply.github.com>
+Date: Mon, 31 Aug 2026 02:18:19 -0700
+Subject: [PATCH] the root containers are as tall as what they hold, in
+ standards mode
+
+`getComputedStyle(body).height` was a per-document constant: the viewport less
+the body's margins, whatever the document held. 184px in a 200px frame for an
+empty body, for one holding a 20px div and for one holding a 900px div alike.
+That reading travels -- the Cloudflare widget dumps a whole computed style off
+the <body> -- and on example.com Chrome answers 98.0781px where this answered
+756px.
+
+Filling the viewport is the QUIRKS rendering, and it stays: an about:blank
+document is in quirks mode, which is the one the 0x0-iframe assertions read. In
+standards mode nothing sizes the two containers in `dimensionsAt` any more, so
+they fall through to the same content pass every other `auto`-height block goes
+through. The quirks fill becomes a floor rather than an answer for the same
+reason, which is `@max(dims.height, content)` -- a quirks body holding a 900px
+div reports 900 of offsetHeight and not 184, and its root grows with it.
+
+Two rules came out of the measurement beside it:
+
+  * a first child's margin cannot escape through the ROOT element, because the
+    root's own margins do not collapse (CSS 2.1 8.3.1). The body's 8px UA
+    margins are therefore inside the root's content box, which is the whole of
+    the 16px between the root's height and the body's;
+  * scrollHeight on the SCROLLING ELEMENT is the scrolling AREA and not its own
+    box: `max(viewport, the root's border box)`. Which element that is takes the
+    same CSSOM swap clientHeight already took -- the root in standards mode, the
+    body in quirks -- so one branch answers 200 and 430 for a standards root and
+    200 and 916 for a quirks body.
+
+frames/root_box_heights.html pins all of it: nineteen served documents read on a
+headed Chrome 151 at dpr 2, eighteen of the nineteen rows byte-identical now
+where the whole table disagreed before. The nineteenth is left as the number this
+engine answers, with Chrome's beside it -- a descendant's ESCAPED margin still
+vanishes instead of collapsing into its ancestor's content height, which
+scratch/b73/expr-escaped-margin.js shows is a margin-collapse defect and not a
+root-container one (both arms agree at one, two and three levels of plain
+nesting; they part on a body holding four such wrappers, 220 against 130).
+
+The two assertions that pinned the old behaviour are re-stated: the top-level
+block in frames/iframe_root_box.html said so in its own comment, and the closing
+lines of element/position.html called the root containers' size synthetic.
+---
+ src/browser/tests/element/position.html       |  22 ++-
+ .../element/scroll_dimension_integers.html    |   8 +-
+ src/browser/tests/frames/iframe_root_box.html |  35 ++++-
+ src/browser/tests/frames/root_box_edges.html  |  12 +-
+ .../tests/frames/root_box_heights.html        | 143 ++++++++++++++++++
+ .../frames/support/root_box_body_margin0.html |   1 +
+ .../frames/support/root_box_child_margin.html |   1 +
+ .../frames/support/root_box_decl_height.html  |   1 +
+ .../tests/frames/support/root_box_empty.html  |   1 +
+ .../tests/frames/support/root_box_nested.html |   1 +
+ .../frames/support/root_box_overflow.html     |   1 +
+ .../support/root_box_quirks_overflow.html     |   1 +
+ .../frames/support/root_box_quirks_plain.html |   1 +
+ .../frames/support/root_box_root_height.html  |   1 +
+ .../tests/frames/support/root_box_tall.html   |   1 +
+ src/browser/webapi/Element.zig                |  89 ++++++++---
+ 16 files changed, 269 insertions(+), 50 deletions(-)
+ create mode 100644 src/browser/tests/frames/root_box_heights.html
+ create mode 100644 src/browser/tests/frames/support/root_box_body_margin0.html
+ create mode 100644 src/browser/tests/frames/support/root_box_child_margin.html
+ create mode 100644 src/browser/tests/frames/support/root_box_decl_height.html
+ create mode 100644 src/browser/tests/frames/support/root_box_empty.html
+ create mode 100644 src/browser/tests/frames/support/root_box_nested.html
+ create mode 100644 src/browser/tests/frames/support/root_box_overflow.html
+ create mode 100644 src/browser/tests/frames/support/root_box_quirks_overflow.html
+ create mode 100644 src/browser/tests/frames/support/root_box_quirks_plain.html
+ create mode 100644 src/browser/tests/frames/support/root_box_root_height.html
+ create mode 100644 src/browser/tests/frames/support/root_box_tall.html
+
+diff --git a/src/browser/tests/element/position.html b/src/browser/tests/element/position.html
+index cb67b0123..442a05c69 100644
+--- a/src/browser/tests/element/position.html
++++ b/src/browser/tests/element/position.html
+@@ -361,14 +361,22 @@
+   document.body.appendChild(emptyPanel);
+   testing.expectEqual(0, emptyPanel.scrollHeight);
+ 
+-  // The root containers keep their synthetic size rather than summing
+-  // children. This is what keeps infinite-scroll triggers reading
+-  // `scrollTop + clientHeight >= scrollHeight` on body/documentElement
+-  // behaving as they do today.
++  // The two root containers, which no longer keep a synthetic size: a
++  // standards-mode document sizes both of them to their CONTENT
++  // (frames/root_box_heights.html has the Chrome table). What holds regardless
++  // of what this page ends up holding is the pair of rules those readings come
++  // off, and that is what is asserted -- it is also what keeps infinite-scroll
++  // triggers reading `scrollTop + clientHeight >= scrollHeight` on
++  // body/documentElement behaving:
++  //
++  //   * the <body> is not the scrollport in standards mode, so both of its
++  //     readings are its own padding box and they agree;
++  //   * the <html> IS, so its clientHeight is the viewport and its scrollHeight
++  //     is the scrolling area, which is never smaller.
+   testing.expectEqual(document.body.clientHeight, document.body.scrollHeight);
+-  testing.expectEqual(
+-    document.documentElement.clientHeight,
+-    document.documentElement.scrollHeight,
++  testing.expectEqual(window.innerHeight, document.documentElement.clientHeight);
++  testing.expectTrue(
++    document.documentElement.scrollHeight >= document.documentElement.clientHeight,
+   );
+ }
+ </script>
+diff --git a/src/browser/tests/element/scroll_dimension_integers.html b/src/browser/tests/element/scroll_dimension_integers.html
+index e6dfa61fe..478467cc9 100644
+--- a/src/browser/tests/element/scroll_dimension_integers.html
++++ b/src/browser/tests/element/scroll_dimension_integers.html
+@@ -13,10 +13,10 @@ That is a stronger tell than a wrong number is: no real browser can produce it
+ at all, and `Number.isInteger(document.body.scrollWidth)` is one expression.
+ 
+ Asserted as the RULE rather than against Chrome's numbers, because the values
+-themselves depend on the viewport, which differs between the arms -- and because
+-two of these shapes also sit on the sealed body-height defect
+-(content-height-memoised-subtree P4), which this does not touch. Chrome 151
+-answers an integer for every case below.
++themselves depend on the viewport, which differs between the arms. The
++root-container heights two of these shapes read are pinned against Chrome
++elsewhere, over nineteen served documents: frames/root_box_heights.html.
++Chrome 151 answers an integer for every case below.
+ -->
+ 
+ <script id=scroll_dimensions_are_never_fractional>
+diff --git a/src/browser/tests/frames/iframe_root_box.html b/src/browser/tests/frames/iframe_root_box.html
+index 5973be8e8..e1464706e 100644
+--- a/src/browser/tests/frames/iframe_root_box.html
++++ b/src/browser/tests/frames/iframe_root_box.html
+@@ -22,10 +22,10 @@ throughout. A body that fills its viewport is the quirks-mode rendering, and an
+ about:blank document is in quirks mode (compatMode reads BackCompat), so this is
+ the shape for exactly the documents these iframes hold.
+ 
+-The top-level block pins this engine's answer rather than Chrome's. Chrome in
+-standards mode sizes a body to its content, which this faux layout cannot
+-compute; the viewport is the other of a real browser's two answers, and unlike
+-the constant it replaced it is a number a browser does report.
++The top-level block asserted the WIDTHS against the viewport and the HEIGHTS
++against this engine's own answer -- and said so. The heights are content-sized
++now, in standards mode, and the pinned Chrome table for that is
++frames/root_box_heights.html.
+ -->
+ 
+ <iframe id="zero" width="0" height="0"></iframe>
+@@ -90,19 +90,40 @@ the constant it replaced it is a number a browser does report.
+ 
+ <script id="top_level_root_box_is_the_viewport">
+ {
+-    // The top-level document has no iframe element to take a box from, so it
++    // The top-level document has no iframe element to take a WIDTH from, so it
+     // takes the viewport -- the same one window.innerWidth reports, which is
+     // the point: a script comparing the two saw them equal before, where a
+     // browser has them 16px apart because of the body's margins.
+     const hs = getComputedStyle(document.documentElement);
+     testing.expectEqual(window.innerWidth + 'px', hs.width);
+-    testing.expectEqual(window.innerHeight + 'px', hs.height);
+ 
+     const cs = getComputedStyle(document.body);
+     testing.expectEqual((window.innerWidth - 16) + 'px', cs.width);
+-    testing.expectEqual((window.innerHeight - 16) + 'px', cs.height);
+     testing.expectEqual(window.innerWidth - 16, document.body.clientWidth);
+ 
++    // The HEIGHT is not the viewport, and these two lines used to say it was --
++    // with a comment admitting they pinned this engine's answer rather than
++    // Chrome's. A standards-mode document sizes both root containers to their
++    // CONTENT, and the pinned table for that is frames/root_box_heights.html:
++    // nineteen served documents against Chrome 151, where the same body reads
++    // 0, 20, 32, 400 and 900 of height for the five things it holds.
++    //
++    // What is asserted here is the part that is about a TOP-LEVEL document,
++    // measured on Chrome 151 over scratch/b73/qc/top-standards.html -- a served
++    // page whose content is shorter than its viewport. Chrome answers
++    // `clientHeight` 862, `scrollHeight` 862 and a computed `height` of
++    // 111.789px off the same <html>: the root is still the scrolling element,
++    // so it reports the window on the two accessors that name the scrollport,
++    // and its own box on the one that names its box.
++    testing.expectEqual(window.innerHeight, document.documentElement.clientHeight);
++    testing.expectEqual(window.innerHeight, document.documentElement.scrollHeight);
++    testing.expectTrue(parseFloat(hs.height) < window.innerHeight);
++    testing.expectTrue(parseFloat(cs.height) < window.innerHeight - 16);
++    // And the body is the one that is NOT the scrollport here, so its own box
++    // is what both of its accessors report -- 86 and 86 against Chrome's 862px
++    // viewport on that same page.
++    testing.expectEqual(document.body.clientHeight, document.body.scrollHeight);
++
+     // And the number that used to be here, which no browser reports, is gone
+     // from every name that resolved against the root box.
+     for (const el of [document.documentElement, document.body]) {
+diff --git a/src/browser/tests/frames/root_box_edges.html b/src/browser/tests/frames/root_box_edges.html
+index adc6e6ca9..5c02293d7 100644
+--- a/src/browser/tests/frames/root_box_edges.html
++++ b/src/browser/tests/frames/root_box_edges.html
+@@ -32,13 +32,11 @@ had no border or padding to tell them apart -- `root_box_padding` is where they
+ separate, Chrome answering 400 for a padding box that is really 396. In quirks
+ mode the root answers its real box (386) and the body answers the viewport.
+ 
+-HEIGHTS ARE NOT ASSERTED HERE, and they are still wrong: this engine stretches
+-an `auto`-height <html> and <body> to fill the viewport where Chrome sizes them
+-to their content, so `body.offsetHeight` reads 184 in a 200px frame holding one
+-20px div where Chrome reads 20. That is a different defect with its own plan
+-(`content-height-memoised-subtree`); the fix here moves the height numbers but
+-cannot make them right, and asserting them would be asserting that engine's
+-behaviour rather than a browser's.
++HEIGHTS ARE NOT ASSERTED HERE, because they are a separate rule with its own
++pinned table: an `auto` height on either container is sized by its CONTENT in
++standards mode and fills the viewport only in quirks. The nineteen-document
++Chrome table for that is frames/root_box_heights.html, which reuses the same
++support/ fixtures this file reads widths off.
+ -->
+ 
+ <iframe id=f_border src="support/root_box_border.html" style="width:400px;height:200px;border:0"></iframe>
+diff --git a/src/browser/tests/frames/root_box_heights.html b/src/browser/tests/frames/root_box_heights.html
+new file mode 100644
+index 000000000..67f985610
+--- /dev/null
++++ b/src/browser/tests/frames/root_box_heights.html
+@@ -0,0 +1,143 @@
++<!DOCTYPE html>
++<body>
++<script src="../testing.js"></script>
++
++<!--
++The HEIGHT half of root_box_edges.html, which asserts only widths and says so.
++
++An `auto` height on the two root containers is sized by their CONTENT in
++standards mode and FILLS the viewport in quirks mode. This engine filled the
++viewport for both, so every document it served answered the same height off its
++<body> whatever the document held -- `getComputedStyle(body).height` was
++`184px` for an empty body, for a body holding a 20px div and for a body holding
++a 900px one alike, in a 200px frame. That reading travels: the Cloudflare widget
++dumps a whole computed style off the <body>, and on example.com Chrome answers
++`98.0781px` there where this engine answered `756px`
++(scratch/b72/expr-body-height.js).
++
++Every number below is measured on a headed Chrome 151 at devicePixelRatio 2
++against these exact support documents (scratch/b73/expr-height-row.js over
++scratch/b73/ch-support-row.json), each in a 400x200 borderless iframe. The rules
++the table encodes:
++
++  * STANDARDS, <body>: the height is what it holds, and its children's margins
++    ESCAPE it -- `child_margin` holds a 20px div with 30px margins and the body
++    is 20 tall, not 80. clientHeight/scrollHeight add its padding, offsetHeight
++    adds its border, and the computed `height` is the content box.
++  * STANDARDS, <html>: the height is the <body>'s MARGIN box, plus its own
++    padding and border for offsetHeight -- `border` is 36px of computed height
++    and 50 of offsetHeight. An empty body is 8 and not 16, because a
++    self-collapsing box's own two margins collapse into one.
++  * STANDARDS, clientHeight/scrollHeight on <html>: the root is the scrolling
++    element, so clientHeight is the VIEWPORT (200 throughout, the mirror of the
++    width rule in root_box_edges.html) and scrollHeight is the scrolling AREA --
++    `max(viewport, the root's border box)`, which is 200 for every short
++    document here and 430 for `tall`.
++  * QUIRKS: the <body> fills instead, and the swap in `cssomViewport` puts the
++    viewport on ITS clientHeight and the root's own box on the root's. A quirks
++    body still GROWS past the fill when it holds more (`quirks_overflow` is 900
++    of offsetHeight, not 184), and both containers grow with it.
++
++Two readings are deliberately NOT asserted, and they are measured so the next
++hop does not have to: `<html style="height:100%"><body style="height:100%">` is
++body 200/200/200/200px and root 200/200/208/200px -- the 208 is the body's
++margin box hanging 8px past a root that is exactly the viewport, which needs a
++scrolling area built from the descendants' bounds rather than from the root's
++own border box. And `body{min-height:100vh}` is body 200/200/200/200px, root
++200/216/216/216px. Both are percentage/viewport-relative heights, a different
++question from the `auto` one this file is about.
++-->
++
++<iframe id=empty src="support/root_box_empty.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=plain src="support/root_box_plain.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=nested src="support/root_box_nested.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=child_margin src="support/root_box_child_margin.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=body_margin0 src="support/root_box_body_margin0.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=body_margin src="support/root_box_body_margin.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=body_edges src="support/root_box_body_edges.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=decl_height src="support/root_box_decl_height.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=root_height src="support/root_box_root_height.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=border src="support/root_box_border.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=padding src="support/root_box_padding.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=margin src="support/root_box_margin.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=width src="support/root_box_width.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=tall src="support/root_box_tall.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=overflow src="support/root_box_overflow.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=quirks_plain src="support/root_box_quirks_plain.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=quirks_overflow src="support/root_box_quirks_overflow.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=quirks_border src="support/root_box_quirks_border.html" style="width:400px;height:200px;border:0"></iframe>
++<iframe id=quirks_padding src="support/root_box_quirks_padding.html" style="width:400px;height:200px;border:0"></iframe>
++
++<script id=root_container_heights_are_the_content>
++testing.onload(() => {
++  // The whole row is one string with the document's id in front, so a failure
++  // names the document and the reading that moved without a separate message.
++  const read = (id) => {
++    const d = document.getElementById(id).contentDocument;
++    const r = d.documentElement, b = d.body;
++    const box = (el) => [
++      el.clientHeight, el.offsetHeight, el.scrollHeight,
++      d.defaultView.getComputedStyle(el).height,
++    ].join('/');
++    return [id, d.compatMode, 'body', box(b), 'root', box(r)].join(' ');
++  };
++
++  // The grid is 1/64 of a DEVICE pixel, so the table only means anything at the
++  // ratio it was measured at.
++  testing.expectEqual(2, window.devicePixelRatio);
++
++  // Every row is compared and only the ones that disagree are reported. An
++  // assertion per row would stop at the first, and a nineteen-row diff is what
++  // says whether a change moved one document or all of them.
++  const chrome151 = [
++    'empty CSS1Compat body 0/0/0/0px root 200/8/200/8px',
++    'plain CSS1Compat body 20/20/20/20px root 200/36/200/36px',
++    'nested CSS1Compat body 20/20/20/20px root 200/36/200/36px',
++    'child_margin CSS1Compat body 20/20/20/20px root 200/80/200/80px',
++    'body_margin0 CSS1Compat body 20/20/20/20px root 200/20/200/20px',
++    'body_margin CSS1Compat body 20/20/20/20px root 200/60/200/60px',
++    'body_edges CSS1Compat body 32/40/32/20px root 200/56/200/56px',
++    'decl_height CSS1Compat body 50/50/50/50px root 200/66/200/66px',
++    'root_height CSS1Compat body 20/20/20/20px root 200/150/200/150px',
++    'border CSS1Compat body 20/20/20/20px root 200/50/200/36px',
++    'padding CSS1Compat body 20/20/20/20px root 200/60/200/36px',
++    'margin CSS1Compat body 20/20/20/20px root 200/50/200/36px',
++    'width CSS1Compat body 20/20/20/20px root 200/50/200/36px',
++    'tall CSS1Compat body 400/400/400/400px root 200/430/430/416px',
++    'overflow CSS1Compat body 900/900/900/900px root 200/916/916/916px',
++    'quirks_plain BackCompat body 200/184/200/184px root 200/200/200/200px',
++    'quirks_overflow BackCompat body 200/900/916/900px root 916/916/916/916px',
++    'quirks_border BackCompat body 200/170/200/170px root 186/200/186/186px',
++    'quirks_padding BackCompat body 200/160/200/160px root 186/200/186/176px',
++  ];
++
++  // One row this engine knowingly answers differently, kept here as the number
++  // it does answer so the Chrome row above stays readable beside it.
++  //
++  // `child_margin` holds a 20px div wearing a 30px margin. The div's margins
++  // ESCAPE the body -- both arms agree the body is 20 tall -- and in Chrome they
++  // then collapse with the body's own 8px and land in the ROOT's content height,
++  // making it 80. Here they simply vanish once they leave the child, so the root
++  // is 36: the body's box plus the body's own two margins.
++  //
++  // That is a margin-collapse defect and not a root-container one: measured on
++  // both arms with scratch/b73/expr-escaped-margin.js, a plain div holding a
++  // wrapper holding the same margined div is 20 on both, at one, two and three
++  // levels of nesting -- but a body holding four such wrappers is 220 in Chrome
++  // and 130 here, which is exactly the three 30px inter-sibling gaps the
++  // escaped margins should have collapsed into.
++  const residual = {
++    child_margin: 'child_margin CSS1Compat body 20/20/20/20px root 200/36/200/36px',
++  };
++
++  const off = [];
++  for (const chrome of chrome151) {
++    const id = chrome.split(' ')[0];
++    const expected = residual[id] ?? chrome;
++    const actual = read(id);
++    if (actual !== expected) off.push(`want[${expected}] got[${actual}]`);
++  }
++  testing.expectEqual('', off.join('\n'));
++});
++</script>
++</body>
+diff --git a/src/browser/tests/frames/support/root_box_body_margin0.html b/src/browser/tests/frames/support/root_box_body_margin0.html
+new file mode 100644
+index 000000000..c61a1f7d9
+--- /dev/null
++++ b/src/browser/tests/frames/support/root_box_body_margin0.html
+@@ -0,0 +1 @@
++<!doctype html><html><body style="margin:0"><div style="height:20px"></div></body></html>
+diff --git a/src/browser/tests/frames/support/root_box_child_margin.html b/src/browser/tests/frames/support/root_box_child_margin.html
+new file mode 100644
+index 000000000..0fe5939fa
+--- /dev/null
++++ b/src/browser/tests/frames/support/root_box_child_margin.html
+@@ -0,0 +1 @@
++<!doctype html><html><body style="margin:8px"><div style="height:20px;margin:30px 0"></div></body></html>
+diff --git a/src/browser/tests/frames/support/root_box_decl_height.html b/src/browser/tests/frames/support/root_box_decl_height.html
+new file mode 100644
+index 000000000..407bea513
+--- /dev/null
++++ b/src/browser/tests/frames/support/root_box_decl_height.html
+@@ -0,0 +1 @@
++<!doctype html><html><body style="margin:8px;height:50px"><div style="height:20px"></div></body></html>
+diff --git a/src/browser/tests/frames/support/root_box_empty.html b/src/browser/tests/frames/support/root_box_empty.html
+new file mode 100644
+index 000000000..8709499fa
+--- /dev/null
++++ b/src/browser/tests/frames/support/root_box_empty.html
+@@ -0,0 +1 @@
++<!doctype html><html><body style="margin:8px"></body></html>
+diff --git a/src/browser/tests/frames/support/root_box_nested.html b/src/browser/tests/frames/support/root_box_nested.html
+new file mode 100644
+index 000000000..ac0fda9dd
+--- /dev/null
++++ b/src/browser/tests/frames/support/root_box_nested.html
+@@ -0,0 +1 @@
++<!doctype html><html><body style="margin:8px"><div><div style="height:20px"></div></div></body></html>
+diff --git a/src/browser/tests/frames/support/root_box_overflow.html b/src/browser/tests/frames/support/root_box_overflow.html
+new file mode 100644
+index 000000000..264fc3087
+--- /dev/null
++++ b/src/browser/tests/frames/support/root_box_overflow.html
+@@ -0,0 +1 @@
++<!doctype html><html><body style="margin:8px"><div style="height:900px"></div></body></html>
+diff --git a/src/browser/tests/frames/support/root_box_quirks_overflow.html b/src/browser/tests/frames/support/root_box_quirks_overflow.html
+new file mode 100644
+index 000000000..696f0b50c
+--- /dev/null
++++ b/src/browser/tests/frames/support/root_box_quirks_overflow.html
+@@ -0,0 +1 @@
++<html><body style="margin:8px"><div style="height:900px"></div></body></html>
+diff --git a/src/browser/tests/frames/support/root_box_quirks_plain.html b/src/browser/tests/frames/support/root_box_quirks_plain.html
+new file mode 100644
+index 000000000..8c8a86e98
+--- /dev/null
++++ b/src/browser/tests/frames/support/root_box_quirks_plain.html
+@@ -0,0 +1 @@
++<html><body style="margin:8px"><div style="height:20px"></div></body></html>
+diff --git a/src/browser/tests/frames/support/root_box_root_height.html b/src/browser/tests/frames/support/root_box_root_height.html
+new file mode 100644
+index 000000000..9f6899269
+--- /dev/null
++++ b/src/browser/tests/frames/support/root_box_root_height.html
+@@ -0,0 +1 @@
++<!doctype html><html style="height:150px"><body style="margin:8px"><div style="height:20px"></div></body></html>
+diff --git a/src/browser/tests/frames/support/root_box_tall.html b/src/browser/tests/frames/support/root_box_tall.html
+new file mode 100644
+index 000000000..b079adc61
+--- /dev/null
++++ b/src/browser/tests/frames/support/root_box_tall.html
+@@ -0,0 +1 @@
++<!doctype html><html style="border:7px solid"><body style="margin:8px"><div style="height:400px"></div></body></html>
+diff --git a/src/browser/webapi/Element.zig b/src/browser/webapi/Element.zig
+index 3130cf1fd..ab61c3cad 100644
+--- a/src/browser/webapi/Element.zig
++++ b/src/browser/webapi/Element.zig
+@@ -2810,6 +2810,22 @@ fn marginEscapes(self: *Element, frame: *Frame, containing: *?f64, depth: u8) st
+     if (CSSStyleDeclaration.establishesBlockFormattingContext(self, frame)) {
+         return .{ .top = false, .bottom = false };
+     }
++    // "Margins of the root element's box do not collapse" (CSS 2.1 8.3.1), so
++    // there is no margin of the root's for a first child's to collapse WITH and
++    // nothing can pass out through it. The <body>'s 8px UA margins therefore sit
++    // INSIDE the root's content box, which is the whole of the 16px between the
++    // root's height and the body's: Chrome answers a 36px computed height off
++    // the <html> of a document whose body holds one 20px div, and 8px off one
++    // whose body is empty -- the empty body being self-collapsing, so its own
++    // two margins become one. Measured over nineteen served documents,
++    // frames/root_box_heights.html.
++    //
++    // The <body> is NOT in this branch and must not be: a body with no edge of
++    // its own does let its first child's margin through, which is why the same
++    // document's body is 20px tall and not 80 when that div wears a 30px margin.
++    if (self.ownerFrame(frame).document.getDocumentElement() == self) {
++        return .{ .top = false, .bottom = false };
++    }
+     return .{
+         .top = CSSStyleDeclaration.blockEdgePx(self, "top", frame, containing, depth) == 0,
+         .bottom = CSSStyleDeclaration.blockEdgePx(self, "bottom", frame, containing, depth) == 0,
+@@ -3260,15 +3276,25 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width:
+         // widget reads: it dumps a computed style over the <body> of a 0x0
+         // about:blank iframe.
+         //
+-        // The HEIGHT that comes out of here is still the viewport's, and that
+-        // is only half right. A body filling the viewport is the *quirks*
+-        // rendering, and an about:blank document is in quirks mode
+-        // (`document.compatMode` reads BackCompat, measured). A standards-mode
+-        // Chrome sizes a body to its CONTENT instead -- 0px for an empty one,
+-        // 20px for one holding a 20px div -- which this faux layout has no way
+-        // to compute yet; that is `content-height-memoised-subtree`. The
+-        // viewport is the wrong half of a real browser's two answers there, but
+-        // it is one of them, which the sentinel never was.
++        // The HEIGHT only fills in QUIRKS mode. A body stretched to its
++        // viewport is the quirks rendering -- and an about:blank document is in
++        // quirks mode (`document.compatMode` reads BackCompat, measured), which
++        // is why the 0x0 iframe above is still the viewport's box. A
++        // standards-mode Chrome sizes both containers to their CONTENT: 0px for
++        // an empty body, 20px for one holding a 20px div, and 900px for one
++        // holding a 900px div in a 200px frame. This used to fill for both, so
++        // `getComputedStyle(body).height` was a per-document CONSTANT -- 184px
++        // in a 200px frame whatever the document held -- and that reading
++        // travels, because the Cloudflare widget dumps a whole computed style
++        // off the <body>. Measured over nineteen served documents against
++        // Chrome 151 at dpr 2, frames/root_box_heights.html.
++        //
++        // Leaving it null is the whole change: the content pass in
++        // `clientHeightOf` is the same one every other `auto`-height block goes
++        // through, and it is only reachable once nothing has claimed the height
++        // here. The quirks fill stays a floor rather than an answer for the same
++        // reason -- a quirks body GROWS past its viewport when it holds more
++        // (offsetHeight 900, not 184), which is `@max(dims.height, content)`.
+         if (tag == .html or tag == .body) {
+             const owner = self.ownerFrame(frame);
+             // The space this element's MARGIN box is laid into. For the root
+@@ -3336,7 +3362,7 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width:
+             if (width == null) {
+                 width = @max(0, available.width - margin_x - edges.border_x - edges.padding_x);
+             }
+-            if (height == null) {
++            if (height == null and owner.document.isQuirksMode()) {
+                 height = @max(0, available.height - margin_y - edges.border_y - edges.padding_y);
+             }
+         } else if (tag == .canvas) {
+@@ -3611,8 +3637,14 @@ pub fn getClientHeightWithCache(self: *Element, frame: *Frame, visibility_cache:
+ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_cache: *VisibilityCache) f64 {
+     if (dims.inline_box) return 0;
+ 
+-    const tag = self.getTag();
+-    if (tag == .html or tag == .body or dims.explicit_height) {
++    // The root containers used to shortcut out here, back when their height was
++    // the viewport and there was nothing for the content pass to add. They go
++    // through it now, and they need to in BOTH modes: in standards nothing has
++    // sized them at all (see the html/body branch in `dimensionsAt`), and in
++    // quirks the viewport is a FLOOR rather than an answer -- a quirks <body>
++    // holding a 900px div in a 200px frame reports 900 of offsetHeight and not
++    // 184, and its root grows with it (frames/root_box_heights.html).
++    if (dims.explicit_height) {
+         return dims.height + dims.padding_y;
+     }
+ 
+@@ -3765,19 +3797,26 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
+ 
+     const dims = self.getElementDimensions(frame);
+ 
+-    const tag = self.getTag();
+-    // The width half of this took the CSSOM swap -- the scrolling element
+-    // reports the viewport -- and the height half deliberately did not. The
+-    // heights are not a swap: Chrome answers the viewport for a short document
+-    // and the CONTENT for a tall one (200 and 430 for the same frame, measured
+-    // in scratch/b72/ch-rootbox2.json), so the reading is `max(viewport,
+-    // content)` and this engine cannot supply the content half yet -- an
+-    // `auto`-height root container is stretched to its viewport here rather
+-    // than sized to what it holds. That is `content-height-memoised-subtree`.
+-    // Until it lands, the viewport is the answer for both, which is what
+-    // `dims.height` already is.
+-    if (tag == .html or tag == .body) {
+-        return @round(dims.height);
++    // The SCROLLING ELEMENT does not report its own box here: it reports the
++    // document's scrolling AREA, which is `max(viewport, the root element's
++    // border box)`. Which element that is takes the same CSSOM swap
++    // `cssomViewport` answers clientHeight with -- the root in standards mode,
++    // the body in quirks -- and the other of the two keeps its own box, which is
++    // the branch below.
++    //
++    // Measured over nineteen served documents against Chrome 151
++    // (frames/root_box_heights.html): a standards root is 200 in a 200px frame
++    // holding a 20px div and 430 holding a 400px one under a 7px border, and a
++    // QUIRKS body is 200 for the short document and 916 for one holding a 900px
++    // div -- the same two numbers off the same formula, which is why this is one
++    // branch and not two. The whole reading used to be `dims.height`, the
++    // viewport, for both containers in both modes.
++    if (self.cssomViewport(frame)) |view| {
++        const owner = self.ownerFrame(frame);
++        const root = owner.document.getDocumentElement() orelse return @round(dims.height);
++        const root_dims = if (root == self) dims else root.getElementDimensions(frame);
++        const border_box = root.clientHeightOf(frame, root_dims, &visibility_cache) + root_dims.border_y;
++        return @round(@max(@as(f64, @floatFromInt(view.height)), border_box));
+     }
+ 
+     if (dims.inline_box) return 0;
+-- 
+2.50.1 (Apple Git-155)
+

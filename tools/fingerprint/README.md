@@ -24208,9 +24208,22 @@ with both changes in, homedepot still stalls.
 ### Where this leaves it
 
 The root-container height work is correct, pinned against Chrome, and **not
-merged**: it sits on `prd/standards-root-box-height` (commits `9f263fcfb` and
-`f5d0d211e`) with `frames/root_box_heights.html` green at 18/19 and the suite at
-1583/1583. What blocks it is not a bug in it — it is that this engine has no
+merged**. It is kept two ways: as
+`probes/b73-root-box-height.patch` (the whole change, including the nineteen-row
+`frames/root_box_heights.html` and its ten support fixtures — apply it and the
+Chrome table comes with it), and as the branch `prd/standards-root-box-height`
+with its worktree left in place. The branch's second commit, `f5d0d211e`, is the
+cost work that has since been merged on its own, so a merge of that branch will
+have to reconcile it — and `contentHeight` has moved underneath it as well, since
+it now returns the escaped margin groups (see the note below this one). The patch
+is the cleaner starting point of the two, and `git apply --check` still passes
+against it on `c8bedc1a8` — textually only; it has not been built or run since
+`contentHeight` changed shape, and that check was deliberately not done in the
+main checkout because a peer session building main mid-experiment would compile
+the patch by accident. The state at the time it was measured: 18 of 19 rows
+byte-identical to Chrome, suite 1583/1583. The nineteenth row, `child_margin`,
+is the one the escaped-margin fix below now covers, so a re-measure should read
+19 — the residual in the test file has to be dropped for that. What blocks it is not a bug in it — it is that this engine has no
 incremental layout, so every height reading pays for its whole subtree, and the
 root containers' subtree is the document. The honest next step is not another
 memo: it is either making a subtree measurement cheap enough that 120 of them fit
