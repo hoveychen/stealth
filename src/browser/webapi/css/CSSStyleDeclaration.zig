@@ -963,6 +963,13 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
         return .{ .value = folded };
     }
 
+    // The same fold one level in: a named colour inside a gradient is a colour
+    // too, and `computedColourText` above cannot see it because it only ever
+    // looks at a whole value.
+    if (computedColourInFunctions(frame.call_arena, substituted)) |folded| {
+        return .{ .value = folded };
+    }
+
     // A `calc()` resolves the same way a bare length does, one term at a time,
     // and has to be asked before computedLengthText -- that walk refuses
     // anything with a paren in it, which is why every calc() reached the guard
@@ -5811,6 +5818,135 @@ fn takesColour(property_name: []const u8) bool {
         if (std.mem.eql(u8, keyword, "currentcolor")) return true;
     }
     return false;
+}
+
+/// The functions whose arguments hold a `<color>`. Measured
+/// (scratch/b77/expr-foldwhere.js, scratch/b77/expr-foldrest.js) rather than
+/// read off the grammars, because the measurement is the only thing that tells
+/// this list from the calls that merely *look* like they hold one.
+///
+/// Depth cannot be the rule. `counter(red)`, `counters(red, ".")`,
+/// `repeat(2, [red] 1fr)`, `styleset(red)`, `swash(red)` and `url(red)` all put
+/// `red` inside a call, and Chrome folds none of them: there it is a counter
+/// name, a line name, a feature name, a path. The enclosing function is what
+/// decides, and it decides on its own -- `linear-gradient(red, blue)` folds
+/// under `background-image`, `mask-image`, `border-image-source` and the
+/// `background` shorthand alike, so the property is not part of the question.
+///
+/// `from`, `to` and `color-stop` are the inner calls of `-webkit-gradient`, and
+/// they carry the colour rather than the outer call does.
+const colour_argument_functions = std.StaticStringMap(void).initComptime(.{
+    .{ "linear-gradient", {} },
+    .{ "radial-gradient", {} },
+    .{ "conic-gradient", {} },
+    .{ "repeating-linear-gradient", {} },
+    .{ "repeating-radial-gradient", {} },
+    .{ "repeating-conic-gradient", {} },
+    .{ "-webkit-linear-gradient", {} },
+    .{ "-webkit-radial-gradient", {} },
+    .{ "-webkit-repeating-linear-gradient", {} },
+    .{ "-webkit-repeating-radial-gradient", {} },
+    .{ "from", {} },
+    .{ "to", {} },
+    .{ "color-stop", {} },
+    .{ "drop-shadow", {} },
+});
+
+/// A named colour inside one of those calls, folded the way `computedColourText`
+/// folds a whole value.
+///
+/// The two are separate because the shapes are. `computedColourText` refuses a
+/// value carrying a `(`, a `#`, a comma or a space, since what reaches it as a
+/// colour is a bare keyword -- so `background-image: linear-gradient(red, blue)`
+/// went straight past it and computed to itself. The other half of the same
+/// gradient was already right: `canonicaliseValue`'s token walk folds a `#hex`
+/// and an `rgb()`/`hsl()` call wherever they appear, so only the bare keyword
+/// was left as written.
+///
+/// Computed surface only, and measured to be: Chrome answers
+/// `el.style.backgroundImage` as `linear-gradient(red, blue)` exactly as this
+/// engine already did, and folds only off `getComputedStyle`.
+///
+/// A system colour is deliberately not folded here. `computedColourText` folds
+/// one because `color: buttonface` was measured; nothing measured one inside a
+/// gradient, and inventing a fold is the direction that costs a page.
+///
+/// Null when nothing changed, which is nearly every value.
+fn computedColourInFunctions(arena: Allocator, value: []const u8) ?[]const u8 {
+    if (std.mem.indexOfScalar(u8, value, '(') == null) {
+        return null;
+    }
+
+    // Deep enough for a gradient inside an `image-set` inside a `cross-fade`.
+    // Past it the walk keeps counting parens but stops naming them, so a value
+    // nested deeper than this simply folds nothing rather than folding wrong.
+    var stack: [8][]const u8 = undefined;
+    var depth: usize = 0;
+
+    var buf = std.Io.Writer.Allocating.init(arena);
+    errdefer buf.deinit();
+    var changed = false;
+
+    var i: usize = 0;
+    while (i < value.len) {
+        const c = value[i];
+
+        // A string is content: `counters(red, ".")` must keep its separator,
+        // and a quote must not be read as the start of an identifier run.
+        if (c == '"' or c == '\'') {
+            const end = stringEnd(value, i);
+            buf.writer.writeAll(value[i..end]) catch return null;
+            i = end;
+            continue;
+        }
+
+        if (c == ')') {
+            if (depth > 0) depth -= 1;
+            buf.writer.writeByte(c) catch return null;
+            i += 1;
+            continue;
+        }
+
+        if (isIdentStart(value, i)) {
+            const end = identEnd(value, i);
+            const name = value[i..end];
+
+            if (end < value.len and value[end] == '(') {
+                if (depth < stack.len) stack[depth] = name;
+                depth += 1;
+                buf.writer.writeAll(value[i .. end + 1]) catch return null;
+                i = end + 1;
+                continue;
+            }
+
+            const in_colour_slot = depth > 0 and depth <= stack.len and
+                colour_argument_functions.has(stack[depth - 1]);
+            if (in_colour_slot) {
+                if (color.RGBA.parse(name)) |rgba| {
+                    writeColour(&buf.writer, .{
+                        .rgb = .{ rgba.r, rgba.g, rgba.b },
+                        .alpha = rgba.a,
+                    }) catch return null;
+                    changed = true;
+                    i = end;
+                    continue;
+                } else |_| {}
+            }
+
+            buf.writer.writeAll(name) catch return null;
+            i = end;
+            continue;
+        }
+
+        buf.writer.writeByte(c) catch return null;
+        i += 1;
+    }
+
+    if (!changed) {
+        buf.deinit();
+        return null;
+    }
+    return buf.written();
 }
 
 fn writeColour(writer: *std.Io.Writer, colour: Colour) !void {
