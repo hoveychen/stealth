@@ -1727,19 +1727,73 @@ fn probeLayoutPassCost(self: *Frame) void {
     };
     if (mode == .off) return;
 
-    const root = self.document.getDocumentElement() orelse return;
-    var table: Element.PositionTable = .{};
-    const started_us = lp.datetime.microTimestamp(.boot);
-    const placed = Element.layoutPassPositions(root, self, &table);
-    const elapsed_us = lp.datetime.microTimestamp(.boot) - started_us;
-    log.warn(.telemetry, "layout pass cost", .{
-        .url = self.url,
-        .placed = placed,
-        .us = elapsed_us,
-        .ns_per_node = if (placed == 0) 0 else (elapsed_us * std.time.ns_per_us) / placed,
-    });
+    // The main frame only. An iframe's own document is a separate pass over a
+    // handful of nodes, and the tick counter below is one counter: letting every
+    // frame share it scrambles the series and spends the bound on the noise.
+    if (self.parent != null) return;
 
-    if (mode == .dump) {
+    self.timeLayoutPass(mode, 0);
+
+    // The load event is the wrong moment on its own: on a station like
+    // homedepot most of the DOM is built by script AFTER it, so a pass timed
+    // here prices a document a third the size of the one a reader would meet.
+    // So the probe keeps going, and the tail of the series is the settled page.
+    // Bounded, because the point is a series and not a permanent tax.
+    if (mode == .time) {
+        self.js.scheduler.add(self, layoutPassTick, layout_pass_tick_ms, .{
+            .name = "frame.probeLayoutPassCost",
+        }) catch {};
+    }
+}
+
+const layout_pass_tick_ms = 2000;
+const layout_pass_ticks = 15;
+var layout_pass_tick: u32 = 0;
+
+fn layoutPassTick(ctx: *anyopaque) !?u32 {
+    const self: *Frame = @ptrCast(@alignCast(ctx));
+    layout_pass_tick += 1;
+    self.timeLayoutPass(.time, layout_pass_tick);
+    return if (layout_pass_tick >= layout_pass_ticks) null else layout_pass_tick_ms;
+}
+
+fn timeLayoutPass(self: *Frame, mode: LayoutPassProbe, tick: u32) void {
+    const root = self.document.getDocumentElement() orelse return;
+
+    // Three passes, reported separately. The first one pays for whatever the
+    // page has not measured yet -- a font's metrics, a percentage's containing
+    // block -- and a pass that runs on every invalidation would pay that once,
+    // not per pass. Reporting only the first would price the warm-up as if it
+    // were the pass; reporting only a warm one would hide it.
+    var round: u8 = 0;
+    while (round < 3) : (round += 1) {
+        var table: Element.PositionTable = .{};
+        Element.measure_entries = 0;
+        const started_us = lp.datetime.microTimestamp(.boot);
+        const placed = Element.layoutPassPositions(root, self, &table);
+        const elapsed_us = lp.datetime.microTimestamp(.boot) - started_us;
+        const measured = Element.measure_entries;
+
+        // The same walk with the sink taken out, so the reading separates "one
+        // pass over the document is expensive" from "the position half of it
+        // is". Without this the number cannot be attributed and the verdict
+        // would be about the instrument.
+        const plain_started_us = lp.datetime.microTimestamp(.boot);
+        _ = Element.layoutPassHeightOnly(root, self);
+        const plain_us = lp.datetime.microTimestamp(.boot) - plain_started_us;
+
+        log.warn(.telemetry, "layout pass cost", .{
+            .url = self.url,
+            .tick = tick,
+            .round = round,
+            .placed = placed,
+            .measured = measured,
+            .us = elapsed_us,
+            .plain_us = plain_us,
+            .ns_per_node = if (placed == 0) 0 else (elapsed_us * std.time.ns_per_us) / placed,
+        });
+        if (mode != .dump) continue;
+
         var it = table.iterator();
         while (it.next()) |entry| {
             const element = entry.key_ptr.*;
@@ -1750,6 +1804,8 @@ fn probeLayoutPassCost(self: *Frame) void {
                 .y = entry.value_ptr.y,
             });
         }
+        // One dump is a table to check; three is the same table three times.
+        break;
     }
 }
 

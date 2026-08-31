@@ -3153,7 +3153,16 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
 /// callers are the content-extent walks, whose children are in-flow or floated
 /// and therefore contained by the box being measured. An out-of-flow child is
 /// contained by something else and those walks skip it.
+/// How many boxes have been MEASURED, counted for the cost prototype
+/// (`layout-pass-cost-prototype` P2). A walk that visits each node once enters
+/// this function once per node; anything above that is re-measurement, and the
+/// ratio is the difference between the linear pass the plan's budget assumed and
+/// whatever this actually is. A `u64` add on a path that already does dozens of
+/// property lookups, and it goes away with the prototype.
+pub var measure_entries: u64 = 0;
+
 pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool, containing_width: ?f64) Dimensions {
+    measure_entries += 1;
     // A backstop the `depth` parameter cannot be: not every path down carries
     // it. A percentage width resolves through the computed-value machinery,
     // which reaches back for the containing block's box through
@@ -3862,6 +3871,15 @@ pub const PositionPass = struct {
         self.table.put(frame.arena, element, at) catch {};
     }
 };
+
+/// The same walk with no sink: the height measurement that already exists,
+/// asked for the whole document at once. Times the baseline the position pass is
+/// an addition to, so a cost reading can say which half it is paying for.
+pub fn layoutPassHeightOnly(root: *Element, frame: *Frame) f64 {
+    var visibility_cache: VisibilityCache = .{};
+    const dims = root.getElementDimensions(frame);
+    return root.contentHeight(frame, &visibility_cache, .in_flow, dims.width, 0, null).total;
+}
 
 /// One pass over the whole document, filling `table` with every in-flow box's
 /// position. Returns the number of boxes placed.
