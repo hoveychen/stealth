@@ -7460,6 +7460,10 @@ test "WebApi: CSSStyleDeclaration transform number format" {
     try testing.htmlRunner("css/transform_number_format.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration transform length units" {
+    try testing.htmlRunner("css/transform_length_units.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration percentage width" {
     try testing.htmlRunner("css/percentage_width.html", .{});
 }
