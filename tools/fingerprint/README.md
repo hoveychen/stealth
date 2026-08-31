@@ -24739,3 +24739,136 @@ candidate pool comes from the standard rather than from Chrome:
 anything else built by offering mdn-data's vocabulary to Chrome. A table
 generated from a pool that cannot contain the answer records a rejection that
 never happened.
+
+## The four short values are not weighed, in either direction (B76, 2026-08-31)
+
+B95 left the Cloudflare widget's four short numbers as the one place in the
+guard's plaintext where this engine answers something Chrome does not, and
+stopped with a verdict on what to do next: "the logic that computes the four
+values is in the bytecode, not in the JavaScript, so reading it statically means
+writing a disassembler for this VM -- a different plan".
+
+That plan is not needed, because a door does not need to know what a value IS.
+It needs to know whether the value is WEIGHED, and that is the one question
+`cf-knob.mjs` was built to answer. The same hook that reads the plaintext can
+replace it: substitute the four on the arm that holds a ticket and see whether
+the ticket survives.
+
+### Both arms, same epoch
+
+`scratch/b76/knobs.mjs`, knob `short4-report` -- `TextEncoder.prototype.encode`,
+counting only encodes of 24 characters or less, reporting through the stash on
+Chrome (a beacon inside the widget's frame costs Chrome the ticket) and over the
+wire on the arm that has no ticket to lose.
+
+| | Chrome, cluster A | Chrome, cluster B | this engine |
+|---|---|---|---|
+| 1 | `5000.266115188599` | `5002.609375` | `4998.22265625` |
+| 2 | `83.9800615310669` | `87.97607231140137` | `84` |
+| 3 | **`0`** | **`0`** | **`16`** |
+| 4 | `0.6387105289554597` | `0.6387295662117005` | `0.639611171875` |
+
+**Two discrete states, not two epochs, and that is a correction to B95.** B95
+saw set A, then set B "an hour later", and read the pair as slow drift. It is
+not drift: a day later, six consecutive runs of the same command flipped A -> B
+-> B -> B -> B -> B within about four minutes, and set B is byte-identical to
+what B95 recorded, verbatim, twenty-four hours earlier. Chrome alternates
+between exactly two bit-exact sets. **This engine's four never move at all** --
+every reading taken today, on a ReleaseFast binary of current main, is the third
+set above, which is also what B69 recorded as `13, 2, 2, 14` characters.
+
+### The Chrome arm, forced to answer ours
+
+`short4-force` overwrites the four slots by position, unconditionally, and
+reports what it overwrote -- so the run is validated after the fact rather than
+before. Six passes, alternating with the controls in the same window
+(`scratch/b76/p2c.sh`, and the first design in `scratch/b76/alt.sh`):
+
+| arm | served |
+|---|---|
+| `none`, untouched | **11 / 11** |
+| all four replaced by ours, first design (index + exact string) | 6 / 6 |
+| all four replaced by ours, forced by position, `subs=4` verified per run | 4 / 5 |
+| `short4-passthru` -- the same hook installed, nothing substituted | 5 / 6 |
+
+Handing Cloudflare this engine's four answers, including the `16` where Chrome
+sends `0`, costs the Chrome arm nothing that the bare hook does not cost it
+anyway. The station's own rate is about five in six
+(`cf-verdict-is-five-in-six`), and here the hook-only control lost one while the
+substitution lost one.
+
+**And one run answers it without any substitution at all.** In `p2c pass4` the
+knob reported `short4-force=installed` from `challenges.cloudflare.com/frame`
+and then made **zero** encodes of 24 characters or less -- the widget never
+computed the four values that run -- and the exchange still ended
+`r3:89580B=TICKET`, served. A quantity the guard sometimes does not send cannot
+be one Cloudflare requires.
+
+### The other direction
+
+Our arm, the four replaced by Chrome's same-epoch strings, all four
+substitutions confirmed in the beacon list: **0 of 5**, `r3` never anything but
+`=gen`. Which is what it was before.
+
+So the four values are neither necessary nor sufficient, and their identity is
+not worth a disassembler. What a knob cannot exclude is that they are one
+feature among many in a score -- but nothing in this file has ever shown
+Cloudflare weighing any content of the guard's plaintext, and this was the last
+qualitative difference in it.
+
+### Two harness lessons, both of the "reads exactly like nothing happened" kind
+
+* **The first map silently disarmed itself.** It matched on index AND the exact
+  string, and the values drift between the two clusters, so a map built one
+  minute earlier stops matching and substitutes nothing. `short4-force`
+  overwrites by position and reports the overwritten string instead.
+* **`sub=` counted out of the wrong line.** `cf-knob`'s summary line truncates
+  the beacon list at six entries with an ellipsis, so a driver grepping that
+  line reports a lower bound, not a count. It read `subs=2` for a run that
+  `--out` showed had substituted all four. Every count in the table above comes
+  from the `--out` JSON.
+
+### The plaintext census, re-measured, and the arms' dpr
+
+While the arms were both instrumented, B69's fifteen-encode census was retaken
+-- engine side through `Context.recordTextEncode` on a Debug build (nothing in
+the realm to find), Chrome side through `report-encodes`, and **Chrome at the
+persona's device scale factor**, which is the correction that makes the table
+readable: this engine reports `devicePixelRatio` 2 as a fixed part of its device
+profile, so a Chrome reference arm at dpr 1 is off by a factor on everything
+measured in device pixels (`chrome-arm-needs-persona-dpr`). `cf-knob` builds
+Chrome's argv itself, so the flag goes in through a `CHROME` wrapper
+(`scratch/b76/bin/chrome-dpr2`).
+
+| segment | Chrome | this engine | |
+|---|---|---|---|
+| `getImageData` 48x48 | 9216 `1ly97t5` | 9216 `1xof2yz` | content |
+| `readPixels` 16x16 | 1024 `ard9mt` | 1024 `ard9mt` | **same** |
+| 49x44 buffer, x3 | 8624 `1m3v0nt` | 8624 `101c16` | content |
+| WebGPU 32x32 | 4096 `sq54p1` | 4096 `e4lqd` | content |
+| `0\|0\|0…`, x2 | 15361 `3coxr6` | 15361 `3coxr6` | **same** |
+| `JSON.stringify(getComputedStyle(el))` | 30918 `t3o0bu` | 30918 `t3o0bu` | **same** |
+| the widget's own CSS rules | 20696 `ug2ibx` | 20659 `1gin0ur` | 37 characters |
+| four short values | 17/16/1/18 | 13/2/2/14 | not weighed, above |
+| font probe list | 69 `mt6m58` | 69 `mt6m58` | **same** |
+
+Five of fifteen byte-identical where B69 had two. Two of the three that closed
+are worth naming because the record still said they were open:
+
+* **the computed style.** B69 measured this engine 16 characters short of
+  Chrome's 30918 and listed 41 disagreeing values behind it. Today, in the
+  widget's own realm, the whole 30918-character string is **byte-identical** --
+  475 indexed property names and 736 name-to-value pairs, zero differences
+  (`scratch/b76/cs-{lp,chrome-dpr2}.txt`). At dpr 1 the Chrome arm differs in
+  exactly 8 of the 736, all of them the same defect-that-is-not-one:
+  `column-rule-width` and its three aliases answer `3px` undeclared at dpr 1 and
+  `1.5px` at dpr 2, which `CSSStyleDeclaration.ruleWidthScale` already records
+  as measured. 8 readings x 2 characters is the 16.
+* **the font probe list.** B69 had 41 characters against Chrome's 69; both arms
+  now spell the same six families.
+
+That leaves the pixel buffers -- right length, wrong content, knob-tested as not
+weighed long ago -- and the widget's own stylesheet, 37 characters, which is the
+chapter above this one and is now fixed. **The guard's plaintext is very nearly
+equal, and the station still refuses us**, which is where
+`cfsc-does-not-judge-collected-values` said this would end.
