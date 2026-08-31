@@ -330,10 +330,11 @@
   // them, so the fold work has a line to move and cannot be credited with
   // moving it by accident.
   const rows = [
-    ['width: min(1px, 1em)', 'width', 'min(1px, 1em)', 'min(1px, 1em)'],
-    ['width: max(1em, 1px)', 'width', 'max(1em, 1px)', 'max(1em, 1px)'],
-    ['width: clamp(1em, 1px, 1vh)', 'width', 'clamp(1em, 1px, 1vh)', 'clamp(1em, 1px, 1vh)'],
-    ['width: min(1px + 1em, 2em)', 'width', 'min(1px + 1em, 2em)', 'min(1em + 1px, 2em)'],
+    // min/max/clamp moved out of this block: their arguments fold and their
+    // shape is kept, which is now asserted against Chrome's own answers in
+    // comparison_functions_keep_their_shape_and_fold_their_arguments. What is
+    // left here is the stepped and exponential family, which has its own
+    // rounding and domain rules and is its own piece of work.
     ['width: round(1.5px, 1px)', 'width', 'round(1.5px, 1px)', 'calc(2px)'],
     ['width: abs(-1px)', 'width', 'abs(-1px)', 'calc(1px)'],
     ['width: calc(1px / 0)', 'width', 'calc(1px / 0)', 'calc(infinity * 1px)'],
