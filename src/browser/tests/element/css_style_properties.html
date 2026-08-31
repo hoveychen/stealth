@@ -79,7 +79,16 @@
   testing.expectEqual(undefined, div.style.oTransition);
 
   testing.expectEqual('rotate(45deg)', div.style['-webkit-transform']);
-  testing.expectEqual('none', div.style['-moz-user-select']);
+  // Was `'none'`, which was wrong twice over: it contradicted the
+  // `mozUserSelect` line above it, and Chrome has no `-moz-user-select`
+  // property at all, so `setProperty` refuses the declaration and the
+  // dash-cased read finds nothing. Measured on Chrome 151 through both doors
+  // -- `setProperty` and the `style=` attribute agree, and `-ms-filter` /
+  // `-o-transition` / `-moz-appearance` behave the same way
+  // (scratch/b97/expr-b97-setproperty-vendor.js).
+  testing.expectEqual(undefined, div.style['-moz-user-select']);
+  testing.expectEqual('', div.style.getPropertyValue('-moz-user-select'));
+  testing.expectEqual(-1, div.style.cssText.indexOf('-moz'));
 }
 </script>
 
