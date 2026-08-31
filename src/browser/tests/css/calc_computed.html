@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=calc-computed-anchor></div>
+
+<!--
+A calc() resolves at computed-value time like any other length.
+
+Folding the expression (tests/css/calc_canonical.html) fixed what
+`el.style.width` reads back. It did nothing for `getComputedStyle`, because
+`resolvesHere` refuses any value with `calc(` in it and the declaration falls
+back to the initial value -- so every calc() on every page was a declaration
+with no effect at all, and a page built on `calc(100% - 2rem)` laid out as if
+nothing had been declared.
+
+Every expected value below is Chrome 151's own, measured with
+scratch/b98/expr-b98-calc-computed.js in exactly the DOM this file builds: a
+400px-wide, 20px-font containing block around the probe element. Twenty-three
+rows, of which twenty-two differed.
+
+No `vh`, `vw`, `ex` or `ch` here on purpose. Those answer to the viewport size
+and to the platform's font metrics, which the two arms are not obliged to
+share; computed_relative_units.html is where they are pinned, one unit at a
+time, and a calc() over them adds nothing this file could check.
+
+The two cases that are not a length in pixels have their own blocks below,
+because each is a separate rule rather than a special case of the sum:
+a calc() over plain numbers stays a number, and a calc() holding a percentage
+the property does not resolve is printed as the folded calc().
+-->
+
+<script id=calc_resolves_to_a_length>
+{
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;font-size:20px"><p style="' + decl + '">x</p></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+
+  const CASES = [
+    // A sum of a font-relative term and an absolute one.
+    ['41px', 'font-size:20px;padding-top:calc(2em + 1px)', 'paddingTop'],
+    ['15px', 'padding-top:calc(10px + 5px)', 'paddingTop'],
+    ['17px', 'padding-top:calc(1rem + 1px)', 'paddingTop'],
+    // Absolute units all fold into px before anything resolves, so these two
+    // are one term by the time the computed value is asked for. Note the
+    // second: 38.7402px here and 38.7344px on `width`, because a used length
+    // lands on the layout grid and a padding does not.
+    ['113.333px', 'padding-top:calc(1in + 1pt + 1pc)', 'paddingTop'],
+    ['38.7402px', 'padding-top:calc(1q + 1cm)', 'paddingTop'],
+    ['20px', 'font-size:20px;padding-top:calc(2em - 1em)', 'paddingTop'],
+    // A percentage resolves against the containing block, and takes the rest
+    // of the sum with it.
+    ['100px', 'padding-top:calc(100% / 4)', 'paddingTop'],
+    ['190px', 'padding-top:calc(50% - 10px)', 'paddingTop'],
+    ['36px', 'padding-top:calc(1rem + 5%)', 'paddingTop'],
+    ['41px', 'font-size:20px;margin-left:calc(2em + 1px)', 'marginLeft'],
+    // `em` on `font-size` is the parent's size, the same rule a bare `1.5em`
+    // already follows.
+    ['30px', 'font-size:calc(1.5em)', 'fontSize'],
+    ['12px', 'font-size:calc(10px + 2px)', 'fontSize'],
+    ['22px', 'font-size:20px;line-height:calc(1em + 2px)', 'lineHeight'],
+    // `width` reports a used value, so this is the layout grid's answer.
+    ['190px', 'width:calc(50% - 10px)', 'width'],
+    ['116px', 'width:calc(100px + 1rem)', 'width'],
+    ['3px', 'font-size:20px;letter-spacing:calc(0.1em + 1px)', 'letterSpacing'],
+    ['42px', 'font-size:20px;text-indent:calc(2em + 2px)', 'textIndent'],
+    ['3px', 'border-top-style:solid;border-top-width:calc(1px + 2px)', 'borderTopWidth'],
+    ['17px', 'top:calc(1rem + 1px)', 'top'],
+  ];
+  const wrong = [];
+  for (const [want, decl, prop] of CASES) {
+    const got = probe(decl, prop);
+    if (got !== want) wrong.push(decl + ' -> ' + prop + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
+
+<script id=calc_over_numbers_stays_a_number>
+{
+  // A calc() whose terms carry no unit is not a length and does not gain a
+  // `px`: `z-index` reports the integer and the alpha family reports the
+  // number, with a percentage in it standing for a hundredth the way it does
+  // when it is written bare.
+  const probe = (decl, prop) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;font-size:20px"><p style="' + decl + '">x</p></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild)[prop]);
+    host.remove();
+    return got;
+  };
+  const CASES = [
+    ['2', 'z-index:calc(1 + 1)', 'zIndex'],
+    ['0.5', 'opacity:calc(0.25 + 0.25)', 'opacity'],
+    ['0.5', 'opacity:calc(50%)', 'opacity'],
+  ];
+  const wrong = [];
+  for (const [want, decl, prop] of CASES) {
+    const got = probe(decl, prop);
+    if (got !== want) wrong.push(decl + ' -> ' + prop + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
+
+<script id=calc_holding_an_unresolved_percentage_prints_the_calc>
+{
+  // `border-radius`'s percentage is its own computed value -- it is a share of
+  // the box, and the box is not known until layout -- so Chrome cannot reduce
+  // this to a length and prints the folded calc() instead. Which is the reason
+  // the fold has to happen even for a value that never becomes a number: the
+  // computed value IS the folded text, terms sorted and all.
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.innerHTML = '<div style="width:400px;font-size:20px"><p style="border-radius:calc(10px + 5%)">x</p></div>';
+  const got = String(getComputedStyle(host.firstChild.firstChild).borderRadius);
+  host.remove();
+  testing.expectEqual('calc(5% + 10px)', got);
+}
+</script>

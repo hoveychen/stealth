@@ -7087,6 +7087,10 @@ test "WebApi: CSSStyleDeclaration calc canonical form" {
     try testing.htmlRunner("css/calc_canonical.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration calc computed value" {
+    try testing.htmlRunner("css/calc_computed.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration computed initial values" {
     try testing.htmlRunner("css/computed_initial_values.html", .{});
 }
