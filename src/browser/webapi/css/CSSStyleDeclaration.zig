@@ -879,7 +879,8 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
     // wrote. A function this engine does not model answers `unreportable`, so
     // the initial `none` is reported instead of a spelling Chrome never prints.
     if (std.mem.eql(u8, property_name, "transform")) {
-        const folded = transform.computedValue(frame.call_arena, substituted) catch null;
+        const basis = transformBasis(element, frame) orelse return .unreportable;
+        const folded = transform.computedValue(frame.call_arena, substituted, basis) catch null;
         return if (folded) |matrix| .{ .value = matrix } else .unreportable;
     }
 
@@ -2023,14 +2024,46 @@ fn animatedTransform(style_manager: *StyleManager, element: *Element, page_frame
         timing.easing;
     const eased = animation_timing.ease(interval_easing, raw);
 
-    if (transform.interpolatedValue(frame.call_arena, from_value, to_value, eased) catch null) |value| {
+    // A percentage inside a keyframe's transform resolves against the same box
+    // the static one does, so the basis is read once and handed to both paths.
+    // An element with no box reports `none` for its transform whether it is
+    // animated or not, and returning null here lands on exactly that.
+    const basis = transformBasis(element, frame) orelse return null;
+    if (transform.interpolatedValue(frame.call_arena, from_value, to_value, eased, basis) catch null) |value| {
         return value;
     }
     // A pair this engine will not interpolate -- two lists of different shapes,
     // which Chrome resolves by decomposing both matrices -- reports the start
     // of the interval. That is a value the animation really passes through,
     // rather than one invented between two it does not.
-    return transform.computedValue(frame.call_arena, from_value) catch null;
+    return transform.computedValue(frame.call_arena, from_value, basis) catch null;
+}
+
+/// What a percentage inside `transform` resolves against: the element's own
+/// BORDER box, the same box `resolvedOrigin` measures for `transform-origin`.
+///
+/// Null when the element has no box at all, where Chrome reports `none` for ANY
+/// transform rather than a matrix -- `display:none` with `translateX(50px)` and
+/// with `rotate(45deg)` both answer `none`, and so does `display:contents`
+/// (scratch/b74/expr-nobox-px.js). The caller turns that into `unreportable`,
+/// which reports the initial value, and the initial value of `transform` is
+/// `none`.
+///
+/// A non-replaced inline element is the other boundary: it has a box, so its
+/// lengths still translate, but it has no reference box for a percentage to be a
+/// percentage of. Chrome answers `matrix(1, 0, 0, 1, 0, 0)` for
+/// `translate(50%, 50%)` on a `display:inline` <p> whose inline box measures
+/// 8x19 -- not 4,9.5 -- so the extents are zero rather than the box's.
+fn transformBasis(element: *Element, frame: *Frame) ?transform.Basis {
+    var visibility_cache: Element.VisibilityCache = .{};
+    if (!element.checkVisibilityCached(&visibility_cache, frame)) return null;
+    if (isInlineBox(element, frame)) return .zero;
+
+    const edges = boxEdges(element, frame);
+    return .{
+        .width = element.getClientWidthWithCache(frame, &visibility_cache) + edges.border_x,
+        .height = element.getClientHeightWithCache(frame, &visibility_cache) + edges.border_y,
+    };
 }
 
 /// One `animation-*` longhand as the cascade sees it, under either spelling,

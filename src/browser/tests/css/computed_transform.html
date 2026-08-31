@@ -16,16 +16,27 @@ third dimension answers `matrix()` while one that does answers `matrix3d()` --
 The numbers are printed to six decimals with trailing zeros dropped, so a cosine
 of 6.1e-17 answers a plain `0`.
 
-Percentages are absent on purpose: they resolve against the element's own box,
-which this engine does not lay out, so `translateX(50%)` reports the initial
-value rather than a number Chrome never printed. See computed-style-relative-units.
+A percentage translate resolves against the element's own BORDER box, which this
+engine does lay out -- `transform-origin` has been resolving against that same
+box for a while. Attributed rather than assumed, on the shape below: adding
+`padding:10px` takes the basis from 100x50 to 120x70 and the answer from 50,25 to
+60,35; adding `border:5px` takes it to 110x60 and 55,30; `box-sizing:border-box`
+puts it back at 100x50 and 50,25. A percentage in `scale()` is just /100 and
+needs no box at all.
+
+Two boundaries come with it. A non-replaced inline element has no reference box,
+so its percentages resolve to 0 while its px translations still work -- Chrome
+answers `matrix(1, 0, 0, 1, 0, 0)` for `translate(50%, 50%)` on a
+`display:inline` box that measures 8x19. And `display:none` reports `none` for
+any transform, percentage or not, which is the no-box path that was already here.
 -->
 
 <script id=transform_computes_to_a_matrix>
 {
-  const probe = (decl) => {
+  const probe = (decl, extra) => {
     const host = document.createElement('div');
-    host.innerHTML = '<p style="width:100px;height:50px;transform:' + decl + '">x</p>';
+    host.innerHTML = '<p style="' + (extra || '') +
+      'width:100px;height:50px;transform:' + decl + '">x</p>';
     document.body.appendChild(host);
     const got = String(getComputedStyle(host.firstChild).transform);
     host.remove();
@@ -74,11 +85,57 @@ value rather than a number Chrome never printed. See computed-style-relative-uni
     testing.expectEqual(decl + ' -> ' + want, decl + ' -> ' + probe(decl));
   }
 
-  // A percentage cannot be resolved without the box, so the declaration is not
-  // reported at all rather than reported wrong.
-  testing.expectEqual('none', probe('translateX(50%)'));
+  // A percentage resolves against the element's own border box, 100x50 here.
+  // Chrome 151 at dpr 2, read off this same shape
+  // (scratch/b74/expr-test-shape-percent.js).
+  const PERCENT_CASES = [
+    ['matrix(1, 0, 0, 1, 50, 0)', 'translateX(50%)'],
+    ['matrix(1, 0, 0, 1, 0, 25)', 'translateY(50%)'],
+    ['matrix(1, 0, 0, 1, 50, 25)', 'translate(50%, 50%)'],
+    ['matrix(1, 0, 0, 1, 50, 0)', 'translate(50%)'],
+    ['matrix(1, 0, 0, 1, -50, -25)', 'translate(-50%, -50%)'],
+    ['matrix(1, 0, 0, 1, 10, 25)', 'translate(10px, 50%)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 50, 12.5, 10, 1)', 'translate3d(50%, 25%, 10px)'],
+    ['matrix(1, 0, 0, 1, 33.3333, 0)', 'translateX(33.333333333%)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'translateX(0%)'],
+    ['matrix(0.5, 0, 0, 0.5, 0, 0)', 'scale(50%)'],
+    ['matrix(0.5, 0, 0, 2, 0, 0)', 'scale(50%, 200%)'],
+    ['matrix(0.5, 0, 0, 1, 0, 0)', 'scaleX(50%)'],
+    ['matrix(1, 0, 0, 2, 0, 0)', 'scaleY(200%)'],
+    ['matrix3d(0.5, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1)', 'scale3d(50%, 200%, 2)'],
+    // the list still composes left to right with a percentage in it
+    ['matrix(0.707107, 0.707107, -0.707107, 0.707107, 50, 0)', 'translateX(50%) rotate(45deg)'],
+    ['matrix(0.707107, 0.707107, -0.707107, 0.707107, 35.3553, 35.3553)', 'rotate(45deg) translateX(50%)'],
+    // and a percentage in a slot whose grammar has no percentage is still a
+    // refusal that takes the whole declaration -- on both engines
+    ['none', 'translateZ(50%)'],
+    ['none', 'rotate(50%)'],
+    ['none', 'skewX(50%)'],
+    ['none', 'perspective(50%)'],
+  ];
+  for (const [want, decl] of PERCENT_CASES) {
+    testing.expectEqual(decl + ' -> ' + want, decl + ' -> ' + probe(decl));
+  }
 
-  // Nor is a function this engine does not model.
+  // Which box the percentage is a percentage OF, one thing moving per row.
+  const BASIS_CASES = [
+    ['matrix(1, 0, 0, 1, 50, 25)', ''],
+    ['matrix(1, 0, 0, 1, 60, 35)', 'padding:10px;'],
+    ['matrix(1, 0, 0, 1, 55, 30)', 'border:5px solid;'],
+    ['matrix(1, 0, 0, 1, 65, 40)', 'padding:10px;border:5px solid;'],
+    ['matrix(1, 0, 0, 1, 50, 25)', 'box-sizing:border-box;padding:10px;border:5px solid;'],
+    ['matrix(1, 0, 0, 1, 50, 25)', 'display:inline-block;'],
+    // a non-replaced inline element has no reference box, so 50% is 0 -- but the
+    // declaration is still reported, unlike the display:none case below
+    ['matrix(1, 0, 0, 1, 0, 0)', 'display:inline;'],
+    ['none', 'display:none;'],
+  ];
+  for (const [want, extra] of BASIS_CASES) {
+    testing.expectEqual('[' + extra + '] ' + want,
+      '[' + extra + '] ' + probe('translate(50%, 50%)', extra));
+  }
+
+  // A function this engine does not model is still not reported.
   testing.expectEqual('none', probe('lp-not-a-transform(1px)'));
 }
 </script>
