@@ -23048,3 +23048,107 @@ the two `0|0|0|…` buffers, `readPixels`, and this one). The four that are not
 are the three larger pixel buffers — measured not weighed — and the four short
 values, which B95 showed are computed inside the guard's bytecode VM rather than
 collected from the page at all. There is nothing left on this channel to fix.
+
+## An `about:blank` iframe answers with the viewport, and three things that follow (B70, 2026-08-30)
+
+A probe written for the animation work threw `Cannot read properties of null`
+on this engine and not on Chrome: `document.head` is null on the top-level
+`about:blank` that `run-expr.mjs` defaults to. Chasing that one line found a
+seam nobody had pointed an instrument at, because `about:blank` is not a page
+anyone writes — it is the document a guard MAKES, and cf-knob's own
+scripted-target list names `page:about:blank`.
+
+The document structure turned out to be fine. Eighteen readings across a
+src-less iframe, an explicit `about:blank` iframe and a written-into one agree
+on `documentElement`, `head`, `body`, `outerHTML`, `compatMode`, `contentType`,
+`characterSet`, `baseURI` and the element count. What did not agree was the
+BOXES, and every difference reproduces on a served document with both arms at
+`readyState: complete`, so none of it is the `document.write` path
+(`scratch/b70/qc/`, eight documents; `scratch/b70/expr-qc-served.js`).
+
+### The rule that swaps with the document's mode
+
+CSSOM View:
+
+> If the element is the root element and the document is **not** in quirks mode,
+> or if the element is the HTML body element and the document **is** in quirks
+> mode, return the viewport width/height excluding scrollbars.
+
+An `about:blank` document has no doctype, so it is always quirks — and the body
+half of that rule was not implemented. In a 300x150 iframe Chrome answers
+`body.clientWidth` 300 and this engine answered 284, while
+`getComputedStyle(body).width`, `offsetWidth` and `getBoundingClientRect().width`
+are 284 **on both arms**. One reading out of four disagreeing is what says it is
+the rule and not the layout.
+
+Chrome answers the viewport through everything the body's own box can be:
+
+| body | Chrome `clientWidth` | this engine, before |
+|---|---|---|
+| bare | 400 | 384 |
+| `margin:8px` | 400 | 384 |
+| `margin:8px;border:5px solid` | 400 | 384 |
+| `margin:8px;width:100px` | 400 | 100 |
+| `margin:8px;padding:20px` | 400 | 424 |
+| `margin:8px;display:inline` | 400 | 0 |
+
+so the rule is asked before any of the box is measured. It is asked only on
+`getClientWidth`/`getClientHeight`, never on `getClientWidthWithCache` —
+`offsetWidth` and the resolved computed `width` are built off that one and
+Chrome keeps both on the body's real box, which is the whole point of the
+divergence.
+
+### `clientTop` and `clientLeft` were a hard-coded zero
+
+The comment said the layout does not apply borders. That had stopped being true:
+`borderPx` reads the UA sheet as well as the author cascade, and `offsetWidth`
+and `getBoundingClientRect` have carried the border for a while. These two
+accessors were what was left behind, and a page sees it in one read — fifteen
+shapes measured (`scratch/b70/expr-client-tl.js`), every bordered one wrong.
+
+Each reads its OWN edge: `border-top:6px` alone is `6,0` and `border-left:9px`
+alone `0,9`, so neither is half of the `border_x`/`border_y` pair the box model
+carries. `display:none` and a non-replaced `display:inline` answer 0 even with a
+border declared, while `display:table` answers the border — the test is whether
+there is a border box, not which keyword made it.
+
+### A fraction where the IDL says `long`
+
+`getScrollWidth` rounds on its ordinary path and returned `dims.width` straight
+for the two root tags, so a `<body>` or `<html>` with a fractional box answered
+things like `100.3984375` and `1985.1484375`. `scrollWidth` and `scrollHeight`
+are `long` in the IDL: that is not a wrong number, it is an impossible one, and
+`Number.isInteger(document.body.scrollWidth)` is a one-expression tell that no
+value-matching exercise would ever have produced.
+
+### An existing test was asserting an inference
+
+`frames/iframe_root_box.html` asserted `d.body.clientWidth === 284` under a
+comment reading "clientWidth/clientHeight read the same box, so a script that
+measures one against the other does not see two different documents." The
+citation at the top of that file — headless Chrome 151, `body 284x134` — is
+correct and unchanged; it is the computed width. The `clientWidth` line was the
+comment's reasoning written down as a measurement. Re-measured on headless
+**and** headed Chrome: same body, `width: 284px` and `clientWidth: 300`. They
+are meant to differ.
+
+### Two more measured, and deliberately not touched
+
+* **The used border width snaps to the wrong grid.** Chrome snaps to DEVICE
+  pixels — at dpr 2, half a CSS pixel — with a floor of one device pixel for a
+  non-zero border. `border-width:0.4px` computes to `0.5px` there and `1px`
+  here; `3.6px` to `3.5px` there and `3px` here. `offsetWidth` and the bounding
+  rect move with it (`0.4px` reads 101 against 102). It decides two of the
+  fifteen `clientTop` shapes, which are the two that file does not assert.
+* **A bordered root element.** Chrome makes the root's BORDER box the viewport
+  and insets the content: a 7px-bordered `<html>` in a 400x200 frame reads
+  client 386x186 and offset 400x200. This engine reads client 400x200 and offset
+  414x214, adding the border outside the viewport. Same for the top-level body's
+  offset box, which Chrome reports as `innerWidth-16` for `margin:8px` and this
+  engine reports as the whole viewport — though it gets that case right inside
+  an iframe.
+
+Neither is a door: the station work in the chapters above closed the
+capability-presence and collected-value levers on cf-scrapingcourse from both
+directions. They are named, reproducible, off-site-testable defects on a surface
+every guard in this file measures, obtained from a corner nothing had looked at.
