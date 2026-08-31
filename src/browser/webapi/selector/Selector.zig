@@ -240,6 +240,14 @@ pub const Part = union(enum) {
     universal, // '*' any element
     pseudo_class: PseudoClass,
     attribute: Attribute,
+    /// `::before` and its family. It parses and it matches nothing, which is
+    /// the whole job: a pseudo-element selects a box no element owns, and the
+    /// reason it has to PARSE is that it usually arrives in a list with
+    /// selectors that do match. `*,::before,::after{...}` is how nearly every
+    /// modern page opens, and rejecting the compound used to take the `*` down
+    /// with it. Which names are known is the parser's business (see
+    /// `Parser.pseudoElement`); by the time one is here it is a real one.
+    pseudo_element,
 };
 
 pub const TagName = struct {
@@ -378,6 +386,9 @@ pub const Compound = struct {
             .attribute => {
                 try writer.writeAll("TODO");
             },
+            // The name is not kept -- nothing matches through it, and this
+            // writer is a debug aid rather than a serialisation.
+            .pseudo_element => try writer.writeAll("::"),
         };
     }
 };
