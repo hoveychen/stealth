@@ -25053,3 +25053,130 @@ default direction (`-webkit-linear-gradient(red, blue)` gains a `top`),
 `color-mix()` and `light-dark()` (evaluated, not folded), `box-shadow` and
 `text-shadow` computed shape, and `getComputedStyle(el).webkitTextStroke`, which
 this engine answers `undefined` where Chrome answers `1px rgb(255, 0, 0)`.
+
+## The stall is the cascade, and B75's page hid that (B99, 2026-08-31)
+
+`datadome-watchdog-stall` E1 asked whether the 30-second watchdog stall on
+dd-datadome was something DataDome waits for. It is not, and it is not
+dd-datadome's either. Grepping the top-level `engineLog` of the 252 archived
+lightpanda sweeps finds the stall fifteen times across **four** stations
+(dd-datadome x7, ak-homedepot x3, ak-kohls x2, ak-expedia x2), and in fourteen of
+the fifteen the first station that broke had `first=200` -- the real site had
+just been handed over. B98 hunted it on dd-datadome, which serves the real page
+in only 23% of 127 runs and closes its window when hammered; **ak-homedepot
+serves it in 91% of 64** and does not punish repetition.
+
+### It is not a loop
+
+`Watchdog.zig` fires only when `wait_depth == 0` and nothing has called `touch()`
+for 30s, and `touch()` is at the top of `Runner._tick`. So a stall is not "a
+condition that never converges" -- it is **one tick, macrotask batch included,
+that runs for thirty seconds**.
+
+`sample` on two live stations (ReleaseFast; a Debug build would make the stall
+indistinguishable from the build being slow) says where those seconds go. Read
+`sample`'s own third section, `Sort by top of stack` -- counting how many lines
+of the call graph mention a symbol counts *paths*, not time, and by that measure
+`Element.dimensionsIn` looks like the most expensive thing in the engine when its
+self time is under five samples. It is the path, not the price.
+
+| self samples | share of the busy thread | symbol |
+|---:|---:|---|
+| 5923 | 44.4% | `StyleManager.cascadedNamedDeclaration…check` |
+| 2067 | 15.5% | `selector.List.matchesPart` |
+| 1966 | 14.7% | `selector.List.matches` |
+| 1086 | 8.1% | `StyleManager.cascadedDeclaration…check` |
+
+Taking only `StyleManager.cascaded*` and `webapi.selector.*`: **86.9% and 88.7%
+of the busy worker thread on ak-homedepot** (two runs), **69.3% on ak-macys**.
+Not one number -- the stations differ, and any retelling should carry the station
+name with the figure.
+
+So the stall is a product: `getBoundingClientRect` walks the subtree, each node
+is asked for ~24 properties, and **every one of those asks re-resolves the
+cascade**. `scratch/b99/cascade-cost.mjs` serves its own synthetic page and needs
+no station window: 33-36 ns x rules x nodes x reads, flatly linear, and
+`--decls 8 --grid 3000x3000x120` reproduces `watchdog stall stalled_ms=30237`
+byte-for-byte with the live signature. That is the first deterministic offline
+reproduction this stall has had.
+
+### Why B75 ruled the cascade out, and why that reading was the page
+
+`The pass is right and 51x too expensive (B75)` above says, in the list of things
+the cost is *not*: "**not the cascade, and not depth.** 802 boxes under 0, 500,
+2 000 and 8 000 stylesheet rules cost 2 506, 3 198, 2 761 and 2 790us — no
+trend."
+
+Every rule on `scratch/b75/page/scale-css-*.html` ends in `span:nth-child(N)`,
+and the body of those pages holds **801 divs and zero spans**. Rules are bucketed
+by their rightmost compound, so all 8 000 landed in `tag_rules[span]` and no
+element in the document ever reached one of them. The rule count could have been
+a million.
+
+`scratch/b99/b75-bucket-artifact.mjs` holds everything else fixed -- same node
+count, same rule bodies, same engine -- and changes only that tag:
+
+| rightmost | 0 rules | 500 | 2 000 | 8 000 |
+|---|---:|---:|---:|---:|
+| `span` (B75's shape) | 2.3 ms | 4.8 | 3.2 | 2.4 |
+| `div` (reachable) | 4.9 ms | 485 | 1 935 | **8 381** |
+
+The flat row reproduces B75's reading exactly. **So "not the cascade" was a
+property of that page, not of the engine**, and the sentence it supports -- "what
+is left is the per-box cost on real markup … properties of `dimensionsIn` meeting
+a real page" -- misattributes the cost the chapter correctly measured. The live
+sample above is the direct evidence: on homedepot the per-box cost *is* the
+cascade.
+
+That matters beyond this stall, because B75 shelved `layout-pass-cost-prototype`
+on cost alone, and that prototype fixes a real reading surface: **26 of 27
+in-flow offsets wrong, every element's x equal to its y, one expression sees it**.
+Its 51x verdict was priced against a term that was misidentified, so it deserves
+re-pricing rather than standing as a closed door.
+
+### What moved, and what did not
+
+`cascade-declaration-name-index` (merged) gives each rule a 128-bit filter over
+the names it declares, two bits per name, hashed once per read and tested with
+one AND. A false positive costs only the scan that used to happen
+unconditionally, so it cannot change an answer. Two arms alternated, three rounds,
+2 000 rules x 2 000 nodes: **1.00x / 1.54x / 1.92x / 2.46x** at 1 / 4 / 8 / 16
+declarations per rule -- the point being that the cost stops tracking the
+declaration count at all. On ak-homedepot the `check` self time went 5346 -> 2624
+and the cascade share 88.7% -> 79.3%. On the synthetic stall cell it is the
+difference between `stalled_ms=30237` and finishing in 26.7 s: **progress, not
+headroom.**
+
+Two things it does *not* do, both measured rather than assumed:
+
+* **it does nothing when the rules declare few names.** On the B75-shaped page
+  above (two declarations per rule) the mask arm reads 461 / 1 907 / 9 117 ms
+  against 485 / 1 935 / 8 381 -- noise. That page's cost is the selector matching
+  underneath, 801 divs against 8 000 rules whose ancestor parts match nothing.
+  An ancestor filter is the lever there; it is measured but not planned, because
+  nobody has yet shown that shape is what a real page looks like.
+* **it does not remove the repeated-read factor.** 2 000 x 2 000 costs 425 ms at
+  one read and 1 462 ms at ten -- repeats are barely discounted.
+  `cascade-per-element-memo` is that lever, and it inherits B73's warning: the
+  memo B73 tried died on real pages because the page kept mutating the DOM
+  between reads. B73 memoised the geometry, which was the wrong layer, but its
+  observation about invalidation applies to the style layer just the same and
+  should be measured before that plan writes any code.
+
+### A methodology note worth more than the fix
+
+Three separate benchmark pages in this chapter -- B75's and two of mine -- each
+reported "the cascade does not cost anything", and all three were wrong for the
+same reason: **the synthetic page's data distribution is itself a premise, and
+each of them quietly made the cascade unreachable.** B75's rules were bucketed
+under a tag the page did not contain. My first probe declared only `margin-top`,
+so `declared_longhands` returned at its first line for nearly every read. My
+second made *every* rule declare *every* property the layout reads, so the
+name filter could only ever cost -- it measured 7% slower, three rounds
+consistent, and I nearly killed a 2x lever on it.
+
+A synthetic benchmark's force comes entirely from resembling real input, and that
+resemblance is an assertion to test, not a backdrop. When a synthetic reading is
+flat where theory says it should not be, suspect the page before the engine, and
+cross-check against a `sample` of a live station -- which is the ground truth for
+exactly this class of premise.
