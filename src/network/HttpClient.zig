@@ -4980,7 +4980,7 @@ test "HttpClient: only an origin that asked gets the six high-entropy hints" {
     try testing.expectString("\"arm\"", seededValue(&loud, "sec-ch-ua-arch"));
     try testing.expectString("\"64\"", seededValue(&loud, "sec-ch-ua-bitness"));
     try testing.expectString("\"\"", seededValue(&loud, "sec-ch-ua-model"));
-    try testing.expectString("\"26.3.1\"", seededValue(&loud, "sec-ch-ua-platform-version"));
+    try testing.expectString("\"26.6.2\"", seededValue(&loud, "sec-ch-ua-platform-version"));
     try testing.expectString("\"151.0.7922.174\"", seededValue(&loud, "sec-ch-ua-full-version"));
     try testing.expectString(
         "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.174\", \"Chromium\";v=\"151.0.7922.174\"",
