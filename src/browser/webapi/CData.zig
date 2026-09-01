@@ -252,10 +252,20 @@ pub const RenderOpts = struct {
 // Trims left and right according to the options.
 // Returns true if the string ends with a trimmed whitespace.
 pub fn render(self: *const CData, writer: *std.Io.Writer, opts: RenderOpts) !bool {
+    return renderText(self._data.str(), writer, opts);
+}
+
+/// The same, for a SLICE of a node's data rather than all of it. innerText
+/// needs one under `white-space-collapse: preserve-breaks`, where the breaks are
+/// written out and each run between two of them collapses on its own terms --
+/// its own trim at either end, because a break trims like a block boundary does.
+pub fn renderText(s: []const u8, writer: *std.Io.Writer, opts: RenderOpts) !bool {
     var start: usize = 0;
     var prev_w: ?bool = null;
     var is_w: bool = undefined;
-    const s = self._data.str();
+    // Nothing to render, and nothing left pending either. Reading `is_w` below
+    // without this is reading an undefined value.
+    if (s.len == 0) return false;
 
     for (s, 0..) |c, i| {
         is_w = std.ascii.isWhitespace(c);

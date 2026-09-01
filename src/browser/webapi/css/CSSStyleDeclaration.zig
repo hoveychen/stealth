@@ -3413,11 +3413,31 @@ fn cascadedOrUaInherited(element: *Element, frame: *Frame, name: []const u8, wra
 /// nothing. The first version of the collapse rule asked for it anyway, so the
 /// escape hatch never fired and a `pre` div holding one space was 0 tall where
 /// Chrome makes it 18.
-fn whiteSpaceCollapse(element: *Element, frame: *Frame) []const u8 {
+pub fn whiteSpaceCollapse(element: *Element, frame: *Frame) []const u8 {
     // Not `comptime .wrap`: a comptime String has to fit the small-string
     // optimisation's twelve bytes and `white-space-collapse` is twenty.
     const name = "white-space-collapse";
     return cascadedOrUaInherited(element, frame, name, .wrap(name)) orelse "collapse";
+}
+
+/// The `white-space-collapse` this element DECLARES -- its own cascade, then the
+/// UA stylesheet -- or null when it has none of its own and inherits one.
+///
+/// The walk above asks every ancestor for every element it is asked about.
+/// innerText walks the whole tree, and the value it wants at each element is the
+/// one it already carried down, so it wants this instead: one element's answer,
+/// and null meaning "keep what you have". The same trade its `visibility`
+/// already makes -- see handleChildElement, where the two sit side by side.
+pub fn declaredWhiteSpaceCollapse(element: *Element, frame: *Frame) ?[]const u8 {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const name = "white-space-collapse";
+    switch (declaredValue(style_manager, element, name, .wrap(name), .computed)) {
+        .value => |value| return std.mem.trim(u8, value, &std.ascii.whitespace),
+        .unreportable => return null,
+        .none => {},
+    }
+    if (uaValue(element, name)) |value| return std.mem.trim(u8, value, &std.ascii.whitespace);
+    return null;
 }
 
 /// Whether a run of spaces survives, so whitespace with nothing beside it is

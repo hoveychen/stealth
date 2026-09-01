@@ -261,3 +261,99 @@ carriage-return cases are scratch/b84/expr-b84-cr.js.
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<!--
+And the reading that made this a task at all: innerText. It reports the RENDERED
+text, so what it preserves is what `white-space` preserves -- and the flag here
+was the TAG, `pre` and nothing else. That got a <pre> right and everything else
+wrong in both directions: a <span style="white-space:pre"> collapsed its run,
+and a <pre style="white-space:normal"> kept one.
+
+Sixteen of the thirty-two readings in scratch/b84/expr-b84-innertext.js were
+wrong. Chrome 151, headed user agent, example.com; readings in
+scratch/b84/it-cr2.json.
+
+Two things this pins that are easy to guess wrong:
+
+  * a preserved carriage return is written OUT, not normalised to a line feed:
+    `a&#13;b` reads back with the CR in it. (The layout side does something
+    else again -- there a CR renders as nothing -- so the two are measured
+    separately.)
+  * `preserve-breaks` (which is what `pre-line` expands to) writes its breaks
+    literally rather than arming the pending-break counter that a block
+    boundary uses, because a leading one SURVIVES: `\na` reads "\na" where a
+    block boundary in the same position writes nothing.
+-->
+
+<script id=inner_text_preserves_what_white_space_preserves>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;left:-9999px;top:0;width:2000px;');
+  document.body.appendChild(host);
+
+  const wrong = [];
+  const eq = (what, got, want) => {
+    if (got !== want) wrong.push(what + ': want ' + JSON.stringify(want) + ', got ' + JSON.stringify(got));
+  };
+  const read = (what, html, want) => {
+    host.innerHTML = html;
+    eq(what, host.innerText, want);
+  };
+
+  const body = 'a   b\nc\td';
+  const kept = 'a   b\nc\td';
+  const collapsed = 'a b c d';
+  const breaks_only = 'a b\nc d';
+
+  // The shorthand, on an inline box and on a block one. `normal` and `nowrap`
+  // collapse both; `pre`, `pre-wrap` and `break-spaces` keep both; `pre-line`
+  // keeps the break and collapses the spaces.
+  for (const [ws, want] of [['normal', collapsed], ['nowrap', collapsed], ['pre', kept],
+                            ['pre-wrap', kept], ['pre-line', breaks_only], ['break-spaces', kept]]) {
+    read('span ' + ws, '<span style="white-space:' + ws + '">' + body + '</span>', want);
+    read('div ' + ws, '<div style="white-space:' + ws + '">' + body + '</div>', want);
+  }
+
+  // The longhand the shorthand expands to, which is the property actually read.
+  read('longhand collapse', '<div style="white-space-collapse:collapse">' + body + '</div>', collapsed);
+  read('longhand preserve', '<div style="white-space-collapse:preserve">' + body + '</div>', kept);
+  read('longhand preserve-breaks', '<div style="white-space-collapse:preserve-breaks">' + body + '</div>', breaks_only);
+  read('longhand break-spaces', '<div style="white-space-collapse:break-spaces">' + body + '</div>', kept);
+
+  // The tag is not the criterion, in either direction: a <pre> preserves
+  // because the UA stylesheet says so, and an author who says otherwise wins.
+  read('pre tag', '<pre>' + body + '</pre>', kept);
+  read('pre tag overridden', '<pre style="white-space:normal">' + body + '</pre>', collapsed);
+
+  // It inherits, so a child with no declaration of its own answers its
+  // ancestor's -- and one with a declaration answers its own.
+  read('inherited', '<div style="white-space:pre"><span>' + body + '</span></div>', kept);
+  read('inherited then off', '<div style="white-space:pre"><span style="white-space:normal">' + body + '</span></div>', collapsed);
+  read('off then inherited', '<div><span style="white-space:pre">' + body + '</span></div>', kept);
+
+  // `pre-line` is the value that needs both halves at once.
+  read('pre-line around break', '<div style="white-space:pre-line">a   \n   bb</div>', 'a\nbb');
+  read('pre-line blank line', '<div style="white-space:pre-line">a\n\nb</div>', 'a\n\nb');
+  read('pre-line leading break', '<div style="white-space:pre-line">\na</div>', '\na');
+  read('pre-line trailing break', '<div style="white-space:pre-line">a\n</div>', 'a\n');
+  read('pre-line leading spaces', '<div style="white-space:pre-line">   a</div>', 'a');
+  read('pre-line tab', '<div style="white-space:pre-line">a\tb</div>', 'a b');
+
+  // A preserved carriage return is written out as it stands.
+  read('pre CR', '<div style="white-space:pre">a&#13;b</div>', 'a\rb');
+  read('pre CRLF', '<div style="white-space:pre">a&#13;&#10;b</div>', 'a\r\nb');
+  read('pre trailing break', '<div style="white-space:pre">a\n</div>', 'a\n');
+
+  // The runs at either end, which only a preserving value keeps.
+  read('pre edges', '<div style="white-space:pre">   a   </div>', '   a   ');
+  read('normal edges', '<div style="white-space:normal">   a   </div>', 'a');
+
+  // Already right before any of this, and here so they stay right: a <br> and a
+  // block boundary are breaks of their own inside preserved text.
+  read('pre br', '<div style="white-space:pre">a<br>b</div>', 'a\nb');
+  read('pre nested block', '<div style="white-space:pre">a<div>b</div>c</div>', 'a\nb\nc');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
