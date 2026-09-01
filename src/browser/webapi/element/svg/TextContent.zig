@@ -107,8 +107,9 @@ fn fontFamily(self: *TextContent, frame: *Frame) font_metrics.Family {
     };
     var names = std.mem.splitScalar(u8, list, ',');
     while (names.next()) |raw| {
-        const name = std.mem.trim(u8, raw, " \t\r\n\x0c'\"");
-        if (font_metrics.find(name)) |family| {
+        // Quotes stay on: `findEntry` needs them to tell the keyword
+        // `monospace` from the family name `'monospace'`, which matches nothing.
+        if (font_metrics.findEntry(raw)) |family| {
             return family;
         }
     }

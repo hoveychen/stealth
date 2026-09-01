@@ -59217,9 +59217,51 @@ pub const zapfino: Family = .{ .glyphs = &glyphs_zapfino, .ascents = &ascents_za
 /// '100px NoSuchFamily12345' measures exactly like '100px serif'.
 pub const fallback = serif;
 
+/// The generic families that only match written as a bare keyword. Quote one
+/// and CSS says it is an ordinary family name, so `'monospace'` names a face
+/// nobody has and the entry falls through -- measured against Chrome 151 headed
+/// and headless, where `'monospace'` measures as the standard font (620 at 72px
+/// where the keyword is 564) and so do `'sans-serif'`, `'cursive'` and
+/// `'fantasy'`. `serif` is in the list too; it is invisible in a measurement
+/// only because the standard font is what it resolves to anyway.
+///
+/// `system-ui` is deliberately absent. It is a generic in the grammar, but the
+/// same Chrome resolves `'system-ui'` to the system font just as it does the
+/// bare keyword (624 both ways), so gating it would introduce the difference
+/// this list exists to remove.
+const quotable_keywords = [_][]const u8{ "serif", "sans-serif", "monospace", "cursive", "fantasy" };
+
+fn isGenericKeyword(name: []const u8) bool {
+    for (quotable_keywords) |keyword| {
+        if (std.ascii.eqlIgnoreCase(keyword, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Resolves one entry of a CSS family list, given exactly as it was written --
+/// quotes, whitespace and all. This is the entry point every caller wants:
+/// whether the name was quoted is part of what it means, and stripping the
+/// quotes before asking throws that away.
+pub fn findEntry(raw: []const u8) ?Family {
+    const name = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (name.len < 2 or (name[0] != '"' and name[0] != '\'') or name[name.len - 1] != name[0]) {
+        return find(name);
+    }
+    const unquoted = name[1 .. name.len - 1];
+    if (isGenericKeyword(unquoted)) {
+        return null;
+    }
+    return find(unquoted);
+}
+
 /// Maps a CSS family name to one of the measured families, ASCII
 /// case-insensitively. Null when we have no table for it, which the caller
 /// resolves by moving on to the next name in the list.
+///
+/// Takes the name unquoted, so it cannot tell a keyword from a family name that
+/// spells one. Callers that have the source text should use `findEntry`.
 pub fn find(name: []const u8) ?Family {
     const table = [_]struct { []const u8, Family }{
         .{ "sans-serif", sans_serif },
@@ -59446,12 +59488,7 @@ pub fn find(name: []const u8) ?Family {
 pub fn findInList(list: []const u8) Family {
     var it = std.mem.splitScalar(u8, list, ',');
     while (it.next()) |raw| {
-        const name = std.mem.trim(u8, raw, &std.ascii.whitespace);
-        const unquoted = if (name.len >= 2 and (name[0] == '"' or name[0] == '\'') and name[name.len - 1] == name[0])
-            name[1 .. name.len - 1]
-        else
-            name;
-        if (find(unquoted)) |family| {
+        if (findEntry(raw)) |family| {
             return family;
         }
     }
