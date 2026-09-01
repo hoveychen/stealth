@@ -25757,3 +25757,80 @@ content" beside `lp-base-c9a8e11eb` as the baseline. Both binaries answer
 `1.0.0-dev.1969+c9a8e11eb` to `version`. Its four alternating sweeps ran the same
 binary in both columns, so "four rounds, 20/29 each, no regression" reads as four
 repetitions of the baseline and not as a before/after.
+
+## Every element's x stopped being its y (B99, 2026-09-01)
+
+`in-flow-block-position` measured the defect a year of chapters kept pointing at:
+`calculateDocumentPosition` and `calculateSiblingPosition` had **identical
+bodies**, both answering "(preceding siblings' subtree nodes + ancestors) × 5px",
+so every element's x equalled its y and one expression saw it. The pass that
+knows better was written in B75 and shelved on cost. Four cascade caches later it
+was affordable, and `inflow-static-position` wired the readers to it.
+
+**27 of 27 rows and all fifteen container sizes now match Chrome**, from 1 of 27.
+
+### The table, and the one thing it must not do
+
+It lives on the Frame and is memoised on `Page.dom_version`. `positionOf` has a
+`position_table_building` guard that is not optional: the pass measures boxes, and
+measuring an out-of-flow box asks its containing block where it is — which is the
+question the table answers, so the first pass would otherwise re-enter itself
+forever.
+
+### Five defects the real positions exposed, each with a Chrome reading
+
+* **UA margins never reached the layout.** `<p>`'s `margin: 1em 0` is in the
+  per-tag table `getComputedStyle` answers from, and only `<body>` had a case for
+  reading it — so paragraphs stacked flush while the computed style said 16px.
+  `StyleManager` already had the helper *and the comment*: "the same table
+  `getComputedStyle` answers from, so the layout and the computed-style surface
+  cannot drift apart again", used for fonts alone. Opened up, and `marginPx` asks
+  it last. This is the one that matters beyond this plan: it is every `<p>`,
+  `<h1>`, `<ul>`, `<blockquote>` on every page.
+* **A child's position was written before the walk descended into it**, so it
+  could not know what would escape out of the child. Chrome puts `<div
+  style="margin-top:40px">` as body's only child at **y=40 for BODY** — the
+  child's margin collapses out through body and body's own 8px loses the max — and
+  at y=8 with the child at 49 once body has a 1px border
+  (`scratch/b99/expr-body-collapse.js`, four shapes). `escapedTopMargin` walks the
+  first-child chain, which is bounded by depth rather than by the subtree.
+* **Scroll offsets were integers.** `element/position.html` asserts
+  `gBCR().y === window.scrollY` after `scrollIntoView()`, which held while every y
+  was a multiple of 5px and broke at 856.5 → 856. Chrome keeps the fraction:
+  `scrollY` reads 100.5 and 123.5 in the two shapes of
+  `scratch/b99/expr-scroll-fraction.js`. So the assertion was Chrome's and the
+  truncation was the defect.
+* **`elementFromPoint` ran its own faux layout** — `preorder_index * 5.0`, used as
+  the box's left AND its top, the very signature being removed — with an early
+  return that only a node count makes valid. It reads the pass's rows now. Doing
+  that with `boundingClientRectValuesAt` per candidate took
+  `document/element_from_point.html` from its budget to **51 951ms** over 400
+  paragraphs, because that call resolves a client box and can walk an element's
+  text. So the rows carry the border box as well as its origin — the pass has
+  measured it already — and the height is corrected once the walk knows what the
+  box holds.
+* **Inline boxes had no row**, which is where `x == y` survived longest: the walk
+  hands them to the line rather than stacking them. The line cursor either side of
+  `flowInline` is where one sits and how wide it is.
+
+### Two test expectations were the bug, written down
+
+* `element/bounding_rect.html` asserted that two links had **different x**. Both
+  are an `<h2>`'s only content, so Chrome puts both at x=8 and only their y
+  differs. "Every element has its own x" was a property of the preorder stand-in.
+* `cdp.dom: getBoxModel` expected `content: {25.0, 25.0, …}` — x equal to y, the
+  signature itself. Chrome puts that `<p>` at 8,16 (8 from body's left margin, 16
+  from its own UA margin collapsing out through the div and through body), which
+  is the quad the test carries now.
+
+### And one where the expectation was mine, from this session
+
+The matrix's `inline-block pair` container went in as **400x30**, read from the
+probe's first Chrome run, and recorded as a pre-existing defect because this
+engine said 400x34. Runs two, three, four and five of the same probe all answer
+**400x34** — the other 26 rows identical across all five — and eight further
+shapes agree at 34 (`scratch/b99/expr-atomic-line-height.js`): the line is 30 of
+box plus the strut's 4 hanging under the baseline the boxes sit on. **The first
+run was cold, this engine was right, and the defect did not exist.** A Chrome
+reading destined for a test expectation is worth running twice, especially
+anything that depends on font metrics.
