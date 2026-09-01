@@ -7871,6 +7871,10 @@ test "WebApi: CSSStyleDeclaration computed style of a detached element" {
     try testing.htmlRunner("css/computed_detached.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration cascade cache invalidation" {
+    try testing.htmlRunner("css/cascade_cache_invalidation.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration computed transform-origin" {
     try testing.htmlRunner("css/computed_origin.html", .{});
 }

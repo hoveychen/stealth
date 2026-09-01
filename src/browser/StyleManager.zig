@@ -120,6 +120,29 @@ declared_longhands: std.StringHashMapUnmanaged(void) = .empty,
 /// so the lookup is an exact match.
 keyframes: std.StringHashMapUnmanaged([]const Keyframe) = .empty,
 
+/// What `cascadedNamedDeclaration` last answered, per element and property.
+///
+/// The walk behind `getBoundingClientRect` asks about two dozen properties of
+/// every node it visits, and a page asks for the box over and over: homedepot
+/// takes 314 layout reads in one load, kohls 1 943, macys 21 695
+/// (`scratch/b99/mutation-between-reads-sync.mjs`). Nothing about the answer
+/// changes between two of those reads unless the rules changed or the DOM did,
+/// and on those same three pages only 36, 25 and 35 reads had any mutation
+/// since the read before them -- 88.5%, 98.7% and 99.8% of reads are asking
+/// again about a document nobody touched.
+///
+/// Lives in `self.arena` beside the rules whose text the answers point into, so
+/// the two are discarded together: `rebuildIfDirty` resets that arena, which is
+/// why the map is reset there rather than cleared.
+cascade_cache: CascadeCache = .empty,
+
+/// The `Page.dom_version` the cache's contents were computed under. Any DOM
+/// mutation moves it -- `Frame.domChanged` covers structure and, through
+/// `Attribute.List.put`/`remove`, class and id -- and every entry is stale at
+/// once, because a single inserted node changes what `:nth-child`, `+` and `~`
+/// match for other elements.
+cache_dom_version: usize = 0,
+
 pub fn init(frame: *Frame) !StyleManager {
     return .{
         .frame = frame,
@@ -1016,6 +1039,10 @@ fn rebuildIfDirty(self: *StyleManager) !void {
 
     self.arena.resetRetain();
 
+    // Both the cached answers and the map holding them were allocated from that
+    // arena, so this is `.empty` rather than a clear: the buckets are gone.
+    self.cascade_cache = .empty;
+
     self.next_doc_order = 1;
 
     self.id_rules = .empty;
@@ -1835,6 +1862,30 @@ fn namedDeclaration(arena: Allocator, name: []const u8, raw: []const u8, importa
     };
 }
 
+const CascadeKey = struct {
+    element: *Element,
+    name: []const u8,
+    which: NamedList,
+};
+
+const CascadeCache = std.HashMapUnmanaged(CascadeKey, ?Declaration, struct {
+    pub fn hash(_: @This(), key: CascadeKey) u64 {
+        var hasher = std.hash.Wyhash.init(@intFromEnum(key.which));
+        hasher.update(std.mem.asBytes(&@intFromPtr(key.element)));
+        hasher.update(key.name);
+        return hasher.final();
+    }
+    pub fn eql(_: @This(), a: CascadeKey, b: CascadeKey) bool {
+        return a.element == b.element and a.which == b.which and std.mem.eql(u8, a.name, b.name);
+    }
+}, 80);
+
+/// Ceiling on cached answers. A page with a hundred thousand elements would
+/// otherwise hold an entry per element per property asked, and the cache is
+/// meant to pay for repeated reads of the same document, not to grow with it
+/// without bound. Past the cap reads still answer correctly, just uncached.
+const MAX_CASCADE_CACHE = 1 << 17;
+
 /// Two bits per name in a 128-bit word, so a property read can ask "can this
 /// rule possibly declare it" without touching the rule's declaration list.
 ///
@@ -2567,9 +2618,22 @@ pub fn cascadedLonghand(self: *StyleManager, el: *Element, name: []const u8) ?De
 fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8, which: NamedList) ?Declaration {
     self.rebuildIfDirty() catch return null;
 
-    // Nothing in the document declares it, so no rule can win it.
+    // Nothing in the document declares it, so no rule can win it. Ahead of the
+    // cache and not worth caching: it is already a single hash lookup.
     if (which == .longhand and !self.declared_longhands.contains(name)) {
         return null;
+    }
+
+    const dom_version = self.frame._page.dom_version;
+    if (dom_version != self.cache_dom_version) {
+        // One mutation invalidates every answer, so this keeps the map's
+        // buckets and drops only its contents -- the arena cannot give memory
+        // back, and a page that mutates a thousand times must not pay for a
+        // thousand maps.
+        self.cascade_cache.clearRetainingCapacity();
+        self.cache_dom_version = dom_version;
+    } else if (self.cascade_cache.get(.{ .element = el, .name = name, .which = which })) |cached| {
+        return cached;
     }
 
     var best: ?Declaration = null;
@@ -2636,6 +2700,26 @@ fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8,
     }
 
     checkRules(&self.other_rules, name, wanted_mask, which, &best, &best_priority, &best_important, el, self.frame);
+
+    // A miss is worth keeping too: "no rule declares this for this element" is
+    // what most of these reads conclude, and concluding it cost the same walk.
+    // `name` is the caller's slice, so the key holds a copy from the arena the
+    // answers already live in.
+    if (self.cascade_cache.count() < MAX_CASCADE_CACHE) {
+        const allocator = self.arena.allocator();
+        const gop = self.cascade_cache.getOrPut(allocator, .{
+            .element = el,
+            .name = name,
+            .which = which,
+        }) catch return best;
+        if (!gop.found_existing) {
+            gop.key_ptr.name = allocator.dupe(u8, name) catch {
+                _ = self.cascade_cache.remove(.{ .element = el, .name = name, .which = which });
+                return best;
+            };
+        }
+        gop.value_ptr.* = best;
+    }
 
     return best;
 }
