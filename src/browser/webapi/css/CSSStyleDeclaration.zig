@@ -388,7 +388,8 @@ fn computedShadow(self: *const CSSStyleDeclaration, property_name: []const u8, v
         const resolved = if (std.ascii.eqlIgnoreCase(written, "currentcolor"))
             self.propertyValueAt("color", frame, surface, depth + 1)
         else
-            computedColourText(frame.call_arena, "color", written) orelse written;
+            computedColourText(frame.call_arena, "color", written) orelse
+                foldedHexColour(frame.call_arena, written) orelse written;
         buf.writer.writeAll(resolved) catch return null;
 
         for (0..slots) |i| {
@@ -402,6 +403,26 @@ fn computedShadow(self: *const CSSStyleDeclaration, property_name: []const u8, v
         buf.deinit();
         return null;
     }
+    return buf.written();
+}
+
+/// A `#rgb` colour written out the way a computed value carries it, or null
+/// when the token is not one.
+///
+/// `computedColourText` deliberately declines a hash: by the time it runs on an
+/// ordinary declaration the hash has already been folded by
+/// `canonicaliseValue`. A shadow whose colour arrives through a `var()` never
+/// went through that -- the specified-value writer declines a value carrying a
+/// substitution, which is right, since the text arrives later -- so the hash is
+/// still a hash here. zillow.com ships exactly that
+/// (`box-shadow: … var(--tw-shadow-color)`) and it came out of the rewrite
+/// spelled `#fff0`; a plain stylesheet rule with the same hash folds fine,
+/// which is what says the substitution is the difference.
+fn foldedHexColour(arena: Allocator, token: []const u8) ?[]const u8 {
+    if (token.len == 0 or token[0] != '#') return null;
+    const rgba = color.RGBA.parse(token) catch return null;
+    var buf = std.Io.Writer.Allocating.init(arena);
+    writeColour(&buf.writer, .{ .rgb = .{ rgba.r, rgba.g, rgba.b }, .alpha = rgba.a }) catch return null;
     return buf.written();
 }
 
