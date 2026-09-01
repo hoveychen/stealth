@@ -7097,13 +7097,28 @@ fn camelCaseToDashCase(name: []const u8, buf: []u8) []const u8 {
 // ---------------------------------------------------------------------------
 // Named property access.
 //
-// Chrome answers every name in chrome_properties.aliases as an own enumerable
-// property of the declaration -- 735 of them, the camelCase spelling of each
-// supported property plus the shorthands and legacy webkit aliases -- and
-// answers undefined to anything else. Membership in that list is the whole
-// rule, and it has to be: Chrome reads style.webkitBorderRadius as "" but
-// style.webkitNotSet as undefined, and no test on the `webkit` prefix tells
+// Chrome answers every name in chrome_properties.alias_set as an own
+// enumerable property of the declaration -- 736 of them, the camelCase
+// spelling of each supported property plus the shorthands and legacy webkit
+// aliases -- and answers undefined to anything else. Membership in that list is
+// the whole rule, and it has to be: Chrome reads style.webkitBorderRadius as ""
+// but style.webkitNotSet as undefined, and no test on the `webkit` prefix tells
 // those two apart.
+//
+// Two things sit either side of that list, and both are name-only differences
+// that reading values cannot see (measured Chrome 151, scratch/b78):
+//
+//   * chrome_properties.aliases is nine names LONGER, because
+//     getOwnPropertyNames also reports the `epub*` block. Those nine answer
+//     nothing at all -- `in` is false, no descriptor, undefined -- so they are
+//     in the enumerator below and in nothing else, and Object.keys comes out
+//     nine shorter than getOwnPropertyNames on the same object.
+//   * every `webkit*` alias also answers under a capital W
+//     (`WebkitBoxAlign`), reading, writing and carrying a descriptor, while
+//     appearing in neither name list. `casedAliasSpelling` is that rule; it is
+//     derived rather than tabulated because the doubling is exact, 151 of 151,
+//     and dump-css-properties.mjs re-checks it against Chrome on every
+//     regeneration.
 //
 // Dash-case names are not in the list. They arrive only through bracket
 // notation (style['-moz-user-select']), where Chrome answers the stored value
@@ -7133,8 +7148,30 @@ pub fn setNamed(self: *CSSStyleDeclaration, name: []const u8, value: []const u8,
     if (isCustomProperty(name)) {
         return error.NotHandled;
     }
-    const dash_case = camelCaseToDashCase(name, &frame.buf);
+    var cased_buf: [128]u8 = undefined;
+    const spelling = casedAliasSpelling(name, &cased_buf) orelse name;
+    const dash_case = camelCaseToDashCase(spelling, &frame.buf);
     try self.setProperty(dash_case, value, null, frame);
+}
+
+/// The camelCase spelling a capital-W name stands for, or null if there is no
+/// such property. CSSOM gives every `-webkit-` property two IDL attributes and
+/// the second one is the first with its initial letter capitalised, so
+/// `WebkitBoxAlign` is `webkitBoxAlign` and reaches `-webkit-box-align`.
+///
+/// The rule is a rule rather than a table because it holds exactly: all 151
+/// `webkit*` aliases have the twin, no other name does, and
+/// dump-css-properties.mjs fails loudly if a future Chrome breaks either half.
+/// `alias_set` still decides, so `WebkitNotAProperty` stays undefined the same
+/// way `webkitNotAProperty` does.
+fn casedAliasSpelling(name: []const u8, buf: []u8) ?[]const u8 {
+    if (!std.mem.startsWith(u8, name, "Webkit") or name.len > buf.len) {
+        return null;
+    }
+    @memcpy(buf[0..name.len], name);
+    buf[0] = 'w';
+    const camel = buf[0..name.len];
+    return if (chrome_properties.alias_set.has(camel)) camel else null;
 }
 
 /// Whether Chrome answers this name at all, under either spelling. `border-block`
@@ -7194,12 +7231,15 @@ pub fn getNamed(self: *CSSStyleDeclaration, name: []const u8, frame: *Frame) ![]
         return error.NotHandled;
     }
 
-    const is_alias = isAliasSpelling(name);
-    if (!is_alias and std.mem.indexOfScalar(u8, name, '-') == null) {
+    var cased_buf: [128]u8 = undefined;
+    const spelling = casedAliasSpelling(name, &cased_buf) orelse name;
+
+    const is_alias = isAliasSpelling(spelling);
+    if (!is_alias and std.mem.indexOfScalar(u8, spelling, '-') == null) {
         return error.NotHandled;
     }
 
-    const dash_case = camelCaseToDashCase(name, &frame.buf);
+    const dash_case = camelCaseToDashCase(spelling, &frame.buf);
     const value = self.getPropertyValue(dash_case, frame);
     if (value.len > 0) {
         return value;
@@ -7212,8 +7252,13 @@ pub fn getNamed(self: *CSSStyleDeclaration, name: []const u8, frame: *Frame) ![]
     return error.NotHandled;
 }
 
-/// The names Object.keys() reports. Numeric indices come from the indexed
-/// enumerator instead, so this is the alias list alone.
+/// The names Object.getOwnPropertyNames() reports. Numeric indices come from
+/// the indexed enumerator instead, so this is the alias list alone.
+///
+/// Not the same thing as what Object.keys() reports: V8 runs every name this
+/// yields back through `queryAlias` when the caller asked for enumerable ones
+/// only, and the nine `epub*` names are declined there, so keys comes out nine
+/// shorter. That is Chrome's own arrangement, not a workaround.
 fn aliasNames(_: *const CSSStyleDeclaration, exec: *const js.Execution) !js.Array {
     var arr = exec.js.local.?.newArray(chrome_properties.aliases.len);
     for (chrome_properties.aliases, 0..) |name, i| {
@@ -7232,13 +7277,17 @@ fn queryAlias(self: *const CSSStyleDeclaration, name: []const u8, frame: *Frame)
     if (isCustomProperty(name)) {
         return error.NotHandled;
     }
-    if (isAliasSpelling(name)) {
+    var cased_buf: [128]u8 = undefined;
+    const spelling = casedAliasSpelling(name, &cased_buf) orelse name;
+    if (isAliasSpelling(spelling)) {
         // Chrome's descriptors are plain data properties: writable, enumerable
-        // and configurable, so no attribute bits are set.
+        // and configurable, so no attribute bits are set. That holds for the
+        // capital-W spellings too, which report `enumerable=true` even though
+        // no enumeration ever mentions them.
         return js.v8.None;
     }
-    if (std.mem.indexOfScalar(u8, name, '-') != null) {
-        const dash_case = camelCaseToDashCase(name, &frame.buf);
+    if (std.mem.indexOfScalar(u8, spelling, '-') != null) {
+        const dash_case = camelCaseToDashCase(spelling, &frame.buf);
         if (self.getPropertyValue(dash_case, frame).len > 0) {
             return js.v8.None;
         }
@@ -7319,9 +7368,9 @@ pub const JsApi = struct {
         return self.indexedItem(@intCast(index));
     }
 
-    // The indexed half is the property list -- Chrome's 474 computed longhands
+    // The indexed half is the property list -- Chrome's 475 computed longhands
     // for a computed view, whatever is set for an inline one -- and the named
-    // half is the 735 aliases. Both need their enumerator: Object.keys() is what
+    // half is the 745 aliases. Both need their enumerator: Object.keys() is what
     // fingerprinting scripts read, and it is empty without them.
     pub const @"[int]" = bridge.indexed(getAtIndex, indexes, .{ .null_as_undefined = true });
     pub const @"[str]" = bridge.namedIndexed(
@@ -7600,6 +7649,10 @@ test "WebApi: CSSStyleDeclaration refuses unknown" {
 
 test "WebApi: CSSStyleDeclaration custom property is not named" {
     try testing.htmlRunner("css/custom_property_not_named.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration cased and listed-only names" {
+    try testing.htmlRunner("css/declaration_cased_and_listed_names.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration alpha value percentage" {

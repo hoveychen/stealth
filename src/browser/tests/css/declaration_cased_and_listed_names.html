@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<head>
+  <script src="../testing.js"></script>
+</head>
+
+<!--
+  Two name-surface differences on CSSStyleDeclaration that reading values
+  cannot see, because both of them are about which *names* the object answers
+  rather than what it answers with.
+
+  Measured on Chrome 151, headed Linux container and headless macOS agreeing,
+  with scratch/b78/expr-casedmap.js, expr-epub.js and expr-setters.js:
+
+  1. Every one of the 151 `webkit*` IDL attributes has a second spelling with a
+     capital W -- `WebkitBoxAlign` beside `webkitBoxAlign`. It reads, it writes,
+     `in` is true and it carries a descriptor, but neither
+     getOwnPropertyNames nor Object.keys ever mentions it. No name outside the
+     `webkit` prefix has such a twin: `Color` and `EpubCaptionSide` are both
+     undefined.
+
+  2. The nine `epub*` names are the mirror image. getOwnPropertyNames reports
+     them -- which is why Chrome's own non-index name count is 745 against
+     Object.keys' 736 -- while `in` says false, there is no descriptor and
+     reading gives undefined.
+
+  So the four ways to ask "what names does this object have" give four
+  different answers on the same object, and a guard may use any of them.
+-->
+
+<div id="cased-anchor"></div>
+
+<script id="capital_w_spellings_answer_but_are_never_listed">
+{
+  const el = document.createElement('div');
+  el.setAttribute('style', '-webkit-box-align: center');
+  document.body.appendChild(el);
+  const cs = getComputedStyle(el);
+
+  const nonIndex = (o) => Object.getOwnPropertyNames(o).filter((n) => isNaN(+n));
+  const lower = nonIndex(cs).filter((n) => n.startsWith('webkit'));
+  const upper = lower.map((n) => n[0].toUpperCase() + n.slice(1));
+
+  const show = (v) => (v === undefined ? 'undefined' : JSON.stringify(v));
+  const d = Object.getOwnPropertyDescriptor(cs, 'WebkitBoxAlign');
+
+  const want = [
+    'webkit aliases 151',
+    'capital-W readable 151',
+    'capital-W in 151',
+    'capital-W value equals lowercase 151',
+    'capital-W listed by getOwnPropertyNames 0',
+    'capital-W listed by keys 0',
+    'WebkitBoxAlign "center"',
+    'WebkitBoxAlign descriptor enumerable=true configurable=true writable=true data',
+    // The prefix is the whole rule: no other name grows a capital twin.
+    'Color undefined',
+    'EpubCaptionSide undefined',
+    'WebkitNotAProperty undefined',
+    'Webkit undefined',
+  ].join('\n');
+
+  const got = [
+    'webkit aliases ' + lower.length,
+    'capital-W readable ' + upper.filter((n) => cs[n] !== undefined).length,
+    'capital-W in ' + upper.filter((n) => n in cs).length,
+    'capital-W value equals lowercase ' + upper.filter((n, i) => cs[n] === cs[lower[i]]).length,
+    'capital-W listed by getOwnPropertyNames ' +
+      upper.filter((n) => nonIndex(cs).includes(n)).length,
+    'capital-W listed by keys ' + upper.filter((n) => Object.keys(cs).includes(n)).length,
+    'WebkitBoxAlign ' + show(cs.WebkitBoxAlign),
+    'WebkitBoxAlign descriptor ' + (d
+      ? `enumerable=${d.enumerable} configurable=${d.configurable} writable=${d.writable} ` +
+        (d.get ? 'accessor' : 'data')
+      : '(absent)'),
+    'Color ' + show(cs.Color),
+    'EpubCaptionSide ' + show(cs.EpubCaptionSide),
+    'WebkitNotAProperty ' + show(cs.WebkitNotAProperty),
+    'Webkit ' + show(cs.Webkit),
+  ].join('\n');
+
+  el.remove();
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="capital_w_spellings_write_through_to_the_property">
+{
+  // The write half. Assigning the capital spelling stores the property under
+  // its dashed name, exactly as the lowercase one does.
+  const el = document.createElement('div');
+  el.style.WebkitBoxAlign = 'center';
+
+  const want = [
+    'cssText "-webkit-box-align: center;"',
+    'length 1',
+    'item(0) "-webkit-box-align"',
+    'read back "center"',
+    'lowercase reads the same "center"',
+  ].join('\n');
+  const got = [
+    'cssText ' + JSON.stringify(el.style.cssText),
+    'length ' + el.style.length,
+    'item(0) ' + JSON.stringify(el.style.item(0)),
+    'read back ' + JSON.stringify(el.style.WebkitBoxAlign),
+    'lowercase reads the same ' + JSON.stringify(el.style.webkitBoxAlign),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="epub_names_are_listed_and_nothing_else">
+{
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  const cs = getComputedStyle(el);
+  const inline = el.style;
+
+  const nonIndex = (o) => Object.getOwnPropertyNames(o).filter((n) => isNaN(+n));
+  const nonIndexKeys = (o) => Object.keys(o).filter((n) => isNaN(+n));
+  const listedOnly = (o) => {
+    const keys = new Set(nonIndexKeys(o));
+    return nonIndex(o).filter((n) => !keys.has(n));
+  };
+  const show = (v) => (v === undefined ? 'undefined' : JSON.stringify(v));
+
+  const names = nonIndex(cs);
+  const at = names.indexOf('epubCaptionSide');
+
+  const want = [
+    'computed own names 745',
+    'computed keys 736',
+    'inline own names 745',
+    'inline keys 736',
+    'listed only epubCaptionSide epubTextCombine epubTextEmphasis ' +
+      'epubTextEmphasisColor epubTextEmphasisStyle epubTextOrientation ' +
+      'epubTextTransform epubWordBreak epubWritingMode',
+    'inline listed only matches computed true',
+    // Alphabetical position, which is where Chrome puts them: they are not
+    // appended to the end of the list.
+    'neighbours emptyCells epubCaptionSide fallback',
+    "'epubCaptionSide' in false",
+    'epubCaptionSide value undefined',
+    'epubCaptionSide descriptor undefined',
+    'hasOwnProperty false',
+  ].join('\n');
+
+  const got = [
+    'computed own names ' + names.length,
+    'computed keys ' + nonIndexKeys(cs).length,
+    'inline own names ' + nonIndex(inline).length,
+    'inline keys ' + nonIndexKeys(inline).length,
+    'listed only ' + listedOnly(cs).join(' '),
+    'inline listed only matches computed ' +
+      (listedOnly(inline).join(' ') === listedOnly(cs).join(' ')),
+    'neighbours ' + names.slice(at - 1, at + 1).join(' ') + ' ' +
+      names[names.indexOf('epubWritingMode') + 1],
+    "'epubCaptionSide' in " + ('epubCaptionSide' in cs),
+    'epubCaptionSide value ' + show(cs.epubCaptionSide),
+    'epubCaptionSide descriptor ' +
+      show(Object.getOwnPropertyDescriptor(cs, 'epubCaptionSide')),
+    'hasOwnProperty ' + Object.prototype.hasOwnProperty.call(cs, 'epubCaptionSide'),
+  ].join('\n');
+
+  el.remove();
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="at_supports_does_not_grow_with_the_listed_only_names">
+{
+  // `aliases` is what CSS.supports() derives its property vocabulary from, and
+  // it just grew by nine names the engine cannot parse. @supports has to keep
+  // agreeing with what a declaration actually retains, so these stay false
+  // until something teaches the parser the dashed `-epub-*` spellings -- at
+  // which point both halves flip together.
+  //
+  // This is a deliberate difference from Chrome, which answers true to the
+  // dashed form: `-epub-caption-side` is a real property alias there,
+  // `setProperty('-epub-caption-side','bottom')` lands as `caption-side:
+  // bottom` and a stylesheet rule using it applies (scratch/b78/expr-epub.js).
+  const want = [
+    "supports('-epub-caption-side', 'bottom') false",
+    "supports('epub-caption-side', 'bottom') false",
+    "supports('-webkit-box-align', 'center') true",
+    "supports('caption-side', 'bottom') true",
+  ].join('\n');
+  const got = [
+    "supports('-epub-caption-side', 'bottom') " + CSS.supports('-epub-caption-side', 'bottom'),
+    "supports('epub-caption-side', 'bottom') " + CSS.supports('epub-caption-side', 'bottom'),
+    "supports('-webkit-box-align', 'center') " + CSS.supports('-webkit-box-align', 'center'),
+    "supports('caption-side', 'bottom') " + CSS.supports('caption-side', 'bottom'),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
