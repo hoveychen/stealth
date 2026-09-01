@@ -6,6 +6,30 @@
 <span id=mySpan></span>
 <p id=paragraph></p>
 
+<!--
+  Named access on the window, and *where the name lives*. Chrome keeps these on
+  the named properties object -- the nameless link between Window.prototype and
+  EventTarget.prototype -- so `in` says yes, hasOwnProperty says no, and there
+  is no descriptor on the window at all. This engine answered them off the
+  global itself: own=true with a descriptor to show for it, and only for names
+  it could reach through getElementById, so an element named by its `name`
+  attribute was not there and an iframe did not read back as its window.
+
+  Measured on Chrome 151 with scratch/b79/window-names.mjs against this markup.
+-->
+
+<div id="wnDiv" name="wnDivName"></div>
+<span id="addEventListener"></span>
+<form name="wnForm" id="wnFormId"><input name="wnField" id="wnFieldId"></form>
+<img name="wnImg" id="wnImgId" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+<embed name="wnEmbed" type="application/x-nonexistent">
+<object name="wnObject"></object>
+<object id="wnObjectId"></object>
+<iframe name="wnFrame" src="about:blank"></iframe>
+<iframe id="wnFrameIdOnly" src="about:blank"></iframe>
+<a name="wnAnchor"></a>
+<select name="wnSelectName"></select>
+
 <script id=named_access_global>
   testing.expectEqual('i', i.id);
   testing.expectEqual('testDiv',testDiv.id);
@@ -23,4 +47,110 @@
 <script id=named_access_shadowing>
   const i = 100;
   testing.expectEqual(100, i);
+</script>
+
+<script id="a_named_window_property_is_not_the_window_s_own">
+{
+  const row = (n) => {
+    const d = Object.getOwnPropertyDescriptor(window, n);
+    const v = window[n];
+    const read = v === undefined ? 'undefined'
+      : Object.prototype.toString.call(v) === '[object Window]' ? 'Window'
+      : v.constructor.name;
+    return `${n} in=${n in window} own=${Object.prototype.hasOwnProperty.call(window, n)} ` +
+      (d ? 'present' : 'absent') + ` read=${read}`;
+  };
+  const want = [
+    // An id names any element at all...
+    'wnDiv in=true own=false absent read=HTMLDivElement',
+    'wnFormId in=true own=false absent read=HTMLFormElement',
+    'wnFieldId in=true own=false absent read=HTMLInputElement',
+    'wnObjectId in=true own=false absent read=HTMLObjectElement',
+    // ...an iframe's id included, which reaches the element.
+    'wnFrameIdOnly in=true own=false absent read=HTMLIFrameElement',
+    // ...and the names are nowhere in the window's own lists.
+    'own []',
+    'keys []',
+  ].join('\n');
+  const mine = (a) => a.filter((n) => n.startsWith('wn'));
+  const got = [
+    row('wnDiv'), row('wnFormId'), row('wnFieldId'), row('wnObjectId'),
+    row('wnFrameIdOnly'),
+    'own [' + mine(Object.getOwnPropertyNames(window)).join(',') + ']',
+    'keys [' + mine(Object.keys(window)).join(',') + ']',
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="a_name_attribute_names_four_kinds_and_a_frame">
+{
+  const row = (n) => {
+    const v = window[n];
+    const read = v === undefined ? 'undefined'
+      : Object.prototype.toString.call(v) === '[object Window]' ? 'Window'
+      : v.constructor.name;
+    return `${n} in=${n in window} read=${read}`;
+  };
+  const want = [
+    'wnForm in=true read=HTMLFormElement',
+    'wnImg in=true read=HTMLImageElement',
+    'wnEmbed in=true read=HTMLEmbedElement',
+    'wnObject in=true read=HTMLObjectElement',
+    // A frame's name reaches the browsing context, not the element -- the one
+    // place where name and id answer with different things.
+    'wnFrame in=true read=Window',
+    // Every other element names nothing by its name attribute.
+    'wnDivName in=false read=undefined',
+    'wnField in=false read=undefined',
+    'wnAnchor in=false read=undefined',
+    'wnSelectName in=false read=undefined',
+    'wnNope in=false read=undefined',
+  ].join('\n');
+  const got = [
+    row('wnForm'), row('wnImg'), row('wnEmbed'), row('wnObject'), row('wnFrame'),
+    row('wnDivName'), row('wnField'), row('wnAnchor'), row('wnSelectName'),
+    row('wnNope'),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="the_named_properties_object_is_where_they_live">
+{
+  const npo = Object.getPrototypeOf(Object.getPrototypeOf(window));
+  const d = Object.getOwnPropertyDescriptor(npo, 'wnDiv');
+  const want = [
+    'tag WindowProperties',
+    // It lists nothing: there is no enumerator behind these names, only a
+    // query, so getOwnPropertyNames is empty while hasOwnProperty is true.
+    'own []',
+    'wnDiv hasOwn=true data e=false c=true w=true read=HTMLDivElement',
+    // A name an object further up the chain already answers stays that
+    // object's: the span with id=addEventListener does not shadow the method.
+    'addEventListener read=function',
+  ].join('\n');
+  const got = [
+    'tag ' + npo[Symbol.toStringTag],
+    'own [' + Object.getOwnPropertyNames(npo).join(',') + ']',
+    'wnDiv hasOwn=' + Object.prototype.hasOwnProperty.call(npo, 'wnDiv') +
+      ' ' + (d ? (d.get || d.set ? 'accessor' : 'data') + ` e=${d.enumerable} c=${d.configurable} w=${d.writable}` : 'absent') +
+      ' read=' + (npo.wnDiv === undefined ? 'undefined' : npo.wnDiv.constructor.name),
+    'addEventListener read=' + typeof window.addEventListener,
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="assigning_over_a_named_window_property_shadows_it">
+{
+  // Last: this one leaves an own property behind. The named property is
+  // writable and lives on the prototype, so the assignment creates an own one
+  // on the window that hides it.
+  window.wnObject = 'x';
+  testing.expectEqual(
+    'read=string own=true',
+    'read=' + (typeof window.wnObject === 'string' ? 'string' : window.wnObject.constructor.name) +
+      ' own=' + Object.prototype.hasOwnProperty.call(window, 'wnObject'));
+}
 </script>

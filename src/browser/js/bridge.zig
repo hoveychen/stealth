@@ -719,19 +719,12 @@ pub fn unknownWindowPropertyCallback(c_name: ?*const v8.Name, handle: ?*const v8
         return js.Intercepted.no;
     };
 
-    // Only Page contexts have document.getElementById lookup
-    switch (local.ctx.global) {
-        .frame => |frame| {
-            const document = frame.document;
-            if (document.getElementById(property, frame)) |el| {
-                const js_val = local.zigValueToJs(el, .{}) catch return js.Intercepted.no;
-                var pc = Caller.PropertyCallbackInfo{ .handle = handle.? };
-                pc.getReturnValue().set(js_val);
-                return js.Intercepted.yes;
-            }
-        },
-        .worker => {}, // no global lookup in a worker
-    }
+    // Named element access used to be answered here, off the global itself,
+    // which made every one of those names an own property of the window with a
+    // descriptor to show for it. Chrome's live on the named properties object
+    // between Window.prototype and EventTarget.prototype -- `in` yes,
+    // hasOwnProperty no, no descriptor -- so the lookup moved to
+    // namedWindowPropertyCallback below and this callback kept only the log.
 
     if (comptime lp.IS_DEBUG) {
         if (std.mem.startsWith(u8, property, "__")) {
@@ -768,13 +761,102 @@ pub fn unknownWindowPropertyCallback(c_name: ?*const v8.Name, handle: ?*const v8
             .{ "ApplePaySession", {} },
         });
         if (!ignored.has(property)) {
-            var buf: [2048]u8 = undefined;
-            const key = std.fmt.bufPrint(&buf, "Window:{s}", .{property}) catch return js.Intercepted.no;
-            logUnknownProperty(local, key) catch return js.Intercepted.no;
+            // A name the page's own markup answers is not an unknown property,
+            // even though this callback declines it: the named properties
+            // object answers it a link further up the chain.
+            const named = switch (local.ctx.global) {
+                .frame => |frame| frame.document.windowNamedObject(property, frame) != null,
+                .worker => false,
+            };
+            if (!named) {
+                var buf: [2048]u8 = undefined;
+                const key = std.fmt.bufPrint(&buf, "Window:{s}", .{property}) catch return js.Intercepted.no;
+                logUnknownProperty(local, key) catch return js.Intercepted.no;
+            }
         }
     }
 
     return js.Intercepted.no;
+}
+
+/// Named access on the Window object: `window.myDiv`, `window.myForm`,
+/// `window.myFrame`. Installed on the *named properties object* -- the nameless
+/// link between Window.prototype and EventTarget.prototype -- because that is
+/// where Chrome keeps these names: `'myDiv' in window` is true while
+/// `window.hasOwnProperty('myDiv')` is false and the window has no descriptor
+/// for it (measured on Chrome 151, scratch/b79/window-names.mjs).
+///
+/// Not a bridge member like every other interceptor because that object is not
+/// an interface -- it has no Zig type behind it, no internal field, and nothing
+/// to be `self`. The window comes from the context instead, as it does for
+/// unknownWindowPropertyCallback above.
+pub fn namedWindowPropertyCallback(c_name: ?*const v8.Name, handle: ?*const v8.PropertyCallbackInfo) callconv(.c) u32 {
+    return windowNamedProperty(.value, c_name, handle);
+}
+
+/// The same lookup, answering `in` and hasOwnProperty rather than the value.
+/// The names are non-enumerable there and the object lists none of them -- it
+/// has a query and no enumerator, so getOwnPropertyNames on it is empty while
+/// hasOwnProperty is true (measured).
+pub fn namedWindowPropertyQueryCallback(c_name: ?*const v8.Name, handle: ?*const v8.PropertyCallbackInfo) callconv(.c) u32 {
+    return windowNamedProperty(.attributes, c_name, handle);
+}
+
+fn windowNamedProperty(
+    comptime answer: enum { value, attributes },
+    c_name: ?*const v8.Name,
+    handle: ?*const v8.PropertyCallbackInfo,
+) u32 {
+    const v8_isolate = v8.v8__PropertyCallbackInfo__GetIsolate(handle).?;
+
+    // No Context in embedder data yet while the snapshot is being created.
+    const v8_context = v8.v8__Isolate__GetCurrentContext(v8_isolate) orelse return js.Intercepted.no;
+    const ctx: *Context = @ptrCast(@alignCast(v8.v8__Context__GetAlignedPointerFromEmbedderData(v8_context, 1) orelse return js.Intercepted.no));
+
+    var caller: Caller = undefined;
+    caller.initWithContext(ctx, v8_context);
+    defer caller.deinit();
+
+    const local = &caller.local;
+
+    var hs: js.HandleScope = undefined;
+    hs.init(local.isolate);
+    defer hs.deinit();
+
+    const property: []const u8 = js.String.toSlice(.{ .local = local, .handle = @ptrCast(c_name.?) }) catch {
+        return js.Intercepted.no;
+    };
+
+    var pc = Caller.PropertyCallbackInfo{ .handle = handle.? };
+
+    // Whose names these are is the *receiver's* business, not the running
+    // script's: a parent reading `childFrame.someName` runs in the parent's
+    // context while the window being asked is the child's, and answering from
+    // the context gave every child frame its parent's names. The receiver is
+    // the window itself, so it carries the frame. A worker's global names
+    // nothing -- there is no document behind it -- and neither does anything
+    // else that reaches here without being a window.
+    const receiver_context = v8.v8__Object__GetCreationContext(pc.getThis()) orelse return js.Intercepted.no;
+    const receiver_ctx: *Context = @ptrCast(@alignCast(
+        v8.v8__Context__GetAlignedPointerFromEmbedderData(receiver_context, 1) orelse return js.Intercepted.no,
+    ));
+    const frame = switch (receiver_ctx.global) {
+        .frame => |receiver_frame| receiver_frame,
+        .worker => return js.Intercepted.no,
+    };
+
+    const named = frame.document.windowNamedObject(property, frame) orelse return js.Intercepted.no;
+
+    const js_value = switch (answer) {
+        .value => switch (named) {
+            .element => |element| local.zigValueToJs(element, .{}),
+            .window => |named_window| local.zigValueToJs(named_window, .{}),
+            .cross_origin => |named_window| local.zigValueToJs(named_window, .{}),
+        },
+        .attributes => local.zigValueToJs(@as(u32, v8.DontEnum), .{}),
+    } catch return js.Intercepted.no;
+    pc.getReturnValue().set(js_value);
+    return js.Intercepted.yes;
 }
 
 // Only used for debugging
