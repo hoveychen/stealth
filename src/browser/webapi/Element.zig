@@ -4437,7 +4437,28 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 const outer_below = flow.open_below;
                 flow.open_above = @max(outer_above, halves.above);
                 flow.open_below = @max(outer_below, halves.below);
+                // Where the line cursor stands on either side of this box is
+                // where the box is and how wide it is. An inline element gets no
+                // row otherwise -- the walk hands it to the line rather than
+                // stacking it -- and without one it keeps the node-count
+                // position, which is the last place `x == y` survives. Chrome
+                // puts the `<a>` filling an `<h2>` at x=8 with the line's own
+                // 27.5 of height (scratch/b99/expr-bounding-rect-page.js).
+                const line_x = flow.placed;
+                const line_y = flow.total;
                 el.flowInline(frame, &flow, child_font.family, child_font.size, 1);
+                if (pass) |p| {
+                    // Only a box that stayed on its line: a wrapped inline is a
+                    // union of line boxes and nothing here has measured one.
+                    if (flow.total == line_y and flow.placed > line_x) {
+                        p.record(frame, el, .{
+                            .x = p.x + line_x,
+                            .y = p.y + total + line_y,
+                            .width = flow.placed - line_x,
+                            .height = halves.above + halves.below,
+                        });
+                    }
+                }
                 flow.open_above = outer_above;
                 flow.open_below = outer_below;
                 continue;

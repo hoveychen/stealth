@@ -43,7 +43,13 @@ regression in sizing cannot hide inside a position fix.
     ["a line of text, then a block", "400x48.5", ["a: d=0,18.5 box=400x30"]],
     ["auto-height child holding one line", "400x38.5", ["a: d=0,0 box=400x18.5", "b: d=0,18.5 box=400x20"]],
     ["float left, then a block", "400x20", ["a: d=0,0 box=100x30", "b: d=0,0 box=400x20"]],
-    ["inline-block pair", "400x30", ["a: d=0,0 box=80x30", "b: d=80,0 box=80x30"]],
+    // 400x34 and not 400x30: the line the two boxes share is 30 of box plus the
+    // strut's 4 of descent hanging under the baseline their bottom edges sit on.
+    // The first Chrome run of this probe answered 30 and four later ones
+    // answered 34, so the 30 was a cold reading -- and eight separate shapes
+    // (scratch/b99/expr-atomic-line-height.js) agree at 34, including a single
+    // inline-block, one beside text, and the pair with a space between them.
+    ["inline-block pair", "400x34", ["a: d=0,0 box=80x30", "b: d=80,0 box=80x30"]],
     ["absolute child in a relative container", "400x80", ["a: d=11,13 box=50x20"]],
   ];
 
