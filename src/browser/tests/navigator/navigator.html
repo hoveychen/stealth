@@ -257,11 +257,11 @@
       testing.expectEqual(navigator.platform === 'MacIntel' ? 'arm' : 'x86', v.architecture);
       // The OS version, which is a per-claim value like the rest of them and not
       // a hint we get to decline: the macOS Chrome on the reference host answers
-      // "26.3.1", and the Linux one answers the empty string -- measured on both,
+      // "26.6.2", and the Linux one answers the empty string -- measured on both,
       // Chrome 151. An empty platformVersion beside a macOS platform is a Linux
       // Chrome's answer under a Mac's claim.
       testing.expectEqual(
-        navigator.platform === 'MacIntel' ? '26.3.1' : '',
+        navigator.platform === 'MacIntel' ? '26.6.2' : '',
         v.platformVersion,
       );
 

@@ -111,7 +111,17 @@ pub const bitness = switch (claimed) {
 /// This is the reference host's macOS version rather than something read off the
 /// running kernel: the whole point of this file is that the claim does not follow
 /// the machine.
+///
+/// Which means it goes stale, and staleness here is not free. `ua_full_version`
+/// below tracks the reference Chrome, so a frozen OS version drifts away from a
+/// current browser version, and the pair is what a two-arm wire comparison
+/// reads: on the reference host, `accept-ch-echo.mjs` had this as the *only*
+/// value difference across the nine hints Cloudflare's managed challenge names,
+/// header for header and in order. A standing difference on that path costs
+/// whoever measures it next the time to rule it out. Re-pin it when the
+/// reference host moves: 26.3.1 -> 26.6.2 (`sw_vers`, and Chrome 151 answers the
+/// same on that host).
 pub const platform_version = switch (claimed) {
-    .macos => "26.3.1",
+    .macos => "26.6.2",
     .linux => "",
 };
