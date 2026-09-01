@@ -255,7 +255,10 @@ fn serialiseFamilies(writer: *std.Io.Writer, list: []const u8) !?font_metrics.Fa
         }
 
         if (resolved == null) {
-            resolved = font_metrics.find(unquoted);
+            // `name`, not `unquoted`: a quoted generic is an ordinary family
+            // name and must not resolve to the keyword's face. The serialised
+            // form below still comes from `unquoted`, which is a separate rule.
+            resolved = font_metrics.findEntry(name);
         }
 
         if (wrote_one) try writer.writeAll(", ");

@@ -212,3 +212,103 @@
   testing.expectEqual(37, span.offsetWidth);
 }
 </script>
+
+<script id="a_quoted_generic_family_is_not_the_keyword">
+{
+  // `monospace` is a keyword; `'monospace'` is an ordinary family name, and no
+  // face is called that, so it falls through to the standard font. Measured
+  // against Chrome 151 both headed and headless: 'monospace' 620 where the bare
+  // keyword is 564, 'sans-serif' 620 where the keyword is 648, and the same for
+  // cursive and fantasy. `serif` is invisible here because the standard font IS
+  // serif, which is why it is not in the list.
+  //
+  // A font-enumeration probe writes every candidate quoted, so an engine that
+  // reads a quoted generic as the keyword reports a different width for
+  // `'monospace'` than every real browser does.
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-size:72px;white-space:nowrap;';
+  span.textContent = 'mmmmmmmmmmlli';
+  document.body.appendChild(span);
+  const widthOf = (family) => { span.style.fontFamily = family; return span.offsetWidth; };
+
+  const fallback = widthOf('bogus-not-a-font-12345');
+  const report = [];
+  for (const generic of ['monospace', 'sans-serif', 'cursive', 'fantasy']) {
+    const bare = widthOf(generic);
+    // The premise: the keyword resolves to a face of its own, so "quoting it
+    // costs the keyword" is a question this measurement can answer at all.
+    report.push(`${generic} bare-differs-from-fallback=${bare !== fallback}`);
+    report.push(`'${generic}' is-fallback=${widthOf(`'${generic}'`) === fallback}`);
+    report.push(`"${generic}" is-fallback=${widthOf(`"${generic}"`) === fallback}`);
+  }
+  // The keyword is ASCII case-insensitive, and recognising it canonicalises the
+  // computed value to lower case -- both engines answer `monospace` for a bare
+  // `MONOSPACE`, and `MONOSPACE` for a quoted one.
+  report.push(`MONOSPACE bare-is-mono=${widthOf('MONOSPACE') === widthOf('monospace')}`);
+  // `'MONOSPACE'` is deliberately not asserted. Chrome measures it as the
+  // standard font (620 where the keyword is 564) while serialising it exactly
+  // as we do, so the quoting survives into Chrome's layout and not into its
+  // computed string. Ours resolves the family from that string, so the
+  // distinction is not reachable here; matching it is a separate change to
+  // where layout reads the family from, not to this rule.
+  // In a list the quoted generic is skipped, so the next entry wins.
+  report.push(`quoted-then-sans=${widthOf("'monospace', sans-serif") === widthOf('sans-serif')}`);
+  report.push(`nonesuch-then-quoted=${widthOf("bogus-not-a-font-12345, 'monospace'") === fallback}`);
+  // And the other half: quoting a real family name is how every probe writes
+  // it, so that has to keep resolving.
+  report.push(`quoted-real-family-resolves=${widthOf('"Courier New", monospace') !== widthOf('monospace')}`);
+  // system-ui is the exception Chrome makes: quoted or bare it resolves to the
+  // system font (624 both ways on the reference host), so it is not gated.
+  report.push(`'system-ui' resolves=${widthOf("'system-ui'") === widthOf('system-ui')}`);
+
+  testing.expectEqual([
+    'monospace bare-differs-from-fallback=true',
+    "'monospace' is-fallback=true",
+    '"monospace" is-fallback=true',
+    'sans-serif bare-differs-from-fallback=true',
+    "'sans-serif' is-fallback=true",
+    '"sans-serif" is-fallback=true',
+    'cursive bare-differs-from-fallback=true',
+    "'cursive' is-fallback=true",
+    '"cursive" is-fallback=true',
+    'fantasy bare-differs-from-fallback=true',
+    "'fantasy' is-fallback=true",
+    '"fantasy" is-fallback=true',
+    'MONOSPACE bare-is-mono=true',
+    'quoted-then-sans=true',
+    'nonesuch-then-quoted=true',
+    'quoted-real-family-resolves=true',
+    "'system-ui' resolves=true",
+  ].join('\n'), report.join('\n'));
+}
+</script>
+
+<script id="a_quoted_generic_family_is_not_the_keyword_on_canvas">
+{
+  // Same rule through the other surface a probe uses. `ctx.font` parses its own
+  // family list, so the gate has to be in the shared resolver rather than in
+  // the element path.
+  const ctx = document.createElement('canvas').getContext('2d');
+  const widthOf = (family) => { ctx.font = `72px ${family}`; return ctx.measureText('mmmmmmmmmmlli').width; };
+
+  const fallback = widthOf('bogus-not-a-font-12345');
+  const report = [];
+  for (const generic of ['monospace', 'sans-serif', 'cursive', 'fantasy']) {
+    report.push(`${generic} bare-differs-from-fallback=${widthOf(generic) !== fallback}`);
+    report.push(`'${generic}' is-fallback=${widthOf(`'${generic}'`) === fallback}`);
+  }
+  report.push(`quoted-real-family-resolves=${widthOf('"Courier New", monospace') !== widthOf('monospace')}`);
+
+  testing.expectEqual([
+    'monospace bare-differs-from-fallback=true',
+    "'monospace' is-fallback=true",
+    'sans-serif bare-differs-from-fallback=true',
+    "'sans-serif' is-fallback=true",
+    'cursive bare-differs-from-fallback=true',
+    "'cursive' is-fallback=true",
+    'fantasy bare-differs-from-fallback=true',
+    "'fantasy' is-fallback=true",
+    'quoted-real-family-resolves=true',
+  ].join('\n'), report.join('\n'));
+}
+</script>
