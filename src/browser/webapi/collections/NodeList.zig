@@ -38,6 +38,7 @@ _data: union(enum) {
     selector_list: *SelectorList,
     radio_node_list: *RadioNodeList,
     name: NodeLive(.name),
+    labels: NodeLive(.labels),
 },
 _rc: lp.RC = .{},
 
@@ -47,6 +48,7 @@ pub fn deinit(self: *NodeList, page: *Page) void {
         .selector_list => |list| list.deinit(page),
         .radio_node_list => |rnl| rnl._form_collection.releaseRef(page),
         .name => {},
+        .labels => {},
     }
 }
 
@@ -64,6 +66,7 @@ pub fn length(self: *NodeList, frame: *Frame) !u32 {
         .selector_list => |impl| @intCast(impl.getLength()),
         .radio_node_list => |impl| impl.getLength(),
         .name => |*impl| impl.length(frame),
+        .labels => |*impl| impl.length(frame),
     };
 }
 
@@ -77,6 +80,7 @@ pub fn getAtIndex(self: *NodeList, index: usize, frame: *Frame) !?*Node {
         .selector_list => |impl| impl.getAtIndex(index),
         .radio_node_list => |impl| impl.getAtIndex(index),
         .name => |*impl| if (impl.getAtIndex(index, frame)) |el| el.asNode() else null,
+        .labels => |*impl| if (impl.getAtIndex(index, frame)) |el| el.asNode() else null,
     };
 }
 

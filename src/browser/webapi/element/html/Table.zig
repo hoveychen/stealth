@@ -23,15 +23,25 @@ pub fn asNode(self: *Table) *Node {
     return self.asElement().asNode();
 }
 
-pub fn getTBodies(self: *Table, frame: *Frame) collections.NodeLive(.child_tag) {
-    return collections.NodeLive(.child_tag).init(self.asNode(), .tbody, frame);
+pub fn getTBodies(self: *Table, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .table_bodies, .name = "" },
+        collections.NodeLive(.child_tag).init(root, .tbody, frame).htmlCollectionValue(),
+    );
 }
 
 // thead rows, then the rows parented by the table or a tbody, then tfoot rows.
 // The ordering lives in TreeWalker.TableRows, next to the reason it cannot be
 // a plain tree walk.
-pub fn getRows(self: *Table, frame: *Frame) collections.NodeLive(.table_rows) {
-    return collections.NodeLive(.table_rows).init(self.asNode(), {}, frame);
+pub fn getRows(self: *Table, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .table_rows, .name = "" },
+        collections.NodeLive(.table_rows).init(root, {}, frame).htmlCollectionValue(),
+    );
 }
 
 // The caption/thead/tfoot trio. Each is "the first child of that kind, in tree

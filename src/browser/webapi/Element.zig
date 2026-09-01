@@ -1620,8 +1620,13 @@ pub fn blur(self: *Element, frame: *Frame) !void {
     try frame._event_manager.dispatch(old_target, focusout_event.asEvent());
 }
 
-pub fn getChildren(self: *Element, frame: *Frame) !collections.NodeLive(.child_elements) {
-    return collections.NodeLive(.child_elements).init(self.asNode(), {}, frame);
+pub fn getChildren(self: *Element, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .children, .name = "" },
+        collections.NodeLive(.child_elements).init(root, {}, frame).htmlCollectionValue(),
+    );
 }
 
 pub fn append(self: *Element, nodes: []const Node.NodeOrText, frame: *Frame) !void {
@@ -4523,15 +4528,15 @@ fn calculateSiblingPosition(node: *Node) f64 {
     return position * 5.0; // 5px per node
 }
 
-pub fn getElementsByTagName(self: *Element, tag_name: []const u8, frame: *Frame) !Node.GetElementsByTagNameResult {
+pub fn getElementsByTagName(self: *Element, tag_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     return self.asNode().getElementsByTagName(tag_name, frame);
 }
 
-pub fn getElementsByTagNameNS(self: *Element, namespace: ?[]const u8, local_name: []const u8, frame: *Frame) !collections.NodeLive(.tag_name_ns) {
+pub fn getElementsByTagNameNS(self: *Element, namespace: ?[]const u8, local_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     return self.asNode().getElementsByTagNameNS(namespace, local_name, frame);
 }
 
-pub fn getElementsByClassName(self: *Element, class_name: []const u8, frame: *Frame) !collections.NodeLive(.class_name) {
+pub fn getElementsByClassName(self: *Element, class_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     return self.asNode().getElementsByClassName(class_name, frame);
 }
 

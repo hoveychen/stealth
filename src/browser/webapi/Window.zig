@@ -913,19 +913,27 @@ pub fn matchMedia(_: *const Window, query: []const u8, frame: *Frame) !*MediaQue
     });
 }
 
+/// A *new* declaration on every call, which is what Chrome does. Measured on
+/// Chrome 151, all four false: `getComputedStyle(d) === getComputedStyle(d)`,
+/// the same with an explicit null pseudo, the same for `'::before'` twice, and
+/// the pseudo against the plain one. This engine used to answer true for the
+/// first three, out of a per-(element, pseudo) cache -- the odd one out in a
+/// family where the fix everywhere else was to add identity, not remove it.
+///
+/// It costs nothing to drop: a computed declaration is a lazy view over the
+/// element, so `init` allocates the struct and returns -- `parseInlineStyle`
+/// is a no-op for the computed variant. 3000 calls went from 1.8ms to 1.9ms,
+/// and the call-plus-one-read shape a guard uses did not move at all
+/// (scratch/b81/gcs-cost.mjs).
+///
+/// :before/:after get no warning: our answer (the element's own computed
+/// style) is a reasonable default for the common probes.
 pub fn getComputedStyle(_: *const Window, element: *Element, pseudo_element: ?[]const u8, frame: *Frame) !*CSSStyleDeclaration {
-    // :before/:after get their own cache entry and no warning: our answer
-    // (the element's own computed style) is a reasonable default for the
-    // common probes
     const pseudo = Element.PseudoElement.parse(pseudo_element orelse "");
-    const gop = try frame._element_computed_styles.getOrPut(frame.arena, .{ .element = element, .pseudo = pseudo });
-    if (!gop.found_existing) {
-        if (pseudo == .other) {
-            log.warn(.not_implemented, "window.GetComputedStyle", .{ .pseudo_element = pseudo_element.? });
-        }
-        gop.value_ptr.* = try CSSStyleDeclaration.init(element, true, frame);
+    if (pseudo == .other) {
+        log.warn(.not_implemented, "window.GetComputedStyle", .{ .pseudo_element = pseudo_element.? });
     }
-    return gop.value_ptr.*;
+    return CSSStyleDeclaration.init(element, true, frame);
 }
 
 // window.open(url?, target?, features?) — v1 scope:

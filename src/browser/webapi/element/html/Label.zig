@@ -8,6 +8,7 @@ const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
 const TreeWalker = @import("../../TreeWalker.zig");
 const Form = @import("Form.zig");
+const collections = @import("../../collections.zig");
 
 const Label = @This();
 
@@ -95,36 +96,34 @@ pub const LabelByForIndex = struct {
     }
 };
 
-/// Collects the `<label>` elements associated with a labellable form control.
-/// Matches HTMLInputElement.labels (and the equivalent on button/select/etc).
-/// Includes every `<label for="id">` reference plus the nearest ancestor
-/// `<label>` wrapping the control.
-pub fn getControlLabels(control: *Element, frame: *Frame) !js.Array {
-    const local = frame.js.local orelse return error.NotHandled;
-    var arr = local.newArray(0);
-    var idx: u32 = 0;
-
-    if (control.getAttributeSafe(comptime .wrap("id"))) |id_value| {
-        if (id_value.len > 0) {
-            const doc = control.asNode().ownerDocument(frame);
-            const search_root: *Node = if (doc) |d| d.asNode() else control.asNode();
-            var it = TreeWalker.Full.Elements.init(search_root, .{});
-            while (it.next()) |el| {
-                if (el.getTag() != .label) continue;
-                const for_attr = el.getAttributeSafe(comptime .wrap("for")) orelse continue;
-                if (!std.mem.eql(u8, for_attr, id_value)) continue;
-                _ = try arr.set(idx, el, .{});
-                idx += 1;
-            }
-        }
+/// The `<label>` elements associated with a labellable form control:
+/// HTMLInputElement.labels and the equivalent on button/select/etc.
+///
+/// A live NodeList, and the same one on every read -- `input.labels ===
+/// input.labels` is true in Chrome, and the value is a NodeList there, not an
+/// Array (measured, scratch/b81/identity.mjs). Membership is `getControl`
+/// answering this control, which is the spec's own definition and covers both
+/// the `for=` reference and the wrapping ancestor in one predicate. The walk
+/// starts at the control's root, so a label wrapping a control in a detached
+/// tree is reached too, and the order is tree order rather than
+/// references-then-wrapper.
+pub fn getControlLabels(control: *Element, frame: *Frame) !*collections.NodeList {
+    const key: collections.identity.Key = .{
+        .root = control.asNode(),
+        .kind = .labels,
+        .name = "",
+    };
+    if (collections.identity.find(frame, collections.NodeList, key)) |cached| {
+        return cached;
     }
-
-    if (findWrappingLabel(control)) |wrap_label| {
-        _ = try arr.set(idx, wrap_label, .{});
-        idx += 1;
-    }
-
-    return arr;
+    const search_root = control.asNode().getRootNode(.{});
+    return collections.identity.put(frame, key, try frame._factory.create(collections.NodeList{
+        ._data = .{ .labels = collections.NodeLive(.labels).init(
+            search_root,
+            .{ .control = control, .frame = frame },
+            frame,
+        ) },
+    }));
 }
 
 pub const JsApi = struct {

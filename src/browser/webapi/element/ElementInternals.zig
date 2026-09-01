@@ -49,6 +49,7 @@ const CustomStateSet = @import("CustomStateSet.zig");
 const Form = @import("html/Form.zig");
 const Label = @import("html/Label.zig");
 const ValidityState = @import("html/ValidityState.zig");
+const collections = @import("../collections.zig");
 
 const Execution = js.Execution;
 
@@ -159,7 +160,7 @@ pub fn getValidationMessage(self: *ElementInternals, exec: *const Execution) ![]
     return self._validation_message;
 }
 
-pub fn getLabels(self: *ElementInternals, exec: *const Execution) !js.Array {
+pub fn getLabels(self: *ElementInternals, exec: *const Execution) !*collections.NodeList {
     try self.requireFormAssociated("labels", "read", exec);
     return Label.getControlLabels(self._element, frameOf(exec));
 }

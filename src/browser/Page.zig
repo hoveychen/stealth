@@ -186,6 +186,23 @@ destroying: bool = false,
 // Emulation.setDeviceMetricsOverride) is stored on the Browser so it persists
 // across page navigations; delegate to it here, keeping a single read path for
 // every viewport consumer.
+/// The version a live collection keys its cached length and cursor on: both
+/// counters, because both mean "the tree moved".
+///
+/// The parser's insertions have to count here even though they deliberately do
+/// not move `dom_version`. A collection object used to be built fresh on every
+/// read, so it never survived long enough to go stale mid-parse; now that
+/// `document.forms` and its twenty siblings hand back one object per (root,
+/// kind, name) -- which is what a browser does -- a collection created by an
+/// early inline script lives for the rest of the parse, and keying it on
+/// `dom_version` alone would freeze its length at whatever the page looked like
+/// then. `collections/html_all_collection.html` catches exactly that.
+///
+/// Both counters only ever go up, so their sum does too.
+pub fn liveVersion(self: *const Page) usize {
+    return self.dom_version +% self.parser_dom_version;
+}
+
 pub fn getViewport(self: *const Page) Viewport {
     return self.session.browser.getViewport();
 }

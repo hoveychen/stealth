@@ -49,8 +49,13 @@ pub fn getType(_: *const FieldSet) []const u8 {
 /// plain `HTMLCollection`, not the `HTMLFormControlsCollection` the IDL names
 /// (measured: `fs.elements.constructor.name` is `HTMLCollection`), and it is
 /// live and the same object every time.
-pub fn getElements(self: *FieldSet, frame: *Frame) collections.NodeLive(.fieldset) {
-    return collections.NodeLive(.fieldset).init(self.asNode(), {}, frame);
+pub fn getElements(self: *FieldSet, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .fieldset_elements, .name = "" },
+        collections.NodeLive(.fieldset).init(root, {}, frame).htmlCollectionValue(),
+    );
 }
 
 pub const JsApi = struct {

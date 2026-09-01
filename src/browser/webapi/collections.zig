@@ -17,9 +17,11 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 pub const NodeLive = @import("collections/node_live.zig").NodeLive;
+pub const identity = @import("collections/identity.zig");
 pub const ChildNodes = @import("collections/ChildNodes.zig");
 pub const DOMTokenList = @import("collections/DOMTokenList.zig");
 pub const DOMStringList = @import("collections/DOMStringList.zig");
+pub const NodeList = @import("collections/NodeList.zig");
 pub const RadioNodeList = @import("collections/RadioNodeList.zig");
 pub const HTMLCollection = @import("collections/HTMLCollection.zig");
 pub const HTMLAllCollection = @import("collections/HTMLAllCollection.zig");

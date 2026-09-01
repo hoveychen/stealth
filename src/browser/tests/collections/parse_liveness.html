@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  A live collection an inline script grabs mid-parse has to keep counting as the
+  parser appends. It is the same object afterwards -- that is what
+  collections/identity.html is about -- and a browser keeps it live throughout.
+
+  This is not automatic here, because the parser deliberately does not move
+  `Page.dom_version` (see the comment on `Page.parser_dom_version`), and a live
+  collection keys its cached length and cursor on a version. `Page.liveVersion`
+  is the sum of the two counters, and every live collection reads that. Before
+  it, `document.body.childNodes` grabbed by the first script below reported 3
+  for the rest of the page where Chrome 151 reported 9.
+
+  Each held collection is checked against a count taken a *different* way --
+  a sibling walk, or querySelectorAll, which is never cached -- rather than
+  against a freshly-read accessor. A fresh read hands back the same cached
+  object, so it would be frozen in exactly the same way and the check would
+  pass with the bug in place.
+-->
+
+<span>1</span>
+<script id=grab>
+  window.pl = {};
+  pl.childNodes = document.body.childNodes;
+  pl.children = document.body.children;
+  pl.byTag = document.getElementsByTagName('span');
+  pl.byClass = document.getElementsByClassName('pl');
+  pl.early = [pl.childNodes.length, pl.children.length, pl.byTag.length, pl.byClass.length];
+  // One span parsed so far and none of them classed. Page-authored counts, so
+  // they hold whatever else the harness puts in the document -- and the runner
+  // wants an assertion in every identified block.
+  testing.expectEqual('span=1 pl=0', 'span=' + pl.early[2] + ' pl=' + pl.early[3]);
+</script>
+<span class=pl>2</span><span class=pl>3</span><span>4</span>
+
+<script id=still_live>
+  {
+    // Independent counts: a sibling walk for childNodes, element-only for
+    // children, querySelectorAll for the other two.
+    let nodes = 0;
+    for (let c = document.body.firstChild; c; c = c.nextSibling) nodes++;
+    let elements = 0;
+    for (let c = document.body.firstElementChild; c; c = c.nextElementSibling) elements++;
+    const recounted = [nodes, elements,
+                       document.querySelectorAll('span').length,
+                       document.querySelectorAll('.pl').length];
+    const held = [pl.childNodes.length, pl.children.length,
+                  pl.byTag.length, pl.byClass.length];
+    // Three spans and two of them classed were parsed after the grab, so the
+    // page-authored growth is known even though the absolute counts depend on
+    // whatever else is in the document.
+    const grew = [held[2] - pl.early[2], held[3] - pl.early[3]];
+    testing.expectEqual(
+      'held=matches-recount grew=[3,2] identity=true',
+      'held=' + (JSON.stringify(held) === JSON.stringify(recounted)
+        ? 'matches-recount' : JSON.stringify(held) + ' vs ' + JSON.stringify(recounted)) +
+      ' grew=' + JSON.stringify(grew) +
+      ' identity=' + (pl.childNodes === document.body.childNodes &&
+                      pl.children === document.body.children &&
+                      pl.byTag === document.getElementsByTagName('span') &&
+                      pl.byClass === document.getElementsByClassName('pl')));
+  }
+</script>
