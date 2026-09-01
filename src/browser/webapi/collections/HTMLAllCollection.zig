@@ -45,28 +45,68 @@ pub fn getAtIndex(self: *HTMLAllCollection, index: usize, frame: *const Frame) ?
     return self._nodes.getAtIndex(index, frame);
 }
 
-pub fn getByName(self: *HTMLAllCollection, name: []const u8, frame: *Frame) ?*Element {
-    if (frame.getElementByIdFromNode(self._nodes._tw._root, name)) |el| {
-        return el;
-    }
+/// What one name reaches: the element, or an HTMLCollection when it reaches
+/// more than one. Measured on Chrome 151 (scratch/b80/remnants.mjs and
+/// scratch/b80/.q2.js) over every way two elements can share a name -- an `id`
+/// twice, a `name` twice, an id and a name, two different element kinds -- and
+/// the answer is a live HTMLCollection in tree order every time. Answering the
+/// first match instead is one expression apart from a real browser.
+pub const NamedResult = union(enum) {
+    element: *Element,
+    collection: *HTMLCollection,
+};
 
-    // Fall back to searching by name attribute. Walking a clone leaves the
-    // indexed-access cursor alone.
+pub fn getByName(self: *HTMLAllCollection, name: []const u8, frame: *Frame) !?NamedResult {
+    // One walk, stopping at the second match, because the count is the answer:
+    // the id hash could find a first match faster but not tell us whether
+    // there is another. Walking a clone leaves the indexed-access cursor alone.
+    var count: u32 = 0;
+    var first: ?*Element = null;
     var tw = self._nodes._tw.clone();
     while (tw.next()) |node| {
-        if (node.is(Element)) |el| {
-            if (!isAllNamed(el)) {
-                continue;
-            }
-            if (el.getAttributeSafe(comptime .wrap("name"))) |attr_name| {
-                if (std.mem.eql(u8, attr_name, name)) {
-                    return el;
-                }
-            }
+        const el = node.is(Element) orelse continue;
+        if (!matchesName(el, name)) {
+            continue;
+        }
+        if (first == null) {
+            first = el;
+        }
+        count += 1;
+        if (count == 2) {
+            break;
         }
     }
 
-    return null;
+    if (count == 0) {
+        return null;
+    }
+    if (count == 1) {
+        return .{ .element = first.? };
+    }
+
+    const live: NodeLive(.all_named) = .init(
+        self._nodes._tw._root,
+        try frame.dupeString(name),
+        frame,
+    );
+    return .{ .collection = try frame._factory.create(live.htmlCollectionValue()) };
+}
+
+/// Every element the name reaches: any element whose id is the name, plus the
+/// "all"-named kinds whose `name` attribute is. Kept beside the collection's
+/// own matcher (node_live.zig, `.all_named`) because the two have to agree --
+/// this one decides how many there are and that one lists them.
+pub fn matchesName(el: *Element, name: []const u8) bool {
+    if (el.getAttributeSafe(comptime .wrap("id"))) |id| {
+        if (std.mem.eql(u8, id, name)) {
+            return true;
+        }
+    }
+    if (!isAllNamed(el)) {
+        return false;
+    }
+    const attr_name = el.getAttributeSafe(comptime .wrap("name")) orelse return false;
+    return std.mem.eql(u8, attr_name, name);
 }
 
 // Every element in the collection is exposed by its id, but only these are
@@ -86,9 +126,17 @@ const CAllAsFunctionArg = union(enum) {
     index: u32,
     id: []const u8,
 };
-pub fn callable(self: *HTMLAllCollection, arg: CAllAsFunctionArg, frame: *Frame) ?*Element {
-    return switch (arg) {
-        .index => |i| self.getAtIndex(i, frame),
+/// `document.all(x)`. Every miss answers **null**, not undefined -- an absent
+/// argument, an out-of-range index, a negative one and an unknown name all
+/// four (measured on Chrome 151, scratch/b80/q10.js). This engine threw
+/// "invalid argument" for the bare call and answered undefined for the rest,
+/// and the four `undefined` rows in the test below were written from that
+/// rather than from a browser.
+pub fn callable(self: *HTMLAllCollection, arg: ?CAllAsFunctionArg, frame: *Frame) !?NamedResult {
+    return switch (arg orelse return null) {
+        .index => |i| if (self.getAtIndex(i, frame)) |el| NamedResult{ .element = el } else null,
+        // `document.all('x')` answers exactly what `document.all.x` does,
+        // HTMLCollection included (measured).
         .id => |id| self.getByName(id, frame),
     };
 }
@@ -143,11 +191,11 @@ pub const JsApi = struct {
     // A name the document does not carry is not a property of `document.all`
     // at all: declining here is what keeps `'anything' in document.all` false,
     // since an interceptor that answers undefined has still answered.
-    fn getNamed(self: *HTMLAllCollection, name: []const u8, frame: *Frame) !*Element {
+    fn getNamed(self: *HTMLAllCollection, name: []const u8, frame: *Frame) !NamedResult {
         if (name.len == 0) {
             return error.NotHandled;
         }
-        return HTMLAllCollection.getByName(self, name, frame) orelse error.NotHandled;
+        return (try HTMLAllCollection.getByName(self, name, frame)) orelse error.NotHandled;
     }
 
     fn getNames(self: *HTMLAllCollection, frame: *Frame) !js.Array {
@@ -157,9 +205,16 @@ pub const JsApi = struct {
     // `document.all` is `[LegacyUnenumerableNamedProperties]` like
     // HTMLCollection: the ids and names belong in getOwnPropertyNames but not
     // in Object.keys, and they are configurable and read-only.
-    fn queryByName(self: *HTMLAllCollection, name: []const u8, frame: *Frame) !u32 {
-        if (name.len > 0 and HTMLAllCollection.getByName(self, name, frame) != null) {
-            return js.v8.DontEnum | js.v8.ReadOnly;
+    fn queryByName(self: *HTMLAllCollection, name: []const u8, _: *Frame) !u32 {
+        if (name.len == 0) {
+            return error.NotHandled;
+        }
+        var tw = self._nodes._tw.clone();
+        while (tw.next()) |node| {
+            const el = node.is(Element) orelse continue;
+            if (HTMLAllCollection.matchesName(el, name)) {
+                return js.v8.DontEnum | js.v8.ReadOnly;
+            }
         }
         return error.NotHandled;
     }
@@ -179,7 +234,7 @@ pub const JsApi = struct {
     pub const namedItem = bridge.function(HTMLAllCollection.getByName, .{});
     pub const symbol_iterator = bridge.iterator(HTMLAllCollection.iterator, .{});
 
-    pub const callable = bridge.callable(HTMLAllCollection.callable, .{ .null_as_undefined = true });
+    pub const callable = bridge.callable(HTMLAllCollection.callable, .{});
 };
 
 const testing = @import("../../../testing.zig");
