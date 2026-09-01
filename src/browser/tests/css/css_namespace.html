@@ -11,10 +11,12 @@ Everything asserted below is measured with
 tools/fingerprint/probes/expr-b85-css-namespace.js, which reads the own names,
 every descriptor, and what each factory returns.
 
-Two of Chrome's 69 are deliberately absent rather than stubbed, and the test
-says so rather than pretending otherwise: `registerProperty` is only meaningful
-once the cascade honours a registered custom property's syntax and initial
-value, and `paintWorklet` needs a Worklet that can load a module.
+All 69 are present. Two of them were deliberately absent for a while, on the
+grounds that a present-but-inert name is its own lie: `registerProperty` is
+only meaningful once the cascade honours a registered custom property's syntax
+and initial value (it now does -- css/registered_property.html), and
+`paintWorklet` needs a Worklet that can load a module (it now fetches and
+compiles one -- css/paint_worklet.html).
 
 One difference is left open and asserted as it is: Chrome's prototype chain is
 `CSS -> Object.prototype` and this one is `CSS -> {} -> Object.prototype`.
@@ -29,31 +31,24 @@ One difference is left open and asserted as it is: Chrome's prototype chain is
     'dvb dvh dvi dvmax dvmin dvw em escape ex fr grad ic in kHz lh lvb lvh lvi lvmax lvmin ' +
     'lvw mm ms number pc percent pt px rad rcap rch registerProperty rem rex ric rlh s ' +
     'supports svb svh svi svmax svmin svw turn vb vh vi vmax vmin vw x paintWorklet').split(' ');
-  const NOT_IMPLEMENTED = ['registerProperty', 'paintWorklet'];
-  const want = CHROME.filter((n) => !NOT_IMPLEMENTED.includes(n));
-
   const got = Object.getOwnPropertyNames(CSS);
-  testing.expectEqual(want.join(','), got.join(','));
-
-  // Absent, not present-and-inert.
-  for (const n of NOT_IMPLEMENTED) {
-    testing.expectEqual(false, n in CSS);
-  }
+  testing.expectEqual(CHROME.join(','), got.join(','));
 }
 </script>
 
 <script id=css_namespace_descriptors>
 {
   // Every name is a writable, enumerable, configurable data property, every
-  // function reports arity 1 and its own name, and `highlights` is the one
-  // accessor.
+  // function reports arity 1 and its own name, and `highlights` and
+  // `paintWorklet` are the two accessors.
   const wrong = [];
   for (const n of Object.getOwnPropertyNames(CSS)) {
     const d = Object.getOwnPropertyDescriptor(CSS, n);
     if (d.enumerable !== true) wrong.push(n + ': enumerable ' + d.enumerable);
     if (d.configurable !== true) wrong.push(n + ': configurable ' + d.configurable);
-    if (n === 'highlights') {
+    if (n === 'highlights' || n === 'paintWorklet') {
       if (typeof CSS[n] !== 'object') wrong.push(n + ': kind ' + typeof CSS[n]);
+      if (d.writable !== undefined) wrong.push(n + ': writable ' + d.writable);
       continue;
     }
     if (d.writable !== true) wrong.push(n + ': writable ' + d.writable);

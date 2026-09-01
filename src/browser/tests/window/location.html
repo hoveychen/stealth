@@ -112,12 +112,57 @@
 
   // With every member unforgeable, the own-name list is itself a fingerprint.
   // Chrome's is neither IDL order nor alphabetical, and it opens with `valueOf`
-  // -- the realm's %Object.prototype.valueOf%, which a template cannot carry
-  // (see Snapshot.attachClass). Ours is Chrome's list without that one name.
+  // -- the realm's %Object.prototype.valueOf%, which HTML's creation steps
+  // define before any IDL member, which is why it sorts first.
   testing.expectEqual(
-    ['ancestorOrigins', 'href', 'origin', 'protocol', 'host', 'hostname', 'port',
-     'pathname', 'search', 'hash', 'assign', 'reload', 'replace', 'toString'],
+    ['valueOf', 'ancestorOrigins', 'href', 'origin', 'protocol', 'host', 'hostname',
+     'port', 'pathname', 'search', 'hash', 'assign', 'reload', 'replace', 'toString'],
     Object.getOwnPropertyNames(location));
+</script>
+
+<script id=location_own_value_of>
+{
+  // The third own property HTML's "create a Location object" steps define, and
+  // the only one whose value is a function the realm already has. Measured on
+  // Chrome 151 (scratch/b80/remnants.mjs):
+  //
+  //   Object.getOwnPropertyDescriptor(location, 'valueOf')
+  //     -> { value, writable: false, enumerable: false, configurable: false }
+  //   location.valueOf === Object.prototype.valueOf   -> true
+  //   location.valueOf()  === location                -> true
+  //
+  // Inheriting it from Object.prototype answers the read the same way and gets
+  // `hasOwnProperty` wrong, which is one expression: an engine that inherits it
+  // says false where every browser says true.
+  const d = Object.getOwnPropertyDescriptor(location, 'valueOf');
+  testing.expectEqual(
+    ['own=true', 'data', 'w=false', 'e=false', 'c=false',
+     'sameFunction=true', 'callsBackToLocation=true',
+     'str=function valueOf() { [native code] }'].join('\n'),
+    ['own=' + Object.prototype.hasOwnProperty.call(location, 'valueOf'),
+     d === undefined ? 'absent' : ('get' in d && (d.get || d.set) ? 'accessor' : 'data'),
+     'w=' + (d && d.writable), 'e=' + (d && d.enumerable), 'c=' + (d && d.configurable),
+     'sameFunction=' + (location.valueOf === Object.prototype.valueOf),
+     'callsBackToLocation=' + (location.valueOf() === location),
+     'str=' + String(location.valueOf)].join('\n'));
+
+  // Non-configurable and non-writable: the page can neither redefine nor
+  // delete it, and an assignment is a silent no-op outside strict mode.
+  testing.expectEqual(false, delete location.valueOf);
+  location.valueOf = 1;
+  testing.expectEqual(true, location.valueOf === Object.prototype.valueOf);
+
+  // A second Location -- every fragment navigation makes one -- carries it too.
+  const frame = document.createElement('iframe');
+  document.documentElement.appendChild(frame);
+  const inner = frame.contentWindow.location;
+  testing.expectEqual(
+    ['own=true', 'ownRealm=true', 'notOuterRealm=false'].join('\n'),
+    ['own=' + Object.prototype.hasOwnProperty.call(inner, 'valueOf'),
+     'ownRealm=' + (inner.valueOf === frame.contentWindow.Object.prototype.valueOf),
+     'notOuterRealm=' + (inner.valueOf === Object.prototype.valueOf)].join('\n'));
+  frame.remove();
+}
 </script>
 
 <div id="sec1"></div>

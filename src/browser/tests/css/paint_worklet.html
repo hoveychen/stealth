@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head><title>paint worklet</title></head>
+<body>
+<div id=anchor></div>
+
+<!--
+  `CSS.paintWorklet` and the `Worklet` interface behind it. The name was
+  deliberately absent for a while -- css_namespace.html says why -- on the
+  grounds that a Worklet which cannot load a module is a different lie from a
+  missing one. So this test is the bar that was set: the shape, and a module
+  that is really fetched and really compiled.
+
+  Ground truth is Chrome 151, measured with scratch/b80/remnants.mjs (the
+  shape) and scratch/b80/addmodule.mjs (the settle table, against a local http
+  fixture serving a good module, a broken one and a 404).
+
+  What is NOT here, and is the one thing this cannot copy: Chrome runs the
+  module in a worklet global scope, where `registerPaint` defines a paint class.
+  Nothing paints in this engine, so the module is compiled and dropped. A page
+  cannot see the difference -- a worklet global is not the page's realm and has
+  no way back into it -- but a `paint()` in a stylesheet would, if anything here
+  rasterised.
+-->
+
+<script src="../testing.js"></script>
+
+<script id=paint_worklet_shape>
+{
+  // The accessor answers the same Worklet on every read, and the object itself
+  // carries nothing: everything is on Worklet.prototype.
+  const pw = CSS.paintWorklet;
+  const chain = () => { const c = []; let p = pw; while ((p = Object.getPrototypeOf(p))) c.push(p.constructor ? p.constructor.name : '?'); return c.join('<'); };
+  const d = Object.getOwnPropertyDescriptor(CSS, 'paintWorklet');
+
+  testing.expectEqual(
+    ['same=true',
+     'tag=[object Worklet]',
+     'chain=Worklet<Object',
+     'ownNames=[]',
+     'protoOwn=["addModule","constructor"]',
+     'addModule=length=1 name=addModule',
+     'windowWorklet=function',
+     'desc=accessor e=true c=true'].join('\n'),
+    ['same=' + (CSS.paintWorklet === pw),
+     'tag=' + Object.prototype.toString.call(pw),
+     'chain=' + chain(),
+     'ownNames=' + JSON.stringify(Object.getOwnPropertyNames(pw)),
+     'protoOwn=' + JSON.stringify(Object.getOwnPropertyNames(Object.getPrototypeOf(pw))),
+     'addModule=length=' + pw.addModule.length + ' name=' + pw.addModule.name,
+     'windowWorklet=' + typeof Worklet,
+     'desc=' + (('value' in d) ? 'data' : 'accessor') + ' e=' + d.enumerable + ' c=' + d.configurable].join('\n'));
+
+  // A Worklet is not constructible, and the interface object is the ordinary
+  // shape: a non-enumerable writable configurable data property on the window.
+  testing.expectError("Failed to construct 'Worklet': Illegal constructor", () => new Worklet());
+  const wd = Object.getOwnPropertyDescriptor(window, 'Worklet');
+  testing.expectEqual(
+    'data w=true e=false c=true proto-tag=[object Worklet]',
+    (('value' in wd) ? 'data' : 'accessor') + ' w=' + wd.writable + ' e=' + wd.enumerable +
+      ' c=' + wd.configurable + ' proto-tag=' + Object.prototype.toString.call(Worklet.prototype));
+}
+</script>
+
+<script id=paint_worklet_add_module type=module>
+{
+  const state = await testing.async();
+
+  const settle = async (thunk) => {
+    let p;
+    try { p = thunk(); } catch (e) { return 'sync-throw:' + e.name; }
+    if (!(p instanceof Promise)) return 'not-a-promise:' + String(p);
+    try { return 'resolved:' + String(await p); }
+    catch (e) { return 'rejected:' + (e && e.name) + ':' + String(e && e.message); }
+  };
+
+  const w = CSS.paintWorklet;
+  const base = testing.BASE_URL + 'css/';
+  const rows = [
+    'noArgs ' + await settle(() => w.addModule()),
+    'module ' + await settle(() => w.addModule(base + 'paint-worklet-module.js')),
+    'again ' + await settle(() => w.addModule(base + 'paint-worklet-module.js')),
+    'relative ' + await settle(() => w.addModule('paint-worklet-module.js')),
+    'httpError ' + await settle(() => w.addModule(testing.BASE_URL + '404.js')),
+    'dataUrl ' + await settle(() => w.addModule('data:text/javascript,void 0')),
+    'badUrl ' + await settle(() => w.addModule('http://[::')),
+  ];
+  const broken = await settle(() => w.addModule(base + 'paint-worklet-broken.js'));
+
+  state.resolve();
+  await state.done(() => {
+    // Chrome's wording, verbatim, for everything except the parse error: that
+    // message is V8's own and says where in the module it gave up, so only its
+    // name is asserted.
+    testing.expectEqual(
+      ["noArgs rejected:TypeError:Failed to execute 'addModule' on 'Worklet': 1 argument required, but only 0 present.",
+       'module resolved:undefined',
+       'again resolved:undefined',
+       'relative resolved:undefined',
+       "httpError rejected:AbortError:Unable to load a worklet's module.",
+       'dataUrl resolved:undefined',
+       "badUrl rejected:SyntaxError:'http://[::' is not a valid URL."].join('\n'),
+      rows.join('\n'));
+    testing.expectEqual('rejected:SyntaxError', broken.split(':').slice(0, 2).join(':'));
+  });
+}
+</script>
+
+</body>
+</html>

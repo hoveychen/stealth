@@ -45,16 +45,22 @@
     testing.expectEqual(null, document.all.namedItem('second'));
     testing.expectEqual(null, document.all.namedItem('nonexistent'));
 
-    // Test callable functionality: document.all(index) and document.all(name)
+    // Test callable functionality: document.all(index) and document.all(name).
+    // Every miss answers null -- an absent argument, an out-of-range index, a
+    // negative one and an unknown name (measured on Chrome 151,
+    // scratch/b80/q10.js). The four `undefined` expectations that used to be
+    // here were this engine's own answer, not a browser's.
     testing.expectEqual('HTML', document.all(0).tagName);
     testing.expectEqual('HEAD', document.all(1).tagName);
     testing.expectEqual('DIV', document.all(4).tagName);
     testing.expectEqual('DIV', document.all('first').tagName);
     testing.expectEqual('First', document.all('first').textContent);
-    testing.expectEqual(undefined, document.all('second'));
+    testing.expectEqual(null, document.all('second'));
     testing.expectEqual('P', document.all('third').tagName);
-    testing.expectEqual(undefined, document.all(999));
-    testing.expectEqual(undefined, document.all('nonexistent'));
+    testing.expectEqual(null, document.all(999));
+    testing.expectEqual(null, document.all('nonexistent'));
+    testing.expectEqual(null, document.all(-1));
+    testing.expectEqual(null, document.all());
 
     let count = 0;
     for (const el of document.all) {
@@ -64,6 +70,72 @@
 
     const plainDoc = new Document();
     testing.expectEqual('undefined', typeof plainDoc.all);
+  </script>
+
+  <script id=all_collection_repeated_name>
+  {
+    // One name, more than one element: `document.all` answers an
+    // HTMLCollection, not the first match. Measured on Chrome 151
+    // (scratch/b80/remnants.mjs, scratch/b80/.q2.js) over every way two
+    // elements can share a name here -- an `id` twice, a name twice, an id and
+    // a name, and two different element kinds -- because the lookup is one set:
+    // every element whose `id` matches plus every "all"-named element whose
+    // `name` matches, in tree order.
+    const holder = document.createElement('div');
+    holder.innerHTML = '<a name="q2a"></a><div id="q2a"></div>' +
+      '<div id="q2b"></div><div id="q2b"></div>' +
+      '<a name="q2c"></a><a name="q2c"></a>' +
+      '<span name="q2d"></span><span name="q2d"></span>' +
+      '<input name="q2e"><a name="q2e"></a>';
+    document.body.appendChild(holder);
+
+    const all = document.all;
+    const shape = (v) => v === undefined ? 'undefined' : v === null ? 'null'
+      : (v.constructor ? v.constructor.name : '?') + (v.length !== undefined ? '[' + v.length + ']' : '');
+    const tags = (v) => v && v.length !== undefined
+      ? Array.prototype.map.call(v, (e) => e.tagName).join('+')
+      : (v ? v.tagName : '-');
+
+    testing.expectEqual(
+      ['q2a prop=HTMLCollection[2] named=HTMLCollection[2] call=HTMLCollection[2] tags=A+DIV',
+       'q2b prop=HTMLCollection[2] named=HTMLCollection[2] call=HTMLCollection[2] tags=DIV+DIV',
+       'q2c prop=HTMLCollection[2] named=HTMLCollection[2] call=HTMLCollection[2] tags=A+A',
+       'q2d prop=undefined named=null call=null tags=-',
+       'q2e prop=HTMLCollection[2] named=HTMLCollection[2] call=HTMLCollection[2] tags=INPUT+A'].join('\n'),
+      ['q2a', 'q2b', 'q2c', 'q2d', 'q2e'].map((n) => n +
+        ' prop=' + shape(all[n]) + ' named=' + shape(all.namedItem(n)) +
+        ' call=' + shape(all(n)) + ' tags=' + tags(all[n])).join('\n'));
+
+    // The collection is live, and the property carrying it has the same bits a
+    // single match gets.
+    //
+    // `same` is the one row that does NOT match Chrome, and it is not this
+    // lookup's doing: no collection in this engine keeps its identity across
+    // two reads. Measured on Chrome 151 (scratch/b80/q9.js): `document.forms
+    // === document.forms`, `document.images`, `document.all`,
+    // `getElementsByTagName('div')` and `body.children` are all true there and
+    // all five false here, because every accessor builds a fresh wrapper. It is
+    // asserted as it is so that fixing that -- one change, five accessors and
+    // this row -- turns this red rather than leaving it silent.
+    const collection = all.q2b;
+    const before = collection.length;
+    const extra = document.createElement('div');
+    extra.id = 'q2b';
+    document.body.appendChild(extra);
+    const after = collection.length;
+    extra.remove();
+    const d = Object.getOwnPropertyDescriptor(all, 'q2b');
+    testing.expectEqual(
+      ['live=2->3', 'same=false (Chrome: true)', 'tag=[object HTMLCollection]',
+       'desc=data e=false c=true w=false'].join('\n'),
+      ['live=' + before + '->' + after,
+       'same=' + (all.q2b === all.q2b) + ' (Chrome: true)',
+       'tag=' + Object.prototype.toString.call(collection),
+       'desc=' + (d ? ('value' in d ? 'data' : 'accessor') +
+         ' e=' + d.enumerable + ' c=' + d.configurable + ' w=' + d.writable : 'absent')].join('\n'));
+
+    holder.remove();
+  }
   </script>
 </body>
 </html>

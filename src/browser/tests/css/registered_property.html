@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head><title>registered custom properties</title>
+<style>
+  #rgParent { --rg-inh: 11px; }
+</style>
+</head>
+<body>
+<div id="rgParent"><div id="rgChild"></div></div>
+<div id="rgLone"></div>
+
+<!--
+  `CSS.registerProperty`. The name was deliberately absent for a while --
+  css_namespace.html says why -- because a registration a page can see and the
+  cascade ignores is its own kind of lie. So the bar was: the syntax has to
+  decide the computed value, and the initial value has to reach an element that
+  never declared the property.
+
+  Ground truth is Chrome 151, measured with scratch/b80/remnants.mjs (the
+  errors, verbatim) and scratch/b80/registered.mjs (what registration does to
+  the cascade).
+
+  Four things a registration changes, all of them page-visible:
+
+    * the property has a computed value on every element, even one that never
+      declared it -- so it is enumerated by getComputedStyle;
+    * the value is computed per the syntax: `<length>` resolves em to px,
+      `<color>` serialises to rgb(), a `<number>` calc() is evaluated;
+    * a declared value that does not parse for the syntax is invalid at
+      computed-value time and falls back to the initial value;
+    * `inherits: false` stops a child seeing the parent's declaration; it sees
+      the initial value instead.
+-->
+
+<script src="../testing.js"></script>
+
+<script id=register_property_argument_errors>
+{
+  // Chrome's wording, verbatim. Each row is one branch of the registration
+  // algorithm and they are checked in this order: argument count, the
+  // dictionary's required member, the name, the syntax, the initial value,
+  // then the duplicate check.
+  const msg = (fn) => { try { fn(); return 'ok'; } catch (e) { return e.name + ': ' + e.message; } };
+  const reg = (d) => msg(() => CSS.registerProperty(d));
+
+  testing.expectEqual(
+    ["noArgs TypeError: Failed to execute 'registerProperty' on 'CSS': 1 argument required, but only 0 present.",
+     "empty TypeError: Failed to execute 'registerProperty' on 'CSS': Failed to read the 'inherits' property from 'PropertyDefinition': Required member is undefined.",
+     "badName SyntaxError: Failed to execute 'registerProperty' on 'CSS': Custom property names must start with '--'.",
+     "notAString SyntaxError: Failed to execute 'registerProperty' on 'CSS': Custom property names must start with '--'.",
+     "badSyntax SyntaxError: Failed to execute 'registerProperty' on 'CSS': The syntax provided is not a valid custom property syntax.",
+     "noInitial SyntaxError: Failed to execute 'registerProperty' on 'CSS': An initial value must be provided if the syntax is not '*'",
+     "badInitial SyntaxError: Failed to execute 'registerProperty' on 'CSS': The initial value provided does not parse for the given syntax.",
+     'universal ok',
+     'returns undefined',
+     "dup InvalidModificationError: Failed to execute 'registerProperty' on 'CSS': The name provided has already been registered.",
+     'coercedInherits ok',
+     'extraMember ok',
+     'syntaxMissing ok',
+     "inheritsCheckedFirst TypeError: Failed to execute 'registerProperty' on 'CSS': Failed to read the 'inherits' property from 'PropertyDefinition': Required member is undefined."].join('\n'),
+    ['noArgs ' + msg(() => CSS.registerProperty()),
+     'empty ' + reg({}),
+     'badName ' + reg({ name: 'x', syntax: '<length>', inherits: false, initialValue: '0px' }),
+     'notAString ' + reg({ name: 5, syntax: '*', inherits: false }),
+     'badSyntax ' + reg({ name: '--rg-e1', syntax: '<nope>', inherits: false, initialValue: '0' }),
+     'noInitial ' + reg({ name: '--rg-e2', syntax: '<length>', inherits: false }),
+     'badInitial ' + reg({ name: '--rg-e3', syntax: '<length>', inherits: false, initialValue: 'red' }),
+     'universal ' + reg({ name: '--rg-e4', syntax: '*', inherits: false }),
+     'returns ' + String(CSS.registerProperty({ name: '--rg-e5', syntax: '*', inherits: false })),
+     'dup ' + reg({ name: '--rg-e5', syntax: '*', inherits: false }),
+     'coercedInherits ' + reg({ name: '--rg-e6', syntax: '*', inherits: 'yes' }),
+     'extraMember ' + reg({ name: '--rg-e7', syntax: '*', inherits: false, nope: 1 }),
+     // `syntax` has a default of `*`; only `inherits` is required.
+     'syntaxMissing ' + reg({ name: '--rg-e8', inherits: false }),
+     // ...and it is read before the name is looked at: a bad name still
+     // reports the missing member.
+     'inheritsCheckedFirst ' + reg({ name: 'x', syntax: '*' })].join('\n'));
+}
+</script>
+
+<script id=register_property_reaches_the_cascade>
+{
+  const lone = document.getElementById('rgLone');
+  const cs = (el) => getComputedStyle(el);
+  const gv = (el, n) => cs(el).getPropertyValue(n);
+  const enumerated = (el, n) => Array.prototype.indexOf.call(cs(el), n) !== -1;
+
+  // Before: an undeclared custom property has no value and is not enumerated.
+  const before = ['before value=' + JSON.stringify(gv(lone, '--rg-len')),
+                  'enumerated=' + enumerated(lone, '--rg-len')].join(' ');
+
+  CSS.registerProperty({ name: '--rg-len', syntax: '<length>', inherits: false, initialValue: '3px' });
+  CSS.registerProperty({ name: '--rg-col', syntax: '<color>', inherits: false, initialValue: 'red' });
+  CSS.registerProperty({ name: '--rg-num', syntax: '<number>', inherits: false, initialValue: '2' });
+  CSS.registerProperty({ name: '--rg-any', syntax: '*', inherits: false });
+
+  testing.expectEqual(
+    ['before value="" enumerated=false',
+     'len="3px"', 'col="rgb(255, 0, 0)"', 'num="2"',
+     // `*` with no initial value registers, but there is nothing to compute:
+     // the property still has no value anywhere and is not enumerated.
+     'any=""', 'anyEnumerated=false',
+     'lenEnumerated=true'].join('\n'),
+    [before,
+     'len=' + JSON.stringify(gv(lone, '--rg-len')),
+     'col=' + JSON.stringify(gv(lone, '--rg-col')),
+     'num=' + JSON.stringify(gv(lone, '--rg-num')),
+     'any=' + JSON.stringify(gv(lone, '--rg-any')),
+     'anyEnumerated=' + enumerated(lone, '--rg-any'),
+     'lenEnumerated=' + enumerated(lone, '--rg-len')].join('\n'));
+}
+</script>
+
+<script id=register_property_syntax_computes_the_value>
+{
+  const lone = document.getElementById('rgLone');
+  const gv = (n) => JSON.stringify(getComputedStyle(lone).getPropertyValue(n));
+
+  lone.style.fontSize = '10px';
+  lone.style.setProperty('--rg-len', '2em');
+  lone.style.setProperty('--rg-col', 'red');
+  lone.style.setProperty('--rg-num', 'calc(1 + 1)');
+
+  const computed = ['len=' + gv('--rg-len'), 'col=' + gv('--rg-col'), 'num=' + gv('--rg-num'),
+                    'inline=' + JSON.stringify(lone.style.getPropertyValue('--rg-len'))].join('\n');
+
+  // var() substitutes the computed value, so a length that was declared in em
+  // arrives already resolved.
+  lone.style.setProperty('--rg-len', '4px');
+  lone.style.width = 'var(--rg-len)';
+  const used = 'width=' + JSON.stringify(getComputedStyle(lone).width);
+
+  // A value that does not parse for the registered syntax is invalid at
+  // computed-value time: back to the initial value, not the empty string.
+  lone.style.setProperty('--rg-len', 'red');
+  const invalid = 'invalid=' + gv('--rg-len');
+
+  testing.expectEqual(
+    ['len="20px"', 'col="rgb(255, 0, 0)"', 'num="2"', 'inline="2em"',
+     'width="4px"', 'invalid="3px"'].join('\n'),
+    [computed, used, invalid].join('\n'));
+
+  lone.style.removeProperty('--rg-len');
+  lone.style.removeProperty('--rg-col');
+  lone.style.removeProperty('--rg-num');
+  lone.style.removeProperty('width');
+  lone.style.removeProperty('font-size');
+}
+</script>
+
+<script id=register_property_inherits_flag>
+{
+  const parent = document.getElementById('rgParent');
+  const child = document.getElementById('rgChild');
+  const gv = (el, n) => JSON.stringify(getComputedStyle(el).getPropertyValue(n));
+
+  // `--rg-inh` is declared on #rgParent by the stylesheet above and registered
+  // as inheriting; `--rg-noinh` is declared inline on the same element and
+  // registered as not inheriting. The child sees one and not the other.
+  CSS.registerProperty({ name: '--rg-inh', syntax: '<length>', inherits: true, initialValue: '1px' });
+  CSS.registerProperty({ name: '--rg-noinh', syntax: '<length>', inherits: false, initialValue: '1px' });
+  parent.style.setProperty('--rg-noinh', '7px');
+
+  testing.expectEqual(
+    ['inhParent="11px"', 'inhChild="11px"', 'noinhParent="7px"', 'noinhChild="1px"'].join('\n'),
+    ['inhParent=' + gv(parent, '--rg-inh'),
+     'inhChild=' + gv(child, '--rg-inh'),
+     'noinhParent=' + gv(parent, '--rg-noinh'),
+     'noinhChild=' + gv(child, '--rg-noinh')].join('\n'));
+
+  parent.style.removeProperty('--rg-noinh');
+}
+</script>
+
+</body>
+</html>
