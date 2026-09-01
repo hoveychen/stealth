@@ -25285,3 +25285,80 @@ one stall turns the twenty stations after it into errors — not the change.
 `antibot-stations-pass-in-windows` already said "只能交替对拍"; the lesson is that
 **alternate means per station**, A then B on the same station before moving on,
 not per arm.
+
+## The layout pass was never 51x too expensive; the cascade was (B99, 2026-09-01)
+
+`layout-pass-reprice` re-priced the prototype B75 shelved. Its verdict was
+"the pass is right and 51x too expensive", and the chapter above already showed
+that the cost term it exonerated -- the cascade -- was exonerated by a benchmark
+page whose rules were unreachable. This is what the pass costs once the cascade
+is actually paid for.
+
+The prototype (`prd/layout-pass-cost-prototype`, two commits, 253 lines) merges
+onto today's main with **no conflicts** and the suite stays green, so B75's other
+half -- "the pass is right" -- still holds a month and three caches later.
+
+### Three caches, measured one at a time
+
+| station | B75 | + name filter, + cross-read cache | + fixed-property cache | total |
+|---|---:|---:|---:|---:|
+| homedepot | 5 265 ms | 2 714 ms | **582 ms** | **9.0x** |
+| macys | 836 ms | 314 ms | **40 ms** | **20.9x** |
+| sony | 291 ms | 74 ms | **21 ms** | **13.9x** |
+
+Per measured box: homedepot 197 -> 90.8 -> **21.3 us**, macys 94 -> 35.7 ->
+**5.2**, sony 98 -> 24.9 -> **7.0**. Node counts match B75's within a few
+percent (sony's `placed=386 / measured=2962` is identical), so these are the same
+pages doing the same work for less.
+
+The third cache is the one that moved it most, and it was invisible until the
+second was in place. Five properties -- `display`, `visibility`, `font-size`,
+`font-family`, `text-transform` -- are lifted out of the declaration list into
+named fields on the rule and read through `cascadedDeclaration`, a different
+function with its own walk. With `cascadedNamedDeclaration` cached they were
+what was left: 6.8% of the busy thread themselves and 26.1% underneath in
+selector matching on plain main, 17.6% and 65.1% under the prototype. Cached,
+ak-homedepot's whole cascade-and-selector family falls from **61.8% of the busy
+thread to 1.6%**, and the engine's total self time by 89% -- while building
+slightly *more* DOM than the uncached arm (3 351 nodes against 3 254), which is
+what says the win is not the page failing to load.
+
+### The denominator moved too, so the ratio is the wrong way to say it
+
+What one layout read costs the page on ak-homedepot, timed in place:
+
+| build | mean | worst single read | layout total per load |
+|---|---:|---:|---:|
+| main before B99 | ~21 ms | ~2 500 ms | ~4 580 ms |
+| + first two caches | ~15 ms | ~1 607 ms | ~3 695 ms |
+| + fixed-property cache | **~3.1 ms** | **~420 ms** | **~1 130 ms** |
+
+Mean 6.8x, worst read 6x, total 4x. **The worst single read went from two and a
+half seconds to four hundred milliseconds**, which is where the watchdog margin
+comes from and why the offline stall cell now finishes in half the threshold.
+
+So state the verdict in absolute cost rather than as a ratio, since both sides
+fell. Enabling the pass costs `passes needed x one pass` (counts are B75's):
+
+* **sony 15 x 21ms = 0.3 s** -- affordable.
+* **macys 53 x 40ms = 2.1 s** -- affordable.
+* **homedepot 59 x 582ms = 34 s** -- still fatal on its own; the watchdog is 30.
+
+**"51x too expensive" is dead as a description, but it did not become "ship
+it".** It became one remaining term, and a measured one: the pass *count*.
+88.5% of homedepot's layout reads sit on a document nothing has mutated since
+the previous read, so memoising the pass itself on `Page.dom_version` -- the same
+key the cascade caches already use -- puts homedepot at roughly 7 passes,
+**4.1 s**. That is the next plan's shape, and until it exists the prototype stays
+on `prd/layout-pass-reprice`, unmerged.
+
+Two limits on the numbers above: only homedepot's denominator was re-measured
+(macys and sony reuse B75's), and the pass counts 59/53/15 are B75's and were not
+re-measured either.
+
+### The in-flow offset tell is no longer blocked by an unknown
+
+`in-flow-block-position`'s reading stands: **26 of 27 offsets wrong, every
+element's x equal to its y, and one expression sees it.** What has changed is
+that it is no longer waiting on a cost nobody had located. It is waiting on one
+named, priced, mechanically-familiar piece of work.
