@@ -3732,10 +3732,8 @@ fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.
         return .{ .x = placed.x, .y = placed.y, .width = width, .height = height };
     }
 
-    const y = calculateDocumentPosition(self.asNode());
-
-    // Use sibling position for x coordinate to ensure siblings have different x values
-    const x = calculateSiblingPosition(self.asNode());
+    const y = documentPosition(self.asNode(), frame);
+    const x = siblingPosition(self.asNode(), frame);
 
     return .{
         .x = x,
@@ -4375,7 +4373,7 @@ pub fn getOffsetTop(self: *Element, frame: *Frame) f64 {
     if (self.outOfFlowPosition(frame, 0)) |placed| {
         return placed.offset_y;
     }
-    return calculateDocumentPosition(self.asNode());
+    return documentPosition(self.asNode(), frame);
 }
 
 pub fn getOffsetLeft(self: *Element, frame: *Frame) f64 {
@@ -4385,7 +4383,7 @@ pub fn getOffsetLeft(self: *Element, frame: *Frame) f64 {
     if (self.outOfFlowPosition(frame, 0)) |placed| {
         return placed.offset_x;
     }
-    return calculateSiblingPosition(self.asNode());
+    return siblingPosition(self.asNode(), frame);
 }
 
 /// Where the element's box sits when the flow does not decide it, or null when
@@ -4595,6 +4593,62 @@ fn clientBorderEdge(self: *Element, frame: *Frame, comptime side: []const u8) f6
 // - Linear scaling: 5px per node
 // - Perfect document order, guaranteed unique positions
 // - Compact coordinates (1000 nodes ≈ 5,000px)
+/// The y a page reads for an in-flow box.
+///
+/// The table from one document-wide pass answers it when it can. The count-based
+/// fallback below is what the engine answered before that pass existed -- every
+/// element's y being `(preceding nodes) x 5px`, and its x the same number, which
+/// is one expression away from a tell. It stays for the cases the table cannot
+/// serve: while the pass is running, and for an element the pass did not place.
+fn documentPosition(node: *Node, frame: *Frame) f64 {
+    if (node.is(Element)) |element| {
+        if (frame.positionOf(element)) |point| {
+            return point.y + relativeOffset(element, frame, "top", "bottom");
+        }
+    }
+    return calculateDocumentPosition(node);
+}
+
+fn siblingPosition(node: *Node, frame: *Frame) f64 {
+    if (node.is(Element)) |element| {
+        if (frame.positionOf(element)) |point| {
+            return point.x + relativeOffset(element, frame, "left", "right");
+        }
+    }
+    return calculateSiblingPosition(node);
+}
+
+/// What `position: relative` moves a box by on one axis.
+///
+/// A relative box keeps the space the flow gave it -- which is why the pass
+/// places it at its static position and this is added afterwards rather than
+/// folded into the walk. Chrome puts the shape in
+/// `scratch/b74/expr-inflow-position-matrix.js` at `d=7,39` where its static
+/// position is `0,30` and it declares `left:7px; top:9px`: a plain sum.
+///
+/// The near edge wins and the far edge is its negation, per
+/// css-position-3 §3.2 -- `right` alone moves the box left. Unlike
+/// `edgeOffset`, neither is resolved against the containing block, because a
+/// relative offset is not a placement.
+fn relativeOffset(
+    self: *Element,
+    frame: *Frame,
+    comptime near: []const u8,
+    comptime far: []const u8,
+) f64 {
+    const position = CSSStyleDeclaration.cascadedComputedValue(self, "position", frame) orelse return 0;
+    if (!std.ascii.eqlIgnoreCase(position, "relative")) {
+        return 0;
+    }
+    if (CSSStyleDeclaration.cascadedComputedValue(self, near, frame)) |declared| {
+        if (CSS.parseDimensionViewport(declared, frame)) |px| return px;
+    }
+    if (CSSStyleDeclaration.cascadedComputedValue(self, far, frame)) |declared| {
+        if (CSS.parseDimensionViewport(declared, frame)) |px| return -px;
+    }
+    return 0;
+}
+
 fn calculateDocumentPosition(node: *Node) f64 {
     var position: f64 = 0.0;
     var current = node;
@@ -4720,7 +4774,7 @@ pub fn clone(self: *Element, deep: bool, frame: *Frame) !*Node {
 
 pub fn scrollIntoViewIfNeeded(self: *Element, center_if_needed: ?bool, frame: *Frame) void {
     _ = center_if_needed;
-    const y = calculateDocumentPosition(self.asNode());
+    const y = documentPosition(self.asNode(), frame);
     const scroll_y: f64 = @floatFromInt(frame.window.getScrollY());
     const viewport_height: f64 = @floatFromInt(frame.window.getInnerHeight(frame));
     if (y >= scroll_y and y <= scroll_y + viewport_height) {
@@ -4738,7 +4792,7 @@ pub fn scrollIntoView(self: *Element, opts: ?ScrollIntoViewOpts, frame: *Frame) 
     // Scroll the window so the element's top is brought into the viewport.
     // Positions come from the faux-layout document position (top = preorder
     // depth-scaled y), the same source getBoundingClientRect uses.
-    const y = calculateDocumentPosition(self.asNode());
+    const y = documentPosition(self.asNode(), frame);
     frame.window.scrollTo(.{ .x = 0 }, @intFromFloat(@max(0, y)), frame) catch {};
 }
 

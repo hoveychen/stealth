@@ -450,6 +450,26 @@ _http_headers: std.ArrayList(HttpHeader) = .empty,
 _csp: ?Csp = null,
 
 _referrer: ?[]const u8 = null,
+
+/// Where every in-flow element sits, from one document-wide pass.
+///
+/// Built on demand and kept until the DOM moves. That is affordable because the
+/// reads come in clusters: the parent plan's E2 counted 1 664 geometry reads on
+/// homedepot arriving in **59** groups separated by a mutation, 49 055 on macys
+/// in 53. One pass per group is the whole cost model, and with the four cascade
+/// caches in place a pass costs 88ms on homedepot, 54 on macys, 8 on sony --
+/// 5.2s, 2.9s and 0.1s for a whole page load.
+position_table: Element.PositionTable = .empty,
+position_table_version: usize = 0,
+/// True while the pass is running. `layoutPassPositions` measures boxes, and
+/// measuring an out-of-flow box asks its containing block where it is -- which
+/// is a question this table answers, so without this the first pass would
+/// re-enter itself forever.
+position_table_building: bool = false,
+/// Whether `position_table` holds a pass at all. Distinguished from an empty
+/// table so a document with no elements is not rebuilt on every read.
+position_table_filled: bool = false,
+
 referrer_policy: referrer.Policy = .default,
 
 pub const HttpHeader = struct {
@@ -1709,6 +1729,24 @@ fn _documentIsComplete(self: *Frame) !void {
 /// it.
 const LayoutPassProbe = enum { off, time, dump };
 var layout_pass_probe: ?LayoutPassProbe = null;
+
+/// Where `element` sits in the document, or null when the table cannot say --
+/// during the pass itself, or for an element the pass did not place.
+pub fn positionOf(self: *Frame, element: *Element) ?Element.Point {
+    if (self.position_table_building) {
+        return null;
+    }
+    if (!self.position_table_filled or self.position_table_version != self._page.dom_version) {
+        const root = self.document.getDocumentElement() orelse return null;
+        self.position_table_building = true;
+        defer self.position_table_building = false;
+        self.position_table = .empty;
+        _ = Element.layoutPassPositions(root, self, &self.position_table);
+        self.position_table_version = self._page.dom_version;
+        self.position_table_filled = true;
+    }
+    return self.position_table.get(element);
+}
 
 /// Time one document-wide layout pass and report what it cost.
 ///
