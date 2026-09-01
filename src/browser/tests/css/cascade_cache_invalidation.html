@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+The cascade lookup caches what it last answered per element and property, keyed
+on `Page.dom_version` and thrown away whenever the rule set is rebuilt. That
+cache is only correct if every way a page can change what a selector matches
+moves one of those two, so this file exercises the ways, one shape each.
+
+Nothing here is about the cache being fast. Every assertion is a value a page
+can read, and each one holds with no cache at all -- which is what makes them
+worth having: they fail only if an answer outlived the thing it depended on.
+
+The reads either side of each change matter as much as the change. Reading
+BEFORE is what puts the stale answer in the cache; a test that only reads after
+passes on a broken cache because there was never an entry to go stale.
+-->
+
+<script id=cascade_cache_invalidation>
+{
+  const wrong = [];
+  const sheet = document.createElement('style');
+  sheet.textContent = `
+    .before { letter-spacing: 1px }
+    .after  { letter-spacing: 2px }
+    #chosen { letter-spacing: 3px }
+    #other  { letter-spacing: 4px }
+    .kids > div:nth-child(2) { letter-spacing: 5px }
+    [data-flag="on"] { letter-spacing: 6px }
+    .parent .descendant { letter-spacing: 7px }
+  `;
+  document.head.appendChild(sheet);
+
+  const ls = (el) => getComputedStyle(el).letterSpacing;
+  const step = (label, el, want) => {
+    const got = ls(el);
+    if (got !== want) wrong.push(label + ': want ' + want + ', got ' + got);
+  };
+
+  // class ------------------------------------------------------------------
+  const a = document.createElement('div');
+  a.className = 'before';
+  document.body.appendChild(a);
+  step('class_before', a, '1px');
+  a.className = 'after';
+  step('class_after', a, '2px');
+  a.classList.remove('after');
+  a.classList.add('before');
+  step('class_via_classList', a, '1px');
+
+  // id ---------------------------------------------------------------------
+  const b = document.createElement('div');
+  b.id = 'chosen';
+  document.body.appendChild(b);
+  step('id_before', b, '3px');
+  b.id = 'other';
+  step('id_after', b, '4px');
+
+  // an attribute an attribute-selector reads --------------------------------
+  const c = document.createElement('div');
+  c.setAttribute('data-flag', 'off');
+  document.body.appendChild(c);
+  step('attr_before', c, 'normal');
+  c.setAttribute('data-flag', 'on');
+  step('attr_after', c, '6px');
+  c.removeAttribute('data-flag');
+  step('attr_removed', c, 'normal');
+
+  // tree position: a sibling inserted in front moves what :nth-child(2) is,
+  // and it changes the answer for an element nobody touched.
+  const kids = document.createElement('div');
+  kids.className = 'kids';
+  const k1 = document.createElement('div');
+  const k2 = document.createElement('div');
+  kids.appendChild(k1);
+  kids.appendChild(k2);
+  document.body.appendChild(kids);
+  step('nth_k1_before', k1, 'normal');
+  step('nth_k2_before', k2, '5px');
+  kids.insertBefore(document.createElement('div'), k1);
+  step('nth_k1_after_insert', k1, '5px');
+  step('nth_k2_after_insert', k2, 'normal');
+  kids.removeChild(kids.firstChild);
+  step('nth_k1_after_remove', k1, 'normal');
+  step('nth_k2_after_remove', k2, '5px');
+
+  // an ancestor's class, for a descendant combinator ------------------------
+  const parent = document.createElement('div');
+  const child = document.createElement('div');
+  child.className = 'descendant';
+  parent.appendChild(child);
+  document.body.appendChild(parent);
+  step('descendant_before', child, 'normal');
+  parent.className = 'parent';
+  step('descendant_after_ancestor_class', child, '7px');
+
+  // moving the same element under a matching ancestor, without touching it
+  const parent2 = document.createElement('div');
+  parent2.className = 'parent';
+  document.body.appendChild(parent2);
+  const moved = document.createElement('div');
+  moved.className = 'descendant';
+  document.body.appendChild(moved);
+  step('moved_before', moved, 'normal');
+  parent2.appendChild(moved);
+  step('moved_after', moved, '7px');
+
+  // the rule set itself ------------------------------------------------------
+  const d = document.createElement('div');
+  d.className = 'sheet-target';
+  document.body.appendChild(d);
+  step('sheet_before', d, 'normal');
+  const added = document.createElement('style');
+  added.textContent = '.sheet-target { letter-spacing: 8px }';
+  document.head.appendChild(added);
+  step('sheet_after_insert', d, '8px');
+  added.remove();
+  step('sheet_after_remove', d, 'normal');
+
+  // ...and editing a sheet that is already in the document
+  const edited = document.createElement('style');
+  edited.textContent = '.edited { letter-spacing: 9px }';
+  document.head.appendChild(edited);
+  const e = document.createElement('div');
+  e.className = 'edited';
+  document.body.appendChild(e);
+  step('edited_before', e, '9px');
+  edited.textContent = '.edited { letter-spacing: 10px }';
+  step('edited_after', e, '10px');
+
+  // ...and a rule inserted through the CSSOM, which changes the rule set
+  // WITHOUT touching the DOM. This is the one shape `dom_version` cannot see,
+  // so it is the only assertion here that the rule-set half has to answer.
+  const cssom = document.createElement('style');
+  document.head.appendChild(cssom);
+  const g = document.createElement('div');
+  g.className = 'cssom-target';
+  document.body.appendChild(g);
+  step('cssom_before', g, 'normal');
+  cssom.sheet.insertRule('.cssom-target { letter-spacing: 12px }', 0);
+  step('cssom_after_insert', g, '12px');
+  cssom.sheet.deleteRule(0);
+  step('cssom_after_delete', g, 'normal');
+
+  // inline style, which wins over the rules and is read on its own path -----
+  const f = document.createElement('div');
+  f.className = 'before';
+  document.body.appendChild(f);
+  step('inline_before', f, '1px');
+  f.style.letterSpacing = '11px';
+  step('inline_after_set', f, '11px');
+  f.style.removeProperty('letter-spacing');
+  step('inline_after_remove', f, '1px');
+
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
