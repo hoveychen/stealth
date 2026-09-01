@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=shadow-anchor></div>
+
+<!--
+A shadow's computed value carries a resolved colour and a fixed number of
+lengths. This engine reported the specified value instead.
+
+The specified side was got right by the @keyframes work -- the colour moves to
+the front, `inset` moves to the back, a unitless zero is written `0px`. None of
+that is the computed value, which Chrome writes differently in two ways this
+engine did neither of:
+
+  * the colour is always there and always resolved. `red` becomes
+    `rgb(255, 0, 0)`, a shadow written with no colour at all takes the element's
+    `color`, and so does `currentcolor`.
+  * the lengths are padded to a fixed count: four for `box-shadow`
+    (offset-x, offset-y, blur, spread) and three for `text-shadow`, which has no
+    spread. `1px 1px` computes to `1px 1px 0px 0px` and `1px 1px 0px`.
+
+Measured on Chrome 151 with scratch/b98/expr-b98-shadow-computed.js: fourteen
+rows, of which the specified value matched on all fourteen and the computed
+value on none.
+
+Worth more than its size: box-shadow serialisation is a surface a guard has been
+measured reading -- the Cloudflare @keyframes payload carries seven box-shadow
+rules -- so this is a difference that has already been observed being collected,
+not one that might be.
+-->
+
+<script id=computed_box_shadow_resolves_its_colour_and_pads_its_lengths>
+{
+  const probe = (decl, prop) => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    el.setAttribute('style', 'color: green;' + decl);
+    const got = String(getComputedStyle(el).getPropertyValue(prop));
+    el.remove();
+    return got;
+  };
+  const CASES = [
+    // A keyword colour resolves, and two missing lengths are filled in.
+    ['rgb(255, 0, 0) 1px 1px 0px 0px', 'box-shadow: 1px 1px red'],
+    ['rgb(255, 0, 0) 1px 1px 2px 0px', 'box-shadow: 1px 1px 2px red'],
+    // All four written: nothing to pad, only the colour to resolve.
+    ['rgb(255, 0, 0) 1px 1px 2px 3px', 'box-shadow: 1px 1px 2px 3px red'],
+    // `inset` stays last, after the padding.
+    ['rgb(255, 0, 0) 1px 1px 0px 0px inset', 'box-shadow: inset 1px 1px red'],
+    // No colour written at all, and `currentcolor`: both are the element's
+    // own `color`, which is what makes this a resolution and not a rewrite.
+    ['rgb(0, 128, 0) 1px 1px 0px 0px', 'box-shadow: 1px 1px'],
+    ['rgb(0, 128, 0) 1px 1px 0px 0px', 'box-shadow: 1px 1px currentcolor'],
+    // A colour already in a resolved form is left alone.
+    ['rgb(170, 187, 204) 1px 1px 0px 0px', 'box-shadow: 1px 1px #abc'],
+    ['rgba(1, 2, 3, 0.5) 1px 1px 0px 0px', 'box-shadow: 1px 1px rgba(1, 2, 3, 0.5)'],
+    // The lengths resolve as lengths do -- this half already worked, and is
+    // here so the padding cannot be added by skipping the resolution.
+    ['rgb(255, 0, 0) 16px 16px 0px 0px', 'box-shadow: 1em 1em red'],
+    // Every layer takes the same treatment.
+    ['rgb(255, 0, 0) 1px 1px 0px 0px, rgb(0, 0, 255) 2px 2px 0px 0px',
+     'box-shadow: 1px 1px red, 2px 2px blue'],
+  ];
+  const wrong = [];
+  for (const [want, decl] of CASES) {
+    const got = probe(decl, 'box-shadow');
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
+
+<script id=computed_text_shadow_pads_to_three_lengths>
+{
+  // `text-shadow` has no spread, so it pads to three where `box-shadow` pads to
+  // four. Split out because that difference is the whole reason the count
+  // cannot be a constant.
+  const probe = (decl) => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    el.setAttribute('style', 'color: green;' + decl);
+    const got = String(getComputedStyle(el).textShadow);
+    el.remove();
+    return got;
+  };
+  const CASES = [
+    ['rgb(255, 0, 0) 1px 1px 0px', 'text-shadow: 1px 1px red'],
+    ['rgb(255, 0, 0) 1px 1px 2px', 'text-shadow: 1px 1px 2px red'],
+    ['rgb(0, 128, 0) 1px 1px 0px', 'text-shadow: 1px 1px'],
+    ['rgb(255, 0, 0) 1px 1px 0px, rgb(0, 0, 255) 2px 2px 0px',
+     'text-shadow: 1px 1px red, 2px 2px blue'],
+  ];
+  const wrong = [];
+  for (const [want, decl] of CASES) {
+    const got = probe(decl);
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
+
+<script id=specified_shadow_is_unchanged>
+{
+  // The guardrail. Every one of these already matched Chrome before the
+  // computed rules existed -- the colour at the front, `inset` at the back, the
+  // author's own length count kept -- and the computed work has no business
+  // touching any of it.
+  const probe = (decl, prop) => {
+    const el = document.createElement('div');
+    el.setAttribute('style', decl);
+    return String(el.style.getPropertyValue(prop));
+  };
+  const CASES = [
+    ['red 1px 1px', 'box-shadow: 1px 1px red', 'box-shadow'],
+    ['red 1px 1px 2px 3px', 'box-shadow: 1px 1px 2px 3px red', 'box-shadow'],
+    ['red 1px 1px inset', 'box-shadow: inset 1px 1px red', 'box-shadow'],
+    ['1px 1px', 'box-shadow: 1px 1px', 'box-shadow'],
+    ['currentcolor 1px 1px', 'box-shadow: 1px 1px currentcolor', 'box-shadow'],
+    ['rgb(170, 187, 204) 1px 1px', 'box-shadow: 1px 1px #abc', 'box-shadow'],
+    ['red 1px 1px, blue 2px 2px', 'box-shadow: 1px 1px red, 2px 2px blue', 'box-shadow'],
+    ['red 1em 1em', 'box-shadow: 1em 1em red', 'box-shadow'],
+    ['red 1px 1px', 'text-shadow: 1px 1px red', 'text-shadow'],
+    ['red 1px 1px, blue 2px 2px', 'text-shadow: 1px 1px red, 2px 2px blue', 'text-shadow'],
+  ];
+  const wrong = [];
+  for (const [want, decl, prop] of CASES) {
+    const got = probe(decl, prop);
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>

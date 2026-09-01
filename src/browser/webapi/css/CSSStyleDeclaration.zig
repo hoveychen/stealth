@@ -7646,6 +7646,10 @@ test "WebApi: CSSStyleDeclaration transform length units" {
     try testing.htmlRunner("css/transform_length_units.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration computed shadow" {
+    try testing.htmlRunner("css/computed_shadow.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration percentage width" {
     try testing.htmlRunner("css/percentage_width.html", .{});
 }
