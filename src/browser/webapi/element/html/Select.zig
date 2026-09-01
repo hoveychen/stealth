@@ -255,9 +255,15 @@ pub fn getType(self: *const Select) []const u8 {
 }
 
 pub fn getOptions(self: *Select, frame: *Frame) !*collections.HTMLOptionsCollection {
+    const root = self.asNode();
+    const key: collections.identity.Key = .{ .root = root, .kind = .select_options, .name = "" };
+    if (collections.identity.find(frame, collections.HTMLOptionsCollection, key)) |cached| {
+        return cached;
+    }
+
     // select_options mode is the select's list of options: option children
     // plus the option children of optgroup children.
-    const node_live = collections.NodeLive(.select_options).init(self.asNode(), {}, frame);
+    const node_live = collections.NodeLive(.select_options).init(root, {}, frame);
     const options = try frame._factory.chained(.{
         node_live.htmlCollectionValue(),
         collections.HTMLOptionsCollection{
@@ -266,7 +272,7 @@ pub fn getOptions(self: *Select, frame: *Frame) !*collections.HTMLOptionsCollect
         },
     });
     options._proto._chained = .options;
-    return options;
+    return collections.identity.put(frame, key, options);
 }
 
 pub fn getLength(self: *Select) u32 {
@@ -309,15 +315,20 @@ pub fn add(self: *Select, element: *Option, before_: ?AddBeforeOption, frame: *F
     _ = try parent.insertBefore(element.asElement().asNode(), before_node, frame);
 }
 
-pub fn getSelectedOptions(self: *Select, frame: *Frame) !collections.NodeLive(.selected_options) {
-    return collections.NodeLive(.selected_options).init(self.asNode(), {}, frame);
+pub fn getSelectedOptions(self: *Select, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .selected_options, .name = "" },
+        collections.NodeLive(.selected_options).init(root, {}, frame).htmlCollectionValue(),
+    );
 }
 
 pub fn getForm(self: *Select, frame: *Frame) ?*Form {
     return Form.ownerOf(self.asElement(), frame);
 }
 
-pub fn getLabels(self: *Select, frame: *Frame) !js.Array {
+pub fn getLabels(self: *Select, frame: *Frame) !*collections.NodeList {
     return @import("Label.zig").getControlLabels(self.asElement(), frame);
 }
 

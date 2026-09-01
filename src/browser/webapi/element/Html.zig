@@ -32,6 +32,7 @@ const EditContext = @import("../EditContext.zig");
 const ElementInternals = @import("ElementInternals.zig");
 const global_event_handlers = @import("../global_event_handlers.zig");
 const CustomElementDefinition = @import("../CustomElementDefinition.zig");
+const CSSStyleDeclaration = @import("../css/CSSStyleDeclaration.zig");
 
 const popover = @import("popover.zig");
 pub const Anchor = @import("html/Anchor.zig");
@@ -368,7 +369,10 @@ pub fn getInnerText(self: *HtmlElement, writer: *std.Io.Writer, frame: *Frame) !
     var state = InnerTextState{
         .writer = writer,
         .frame = frame,
-        .preserve = tag == .pre,
+        // The root's own value, which is the one walk up the ancestors this
+        // costs: every element below answers with its own declaration or with
+        // this one.
+        .white_space = WhiteSpace.of(CSSStyleDeclaration.whiteSpaceCollapse(self.asElement(), frame)),
         .transform = TextTransform.of(frame._style_manager.computedTextTransform(self.asElement())),
         // Seeded from the element's own computed value, which is an ancestor walk
         // because `visibility` inherits -- reading innerText off a hidden element
@@ -1841,6 +1845,36 @@ pub fn parseInteger(input: []const u8) ?i32 {
     return @intCast(value);
 }
 
+/// What `white-space-collapse` keeps of a run of document white space, which is
+/// what innerText reports: it is defined on the RENDERED text, so the two
+/// answer together. `preserve` (from `pre` and `pre-wrap`) and `break-spaces`
+/// keep the spaces and the breaks; `preserve-breaks` (from `pre-line`) keeps
+/// only the breaks; `collapse` (from `normal` and `nowrap`) keeps neither.
+///
+/// This used to be `tag == .pre`, which is right for a <pre> only because the UA
+/// stylesheet gives one `white-space: pre` -- and wrong in both directions for
+/// anything else. Measured on Chrome 151, scratch/b84/expr-b84-innertext.js.
+const WhiteSpace = enum {
+    collapse,
+    preserve_breaks,
+    preserve,
+
+    fn of(declared: []const u8) WhiteSpace {
+        if (std.ascii.eqlIgnoreCase(declared, "preserve")) return .preserve;
+        if (std.ascii.eqlIgnoreCase(declared, "break-spaces")) return .preserve;
+        if (std.ascii.eqlIgnoreCase(declared, "preserve-breaks")) return .preserve_breaks;
+        return .collapse;
+    }
+
+    fn keepsSpaces(self: WhiteSpace) bool {
+        return self == .preserve;
+    }
+
+    fn keepsBreaks(self: WhiteSpace) bool {
+        return self != .collapse;
+    }
+};
+
 const InnerTextState = struct {
     writer: *std.Io.Writer,
 
@@ -1870,8 +1904,12 @@ const InnerTextState = struct {
     // reads "a \nM\n b", where the same shape with a plain block reads "a\nM\nb".
     breaks_inside_atomic: bool = false,
 
-    // preserve whitespace (pre tag, in the future white-space: pre)
-    preserve: bool = false,
+    // What `white-space-collapse` leaves in the rendered text of the element
+    // whose children we are walking. Threaded rather than resolved per element,
+    // for the reason `visibility` below is: the property inherits, so the walk
+    // already carries it, and only an element with a declaration of its own
+    // pays a lookup.
+    white_space: WhiteSpace = .collapse,
 
     // The computed text-transform of the element whose children we are walking.
     // innerText is defined in terms of layout, so it reports rendered casing.
@@ -2052,11 +2090,19 @@ fn handleChildElement(
         return;
     }
 
-    // This element's own computed value, restored on the way out, the same
-    // set/defer-restore shape enterBlock uses for <pre>'s whitespace.
+    // This element's own computed value, restored on the way out.
     const outer_transform = state.transform;
     defer state.transform = outer_transform;
     state.transform = TextTransform.of(state.frame._style_manager.computedTextTransform(he.asElement()));
+
+    // And its own `white-space-collapse`, on the same terms as `visibility`
+    // above: only its own declaration is looked up, because what it inherits is
+    // what the walk brought here.
+    const outer_white_space = state.white_space;
+    defer state.white_space = outer_white_space;
+    if (CSSStyleDeclaration.declaredWhiteSpaceCollapse(he.asElement(), state.frame)) |declared| {
+        state.white_space = WhiteSpace.of(declared);
+    }
 
     switch (innerTextDisplay(he, tag, state.frame)) {
         // Not rendered: skip the subtree entirely (script/style/metadata/...).
@@ -2095,7 +2141,7 @@ fn handleChildElement(
         // read "a\nM\nb" where the same with a visible span inside reads "aMb".
         .block => {
             if (visible) state.requireBreaks(1) else state.hiddenBlockBoundary();
-            try enterBlock(he, tag, state);
+            try he.collectInnerText(state);
             if (visible) state.requireBreaks(1) else state.hiddenBlockBoundary();
         },
         .block_p => {
@@ -2127,16 +2173,6 @@ fn handleChildElement(
             try he.collectInnerText(state);
         },
     }
-}
-
-// Recurse into a block, enabling whitespace preservation for <pre> subtrees.
-fn enterBlock(he: *HtmlElement, tag: Element.Tag, state: *InnerTextState) std.Io.Writer.Error!void {
-    if (tag == .pre and !state.preserve) {
-        state.preserve = true;
-        defer state.preserve = false;
-        return he.collectInnerText(state);
-    }
-    return he.collectInnerText(state);
 }
 
 /// How far up `isBeingRendered` walks before giving up, matching the ceiling the
@@ -2378,30 +2414,55 @@ fn writeText(c: *Node.CData, state: *InnerTextState) !void {
         state.trim_left = false;
         return;
     }
-    if (state.preserve) {
+    if (state.white_space.keepsSpaces()) {
         if (s.len == 0) {
             return;
         }
         try state.flushBreaks();
-        // Preserve whitespace verbatim, normalising CR / CRLF to LF.
-        var i: usize = 0;
-        while (i < s.len) : (i += 1) {
-            const ch = s[i];
-            if (ch == '\r') {
-                try writeTransformed(state, "\n");
-                if (i + 1 < s.len and s[i + 1] == '\n') {
-                    i += 1;
-                }
-            } else {
-                try writeTransformed(state, s[i .. i + 1]);
-            }
-        }
+        // Verbatim, carriage returns and all: `a&#13;b` reads back with the CR
+        // still in it in Chrome 151. This used to normalise CR and CRLF to a
+        // line feed, which is what the PARSER does to a source document -- a CR
+        // that survives into a text node came from script or from a character
+        // reference, and innerText hands it back.
+        try writeTransformed(state, s);
         state.wrote_any = true;
         state.pre_w = false;
         state.trim_left = false;
         return;
     }
 
+    if (!state.white_space.keepsBreaks()) {
+        return writeCollapsedRun(state, c, s);
+    }
+
+    // `preserve-breaks`: the line feeds are written and each run between two of
+    // them collapses on its own. The break is written STRAIGHT OUT rather than
+    // armed as a pending one, because a leading break survives where a block
+    // boundary's does not -- `<div style="white-space:pre-line">\na</div>` reads
+    // "\na" in Chrome, and the same shape with a leading <div> reads "a".
+    var rest = s;
+    while (true) {
+        const feed = std.mem.indexOfScalar(u8, rest, '\n');
+        try writeCollapsedRun(state, c, rest[0 .. feed orelse rest.len]);
+        const at = feed orelse return;
+        try state.flushBreaks();
+        try writer.writeByte('\n');
+        state.wrote_any = true;
+        // A break trims the collapsible white space on either side of it, the
+        // same as the block boundary it stands in for.
+        state.pre_w = false;
+        state.trim_left = true;
+        rest = rest[at + 1 ..];
+    }
+}
+
+/// One run of collapsible text: a run of document white space becomes one space,
+/// and one at either end of the run becomes nothing.
+///
+/// `c` is only along for its `render`, which reads the node's data; a run that is
+/// a SLICE of it -- which is what `preserve-breaks` hands over -- goes through
+/// renderText instead.
+fn writeCollapsedRun(state: *InnerTextState, c: *Node.CData, s: []const u8) !void {
     if (isAllAsciiWhitespace(s)) {
         // A run of collapsible whitespace collapses to one space, so a space
         // already pending stays pending: this node adds nothing but takes
@@ -2410,7 +2471,12 @@ fn writeText(c: *Node.CData, state: *InnerTextState) !void {
         // `wrote_any` still gates it, so leading whitespace is dropped, and
         // trim_left without a pending space means a block boundary already
         // trimmed here -- neither may start a space.
-        state.pre_w = state.wrote_any and (state.pre_w or state.trim_left == false);
+        //
+        // An EMPTY run is neither: it is the nothing between two line feeds, and
+        // it may not arm a space that was not in the text.
+        if (s.len != 0) {
+            state.pre_w = state.wrote_any and (state.pre_w or state.trim_left == false);
+        }
         return;
     }
 
@@ -2418,14 +2484,21 @@ fn writeText(c: *Node.CData, state: *InnerTextState) !void {
     if (state.pre_w) {
         try writeTransformed(state, " ");
     }
+    const whole = s.len == c.getData().str().len;
     if (state.transform == .none) {
-        state.pre_w = try c.render(writer, .{ .trim_left = state.trim_left });
+        state.pre_w = if (whole)
+            try c.render(state.writer, .{ .trim_left = state.trim_left })
+        else
+            try Node.CData.renderText(s, state.writer, .{ .trim_left = state.trim_left });
     } else {
         // render() writes straight to the writer, so the transform cannot wrap
         // it in place: render once into the frame arena, then transform the
         // bytes it produced. innerText is not a hot path.
         var run = std.Io.Writer.Allocating.init(state.frame.local_arena);
-        state.pre_w = try c.render(&run.writer, .{ .trim_left = state.trim_left });
+        state.pre_w = if (whole)
+            try c.render(&run.writer, .{ .trim_left = state.trim_left })
+        else
+            try Node.CData.renderText(s, &run.writer, .{ .trim_left = state.trim_left });
         try writeTransformed(state, run.written());
     }
     state.wrote_any = true;

@@ -102,9 +102,48 @@ pub fn getUserAgent(_: *const Navigator, exec: *const Execution) []const u8 {
 //
 // Read through http_client rather than off the config so a CDP
 // acceptLanguage override is reflected too.
-pub fn getLanguages(_: *const Navigator, exec: *const Execution) !js.FrozenArray([]const u8) {
-    return .{ .items = try parseLanguages(exec.call_arena, exec.session.browser.http_client.getLanguages()) };
+/// The same frozen array on every read, the way Chrome answers it: the
+/// attribute is a `FrozenArray<DOMString>`, and WebIDL says a frozen array
+/// attribute keeps handing back the object it created until the underlying
+/// value changes (measured on Chrome 151: `navigator.languages ===
+/// navigator.languages` is true, while `viewport.segments` -- another frozen
+/// array -- is false, so this is not a blanket rule about the type).
+///
+/// A JS array cannot be cached the way a collection is: it is not backed by a
+/// Zig pointer the bridge can deduplicate, so the JS object itself is held in a
+/// global slot. The Accept-Language header is the "underlying value" -- a CDP
+/// override changes it, and then a new array is correct.
+pub fn getLanguages(_: *const Navigator, frame: *Frame) !js.Object {
+    const local = frame.js.local orelse return error.NotHandled;
+    const header = frame._page.session.browser.http_client.getLanguages();
+
+    if (frame._navigator_languages) |cached| {
+        if (std.mem.eql(u8, cached.header, header)) {
+            return cached.value.local(local);
+        }
+        cached.value.deinit();
+        frame._navigator_languages = null;
+    }
+
+    const tags = try parseLanguages(frame.arena, header);
+    const array = local.newArray(@intCast(tags.len));
+    for (tags, 0..) |tag, i| {
+        _ = try array.set(@intCast(i), tag, .{});
+    }
+    try local.freeze(array.toValue());
+
+    const object = array.toObject();
+    frame._navigator_languages = .{
+        .header = try frame.arena.dupe(u8, header),
+        .value = try object.persist(),
+    };
+    return object;
 }
+
+pub const LanguagesCache = struct {
+    header: []const u8,
+    value: js.Object.Global,
+};
 
 pub fn getLanguage(_: *const Navigator, exec: *const Execution) ![]const u8 {
     const tags = try parseLanguages(exec.call_arena, exec.session.browser.http_client.getLanguages());
@@ -115,7 +154,7 @@ pub fn getLanguage(_: *const Navigator, exec: *const Execution) ![]const u8 {
 // Splits an Accept-Language value into its bare tags, dropping the q-weights:
 // "de-DE,de;q=0.9,en;q=0.8" -> { "de-DE", "de", "en" }. Chrome exposes the
 // tags in the header's own order and never shows the weights.
-fn parseLanguages(allocator: Allocator, header: []const u8) ![]const []const u8 {
+pub fn parseLanguages(allocator: Allocator, header: []const u8) ![]const []const u8 {
     var tags: std.ArrayList([]const u8) = .empty;
     var it = std.mem.splitScalar(u8, header, ',');
     while (it.next()) |part| {

@@ -82,8 +82,11 @@ pub fn getLanguage(self: *const WorkerNavigator, exec: *const Execution) ![]cons
     return self._navigator.getLanguage(exec);
 }
 
-pub fn getLanguages(self: *const WorkerNavigator, exec: *const Execution) !js.FrozenArray([]const u8) {
-    return self._navigator.getLanguages(exec);
+// A fresh array per read, unlike the window's: the same-object cache there
+// hangs off the frame, and a worker has none. Not a measured divergence --
+// nothing here has looked at a worker's `navigator.languages`.
+pub fn getLanguages(_: *const WorkerNavigator, exec: *const Execution) !js.FrozenArray([]const u8) {
+    return .{ .items = try Navigator.parseLanguages(exec.call_arena, exec.session.browser.http_client.getLanguages()) };
 }
 
 pub fn getOnLine(self: *const WorkerNavigator) bool {

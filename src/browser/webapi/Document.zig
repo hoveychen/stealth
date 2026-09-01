@@ -495,26 +495,37 @@ pub fn getElementById(self: *Document, id: []const u8, frame: *Frame) ?*Element 
     return null;
 }
 
-pub fn getElementsByTagName(self: *Document, tag_name: []const u8, frame: *Frame) !Node.GetElementsByTagNameResult {
+pub fn getElementsByTagName(self: *Document, tag_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     return self.asNode().getElementsByTagName(tag_name, frame);
 }
 
-pub fn getElementsByTagNameNS(self: *Document, namespace: ?[]const u8, local_name: []const u8, frame: *Frame) !collections.NodeLive(.tag_name_ns) {
+pub fn getElementsByTagNameNS(self: *Document, namespace: ?[]const u8, local_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     return self.asNode().getElementsByTagNameNS(namespace, local_name, frame);
 }
 
-pub fn getElementsByClassName(self: *Document, class_name: []const u8, frame: *Frame) !collections.NodeLive(.class_name) {
+pub fn getElementsByClassName(self: *Document, class_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     return self.asNode().getElementsByClassName(class_name, frame);
 }
 
-pub fn getElementsByName(self: *Document, name: []const u8, frame: *Frame) !collections.NodeLive(.name) {
-    const arena = frame.arena;
-    const filter = try arena.dupe(u8, name);
-    return collections.NodeLive(.name).init(self.asNode(), filter, frame);
+pub fn getElementsByName(self: *Document, name: []const u8, frame: *Frame) !*collections.NodeList {
+    const root = self.asNode();
+    const key: collections.identity.Key = .{ .root = root, .kind = .by_name, .name = name };
+    if (collections.identity.find(frame, collections.NodeList, key)) |cached| {
+        return cached;
+    }
+    const filter = try frame.arena.dupe(u8, name);
+    return collections.identity.put(frame, key, try frame._factory.create(collections.NodeList{
+        ._data = .{ .name = collections.NodeLive(.name).init(root, filter, frame) },
+    }));
 }
 
-pub fn getChildren(self: *Document, frame: *Frame) !collections.NodeLive(.child_elements) {
-    return collections.NodeLive(.child_elements).init(self.asNode(), {}, frame);
+pub fn getChildren(self: *Document, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .children, .name = "" },
+        collections.NodeLive(.child_elements).init(root, {}, frame).htmlCollectionValue(),
+    );
 }
 
 /// What `document.myForm` reaches. An iframe's name reaches its window rather
@@ -1492,32 +1503,70 @@ pub fn setTitle(self: *Document, title: []const u8, frame: *Frame) !void {
     _ = try head.asNode().appendChild(title_node, frame);
 }
 
-pub fn getImages(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
-    return collections.NodeLive(.tag).init(self.asNode(), .img, frame);
+pub fn getImages(self: *Document, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .images, .name = "" },
+        collections.NodeLive(.tag).init(root, .img, frame).htmlCollectionValue(),
+    );
 }
 
-pub fn getScripts(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
-    return collections.NodeLive(.tag).init(self.asNode(), .script, frame);
+pub fn getScripts(self: *Document, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .scripts, .name = "" },
+        collections.NodeLive(.tag).init(root, .script, frame).htmlCollectionValue(),
+    );
 }
 
-pub fn getLinks(self: *Document, frame: *Frame) !collections.NodeLive(.links) {
-    return collections.NodeLive(.links).init(self.asNode(), {}, frame);
+pub fn getLinks(self: *Document, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .links, .name = "" },
+        collections.NodeLive(.links).init(root, {}, frame).htmlCollectionValue(),
+    );
 }
 
-pub fn getAnchors(self: *Document, frame: *Frame) !collections.NodeLive(.anchors) {
-    return collections.NodeLive(.anchors).init(self.asNode(), {}, frame);
+pub fn getAnchors(self: *Document, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .anchors, .name = "" },
+        collections.NodeLive(.anchors).init(root, {}, frame).htmlCollectionValue(),
+    );
 }
 
-pub fn getForms(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
-    return collections.NodeLive(.tag).init(self.asNode(), .form, frame);
+pub fn getForms(self: *Document, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .forms, .name = "" },
+        collections.NodeLive(.tag).init(root, .form, frame).htmlCollectionValue(),
+    );
 }
 
-pub fn getEmbeds(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
-    return collections.NodeLive(.tag).init(self.asNode(), .embed, frame);
+// `document.plugins` is bound to this too, because the HTML spec says it "must
+// return the same object as that returned by the embeds IDL attribute" -- one
+// kind, so one cache entry, and the two names answer the same object (measured
+// on Chrome 151).
+pub fn getEmbeds(self: *Document, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .embeds, .name = "" },
+        collections.NodeLive(.tag).init(root, .embed, frame).htmlCollectionValue(),
+    );
 }
 
-pub fn getApplets(_: *const Document, frame: *Frame) !*collections.HTMLCollection {
-    return frame._factory.create(collections.HTMLCollection{ ._data = .empty });
+pub fn getApplets(self: *Document, frame: *Frame) !*collections.HTMLCollection {
+    return collections.identity.get(
+        frame,
+        .{ .root = self.asNode(), .kind = .applets, .name = "" },
+        collections.HTMLCollection{ ._data = .empty },
+    );
 }
 
 pub fn getCurrentScript(self: *const Document) ?*Element.Html.Script {
@@ -1537,7 +1586,12 @@ pub fn setDir(self: *Document, value: []const u8, frame: *Frame) !void {
 }
 
 pub fn getAll(self: *Document, frame: *Frame) !*collections.HTMLAllCollection {
-    return frame._factory.create(collections.HTMLAllCollection.init(self.asNode(), frame));
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .all, .name = "" },
+        collections.HTMLAllCollection.init(root, frame),
+    );
 }
 
 // We do not retain the XML declaration a document was parsed from, so this is

@@ -102,8 +102,13 @@ pub fn querySelectorAll(self: *DocumentFragment, input: []const u8, frame: *Fram
         Selector.failToDOM(err, input, "querySelectorAll", "DocumentFragment", frame);
 }
 
-pub fn getChildren(self: *DocumentFragment, frame: *Frame) !collections.NodeLive(.child_elements) {
-    return collections.NodeLive(.child_elements).init(self.asNode(), {}, frame);
+pub fn getChildren(self: *DocumentFragment, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .children, .name = "" },
+        collections.NodeLive(.child_elements).init(root, {}, frame).htmlCollectionValue(),
+    );
 }
 
 pub fn firstElementChild(self: *DocumentFragment) ?*Element {

@@ -7,6 +7,7 @@ const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
 const reflection = @import("../reflection.zig");
+const collections = @import("../../collections.zig");
 
 const Progress = @This();
 
@@ -22,7 +23,7 @@ pub fn asNode(self: *Progress) *Node {
     return self.asElement().asNode();
 }
 
-pub fn getLabels(self: *Progress, frame: *Frame) !js.Array {
+pub fn getLabels(self: *Progress, frame: *Frame) !*collections.NodeList {
     return @import("Label.zig").getControlLabels(self.asElement(), frame);
 }
 

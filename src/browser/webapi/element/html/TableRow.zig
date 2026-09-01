@@ -23,8 +23,13 @@ pub fn asNode(self: *TableRow) *Node {
     return self.asElement().asNode();
 }
 
-pub fn getCells(self: *TableRow, frame: *Frame) collections.NodeLive(.cells) {
-    return collections.NodeLive(.cells).init(self.asNode(), {}, frame);
+pub fn getCells(self: *TableRow, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .row_cells, .name = "" },
+        collections.NodeLive(.cells).init(root, {}, frame).htmlCollectionValue(),
+    );
 }
 
 pub fn insertCell(self: *TableRow, index_: ?i32, frame: *Frame) !*Node {
@@ -38,7 +43,7 @@ pub fn deleteCell(self: *TableRow, index: i32, frame: *Frame) !void {
     if (index < -1) {
         return error.IndexSizeError;
     }
-    var cells = self.getCells(frame);
+    const cells = try self.getCells(frame);
     const len: i32 = @intCast(cells.length(frame));
     const at = if (index == -1) len - 1 else index;
     if (at < 0 or at >= len) {

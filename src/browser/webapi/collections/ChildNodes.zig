@@ -51,7 +51,7 @@ pub fn init(node: *Node, frame: *Frame) !*ChildNodes {
         ._last_index = 0,
         ._last_node = null,
         ._last_length = null,
-        ._cached_version = frame._page.dom_version,
+        ._cached_version = frame._page.liveVersion(),
     };
     return self;
 }
@@ -118,7 +118,12 @@ pub fn entries(self: *ChildNodes, frame: *Frame) !*EntryIterator {
 }
 
 fn versionCheck(self: *ChildNodes, frame: *const Frame) bool {
-    const current = frame._page.dom_version;
+    // `liveVersion`, not `dom_version`: this list is cached per node and so
+    // outlives the parse, and the parser does not move `dom_version`. Keyed on
+    // that alone, a `childNodes` an early inline script reads reports the same
+    // length for the rest of the page -- Chrome 151 says 9 where we said 3
+    // (collections/parse_liveness.html).
+    const current = frame._page.liveVersion();
     if (current == self._cached_version) {
         return true;
     }

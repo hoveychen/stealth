@@ -1620,8 +1620,13 @@ pub fn blur(self: *Element, frame: *Frame) !void {
     try frame._event_manager.dispatch(old_target, focusout_event.asEvent());
 }
 
-pub fn getChildren(self: *Element, frame: *Frame) !collections.NodeLive(.child_elements) {
-    return collections.NodeLive(.child_elements).init(self.asNode(), {}, frame);
+pub fn getChildren(self: *Element, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .children, .name = "" },
+        collections.NodeLive(.child_elements).init(root, {}, frame).htmlCollectionValue(),
+    );
 }
 
 pub fn append(self: *Element, nodes: []const Node.NodeOrText, frame: *Frame) !void {
@@ -1846,6 +1851,91 @@ fn isCollapsibleWhitespace(str: []const u8) bool {
     return true;
 }
 
+/// A run of text measured the way a COLLAPSING `white-space` renders it: every
+/// run of document white space is one space, and a run at either end is nothing
+/// at all. Measured on Chrome 151 in css/../element/text_whitespace_collapse.html:
+/// `a   b` is three characters wide and not five, `   ab` is two, and a box
+/// holding nothing but spaces has no line and no size.
+///
+/// The state is a field rather than a local because the run spans the text
+/// nodes: `a ` and ` b` in two nodes are one space between two words, and `ab`
+/// and `cd` are one word. So is an inline child -- `a <b>x</b> c` renders three
+/// words -- which is what `box` is for.
+///
+/// `differs` is the reason this measures rather than rewrites: asking
+/// `white-space` what it wants costs a cascade read, and the answer only
+/// matters when the two renderings are not the same string. Text with single
+/// spaces between its words and none at either end -- which is most of the text
+/// on most pages -- measures identically either way and never asks.
+const CollapsedRun = struct {
+    /// Whether anything has been rendered yet, so a leading run drops.
+    emitted: bool = false,
+    /// Whether a run of white space is waiting to become a space. It becomes one
+    /// only when something follows it, which is what drops a trailing run.
+    pending: bool = false,
+    /// Whether the collapsed rendering is anything other than the bytes as
+    /// written.
+    seen_difference: bool = false,
+
+    /// One text node's contribution to the run's width, in `family` at `size`.
+    fn measure(self: *CollapsedRun, str: []const u8, family: font_metrics.Family, size: f64) f64 {
+        var width: f64 = 0;
+        var i: usize = 0;
+        while (i < str.len) {
+            if (std.mem.indexOfScalar(u8, css_whitespace, str[i]) != null) {
+                // Anything but one plain space between two words renders
+                // differently: a second one in a row, one before anything has
+                // been rendered, and a tab or a newline, neither of which
+                // advances the way the space it becomes does.
+                if (self.pending or !self.emitted or str[i] != ' ') self.seen_difference = true;
+                self.pending = true;
+                i += 1;
+                continue;
+            }
+            const start = i;
+            while (i < str.len and std.mem.indexOfScalar(u8, css_whitespace, str[i]) == null) i += 1;
+            width += self.open(family, size);
+            // Advances are additive and nothing here kerns (see text_measure),
+            // so measuring the words and the spaces apart sums to measuring the
+            // rendered string -- which is why a run that collapses to itself
+            // comes out bit-identical to the one-call measurement it replaced.
+            width += text_measure.measure(family, str[start..i], size).width;
+        }
+        return width;
+    }
+
+    /// A box on the line -- an inline child, which brings its own width -- is
+    /// rendered content: a run before it is a space, and a run after it is not a
+    /// leading one. Returns the width of that space, in the run's own font
+    /// rather than the box's.
+    fn box(self: *CollapsedRun, family: font_metrics.Family, size: f64) f64 {
+        return self.open(family, size);
+    }
+
+    /// The white space owed in front of whatever is about to be rendered.
+    fn open(self: *CollapsedRun, family: font_metrics.Family, size: f64) f64 {
+        defer {
+            self.pending = false;
+            self.emitted = true;
+        }
+        if (!self.pending or !self.emitted) return 0;
+        return text_measure.measure(family, " ", size).width;
+    }
+
+    /// Whether the run rendered anything at all: text that is all white space
+    /// collapses away, and a box with no line has no height either.
+    fn rendered(self: *const CollapsedRun) bool {
+        return self.emitted;
+    }
+
+    /// Whether the collapsed rendering differs from the bytes as written, so the
+    /// caller has to ask `white-space` which of the two it wants. Asked at the
+    /// end, because a run still pending is a trailing one and it drops.
+    fn differs(self: *const CollapsedRun) bool {
+        return self.seen_difference or self.pending;
+    }
+};
+
 /// How an element's inline content lays out, or null when the element is not
 /// one whose box its own content decides — a block-level child means the box is
 /// a stack of child boxes and contentHeight owns it, and no content at all means
@@ -1902,18 +1992,32 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
     // preserve, no inline box carrying text of its own, and a width that fits.
     if (!scan.has_break and !scan.has_newline and !scan.has_inline_child) {
         var width: f64 = 0;
+        // Whether the shortcut can answer at all. It measures the COLLAPSED
+        // rendering, which is what every value but the preserving three shows;
+        // a preserved run keeps its spaces and sends a tab to the next stop,
+        // and the flow below is where that lives.
+        var shortcut = true;
         if (measure_width or available != null) {
+            var run: CollapsedRun = .{};
             var child = self.asNode().firstChild();
             while (child) |node| : (child = node.nextSibling()) {
                 if (node.is(CData.Text)) |text| {
+                    const str = Factory.protoOf(text)._data.str();
                     // Each text node meets the grid on its own -- see
                     // textAdvanceUnit, where the two-node cases that say so are.
-                    width += textAdvanceUnit(text_measure.measure(font.family, Factory.protoOf(text)._data.str(), font.size).width);
+                    width += textAdvanceUnit(run.measure(str, font.family, font.size));
                 }
             }
+            // Text already in its collapsed form -- single spaces between the
+            // words and none at either end, which is most text -- renders the
+            // same either way, so the cascade read below is paid for only by the
+            // boxes whose answer it can change.
+            shortcut = !run.differs() or !CSSStyleDeclaration.preservesWhitespace(self, frame);
         }
-        const box = available orelse return .{ .width = width, .height = strut.above + strut.below };
-        if (width <= box) return .{ .width = width, .height = strut.above + strut.below };
+        if (shortcut) {
+            const box = available orelse return .{ .width = width, .height = strut.above + strut.below };
+            if (width <= box) return .{ .width = width, .height = strut.above + strut.below };
+        }
     }
 
     // The width is on the grid already -- each text node met it as it was
@@ -1923,6 +2027,7 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
     // readings round it, which is what Chrome does too.
     var flow: LineFlow = .{
         .keeps_newlines = CSSStyleDeclaration.preservesNewlines(self, frame),
+        .collapses = !CSSStyleDeclaration.preservesWhitespace(self, frame),
         .wraps = available != null and CSSStyleDeclaration.wrapsText(self, frame),
         .box = available orelse 0,
         .space = text_measure.measure(font.family, " ", font.size).width,
@@ -1935,7 +2040,8 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
         .measure_width = measure_width or available != null,
     };
     self.flowInline(frame, &flow, font.family, font.size, 0);
-    return .{ .width = flow.width, .height = flow.finish() };
+    const height = flow.finish();
+    return .{ .width = flow.width, .height = height };
 }
 
 /// What one walk over an element's children says about laying its content out
@@ -2071,13 +2177,11 @@ fn flowInline(self: *Element, frame: *Frame, flow: *LineFlow, family: font_metri
             continue;
         }
         const text = node.is(CData.Text) orelse continue;
-        const str = Factory.protoOf(text)._data.str();
-        if (flow.measure_width and str.len > 0) {
-            // Each text node meets the grid on its own -- see textAdvanceUnit,
-            // where the two-node cases that say so are.
-            flow.width += textAdvanceUnit(text_measure.measure(family, str, size).width);
-        }
-        flow.addText(str, family, size);
+        // The width is the widest LINE, which addText builds as it places the
+        // words. It used to be the sum of the text nodes as written, which
+        // counted a run of spaces once per character and counted the two sides
+        // of a hard break as one line.
+        flow.addText(Factory.protoOf(text)._data.str(), family, size);
     }
 }
 
@@ -2100,6 +2204,12 @@ fn flowInline(self: *Element, frame: *Frame, flow: *LineFlow, family: font_metri
 /// two lines and `a\n\nb` is three.
 const LineFlow = struct {
     keeps_newlines: bool,
+    /// Whether a run of document white space renders as one space. It is what
+    /// the words this places are already built for -- addText has always joined
+    /// them with exactly one space -- so it only decides where the WIDTH comes
+    /// from: the widest line when it collapses, and the sum of the text as
+    /// written when it does not. See flowInline.
+    collapses: bool = true,
     wraps: bool,
     box: f64,
     space: f64,
@@ -2177,9 +2287,35 @@ const LineFlow = struct {
         var i: usize = 0;
         while (i < str.len) {
             if (std.mem.indexOfScalar(u8, css_whitespace, str[i]) != null) {
-                const newline = str[i] == '\n' or str[i] == '\r';
+                // Only a line feed is a segment break. A carriage return is
+                // not: `a\rb` is ONE line in Chrome under `pre` -- and two
+                // characters wide, because a preserved CR renders nothing --
+                // where `a\r\nb` is two lines, which is the line feed in it and
+                // not the pair. The parser normalises CRLF in a source document
+                // before it is ever a text node; a CR that reaches one came from
+                // script or from a character reference, and this is what Chrome
+                // does with it. Measured, scratch/b84/expr-b84-cr.js.
+                const newline = str[i] == '\n';
                 self.placeWord();
-                if (newline and self.keeps_newlines) self.endSegment();
+                if (newline and self.keeps_newlines) {
+                    self.endSegment();
+                } else if (!self.collapses) {
+                    // Preserved white space is rendered, so it takes room of its
+                    // own on the line rather than being the gap placeWord adds
+                    // between two words. A space is its advance; a tab is the
+                    // distance to the next stop on the eight-character grid,
+                    // and it always moves -- `a\tb` is nine characters wide in
+                    // Chrome, `\tb` is nine as well, and `aaaaaaaaa\tb`, already
+                    // past the first stop, is seventeen.
+                    self.placed = switch (str[i]) {
+                        '\t' => tabStop(self.placed, self.space),
+                        // Preserved, and rendered as nothing at all.
+                        '\r' => self.placed,
+                        else => self.placed + self.space,
+                    };
+                    self.segment_has_word = true;
+                    self.any = true;
+                }
                 i += 1;
                 continue;
             }
@@ -2221,15 +2357,50 @@ const LineFlow = struct {
         self.any = true;
     }
 
+    /// A box that shares the line with the text around it rather than being a
+    /// line of its own -- an inline child, measured whole by its own walk. It
+    /// joins the WORD, so `a<span>b</span>` is one word and `a <span>b</span>`
+    /// is two with one space between them, which is exactly what a word split
+    /// across two text nodes already does.
+    ///
+    /// A box of no width is not content: an empty <span> between two words must
+    /// leave ONE space, not two.
+    fn addBox(self: *LineFlow, width: f64) void {
+        if (width <= 0) return;
+        self.raise();
+        self.word += width;
+        self.have_word = true;
+    }
+
     fn newLine(self: *LineFlow) void {
+        self.recordWidth();
         self.total += self.line_above + self.line_below;
         self.line_above = @max(self.strut_above, self.open_above);
         self.line_below = @max(self.strut_below, self.open_below);
     }
 
+    /// The line that is ending is a candidate for the box's width, which is the
+    /// widest of them: a box holding `a\nbb` under a preserved newline is two
+    /// characters wide and not three, and one holding `a   b` is three and not
+    /// five. Called wherever a line ends -- a wrap, a hard break, the last one.
+    ///
+    /// On the grid once per line rather than once per text node, because a line
+    /// is what is being measured here; the difference between the two is a
+    /// 128th of a pixel and every integer reading rounds it away.
+    fn recordWidth(self: *LineFlow) void {
+        if (!self.measure_width) return;
+        const line = textAdvanceUnit(self.placed);
+        if (line > self.width) self.width = line;
+    }
+
     fn placeWord(self: *LineFlow) void {
         if (!self.have_word) return;
-        const joined = if (self.placed > 0) self.placed + self.space + self.word else self.word;
+        // A collapsing run joins its words with exactly one space, which is the
+        // whole of what collapsing a run of them means. A preserving one has
+        // already placed the space it had, and adding another would count it
+        // twice.
+        const gap = if (self.collapses and self.placed > 0) self.space else 0;
+        const joined = self.placed + gap + self.word;
         // The break goes BEFORE the word that does not fit, and never inside one:
         // a word wider than the whole box overflows instead, which is why
         // twenty-four `a` in a 50px box is one line in Chrome and not four.
@@ -2254,6 +2425,7 @@ const LineFlow = struct {
 
     fn finish(self: *LineFlow) f64 {
         self.placeWord();
+        self.recordWidth();
         // The last segment counts unless it is empty -- and an empty FIRST
         // segment still counts, because a box holding one preserved space is a
         // line.
@@ -2370,16 +2542,28 @@ pub fn minContentWidth(self: *Element, frame: *Frame) ?f64 {
 /// </span>` is 32 wide (its own text plus the child's), and a <span> holding a
 /// <div> is 1904 -- the block escapes the inline and fills the block container,
 /// which is what containingBlock walks up to find.
-fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) struct { width: f64, height: f64 } {
+/// What an inline box's own content occupies: the two ways of arriving at it --
+/// a sum of the text and a stack of lines -- answer in the same shape.
+const InkBox = struct { width: f64, height: f64 };
+
+fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) InkBox {
     // The same backstop the containing-block walk has. A chain of inline
     // elements is measured one level at a time, and this is what stops a page
     // that nests them beyond anything real from walking forever.
     if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return .{ .width = 0, .height = 0 };
 
+    if (self.inlineNeedsLines()) return self.inlineInkLines(frame, depth, containing);
+
     var width: f64 = 0;
     var height: f64 = 0;
     var text_width: f64 = 0;
     var has_text = false;
+    // The collapsed rendering of the same text, kept beside the written one for
+    // the reason textLayout's walk keeps both: which of the two an inline box
+    // shows is a cascade read, and the read is worth paying for only where the
+    // two disagree. An inline box is where `a   b` was five characters wide.
+    var collapsed_width: f64 = 0;
+    var run: CollapsedRun = .{};
 
     const font = self.resolveFont(frame);
     var visibility_cache: VisibilityCache = .{};
@@ -2392,6 +2576,7 @@ fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) struct
             // Per text node, the same as textLayout's walk -- see
             // textAdvanceUnit.
             text_width += textAdvanceUnit(text_measure.measure(font.family, str, font.size).width);
+            collapsed_width += textAdvanceUnit(run.measure(str, font.family, font.size));
             continue;
         }
         if (node.is(Element)) |el| {
@@ -2415,9 +2600,23 @@ fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) struct
             // never came back, and a real page's did not either -- it took the
             // engine out with a SIGBUS mid-sweep.
             const box = el.dimensionsAt(frame, true, depth + 1, true);
-            width += box.width + box.padding_x + box.border_x;
+            const outer = box.width + box.padding_x + box.border_x;
+            width += outer;
             height = @max(height, box.height + box.padding_y + box.border_y);
+            // A child that renders something is content the run either side of
+            // it is measured against: `a <b>x</b> c` is three words with two
+            // spaces. One that renders nothing is not, and must not eat the
+            // space beside it -- an empty <span> between two words leaves ONE.
+            if (outer > 0) collapsed_width += textAdvanceUnit(run.box(font.family, font.size));
         }
+    }
+
+    // Text that collapses away entirely leaves no line, so the box has no
+    // height either: a <span> holding three spaces is 0x0 in Chrome and this
+    // engine made it a full line of three characters.
+    if (run.differs() and !CSSStyleDeclaration.preservesWhitespace(self, frame)) {
+        text_width = collapsed_width;
+        has_text = has_text and run.rendered();
     }
 
     width += text_width;
@@ -2433,6 +2632,111 @@ fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) struct
         height = @max(height, font_metrics.lineBox(font.family, font.size));
     }
     return .{ .width = width, .height = height };
+}
+
+/// Whether an inline box's own content can make more than one line, or hold a
+/// tab, so the sum above is not enough and the line model has to be set up.
+///
+/// Asked in the BYTES, before anything costs a cascade read: a <br>, a newline
+/// and a tab are all rare in inline content, and the two reads
+/// `inlineInkLines` needs to resolve them are the expensive half of laying a
+/// page out. A newline is asked for even where it will collapse to a space,
+/// because whether it does is one of those two reads.
+///
+/// It does not look inside an inline child -- a <br> nested in one leaves this
+/// box a sum -- for the same reason the walk below measures a child whole
+/// rather than descending into it.
+fn inlineNeedsLines(self: *Element) bool {
+    var child = self.asNode().firstChild();
+    while (child) |node| : (child = node.nextSibling()) {
+        if (node.is(Element)) |el| {
+            if (el.getTag() == .br) return true;
+            continue;
+        }
+        if (node.is(CData.Text)) |text| {
+            const str = Factory.protoOf(text)._data.str();
+            if (std.mem.indexOfAny(u8, str, "\n\r\t") != null) return true;
+        }
+    }
+    return false;
+}
+
+/// The same ink, built as LINES rather than summed, for the inline boxes whose
+/// content can make more than one of them.
+///
+/// The line rules are flowInline's -- one more line than there are breaks, less
+/// one when the content ends with a break, and the box as wide as its widest
+/// line -- so this sets up that flow rather than restating them. Measured on
+/// Chrome 151 in element/text_whitespace_collapse.html: a <span> holding
+/// `a\nb` under `pre` is 43x168 where this engine made it one 130x84 line, and
+/// one holding `a<br>bb` is 87x168 under every value of `white-space`.
+///
+/// The strut is the font's own line box rather than lineBoxHalves, for the
+/// reason the sum path's comment gives: an inline box ignores a declared
+/// line-height. All of it above the baseline and none below, because only the
+/// total a line is worth is read back out.
+fn inlineInkLines(self: *Element, frame: *Frame, depth: u8, containing: *?f64) InkBox {
+    const font = self.resolveFont(frame);
+    const line_box = font_metrics.lineBox(font.family, font.size);
+    var flow: LineFlow = .{
+        .keeps_newlines = CSSStyleDeclaration.preservesNewlines(self, frame),
+        .collapses = !CSSStyleDeclaration.preservesWhitespace(self, frame),
+        // An inline box has no box to wrap in: it is as wide as its content
+        // makes it, and a line ends here only where something ends it.
+        .wraps = false,
+        .box = 0,
+        .space = text_measure.measure(font.family, " ", font.size).width,
+        .strut_above = line_box,
+        .strut_below = 0,
+        .open_above = line_box,
+        .open_below = 0,
+        .line_above = line_box,
+        .line_below = 0,
+        .measure_width = true,
+    };
+
+    var width: f64 = 0;
+    var height: f64 = 0;
+    var visibility_cache: VisibilityCache = .{};
+    var child = self.asNode().firstChild();
+    while (child) |node| : (child = node.nextSibling()) {
+        if (node.is(CData.Text)) |text| {
+            flow.addText(Factory.protoOf(text)._data.str(), font.family, font.size);
+            continue;
+        }
+        if (node.is(Element)) |el| {
+            // A <br> ends the line it is on, whatever `white-space` says about
+            // newlines -- the same order flowInline asks these in.
+            if (el.getTag() == .br) {
+                flow.placeWord();
+                flow.endSegment();
+                continue;
+            }
+            if (!el.checkVisibilityCached(&visibility_cache, frame)) continue;
+            // A block-level child breaks the inline in two and the box it
+            // leaves behind spans the whole line -- see the sum path.
+            if (CSSStyleDeclaration.breaksInline(el, frame)) {
+                const box = el.dimensionsAt(frame, true, depth + 1, true);
+                height = @max(height, box.height + box.padding_y + box.border_y);
+                if (CSSStyleDeclaration.containingWidth(self, frame, containing, depth)) |line| {
+                    width = @max(width, line);
+                }
+                continue;
+            }
+            // ONE measurement per child, carrying the depth down -- see the sum
+            // path, where what happens without that is written down.
+            const box = el.dimensionsAt(frame, true, depth + 1, true);
+            flow.addBox(box.width + box.padding_x + box.border_x);
+            height = @max(height, box.height + box.padding_y + box.border_y);
+        }
+    }
+
+    // Before the width: the last line is only recorded once the flow is
+    // finished, and a box whose content all collapsed away has no line and so no
+    // height of its own.
+    const lines = flow.finish();
+    if (flow.hasContent()) height = @max(height, lines);
+    return .{ .width = @max(width, flow.width), .height = height };
 }
 
 /// Chrome draws a broken-image icon in place of an <img> whose bytes never
@@ -2634,6 +2938,19 @@ pub fn layoutUnit(px: f64) f64 {
 /// `clientWidth` and `scrollWidth` are `round()` of the box in Chrome too, and
 /// they already were here, so keeping the fraction in the box is what makes both
 /// halves right at once -- 693.28125 rounds to 693 and 7101.5625 to 7102.
+/// Where a preserved tab lands: the next stop on a grid eight spaces wide,
+/// measured from the start of the line. A tab always moves, so one that is
+/// already on a stop walks a whole eight. Measured on Chrome 151 in
+/// element/text_whitespace_collapse.html, in 72px monospace, where `a\tb` is
+/// nine characters wide, `\tb` is nine as well, `a\t\tb` is seventeen and
+/// `aaaaaaaaa\tb` -- nine characters in, so already past the first stop -- is
+/// seventeen too.
+fn tabStop(from: f64, space: f64) f64 {
+    const stop = space * 8;
+    if (stop <= 0) return from;
+    return (@floor(from / stop) + 1) * stop;
+}
+
 pub fn textAdvanceUnit(px: f64) f64 {
     const narrowed: f64 = @as(f32, @floatCast(px));
     return @ceil(narrowed * LAYOUT_GRID_STEPS) / LAYOUT_GRID_STEPS;
@@ -4708,15 +5025,15 @@ fn calculateSiblingPosition(node: *Node) f64 {
     return position * 5.0; // 5px per node
 }
 
-pub fn getElementsByTagName(self: *Element, tag_name: []const u8, frame: *Frame) !Node.GetElementsByTagNameResult {
+pub fn getElementsByTagName(self: *Element, tag_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     return self.asNode().getElementsByTagName(tag_name, frame);
 }
 
-pub fn getElementsByTagNameNS(self: *Element, namespace: ?[]const u8, local_name: []const u8, frame: *Frame) !collections.NodeLive(.tag_name_ns) {
+pub fn getElementsByTagNameNS(self: *Element, namespace: ?[]const u8, local_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     return self.asNode().getElementsByTagNameNS(namespace, local_name, frame);
 }
 
-pub fn getElementsByClassName(self: *Element, class_name: []const u8, frame: *Frame) !collections.NodeLive(.class_name) {
+pub fn getElementsByClassName(self: *Element, class_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     return self.asNode().getElementsByClassName(class_name, frame);
 }
 

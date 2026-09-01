@@ -1483,22 +1483,27 @@ fn _normalize(self: *Node, allocator: Allocator, buffer: *std.ArrayList(u8), fra
     }
 }
 
-pub const GetElementsByTagNameResult = union(enum) {
-    tag: collections.NodeLive(.tag),
-    tag_name: collections.NodeLive(.tag_name),
-    all_elements: collections.NodeLive(.all_elements),
-};
-// Not exposed in the WebAPI, but used by both Element and Document
-pub fn getElementsByTagName(self: *Node, tag_name: []const u8, frame: *Frame) !GetElementsByTagNameResult {
+// Not exposed in the WebAPI, but used by both Element and Document.
+//
+// One object per (root, name-as-written), because that is what a browser hands
+// back: `getElementsByTagName('div')` twice is the same collection there, and
+// `('DIV')` is a different one. The lookup comes before the parsing so a repeat
+// call also skips the arena copies below -- see collections/identity.zig.
+pub fn getElementsByTagName(self: *Node, tag_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     if (tag_name.len > 256) {
         // 256 seems generous.
         return error.InvalidTagName;
     }
 
+    const key: collections.identity.Key = .{ .root = self, .kind = .by_tag_name, .name = tag_name };
+    if (collections.identity.find(frame, collections.HTMLCollection, key)) |cached| {
+        return cached;
+    }
+
     if (std.mem.eql(u8, tag_name, "*")) {
-        return .{
-            .all_elements = collections.NodeLive(.all_elements).init(self, {}, frame),
-        };
+        return collections.identity.put(frame, key, try frame._factory.create(
+            collections.NodeLive(.all_elements).init(self, {}, frame).htmlCollectionValue(),
+        ));
     }
 
     const arena = frame.arena;
@@ -1515,32 +1520,45 @@ pub fn getElementsByTagName(self: *Node, tag_name: []const u8, frame: *Frame) !G
         // local one points into that local.
         const written = try arena.dupe(u8, tag_name);
         const colon = std.mem.indexOfScalar(u8, written, ':');
-        return .{ .tag_name = collections.NodeLive(.tag_name).init(self, .{
-            .name = try String.init(arena, written, .{}),
-            .qualified = .{
-                .prefix = if (colon) |pos| written[0..pos] else null,
-                .local = if (colon) |pos| written[pos + 1 ..] else written,
-                .frame = frame,
-            },
-        }, frame) };
+        return collections.identity.put(frame, key, try frame._factory.create(
+            collections.NodeLive(.tag_name).init(self, .{
+                .name = try String.init(arena, written, .{}),
+                .qualified = .{
+                    .prefix = if (colon) |pos| written[0..pos] else null,
+                    .local = if (colon) |pos| written[pos + 1 ..] else written,
+                    .frame = frame,
+                },
+            }, frame).htmlCollectionValue(),
+        ));
     }
 
     const lower = std.ascii.lowerString(&frame.buf, tag_name);
     if (Node.Element.Tag.parseForMatch(lower)) |known| {
         // optimized for known tag names, comparis
-        return .{
-            .tag = collections.NodeLive(.tag).init(self, known, frame),
-        };
+        return collections.identity.put(frame, key, try frame._factory.create(
+            collections.NodeLive(.tag).init(self, known, frame).htmlCollectionValue(),
+        ));
     }
 
     const filter = try String.init(arena, tag_name, .{});
-    return .{ .tag_name = collections.NodeLive(.tag_name).init(self, .{ .name = filter }, frame) };
+    return collections.identity.put(frame, key, try frame._factory.create(
+        collections.NodeLive(.tag_name).init(self, .{ .name = filter }, frame).htmlCollectionValue(),
+    ));
 }
 
 // Not exposed in the WebAPI, but used by both Element and Document
-pub fn getElementsByTagNameNS(self: *Node, namespace: ?[]const u8, local_name: []const u8, frame: *Frame) !collections.NodeLive(.tag_name_ns) {
+pub fn getElementsByTagNameNS(self: *Node, namespace: ?[]const u8, local_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
     if (local_name.len > 256) {
         return error.InvalidTagName;
+    }
+
+    const key: collections.identity.Key = .{
+        .root = self,
+        .kind = .by_tag_name_ns,
+        .name = try collections.identity.namespacedName(frame, namespace, local_name),
+    };
+    if (collections.identity.find(frame, collections.HTMLCollection, key)) |cached| {
+        return cached;
     }
 
     // Parse namespace - "*" means wildcard (null), null means Element.Namespace.null
@@ -1549,14 +1567,23 @@ pub fn getElementsByTagNameNS(self: *Node, namespace: ?[]const u8, local_name: [
     else
         Element.Namespace.null;
 
-    return collections.NodeLive(.tag_name_ns).init(self, .{
-        .namespace = ns,
-        .local_name = try String.init(frame.arena, local_name, .{}),
-    }, frame);
+    return collections.identity.put(frame, key, try frame._factory.create(
+        collections.NodeLive(.tag_name_ns).init(self, .{
+            .namespace = ns,
+            .local_name = try String.init(frame.arena, local_name, .{}),
+        }, frame).htmlCollectionValue(),
+    ));
 }
 
 // Not exposed in the WebAPI, but used by both Element and Document
-pub fn getElementsByClassName(self: *Node, class_name: []const u8, frame: *Frame) !collections.NodeLive(.class_name) {
+pub fn getElementsByClassName(self: *Node, class_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
+    // Keyed by the argument as written, not by the parsed name list: `'cc'` and
+    // `' cc '` match the same elements but are two collections in Chrome.
+    const key: collections.identity.Key = .{ .root = self, .kind = .by_class_name, .name = class_name };
+    if (collections.identity.find(frame, collections.HTMLCollection, key)) |cached| {
+        return cached;
+    }
+
     const arena = frame.arena;
 
     // Parse space-separated class names
@@ -1567,10 +1594,12 @@ pub fn getElementsByClassName(self: *Node, class_name: []const u8, frame: *Frame
     }
 
     const quirks = if (self.ownerDocumentIncludingSelf(frame)) |doc| doc.isQuirksMode() else false;
-    return collections.NodeLive(.class_name).init(self, .{
-        .names = class_names.items,
-        .case_insensitive = quirks,
-    }, frame);
+    return collections.identity.put(frame, key, try frame._factory.create(
+        collections.NodeLive(.class_name).init(self, .{
+            .names = class_names.items,
+            .case_insensitive = quirks,
+        }, frame).htmlCollectionValue(),
+    ));
 }
 
 // ParentNode.append/prepend with several nodes convert them into a fragment

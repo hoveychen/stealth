@@ -45,6 +45,8 @@ const EventTarget = @import("webapi/EventTarget.zig");
 const Element = @import("webapi/Element.zig");
 const HtmlElement = @import("webapi/element/Html.zig");
 const ElementInternals = @import("webapi/element/ElementInternals.zig");
+const collection_identity = @import("webapi/collections/identity.zig");
+const Navigator = @import("webapi/Navigator.zig");
 const Image = @import("webapi/element/html/Image.zig");
 // Geometry parsers, shared with ImageDecoder: an `<img>` and a decoder read the
 // same headers, and `readSize` is the entry point that stops at the two numbers.
@@ -164,6 +166,14 @@ _element_styles: Element.StyleLookup = .empty,
 // identity is also conformance.
 _element_computed_styles: Element.ComputedStyleLookup = .empty,
 _element_datasets: Element.DatasetLookup = .empty,
+// One collection object per (root, kind, name), so `document.forms ===
+// document.forms` the way it is in a browser. The cache holds a reference to
+// each, released in deinit -- see webapi/collections/identity.zig.
+_live_collections: collection_identity.Lookup = .empty,
+// The frozen array `navigator.languages` answers, kept so that two reads are
+// the same object. Held in a global slot rather than the identity table above
+// because it is a plain JS array, not a Zig-backed collection.
+_navigator_languages: ?Navigator.LanguagesCache = null,
 _element_class_lists: Element.ClassListLookup = .empty,
 _element_rel_lists: Element.RelListLookup = .empty,
 _element_token_lists: Element.TokenListLookup = .empty,
@@ -702,6 +712,12 @@ pub fn deinit(self: *Frame) void {
         var svg_transform_lists = self._svg_animated_transform_lists.valueIterator();
         while (svg_transform_lists.next()) |list| {
             list.*.deinit(page);
+        }
+
+        collection_identity.releaseAll(self, page);
+
+        if (self._navigator_languages) |languages| {
+            languages.value.deinit();
         }
 
         var document = self.window._document;

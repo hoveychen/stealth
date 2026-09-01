@@ -29,6 +29,7 @@ const Blob = @import("../Blob.zig");
 const File = @import("../File.zig");
 
 const KeyValueList = @import("../KeyValueList.zig");
+const collections = @import("../collections.zig");
 const header_parser = @import("../../../network/header_parser.zig");
 
 const log = lp.log;
@@ -810,7 +811,10 @@ fn collectForm(arena: Allocator, form_: ?*Form, submitter_: ?*Element, frame: *F
                     break :blk opt.getValue(frame);
                 }
 
-                var options = try select.getSelectedOptions(frame);
+                // The walk itself rather than `select.selectedOptions`: that
+                // accessor now answers a cached HTMLCollection, which is
+                // indexed rather than iterated.
+                var options = collections.NodeLive(.selected_options).init(select.asNode(), {}, frame);
                 while (options.next()) |option| {
                     try appendString(&list, arena, name, option.as(Form.Select.Option).getValue(frame));
                 }

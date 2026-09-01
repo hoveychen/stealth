@@ -120,13 +120,18 @@ pub fn setMethod(self: *Form, method: []const u8, frame: *Frame) !void {
 /// probes/expr-listed-elements.js). That is not the same set the form-data
 /// algorithm walks; see `iterator`.
 pub fn getElements(self: *Form, frame: *Frame) !*collections.HTMLFormControlsCollection {
+    const key: collections.identity.Key = .{ .root = self.asNode(), .kind = .form_elements, .name = "" };
+    if (collections.identity.find(frame, collections.HTMLFormControlsCollection, key)) |cached| {
+        return cached;
+    }
+
     const node_live = self.walk(.form, frame);
     const elements = try frame._factory.chained(.{
         node_live.htmlCollectionValue(),
         collections.HTMLFormControlsCollection{ ._proto = undefined },
     });
     elements._proto._chained = .form_controls;
-    return elements;
+    return collections.identity.put(frame, key, elements);
 }
 
 /// The *submittable* elements, which is what the form-data set and the

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Every accessor that hands back a live collection is supposed to hand back the
+  *same* collection object each time. `document.forms === document.forms` is
+  true in a browser, and a page can read that without knowing anything about the
+  page it is on: one expression, no fingerprint knowledge, and the two engines
+  come apart.
+
+  Measured on Chrome 151 against this fixture (scratch/b81/identity.mjs, both
+  arms on the same http page). Everything asserted true below is true there.
+  The three `false` rows at the bottom are controls -- Chrome mints a new object
+  for those, so keeping them false is part of matching it.
+
+  How the cache has to be keyed, also measured on Chrome:
+    * by root node   -- document.getElementsByTagName('div') is not
+                        body.getElementsByTagName('div')
+    * by kind        -- document.forms is not getElementsByTagName('form'),
+                        and getElementsByTagName('cc') is not
+                        getElementsByClassName('cc')
+    * by name as written -- 'div' and 'DIV' get separate objects, and so do
+                        'cc' and ' cc '
+    * NOT by contents -- identity survives a DOM mutation
+  and the one aliasing pair the HTML spec requires: `document.plugins` must
+  return the same object as `document.embeds`.
+-->
+
+<form name="idForm" id="idFormId">
+  <input name="idField" value="v" id="idInput">
+  <select name="idSelect" id="idSelect"><option value="a" selected>a</option><option value="b">b</option></select>
+  <label for="idInput">L</label>
+</form>
+<table id="idTable"><tbody id="idTbody"><tr id="idRow"><td id="idCell">c</td><td>d</td></tr></tbody></table>
+<a id="idAnchor" href="/y">a</a>
+<img id="idImg" name="idImgName" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+<embed id="idEmbed" name="idEmbedName" type="text/plain">
+<div id="idProbe" class="cc"><span class="cc">s</span></div>
+
+<script id=document_collections>
+  {
+    // The nine parameterless collections hanging off Document.
+    const rows = ['anchors', 'applets', 'children', 'embeds', 'forms', 'images',
+                  'links', 'plugins', 'scripts', 'all']
+      .map((n) => n + '=' + (document[n] === document[n]));
+    testing.expectEqual(
+      ['anchors=true', 'applets=true', 'children=true', 'embeds=true',
+       'forms=true', 'images=true', 'links=true', 'plugins=true',
+       'scripts=true', 'all=true'].join('\n'),
+      rows.join('\n'));
+  }
+</script>
+
+<script id=element_children>
+  {
+    // ParentNode.children, on each of the shapes that reach it.
+    const rows = [
+      'documentElement=' + (document.documentElement.children === document.documentElement.children),
+      'body=' + (document.body.children === document.body.children),
+      'head=' + (document.head.children === document.head.children),
+      'div=' + (document.getElementById('idProbe').children === document.getElementById('idProbe').children),
+    ];
+    const detached = document.createElement('div');
+    rows.push('detached=' + (detached.children === detached.children));
+    const frag = document.createDocumentFragment();
+    rows.push('fragment=' + (frag.children === frag.children));
+    testing.expectEqual(
+      ['documentElement=true', 'body=true', 'head=true', 'div=true',
+       'detached=true', 'fragment=true'].join('\n'),
+      rows.join('\n'));
+  }
+</script>
+
+<script id=element_collections>
+  {
+    const form = document.getElementById('idFormId');
+    const select = document.getElementById('idSelect');
+    const table = document.getElementById('idTable');
+    const tbody = document.getElementById('idTbody');
+    const tr = document.getElementById('idRow');
+    const input = document.getElementById('idInput');
+    const rows = [
+      'form.elements=' + (form.elements === form.elements),
+      'select.options=' + (select.options === select.options),
+      'select.selectedOptions=' + (select.selectedOptions === select.selectedOptions),
+      'table.rows=' + (table.rows === table.rows),
+      'table.tBodies=' + (table.tBodies === table.tBodies),
+      'tbody.rows=' + (tbody.rows === tbody.rows),
+      'tr.cells=' + (tr.cells === tr.cells),
+      'input.labels=' + (input.labels === input.labels),
+      'select.labels=' + (select.labels === select.labels),
+    ];
+    testing.expectEqual(
+      ['form.elements=true', 'select.options=true', 'select.selectedOptions=true',
+       'table.rows=true', 'table.tBodies=true', 'tbody.rows=true',
+       'tr.cells=true', 'input.labels=true', 'select.labels=true'].join('\n'),
+      rows.join('\n'));
+  }
+</script>
+
+<script id=labels_is_a_nodelist>
+  {
+    // `labels` is a NodeList in Chrome, not an Array. An Array cannot keep its
+    // identity for free the way a cached NodeList can, so the two halves of
+    // this row are the same defect.
+    const input = document.getElementById('idInput');
+    testing.expectEqual(
+      'tag=[object NodeList] ctor=NodeList length=1',
+      'tag=' + Object.prototype.toString.call(input.labels) +
+      ' ctor=' + input.labels.constructor.name +
+      ' length=' + input.labels.length);
+  }
+</script>
+
+<script id=method_collections>
+  {
+    // Chrome caches these per (root, kind, name-as-written), so calling one
+    // twice with the same arguments is the same object.
+    const div = document.getElementById('idProbe');
+    const rows = [
+      'doc.byTag=' + (document.getElementsByTagName('div') === document.getElementsByTagName('div')),
+      'doc.byTagNS=' + (document.getElementsByTagNameNS('http://www.w3.org/1999/xhtml', 'div') ===
+                        document.getElementsByTagNameNS('http://www.w3.org/1999/xhtml', 'div')),
+      'doc.byClass=' + (document.getElementsByClassName('cc') === document.getElementsByClassName('cc')),
+      'doc.byName=' + (document.getElementsByName('idField') === document.getElementsByName('idField')),
+      'el.byTag=' + (div.getElementsByTagName('span') === div.getElementsByTagName('span')),
+      'el.byClass=' + (div.getElementsByClassName('cc') === div.getElementsByClassName('cc')),
+    ];
+    testing.expectEqual(
+      ['doc.byTag=true', 'doc.byTagNS=true', 'doc.byClass=true', 'doc.byName=true',
+       'el.byTag=true', 'el.byClass=true'].join('\n'),
+      rows.join('\n'));
+  }
+</script>
+
+<script id=cache_keying>
+  {
+    // What must NOT collapse into one entry, and the one pair that must.
+    const div = document.getElementById('idProbe');
+    const rows = [
+      'div-vs-DIV=' + (document.getElementsByTagName('div') === document.getElementsByTagName('DIV')),
+      'doc-vs-body=' + (document.getElementsByTagName('div') === document.body.getElementsByTagName('div')),
+      'div-vs-star=' + (document.getElementsByTagName('div') === document.getElementsByTagName('*')),
+      'cc-vs-spaced=' + (document.getElementsByClassName('cc') === document.getElementsByClassName(' cc ')),
+      'byTag-vs-byClass=' + (document.getElementsByTagName('cc') === document.getElementsByClassName('cc')),
+      'forms-vs-byTag=' + (document.forms === document.getElementsByTagName('form')),
+      'body-vs-head=' + (document.body.children === document.head.children),
+      'children-vs-star=' + (div.children === div.getElementsByTagName('*')),
+      'table-vs-tbody=' + (document.getElementById('idTable').rows === document.getElementById('idTbody').rows),
+      'plugins-is-embeds=' + (document.plugins === document.embeds),
+    ];
+    testing.expectEqual(
+      ['div-vs-DIV=false', 'doc-vs-body=false', 'div-vs-star=false',
+       'cc-vs-spaced=false', 'byTag-vs-byClass=false', 'forms-vs-byTag=false',
+       'body-vs-head=false', 'children-vs-star=false', 'table-vs-tbody=false',
+       'plugins-is-embeds=true'].join('\n'),
+      rows.join('\n'));
+  }
+</script>
+
+<script id=identity_survives_mutation>
+  {
+    // The object is not the contents: appending to the tree it walks does not
+    // replace it, and the collection it returns is still live.
+    const before = document.forms;
+    const beforeLength = before.length;
+    const extra = document.createElement('form');
+    document.body.appendChild(extra);
+    const rows = [
+      'same=' + (before === document.forms),
+      'live=' + beforeLength + '->' + before.length,
+    ];
+    extra.remove();
+    rows.push('after-remove=' + (before === document.forms) + ' len=' + before.length);
+    testing.expectEqual(
+      ['same=true', 'live=1->2', 'after-remove=true len=1'].join('\n'),
+      rows.join('\n'));
+  }
+</script>
+
+<script id=named_results>
+  {
+    // A collection's named lookup answers the element itself, and elements
+    // already keep their identity -- these pass today and are here so a change
+    // to the collection cache cannot quietly break them.
+    const form = document.getElementById('idFormId');
+    const rows = [
+      'elements.named=' + (form.elements.namedItem('idField') === form.elements.namedItem('idField')),
+      'all.named=' + (document.all.namedItem('idImgName') === document.all.namedItem('idImgName')),
+      'all.call=' + (document.all('idImgName') === document.all('idImgName')),
+      'forms.named=' + (document.forms.namedItem('idForm') === document.forms.namedItem('idForm')),
+      'doc.named=' + (document['idForm'] === document['idForm']),
+    ];
+    testing.expectEqual(
+      ['elements.named=true', 'all.named=true', 'all.call=true',
+       'forms.named=true', 'doc.named=true'].join('\n'),
+      rows.join('\n'));
+  }
+</script>
+
+<script id=navigator_languages>
+  {
+    // navigator.languages is one frozen array in Chrome, not a fresh one per
+    // read. Same family, different root.
+    testing.expectEqual('same=true frozen=true',
+      'same=' + (navigator.languages === navigator.languages) +
+      ' frozen=' + Object.isFrozen(navigator.languages));
+  }
+</script>
+
+<script id=controls_that_mint>
+  {
+    // Chrome does NOT cache these. Keeping them false is as much a part of
+    // matching it as the true rows above.
+    const div = document.getElementById('idProbe');
+    const rows = [
+      'querySelectorAll=' + (document.querySelectorAll('div') === document.querySelectorAll('div')),
+      'el.querySelectorAll=' + (div.querySelectorAll('span') === div.querySelectorAll('span')),
+      'matchMedia=' + (matchMedia('(min-width:1px)') === matchMedia('(min-width:1px)')),
+      'getComputedStyle=' + (getComputedStyle(div) === getComputedStyle(div)),
+    ];
+    testing.expectEqual(
+      ['querySelectorAll=false', 'el.querySelectorAll=false', 'matchMedia=false',
+       'getComputedStyle=false'].join('\n'),
+      rows.join('\n'));
+  }
+</script>
+
+<script id=stable_already>
+  {
+    // The neighbours that already keep their identity here, asserted so the
+    // new cache is measured against a family that was never broken.
+    const div = document.getElementById('idProbe');
+    const rows = [
+      'styleSheets=' + (document.styleSheets === document.styleSheets),
+      'fonts=' + (document.fonts === document.fonts),
+      'timeline=' + (document.timeline === document.timeline),
+      'doc.childNodes=' + (document.childNodes === document.childNodes),
+      'el.childNodes=' + (div.childNodes === div.childNodes),
+      'attributes=' + (div.attributes === div.attributes),
+      'classList=' + (div.classList === div.classList),
+      'dataset=' + (div.dataset === div.dataset),
+      'style=' + (div.style === div.style),
+      'relList=' + (document.getElementById('idAnchor').relList === document.getElementById('idAnchor').relList),
+    ];
+    testing.expectEqual(
+      ['styleSheets=true', 'fonts=true', 'timeline=true', 'doc.childNodes=true',
+       'el.childNodes=true', 'attributes=true', 'classList=true', 'dataset=true',
+       'style=true', 'relList=true'].join('\n'),
+      rows.join('\n'));
+  }
+</script>

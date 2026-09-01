@@ -36,7 +36,12 @@ pub const JsApi = struct {
     /// A live HTMLCollection of the map's <area> descendants (measured: a map
     /// with two areas answers an HTMLCollection of length 2).
     pub const areas = bridge.accessor(_areas, null, .{});
-    fn _areas(self: *Map, frame: *Frame) !collections.NodeLive(.tag) {
-        return collections.NodeLive(.tag).init(self.asNode(), .area, frame);
+    fn _areas(self: *Map, frame: *Frame) !*collections.HTMLCollection {
+        const root = self.asNode();
+        return collections.identity.get(
+            frame,
+            .{ .root = root, .kind = .area_map, .name = "" },
+            collections.NodeLive(.tag).init(root, .area, frame).htmlCollectionValue(),
+        );
     }
 };

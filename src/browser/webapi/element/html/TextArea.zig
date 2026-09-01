@@ -33,6 +33,7 @@ const ValidityState = @import("ValidityState.zig");
 const handler_property = @import("../../handler_property.zig");
 const reflection = @import("../reflection.zig");
 const text_selection = @import("text_selection.zig");
+const collections = @import("../../collections.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
 /// function is a listener like any other, so it lives in the event manager's
@@ -290,7 +291,7 @@ pub fn getForm(self: *TextArea, frame: *Frame) ?*Form {
     return Form.ownerOf(self.asElement(), frame);
 }
 
-pub fn getLabels(self: *TextArea, frame: *Frame) !js.Array {
+pub fn getLabels(self: *TextArea, frame: *Frame) !*collections.NodeList {
     return @import("Label.zig").getControlLabels(self.asElement(), frame);
 }
 

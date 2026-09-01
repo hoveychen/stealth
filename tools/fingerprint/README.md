@@ -25634,3 +25634,126 @@ unmerged, because nothing reads its table yet — wiring
 `calculateDocumentPosition` and `calculateSiblingPosition` to it is that plan's
 P2, and its ground truth has to be re-read from Chrome first: the 27 rows were
 measured but never saved, only summarised.
+
+## Eight of the ten closed doors are not doors, and the last two open to a headless browser (B82, 2026-09-01)
+
+`finish-condition-audit`. The only stopping condition this work has is "the
+antibot stations read the same as headed Chrome or better", and that condition
+had never been measured with enough runs to mean anything. The door map's Chrome
+column was a scratch profile, single-run, and — on Cloudflare — scored under a
+criterion that `cf-ticket-is-not-a-pass` later replaced. Meanwhile these stations
+pass in windows: `antibot-stations-pass-in-windows` and
+`cfsc-verdict-is-five-in-six` both say a single sweep cannot tell a closed door
+from a closed window.
+
+So: the ten stations that were not clean in the previous sweep, both arms, **six
+rounds each, 120 runs**, station-level alternation with the within-station order
+flipped every round (block A/B favours whichever arm goes first on a station that
+hardens with visits). Our arm is a ReleaseFast build of `d21d89ac2`; the
+reference arm is `--headed --profile-dir` over a profile warmed on sixteen
+ordinary pages (352 cookies), which is what `warm-profile.mjs` documents as the
+minimum for a reference that does not refuse stations this engine walks into.
+Every run records its own egress: `108.211.179.124`, colo SJC, all 120.
+
+Verdict is "behind" only when the two Wilson 95% intervals do not overlap.
+
+| station | this engine | headed+warm Chrome | |
+|---|---|---|---|
+| cf-scrapingcourse | **0/6** | **6/6** | **behind** |
+| x-hyatt | **0/6** | **6/6** | **behind** |
+| cf-nopecha | 0/6 | 0/6 | level |
+| cf-zeroclover | 0/6 | 0/6 | level — and Chrome is *worse*: its six are `cf-blocked`, ours `cf-challenge` |
+| dd-allopneus | 0/6 | 0/6 | level — both arms `cf-blocked` six times, so the site is blocking the address |
+| dd-datadome | 1/6 | 1/6 | level |
+| dd-g2 | 0/6 | 0/6 | level |
+| dd-hermes | **1/6** | 0/6 | level (we are numerically ahead) |
+| dd-leboncoin | **2/6** | 1/6 | level (we are numerically ahead) |
+| dd-saks | 0/6 | 0/6 | level |
+
+Totals: 4/60 here, 14/60 there — and **twelve of Chrome's fourteen are the two
+stations above**. Over the six DataDome stations alone it is **4/36 here against
+2/36 there**, which re-runs `chrome-is-no-reference-on-datadome` with a warm
+profile and gets the same answer.
+
+**Eight stations are retired.** `dd-saks` and `dd-g2` were still being carried as
+gaps; they refuse a warm headed Chrome six times out of six. `dd-allopneus` is an
+address block, not a guard verdict. Nothing about the finish condition is left on
+any of the eight.
+
+### Which leaves two, and neither of them wants a head
+
+Five arms on the two remaining stations, six rounds each, then a second cut:
+
+| arm | cf-scrapingcourse | x-hyatt |
+|---|---|---|
+| this engine (headless) | 0/6 `cf-challenge` | 0/6 `refused-429` |
+| Chrome headed + warm | 6/6 | 6/6 |
+| Chrome headed + fresh | 6/6 | 6/6 |
+| Chrome headless + warm | 0/6 `cf-challenge` | 0/6 `refused-403` |
+| Chrome headless + fresh | 0/6 `cf-challenge` | 0/6 `refused-403` |
+
+Profile warmth moves nothing on either station — unlike DataDome, where
+`warm-profile.mjs`'s own 2x2 says warmth and a head are both required. But that
+table is confounded, and by something the sweep's header comment already names:
+`--headless=new` puts `HeadlessChrome/151` in the user agent, so the headless
+rows measure head *and* UA together.
+
+Hold the UA equal — `--headed-ua` on both arms, so the string and the emptied
+high-entropy metadata match — and the head stops mattering:
+
+| arm | cf-scrapingcourse | x-hyatt |
+|---|---|---|
+| Chrome headed, normal UA | 6/6 | 6/6 |
+| **Chrome headless, normal UA** | **5/6** | **6/6** |
+
+One variable, both stations: adding `--headed-ua` to a headless Chrome takes
+cf-scrapingcourse from 0/6 to 5/6 and x-hyatt from 0/6 to 6/6. This sharpens
+rather than discovers — the sweep's header already recorded plain headless 2/15,
+headless with the headed UA 9/15, headed 10/15 across fifteen stations. What is
+new is that it now holds on the two stations that are still open, six runs each.
+
+**The point is the arm it leaves behind.** Every two-arm comparison ever run on
+these two doors used a *headed* Chrome, which kept a whole class of explanation
+alive and cost several plans: `display-persona-lever-spent` (colour gamut, HDR,
+depth, DPR — 75 station-runs), `chrome-arm-needs-persona-dpr`,
+`intrinsic-box-is-dpr1-while-fonts-are-dpr2`, and the widget-timing chapter whose
+finding was that Chrome's main thread is blocked for over a second. A headless
+browser walks through both doors, so none of that is the gate. The reference arm
+for these stations is now `antibot-sweep.mjs chrome --headed-ua` with no
+`--headed`, and it is the same shape as ours.
+
+### And the wire between the two is one stale constant wide
+
+With the transport layer already closed (`cf-transport-layer-is-closed`), the
+remaining wire question was the hint negotiation Cloudflare's managed challenge
+actually performs: it answers the interstitial with `Accept-CH` *and*
+`Critical-CH` naming nine high-entropy hints. `accept-ch-echo.mjs` serves that
+exact list off localhost and records the byte-exact request head of every hit.
+
+Eleven hits, paired by method and target: **header names, header order and header
+values all identical**, except `sec-ch-ua-platform-version` — `"26.3.1"` here
+against `"26.6.2"` from Chrome on the same machine — and Chrome's own
+`HeadlessChrome` UA token, which is the reference arm's problem and not ours.
+The `Accept-CH`/`Critical-CH` restart itself is implemented in
+`src/network/HttpClient.zig`, with tests that assert the restart happens once and
+does not happen for a hint that already went out; it is not a gap.
+
+That one value was `claimed_platform.zig`'s pinned macOS version, and the pin is
+deliberate — the file's whole point is that the claim does not follow the running
+kernel. The number had simply gone stale against a reference host now on 26.6.2.
+Staleness is not free next to `ua_full_version`, which *does* track the reference
+Chrome: the two drift apart, and the pair is what a wire comparison reads. Re-pinned,
+and the comment now says when to do it again. After: the only header that differs
+across the eleven hits is the reference arm's user agent.
+
+Not a door — `display-persona-lever-spent` already priced persona values — but a
+standing false lead on a path a guard negotiates, which cost this session the time
+to rule it out and would have cost the next one the same.
+
+### One correction to carry forward
+
+The previous session's handoff offered `scratch/b81/lp-b81` as "the merged
+content" beside `lp-base-c9a8e11eb` as the baseline. Both binaries answer
+`1.0.0-dev.1969+c9a8e11eb` to `version`. Its four alternating sweeps ran the same
+binary in both columns, so "four rounds, 20/29 each, no regression" reads as four
+repetitions of the baseline and not as a before/after.
