@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A collapsing `white-space` renders a run of document white space as ONE space,
+and drops it entirely at either end of the line. This engine rendered every
+character: `a   b` was five characters wide where Chrome makes it three, and
+`   ab` was five where Chrome makes it two. That is the default value on any
+page whose HTML is indented, so it was most of the text on most of them.
+
+Measured on Chrome 151 at `--force-device-scale-factor=2` -- the factor this
+engine's persona claims, and the one text_advance_grid.html explains -- on
+https://example.com with the headed user agent. Probes
+scratch/b84/expr-b84-testcases.js, which builds these cases in this DOM shape so
+the numbers below are Chrome's own rather than arithmetic; readings in
+scratch/b84/tc-cr2.json. The wider survey they came out of is
+scratch/b83/expr-b83-ws-truth.js, 26 of whose 38 readings this engine had wrong.
+
+The font is `72px monospace`, so one character is 43.4px and a width says how
+many characters were measured: 43 is one, 87 is two, 130 is three, 173 is four,
+217 is five and 303 is seven.
+
+Three separate paths measure text and all three had to learn this, which is why
+the cases below are grouped by the path they reach rather than by the value:
+
+  * an inline box goes through inlineInk -- a <span> with text of its own;
+  * a shrink-to-fit block goes through textLayout's one-line shortcut;
+  * a block whose content needs line boxes goes through flowInline, which is
+    the case with an inline child.
+
+`white-space: pre` is here as the control: nothing about it changes, so a
+collapse that fired where it should not shows up as a `pre` case going wrong.
+
+Not asserted here, because it is line BREAKING rather than collapsing and the
+next task owns it: a preserved newline (`pre`, `pre-wrap`, `pre-line`,
+`break-spaces`) makes a line of its own, so `a\nb` under `pre-line` is 43 wide
+and 168 tall in Chrome and one 130x84 line here.
+-->
+
+<script id=collapsing_white_space_renders_a_run_as_one_space>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;left:-9999px;top:0;width:2000px;font:72px monospace;');
+  document.body.appendChild(host);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // One <span> per reading, built by the caller so a case can hand it more than
+  // one text node, and thrown away after: the host holds one box at a time so
+  // nothing measured here is a sibling's.
+  const box = (ws, build) => {
+    host.innerHTML = '';
+    const el = document.createElement('span');
+    if (ws) el.style.whiteSpace = ws;
+    build(el);
+    host.appendChild(el);
+    return el;
+  };
+  const text = (s) => (el) => el.appendChild(document.createTextNode(s));
+  const size = (what, ws, build, width, height) => {
+    const el = box(ws, build);
+    eq(what + ' width', el.offsetWidth, width);
+    eq(what + ' height', el.offsetHeight, height);
+  };
+
+  // The three values that collapse: `normal` and `nowrap` are
+  // `white-space-collapse: collapse`, `pre-line` is `preserve-breaks`, and
+  // preserving the breaks does not preserve the spaces.
+  for (const ws of ['normal', 'nowrap', 'pre-line']) {
+    // A single space between two words is already what it renders as.
+    size(ws + ' one space', ws, text('a b'), 130, 84);
+    // A run of them is one space.
+    size(ws + ' three spaces', ws, text('a   b'), 130, 84);
+    // At either end of the line it is nothing at all.
+    size(ws + ' leading', ws, text('   ab'), 87, 84);
+    size(ws + ' trailing', ws, text('ab   '), 87, 84);
+    size(ws + ' both ends', ws, text('  a b  '), 130, 84);
+    // Every character CSS calls document white space collapses, not just the
+    // space: a tab is one space, and so is a run mixing all of them.
+    size(ws + ' tab', ws, text('a\tb'), 130, 84);
+    size(ws + ' mixed run', ws, text('a \t\r b'), 130, 84);
+    // A non-breaking space is NOT document white space, so two of them are two
+    // characters however the property reads.
+    size(ws + ' nbsp', ws, text('a  b'), 173, 84);
+    // Text with nothing but white space in it collapses away entirely, so the
+    // box has no line and no size.
+    size(ws + ' space only', ws, text('   '), 0, 0);
+    // The run crosses a text node boundary in both directions: two nodes
+    // holding one word are one word, and a space either side of the boundary is
+    // still one space.
+    size(ws + ' split word', ws, (el) => {
+      el.appendChild(document.createTextNode('ab'));
+      el.appendChild(document.createTextNode('cd'));
+    }, 173, 84);
+    size(ws + ' split space', ws, (el) => {
+      el.appendChild(document.createTextNode('a '));
+      el.appendChild(document.createTextNode(' b'));
+    }, 130, 84);
+    // And across an inline child, which is a second box on the same line: the
+    // space before it and the space after it are each one space, so `a  <b>b</b>
+    //   c` is the five characters of `a b c`. A plain <span> and not a <b>:
+    // the point here is the run, and a bold face measures differently.
+    size(ws + ' inline child', ws, (el) => {
+      el.appendChild(document.createTextNode('a  '));
+      const b = document.createElement('span');
+      b.appendChild(document.createTextNode('b'));
+      el.appendChild(b);
+      el.appendChild(document.createTextNode('  c'));
+    }, 217, 84);
+  }
+
+  // The control. `pre` preserves, so every one of those readings is the
+  // character count of the string as written.
+  size('pre one space', 'pre', text('a b'), 130, 84);
+  size('pre both ends', 'pre', text('  a b  '), 303, 84);
+  size('pre nbsp', 'pre', text('a  b'), 173, 84);
+  size('pre space only', 'pre', text('   '), 130, 84);
+
+  // The same question asked of a block box rather than an inline one, which is
+  // the other two paths. Absolutely positioned so the box is its content and
+  // not the line it sits on.
+  {
+    const shrink = 'position:absolute;left:0;top:0;';
+    const blk = (what, css, build, width) => {
+      host.innerHTML = '';
+      const el = document.createElement('div');
+      el.setAttribute('style', shrink + css);
+      build(el);
+      host.appendChild(el);
+      eq(what, el.offsetWidth, width);
+    };
+    blk('block three spaces', '', text('a   b'), 130);
+    blk('block leading', '', text('   ab'), 87);
+    blk('block trailing', '', text('ab   '), 87);
+    blk('block pre three spaces', 'white-space:pre', text('a   b'), 217);
+    // An inline child sends the block through the line walk instead of the
+    // one-line shortcut.
+    blk('block inline child', '', (el) => {
+      el.appendChild(document.createTextNode('a  '));
+      const b = document.createElement('span');
+      b.appendChild(document.createTextNode('b'));
+      el.appendChild(b);
+      el.appendChild(document.createTextNode('  c'));
+    }, 217);
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
