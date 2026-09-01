@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<head>
+  <script src="testing.js"></script>
+</head>
+
+<!--
+  What a named-property interceptor answers for a name it does NOT support.
+
+  Chrome answers nothing: `in` is false, `hasOwnProperty` is false and there is
+  no descriptor. This engine answered *yes to every name* on five of them --
+  `'anythingAtAll' in el.dataset` came back true, with a descriptor, reading
+  undefined -- because their interceptors were installed with a null query
+  callback, so V8 fell back to the getter and the getter intercepted every
+  name. One expression, no knowledge of any real property name needed, and it
+  separates this engine from every real browser.
+
+  The same measurement pins the attribute bits, which were wrong in the same
+  place: a supported named property is `writable` in Chrome only on
+  DOMStringMap, and `enumerable` only on DOMStringMap and the two form-ish
+  collections. HTMLCollection already had all of this right
+  (queryByName/describeByName there is the shape the others now follow), which
+  is how the sweep that found this could tell the broken ones from the sound
+  one.
+
+  Measured on Chrome 151 with scratch/b78/expr-named-query.js, against this
+  same markup.
+-->
+
+<div id="nqDiv" data-one="1" data-two-part="2"></div>
+<form name="nqForm" id="nqFormId"><input name="nqField" value="v"><input name="nqField2"></form>
+<select id="nqSelect"><option name="nqOptA" id="nqOptAId"></option></select>
+
+<script id="unsupported_names_are_answered_by_nothing">
+{
+  const div = document.getElementById('nqDiv');
+  const form = document.getElementById('nqFormId');
+  const sel = document.getElementById('nqSelect');
+  const roots = [
+    ['dataset', div.dataset],
+    ['attributes', div.attributes],
+    ['formElements', form.elements],
+    ['options', sel.options],
+    ['all', document.all],
+  ];
+  // None of these is a supported property name anywhere: a plain word, a name
+  // belonging to a different object, and an own property of the prototype.
+  const names = ['nope', 'nqDiv', 'nqField', 'length'];
+
+  const want = [];
+  const got = [];
+  for (const [label, o] of roots) {
+    for (const n of names) {
+      // `length` is a real prototype accessor on four of the five, so it is
+      // asked about only where it is not: DOMStringMap has none.
+      if (n === 'length' && label !== 'dataset') continue;
+      // `nqField` IS supported on formElements, and `nqDiv` on document.all.
+      if (label === 'formElements' && n === 'nqField') continue;
+      if (label === 'all' && (n === 'nqDiv' || n === 'nqField')) continue;
+      want.push(`${label}.${n} in=false own=false desc=absent`);
+      got.push(`${label}.${n} in=${n in o} own=${Object.prototype.hasOwnProperty.call(o, n)}` +
+        ` desc=${Object.getOwnPropertyDescriptor(o, n) ? 'present' : 'absent'}`);
+    }
+  }
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+}
+</script>
+
+<script id="dataset_names_are_the_camel_case_ones_only">
+{
+  const d = document.getElementById('nqDiv').dataset;
+  const row = (n) => {
+    const desc = Object.getOwnPropertyDescriptor(d, n);
+    return `${n} in=${n in d} own=${Object.prototype.hasOwnProperty.call(d, n)} ` +
+      (desc ? `e=${desc.enumerable} c=${desc.configurable} w=${desc.writable}` : 'absent') +
+      ` read=${d[n] === undefined ? 'undefined' : JSON.stringify(d[n])}`;
+  };
+  const want = [
+    'keys one,twoPart',
+    'own one,twoPart',
+    'one in=true own=true e=true c=true w=true read="1"',
+    'twoPart in=true own=true e=true c=true w=true read="2"',
+    // The attribute is `data-two-part` and the name is `twoPart`: the dashed
+    // spelling and a re-capitalised one are not names of this map, even
+    // though naive camel-to-kebab would find the attribute for both.
+    'two-part in=false own=false absent read=undefined',
+    'One in=false own=false absent read=undefined',
+    // Prototype properties still resolve through the chain.
+    'constructor in=true own=false absent read=function',
+  ].join('\n');
+  const got = [
+    'keys ' + Object.keys(d).join(','),
+    'own ' + Object.getOwnPropertyNames(d).join(','),
+    row('one'),
+    row('twoPart'),
+    row('two-part'),
+    row('One'),
+    'constructor in=' + ('constructor' in d) +
+      ' own=' + Object.prototype.hasOwnProperty.call(d, 'constructor') +
+      ' ' + (Object.getOwnPropertyDescriptor(d, 'constructor') ? 'present' : 'absent') +
+      ' read=' + typeof d.constructor,
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="named_node_map_names_are_case_sensitive_but_reads_are_not">
+{
+  const a = document.getElementById('nqDiv').attributes;
+  const row = (n) => {
+    const desc = Object.getOwnPropertyDescriptor(a, n);
+    const v = a[n];
+    return `${n} in=${n in a} own=${Object.prototype.hasOwnProperty.call(a, n)} ` +
+      (desc ? `e=${desc.enumerable} c=${desc.configurable} w=${desc.writable}` : 'absent') +
+      ` read=${v === undefined ? 'undefined' : v.constructor.name}`;
+  };
+  const want = [
+    // The named entries are non-enumerable, so Object.keys is the indices
+    // alone while getOwnPropertyNames carries both.
+    'keys 0,1,2',
+    'own 0,1,2,id,data-one,data-two-part',
+    'id in=true own=true e=false c=true w=false read=Attr',
+    'data-two-part in=true own=true e=false c=true w=false read=Attr',
+    // An HTML document matches attribute names case-insensitively, so the
+    // read succeeds -- but the supported property names are the qualified
+    // names as written, so `in` says no. Chrome answers both at once.
+    'Id in=false own=false e=false c=true w=false read=Attr',
+    'DATA-ONE in=false own=false e=false c=true w=false read=Attr',
+    // A camelled spelling is not an attribute name at all.
+    'dataOne in=false own=false absent read=undefined',
+  ].join('\n');
+  const got = [
+    'keys ' + Object.keys(a).join(','),
+    'own ' + Object.getOwnPropertyNames(a).join(','),
+    row('id'),
+    row('data-two-part'),
+    row('Id'),
+    row('DATA-ONE'),
+    row('dataOne'),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="form_and_option_collections_list_their_named_entries">
+{
+  const form = document.getElementById('nqFormId');
+  const sel = document.getElementById('nqSelect');
+  const row = (o, n) => {
+    const desc = Object.getOwnPropertyDescriptor(o, n);
+    const v = o[n];
+    return `${n} in=${n in o} own=${Object.prototype.hasOwnProperty.call(o, n)} ` +
+      (desc ? `e=${desc.enumerable} c=${desc.configurable} w=${desc.writable}` : 'absent') +
+      ` read=${v === undefined ? 'undefined' : v.constructor.name}`;
+  };
+  // Unlike a plain HTMLCollection, whose named entries are
+  // [LegacyUnenumerableNamedProperties], these two enumerate theirs.
+  const want = [
+    'elements keys 0,1,nqField,nqField2',
+    'elements own 0,1,nqField,nqField2',
+    'nqField in=true own=true e=true c=true w=false read=HTMLInputElement',
+    'FixtureField in=false own=false absent read=undefined',
+    'options keys 0,nqOptAId,nqOptA',
+    'options own 0,nqOptAId,nqOptA',
+    'nqOptA in=true own=true e=true c=true w=false read=HTMLOptionElement',
+    'nqOptAId in=true own=true e=true c=true w=false read=HTMLOptionElement',
+  ].join('\n');
+  const got = [
+    'elements keys ' + Object.keys(form.elements).join(','),
+    'elements own ' + Object.getOwnPropertyNames(form.elements).join(','),
+    row(form.elements, 'nqField'),
+    row(form.elements, 'FixtureField'),
+    'options keys ' + Object.keys(sel.options).join(','),
+    'options own ' + Object.getOwnPropertyNames(sel.options).join(','),
+    row(sel.options, 'nqOptA'),
+    row(sel.options, 'nqOptAId'),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="document_all_lists_its_named_entries_unenumerably">
+{
+  const all = document.all;
+  const row = (n) => {
+    const desc = Object.getOwnPropertyDescriptor(all, n);
+    const v = all[n];
+    return `${n} in=${n in all} own=${Object.prototype.hasOwnProperty.call(all, n)} ` +
+      (desc ? `e=${desc.enumerable} c=${desc.configurable} w=${desc.writable}` : 'absent') +
+      ` read=${v === undefined ? 'undefined' : v.constructor.name}`;
+  };
+  // The absolute lists depend on the whole test page, so only this page's own
+  // fixture names are asserted -- in document order, id before name, which is
+  // the order Chrome's supported property names come in.
+  const mine = (a) => a.filter((n) => n.startsWith('nq'));
+  const want = [
+    'own [nqDiv,nqFormId,nqForm,nqField,nqField2,nqSelect,nqOptAId]',
+    'keys []',
+    'nqDiv in=true own=true e=false c=true w=false read=HTMLDivElement',
+    'nqForm in=true own=true e=false c=true w=false read=HTMLFormElement',
+    'NqDiv in=false own=false absent read=undefined',
+  ].join('\n');
+  const got = [
+    'own [' + mine(Object.getOwnPropertyNames(all)).join(',') + ']',
+    'keys [' + mine(Object.keys(all)).join(',') + ']',
+    row('nqDiv'),
+    row('nqForm'),
+    row('NqDiv'),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="assigning_an_unsupported_dataset_name_still_sets_the_attribute">
+{
+  // The getter tightened, the setter did not: DOMStringMap's named setter
+  // accepts any name that makes a legal attribute, so this keeps working.
+  const div = document.getElementById('nqDiv');
+  div.dataset.freshName = 'x';
+  const want = [
+    'attribute "x"',
+    'read "x"',
+    'own true',
+  ].join('\n');
+  const got = [
+    'attribute ' + JSON.stringify(div.getAttribute('data-fresh-name')),
+    'read ' + JSON.stringify(div.dataset.freshName),
+    'own ' + Object.prototype.hasOwnProperty.call(div.dataset, 'freshName'),
+  ].join('\n');
+  div.removeAttribute('data-fresh-name');
+  testing.expectEqual(want, got);
+}
+</script>

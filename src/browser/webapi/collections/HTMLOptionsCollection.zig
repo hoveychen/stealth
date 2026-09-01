@@ -129,7 +129,31 @@ pub const JsApi = struct {
         }
         return arr;
     }
-    pub const @"[str]" = bridge.namedIndexed(HTMLOptionsCollection.getByName, null, null, null, null, .{ .null_as_undefined = true });
+    pub const @"[str]" = bridge.namedIndexed(getNamed, null, null, getNames, queryByName, .{ .null_as_undefined = true });
+
+    // A name this collection does not have is not a property of it at all:
+    // declining here is what keeps `'anything' in select.options` false, since
+    // an interceptor that answers undefined has still answered.
+    fn getNamed(self: *HTMLOptionsCollection, name: []const u8, frame: *Frame) !*Element {
+        if (name.len == 0) {
+            return error.NotHandled;
+        }
+        return HTMLOptionsCollection.getByName(self, name, frame) orelse error.NotHandled;
+    }
+
+    fn getNames(self: *HTMLOptionsCollection, frame: *Frame) !js.Array {
+        return HTMLCollection.supportedNames(self, HTMLCollection.anyHtmlElement, frame);
+    }
+
+    // Enumerable, configurable, read-only -- unlike a plain HTMLCollection's
+    // named entries, which Chrome keeps out of Object.keys (measured,
+    // scratch/b78/expr-named-query.js).
+    fn queryByName(self: *HTMLOptionsCollection, name: []const u8, frame: *Frame) !u32 {
+        if (name.len > 0 and HTMLOptionsCollection.getByName(self, name, frame) != null) {
+            return js.v8.ReadOnly;
+        }
+        return error.NotHandled;
+    }
 
     pub const selectedIndex = bridge.accessor(HTMLOptionsCollection.getSelectedIndex, HTMLOptionsCollection.setSelectedIndex, .{});
     pub const add = bridge.function(HTMLOptionsCollection.add, .{ .ce_reactions = true });

@@ -32,8 +32,32 @@ const DOMStringMap = @This();
 _element: *Element,
 
 fn getProperty(self: *DOMStringMap, name: String, frame: *Frame) !?String {
+    // Only a name this map actually has. Two spellings would otherwise reach
+    // the same attribute and answer with it: `two-part` and `One` both kebab
+    // back to `data-one`/`data-two-part`, and Chrome answers undefined to both
+    // -- the supported property names are the camelCase ones and nothing else.
+    // Declining also matters for a name that is nothing at all: an interceptor
+    // that answers undefined has still answered, so `'nope' in el.dataset`
+    // would be true.
+    if (!try self.supportsName(name.str(), frame)) {
+        return error.NotHandled;
+    }
     const attr_name = try camelToKebab(frame.local_arena, name);
     return try self._element.getAttribute(attr_name, frame);
+}
+
+/// Whether `name` is one of this map's supported property names -- the
+/// camel-cased spelling of one of the element's `data-*` attributes. Derived
+/// from the attributes rather than tested with a round trip so there is one
+/// definition of the list, shared with the enumerator.
+fn supportsName(self: *DOMStringMap, name: []const u8, frame: *Frame) !bool {
+    for (try self._element._attributes.getNames(frame.local_arena)) |attr_name| {
+        const camel = (try kebabToCamel(frame.local_arena, attr_name)) orelse continue;
+        if (std.mem.eql(u8, camel, name)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn setProperty(self: *DOMStringMap, name: String, value: String, frame: *Frame) !void {
@@ -135,7 +159,20 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const @"[]" = bridge.namedIndexed(getProperty, setProperty, deleteProperty, getNames, null, .{ .null_as_undefined = true, .ce_reactions = true });
+    pub const @"[]" = bridge.namedIndexed(getProperty, setProperty, deleteProperty, getNames, queryProperty, .{ .null_as_undefined = true, .ce_reactions = true });
+
+    // Supported names are ordinary data properties: enumerable, configurable
+    // and writable, which is what Chrome reports and what puts them in
+    // Object.keys as well as getOwnPropertyNames. Nothing else is a property
+    // here at all -- note this bounds only the *read* side, because the setter
+    // stays permissive: `el.dataset.freshName = 'x'` still writes
+    // `data-fresh-name`, after which the name is supported.
+    fn queryProperty(self: *DOMStringMap, name: String, frame: *Frame) !u32 {
+        if (try self.supportsName(name.str(), frame)) {
+            return js.v8.None;
+        }
+        return error.NotHandled;
+    }
 
     // The supported property names are the camel-cased names of the
     // element's data-* attributes, in attribute order.
