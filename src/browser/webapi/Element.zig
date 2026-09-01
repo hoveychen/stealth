@@ -3153,7 +3153,16 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
 /// callers are the content-extent walks, whose children are in-flow or floated
 /// and therefore contained by the box being measured. An out-of-flow child is
 /// contained by something else and those walks skip it.
+/// How many boxes have been MEASURED, counted for the cost prototype
+/// (`layout-pass-cost-prototype` P2). A walk that visits each node once enters
+/// this function once per node; anything above that is re-measurement, and the
+/// ratio is the difference between the linear pass the plan's budget assumed and
+/// whatever this actually is. A `u64` add on a path that already does dozens of
+/// property lookups, and it goes away with the prototype.
+pub var measure_entries: u64 = 0;
+
 pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool, containing_width: ?f64) Dimensions {
+    measure_entries += 1;
     // A backstop the `depth` parameter cannot be: not every path down carries
     // it. A percentage width resolves through the computed-value machinery,
     // which reaches back for the containing block's box through
@@ -3651,7 +3660,7 @@ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_ca
         return dims.height + dims.padding_y;
     }
 
-    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0).total) + dims.padding_y;
+    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0, null).total) + dims.padding_y;
 }
 
 pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
@@ -3817,7 +3826,80 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 
     if (dims.inline_box) return 0;
 
-    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0).total) + dims.padding_y);
+    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0, null).total) + dims.padding_y);
+}
+
+/// Where one in-flow box landed, relative to the top-left of the initial
+/// containing block -- the origin `getBoundingClientRect` reports against when
+/// nothing is scrolled.
+pub const Point = struct { x: f64, y: f64 };
+
+/// Every in-flow box's position, filled by one pass over the document.
+pub const PositionTable = std.AutoHashMapUnmanaged(*Element, Point);
+
+/// The document-wide layout pass, threaded through the walk that already stacks
+/// the children.
+///
+/// `contentHeight` is that walk: it visits each child in order, pays out the
+/// collapsed margin group that precedes it, and advances a running `total` by
+/// the child's whole box. That `total` IS the child's offset from the content
+/// box it is being stacked in -- the number this engine has never kept. So the
+/// pass is not a second layout algorithm, it is a sink handed to the existing
+/// one: give the walk the absolute origin of the box it is filling and it can
+/// name where every child ends up.
+///
+/// Why a parameter and not a field on the Frame: `contentHeight` is also called
+/// by the readers (clientHeight, scrollHeight), which start at an element whose
+/// own absolute origin is unknown. An optional parameter is what keeps those
+/// calls from writing positions measured against nothing.
+///
+/// **Nothing reads this table.** The prototype exists to price the pass -- see
+/// the `layout-pass-cost-prototype` plan -- and wiring the rect accessors to it
+/// is a separate decision that the cost has to clear first.
+pub const PositionPass = struct {
+    table: *PositionTable,
+    /// Nodes placed, so the cost can be reported per node rather than per page.
+    nodes: *usize,
+    /// The absolute position of the content box currently being filled.
+    x: f64,
+    y: f64,
+
+    fn record(self: PositionPass, frame: *Frame, element: *Element, at: Point) void {
+        self.nodes.* += 1;
+        // A prototype that is only ever measured: a table this pass could not
+        // grow is a missing row, not a failed page load.
+        self.table.put(frame.arena, element, at) catch {};
+    }
+};
+
+/// The same walk with no sink: the height measurement that already exists,
+/// asked for the whole document at once. Times the baseline the position pass is
+/// an addition to, so a cost reading can say which half it is paying for.
+pub fn layoutPassHeightOnly(root: *Element, frame: *Frame) f64 {
+    var visibility_cache: VisibilityCache = .{};
+    const dims = root.getElementDimensions(frame);
+    return root.contentHeight(frame, &visibility_cache, .in_flow, dims.width, 0, null).total;
+}
+
+/// One pass over the whole document, filling `table` with every in-flow box's
+/// position. Returns the number of boxes placed.
+///
+/// The root's own content box is the origin every position is relative to, so
+/// the pass starts inside `<html>`'s border and padding -- and records the root
+/// itself at 0,0, which is where Chrome reports it with nothing scrolled.
+pub fn layoutPassPositions(root: *Element, frame: *Frame, table: *PositionTable) usize {
+    var nodes: usize = 0;
+    var visibility_cache: VisibilityCache = .{};
+    const dims = root.getElementDimensions(frame);
+    var containing: ?f64 = null;
+    table.put(frame.arena, root, .{ .x = 0, .y = 0 }) catch {};
+    _ = root.contentHeight(frame, &visibility_cache, .in_flow, dims.width, 0, .{
+        .table = table,
+        .nodes = &nodes,
+        .x = CSSStyleDeclaration.blockEdgePx(root, "left", frame, &containing, 0),
+        .y = CSSStyleDeclaration.blockEdgePx(root, "top", frame, &containing, 0),
+    });
+    return nodes;
 }
 
 // The height of the direct child elements stacked vertically, the counterpart
@@ -3838,7 +3920,7 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 // is 55.5 (a line, a block, a line) where stacking the block alone says 18.5.
 // Both measured at dpr 2 with
 // tools/fingerprint/scratch/expr-inline-content-lines.js.
-fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8) ContentHeight {
+fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass) ContentHeight {
     var total: f64 = 0;
     // The margins that LEAVE through this box's two block edges. They are not
     // part of its height -- that is what escaping means -- but they are part of
@@ -3878,7 +3960,21 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
     // The children share one containing block, so the width a percentage margin
     // takes its share of is measured once for all of them.
     var margin_containing: ?f64 = content_width;
-    const escapes = self.marginEscapes(frame, &margin_containing, depth);
+    var escapes = self.marginEscapes(frame, &margin_containing, depth);
+
+    // The outermost frame of a document-wide pass is the root element, whose box
+    // establishes the initial block formatting context: its containing block is
+    // the initial containing block and there is no box outside it for a margin
+    // to move. Chrome reports <html> at 0,0 and <body> at 8,8, so <body>'s UA
+    // margin is INSIDE the root and not a gap above it -- without this every
+    // position in the table came out 8px short in both axes, on all 31 boxes of
+    // scratch/b75/page (scratch/b75/expr-static-positions.js).
+    //
+    // Confined to the pass because the height readers do not care: the root's
+    // clientHeight and scrollHeight both short-circuit to the viewport before
+    // this total is used, so correcting it for them would be a change with no
+    // observable half.
+    if (pass != null and depth == 0) escapes = .{ .top = false, .bottom = false };
     var group: MarginGroup = .{};
     var placed = false;
 
@@ -3953,6 +4049,36 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             // Frame (probes/b72-memo-attempt.patch) -- it is the seeded width
             // that moves it, 6022ms of homedepot's offsetHeight reads down to
             // 1783 (scratch/b73/count-root-reads.mjs).
+            // Where this child's border box lands, for the one caller that is
+            // laying the whole document out rather than measuring one box. The
+            // gap is previewed rather than paid here because the
+            // self-collapsing branch below must not pay it -- the payout at the
+            // end of this block computes the identical value.
+            var child_pass: ?PositionPass = null;
+            if (pass) |p| {
+                // `containerMarginPx` and not `marginPx`: the two differ on
+                // exactly one element, `<body>`, whose UA margin is a fallback
+                // the cascade cannot answer for. The stacking walk asks
+                // `marginPx` and therefore reads 0 there, which put every box
+                // in the table 8px short in both axes -- measured on
+                // scratch/b75/page, all 31 of them, before and after.
+                //
+                // Joined into a COPY of the group so the height half of this
+                // walk keeps the number it has always had.
+                var placement = group;
+                placement.join(el.containerMarginPx("margin-top", frame, &margin_containing, depth));
+                const gap = if (placed or !escapes.top) placement.gap() else 0;
+                const child_y = p.y + total + gap;
+                const child_x = p.x + el.containerMarginPx("margin-left", frame, &margin_containing, depth);
+                p.record(frame, el, .{ .x = child_x, .y = child_y });
+                child_pass = .{
+                    .table = p.table,
+                    .nodes = p.nodes,
+                    .x = child_x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &margin_containing, depth),
+                    .y = child_y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &margin_containing, depth),
+                };
+            }
+
             var inner = box.height;
             // What LEAVES the child through its own two edges, which adjoins
             // the run this box's margins are in. Empty unless the child has no
@@ -3960,9 +4086,14 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             // recursion is what decides that -- so a padded or bordered child
             // reports nothing and keeps its gaps to itself.
             var held: ContentHeight = .{};
-            if (!box.explicit_height and depth < MAX_CONTAINING_BLOCK_DEPTH) {
-                held = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1);
-                inner = @max(inner, held.total);
+            // A declared height means the children cannot change this box, so
+            // measuring one stops here -- but a document-wide pass still has to
+            // place what is inside it, or the table it fills covers only the
+            // auto-height part of the tree and the cost it reports is not the
+            // cost of laying the document out.
+            if (depth < MAX_CONTAINING_BLOCK_DEPTH and (!box.explicit_height or child_pass != null)) {
+                held = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1, child_pass);
+                if (!box.explicit_height) inner = @max(inner, held.total) else held = .{};
             }
             group.joinGroup(held.escaped_top);
             if (inner == 0 and box.padding_y == 0 and box.border_y == 0) {
