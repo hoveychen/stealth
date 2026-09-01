@@ -21,6 +21,8 @@ const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const units = @import("../css/units.zig");
 const HighlightRegistry = @import("css/highlights.zig").HighlightRegistry;
+const Worklet = @import("audio/worklet.zig").Worklet;
+const registered_property = @import("css/registered_property.zig");
 const supports_condition = @import("css/supports.zig");
 const typed_om = @import("css/typed_om.zig");
 
@@ -182,12 +184,16 @@ pub const JsApi = struct {
     pub const bridge = js.Bridge(CSS);
 
     pub const Meta = struct {
-        pub const name = "Css";
+        // All upper case, because this name is not only the class's: it is the
+        // interface the bridge names in a refusal, and Chrome's arity sentence
+        // for `CSS.escape()` says "on 'CSS'". It was `Css` for as long as
+        // nothing read it back.
+        pub const name = "CSS";
 
-        // ...and that name never reaches the global. Chrome's `CSS` is the
-        // namespace object the Window accessor hands out; there is no `Css`
+        // ...and that name never reaches the global either way. Chrome's `CSS`
+        // is the namespace object the Window accessor hands out; there is no
         // constructor beside it. Measured against a real Chrome 151:
-        // Object.getOwnPropertyNames(window) has "CSS" and no "Css".
+        // Object.getOwnPropertyNames(window) has "CSS" and nothing else.
         pub const no_interface_object = true;
 
         // The namespace's identifier is all upper case. Measured on Chrome 150:
@@ -223,12 +229,11 @@ pub const JsApi = struct {
     // probes/expr-b85-css-namespace.js. The declarations below are in that
     // order because the bridge emits own properties in declaration order.
     //
-    // Two of Chrome's 69 names are deliberately absent rather than stubbed:
-    // `registerProperty`, which is only meaningful once the cascade honours a
-    // registered custom property's syntax and initial value, and
-    // `paintWorklet`, which needs a Worklet that can actually load a module.
-    // A present-but-inert name is a different lie from an absent one and this
-    // repo has no way to measure which a guard prefers, so neither is invented.
+    // All 69 are here. Two of them were absent for a long time on the grounds
+    // that a present-but-inert name is its own kind of lie -- and that bar is
+    // what each of them had to clear: `registerProperty` reaches the cascade
+    // (css/registered_property.zig) and `paintWorklet` really fetches and
+    // compiles a module (css/paint_worklet.zig).
 
     // `CSS.highlights` is an own accessor on the namespace object and answers
     // the same HighlightRegistry every time (measured on Chrome 150).
@@ -297,6 +302,13 @@ pub const JsApi = struct {
     pub const rad = bridge.function(unitFactory(.rad), .{ .static = true });
     pub const rcap = bridge.function(unitFactory(.rcap), .{ .static = true });
     pub const rch = bridge.function(unitFactory(.rch), .{ .static = true });
+
+    /// Between `rch` and `rem`, which is where Chrome's own-name order puts it:
+    /// the operations sit in one alphabetical run among the unit factories
+    /// rather than beside each other (measured,
+    /// probes/expr-b85-css-namespace.js).
+    pub const registerProperty = bridge.function(registered_property.registerProperty, .{ .static = true, .arity = 1 });
+
     pub const rem = bridge.function(unitFactory(.rem), .{ .static = true });
     pub const rex = bridge.function(unitFactory(.rex), .{ .static = true });
     pub const ric = bridge.function(unitFactory(.ric), .{ .static = true });
@@ -317,6 +329,15 @@ pub const JsApi = struct {
     pub const vmin = bridge.function(unitFactory(.vmin), .{ .static = true });
     pub const vw = bridge.function(unitFactory(.vw), .{ .static = true });
     pub const x = bridge.function(unitFactory(.x), .{ .static = true });
+
+    /// Last in Chrome's own-name order -- after every unit factory, where the
+    /// alphabetical run does not put it (measured,
+    /// probes/expr-b85-css-namespace.js). An accessor answering the same
+    /// Worklet on every read, like `highlights`.
+    pub const paintWorklet = bridge.accessor(_paintWorklet, null, .{ .static = true });
+    fn _paintWorklet(frame: *Frame) *Worklet {
+        return frame.window.getPaintWorklet();
+    }
 };
 
 const testing = @import("../../testing.zig");
@@ -330,4 +351,12 @@ test "WebApi: CSS namespace" {
 
 test "WebApi: CSS supports" {
     try testing.htmlRunner("css/supports_condition.html", .{});
+}
+
+test "WebApi: CSS registerProperty" {
+    try testing.htmlRunner("css/registered_property.html", .{});
+}
+
+test "WebApi: CSS paintWorklet" {
+    try testing.htmlRunner("css/paint_worklet.html", .{});
 }

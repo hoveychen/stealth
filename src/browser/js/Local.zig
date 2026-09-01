@@ -338,6 +338,17 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
             // Struct, has to be placed on the heap
             const heap = try context_arena.create(T);
             heap.* = value;
+            // The struct moves to the context arena; the strings it points at
+            // do not. A caller that formatted one on its per-call scratch has
+            // handed over a slice that the next string across the bridge
+            // overwrites in place, and by then a script may still be holding
+            // the object -- a caught DOMException read one task later reported
+            // "aVeryLongIdNobodyHasAtAll on 'TimeRanges': ..." (measured; see
+            // domexception.html's last block). A type that borrows strings
+            // says so with `ownStrings` and takes them along.
+            if (comptime @hasDecl(T, "ownStrings")) {
+                try heap.ownStrings(context_arena.allocator());
+            }
             return self.mapZigInstanceToJs(js_obj_handle, heap);
         },
         .pointer => |ptr| {
@@ -391,6 +402,25 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
                     @as(*const v8.Value, @ptrCast(isolate.initNull())),
                     &maybe_proto,
                 });
+            }
+
+            // The other half of Snapshot.attachClass's `own_value_of` slot:
+            // the template reserved the position, this puts the realm's
+            // %Object.prototype.valueOf% in it with Chrome's attribute bits
+            // (data, non-writable, non-enumerable, non-configurable --
+            // measured). Redefining the placeholder keeps the slot's insertion
+            // position, which is what makes `valueOf` sort first in
+            // `Object.getOwnPropertyNames(location)`.
+            if (comptime @hasDecl(JsApi.Meta, "own_value_of")) {
+                if (self.ctx.objectPrototypeValueOf(self)) |value_of| {
+                    _ = js_obj.defineOwnProperty(
+                        "valueOf",
+                        value_of,
+                        v8.ReadOnly + v8.DontEnum + v8.DontDelete,
+                    );
+                } else |err| {
+                    log.warn(.js, "own valueOf", .{ .err = err, .type = @typeName(ptr.child) });
+                }
             }
 
             if (!@hasDecl(JsApi.Meta, "empty_with_no_proto")) {

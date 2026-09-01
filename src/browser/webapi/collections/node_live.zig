@@ -36,6 +36,11 @@ const Mode = enum {
     tag_name_ns,
     class_name,
     name,
+    // Every element `document.all.<name>` reaches: any element whose id is the
+    // name, plus the "all"-named element kinds whose name attribute is. One
+    // name can reach more than one element, and Chrome answers an
+    // HTMLCollection of them rather than the first (measured).
+    all_named,
     all_elements,
     child_elements,
     child_tag,
@@ -81,6 +86,7 @@ const Filters = union(Mode) {
     tag_name_ns: TagNameNsFilter,
     class_name: ClassNameFilter,
     name: []const u8,
+    all_named: []const u8,
     all_elements,
     child_elements,
     child_tag: Element.Tag,
@@ -122,7 +128,7 @@ const Filters = union(Mode) {
 pub fn NodeLive(comptime mode: Mode) type {
     const Filter = Filters.TypeOf(mode);
     const TW = switch (mode) {
-        .tag, .tag_name, .tag_name_ns, .class_name, .name, .all_elements, .links, .anchors, .form, .form_submittable, .fieldset => TreeWalker.FullExcludeSelf,
+        .tag, .tag_name, .tag_name_ns, .class_name, .name, .all_named, .all_elements, .links, .anchors, .form, .form_submittable, .fieldset => TreeWalker.FullExcludeSelf,
         .child_elements, .child_tag, .cells => TreeWalker.Children,
         // Not a tree-order walk: see TreeWalker.TableRows.
         .table_rows => TreeWalker.TableRows,
@@ -362,6 +368,16 @@ pub fn NodeLive(comptime mode: Mode) type {
                     const name_attr = el.getAttributeSafe(comptime .wrap("name")) orelse return false;
                     return std.mem.eql(u8, name_attr, self._filter);
                 },
+                .all_named => {
+                    const el = node.is(Element) orelse return false;
+                    if (el.getAttributeSafe(comptime .wrap("id"))) |id| {
+                        if (std.mem.eql(u8, id, self._filter)) return true;
+                    }
+                    const HTMLAllCollection = @import("HTMLAllCollection.zig");
+                    if (!HTMLAllCollection.isAllNamed(el)) return false;
+                    const name_attr = el.getAttributeSafe(comptime .wrap("name")) orelse return false;
+                    return std.mem.eql(u8, name_attr, self._filter);
+                },
                 .all_elements => return node._type == .element,
                 .child_elements => return node._type == .element,
                 .child_tag => {
@@ -520,6 +536,7 @@ pub fn NodeLive(comptime mode: Mode) type {
                 .tag_name => .{ ._data = .{ .tag_name = self } },
                 .tag_name_ns => .{ ._data = .{ .tag_name_ns = self } },
                 .class_name => .{ ._data = .{ .class_name = self } },
+                .all_named => .{ ._data = .{ .all_named = self } },
                 .all_elements => .{ ._data = .{ .all_elements = self } },
                 .child_elements => .{ ._data = .{ .child_elements = self } },
                 .child_tag => .{ ._data = .{ .child_tag = self } },

@@ -1212,6 +1212,26 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
         v8.v8__Template__Set(@ptrCast(if (own_properties) instance else prototype), js_name, @ptrCast(js_value), v8.ReadOnly + v8.DontEnum);
     }
 
+    // HTML's "create a Location object" steps define an own `valueOf` *before*
+    // any IDL member, which is why Chrome's own-name list for `location` opens
+    // with it and not with `ancestorOrigins` (measured, scratch/b80/q1.js).
+    //
+    // A template cannot carry the value: it is the realm's
+    // %Object.prototype.valueOf%, a per-context object, and minting a second
+    // function would trade a missing own property for a wrong identity. So this
+    // is only the *slot*, writable and configurable so that
+    // `Local.zigValueToJs` can put the real function into it -- redefining an
+    // existing own property keeps its insertion position, and the position is
+    // the whole point of doing it here rather than after the members.
+    if (comptime !flatten and @hasDecl(JsApi.Meta, "own_value_of")) {
+        v8.v8__Template__Set(
+            @ptrCast(instance),
+            @ptrCast(v8.v8__String__NewFromUtf8(isolate, "valueOf", v8.kNormal, "valueOf".len)),
+            @ptrCast(v8.v8__Undefined(isolate)),
+            0,
+        );
+    }
+
     const declarations = @typeInfo(JsApi).@"struct".decls;
     var has_named_index_getter = false;
 
@@ -1314,7 +1334,17 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     .definer = if (value.definer) |definer| @ptrCast(definer) else null,
                     .descriptor = if (value.descriptor) |descriptor| @ptrCast(descriptor) else null,
                     .data = null,
-                    .flags = if (guarded) 0 else v8.kOnlyInterceptStrings | v8.kNonMasking,
+                    // kNonMasking unless the interface is
+                    // [LegacyOverrideBuiltIns]: with it, a name any link of the
+                    // prototype chain answers never reaches the handler, which
+                    // is right for most interfaces and wrong for a Document --
+                    // `<form name="title">` makes `document.title` the form.
+                    .flags = if (guarded)
+                        0
+                    else if (value.masking)
+                        v8.kOnlyInterceptStrings
+                    else
+                        v8.kOnlyInterceptStrings | v8.kNonMasking,
                 };
                 if (guarded) {
                     // Both handlers go in together, so the interface's indexed

@@ -251,6 +251,11 @@ encoded_texts: (if (lp.IS_DEBUG) std.ArrayListUnmanaged(EncodedText) else void) 
 // below for the contexts built outside it.
 object_freeze: ?js.Function.Global = null,
 
+// This realm's `Object.prototype.valueOf`, which every Location carries as an
+// own property. Same reason it is cached: one lookup per realm rather than one
+// per Location, and the page cannot move it by assigning to `Object`.
+object_proto_value_of: ?js.Value.Global = null,
+
 // The two `size` functions the queuing strategies hand out. They belong to
 // the realm, not to the instance: every ByteLengthQueuingStrategy in a
 // context reports the same function object, and so does every
@@ -625,6 +630,33 @@ pub fn objectFreeze(self: *Context, local: *const js.Local) !js.Function {
     return func;
 }
 
+/// This realm's `Object.prototype.valueOf`, cached on first use. HTML's
+/// "create a Location object" steps define it as an own property of every
+/// Location, and it has to be *this* function: `location.valueOf ===
+/// Object.prototype.valueOf` is true in Chrome, and true per realm -- a child
+/// frame's Location carries the child's (measured, scratch/b80/q1.js).
+pub fn objectPrototypeValueOf(self: *Context, local: *const js.Local) !js.Value {
+    if (self.object_proto_value_of) |cached| {
+        return cached.local(local);
+    }
+
+    const object = try self.globalObject(local).get("Object");
+    if (object.isObject() == false) {
+        return error.NoObjectPrototype;
+    }
+    const prototype = try object.toObject().get("prototype");
+    if (prototype.isObject() == false) {
+        return error.NoObjectPrototype;
+    }
+    const value_of = try prototype.toObject().get("valueOf");
+    if (value_of.isFunction() == false) {
+        return error.NoObjectPrototype;
+    }
+
+    self.object_proto_value_of = try value_of.persist();
+    return value_of;
+}
+
 pub fn getIncumbent(self: *Context) *Frame {
     const ctx = fromC(v8.v8__Isolate__GetIncumbentContext(self.env.isolate.handle).?).?;
     return switch (ctx.global) {
@@ -768,6 +800,32 @@ fn evaluateModule(self: *Context, comptime want_result: bool, mod: js.Module, ur
         entry.module_promise = try evaluated.toPromise().persist();
     }
     return if (comptime want_result) entry.* else {};
+}
+
+/// Compile `src` as a module and throw the module away -- no instantiation, no
+/// evaluation, no cache entry. `CSS.paintWorklet.addModule` is the caller: the
+/// module belongs to a paint worklet global this engine does not have, so it
+/// cannot be run, but a module that does not *parse* has to reject with the
+/// parse error and only V8 can word that. On failure the message V8 gave is
+/// written to `message` (out of `allocator`) and `error.JsException` returned.
+pub fn compileModuleSyntaxOnly(
+    local: *const js.Local,
+    allocator: Allocator,
+    src: []const u8,
+    url: []const u8,
+    message: *[]const u8,
+) !void {
+    const owned_url = try allocator.dupeZ(u8, url);
+
+    var try_catch: js.TryCatch = undefined;
+    try_catch.init(local);
+    defer try_catch.deinit();
+
+    _ = compileModule(local, src, owned_url) catch |err| {
+        const caught = try_catch.caughtOrError(allocator, err);
+        message.* = caught.exception orelse "Unable to load a worklet's module.";
+        return error.JsException;
+    };
 }
 
 fn compileModule(local: *const js.Local, src: []const u8, name: []const u8) !js.Module {

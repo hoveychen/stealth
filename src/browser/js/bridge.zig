@@ -457,6 +457,13 @@ pub const NamedIndexed = struct {
     descriptor: ?*const fn (c_name: ?*const v8.Name, handle: ?*const v8.PropertyCallbackInfo) callconv(.c) u32 = null,
     enumerator: ?*const fn (handle: ?*const v8.PropertyCallbackInfo) callconv(.c) u32 = null,
 
+    /// [LegacyOverrideBuiltIns]: the handler is consulted for every name, not
+    /// only the ones nothing else answers. Off by default, because for most
+    /// interfaces the named properties lose to the prototype's members and
+    /// kNonMasking is both the correct semantics and the cheap one -- with
+    /// masking on, every property read on the object enters the getter.
+    masking: bool = false,
+
     const Opts = struct {
         as_typed_array: bool = false,
         null_as_undefined: bool = false,
@@ -464,6 +471,8 @@ pub const NamedIndexed = struct {
         // HTMLElement.dataset, which proxies setAttribute/removeAttribute).
         // Only applies to setter and deleter; getters don't mutate.
         ce_reactions: bool = false,
+        // See NamedIndexed.masking.
+        masking: bool = false,
     };
 
     fn init(comptime T: type, comptime getter: anytype, setter: anytype, deleter: anytype, enumerator: anytype, query: anytype, definer: anytype, descriptor: anytype, comptime opts: Opts) NamedIndexed {
@@ -602,6 +611,7 @@ pub const NamedIndexed = struct {
             .definer = definer_fn,
             .descriptor = descriptor_fn,
             .enumerator = enumerator_fn,
+            .masking = opts.masking,
         };
     }
 };

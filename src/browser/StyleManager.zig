@@ -37,6 +37,7 @@ const chrome_per_tag_values = @import("webapi/css/chrome_per_tag_values.zig");
 const CSSStyleDeclaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const CSSStyleProperty = @import("webapi/css/CSSStyleDeclaration.zig").Property;
 const shorthand = @import("webapi/css/shorthand.zig");
+const registered_property = @import("webapi/css/registered_property.zig");
 const supports_condition = @import("webapi/css/supports.zig");
 
 const log = lp.log;
@@ -153,6 +154,13 @@ fixed_cascade_cache: FixedCascadeCache = .empty,
 /// once, because a single inserted node changes what `:nth-child`, `+` and `~`
 /// match for other elements.
 cache_dom_version: usize = 0,
+
+/// What `CSS.registerProperty` has registered, in registration order. Not
+/// rebuilt with the rules: a registration is the document's for its lifetime
+/// and no stylesheet can undo one -- which is why its entries are allocated
+/// from the *frame's* arena and not from `self.arena`, the one `rebuildIfDirty`
+/// resets.
+registered_properties: registered_property.Registry = .{},
 
 pub fn init(frame: *Frame) !StyleManager {
     return .{
@@ -2439,7 +2447,28 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
 /// The cascaded value of a custom property on `element`, or null when nothing
 /// up the tree declares it. Custom properties inherit, so a miss walks to the
 /// parent -- which is also why this is a tree walk rather than a lookup.
+///
+/// A *registered* property (`CSS.registerProperty`) answers differently on
+/// three counts, all measured: `inherits: false` stops the walk at the element
+/// itself, the declared value is computed per the registered syntax, and a
+/// value that does not parse for that syntax falls back to the registered
+/// initial value instead of reaching the page as written.
 pub fn customPropertyValue(self: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
+    if (self.registered_properties.find(name)) |entry| {
+        const declared: ?[]const u8, const on: ?*Element = blk: {
+            if (entry.inherits) {
+                break :blk self.declaredCustomPropertyUpTree(element, name, 0);
+            }
+            break :blk .{ self.declaredCustomProperty(element, name), element };
+        };
+        if (declared) |raw| {
+            const arena = self.frame.call_arena;
+            if (registered_property.compute(arena, entry.syntax, raw, on, self)) |computed| {
+                return computed;
+            }
+        }
+        return entry.initial;
+    }
     return self.customPropertyValueAt(element, name, 0);
 }
 
@@ -2448,9 +2477,18 @@ fn customPropertyValueAt(self: *StyleManager, element: ?*Element, name: []const 
         return null;
     }
     const current = element orelse return null;
+    if (self.declaredCustomProperty(current, name)) |value| {
+        return value;
+    }
+    return self.customPropertyValueAt(current.parentElement(), name, depth + 1);
+}
 
-    const inline_property = getInlineStyleProperty(current, .wrap(name), self.frame);
-    const rule = self.cascadedCustomDeclaration(current, name);
+/// What `element` itself declares for `name`, inline or through a matching
+/// rule, with no ancestor walk. The unit the walk above is built out of, and
+/// the whole of the answer for a property registered with `inherits: false`.
+fn declaredCustomProperty(self: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
+    const inline_property = getInlineStyleProperty(element, .wrap(name), self.frame);
+    const rule = self.cascadedCustomDeclaration(element, name);
 
     // Same order as computedFontFamily: an `!important` rule beats the style
     // attribute unless that one is `!important` too.
@@ -2465,7 +2503,27 @@ fn customPropertyValueAt(self: *StyleManager, element: ?*Element, name: []const 
     if (rule) |declaration| {
         return declaration.value;
     }
-    return self.customPropertyValueAt(current.parentElement(), name, depth + 1);
+    return null;
+}
+
+/// The nearest declaration of `name` at or above `element`, and the element it
+/// was found on. A registered property's syntax is applied where the value was
+/// written -- `2em` on an ancestor resolves against *that* element's font and
+/// the computed result is what inherits.
+fn declaredCustomPropertyUpTree(
+    self: *StyleManager,
+    element: ?*Element,
+    name: []const u8,
+    depth: u8,
+) struct { ?[]const u8, ?*Element } {
+    if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
+        return .{ null, null };
+    }
+    const current = element orelse return .{ null, null };
+    if (self.declaredCustomProperty(current, name)) |value| {
+        return .{ value, current };
+    }
+    return self.declaredCustomPropertyUpTree(current.parentElement(), name, depth + 1);
 }
 
 /// Every custom property name in effect on `element`: the ones it declares
@@ -2496,6 +2554,15 @@ pub fn collectCustomPropertyNames(self: *StyleManager, element: *Element, out: *
         }
 
         try self.appendMatchingCustomNames(el, out);
+    }
+
+    // A registered property has a computed value on every element, whether
+    // anything declared it or not, so it is enumerated everywhere -- except
+    // the one registration that has no value to report: a universal syntax
+    // with no initial value (measured, scratch/b80/q6.js).
+    for (self.registered_properties.entries.items) |entry| {
+        if (entry.initial == null) continue;
+        try appendUnique(self.frame.local_arena, out, entry.name);
     }
 }
 

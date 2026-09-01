@@ -197,5 +197,74 @@
 }
 </script>
 
+<script id="zz_a_named_object_overrides_a_built_in">
+{
+  // [LegacyOverrideBuiltIns] on Document: a named object whose name is also a
+  // member of Document.prototype wins. `<form name="title">` makes
+  // `document.title` the form, not the string -- one expression, no knowledge
+  // of the page, and every browser answers the element.
+  //
+  // Measured on Chrome 151 (scratch/b80/.q3.js) over thirteen names covering
+  // every kind of member the chain carries: an accessor (`title`, `images`,
+  // `URL`, `body`, `forms`, `nodeType`), an operation (`getElementById`,
+  // `addEventListener`), and Object.prototype's own (`constructor`,
+  // `hasOwnProperty`, `toString`). All of them lose to the form.
+  //
+  // The one that does not is `location`: it is an own property of the document
+  // instance, not a prototype member, and an own property still comes first.
+  // That is the whole ordering -- own properties, then named objects, then the
+  // prototype chain -- and it is why this block asserts `location` beside the
+  // rest rather than in a test of its own.
+  //
+  // Named last (`zz_`) because the elements it inserts carry names the earlier
+  // blocks read.
+  const names = ['title', 'images', 'URL', 'getElementById', 'location', 'all', 'body',
+                 'forms', 'constructor', 'hasOwnProperty', 'toString', 'nodeType',
+                 'addEventListener'];
+  const holder = document.createElement('div');
+  holder.innerHTML = names.map((n) => '<form name="' + n + '"></form>').join('');
+  document.body.appendChild(holder);
+
+  const shape = (v) => v === undefined ? 'undefined' : v === null ? 'null'
+    : (typeof v === 'object' || typeof v === 'function')
+      ? (v.constructor ? v.constructor.name : '?')
+      : typeof v;
+  const rows = names.map((n) => {
+    const d = Object.getOwnPropertyDescriptor(document, n);
+    return n + ' read=' + shape(document[n]) +
+      ' own=' + Object.prototype.hasOwnProperty.call(document, n) +
+      ' desc=' + (d ? (('value' in d) ? 'data' : 'accessor') +
+        ' e=' + d.enumerable + ' c=' + d.configurable + ' w=' + d.writable : 'absent') +
+      ' listed=' + Object.getOwnPropertyNames(document).includes(n);
+  });
+
+  const form = 'read=HTMLFormElement own=true desc=data e=true c=true w=true listed=true';
+  testing.expectEqual(
+    ['title ' + form,
+     'images ' + form,
+     'URL ' + form,
+     'getElementById ' + form,
+     'location read=Location own=true desc=accessor e=true c=false w=undefined listed=true',
+     'all ' + form,
+     'body ' + form,
+     'forms ' + form,
+     'constructor ' + form,
+     'hasOwnProperty ' + form,
+     'toString ' + form,
+     'nodeType ' + form,
+     'addEventListener ' + form].join('\n'),
+    rows.join('\n'));
+
+  // And the members come back when the elements go away.
+  holder.remove();
+  testing.expectEqual(
+    ['title=string', 'getElementById=function', 'nodeType=number', 'toString=function'].join('\n'),
+    ['title=' + typeof document.title,
+     'getElementById=' + typeof document.getElementById,
+     'nodeType=' + typeof document.nodeType,
+     'toString=' + typeof document.toString].join('\n'));
+}
+</script>
+
 </body>
 </html>
