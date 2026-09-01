@@ -426,6 +426,14 @@ fn valueSupported(property: []const u8, value: []const u8) bool {
 /// keyword list is complete cannot be talked into refusing a real value, and
 /// the multi-component grammars nobody has modelled are never asked.
 ///
+/// A keyword list cannot be reused for one component of a *pair*, and it was
+/// tried: the list is measured by offering each identifier alone, and half of
+/// a two-component grammar routinely does not parse alone. `align-items: first
+/// baseline` hangs off a leading modifier, and `scroll-marker-group: after
+/// links` hangs off a trailing one, so neither end of a pair is safe to grade
+/// this way. That is why `clip-path: circle() nonsense` is kept -- see the
+/// value-class ceiling note in `shorthand.refusesLonghand`.
+///
 /// Two exemptions, both measured:
 ///   - `any_identifier` properties take an author's own name, so no list can
 ///     say no: `(font-family: nonsense-family)` and `(will-change:

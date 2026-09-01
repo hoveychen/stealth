@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  A colour keyword inside a gradient stayed a keyword in the computed value.
+
+  `computedColourText` folds a named colour to `rgb()` on the computed surface,
+  and it is written to take the *whole* value: it refuses anything carrying a
+  `(`, a `#`, a comma or a space, because what reaches it as a colour is a bare
+  keyword. So `color: red` computes to `rgb(255, 0, 0)` and
+  `background-image: linear-gradient(red, blue)` computed to itself, where
+  Chrome answers `linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))`.
+
+  The half that already worked is what makes this a gap rather than a design:
+  a `#hex` and an `rgb()`/`hsl()` call inside the same gradient were already
+  folded, by `canonicaliseValue`'s token walk. Only the bare keyword was not.
+
+  Two things the measurement settled, and both of them are why this is not a
+  `canonicaliseValue` change (scratch/b77/expr-foldwhere.js, Chrome 151):
+
+    1. Chrome does not fold here at *specified* time. `el.style.backgroundImage`
+       reads back `linear-gradient(red, blue)` in Chrome exactly as this engine
+       already answers it. The fold is computed-value only.
+    2. Depth cannot be the rule. `counter(red)`, `counters(red, ".")`,
+       `repeat(2, [red] 1fr)`, `styleset(red)` and `url(...red)` all put `red`
+       inside a call and Chrome folds none of them -- there `red` is a counter
+       name, a line name, a feature name, a path. The enclosing function is what
+       decides, so the engine carries the measured list of the ones whose
+       grammar puts a `<color>` in their arguments.
+
+  Measured with scratch/b77/expr-foldassert.js on Chrome 151 against this engine
+  on the same page: 25 readings, 11 differing, every one of them colour-only --
+  the negative controls below already agreed before the fix.
+
+  Not covered here, because each needs more than the fold and would hide behind
+  it: `image-set(linear-gradient(red, blue) 1x)` (Chrome also answers `1dppx`),
+  `filter: drop-shadow(0px 0px red)` (Chrome also reorders and pads to three
+  lengths), and `-webkit-gradient(...)` (Chrome also rewrites `left top` to
+  `0% 0%`). They belong to the prefixed-gradient plan, not to this one.
+-->
+
+<body>
+
+<script id=computed_colour_in_function>
+{
+  const rows = [];
+  const check = (label, got, expected) => {
+    rows.push(label + ' = ' + got);
+    rows.push(label + ' = ' + expected);
+  };
+
+  const camel = (p) => p.replace(/-([a-z])/g, (m, c) => c.toUpperCase());
+  const computed = (property, value) => {
+    const el = document.createElement('div');
+    el.style.setProperty(property, value);
+    document.body.appendChild(el);
+    const got = String(getComputedStyle(el)[camel(property)]);
+    el.remove();
+    return got;
+  };
+  const row = (property, value, expected) =>
+    check('computed ' + property + ': ' + value, computed(property, value), expected);
+
+  // Folded: the enclosing function's grammar puts a `<color>` there.
+  row('background-image', 'linear-gradient(red, blue)',
+      'linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))');
+  row('background-image', 'radial-gradient(red, blue)',
+      'radial-gradient(rgb(255, 0, 0), rgb(0, 0, 255))');
+  row('background-image', 'conic-gradient(red, blue)',
+      'conic-gradient(rgb(255, 0, 0), rgb(0, 0, 255))');
+  row('background-image', 'repeating-linear-gradient(red 0px, blue 10px)',
+      'repeating-linear-gradient(rgb(255, 0, 0) 0px, rgb(0, 0, 255) 10px)');
+  row('background-image', 'repeating-radial-gradient(red 0px, blue 10px)',
+      'repeating-radial-gradient(rgb(255, 0, 0) 0px, rgb(0, 0, 255) 10px)');
+  row('background-image', 'repeating-conic-gradient(red 0deg, blue 90deg)',
+      'repeating-conic-gradient(rgb(255, 0, 0) 0deg, rgb(0, 0, 255) 90deg)');
+  row('background-image', '-webkit-linear-gradient(top, red, blue)',
+      '-webkit-linear-gradient(top, rgb(255, 0, 0), rgb(0, 0, 255))');
+  row('background-image', '-webkit-repeating-linear-gradient(top, red, blue)',
+      '-webkit-repeating-linear-gradient(top, rgb(255, 0, 0), rgb(0, 0, 255))');
+  // A keyword whose rgb() is not three of the same digit, and one whose fold is
+  // an rgba(): `transparent` is a named colour like any other.
+  row('background-image', 'linear-gradient(red, rebeccapurple)',
+      'linear-gradient(rgb(255, 0, 0), rgb(102, 51, 153))');
+  row('background-image', 'linear-gradient(transparent, red)',
+      'linear-gradient(rgba(0, 0, 0, 0), rgb(255, 0, 0))');
+  // Two layers, so the walk cannot stop at the first function it closes.
+  row('background-image', 'linear-gradient(red 0px, blue 10px), linear-gradient(tan, gold)',
+      'linear-gradient(rgb(255, 0, 0) 0px, rgb(0, 0, 255) 10px), ' +
+      'linear-gradient(rgb(210, 180, 140), rgb(255, 215, 0))');
+
+  // Already folded before this change, by canonicaliseValue's token walk. The
+  // new walk must not double-fold them or lose them.
+  row('background-image', 'linear-gradient(#ff0000, #0000ff)',
+      'linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))');
+  row('background-image', 'linear-gradient(rgb(1, 2, 3), hsl(0, 100%, 50%))',
+      'linear-gradient(rgb(1, 2, 3), rgb(255, 0, 0))');
+
+  // Not folded: `red` inside a call whose grammar has no `<color>` in it.
+  row('content', 'counter(red)', 'counter(red)');
+  row('content', 'counters(red, ".")', 'counters(red, ".")');
+  row('grid-template-columns', 'repeat(2, [red] 1fr)', 'repeat(2, [red] 1fr)');
+  row('font-variant-alternates', 'styleset(red)', 'styleset(red)');
+  row('font-variant-alternates', 'swash(red)', 'swash(red)');
+  // Absolute, because a relative url() is resolved against the document and the
+  // measurement was taken on a `data:` page where there is nothing to resolve
+  // against. The control is that `red` inside a `url()` is a path, not a colour.
+  row('background-image', 'url(https://example.com/red)',
+      'url("https://example.com/red")');
+
+  // Not folded: `red` as a whole value on a property that takes no colour.
+  row('animation-name', 'red', 'red');
+  row('font-family', 'red', 'red');
+  row('grid-area', 'red', 'red');
+  row('will-change', 'red', 'red');
+
+  // The whole-value fold this one sits beside, which must keep working.
+  row('color', 'red', 'rgb(255, 0, 0)');
+  row('background-color', 'rebeccapurple', 'rgb(102, 51, 153)');
+
+  for (let i = 0; i < rows.length; i += 2) {
+    testing.expectEqual(rows[i + 1], rows[i]);
+  }
+}
+</script>
+</body>

@@ -1295,6 +1295,15 @@ pub fn refusesLonghand(name: []const u8, value: []const u8) bool {
 /// value back (tools/fingerprint/results/b55-answers-lp.json), which makes the
 /// gap a tell rather than a rounding error.
 ///
+/// The same gap is what `src/browser/tests/css/arity_pool_ceiling.html` leaves
+/// six declarations to. `clip-path`, `shape-outside`, `border-shape` and
+/// `scroll-marker-group` are all longhands nothing expands to, so nothing
+/// grades their components; the arity count used to refuse every two-component
+/// value they were given, which hid the gap by also refusing the valid ones.
+/// Now that the count is right, `clip-path: circle() nonsense` is kept. Closing
+/// it means measuring value classes for the longhands no shorthand reaches --
+/// the same remedy as the colours below, one property at a time.
+///
 /// Measured with tools/fingerprint/probes/expr-b55-color-classes.js on the
 /// generator's own token battery, so the answer is in the same vocabulary:
 /// `color` takes `#abc` and `rgb(1, 2, 3)` and refuses the other ten, which is
