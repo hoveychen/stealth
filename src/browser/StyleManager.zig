@@ -148,6 +148,16 @@ cascade_cache: CascadeCache = .empty,
 /// on the page, those become 17.6% and 65.1%.
 fixed_cascade_cache: FixedCascadeCache = .empty,
 
+/// The same again, for `ruleHiding`. Its key is the element alone: the answer
+/// takes no property name, no `options` and no inline style, which is the whole
+/// reason `isElementHidden` was split in two.
+///
+/// It earns a third map because it is what the other two left behind. Under the
+/// layout-pass prototype, with the named and fixed caches in place, a sample of
+/// ak-homedepot put `isElementHidden` at 16.5% of the busy thread and the
+/// selector matching it drives at 50.8%.
+rule_hiding_cache: RuleHidingCache = .empty,
+
 /// The `Page.dom_version` the cache's contents were computed under. Any DOM
 /// mutation moves it -- `Frame.domChanged` covers structure and, through
 /// `Attribute.List.put`/`remove`, class and id -- and every entry is stale at
@@ -1062,6 +1072,7 @@ fn rebuildIfDirty(self: *StyleManager) !void {
     // arena, so these are `.empty` rather than a clear: the buckets are gone.
     self.cascade_cache = .empty;
     self.fixed_cascade_cache = .empty;
+    self.rule_hiding_cache = .empty;
 
     self.next_doc_order = 1;
 
@@ -1296,6 +1307,67 @@ fn isElementHidden(self: *StyleManager, el: *Element, options: CheckVisibilityOp
         return (display.hides orelse false) or (visibility.hides orelse false) or (opacity.hides orelse false);
     }
 
+    // The rule scan used to run seeded with the inline values above, which let
+    // it skip any rule that could not beat them. Splitting it out costs that
+    // pruning and buys something worth more: the answer no longer depends on
+    // the element's inline style, and an answer that depends only on the rules
+    // and the tree is one that can be remembered.
+    //
+    // The merge is the same verdict the seeded loop reached. `beatenBy` is a
+    // total order on (important, priority), the seeded loop's winner is
+    // `max(inline, every matching rule)`, and max is associative -- so taking
+    // the max over rules first and comparing that to the inline seed lands on
+    // the same rule. `unbeatable` sits at INLINE_PRIORITY with important set, so
+    // a property the caller did not ask about still cannot be beaten.
+    const from_rules = self.ruleHiding(el);
+    if (from_rules.display.hides != null and
+        display.beatenBy(from_rules.display.priority, from_rules.display.important))
+    {
+        display = from_rules.display;
+    }
+    if (from_rules.visibility.hides != null and
+        visibility.beatenBy(from_rules.visibility.priority, from_rules.visibility.important))
+    {
+        visibility = from_rules.visibility;
+    }
+    if (from_rules.opacity.hides != null and
+        opacity.beatenBy(from_rules.opacity.priority, from_rules.opacity.important))
+    {
+        opacity = from_rules.opacity;
+    }
+
+    // UA stylesheet display:none fallback (HTML Rendering §15.3.1 "Hidden
+    // elements"). Applied only when nothing authored a `display` for the
+    // element — per CSS Cascade §6.1 any normal-origin author rule beats UA
+    // origin regardless of specificity, so `.x { display: flex }` on a
+    // `<div class="x" hidden>` must report visible.
+    if (options.check_display and options.ua_display_none and display.hides == null) {
+        if (matchesUaDisplayNoneRule(el)) {
+            display.hides = true;
+        }
+    }
+
+    return (display.hides orelse false) or (visibility.hides orelse false) or (opacity.hides orelse false);
+}
+
+/// What the stylesheet rules alone say about an element's three hiding
+/// properties. No inline style, no UA fallback and no `options`: those are the
+/// caller's to apply, and leaving them out is what makes this answer a function
+/// of the rules and the tree only.
+const RuleHiding = struct {
+    display: HidingWinner = .{},
+    visibility: HidingWinner = .{},
+    opacity: HidingWinner = .{},
+};
+
+fn ruleHiding(self: *StyleManager, el: *Element) RuleHiding {
+    self.dropCachesIfDomMoved();
+    if (self.rule_hiding_cache.get(el)) |cached| {
+        return cached;
+    }
+
+    var out: RuleHiding = .{};
+
     // Helper to check a single rule
     const Ctx = struct {
         display: *HidingWinner,
@@ -1343,9 +1415,9 @@ fn isElementHidden(self: *StyleManager, el: *Element, options: CheckVisibilityOp
         }
     };
     const ctx = Ctx{
-        .display = &display,
-        .visibility = &visibility,
-        .opacity = &opacity,
+        .display = &out.display,
+        .visibility = &out.visibility,
+        .opacity = &out.opacity,
         .el = el,
         .frame = self.frame,
     };
@@ -1371,18 +1443,13 @@ fn isElementHidden(self: *StyleManager, el: *Element, options: CheckVisibilityOp
 
     ctx.checkRules(&self.other_rules);
 
-    // UA stylesheet display:none fallback (HTML Rendering §15.3.1 "Hidden
-    // elements"). Applied only when nothing authored a `display` for the
-    // element — per CSS Cascade §6.1 any normal-origin author rule beats UA
-    // origin regardless of specificity, so `.x { display: flex }` on a
-    // `<div class="x" hidden>` must report visible.
-    if (options.check_display and options.ua_display_none and display.hides == null) {
-        if (matchesUaDisplayNoneRule(el)) {
-            display.hides = true;
-        }
+    // "No rule hides this element" is the usual answer and cost the same walk,
+    // so it is kept like any other.
+    if (self.rule_hiding_cache.count() < MAX_CASCADE_CACHE) {
+        self.rule_hiding_cache.put(self.arena.allocator(), el, out) catch {};
     }
 
-    return (display.hides orelse false) or (visibility.hides orelse false) or (opacity.hides orelse false);
+    return out;
 }
 
 /// Check if an element has pointer-events:none.
@@ -1907,6 +1974,8 @@ const FixedCascadeKey = struct {
 
 const FixedCascadeCache = std.AutoHashMapUnmanaged(FixedCascadeKey, ?Declaration);
 
+const RuleHidingCache = std.AutoHashMapUnmanaged(*Element, RuleHiding);
+
 /// Ceiling on cached answers. A page with a hundred thousand elements would
 /// otherwise hold an entry per element per property asked, and the cache is
 /// meant to pay for repeated reads of the same document, not to grow with it
@@ -2375,6 +2444,7 @@ fn dropCachesIfDomMoved(self: *StyleManager) void {
     }
     self.cascade_cache.clearRetainingCapacity();
     self.fixed_cascade_cache.clearRetainingCapacity();
+    self.rule_hiding_cache.clearRetainingCapacity();
     self.cache_dom_version = dom_version;
 }
 

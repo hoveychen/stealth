@@ -7879,6 +7879,10 @@ test "WebApi: CSSStyleDeclaration fixed cascade cache invalidation" {
     try testing.htmlRunner("css/fixed_cascade_cache_invalidation.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration rule hiding cache invalidation" {
+    try testing.htmlRunner("css/rule_hiding_cache_invalidation.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration computed transform-origin" {
     try testing.htmlRunner("css/computed_origin.html", .{});
 }
