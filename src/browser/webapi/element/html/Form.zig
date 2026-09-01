@@ -26,6 +26,7 @@ const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
 const collections = @import("../../collections.zig");
+const TreeWalker = @import("../../TreeWalker.zig");
 const Event = @import("../../Event.zig");
 
 pub const Input = @import("Input.zig");
@@ -175,6 +176,61 @@ pub fn setEnctype(self: *Form, value: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("enctype"), .wrap(value), frame);
 }
 
+/// Whether any listed element of the form carries this name -- as its `name`
+/// or as its `id`, which name it equally.
+fn namesControl(self: *Form, name: []const u8, frame: *Frame) bool {
+    var listed = self.walk(.form, frame);
+    while (listed.next()) |element| {
+        if (namedAs(element, name)) return true;
+    }
+    return false;
+}
+
+fn namedAs(element: *Element, name: []const u8) bool {
+    if (element.getAttributeSafe(comptime .wrap("id"))) |id| {
+        if (std.mem.eql(u8, id, name)) return true;
+    }
+    if (element.getAttributeSafe(comptime .wrap("name"))) |element_name| {
+        if (std.mem.eql(u8, element_name, name)) return true;
+    }
+    return false;
+}
+
+/// A form is named by its img elements as well as by its listed ones -- but
+/// only where no listed element answers, so a control and an image sharing a
+/// name reads back as the control rather than as a list of the two (measured
+/// on Chrome 151, scratch/b79/edges.mjs). An img has no `form` attribute, so
+/// its owner is the form it sits inside.
+fn namedImage(self: *Form, name: []const u8) ?*Element {
+    var tw = TreeWalker.FullExcludeSelf.Elements.init(self.asNode(), .{});
+    while (tw.next()) |element| {
+        if (element.is(Element.Html.Image) == null) {
+            continue;
+        }
+        if (!namedAs(element, name)) {
+            continue;
+        }
+        if (ownerForm(element) != self) {
+            continue;
+        }
+        return element;
+    }
+    return null;
+}
+
+/// The nearest ancestor form, which is the form owner of an element that
+/// cannot carry a `form` attribute.
+fn ownerForm(element: *Element) ?*Form {
+    var node = element.asNode()._parent;
+    while (node) |n| {
+        if (n.is(Form)) |form| {
+            return form;
+        }
+        node = n._parent;
+    }
+    return null;
+}
+
 pub fn getLength(self: *Form, frame: *Frame) !u32 {
     const elements = try self.getElements(frame);
     return elements.length(frame);
@@ -310,6 +366,73 @@ pub const JsApi = struct {
     pub const reset = bridge.function(Form.reset, .{});
     pub const submit = bridge.function(Form.submit, .{});
 
+    /// A form is indexed and named itself, not only through `form.elements`:
+    /// `form[0]` is its first listed element and `form.myField` the control
+    /// that name reaches -- a RadioNodeList when it reaches more than one.
+    ///
+    /// The two halves answer differently, which is why both were measured
+    /// (Chrome 151, scratch/b79/named-objects.mjs): the indices are enumerable
+    /// and listed by getOwnPropertyNames, while the names are neither listed
+    /// nor enumerable and still answer `in` and hasOwnProperty. So the indexed
+    /// handler has an enumerator and the named one does not.
+    pub const @"[int]" = bridge.indexedFull(getAtIndex, setAtIndex, null, queryAtIndex, defineAtIndex, getIndexes, .{ .null_as_undefined = true });
+    pub const @"[str]" = bridge.namedIndexed(getByName, null, null, null, queryByName, .{ .null_as_undefined = true });
+
+    fn getAtIndex(self: *Form, index: usize, frame: *Frame) ?*Element {
+        var listed = self.walk(.form, frame);
+        return listed.getAtIndex(index, frame);
+    }
+
+    // Supported indexed properties are enumerable, configurable, read-only.
+    fn queryAtIndex(self: *Form, index: u32, frame: *Frame) !u32 {
+        var listed = self.walk(.form, frame);
+        if (index < listed.length(frame)) {
+            return js.v8.ReadOnly;
+        }
+        return error.NotHandled;
+    }
+
+    // Web IDL gives the form no indexed setter, so assigning to or defining an
+    // index fails rather than shadowing the element.
+    fn setAtIndex(_: *Form, _: u32, _: js.Value) bool {
+        return false;
+    }
+
+    fn defineAtIndex(_: *Form, _: u32) bool {
+        return false;
+    }
+
+    fn getIndexes(self: *Form, frame: *Frame) !js.Array {
+        var listed = self.walk(.form, frame);
+        const len = listed.length(frame);
+        var arr = frame.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
+
+    fn getByName(self: *Form, control_name: []const u8, frame: *Frame) !collections.HTMLFormControlsCollection.NamedItemResult {
+        if (control_name.len == 0) {
+            return error.NotHandled;
+        }
+        const controls = try self.getElements(frame);
+        if (try controls.namedItem(control_name, frame)) |named| {
+            return named;
+        }
+        return .{ .element = self.namedImage(control_name) orelse return error.NotHandled };
+    }
+
+    // Named properties are [LegacyUnenumerableNamedProperties]: non-enumerable
+    // and read-only. Answered by a walk rather than by namedItem so that an
+    // `in` costs no collection.
+    fn queryByName(self: *Form, control_name: []const u8, frame: *Frame) !u32 {
+        if (control_name.len > 0 and (self.namesControl(control_name, frame) or self.namedImage(control_name) != null)) {
+            return js.v8.ReadOnly | js.v8.DontEnum;
+        }
+        return error.NotHandled;
+    }
+
     fn _getRelList(self: *Form, frame: *Frame) !*collections.DOMTokenList {
         return self.asElement().getRelList(frame);
     }
@@ -326,4 +449,5 @@ const testing = @import("../../../../testing.zig");
 test "WebApi: HTML.Form" {
     try testing.htmlRunner("element/html/form.html", .{});
     try testing.htmlRunner("element/html/form-validity.html", .{});
+    try testing.htmlRunner("element/html/form_named_access.html", .{});
 }

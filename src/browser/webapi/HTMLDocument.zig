@@ -53,6 +53,12 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    /// `document.myForm`. The list is Document's, but the handler has to be
+    /// installed here too: V8 does not give a derived instance template its
+    /// base's named handler, and the document every page has is this one.
+    const named_objects = Document.NamedObjectAccess(HTMLDocument);
+    pub const @"[str]" = bridge.namedIndexedFull(named_objects.get, null, named_objects.delete, named_objects.names, named_objects.query, named_objects.define, null, .{ .null_as_undefined = true });
+
     pub const constructor = bridge.constructor(_constructor, .{});
     fn _constructor(frame: *Frame) !*HTMLDocument {
         return frame._factory.document(HTMLDocument{

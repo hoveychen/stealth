@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>named objects</title>
+</head>
+<body>
+
+<!--
+  The named objects of a Document: `document.myForm`, `document.myImage`,
+  `document.myFrame`. Five element kinds earn a name -- embed, form, iframe,
+  img, object -- from their `name` attribute, an object also from its `id`, and
+  an img from its `id` too but only when it also carries a `name`. Everything
+  else in the tree names nothing: a div with an id does not, a select with a
+  name does not, an anchor with a name does not.
+
+  This engine had none of them. `Object.getOwnPropertyNames(document)` answered
+  seven names in Chrome and one here (scratch/b78/name-questions.json), which
+  is a difference a guard reads with one expression and no knowledge of the
+  page: a real document names its forms and images, and this one did not.
+
+  Measured on Chrome 151 with scratch/b79/named-objects.mjs against this same
+  markup. The names are own, enumerable, configurable and writable -- they are
+  in Object.keys, not just getOwnPropertyNames -- and they come in tree order,
+  with an element's id before its name when it contributes both.
+-->
+
+<div id="nxDiv" name="nxDivName"></div>
+<form name="nxForm" id="nxFormId"><input name="nxField"></form>
+<img name="nxImg" id="nxImgId" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+<img name="nxImgNameOnly" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+<img id="nxImgIdOnly" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+<iframe name="nxFrame" src="about:blank"></iframe>
+<iframe id="nxFrameIdOnly" src="about:blank"></iframe>
+<embed name="nxEmbed" type="application/x-nonexistent">
+<embed id="nxEmbedIdOnly" type="application/x-nonexistent">
+<object name="nxObject"></object>
+<object id="nxObjectId"></object>
+<select id="nxSelect" name="nxSelectName"></select>
+<a name="nxAnchor"></a>
+
+<script src="../testing.js"></script>
+
+<script id="named_objects_are_own_enumerable_properties">
+{
+  const mine = (a) => a.filter((n) => n.startsWith('nx'));
+  // Tree order, and for the img that carries both, its id before its name.
+  const want = [
+    'own nxForm,nxImgId,nxImg,nxImgNameOnly,nxFrame,nxEmbed,nxObject,nxObjectId',
+    'keys nxForm,nxImgId,nxImg,nxImgNameOnly,nxFrame,nxEmbed,nxObject,nxObjectId',
+  ].join('\n');
+  const got = [
+    'own ' + mine(Object.getOwnPropertyNames(document)).join(','),
+    'keys ' + mine(Object.keys(document)).join(','),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="each_named_object_answers_all_four_name_questions">
+{
+  const row = (n) => {
+    const d = Object.getOwnPropertyDescriptor(document, n);
+    const v = document[n];
+    const desc = d
+      ? (d.get || d.set ? 'accessor' : 'data') + ` e=${d.enumerable} c=${d.configurable} w=${d.writable}`
+      : 'absent';
+    const read = v === undefined ? 'undefined'
+      : Object.prototype.toString.call(v) === '[object Window]' ? 'Window'
+      : v.constructor.name;
+    return `${n} in=${n in document} own=${Object.prototype.hasOwnProperty.call(document, n)} ${desc} read=${read}`;
+  };
+  const want = [
+    'nxForm in=true own=true data e=true c=true w=true read=HTMLFormElement',
+    'nxImg in=true own=true data e=true c=true w=true read=HTMLImageElement',
+    'nxImgId in=true own=true data e=true c=true w=true read=HTMLImageElement',
+    'nxImgNameOnly in=true own=true data e=true c=true w=true read=HTMLImageElement',
+    // An iframe's name reaches its window, not the element.
+    'nxFrame in=true own=true data e=true c=true w=true read=Window',
+    'nxEmbed in=true own=true data e=true c=true w=true read=HTMLEmbedElement',
+    'nxObject in=true own=true data e=true c=true w=true read=HTMLObjectElement',
+    // An object earns a name from its id as well.
+    'nxObjectId in=true own=true data e=true c=true w=true read=HTMLObjectElement',
+  ].join('\n');
+  const got = [
+    row('nxForm'), row('nxImg'), row('nxImgId'), row('nxImgNameOnly'),
+    row('nxFrame'), row('nxEmbed'), row('nxObject'), row('nxObjectId'),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="everything_else_in_the_tree_names_nothing">
+{
+  const row = (n) =>
+    `${n} in=${n in document} own=${Object.prototype.hasOwnProperty.call(document, n)}` +
+    ` ${Object.getOwnPropertyDescriptor(document, n) ? 'present' : 'absent'}` +
+    ` read=${document[n] === undefined ? 'undefined' : document[n].constructor.name}`;
+  const want = [
+    // A form's id is not one of its names, and neither is a field's name.
+    'nxFormId in=false own=false absent read=undefined',
+    'nxField in=false own=false absent read=undefined',
+    // An id alone earns nothing for an img, an iframe or an embed.
+    'nxImgIdOnly in=false own=false absent read=undefined',
+    'nxFrameIdOnly in=false own=false absent read=undefined',
+    'nxEmbedIdOnly in=false own=false absent read=undefined',
+    // The element kind is what qualifies, not the attribute: a div, a select
+    // and an anchor name nothing however they are labelled.
+    'nxDiv in=false own=false absent read=undefined',
+    'nxDivName in=false own=false absent read=undefined',
+    'nxSelect in=false own=false absent read=undefined',
+    'nxSelectName in=false own=false absent read=undefined',
+    'nxAnchor in=false own=false absent read=undefined',
+    // Names are compared as written.
+    'NxForm in=false own=false absent read=undefined',
+    'nxNope in=false own=false absent read=undefined',
+  ].join('\n');
+  const got = [
+    row('nxFormId'), row('nxField'), row('nxImgIdOnly'), row('nxFrameIdOnly'),
+    row('nxEmbedIdOnly'), row('nxDiv'), row('nxDivName'), row('nxSelect'),
+    row('nxSelectName'), row('nxAnchor'), row('NxForm'), row('nxNope'),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="the_name_list_is_the_tree_as_it_is_now">
+{
+  const fresh = document.createElement('img');
+  fresh.setAttribute('name', 'nxFresh');
+  const before = 'before ' + ('nxFresh' in document);
+  document.body.appendChild(fresh);
+  const after = 'after-insert ' + ('nxFresh' in document) +
+    ' own=' + Object.prototype.hasOwnProperty.call(document, 'nxFresh');
+  fresh.remove();
+  const gone = 'after-remove ' + ('nxFresh' in document);
+  testing.expectEqual(
+    'before false\nafter-insert true own=true\nafter-remove false',
+    [before, after, gone].join('\n'));
+}
+</script>
+
+<script id="renaming_an_element_renames_the_document_property">
+{
+  // The list is cached and the cache turns over with the DOM version, which
+  // an attribute write moves as much as an insertion does.
+  const img = document.getElementsByTagName('img')[1];
+  const before = 'before ' + ('nxImgNameOnly' in document) + ',' + ('nxRenamed' in document);
+  img.setAttribute('name', 'nxRenamed');
+  const after = 'after ' + ('nxImgNameOnly' in document) + ',' + ('nxRenamed' in document);
+  img.setAttribute('name', 'nxImgNameOnly');
+  testing.expectEqual('before true,false\nafter false,true', [before, after].join('\n'));
+}
+</script>
+
+<script id="a_named_object_cannot_be_assigned_over">
+{
+  // The descriptor says writable, and the assignment still does nothing:
+  // there is no named setter, so the define that [[Set]] falls back to is
+  // refused, silently outside strict mode.
+  document.nxObject = 'x';
+  testing.expectEqual(
+    'read=HTMLObjectElement',
+    'read=' + (typeof document.nxObject === 'string' ? 'string' : document.nxObject.constructor.name));
+}
+</script>
+
+<script id="deleting_a_named_object_takes_the_name_for_good">
+{
+  // Last, because it is the one block that does not put the page back. The
+  // element stays in the tree and the name never comes back -- not even after
+  // a DOM change, which rebuilds the list from scratch. Only a document does
+  // this; a form keeps a name a script deleted (scratch/b79/edges.mjs).
+  const before = 'before ' + ('nxEmbed' in document);
+  const deleted = 'delete ' + (delete document.nxEmbed);
+  const after = 'after in=' + ('nxEmbed' in document) +
+    ' listed=' + Object.getOwnPropertyNames(document).includes('nxEmbed') +
+    ' read=' + (document.nxEmbed === undefined ? 'undefined' : 'object') +
+    ' element=' + (document.getElementsByTagName('embed')[0].getAttribute('name'));
+  const spacer = document.createElement('div');
+  document.body.appendChild(spacer);
+  spacer.remove();
+  const still = 'after-mutation in=' + ('nxEmbed' in document);
+  testing.expectEqual(
+    ['before true', 'delete true',
+      'after in=false listed=false read=undefined element=nxEmbed',
+      'after-mutation in=false'].join('\n'),
+    [before, deleted, after, still].join('\n'));
+}
+</script>
+
+</body>
+</html>

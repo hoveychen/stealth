@@ -47,4 +47,10 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
+
+    /// The named objects are a Document's, not an HTML document's, so an XML
+    /// one answers them too -- and needs its own handler to do it, since V8
+    /// does not inherit one. See Document.NamedObjectAccess.
+    const named_objects = Document.NamedObjectAccess(XMLDocument);
+    pub const @"[str]" = bridge.namedIndexedFull(named_objects.get, null, named_objects.delete, named_objects.names, named_objects.query, named_objects.define, null, .{ .null_as_undefined = true });
 };
