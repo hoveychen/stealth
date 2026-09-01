@@ -925,7 +925,7 @@ fn declaredValue(style_manager: *StyleManager, element: *Element, property_name:
     // wrote. A function this engine does not model answers `unreportable`, so
     // the initial `none` is reported instead of a spelling Chrome never prints.
     if (std.mem.eql(u8, property_name, "transform")) {
-        const basis = transformBasis(element, frame) orelse return .unreportable;
+        const basis = transformBasis(style_manager, element, frame) orelse return .unreportable;
         // The author's text, not the print. `value` has already been through
         // writeCssNumber, which keeps six significant digits -- so computing
         // from it makes `rotate(1.5707963267948966rad)` a rotation of `1.5708`
@@ -2279,7 +2279,7 @@ fn animatedTransform(style_manager: *StyleManager, element: *Element, page_frame
     // the static one does, so the basis is read once and handed to both paths.
     // An element with no box reports `none` for its transform whether it is
     // animated or not, and returning null here lands on exactly that.
-    const basis = transformBasis(element, frame) orelse return null;
+    const basis = transformBasis(style_manager, element, frame) orelse return null;
     if (transform.interpolatedValue(frame.call_arena, from_value, to_value, eased, basis) catch null) |value| {
         return value;
     }
@@ -2305,16 +2305,50 @@ fn animatedTransform(style_manager: *StyleManager, element: *Element, page_frame
 /// percentage of. Chrome answers `matrix(1, 0, 0, 1, 0, 0)` for
 /// `translate(50%, 50%)` on a `display:inline` <p> whose inline box measures
 /// 8x19 -- not 4,9.5 -- so the extents are zero rather than the box's.
-fn transformBasis(element: *Element, frame: *Frame) ?transform.Basis {
+fn transformBasis(style_manager: *StyleManager, element: *Element, frame: *Frame) ?transform.Basis {
     var visibility_cache: Element.VisibilityCache = .{};
     if (!element.checkVisibilityCached(&visibility_cache, frame)) return null;
-    if (isInlineBox(element, frame)) return .zero;
+    if (isInlineBox(element, frame)) return .{
+        .width = 0,
+        .height = 0,
+        .factors = transformFactors(style_manager, element),
+    };
 
     const edges = boxEdges(element, frame);
     return .{
         .width = element.getClientWidthWithCache(frame, &visibility_cache) + edges.border_x,
         .height = element.getClientHeightWithCache(frame, &visibility_cache) + edges.border_y,
+        .factors = transformFactors(style_manager, element),
     };
+}
+
+/// CSS pixels per unit for the lengths a transform argument can carry that
+/// transform.zig cannot resolve alone.
+///
+/// Read off `lengthFactor`, so a transform's `em` is the same em every other
+/// property gets and there is no second conversion table to drift. The property
+/// name handed to it is `transform` itself, which has no special case in there:
+/// the two that do -- `font-size` and `line-height`, where `em` means the
+/// PARENT's size -- are exactly the two this is not.
+fn transformFactors(style_manager: *StyleManager, element: *Element) transform.Factors {
+    var out: transform.Factors = .{};
+    const wanted = [_]struct { units.Unit, *?f64 }{
+        .{ .em, &out.em },     .{ .rem, &out.rem },
+        .{ .ex, &out.ex },     .{ .ch, &out.ch },
+        .{ .vh, &out.vh },     .{ .vw, &out.vw },
+        .{ .vmin, &out.vmin }, .{ .vmax, &out.vmax },
+    };
+    for (wanted) |entry| {
+        const unit, const slot = entry;
+        switch (lengthFactor(style_manager, element, "transform", unit)) {
+            .pixels => |factor| slot.* = factor,
+            // `verbatim` means the unit is already a computed value, which none
+            // of these eight ever is; `unresolvable` means this engine has no
+            // answer. Both leave the slot null and refuse the argument.
+            .verbatim, .unresolvable => {},
+        }
+    }
+    return out;
 }
 
 /// One `animation-*` longhand as the cascade sees it, under either spelling,
@@ -7606,6 +7640,10 @@ test "WebApi: CSSStyleDeclaration animation computed transform" {
 
 test "WebApi: CSSStyleDeclaration transform number format" {
     try testing.htmlRunner("css/transform_number_format.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration transform length units" {
+    try testing.htmlRunner("css/transform_length_units.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration percentage width" {

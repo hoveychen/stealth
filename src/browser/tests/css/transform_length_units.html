@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=transform-anchor></div>
+
+<!--
+`transform` took four kinds of argument and refused everything else.
+
+`parseScalar` handled a percentage, the four angle units, `px` and a bare
+number. Every other length -- `em`, `rem`, `ex`, `ch`, the absolute units, the
+viewport units -- came back null, and a null argument takes the whole
+declaration with it, so `transform: translateX(1em)` computed to `none`. Not a
+number that was slightly wrong: a declaration that did nothing, on a property
+whose computed value is a matrix string that fingerprinting scripts read
+directly.
+
+Every expected value is Chrome 151's own, measured with
+scratch/b98/expr-b98-transform-units.js in exactly the DOM this file builds: a
+400x200 container with a 20px font, around a 100x50 element that also declares
+20px. 22 rows, of which 18 differed.
+
+`ex`, `ch` and the viewport units are asserted here and not left to
+computed_relative_units.html because the question is different: that file asks
+what one unit resolves to, this one asks whether the transform parser accepts it
+at all. A wrong number and a missing declaration are not the same failure.
+-->
+
+<script id=transform_resolves_font_relative_lengths>
+{
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;height:200px;font-size:20px">' +
+      '<div style="font-size:20px;width:100px;height:50px;' + decl + '">x</div></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild).transform);
+    host.remove();
+    return got;
+  };
+  const CASES = [
+    // `em` is the element's own computed font size, `rem` the root's 16px.
+    ['matrix(1, 0, 0, 1, 20, 0)', 'transform: translateX(1em)'],
+    ['matrix(1, 0, 0, 1, 32, 0)', 'transform: translateX(2rem)'],
+    // The absolute units, which need no context at all and were refused anyway.
+    ['matrix(1, 0, 0, 1, 96, 0)', 'transform: translateX(1in)'],
+    ['matrix(1, 0, 0, 1, 37.7953, 0)', 'transform: translateX(1cm)'],
+    ['matrix(1, 0, 0, 1, 1.33333, 0)', 'transform: translateX(1pt)'],
+    // More than one argument, and the three-dimensional forms.
+    ['matrix(1, 0, 0, 1, 20, 40)', 'transform: translate(1em, 2em)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 20, 40, 60, 1)',
+     'transform: translate3d(1em, 2em, 3em)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -0.025, 0, 0, 0, 1)',
+     'transform: perspective(2em)'],
+    // The two that already worked, so the fix cannot lose them.
+    ['matrix(1, 0, 0, 1, 10, 0)', 'transform: translateX(10px)'],
+    ['matrix(1, 0, 0, 1, 50, 0)', 'transform: translateX(50%)'],
+    ['matrix(-1, 0, 0, -1, 0, 0)', 'transform: rotate(0.5turn)'],
+    // And the one Chrome refuses too: a matrix() takes numbers, not lengths.
+    ['none', 'transform: matrix(1, 0, 0, 1, 1em, 0)'],
+  ];
+  const wrong = [];
+  for (const [want, decl] of CASES) {
+    const got = probe(decl);
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
+
+<script id=transform_resolves_viewport_and_font_metric_lengths>
+{
+  // Split from the block above because these three answer to something the
+  // element does not carry -- the viewport for `vh`/`vw`, the font's own
+  // metrics for `ex` and `ch`. If one of them is ever wrong it is worth seeing
+  // that on its own rather than inside a list of ordinary lengths.
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;height:200px;font-size:20px">' +
+      '<div style="font-size:20px;width:100px;height:50px;' + decl + '">x</div></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild).transform);
+    host.remove();
+    return got;
+  };
+  const CASES = [
+    ['matrix(1, 0, 0, 1, 10, 0)', 'transform: translateX(1ch)'],
+    ['matrix(1, 0, 0, 1, 192, 0)', 'transform: translateX(10vw)'],
+  ];
+  const wrong = [];
+  for (const [want, decl] of CASES) {
+    const got = probe(decl);
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
+
+<script id=transform_takes_a_unitless_zero_in_any_slot>
+{
+  // Zero is the one number that stands in for a dimension anywhere, and the
+  // argument-type table has to let it through or it refuses real pages:
+  // discord.com ships `rotateX(0) rotateY(0) rotateZ(0deg)` on 39 elements, and
+  // the first version of that table turned every one of them into `none`.
+  //
+  // Found by counting how many elements end up with a matrix on a real page
+  // rather than by another probe -- the slot-type sweep used `2` for its number
+  // token and so never asked. A unitless NON-zero is still refused, which is
+  // what keeps this an allowance for zero and not a hole.
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;height:200px;font-size:20px">' +
+      '<div style="font-size:20px;width:100px;height:50px;' + decl + '">x</div></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild).transform);
+    host.remove();
+    return got;
+  };
+  const CASES = [
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: rotate(0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: rotateX(0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: rotate(0.0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: skew(0, 0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: translateX(0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: translateZ(0)'],
+    ['matrix(1, 0, 0, 1, 0, 0)', 'transform: rotate3d(1, 1, 1, 0)'],
+    // The shape discord actually writes.
+    ['matrix(1, 0, 0, 1, 0, 50)',
+     'transform: translate3d(0, 50px, 0) scale3d(1, 1, 1) rotateX(0) rotateY(0) rotateZ(0) skew(0, 0)'],
+    // A unitless non-zero is still a refusal.
+    ['none', 'transform: rotate(1)'],
+    // A perspective depth under a pixel is a pixel, so a zero one is not the
+    // division by zero it looks like. Measured over eight depths; a negative
+    // one is still refused.
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -1, 0, 0, 0, 1)', 'transform: perspective(0)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -1, 0, 0, 0, 1)', 'transform: perspective(0.5px)'],
+    ['matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -0.5, 0, 0, 0, 1)', 'transform: perspective(2px)'],
+    ['none', 'transform: perspective(-1px)'],
+  ];
+  const wrong = [];
+  for (const [want, decl] of CASES) {
+    const got = probe(decl);
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
+
+<script id=transform_resolves_a_math_function_argument>
+{
+  // A calc() argument was refused for the same reason a bare `em` was, so it
+  // comes back here rather than in the calc files: this is the transform
+  // parser's list of what an argument may be, not the calc evaluator's.
+  const probe = (decl) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = '<div style="width:400px;height:200px;font-size:20px">' +
+      '<div style="font-size:20px;width:100px;height:50px;' + decl + '">x</div></div>';
+    const got = String(getComputedStyle(host.firstChild.firstChild).transform);
+    host.remove();
+    return got;
+  };
+  const CASES = [
+    ['matrix(1, 0, 0, 1, 15, 0)', 'transform: translateX(calc(10px + 5px))'],
+    ['matrix(1, 0, 0, 1, 21, 0)', 'transform: translateX(calc(1px + 1em))'],
+    // The percentage inside a calc resolves against the same extent a bare one
+    // would: half of the element's own 100px border box, less ten.
+    ['matrix(1, 0, 0, 1, 40, 0)', 'transform: translateX(calc(50% - 10px))'],
+    // An angle argument folds as an angle, not as a length.
+    ['matrix(0, 1, -1, 0, 0, 0)', 'transform: rotate(calc(45deg + 45deg))'],
+    // And a bare number stays a number.
+    ['matrix(2, 0, 0, 2, 0, 0)', 'transform: scale(calc(1 + 1))'],
+    ['matrix(1, 0, 0, 1, 1, 0)', 'transform: translateX(min(1px, 1em))'],
+  ];
+  const wrong = [];
+  for (const [want, decl] of CASES) {
+    const got = probe(decl);
+    if (got !== want) wrong.push(decl + ': want ' + want + ', got ' + got);
+  }
+  testing.expectEqual('', wrong.join('\n'));
+}
+</script>
