@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+The hidden-element path caches what the STYLESHEET RULES say about an element's
+`display`, `visibility` and `opacity` -- and only that. Inline style is read
+fresh every time and merged on top, because writing `el.style.display` does not
+move `Page.dom_version`: `CSSStyleDeclaration.zig` never calls
+`Frame.domChanged`, so a cache keyed on that version would never hear about it.
+Splitting `isElementHidden` into a cacheable rule half and a live inline half is
+what this file guards.
+
+Two halves to check, then:
+  * the rule half must go stale when the rules or the tree change -- class,
+    `insertRule`, and a sibling inserted in front of a `:nth-child` rule;
+  * the inline half must NOT be cached at all, which the last block asserts by
+    writing inline style with nothing else changing.
+
+Every case reads before and after. The read before is what fills the cache; a
+test that only reads after passes on a broken cache because there was never an
+entry to go stale.
+-->
+
+<script id=rule_hiding_cache_invalidation>
+{
+  const wrong = [];
+  const base = document.createElement('style');
+  base.textContent = `
+    .gone { display: none }
+    .invis { visibility: hidden }
+    .clear { opacity: 0 }
+    .kids > div:nth-child(2) { display: none }
+  `;
+  document.head.appendChild(base);
+  const live = document.createElement('style');
+  document.head.appendChild(live);
+
+  // checkVisibility() defaults to display only, so visibility and opacity need
+  // to be asked for explicitly.
+  const vis = (el, opts) => el.checkVisibility(opts);
+  const step = (label, el, want, opts) => {
+    const got = vis(el, opts);
+    if (got !== want) wrong.push(label + ': want ' + want + ', got ' + got);
+  };
+
+  // the rule half: a class change -------------------------------------------
+  const shapes = [
+    ['display', 'gone', undefined],
+    ['visibility', 'invis', { visibilityProperty: true }],
+    ['opacity', 'clear', { opacityProperty: true }],
+  ];
+  for (const [label, cls, opts] of shapes) {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    step(label + '_visible_before', el, true, opts);
+    el.className = cls;
+    step(label + '_hidden_after_class', el, false, opts);
+    el.className = '';
+    step(label + '_visible_after_class_removed', el, true, opts);
+  }
+
+  // the rule half: the rule set, with no DOM change --------------------------
+  const cssom = document.createElement('div');
+  cssom.className = 'cssom-target';
+  document.body.appendChild(cssom);
+  step('cssom_before', cssom, true);
+  live.sheet.insertRule('.cssom-target { display: none }', 0);
+  step('cssom_after_insert', cssom, false);
+  live.sheet.deleteRule(0);
+  step('cssom_after_delete', cssom, true);
+
+  // the rule half: tree position, for an element nobody touched --------------
+  const kids = document.createElement('div');
+  kids.className = 'kids';
+  const k1 = document.createElement('div');
+  const k2 = document.createElement('div');
+  kids.appendChild(k1);
+  kids.appendChild(k2);
+  document.body.appendChild(kids);
+  step('nth_k1_before', k1, true);
+  step('nth_k2_before', k2, false);
+  kids.insertBefore(document.createElement('div'), k1);
+  step('nth_k1_after_insert', k1, false);
+  step('nth_k2_after_insert', k2, true);
+
+  // the inline half, which must never be cached ------------------------------
+  // Nothing here moves dom_version, so if the inline read were folded into the
+  // cached answer these would all keep the value from the read before them.
+  const inl = document.createElement('div');
+  document.body.appendChild(inl);
+  step('inline_visible_before', inl, true);
+  inl.style.display = 'none';
+  step('inline_hidden_after_write', inl, false);
+  inl.style.display = 'block';
+  step('inline_visible_after_rewrite', inl, true);
+
+  const inlVis = document.createElement('div');
+  document.body.appendChild(inlVis);
+  step('inline_vis_before', inlVis, true, { visibilityProperty: true });
+  inlVis.style.visibility = 'hidden';
+  step('inline_vis_after_write', inlVis, false, { visibilityProperty: true });
+
+  const inlOp = document.createElement('div');
+  document.body.appendChild(inlOp);
+  step('inline_opacity_before', inlOp, true, { opacityProperty: true });
+  inlOp.style.opacity = '0';
+  step('inline_opacity_after_write', inlOp, false, { opacityProperty: true });
+
+  // an important inline declaration outranks an important rule, and that
+  // shortcut lives outside the cache too.
+  const bang = document.createElement('div');
+  bang.className = 'shown-important';
+  document.body.appendChild(bang);
+  live.sheet.insertRule('.shown-important { display: none !important }', 0);
+  step('important_rule_hides', bang, false);
+  bang.style.setProperty('display', 'block', 'important');
+  step('important_inline_wins', bang, true);
+
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
