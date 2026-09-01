@@ -1572,7 +1572,7 @@ fn writeLengthText(element: *Element, style_manager: *StyleManager, property_nam
     return buf.written();
 }
 
-fn computedLengthText(style_manager: *StyleManager, element: *Element, property_name: []const u8, value: []const u8, specified: ?f64) ?[]const u8 {
+pub fn computedLengthText(style_manager: *StyleManager, element: *Element, property_name: []const u8, value: []const u8, specified: ?f64) ?[]const u8 {
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
     if (trimmed.len == 0) return null;
 
@@ -5648,7 +5648,7 @@ fn hashEnd(value: []const u8, index: usize) usize {
 }
 
 /// A colour as Chrome answers it: three bytes and an alpha byte.
-const Colour = struct {
+pub const Colour = struct {
     rgb: [3]u8,
     alpha: u8,
 };
@@ -6091,7 +6091,7 @@ fn computedColourInFunctions(arena: Allocator, value: []const u8) ?[]const u8 {
     return buf.written();
 }
 
-fn writeColour(writer: *std.Io.Writer, colour: Colour) !void {
+pub fn writeColour(writer: *std.Io.Writer, colour: Colour) !void {
     const rgb = colour.rgb;
     if (colour.alpha == 255) {
         return writer.print("rgb({d}, {d}, {d})", .{ rgb[0], rgb[1], rgb[2] });
@@ -7873,6 +7873,10 @@ test "WebApi: CSSStyleDeclaration computed style of a detached element" {
 
 test "WebApi: CSSStyleDeclaration cascade cache invalidation" {
     try testing.htmlRunner("css/cascade_cache_invalidation.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration fixed cascade cache invalidation" {
+    try testing.htmlRunner("css/fixed_cascade_cache_invalidation.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration computed transform-origin" {

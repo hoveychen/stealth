@@ -244,6 +244,11 @@ pub const JsApi = struct {
         // See the comment in Snapshot.attachClass: an own @@toPrimitive of
         // value undefined, from HTML's Location creation steps.
         pub const to_primitive_undefined = true;
+        // ...and the own `valueOf` those same steps define, which is the
+        // realm's %Object.prototype.valueOf% and therefore cannot come out of
+        // a template. attachClass reserves the slot and Local.zigValueToJs
+        // fills it; both halves are keyed on this one flag.
+        pub const own_value_of = true;
     };
 
     // Every member of Location is [LegacyUnforgeable]: it lives on the instance
@@ -260,8 +265,9 @@ pub const JsApi = struct {
     //   valueOf, ancestorOrigins, href, origin, protocol, host, hostname, port,
     //   pathname, search, hash, assign, reload, replace, toString
     //
-    // `valueOf` is the one name we cannot place -- see Snapshot.attachClass for
-    // why -- so ours is Chrome's list with that first entry missing.
+    // `valueOf` is not declared here because it is not an IDL member at all:
+    // HTML's creation steps define it before any of these, which is why it
+    // sorts first. `Meta.own_value_of` is where it comes from.
     pub const ancestorOrigins = bridge.accessor(Location.getAncestorOrigins, null, unforgeable);
     pub const href = bridge.accessor(Location.toString, setHref, unforgeable);
     fn setHref(self: *const Location, url: [:0]const u8, frame: *Frame) !void {

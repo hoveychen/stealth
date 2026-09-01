@@ -4550,6 +4550,10 @@ pub fn _insertNodeRelative(self: *Frame, comptime from_parser: bool, parent: *No
     // The parser path does its own (limited) notification and
     // connected-callback work, then returns.
     if (comptime from_parser) {
+        // Not `domChanged()` -- see the comment on Page.parser_dom_version for
+        // why the parser keeps its own counter and what reads it.
+        self._page.parser_dom_version += 1;
+
         // Main-document parser insertions notify per node: scripts running
         // during parsing can observe the document. Fragment parses
         // (innerHTML et al.) stay silent; Node.setHTML queues one combined

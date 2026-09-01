@@ -57,6 +57,23 @@ session: *Session,
 // a cached lookup on Frame 2. We picked the latter.
 dom_version: usize = 0,
 
+// The same counter for the *parser's* insertions, which deliberately do not
+// move `dom_version`: the parser path returns before `domChanged` because
+// per-node notification is what it exists to avoid, and every live collection
+// keys its cached length and cursor on that version.
+//
+// Something still has to notice a parse in progress, though. The document's
+// named-object list is built by walking the tree, and with nothing moving while
+// the parser appends, a list built by an early inline script would still be
+// that empty list for the rest of the page -- which is exactly the bug
+// `document/named_objects.html`'s first block is there to catch. Rebuilding it
+// per lookup instead costs 1249ms for 2000 `document.body` reads on a
+// 4000-element page (scratch/b80/parse-cost.mjs), and with the named handler
+// masking, *every* property read on `document` is such a lookup. So: a second
+// counter, bumped by the parser, which the named-object cache checks alongside
+// `dom_version` and nothing else looks at.
+parser_dom_version: usize = 0,
+
 // Monotonic creation counter for BroadcastChannels in this Page. A postMessage
 // captures the current value so delivery targets only channels that existed
 // when it was called

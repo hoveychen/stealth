@@ -85,6 +85,8 @@ _removed_ids: std.StringHashMapUnmanaged(void) = .empty,
 // (scratch/b79/named-cost.mjs).
 _named_objects: std.ArrayListUnmanaged(NamedObjectEntry) = .empty,
 _named_objects_version: ?usize = null,
+// The parser's half of the same key -- see Page.parser_dom_version.
+_named_objects_parser_version: ?usize = null,
 // Named objects a script has deleted. `delete document.myForm` takes the name
 // away for good in Chrome -- the element stays in the tree, the property does
 // not come back, not even after a DOM change (measured, scratch/b79/edges.mjs)
@@ -571,14 +573,17 @@ const NamedObjectEntry = struct {
 /// rebuilt when it has.
 fn namedObjectEntries(self: *Document, frame: *Frame) ![]const NamedObjectEntry {
     const version = frame._page.dom_version;
-
     // The parser does not move the DOM version -- only the DOM APIs do -- so a
     // list built while the document is still being parsed would never see the
     // rest of the page. An inline script that reads one unknown name early is
     // enough to trigger that, and it left every named object of the document
-    // missing for the whole run. While loading, walk every time.
-    const cacheable = self._ready_state != .loading;
-    if (cacheable and self._named_objects_version == version) {
+    // missing for the whole run (`document/named_objects.html`'s first block).
+    // The parser's own counter is what closes that; walking every time instead
+    // costs 1249ms for 2000 parse-time `document.body` reads
+    // (scratch/b80/parse-cost.mjs), and the handler is masking, so every
+    // property read on `document` is one of those.
+    const parser_version = frame._page.parser_dom_version;
+    if (self._named_objects_version == version and self._named_objects_parser_version == parser_version) {
         return self._named_objects.items;
     }
 
@@ -605,7 +610,8 @@ fn namedObjectEntries(self: *Document, frame: *Frame) ![]const NamedObjectEntry 
         }
     }
 
-    self._named_objects_version = if (cacheable) version else null;
+    self._named_objects_version = version;
+    self._named_objects_parser_version = parser_version;
     return entries.items;
 }
 
@@ -689,7 +695,52 @@ pub fn NamedObjectAccess(comptime T: type) type {
             return if (comptime T == Document) self else self.asDocument();
         }
 
+        /// The names a document answers itself, which a named object must not
+        /// shadow. `[LegacyOverrideBuiltIns]` puts named properties *before*
+        /// the prototype chain and *after* the object's own properties, and
+        /// V8 has no third setting: a masking interceptor is consulted before
+        /// the own properties too, so the handler has to answer this itself.
+        /// There is no HasRealNamedProperty in the vendored V8 C API to ask
+        /// with, and asking through `Object.Has` would re-enter this handler.
+        ///
+        /// `location` is the whole list -- the only [LegacyUnforgeable] member
+        /// a Document has -- and the comptime check below keeps that true if
+        /// somebody adds a second one.
+        ///
+        /// Measured on Chrome 151 (scratch/b80/.q3.js): with a `<form
+        /// name="location">` in the tree, `document.location` is still the
+        /// Location and its descriptor is still the own `accessor e=true
+        /// c=false`, while `document.title`, `document.getElementById` and
+        /// eleven others become the form. The name is still *listed* either
+        /// way, because it is a supported property name whether or not it wins
+        /// the read -- so this filter is not in `namedObjects`.
+        ///
+        /// What it does not cover: a page that assigns its own property and
+        /// then names an element after it (`document.x = 1` with a `<form
+        /// name="x">`). Chrome keeps the 1; this answers the form.
+        fn shadowedByOwn(name: []const u8) bool {
+            return std.mem.eql(u8, name, "location");
+        }
+
+        comptime {
+            var unforgeables: usize = 0;
+            for (@typeInfo(Document.JsApi).@"struct".decls) |d| {
+                const value = @field(Document.JsApi, d.name);
+                const V = @TypeOf(value);
+                if (@typeInfo(V) == .@"struct" and @hasField(V, "unforgeable") and value.unforgeable) {
+                    unforgeables += 1;
+                }
+            }
+            if (unforgeables != 1) {
+                @compileError("Document gained an unforgeable member; add it to " ++
+                    "NamedObjectAccess.shadowedByOwn or a named object will shadow it");
+            }
+        }
+
         pub fn get(self: *T, name: []const u8, frame: *Frame) !NamedObject {
+            if (shadowedByOwn(name)) {
+                return error.NotHandled;
+            }
             return document(self).namedObject(name, frame) orelse error.NotHandled;
         }
 
@@ -717,6 +768,9 @@ pub fn NamedObjectAccess(comptime T: type) type {
         /// A deleted name is gone for good, which is what Chrome does with it:
         /// the element stays, the property does not come back.
         pub fn delete(self: *T, name: []const u8, frame: *Frame) !bool {
+            if (shadowedByOwn(name)) {
+                return error.NotHandled;
+            }
             const doc = document(self);
             if (doc.namedObject(name, frame) == null) {
                 return error.NotHandled;
@@ -730,6 +784,9 @@ pub fn NamedObjectAccess(comptime T: type) type {
         /// of Object.keys as well as getOwnPropertyNames (measured on Chrome
         /// 151, scratch/b79/named-objects.mjs).
         pub fn query(self: *T, name: []const u8, frame: *Frame) !u32 {
+            if (shadowedByOwn(name)) {
+                return error.NotHandled;
+            }
             if (document(self).namedObject(name, frame) != null) {
                 return js.v8.None;
             }
@@ -741,6 +798,9 @@ pub fn NamedObjectAccess(comptime T: type) type {
         /// refused -- silently outside strict mode, which is what Chrome does
         /// with it.
         pub fn define(self: *T, name: []const u8, frame: *Frame) !bool {
+            if (shadowedByOwn(name)) {
+                return error.NotHandled;
+            }
             if (document(self).namedObject(name, frame) != null) {
                 return false;
             }
@@ -2866,7 +2926,7 @@ pub const JsApi = struct {
 
     /// `document.myForm`; see Document.NamedObjectAccess.
     const named_objects = Document.NamedObjectAccess(Document);
-    pub const @"[str]" = bridge.namedIndexedFull(named_objects.get, null, named_objects.delete, named_objects.names, named_objects.query, named_objects.define, null, .{ .null_as_undefined = true });
+    pub const @"[str]" = bridge.namedIndexedFull(named_objects.get, null, named_objects.delete, named_objects.names, named_objects.query, named_objects.define, null, .{ .null_as_undefined = true, .masking = true });
 
     fn getCharacterSet(self: *const Document) []const u8 {
         return self.getCharset();

@@ -37,6 +37,7 @@ const chrome_per_tag_values = @import("webapi/css/chrome_per_tag_values.zig");
 const CSSStyleDeclaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const CSSStyleProperty = @import("webapi/css/CSSStyleDeclaration.zig").Property;
 const shorthand = @import("webapi/css/shorthand.zig");
+const registered_property = @import("webapi/css/registered_property.zig");
 const supports_condition = @import("webapi/css/supports.zig");
 
 const log = lp.log;
@@ -136,12 +137,30 @@ keyframes: std.StringHashMapUnmanaged([]const Keyframe) = .empty,
 /// why the map is reset there rather than cleared.
 cascade_cache: CascadeCache = .empty,
 
+/// The same, for `cascadedDeclaration`'s five fixed properties. Separate map
+/// rather than a third `NamedList` variant because the key needs no name: the
+/// property is an enum, so this one is a pointer and a tag.
+///
+/// Worth its own entry because the named cache leaves it as the largest term.
+/// With `cascadedNamedDeclaration` cached, a sample of ak-homedepot puts
+/// `cascadedDeclaration` at 6.8% of the busy thread and the selector matching it
+/// drives at 26.1%; under the layout-pass prototype, which measures every box
+/// on the page, those become 17.6% and 65.1%.
+fixed_cascade_cache: FixedCascadeCache = .empty,
+
 /// The `Page.dom_version` the cache's contents were computed under. Any DOM
 /// mutation moves it -- `Frame.domChanged` covers structure and, through
 /// `Attribute.List.put`/`remove`, class and id -- and every entry is stale at
 /// once, because a single inserted node changes what `:nth-child`, `+` and `~`
 /// match for other elements.
 cache_dom_version: usize = 0,
+
+/// What `CSS.registerProperty` has registered, in registration order. Not
+/// rebuilt with the rules: a registration is the document's for its lifetime
+/// and no stylesheet can undo one -- which is why its entries are allocated
+/// from the *frame's* arena and not from `self.arena`, the one `rebuildIfDirty`
+/// resets.
+registered_properties: registered_property.Registry = .{},
 
 pub fn init(frame: *Frame) !StyleManager {
     return .{
@@ -1039,9 +1058,10 @@ fn rebuildIfDirty(self: *StyleManager) !void {
 
     self.arena.resetRetain();
 
-    // Both the cached answers and the map holding them were allocated from that
-    // arena, so this is `.empty` rather than a clear: the buckets are gone.
+    // Both the cached answers and the maps holding them were allocated from that
+    // arena, so these are `.empty` rather than a clear: the buckets are gone.
     self.cascade_cache = .empty;
+    self.fixed_cascade_cache = .empty;
 
     self.next_doc_order = 1;
 
@@ -1880,6 +1900,13 @@ const CascadeCache = std.HashMapUnmanaged(CascadeKey, ?Declaration, struct {
     }
 }, 80);
 
+const FixedCascadeKey = struct {
+    element: *Element,
+    property: CascadedProperty,
+};
+
+const FixedCascadeCache = std.AutoHashMapUnmanaged(FixedCascadeKey, ?Declaration);
+
 /// Ceiling on cached answers. A page with a hundred thousand elements would
 /// otherwise hold an entry per element per property asked, and the cache is
 /// meant to pay for repeated reads of the same document, not to grow with it
@@ -2337,8 +2364,27 @@ const CascadedProperty = enum { font_size, font_family, text_transform, display,
 /// The winning declaration of `property` among the stylesheet rules matching
 /// `el`, or null when none match. Importance outranks specificity, which is
 /// why the two are tracked apart rather than folded into `priority`.
+/// Both caches answer for a document that has not moved, so one mutation drops
+/// both. `clearRetainingCapacity` keeps the buckets: the arena cannot give
+/// memory back, and a page that mutates a thousand times must not pay for a
+/// thousand maps.
+fn dropCachesIfDomMoved(self: *StyleManager) void {
+    const dom_version = self.frame._page.dom_version;
+    if (dom_version == self.cache_dom_version) {
+        return;
+    }
+    self.cascade_cache.clearRetainingCapacity();
+    self.fixed_cascade_cache.clearRetainingCapacity();
+    self.cache_dom_version = dom_version;
+}
+
 fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProperty) ?Declaration {
     self.rebuildIfDirty() catch return null;
+
+    self.dropCachesIfDomMoved();
+    if (self.fixed_cascade_cache.get(.{ .element = el, .property = property })) |cached| {
+        return cached;
+    }
 
     var best: ?Declaration = null;
     var best_priority: u64 = 0;
@@ -2385,13 +2431,44 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
 
     checkRules(&self.other_rules, property, &best, &best_priority, &best_important, el, self.frame);
 
+    // Misses cached alongside hits, as in the named cache: "no rule sets display
+    // on this element" is the usual answer and it cost the same walk.
+    if (self.fixed_cascade_cache.count() < MAX_CASCADE_CACHE) {
+        self.fixed_cascade_cache.put(
+            self.arena.allocator(),
+            .{ .element = el, .property = property },
+            best,
+        ) catch {};
+    }
+
     return best;
 }
 
 /// The cascaded value of a custom property on `element`, or null when nothing
 /// up the tree declares it. Custom properties inherit, so a miss walks to the
 /// parent -- which is also why this is a tree walk rather than a lookup.
+///
+/// A *registered* property (`CSS.registerProperty`) answers differently on
+/// three counts, all measured: `inherits: false` stops the walk at the element
+/// itself, the declared value is computed per the registered syntax, and a
+/// value that does not parse for that syntax falls back to the registered
+/// initial value instead of reaching the page as written.
 pub fn customPropertyValue(self: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
+    if (self.registered_properties.find(name)) |entry| {
+        const declared: ?[]const u8, const on: ?*Element = blk: {
+            if (entry.inherits) {
+                break :blk self.declaredCustomPropertyUpTree(element, name, 0);
+            }
+            break :blk .{ self.declaredCustomProperty(element, name), element };
+        };
+        if (declared) |raw| {
+            const arena = self.frame.call_arena;
+            if (registered_property.compute(arena, entry.syntax, raw, on, self)) |computed| {
+                return computed;
+            }
+        }
+        return entry.initial;
+    }
     return self.customPropertyValueAt(element, name, 0);
 }
 
@@ -2400,9 +2477,18 @@ fn customPropertyValueAt(self: *StyleManager, element: ?*Element, name: []const 
         return null;
     }
     const current = element orelse return null;
+    if (self.declaredCustomProperty(current, name)) |value| {
+        return value;
+    }
+    return self.customPropertyValueAt(current.parentElement(), name, depth + 1);
+}
 
-    const inline_property = getInlineStyleProperty(current, .wrap(name), self.frame);
-    const rule = self.cascadedCustomDeclaration(current, name);
+/// What `element` itself declares for `name`, inline or through a matching
+/// rule, with no ancestor walk. The unit the walk above is built out of, and
+/// the whole of the answer for a property registered with `inherits: false`.
+fn declaredCustomProperty(self: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
+    const inline_property = getInlineStyleProperty(element, .wrap(name), self.frame);
+    const rule = self.cascadedCustomDeclaration(element, name);
 
     // Same order as computedFontFamily: an `!important` rule beats the style
     // attribute unless that one is `!important` too.
@@ -2417,7 +2503,27 @@ fn customPropertyValueAt(self: *StyleManager, element: ?*Element, name: []const 
     if (rule) |declaration| {
         return declaration.value;
     }
-    return self.customPropertyValueAt(current.parentElement(), name, depth + 1);
+    return null;
+}
+
+/// The nearest declaration of `name` at or above `element`, and the element it
+/// was found on. A registered property's syntax is applied where the value was
+/// written -- `2em` on an ancestor resolves against *that* element's font and
+/// the computed result is what inherits.
+fn declaredCustomPropertyUpTree(
+    self: *StyleManager,
+    element: ?*Element,
+    name: []const u8,
+    depth: u8,
+) struct { ?[]const u8, ?*Element } {
+    if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
+        return .{ null, null };
+    }
+    const current = element orelse return .{ null, null };
+    if (self.declaredCustomProperty(current, name)) |value| {
+        return .{ value, current };
+    }
+    return self.declaredCustomPropertyUpTree(current.parentElement(), name, depth + 1);
 }
 
 /// Every custom property name in effect on `element`: the ones it declares
@@ -2448,6 +2554,15 @@ pub fn collectCustomPropertyNames(self: *StyleManager, element: *Element, out: *
         }
 
         try self.appendMatchingCustomNames(el, out);
+    }
+
+    // A registered property has a computed value on every element, whether
+    // anything declared it or not, so it is enumerated everywhere -- except
+    // the one registration that has no value to report: a universal syntax
+    // with no initial value (measured, scratch/b80/q6.js).
+    for (self.registered_properties.entries.items) |entry| {
+        if (entry.initial == null) continue;
+        try appendUnique(self.frame.local_arena, out, entry.name);
     }
 }
 
@@ -2624,15 +2739,8 @@ fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8,
         return null;
     }
 
-    const dom_version = self.frame._page.dom_version;
-    if (dom_version != self.cache_dom_version) {
-        // One mutation invalidates every answer, so this keeps the map's
-        // buckets and drops only its contents -- the arena cannot give memory
-        // back, and a page that mutates a thousand times must not pay for a
-        // thousand maps.
-        self.cascade_cache.clearRetainingCapacity();
-        self.cache_dom_version = dom_version;
-    } else if (self.cascade_cache.get(.{ .element = el, .name = name, .which = which })) |cached| {
+    self.dropCachesIfDomMoved();
+    if (self.cascade_cache.get(.{ .element = el, .name = name, .which = which })) |cached| {
         return cached;
     }
 

@@ -67,6 +67,7 @@ const CookieStore = @import("storage/CookieStore.zig");
 const Element = @import("Element.zig");
 const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
 const HighlightRegistry = @import("css/highlights.zig").HighlightRegistry;
+const Worklet = @import("audio/worklet.zig").Worklet;
 const CustomElementRegistry = @import("CustomElementRegistry.zig");
 const Selection = @import("Selection.zig");
 const Timers = @import("Timers.zig");
@@ -134,6 +135,10 @@ _battery: ?*BatteryManager = null,
 // CSS.highlights. One registry per window, built on first use, because a page
 // that registers a highlight has to find it again on the next read.
 _css_highlights: ?*HighlightRegistry = null,
+// CSS.paintWorklet. One per window and by value, because the accessor answers
+// the same object on every read (measured: `CSS.paintWorklet ===
+// CSS.paintWorklet`) and a bare Worklet owns nothing.
+_paint_worklet: Worklet = .{ ._type = .paint },
 // window.speechSynthesis, and the voice objects getVoices() hands back. Both
 // are built on first use and then reused, because scripts compare voices by
 // identity across calls.
@@ -185,6 +190,10 @@ _closed: bool = false,
 
 // Popup name (owned by page.arena)
 _name: []const u8 = "",
+
+pub fn getPaintWorklet(self: *Window) *Worklet {
+    return &self._paint_worklet;
+}
 
 pub fn getHighlights(self: *Window, frame: *Frame) !*HighlightRegistry {
     if (self._css_highlights) |highlights| {

@@ -205,3 +205,46 @@
       messages[2].message);
   }
 </script>
+
+<script id=a_caught_message_survives_the_next_task type=module>
+{
+  // The block above churns the arena inside one task, which the three paths it
+  // names survive. This is the shape that a borrowed message does not: catch in
+  // one task, read in the next, with one short string crossing the bridge in
+  // between so the allocation lands where the message started rather than
+  // running past it.
+  //
+  // It is not a corner. A guard catches exceptions and reads them back later --
+  // Kasada rejects twenty-five promises in a row on x-hyatt just to collect the
+  // messages -- and what it got here was a message no browser writes:
+  // "currentScriptcute 'start' on 'TimeRanges': ..." (measured on main,
+  // scratch/b80/q12.js, before the copy below existed).
+  //
+  // `DOMException.init` borrows both of its strings; `TimeRanges` builds its
+  // message on the per-call arena. Every other path through `Context.fail`
+  // copies as it throws, which is why the block above is green.
+  const state = await testing.async();
+
+  let caught = null;
+  try {
+    document.createElement('video').buffered.start(0);
+  } catch (e) {
+    caught = e;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  document.getElementById('aVeryLongIdNobodyHasAtAll');
+  const message = caught && caught.message;
+  const name = caught && caught.name;
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(
+      "Failed to execute 'start' on 'TimeRanges': The index provided (0) is " +
+      'greater than or equal to the maximum bound (0).',
+      message);
+    // Both strings are one question: a borrowed name goes the same way.
+    testing.expectEqual('IndexSizeError', name);
+  });
+}
+</script>
