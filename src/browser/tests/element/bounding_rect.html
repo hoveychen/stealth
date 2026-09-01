@@ -31,7 +31,12 @@
   const a2 = document.querySelector('[href="amiibo/"]');
   const rect2 = a2.getBoundingClientRect();
 
-  testing.expectTrue(rect1.x != rect2.x)
+  // Both links fill an <h2> at the left edge, so they share an x and differ only
+  // down the page: Chrome 151 at dpr 2 puts them at 8,79.875 and 8,220.203125
+  // (scratch/b99/expr-bounding-rect-page.js). This asserted that the two x
+  // values DIFFERED, which was true only while every element's x was its
+  // position in a preorder count -- the same stand-in that made x equal y.
+  testing.expectEqual(rect1.x, rect2.x);
   testing.expectTrue(rect1.y != rect2.y);
   testing.expectEqual(a1, document.elementFromPoint(rect1.x, rect1.y))
   testing.expectEqual(a2, document.elementFromPoint(rect2.x, rect2.y))

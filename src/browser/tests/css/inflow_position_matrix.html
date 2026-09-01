@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Where in-flow boxes actually sit. Fifteen shapes, twenty-seven rows, measured on
+Chrome 151 at device scale 2 with
+`scratch/b74/expr-inflow-position-matrix.js` -- the same probe the
+`in-flow-block-position` plan wrote, re-read because the numbers were summarised
+but never saved.
+
+Twenty-six of the twenty-seven rows disagreed when this file was written. The one
+that agreed is the absolutely-positioned child, which is the half
+`out-of-flow-position` already fixed. `calculateDocumentPosition` and
+`calculateSiblingPosition` have identical bodies and both answer
+"(preceding siblings' subtree nodes + ancestors) x 5px", so **every element's x
+equals its y** -- the readings below show it as `d=5,5`, `d=10,10`, `d=15,15`.
+
+Each row reports the child's offset from its container's border box and its own
+box, and NOT `offsetLeft`/`offsetTop`. That is deliberate: the offset-from-
+container is a fact about the shape and reads the same on any page, while
+`offsetLeft` also carries wherever the container happens to sit, which would bake
+this test page's own layout into the expectations. The engine computes both from
+the same positions, so a row that is right here is right for the accessors too.
+
+`box=` is included per row even though the boxes were already correct, so that a
+regression in sizing cannot hide inside a position fix.
+-->
+
+<script id=inflow_position_matrix>
+{
+  const EXPECTED = [
+    ["two stacked blocks, no margins", "400x50", ["a: d=0,0 box=400x30", "b: d=0,30 box=400x20"]],
+    ["three stacked, middle taller", "400x120", ["a: d=0,0 box=400x30", "b: d=0,30 box=400x70", "c: d=0,100 box=400x20"]],
+    ["siblings with margins that collapse", "400x70", ["a: d=0,0 box=400x30", "b: d=0,50 box=400x20"]],
+    ["container padding 10", "420x70", ["a: d=10,10 box=400x30", "b: d=10,40 box=400x20"]],
+    ["container border 5", "410x60", ["a: d=5,5 box=400x30", "b: d=5,35 box=400x20"]],
+    ["container padding 10 border 5", "430x80", ["a: d=15,15 box=400x30", "b: d=15,45 box=400x20"]],
+    ["child margin-left 25", "400x30", ["a: d=25,0 box=375x30"]],
+    ["child auto margins, width 200", "400x30", ["a: d=100,0 box=200x30"]],
+    ["nested two deep", "400x50", ["outer: d=0,0 box=400x50", "inner: d=10,10 box=380x30"]],
+    ["position:relative left 7 top 9", "400x50", ["a: d=0,0 box=400x30", "b: d=7,39 box=400x20"]],
+    ["a line of text, then a block", "400x48.5", ["a: d=0,18.5 box=400x30"]],
+    ["auto-height child holding one line", "400x38.5", ["a: d=0,0 box=400x18.5", "b: d=0,18.5 box=400x20"]],
+    ["float left, then a block", "400x20", ["a: d=0,0 box=100x30", "b: d=0,0 box=400x20"]],
+    // 400x34 and not 400x30: the line the two boxes share is 30 of box plus the
+    // strut's 4 of descent hanging under the baseline their bottom edges sit on.
+    // The first Chrome run of this probe answered 30 and four later ones
+    // answered 34, so the 30 was a cold reading -- and eight separate shapes
+    // (scratch/b99/expr-atomic-line-height.js) agree at 34, including a single
+    // inline-block, one beside text, and the pair with a space between them.
+    ["inline-block pair", "400x34", ["a: d=0,0 box=80x30", "b: d=80,0 box=80x30"]],
+    ["absolute child in a relative container", "400x80", ["a: d=11,13 box=50x20"]],
+  ];
+
+  // Same construction as the probe, so a disagreement lands on the engine and
+  // not on a shape that drifted.
+  const box = (k, css, text) =>
+    '<div data-k="' + k + '" style="' + css + '">' + (text === undefined ? '' : text) + '</div>';
+  const SHAPES = {
+    "two stacked blocks, no margins": ['', box('a', 'height:30px') + box('b', 'height:20px')],
+    "three stacked, middle taller": ['', box('a', 'height:30px') + box('b', 'height:70px') + box('c', 'height:20px')],
+    "siblings with margins that collapse": ['', box('a', 'height:30px;margin-bottom:20px') + box('b', 'height:20px;margin-top:10px')],
+    "container padding 10": ['padding:10px', box('a', 'height:30px') + box('b', 'height:20px')],
+    "container border 5": ['border:5px solid', box('a', 'height:30px') + box('b', 'height:20px')],
+    "container padding 10 border 5": ['padding:10px;border:5px solid', box('a', 'height:30px') + box('b', 'height:20px')],
+    "child margin-left 25": ['', box('a', 'height:30px;margin-left:25px')],
+    "child auto margins, width 200": ['', box('a', 'height:30px;width:200px;margin-left:auto;margin-right:auto')],
+    "nested two deep": ['', '<div data-k="outer" style="padding:10px">' + box('inner', 'height:30px') + '</div>'],
+    "position:relative left 7 top 9": ['', box('a', 'height:30px') + box('b', 'height:20px;position:relative;left:7px;top:9px')],
+    "a line of text, then a block": ['', 'hello world' + box('a', 'height:30px')],
+    "auto-height child holding one line": ['', box('a', '', 'x') + box('b', 'height:20px')],
+    "float left, then a block": ['', box('a', 'float:left;width:100px;height:30px') + box('b', 'height:20px')],
+    "inline-block pair": ['', box('a', 'display:inline-block;width:80px;height:30px') + box('b', 'display:inline-block;width:80px;height:30px')],
+    "absolute child in a relative container": ['position:relative;height:80px', box('a', 'position:absolute;left:11px;top:13px;width:50px;height:20px')],
+  };
+
+  const round = (n) => Math.round(n * 100) / 100;
+  const wrong = [];
+
+  for (const [label, wantContainer, wantRows] of EXPECTED) {
+    const [containerCss, html] = SHAPES[label];
+    const c = document.createElement('div');
+    c.style.cssText = 'width:400px;' + containerCss;
+    c.innerHTML = html;
+    document.body.appendChild(c);
+    const base = c.getBoundingClientRect();
+    const gotContainer = round(base.width) + 'x' + round(base.height);
+    if (gotContainer !== wantContainer) {
+      wrong.push(label + ' container: want ' + wantContainer + ', got ' + gotContainer);
+    }
+    const kids = c.querySelectorAll('[data-k]');
+    if (kids.length !== wantRows.length) {
+      wrong.push(label + ' row count: want ' + wantRows.length + ', got ' + kids.length);
+    }
+    for (let i = 0; i < kids.length && i < wantRows.length; i++) {
+      const r = kids[i].getBoundingClientRect();
+      const got = kids[i].getAttribute('data-k') + ': d=' +
+        round(r.left - base.left) + ',' + round(r.top - base.top) +
+        ' box=' + round(r.width) + 'x' + round(r.height);
+      if (got !== wantRows[i]) {
+        wrong.push('[' + label + '] want "' + wantRows[i] + '", got "' + got + '"');
+      }
+    }
+    c.remove();
+  }
+
+  testing.expectEqual('', wrong.join('\n  | '));
+}
+</script>

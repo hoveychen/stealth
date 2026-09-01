@@ -2341,20 +2341,29 @@ const LineFlow = struct {
     /// An atomic inline — a replaced element, an inline-block — is a box ON the
     /// line rather than a box the line is made of, so it raises the line by its
     /// own two halves and takes its width along the line.
-    fn placeAtomic(self: *LineFlow, above: f64, below: f64, width: f64) void {
+    /// Where an atomic inline was put, for the caller that is laying out rather
+    /// than only measuring. `inline_at` is the line cursor before the box went
+    /// down -- 0 when it opened a fresh line -- and `block_at` is the height of
+    /// the lines already closed above it.
+    const Placed = struct { inline_at: f64, block_at: f64 };
+
+    fn placeAtomic(self: *LineFlow, above: f64, below: f64, width: f64) Placed {
         self.placeWord();
         if (above > self.line_above) self.line_above = above;
         if (below > self.line_below) self.line_below = below;
+        var inline_at = self.placed;
         if (self.wraps and self.placed > 0 and self.placed + width > self.box) {
             self.newLine();
             if (above > self.line_above) self.line_above = above;
             if (below > self.line_below) self.line_below = below;
             self.placed = width;
+            inline_at = 0;
         } else {
             self.placed += width;
         }
         self.segment_has_word = true;
         self.any = true;
+        return .{ .inline_at = inline_at, .block_at = self.total };
     }
 
     /// A box that shares the line with the text around it rather than being a
@@ -3058,6 +3067,47 @@ fn containerMarginPx(self: *Element, name: []const u8, frame: *Frame, containing
         self.marginPx(name, frame, containing, depth);
 }
 
+/// Whether one margin is `auto`, which `marginPx` cannot say: it resolves a
+/// length, and `auto` is not one, so it answers 0 for both `auto` and `0`.
+fn marginIsAuto(self: *Element, name: []const u8, frame: *Frame) bool {
+    const declared = CSSStyleDeclaration.cascadedComputedValue(self, name, frame) orelse return false;
+    return std.ascii.eqlIgnoreCase(std.mem.trim(u8, declared, " \t\r\n"), "auto");
+}
+
+/// Where a child's border box starts inside the content box it is laid into, on
+/// the inline axis.
+///
+/// `margin-left`, except that an `auto` margin takes a share of what is left
+/// over -- which is how a block with a width centres itself. Chrome puts a
+/// 200px-wide child with both margins auto at `d=100,0` inside a 400px
+/// container (`scratch/b74/expr-inflow-position-matrix.js`), where reading
+/// `marginPx` alone answers 0.
+///
+/// Only the two shapes the matrix measures are modelled: both margins auto
+/// (centred) and the near one auto (pushed to the far edge). A negative
+/// remainder gives 0 rather than pulling the box out of its container.
+fn staticInlineOffset(
+    self: *Element,
+    frame: *Frame,
+    available: ?f64,
+    own: f64,
+    containing: *?f64,
+    depth: u8,
+) f64 {
+    if (!self.marginIsAuto("margin-left", frame)) {
+        return self.containerMarginPx("margin-left", frame, containing, depth);
+    }
+    const box = available orelse return 0;
+    const free = box - own;
+    if (free <= 0) {
+        return 0;
+    }
+    if (self.marginIsAuto("margin-right", frame)) {
+        return free / 2;
+    }
+    return free - self.containerMarginPx("margin-right", frame, containing, depth);
+}
+
 /// One margin in px, from the cascade, so a stylesheet rule counts.
 fn marginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, depth: u8) f64 {
     if (CSSStyleDeclaration.marginPercentagePx(self, name, frame, containing, depth)) |px| {
@@ -3069,6 +3119,15 @@ fn marginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, 
     if (CSSStyleDeclaration.specifiedPx(self, name, frame)) |px| return px;
     if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
         if (CSS.parseDimensionViewport(declared, frame)) |px| return px;
+    }
+    // The UA sheet, last, because nothing in the cascade carries it: `<p>`'s
+    // `margin: 1em 0` reaches `getComputedStyle` off the per-tag table and never
+    // reached this walk, so every paragraph stacked flush against its neighbour
+    // while the computed style said 16px. `<body>` had the only case for it
+    // (`bodyMarginPx`, still routed there by `containerMarginPx` so its own
+    // shape does not move); this is the same fix for the other thirty-odd tags.
+    if (StyleManager.userAgentValue(self, name)) |ua| {
+        if (CSS.parseDimensionViewport(ua, frame)) |px| return px;
     }
     return 0;
 }
@@ -3139,6 +3198,62 @@ fn marginEscapes(self: *Element, frame: *Frame, containing: *?f64, depth: u8) st
         .top = CSSStyleDeclaration.blockEdgePx(self, "top", frame, containing, depth) == 0,
         .bottom = CSSStyleDeclaration.blockEdgePx(self, "bottom", frame, containing, depth) == 0,
     };
+}
+
+/// The top margin that leaves `self` through its own top edge, collapsed.
+///
+/// `self`'s OWN margin is not in it -- the caller joins that separately. This is
+/// what its first in-flow child contributes from inside, which a box with no top
+/// border or padding cannot stop.
+///
+/// Needed because a child's position is recorded before the walk descends into
+/// it, and by then the group holds only the child's own margin. The height half
+/// does not have the problem: it joins `held.escaped_top` after the recursion,
+/// which is too late to place the box but in time to size the parent. Chrome, on
+/// `<div style="margin-top:40px">` as body's only child, puts BODY at y=40 --
+/// the child's margin collapses out through body and lands above it, and body's
+/// own 8px UA margin loses the max (scratch/b99/expr-body-collapse.js, four
+/// shapes; a 1px border on body stops it and body goes back to 8 with the child
+/// at 49).
+///
+/// A walk down the first-child chain, not over the subtree: it stops at the
+/// first box that has an edge, is not an element, or has content in front of it.
+/// So it costs the depth of that chain.
+fn escapedTopMargin(self: *Element, frame: *Frame, containing: *?f64, depth: u8) MarginGroup {
+    var out: MarginGroup = .{};
+    var current = self;
+    var level = depth;
+    while (level < MAX_CONTAINING_BLOCK_DEPTH) : (level += 1) {
+        if (!current.marginEscapes(frame, containing, level).top) {
+            return out;
+        }
+        const child = current.firstFlowChild(frame) orelse return out;
+        out.join(child.containerMarginPx("margin-top", frame, containing, level + 1));
+        current = child;
+    }
+    return out;
+}
+
+/// The first thing in `self` that a margin could adjoin, or null when the first
+/// thing is content -- text stops a margin from reaching the edge as surely as a
+/// border does.
+fn firstFlowChild(self: *Element, frame: *Frame) ?*Element {
+    var node = self.asNode().firstChild();
+    while (node) |n| : (node = n.nextSibling()) {
+        if (n.is(CData.Text)) |text| {
+            // Whitespace between tags is not content; anything else is.
+            if (std.mem.trim(u8, text.asCData().getData().str(), " \t\r\n\x0c").len == 0) continue;
+            return null;
+        }
+        const el = n.is(Element) orelse continue;
+        if (el.getTag() == .br) return null;
+        if (!el.checkVisibilityCached(null, frame)) continue;
+        if (CSSStyleDeclaration.flowKind(el, frame) != .in_flow) continue;
+        if (CSSStyleDeclaration.defaultDisplayIsInline(el) and CSSStyleDeclaration.isInlineBox(el, frame)) return null;
+        if (el.atomicInlineHalves(frame) != null) return null;
+        return el;
+    }
+    return null;
 }
 
 /// The CONTENT box an element has because of what it is rather than what it
@@ -3470,7 +3585,16 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
 /// callers are the content-extent walks, whose children are in-flow or floated
 /// and therefore contained by the box being measured. An out-of-flow child is
 /// contained by something else and those walks skip it.
+/// How many boxes have been MEASURED, counted for the cost prototype
+/// (`layout-pass-cost-prototype` P2). A walk that visits each node once enters
+/// this function once per node; anything above that is re-measurement, and the
+/// ratio is the difference between the linear pass the plan's budget assumed and
+/// whatever this actually is. A `u64` add on a path that already does dozens of
+/// property lookups, and it goes away with the prototype.
+pub var measure_entries: u64 = 0;
+
 pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool, containing_width: ?f64) Dimensions {
+    measure_entries += 1;
     // A backstop the `depth` parameter cannot be: not every path down carries
     // it. A percentage width resolves through the computed-value machinery,
     // which reaches back for the containing block's box through
@@ -3968,7 +4092,7 @@ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_ca
         return dims.height + dims.padding_y;
     }
 
-    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0).total) + dims.padding_y;
+    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0, null).total) + dims.padding_y;
 }
 
 pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
@@ -3990,7 +4114,7 @@ pub fn boundingClientRectValuesForVisible(self: *Element, frame: *Frame) DOMRect
     return self.boundingClientRectValuesAt(frame, 0);
 }
 
-fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
+pub fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
     const dims = self.getElementDimensions(frame);
 
     // getBoundingClientRect is the BORDER box, the same box offsetWidth
@@ -4040,10 +4164,8 @@ fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.
         return .{ .x = placed.x, .y = placed.y, .width = width, .height = height };
     }
 
-    const y = calculateDocumentPosition(self.asNode());
-
-    // Use sibling position for x coordinate to ensure siblings have different x values
-    const x = calculateSiblingPosition(self.asNode());
+    const y = documentPosition(self.asNode(), frame);
+    const x = siblingPosition(self.asNode(), frame);
 
     return .{
         .x = x,
@@ -4134,7 +4256,94 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 
     if (dims.inline_box) return 0;
 
-    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0).total) + dims.padding_y);
+    return @round(@max(dims.height, self.contentHeight(frame, &visibility_cache, .scrollable, dims.width, 0, null).total) + dims.padding_y);
+}
+
+/// Where one in-flow box landed, relative to the top-left of the initial
+/// containing block -- the origin `getBoundingClientRect` reports against when
+/// nothing is scrolled.
+pub const Point = struct { x: f64, y: f64 };
+
+/// A placed border box: where it is and how big it is.
+///
+/// The size rides along because the pass has already measured it and because
+/// `elementFromPoint` needs it. Asking `boundingClientRectValuesAt` per
+/// candidate instead is what took `document/element_from_point.html` from its
+/// budget to 51 951ms over 400 paragraphs -- that call resolves a client box,
+/// which can walk an element's text.
+pub const PlacedBox = struct { x: f64, y: f64, width: f64, height: f64 };
+
+/// Every in-flow box's position, filled by one pass over the document.
+pub const PositionTable = std.AutoHashMapUnmanaged(*Element, PlacedBox);
+
+/// The document-wide layout pass, threaded through the walk that already stacks
+/// the children.
+///
+/// `contentHeight` is that walk: it visits each child in order, pays out the
+/// collapsed margin group that precedes it, and advances a running `total` by
+/// the child's whole box. That `total` IS the child's offset from the content
+/// box it is being stacked in -- the number this engine has never kept. So the
+/// pass is not a second layout algorithm, it is a sink handed to the existing
+/// one: give the walk the absolute origin of the box it is filling and it can
+/// name where every child ends up.
+///
+/// Why a parameter and not a field on the Frame: `contentHeight` is also called
+/// by the readers (clientHeight, scrollHeight), which start at an element whose
+/// own absolute origin is unknown. An optional parameter is what keeps those
+/// calls from writing positions measured against nothing.
+///
+/// **Nothing reads this table.** The prototype exists to price the pass -- see
+/// the `layout-pass-cost-prototype` plan -- and wiring the rect accessors to it
+/// is a separate decision that the cost has to clear first.
+pub const PositionPass = struct {
+    table: *PositionTable,
+    /// Nodes placed, so the cost can be reported per node rather than per page.
+    nodes: *usize,
+    /// The absolute position of the content box currently being filled.
+    x: f64,
+    y: f64,
+
+    fn record(self: PositionPass, frame: *Frame, element: *Element, at: PlacedBox) void {
+        self.nodes.* += 1;
+        // A prototype that is only ever measured: a table this pass could not
+        // grow is a missing row, not a failed page load.
+        self.table.put(frame.arena, element, at) catch {};
+    }
+};
+
+/// The same walk with no sink: the height measurement that already exists,
+/// asked for the whole document at once. Times the baseline the position pass is
+/// an addition to, so a cost reading can say which half it is paying for.
+pub fn layoutPassHeightOnly(root: *Element, frame: *Frame) f64 {
+    var visibility_cache: VisibilityCache = .{};
+    const dims = root.getElementDimensions(frame);
+    return root.contentHeight(frame, &visibility_cache, .in_flow, dims.width, 0, null).total;
+}
+
+/// One pass over the whole document, filling `table` with every in-flow box's
+/// position. Returns the number of boxes placed.
+///
+/// The root's own content box is the origin every position is relative to, so
+/// the pass starts inside `<html>`'s border and padding -- and records the root
+/// itself at 0,0, which is where Chrome reports it with nothing scrolled.
+pub fn layoutPassPositions(root: *Element, frame: *Frame, table: *PositionTable) usize {
+    var nodes: usize = 0;
+    var visibility_cache: VisibilityCache = .{};
+    const dims = root.getElementDimensions(frame);
+    var containing: ?f64 = null;
+    table.put(frame.arena, root, .{
+        .x = 0,
+        .y = 0,
+        .width = dims.width + dims.padding_x + dims.border_x,
+        .height = dims.height + dims.padding_y + dims.border_y,
+    }) catch {};
+    _ = root.contentHeight(frame, &visibility_cache, .in_flow, dims.width, 0, .{
+        .table = table,
+        .nodes = &nodes,
+        .x = CSSStyleDeclaration.blockEdgePx(root, "left", frame, &containing, 0),
+        .y = CSSStyleDeclaration.blockEdgePx(root, "top", frame, &containing, 0),
+    });
+    return nodes;
 }
 
 // The height of the direct child elements stacked vertically, the counterpart
@@ -4155,7 +4364,7 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 // is 55.5 (a line, a block, a line) where stacking the block alone says 18.5.
 // Both measured at dpr 2 with
 // tools/fingerprint/scratch/expr-inline-content-lines.js.
-fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8) ContentHeight {
+fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass) ContentHeight {
     var total: f64 = 0;
     // The margins that LEAVE through this box's two block edges. They are not
     // part of its height -- that is what escaping means -- but they are part of
@@ -4195,7 +4404,21 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
     // The children share one containing block, so the width a percentage margin
     // takes its share of is measured once for all of them.
     var margin_containing: ?f64 = content_width;
-    const escapes = self.marginEscapes(frame, &margin_containing, depth);
+    var escapes = self.marginEscapes(frame, &margin_containing, depth);
+
+    // The outermost frame of a document-wide pass is the root element, whose box
+    // establishes the initial block formatting context: its containing block is
+    // the initial containing block and there is no box outside it for a margin
+    // to move. Chrome reports <html> at 0,0 and <body> at 8,8, so <body>'s UA
+    // margin is INSIDE the root and not a gap above it -- without this every
+    // position in the table came out 8px short in both axes, on all 31 boxes of
+    // scratch/b75/page (scratch/b75/expr-static-positions.js).
+    //
+    // Confined to the pass because the height readers do not care: the root's
+    // clientHeight and scrollHeight both short-circuit to the viewport before
+    // this total is used, so correcting it for them would be a change with no
+    // observable half.
+    if (pass != null and depth == 0) escapes = .{ .top = false, .bottom = false };
     var group: MarginGroup = .{};
     var placed = false;
 
@@ -4214,16 +4437,79 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 const outer_below = flow.open_below;
                 flow.open_above = @max(outer_above, halves.above);
                 flow.open_below = @max(outer_below, halves.below);
+                // Where the line cursor stands on either side of this box is
+                // where the box is and how wide it is. An inline element gets no
+                // row otherwise -- the walk hands it to the line rather than
+                // stacking it -- and without one it keeps the node-count
+                // position, which is the last place `x == y` survives. Chrome
+                // puts the `<a>` filling an `<h2>` at x=8 with the line's own
+                // 27.5 of height (scratch/b99/expr-bounding-rect-page.js).
+                const line_x = flow.placed;
+                const line_y = flow.total;
                 el.flowInline(frame, &flow, child_font.family, child_font.size, 1);
+                if (pass) |p| {
+                    // Only a box that stayed on its line: a wrapped inline is a
+                    // union of line boxes and nothing here has measured one.
+                    if (flow.total == line_y and flow.placed > line_x) {
+                        p.record(frame, el, .{
+                            .x = p.x + line_x,
+                            .y = p.y + total + line_y,
+                            .width = flow.placed - line_x,
+                            .height = halves.above + halves.below,
+                        });
+                    }
+                }
                 flow.open_above = outer_above;
                 flow.open_below = outer_below;
                 continue;
             }
             if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
-            if (!extent.counts(CSSStyleDeclaration.flowKind(el, frame))) continue;
+            const kind = CSSStyleDeclaration.flowKind(el, frame);
+            if (!extent.counts(kind)) {
+                // A float leaves the block flow but still starts where the flow
+                // had got to, which is what Chrome reports: the float and the
+                // block after it both sit at `d=0,0` in
+                // `scratch/b74/expr-inflow-position-matrix.js`. So it takes a
+                // position and does not advance `total`.
+                //
+                // Only floats. A positioned box is placed by `outOfFlowPosition`
+                // and its readers ask that first, so a flow position for one
+                // would be a row nothing reads and everything has to explain.
+                if (kind == .floated) {
+                    if (pass) |p| {
+                        const float_box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+                        p.record(frame, el, .{
+                            .x = p.x + el.staticInlineOffset(
+                                frame,
+                                content_width,
+                                float_box.width + float_box.padding_x + float_box.border_x,
+                                &margin_containing,
+                                depth,
+                            ),
+                            .y = p.y + total,
+                            .width = float_box.width + float_box.padding_x + float_box.border_x,
+                            .height = float_box.height + float_box.padding_y + float_box.border_y,
+                        });
+                    }
+                }
+                continue;
+            }
             if (el.atomicInlineHalves(frame)) |halves| {
                 const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
-                flow.placeAtomic(halves.above, halves.below, box.width + box.padding_x + box.border_x);
+                const at = flow.placeAtomic(halves.above, halves.below, box.width + box.padding_x + box.border_x);
+                // An atomic inline shares a line, so its inline position is the
+                // line cursor before it was placed -- Chrome puts a pair of
+                // 80px inline-blocks at `d=0,0` and `d=80,0`. The block axis is
+                // where the run of lines has got to; only the single-line case
+                // is in the matrix, so that is the only one measured.
+                if (pass) |p| {
+                    p.record(frame, el, .{
+                        .x = p.x + at.inline_at,
+                        .y = p.y + total + at.block_at,
+                        .width = box.width + box.padding_x + box.border_x,
+                        .height = box.height + box.padding_y + box.border_y,
+                    });
+                }
                 continue;
             }
             // A block box ends the run of lines above it, and opens a new one
@@ -4270,6 +4556,52 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             // Frame (probes/b72-memo-attempt.patch) -- it is the seeded width
             // that moves it, 6022ms of homedepot's offsetHeight reads down to
             // 1783 (scratch/b73/count-root-reads.mjs).
+            // Where this child's border box lands, for the one caller that is
+            // laying the whole document out rather than measuring one box. The
+            // gap is previewed rather than paid here because the
+            // self-collapsing branch below must not pay it -- the payout at the
+            // end of this block computes the identical value.
+            var child_pass: ?PositionPass = null;
+            if (pass) |p| {
+                // `containerMarginPx` and not `marginPx`: the two differ on
+                // exactly one element, `<body>`, whose UA margin is a fallback
+                // the cascade cannot answer for. The stacking walk asks
+                // `marginPx` and therefore reads 0 there, which put every box
+                // in the table 8px short in both axes -- measured on
+                // scratch/b75/page, all 31 of them, before and after.
+                //
+                // Joined into a COPY of the group so the height half of this
+                // walk keeps the number it has always had.
+                var placement = group;
+                placement.join(el.containerMarginPx("margin-top", frame, &margin_containing, depth));
+                // What will escape out of this child from inside. It collapses
+                // with the child's own margin, and the max of the two is where
+                // the child's border box lands -- so it has to be known before
+                // the position is written, which is before the walk descends.
+                placement.joinGroup(el.escapedTopMargin(frame, &margin_containing, depth));
+                const gap = if (placed or !escapes.top) placement.gap() else 0;
+                const child_y = p.y + total + gap;
+                const child_x = p.x + el.staticInlineOffset(
+                    frame,
+                    content_width,
+                    box.width + box.padding_x + box.border_x,
+                    &margin_containing,
+                    depth,
+                );
+                p.record(frame, el, .{
+                    .x = child_x,
+                    .y = child_y,
+                    .width = box.width + box.padding_x + box.border_x,
+                    .height = box.height + box.padding_y + box.border_y,
+                });
+                child_pass = .{
+                    .table = p.table,
+                    .nodes = p.nodes,
+                    .x = child_x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &margin_containing, depth),
+                    .y = child_y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &margin_containing, depth),
+                };
+            }
+
             var inner = box.height;
             // What LEAVES the child through its own two edges, which adjoins
             // the run this box's margins are in. Empty unless the child has no
@@ -4277,9 +4609,24 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             // recursion is what decides that -- so a padded or bordered child
             // reports nothing and keeps its gaps to itself.
             var held: ContentHeight = .{};
-            if (!box.explicit_height and depth < MAX_CONTAINING_BLOCK_DEPTH) {
-                held = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1);
-                inner = @max(inner, held.total);
+            // A declared height means the children cannot change this box, so
+            // measuring one stops here -- but a document-wide pass still has to
+            // place what is inside it, or the table it fills covers only the
+            // auto-height part of the tree and the cost it reports is not the
+            // cost of laying the document out.
+            if (depth < MAX_CONTAINING_BLOCK_DEPTH and (!box.explicit_height or child_pass != null)) {
+                held = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1, child_pass);
+                if (!box.explicit_height) inner = @max(inner, held.total) else held = .{};
+            }
+            // The height the child ENDS UP with, now that the walk knows what it
+            // holds. The row went in before the recursion because the position
+            // had to; a box whose own content box is 0 and which wraps three
+            // lines of text is 0 tall until this correction, and
+            // `elementFromPoint` would never land inside it.
+            if (pass) |p| {
+                if (p.table.getPtr(el)) |row| {
+                    row.height = inner + box.padding_y + box.border_y;
+                }
             }
             group.joinGroup(held.escaped_top);
             if (inner == 0 and box.padding_y == 0 and box.border_y == 0) {
@@ -4561,7 +4908,7 @@ pub fn getOffsetTop(self: *Element, frame: *Frame) f64 {
     if (self.outOfFlowPosition(frame, 0)) |placed| {
         return placed.offset_y;
     }
-    return calculateDocumentPosition(self.asNode());
+    return documentPosition(self.asNode(), frame);
 }
 
 pub fn getOffsetLeft(self: *Element, frame: *Frame) f64 {
@@ -4571,7 +4918,7 @@ pub fn getOffsetLeft(self: *Element, frame: *Frame) f64 {
     if (self.outOfFlowPosition(frame, 0)) |placed| {
         return placed.offset_x;
     }
-    return calculateSiblingPosition(self.asNode());
+    return siblingPosition(self.asNode(), frame);
 }
 
 /// Where the element's box sits when the flow does not decide it, or null when
@@ -4781,6 +5128,62 @@ fn clientBorderEdge(self: *Element, frame: *Frame, comptime side: []const u8) f6
 // - Linear scaling: 5px per node
 // - Perfect document order, guaranteed unique positions
 // - Compact coordinates (1000 nodes ≈ 5,000px)
+/// The y a page reads for an in-flow box.
+///
+/// The table from one document-wide pass answers it when it can. The count-based
+/// fallback below is what the engine answered before that pass existed -- every
+/// element's y being `(preceding nodes) x 5px`, and its x the same number, which
+/// is one expression away from a tell. It stays for the cases the table cannot
+/// serve: while the pass is running, and for an element the pass did not place.
+fn documentPosition(node: *Node, frame: *Frame) f64 {
+    if (node.is(Element)) |element| {
+        if (frame.positionOf(element)) |point| {
+            return point.y + relativeOffset(element, frame, "top", "bottom");
+        }
+    }
+    return calculateDocumentPosition(node);
+}
+
+fn siblingPosition(node: *Node, frame: *Frame) f64 {
+    if (node.is(Element)) |element| {
+        if (frame.positionOf(element)) |point| {
+            return point.x + relativeOffset(element, frame, "left", "right");
+        }
+    }
+    return calculateSiblingPosition(node);
+}
+
+/// What `position: relative` moves a box by on one axis.
+///
+/// A relative box keeps the space the flow gave it -- which is why the pass
+/// places it at its static position and this is added afterwards rather than
+/// folded into the walk. Chrome puts the shape in
+/// `scratch/b74/expr-inflow-position-matrix.js` at `d=7,39` where its static
+/// position is `0,30` and it declares `left:7px; top:9px`: a plain sum.
+///
+/// The near edge wins and the far edge is its negation, per
+/// css-position-3 §3.2 -- `right` alone moves the box left. Unlike
+/// `edgeOffset`, neither is resolved against the containing block, because a
+/// relative offset is not a placement.
+fn relativeOffset(
+    self: *Element,
+    frame: *Frame,
+    comptime near: []const u8,
+    comptime far: []const u8,
+) f64 {
+    const position = CSSStyleDeclaration.cascadedComputedValue(self, "position", frame) orelse return 0;
+    if (!std.ascii.eqlIgnoreCase(position, "relative")) {
+        return 0;
+    }
+    if (CSSStyleDeclaration.cascadedComputedValue(self, near, frame)) |declared| {
+        if (CSS.parseDimensionViewport(declared, frame)) |px| return px;
+    }
+    if (CSSStyleDeclaration.cascadedComputedValue(self, far, frame)) |declared| {
+        if (CSS.parseDimensionViewport(declared, frame)) |px| return -px;
+    }
+    return 0;
+}
+
 fn calculateDocumentPosition(node: *Node) f64 {
     var position: f64 = 0.0;
     var current = node;
@@ -4906,8 +5309,8 @@ pub fn clone(self: *Element, deep: bool, frame: *Frame) !*Node {
 
 pub fn scrollIntoViewIfNeeded(self: *Element, center_if_needed: ?bool, frame: *Frame) void {
     _ = center_if_needed;
-    const y = calculateDocumentPosition(self.asNode());
-    const scroll_y: f64 = @floatFromInt(frame.window.getScrollY());
+    const y = documentPosition(self.asNode(), frame);
+    const scroll_y = frame.window.getScrollY();
     const viewport_height: f64 = @floatFromInt(frame.window.getInnerHeight(frame));
     if (y >= scroll_y and y <= scroll_y + viewport_height) {
         return;
@@ -4924,8 +5327,8 @@ pub fn scrollIntoView(self: *Element, opts: ?ScrollIntoViewOpts, frame: *Frame) 
     // Scroll the window so the element's top is brought into the viewport.
     // Positions come from the faux-layout document position (top = preorder
     // depth-scaled y), the same source getBoundingClientRect uses.
-    const y = calculateDocumentPosition(self.asNode());
-    frame.window.scrollTo(.{ .x = 0 }, @intFromFloat(@max(0, y)), frame) catch {};
+    const y = documentPosition(self.asNode(), frame);
+    frame.window.scrollTo(.{ .x = 0 }, @max(0, y), frame) catch {};
 }
 
 const ScrollToOpts = union(enum) {

@@ -460,6 +460,26 @@ _http_headers: std.ArrayList(HttpHeader) = .empty,
 _csp: ?Csp = null,
 
 _referrer: ?[]const u8 = null,
+
+/// Where every in-flow element sits, from one document-wide pass.
+///
+/// Built on demand and kept until the DOM moves. That is affordable because the
+/// reads come in clusters: the parent plan's E2 counted 1 664 geometry reads on
+/// homedepot arriving in **59** groups separated by a mutation, 49 055 on macys
+/// in 53. One pass per group is the whole cost model, and with the four cascade
+/// caches in place a pass costs 88ms on homedepot, 54 on macys, 8 on sony --
+/// 5.2s, 2.9s and 0.1s for a whole page load.
+position_table: Element.PositionTable = .empty,
+position_table_version: usize = 0,
+/// True while the pass is running. `layoutPassPositions` measures boxes, and
+/// measuring an out-of-flow box asks its containing block where it is -- which
+/// is a question this table answers, so without this the first pass would
+/// re-enter itself forever.
+position_table_building: bool = false,
+/// Whether `position_table` holds a pass at all. Distinguished from an empty
+/// table so a document with no elements is not rebuilt on every read.
+position_table_filled: bool = false,
+
 referrer_policy: referrer.Policy = .default,
 
 pub const HttpHeader = struct {
@@ -1704,10 +1724,143 @@ fn _documentIsComplete(self: *Frame) !void {
         log.debug(.frame, "load", .{ .url = self.url, .type = self._type });
     }
 
+    self.probeLayoutPassCost();
+
     // Last, after every other subresource, which is where Chrome puts it.
     self.requestFavicon();
 
     self.notifyParentLoadComplete();
+}
+
+/// What `LIGHTPANDA_LAYOUT_PASS_PROBE` asked for, read once.
+///
+/// An environment variable and not a flag: the pass behind it is a prototype
+/// being priced (the `layout-pass-cost-prototype` plan), nothing on the page can
+/// see it either way, and it should leave no CLI surface behind if the price
+/// turns out to be too high. Same shape as LIGHTPANDA_DISABLE_CORE_DUMP.
+///
+/// `dump` additionally logs every position the pass computed, which is how the
+/// table is checked against the ground truth the parent plan measured
+/// (`scratch/b74/expr-inflow-position-matrix.js`) without any accessor reading
+/// it.
+const LayoutPassProbe = enum { off, time, dump };
+var layout_pass_probe: ?LayoutPassProbe = null;
+
+/// Where `element` sits in the document, or null when the table cannot say --
+/// during the pass itself, or for an element the pass did not place.
+pub fn positionOf(self: *Frame, element: *Element) ?Element.PlacedBox {
+    if (self.position_table_building) {
+        return null;
+    }
+    if (!self.position_table_filled or self.position_table_version != self._page.dom_version) {
+        const root = self.document.getDocumentElement() orelse return null;
+        self.position_table_building = true;
+        defer self.position_table_building = false;
+        self.position_table = .empty;
+        _ = Element.layoutPassPositions(root, self, &self.position_table);
+        self.position_table_version = self._page.dom_version;
+        self.position_table_filled = true;
+    }
+    return self.position_table.get(element);
+}
+
+/// Time one document-wide layout pass and report what it cost.
+///
+/// Costs a loaded enum when the probe is off, which is what keeps this out of
+/// the way of an antibot sweep. The table is filled and then dropped on the
+/// floor: no reader is wired to it yet, on purpose.
+fn probeLayoutPassCost(self: *Frame) void {
+    const mode = layout_pass_probe orelse blk: {
+        const raw = std.c.getenv("LIGHTPANDA_LAYOUT_PASS_PROBE");
+        const resolved: LayoutPassProbe = if (raw) |r|
+            (if (std.mem.eql(u8, std.mem.span(r), "dump")) .dump else .time)
+        else
+            .off;
+        layout_pass_probe = resolved;
+        break :blk resolved;
+    };
+    if (mode == .off) return;
+
+    // The main frame only. An iframe's own document is a separate pass over a
+    // handful of nodes, and the tick counter below is one counter: letting every
+    // frame share it scrambles the series and spends the bound on the noise.
+    if (self.parent != null) return;
+
+    self.timeLayoutPass(mode, 0);
+
+    // The load event is the wrong moment on its own: on a station like
+    // homedepot most of the DOM is built by script AFTER it, so a pass timed
+    // here prices a document a third the size of the one a reader would meet.
+    // So the probe keeps going, and the tail of the series is the settled page.
+    // Bounded, because the point is a series and not a permanent tax.
+    if (mode == .time) {
+        self.js.scheduler.add(self, layoutPassTick, layout_pass_tick_ms, .{
+            .name = "frame.probeLayoutPassCost",
+        }) catch {};
+    }
+}
+
+const layout_pass_tick_ms = 2000;
+const layout_pass_ticks = 15;
+var layout_pass_tick: u32 = 0;
+
+fn layoutPassTick(ctx: *anyopaque) !?u32 {
+    const self: *Frame = @ptrCast(@alignCast(ctx));
+    layout_pass_tick += 1;
+    self.timeLayoutPass(.time, layout_pass_tick);
+    return if (layout_pass_tick >= layout_pass_ticks) null else layout_pass_tick_ms;
+}
+
+fn timeLayoutPass(self: *Frame, mode: LayoutPassProbe, tick: u32) void {
+    const root = self.document.getDocumentElement() orelse return;
+
+    // Three passes, reported separately. The first one pays for whatever the
+    // page has not measured yet -- a font's metrics, a percentage's containing
+    // block -- and a pass that runs on every invalidation would pay that once,
+    // not per pass. Reporting only the first would price the warm-up as if it
+    // were the pass; reporting only a warm one would hide it.
+    var round: u8 = 0;
+    while (round < 3) : (round += 1) {
+        var table: Element.PositionTable = .{};
+        Element.measure_entries = 0;
+        const started_us = lp.datetime.microTimestamp(.boot);
+        const placed = Element.layoutPassPositions(root, self, &table);
+        const elapsed_us = lp.datetime.microTimestamp(.boot) - started_us;
+        const measured = Element.measure_entries;
+
+        // The same walk with the sink taken out, so the reading separates "one
+        // pass over the document is expensive" from "the position half of it
+        // is". Without this the number cannot be attributed and the verdict
+        // would be about the instrument.
+        const plain_started_us = lp.datetime.microTimestamp(.boot);
+        _ = Element.layoutPassHeightOnly(root, self);
+        const plain_us = lp.datetime.microTimestamp(.boot) - plain_started_us;
+
+        log.warn(.telemetry, "layout pass cost", .{
+            .url = self.url,
+            .tick = tick,
+            .round = round,
+            .placed = placed,
+            .measured = measured,
+            .us = elapsed_us,
+            .plain_us = plain_us,
+            .ns_per_node = if (placed == 0) 0 else (elapsed_us * std.time.ns_per_us) / placed,
+        });
+        if (mode != .dump) continue;
+
+        var it = table.iterator();
+        while (it.next()) |entry| {
+            const element = entry.key_ptr.*;
+            log.warn(.telemetry, "layout pass position", .{
+                .tag = element.getTagNameDump(),
+                .id = element.getId(),
+                .x = entry.value_ptr.x,
+                .y = entry.value_ptr.y,
+            });
+        }
+        // One dump is a table to check; three is the same table three times.
+        break;
+    }
 }
 
 fn notifyParentLoadComplete(self: *Frame) void {

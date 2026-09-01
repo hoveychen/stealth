@@ -1151,8 +1151,15 @@ test "cdp.dom: getBoxModel" {
     // one 40.6953125 tall answers 41 and one 40.1953125 tall answers 40. This
     // truncated, so every fractional box was a pixel short -- and now that a
     // line box is 18.5 rather than 18, that is every box holding text.
+    // The origin used to read `25, 25` -- x equal to y, which is the signature of
+    // the node-count stand-in that `calculateDocumentPosition` used before one
+    // layout pass placed the boxes. Chrome puts this <p> at 8,16: 8 from body's
+    // left margin, and 16 because the paragraph's `margin: 1em 0` collapses out
+    // through the div and through body, taking the max against body's own 8
+    // (scratch/b99/expr-p-in-div.js and expr-body-collapse.js, dpr 2). With a
+    // 1904-wide box 18.5 tall that is the quad below, corner for corner.
     try ctx.expectSentResult(.{ .model = BoxModel{
-        .content = Quad{ 25.0, 25.0, 1929.0, 25.0, 1929.0, 43.5, 25.0, 43.5 },
+        .content = Quad{ 8.0, 16.0, 1912.0, 16.0, 1912.0, 34.5, 8.0, 34.5 },
         .padding = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
         .border = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
         .margin = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },

@@ -7903,6 +7903,10 @@ test "WebApi: CSSStyleDeclaration rule hiding cache invalidation" {
     try testing.htmlRunner("css/rule_hiding_cache_invalidation.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration in-flow position matrix" {
+    try testing.htmlRunner("css/inflow_position_matrix.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration computed transform-origin" {
     try testing.htmlRunner("css/computed_origin.html", .{});
 }
