@@ -393,6 +393,25 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
                 });
             }
 
+            // The other half of Snapshot.attachClass's `own_value_of` slot:
+            // the template reserved the position, this puts the realm's
+            // %Object.prototype.valueOf% in it with Chrome's attribute bits
+            // (data, non-writable, non-enumerable, non-configurable --
+            // measured). Redefining the placeholder keeps the slot's insertion
+            // position, which is what makes `valueOf` sort first in
+            // `Object.getOwnPropertyNames(location)`.
+            if (comptime @hasDecl(JsApi.Meta, "own_value_of")) {
+                if (self.ctx.objectPrototypeValueOf(self)) |value_of| {
+                    _ = js_obj.defineOwnProperty(
+                        "valueOf",
+                        value_of,
+                        v8.ReadOnly + v8.DontEnum + v8.DontDelete,
+                    );
+                } else |err| {
+                    log.warn(.js, "own valueOf", .{ .err = err, .type = @typeName(ptr.child) });
+                }
+            }
+
             if (!@hasDecl(JsApi.Meta, "empty_with_no_proto")) {
                 // The TAO contains the pointer to our Zig instance as
                 // well as any meta data we'll need to use it later.

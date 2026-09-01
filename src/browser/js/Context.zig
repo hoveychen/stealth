@@ -251,6 +251,11 @@ encoded_texts: (if (lp.IS_DEBUG) std.ArrayListUnmanaged(EncodedText) else void) 
 // below for the contexts built outside it.
 object_freeze: ?js.Function.Global = null,
 
+// This realm's `Object.prototype.valueOf`, which every Location carries as an
+// own property. Same reason it is cached: one lookup per realm rather than one
+// per Location, and the page cannot move it by assigning to `Object`.
+object_proto_value_of: ?js.Value.Global = null,
+
 // The two `size` functions the queuing strategies hand out. They belong to
 // the realm, not to the instance: every ByteLengthQueuingStrategy in a
 // context reports the same function object, and so does every
@@ -623,6 +628,33 @@ pub fn objectFreeze(self: *Context, local: *const js.Local) !js.Function {
     const func: js.Function = .{ .local = local, .handle = @ptrCast(freeze.handle) };
     self.object_freeze = try func.persist();
     return func;
+}
+
+/// This realm's `Object.prototype.valueOf`, cached on first use. HTML's
+/// "create a Location object" steps define it as an own property of every
+/// Location, and it has to be *this* function: `location.valueOf ===
+/// Object.prototype.valueOf` is true in Chrome, and true per realm -- a child
+/// frame's Location carries the child's (measured, scratch/b80/q1.js).
+pub fn objectPrototypeValueOf(self: *Context, local: *const js.Local) !js.Value {
+    if (self.object_proto_value_of) |cached| {
+        return cached.local(local);
+    }
+
+    const object = try self.globalObject(local).get("Object");
+    if (object.isObject() == false) {
+        return error.NoObjectPrototype;
+    }
+    const prototype = try object.toObject().get("prototype");
+    if (prototype.isObject() == false) {
+        return error.NoObjectPrototype;
+    }
+    const value_of = try prototype.toObject().get("valueOf");
+    if (value_of.isFunction() == false) {
+        return error.NoObjectPrototype;
+    }
+
+    self.object_proto_value_of = try value_of.persist();
+    return value_of;
 }
 
 pub fn getIncumbent(self: *Context) *Frame {
