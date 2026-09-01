@@ -150,3 +150,114 @@ and 168 tall in Chrome and one 130x84 line here.
   testing.expectEqual('', wrong.join(' | '));
 }
 </script>
+
+<!--
+The other half. A PRESERVING `white-space` keeps the run as written, which this
+engine already measured right, but it also makes a newline a line of its own and
+sends a tab to the next eight-character stop, neither of which reached the box:
+`a\nb` came out one 130x84 line where Chrome makes two 43x84 ones, and `a\tb`
+was three characters where Chrome makes nine.
+
+The line rules are the ones flowInline already had for a block, and the readings
+here are what put them there: one more line than there are breaks, less one when
+the content ends with a break -- so `a\nb\n` is two lines and `a\n\nb` is three
+-- and the box is as wide as its WIDEST line rather than as the sum of them. A
+<br> is a break on the same terms, whatever white-space says, which is why the
+last case is a collapsing one.
+
+The tab grid is eight spaces wide and a tab always moves: `a\tb` is 9 characters,
+`\tb` is 9 as well, `a\t\tb` is 17, and `aaaaaaaaa\tb` -- already past the first
+stop -- is 17 too.
+
+Same probe and same Chrome as the block above: scratch/b84/expr-b84-preserve.js,
+readings in scratch/b84/pre-cr.json, 39 of whose 52 this engine had wrong. The
+carriage-return cases are scratch/b84/expr-b84-cr.js.
+-->
+
+<script id=preserved_white_space_breaks_lines_and_walks_to_tab_stops>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;left:-9999px;top:0;width:2000px;font:72px monospace;');
+  document.body.appendChild(host);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+  const text = (s) => (el) => el.appendChild(document.createTextNode(s));
+  const broken = (el) => {
+    el.appendChild(document.createTextNode('a'));
+    el.appendChild(document.createElement('br'));
+    el.appendChild(document.createTextNode('bb'));
+  };
+  const span = (what, ws, build, width, height) => {
+    host.innerHTML = '';
+    const el = document.createElement('span');
+    el.style.whiteSpace = ws;
+    build(el);
+    host.appendChild(el);
+    eq('span ' + what + ' width', el.offsetWidth, width);
+    eq('span ' + what + ' height', el.offsetHeight, height);
+  };
+  const blk = (what, ws, build, width, height) => {
+    host.innerHTML = '';
+    const el = document.createElement('div');
+    el.setAttribute('style', 'position:absolute;left:0;top:0;white-space:' + ws);
+    build(el);
+    host.appendChild(el);
+    eq('block ' + what + ' width', el.offsetWidth, width);
+    eq('block ' + what + ' height', el.offsetHeight, height);
+  };
+
+  // The three values that preserve. They differ from each other in how a line
+  // too long for its box breaks, which nothing here is, so all three answer the
+  // same to all of this.
+  for (const ws of ['pre', 'pre-wrap', 'break-spaces']) {
+    // Preserved, which already worked and is here so it keeps working.
+    span(ws + ' spaces', ws, text('a   b'), 217, 84);
+    span(ws + ' leading', ws, text('   ab'), 217, 84);
+    span(ws + ' trailing', ws, text('ab   '), 217, 84);
+    // One more line than there are breaks...
+    span(ws + ' newline', ws, text('a\nb'), 43, 168);
+    span(ws + ' two newlines', ws, text('a\nbb\nccc'), 130, 252);
+    span(ws + ' blank line', ws, text('a\n\nb'), 43, 252);
+    span(ws + ' leading newline', ws, text('\na'), 43, 168);
+    // ... less one when the content ends with one.
+    span(ws + ' trailing newline', ws, text('a\nb\n'), 43, 168);
+    // The tab grid, from the start of the line.
+    span(ws + ' tab', ws, text('a\tb'), 390, 84);
+    span(ws + ' leading tab', ws, text('\tb'), 390, 84);
+    span(ws + ' two tabs', ws, text('a\t\tb'), 737, 84);
+    span(ws + ' tab past stop', ws, text('aaaaaaaaa\tb'), 737, 84);
+    // A <br> is a break of its own.
+    span(ws + ' br', ws, broken, 87, 168);
+    // And the same three questions of a block box, which is the other path.
+    blk(ws + ' newline', ws, text('a\nbb'), 87, 168);
+    blk(ws + ' spaces', ws, text('a   b'), 217, 84);
+    blk(ws + ' tab', ws, text('a\tb'), 390, 84);
+  }
+
+  // `pre-line` preserves the breaks and collapses the spaces, so it is the one
+  // value that needs both halves at once: the run either side of a break
+  // collapses away against it, leaving two lines of `a` and `bb`.
+  span('pre-line newline', 'pre-line', text('a\nbb'), 87, 168);
+  span('pre-line spaced newline', 'pre-line', text('a   \n   bb'), 87, 168);
+  blk('pre-line newline', 'pre-line', text('a\nbb'), 87, 168);
+
+  // Only a LINE FEED is a segment break. A carriage return is not, under any
+  // value: preserved it renders as nothing, so `a\rb` is two characters on one
+  // line, and collapsed it is a space like any other white space. `a\r\nb` is
+  // two lines because of the line feed in it, not because of the pair -- a
+  // source document has its CRLF normalised away by the parser, so a CR in a
+  // text node came from script or from a character reference.
+  span('pre CR', 'pre', text('a\rb'), 87, 84);
+  span('pre CRLF', 'pre', text('a\r\nb'), 43, 168);
+  span('pre-line CR', 'pre-line', text('a\rb'), 130, 84);
+  span('normal CR', 'normal', text('a\rb'), 130, 84);
+
+  // A <br> under a collapsing value breaks the line too -- it is an element and
+  // not white space, so no value of this property has a say in it.
+  span('normal br', 'normal', broken, 87, 168);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
