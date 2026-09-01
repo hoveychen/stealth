@@ -330,7 +330,100 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
     // `el.style.opacity` reads back what the author wrote.
     if (!self._is_computed) return value;
     const clamped = clampAlphaValue(property_name, value) orelse value;
-    return absoluteUrls(property_name, clamped, frame);
+    const shadowed = self.computedShadow(property_name, clamped, frame, surface, depth: {
+        break :depth 0;
+    }) orelse clamped;
+    return absoluteUrls(property_name, shadowed, frame);
+}
+
+/// A shadow's computed value, which carries two things its specified value does
+/// not: a colour that is always present and always resolved, and a fixed number
+/// of lengths.
+///
+/// Measured over fourteen rows (scratch/b98/expr-b98-shadow-computed.js). The
+/// specified value matched Chrome on all fourteen -- the colour is already at
+/// the front and `inset` at the back, which the @keyframes work got right -- and
+/// the computed value on none of them, for these two reasons alone:
+///
+///   * `box-shadow: 1px 1px red` computes to `rgb(255, 0, 0) 1px 1px 0px 0px`.
+///     The keyword resolves, and the blur and spread Chrome fills in are `0px`.
+///   * a shadow written with no colour, or with `currentcolor`, takes the
+///     element's own `color`: on a green element both compute to
+///     `rgb(0, 128, 0) …`.
+///
+/// `text-shadow` pads to three rather than four, because it has no spread. That
+/// is the only difference between the two, and it is why the count is looked up
+/// rather than written as a constant.
+///
+/// The lengths themselves arrive already resolved -- `1em 1em` is `16px 16px`
+/// by the time this sees it -- so this pads and does not convert.
+fn computedShadow(self: *const CSSStyleDeclaration, property_name: []const u8, value: []const u8, frame: *Frame, surface: Surface, depth: u8) ?[]const u8 {
+    const slots: usize = if (std.mem.eql(u8, property_name, "box-shadow"))
+        4
+    else if (std.mem.eql(u8, property_name, "text-shadow"))
+        3
+    else
+        return null;
+
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    // `none` and the CSS-wide keywords are not shadows and parse as none below,
+    // but leaving early saves the walk on the commonest value there is.
+    if (std.ascii.eqlIgnoreCase(trimmed, "none")) return null;
+
+    const colours = chrome_keywords.keywords.get("background-color");
+    var buf = std.Io.Writer.Allocating.init(frame.call_arena);
+    var layers = shorthand.Layers.init(trimmed);
+    var first = true;
+    while (layers.next()) |layer| {
+        const parsed = parseShadowLayer(layer, colours) orelse return null;
+        if (parsed.count > slots) return null;
+
+        if (!first) buf.writer.writeAll(", ") catch return null;
+        first = false;
+
+        // The colour, resolved. A missing one and `currentcolor` are the same
+        // question asked twice, and the answer to both is the element's own.
+        const written = parsed.colour orelse "currentcolor";
+        const resolved = if (std.ascii.eqlIgnoreCase(written, "currentcolor"))
+            self.propertyValueAt("color", frame, surface, depth + 1)
+        else
+            computedColourText(frame.call_arena, "color", written) orelse
+                foldedHexColour(frame.call_arena, written) orelse written;
+        buf.writer.writeAll(resolved) catch return null;
+
+        for (0..slots) |i| {
+            buf.writer.writeByte(' ') catch return null;
+            buf.writer.writeAll(if (i < parsed.count) parsed.lengths[i] else "0px") catch return null;
+        }
+        if (parsed.inset) buf.writer.writeAll(" inset") catch return null;
+    }
+    if (first) return null;
+    if (std.mem.eql(u8, buf.written(), value)) {
+        buf.deinit();
+        return null;
+    }
+    return buf.written();
+}
+
+/// A `#rgb` colour written out the way a computed value carries it, or null
+/// when the token is not one.
+///
+/// `computedColourText` deliberately declines a hash: by the time it runs on an
+/// ordinary declaration the hash has already been folded by
+/// `canonicaliseValue`. A shadow whose colour arrives through a `var()` never
+/// went through that -- the specified-value writer declines a value carrying a
+/// substitution, which is right, since the text arrives later -- so the hash is
+/// still a hash here. zillow.com ships exactly that
+/// (`box-shadow: … var(--tw-shadow-color)`) and it came out of the rewrite
+/// spelled `#fff0`; a plain stylesheet rule with the same hash folds fine,
+/// which is what says the substitution is the difference.
+fn foldedHexColour(arena: Allocator, token: []const u8) ?[]const u8 {
+    if (token.len == 0 or token[0] != '#') return null;
+    const rgba = color.RGBA.parse(token) catch return null;
+    var buf = std.Io.Writer.Allocating.init(arena);
+    writeColour(&buf.writer, .{ .rgb = .{ rgba.r, rgba.g, rgba.b }, .alpha = rgba.a }) catch return null;
+    return buf.written();
 }
 
 /// A `url()` in a computed value is absolute. `background-image: url(/a.png)`
@@ -4768,32 +4861,11 @@ fn writeShadow(arena: Allocator, value: []const u8) !?[]const u8 {
     var layers = shorthand.Layers.init(value);
     var first = true;
     while (layers.next()) |layer| {
-        var lengths: [4][]const u8 = undefined;
-        var length_count: usize = 0;
-        var colour: ?[]const u8 = null;
-        var inset = false;
-
-        var parts = shorthand.Components.init(layer);
-        while (parts.next()) |part| {
-            if (std.ascii.eqlIgnoreCase(part, "inset")) {
-                if (inset) return null;
-                inset = true;
-            } else if (isLengthToken(part)) {
-                if (length_count == lengths.len) return null;
-                // Only a zero is a bare number a length slot takes; writing
-                // `px` onto any other would invent a length Chrome refused.
-                lengths[length_count] = if (std.mem.eql(u8, part, "0")) "0px" else part;
-                length_count += 1;
-            } else {
-                if (colour != null) return null;
-                colour = keywordSpelling(colours, part, false);
-            }
-        }
-        // A `/` stops the walk, and a shadow never carries one.
-        if (parts.stopped) return null;
-        // Two lengths are the fewest a shadow has. Fewer means this is not one:
-        // `none`, `inherit`, or a value that did not parse as a shadow at all.
-        if (length_count < 2) return null;
+        const parsed = parseShadowLayer(layer, colours) orelse return null;
+        const lengths = parsed.lengths;
+        const length_count = parsed.count;
+        const colour = parsed.colour;
+        const inset = parsed.inset;
 
         if (!first) {
             try buf.writer.writeAll(", ");
@@ -4820,6 +4892,42 @@ fn writeShadow(arena: Allocator, value: []const u8) !?[]const u8 {
         return null;
     }
     return buf.written();
+}
+
+/// One layer of a shadow, taken apart. Shared by the specified-value writer
+/// above and the computed one below, which differ in what they do with the
+/// pieces and not in how the pieces are found.
+const ShadowLayer = struct {
+    lengths: [4][]const u8,
+    count: usize,
+    colour: ?[]const u8,
+    inset: bool,
+};
+
+fn parseShadowLayer(layer: []const u8, colours: ?[]const []const u8) ?ShadowLayer {
+    var out: ShadowLayer = .{ .lengths = undefined, .count = 0, .colour = null, .inset = false };
+    var parts = shorthand.Components.init(layer);
+    while (parts.next()) |part| {
+        if (std.ascii.eqlIgnoreCase(part, "inset")) {
+            if (out.inset) return null;
+            out.inset = true;
+        } else if (isLengthToken(part)) {
+            if (out.count == out.lengths.len) return null;
+            // Only a zero is a bare number a length slot takes; writing `px`
+            // onto any other would invent a length Chrome refused.
+            out.lengths[out.count] = if (std.mem.eql(u8, part, "0")) "0px" else part;
+            out.count += 1;
+        } else {
+            if (out.colour != null) return null;
+            out.colour = keywordSpelling(colours, part, false);
+        }
+    }
+    // A `/` stops the walk, and a shadow never carries one.
+    if (parts.stopped) return null;
+    // Two lengths are the fewest a shadow has. Fewer means this is not one:
+    // `none`, `inherit`, or a value that did not parse as a shadow at all.
+    if (out.count < 2) return null;
+    return out;
 }
 
 /// Whether a shadow component is one of its lengths rather than its colour: a
@@ -7697,6 +7805,10 @@ test "WebApi: CSSStyleDeclaration transform number format" {
 
 test "WebApi: CSSStyleDeclaration transform length units" {
     try testing.htmlRunner("css/transform_length_units.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed shadow" {
+    try testing.htmlRunner("css/computed_shadow.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration percentage width" {
