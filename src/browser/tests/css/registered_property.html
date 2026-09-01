@@ -86,7 +86,7 @@
   const enumerated = (el, n) => Array.prototype.indexOf.call(cs(el), n) !== -1;
 
   // Before: an undeclared custom property has no value and is not enumerated.
-  const before = ['value=' + JSON.stringify(gv(lone, '--rg-len')),
+  const before = ['before value=' + JSON.stringify(gv(lone, '--rg-len')),
                   'enumerated=' + enumerated(lone, '--rg-len')].join(' ');
 
   CSS.registerProperty({ name: '--rg-len', syntax: '<length>', inherits: false, initialValue: '3px' });

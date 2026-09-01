@@ -22,6 +22,7 @@ const Frame = @import("../Frame.zig");
 const units = @import("../css/units.zig");
 const HighlightRegistry = @import("css/highlights.zig").HighlightRegistry;
 const Worklet = @import("audio/worklet.zig").Worklet;
+const registered_property = @import("css/registered_property.zig");
 const supports_condition = @import("css/supports.zig");
 const typed_om = @import("css/typed_om.zig");
 
@@ -183,12 +184,16 @@ pub const JsApi = struct {
     pub const bridge = js.Bridge(CSS);
 
     pub const Meta = struct {
-        pub const name = "Css";
+        // All upper case, because this name is not only the class's: it is the
+        // interface the bridge names in a refusal, and Chrome's arity sentence
+        // for `CSS.escape()` says "on 'CSS'". It was `Css` for as long as
+        // nothing read it back.
+        pub const name = "CSS";
 
-        // ...and that name never reaches the global. Chrome's `CSS` is the
-        // namespace object the Window accessor hands out; there is no `Css`
+        // ...and that name never reaches the global either way. Chrome's `CSS`
+        // is the namespace object the Window accessor hands out; there is no
         // constructor beside it. Measured against a real Chrome 151:
-        // Object.getOwnPropertyNames(window) has "CSS" and no "Css".
+        // Object.getOwnPropertyNames(window) has "CSS" and nothing else.
         pub const no_interface_object = true;
 
         // The namespace's identifier is all upper case. Measured on Chrome 150:
@@ -297,6 +302,13 @@ pub const JsApi = struct {
     pub const rad = bridge.function(unitFactory(.rad), .{ .static = true });
     pub const rcap = bridge.function(unitFactory(.rcap), .{ .static = true });
     pub const rch = bridge.function(unitFactory(.rch), .{ .static = true });
+
+    /// Between `rch` and `rem`, which is where Chrome's own-name order puts it:
+    /// the operations sit in one alphabetical run among the unit factories
+    /// rather than beside each other (measured,
+    /// probes/expr-b85-css-namespace.js).
+    pub const registerProperty = bridge.function(registered_property.registerProperty, .{ .static = true, .arity = 1 });
+
     pub const rem = bridge.function(unitFactory(.rem), .{ .static = true });
     pub const rex = bridge.function(unitFactory(.rex), .{ .static = true });
     pub const ric = bridge.function(unitFactory(.ric), .{ .static = true });
