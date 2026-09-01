@@ -338,6 +338,17 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
             // Struct, has to be placed on the heap
             const heap = try context_arena.create(T);
             heap.* = value;
+            // The struct moves to the context arena; the strings it points at
+            // do not. A caller that formatted one on its per-call scratch has
+            // handed over a slice that the next string across the bridge
+            // overwrites in place, and by then a script may still be holding
+            // the object -- a caught DOMException read one task later reported
+            // "aVeryLongIdNobodyHasAtAll on 'TimeRanges': ..." (measured; see
+            // domexception.html's last block). A type that borrows strings
+            // says so with `ownStrings` and takes them along.
+            if (comptime @hasDecl(T, "ownStrings")) {
+                try heap.ownStrings(context_arena.allocator());
+            }
             return self.mapZigInstanceToJs(js_obj_handle, heap);
         },
         .pointer => |ptr| {

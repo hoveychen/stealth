@@ -17,7 +17,10 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
+const lp = @import("lightpanda");
 const js = @import("../js/js.zig");
+
+const String = lp.String;
 
 const DOMException = @This();
 
@@ -51,6 +54,30 @@ pub fn constructor(message: ?[]const u8, name: ?[]const u8, exec: *const js.Exec
         ._custom_name = if (name) |n| try exec.dupeString(n) else null,
         ._custom_message = if (message) |m| try exec.dupeString(m) else null,
     };
+}
+
+/// Both strings this carries are *borrowed*: `init` takes whatever the caller
+/// had, and a caller that formatted a message -- `TimeRanges`'s bounds sentence
+/// is one -- had it on the per-call scratch arena. That memory is reused by the
+/// next string to cross the bridge, in place, while a script may still be
+/// holding the exception: a caught one read in the following task answered
+/// "aVeryLongIdNobodyHasAtAll on 'TimeRanges': ..." (measured on main,
+/// scratch/b80/q12.js). Guards read exceptions back exactly that way -- Kasada
+/// rejects twenty-five promises in a row on x-hyatt to collect the messages --
+/// so the answer was a string no browser writes.
+///
+/// `Local.mapZigInstanceToJs` calls this as it copies the struct into the
+/// context arena, which is the one moment both the value and an allocator that
+/// outlives the call are in the same place. `constructor` already copied its
+/// own two strings for the same reason and can keep doing so; this covers every
+/// `init` caller, whatever the provenance of what it passed.
+pub fn ownStrings(self: *DOMException, allocator: std.mem.Allocator) !void {
+    if (self._custom_message) |message| {
+        self._custom_message = String.intern(message) orelse try allocator.dupe(u8, message);
+    }
+    if (self._custom_name) |name| {
+        self._custom_name = String.intern(name) orelse try allocator.dupe(u8, name);
+    }
 }
 
 pub fn fromError(err: anyerror) ?DOMException {
