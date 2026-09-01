@@ -52,5 +52,5 @@ pub const JsApi = struct {
     /// one answers them too -- and needs its own handler to do it, since V8
     /// does not inherit one. See Document.NamedObjectAccess.
     const named_objects = Document.NamedObjectAccess(XMLDocument);
-    pub const @"[str]" = bridge.namedIndexedFull(named_objects.get, null, named_objects.delete, named_objects.names, named_objects.query, named_objects.define, null, .{ .null_as_undefined = true });
+    pub const @"[str]" = bridge.namedIndexedFull(named_objects.get, null, named_objects.delete, named_objects.names, named_objects.query, named_objects.define, null, .{ .null_as_undefined = true, .masking = true });
 };

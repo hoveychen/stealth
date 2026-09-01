@@ -1334,7 +1334,17 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     .definer = if (value.definer) |definer| @ptrCast(definer) else null,
                     .descriptor = if (value.descriptor) |descriptor| @ptrCast(descriptor) else null,
                     .data = null,
-                    .flags = if (guarded) 0 else v8.kOnlyInterceptStrings | v8.kNonMasking,
+                    // kNonMasking unless the interface is
+                    // [LegacyOverrideBuiltIns]: with it, a name any link of the
+                    // prototype chain answers never reaches the handler, which
+                    // is right for most interfaces and wrong for a Document --
+                    // `<form name="title">` makes `document.title` the form.
+                    .flags = if (guarded)
+                        0
+                    else if (value.masking)
+                        v8.kOnlyInterceptStrings
+                    else
+                        v8.kOnlyInterceptStrings | v8.kNonMasking,
                 };
                 if (guarded) {
                     // Both handlers go in together, so the interface's indexed
