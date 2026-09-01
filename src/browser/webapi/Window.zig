@@ -162,8 +162,13 @@ _timers: Timers = .{},
 _scheduler: scheduler.Scheduler = .init,
 _custom_elements: CustomElementRegistry = .{},
 _scroll_pos: struct {
-    x: u32,
-    y: u32,
+    // Fractional, because a scroll offset is. Chrome answers `scrollY` 100.5
+    // after `scrollIntoView()` on a box whose rect y is 100.5, and 123.5 after
+    // `scrollTo(0, 123.5)` (scratch/b99/expr-scroll-fraction.js). Held as u32
+    // this was invisible: every in-flow y this engine could produce was a
+    // multiple of 5px, so nothing ever had a fraction to lose.
+    x: f64,
+    y: f64,
     state: enum {
         scroll,
         end,
@@ -1245,11 +1250,11 @@ pub fn getFramesLength(self: *const Window) u32 {
     return @intCast(self._frame.child_frames.items.len);
 }
 
-pub fn getScrollX(self: *const Window) u32 {
+pub fn getScrollX(self: *const Window) f64 {
     return self._scroll_pos.x;
 }
 
-pub fn getScrollY(self: *const Window) u32 {
+pub fn getScrollY(self: *const Window) f64 {
     return self._scroll_pos.y;
 }
 
@@ -1298,24 +1303,24 @@ pub fn getScreenY(_: *const Window, frame: *Frame) u32 {
 }
 
 const ScrollToOpts = union(enum) {
-    x: i32,
+    x: f64,
     opts: Opts,
 
     const Opts = struct {
         // Alphabetical: a dictionary's members are read in that order and a
         // page handing a Proxy in sees the sequence.
         behavior: []const u8 = "",
-        left: i32,
-        top: i32,
+        left: f64,
+        top: f64,
     };
 };
 // Both overloads take everything optional -- `scrollTo()` scrolls to where the
 // page already is -- so Chrome 151 reports scrollTo.length === 0 and a bare call
 // does nothing rather than refusing.
-pub fn scrollTo(self: *Window, opts_: ?ScrollToOpts, y: ?i32, frame: *Frame) !void {
-    const new_x: u32, const new_y: u32 = switch (opts_ orelse return) {
-        .x => |x| .{ @intCast(@max(x, 0)), @intCast(@max(0, y orelse 0)) },
-        .opts => |o| .{ @intCast(@max(0, o.left)), @intCast(@max(0, o.top)) },
+pub fn scrollTo(self: *Window, opts_: ?ScrollToOpts, y: ?f64, frame: *Frame) !void {
+    const new_x: f64, const new_y: f64 = switch (opts_ orelse return) {
+        .x => |x| .{ @max(x, 0), @max(0, y orelse 0) },
+        .opts => |o| .{ @max(0, o.left), @max(0, o.top) },
     };
 
     if (new_x == self._scroll_pos.x and new_y == self._scroll_pos.y) {
@@ -1378,19 +1383,19 @@ pub fn scrollTo(self: *Window, opts_: ?ScrollToOpts, y: ?i32, frame: *Frame) !vo
     );
 }
 
-pub fn scrollBy(self: *Window, opts_: ?ScrollToOpts, y: ?i32, frame: *Frame) !void {
+pub fn scrollBy(self: *Window, opts_: ?ScrollToOpts, y: ?f64, frame: *Frame) !void {
     // The scroll is relative to the current position. So compute to new
     // absolute position.
-    var absx: i32 = undefined;
-    var absy: i32 = undefined;
+    var absx: f64 = undefined;
+    var absy: f64 = undefined;
     switch (opts_ orelse return) {
         .x => |x| {
-            absx = @as(i32, @intCast(self._scroll_pos.x)) + x;
-            absy = @as(i32, @intCast(self._scroll_pos.y)) + (y orelse 0);
+            absx = self._scroll_pos.x + x;
+            absy = self._scroll_pos.y + (y orelse 0);
         },
         .opts => |o| {
-            absx = @as(i32, @intCast(self._scroll_pos.x)) + o.left;
-            absy = @as(i32, @intCast(self._scroll_pos.y)) + o.top;
+            absx = self._scroll_pos.x + o.left;
+            absy = self._scroll_pos.y + o.top;
         },
     }
     return self.scrollTo(.{ .x = absx }, absy, frame);

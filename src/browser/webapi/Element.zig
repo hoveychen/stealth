@@ -2341,20 +2341,29 @@ const LineFlow = struct {
     /// An atomic inline — a replaced element, an inline-block — is a box ON the
     /// line rather than a box the line is made of, so it raises the line by its
     /// own two halves and takes its width along the line.
-    fn placeAtomic(self: *LineFlow, above: f64, below: f64, width: f64) void {
+    /// Where an atomic inline was put, for the caller that is laying out rather
+    /// than only measuring. `inline_at` is the line cursor before the box went
+    /// down -- 0 when it opened a fresh line -- and `block_at` is the height of
+    /// the lines already closed above it.
+    const Placed = struct { inline_at: f64, block_at: f64 };
+
+    fn placeAtomic(self: *LineFlow, above: f64, below: f64, width: f64) Placed {
         self.placeWord();
         if (above > self.line_above) self.line_above = above;
         if (below > self.line_below) self.line_below = below;
+        var inline_at = self.placed;
         if (self.wraps and self.placed > 0 and self.placed + width > self.box) {
             self.newLine();
             if (above > self.line_above) self.line_above = above;
             if (below > self.line_below) self.line_below = below;
             self.placed = width;
+            inline_at = 0;
         } else {
             self.placed += width;
         }
         self.segment_has_word = true;
         self.any = true;
+        return .{ .inline_at = inline_at, .block_at = self.total };
     }
 
     /// A box that shares the line with the text around it rather than being a
@@ -3056,6 +3065,47 @@ fn containerMarginPx(self: *Element, name: []const u8, frame: *Frame, containing
         self.bodyMarginPx(name, frame, containing, depth)
     else
         self.marginPx(name, frame, containing, depth);
+}
+
+/// Whether one margin is `auto`, which `marginPx` cannot say: it resolves a
+/// length, and `auto` is not one, so it answers 0 for both `auto` and `0`.
+fn marginIsAuto(self: *Element, name: []const u8, frame: *Frame) bool {
+    const declared = CSSStyleDeclaration.cascadedComputedValue(self, name, frame) orelse return false;
+    return std.ascii.eqlIgnoreCase(std.mem.trim(u8, declared, " \t\r\n"), "auto");
+}
+
+/// Where a child's border box starts inside the content box it is laid into, on
+/// the inline axis.
+///
+/// `margin-left`, except that an `auto` margin takes a share of what is left
+/// over -- which is how a block with a width centres itself. Chrome puts a
+/// 200px-wide child with both margins auto at `d=100,0` inside a 400px
+/// container (`scratch/b74/expr-inflow-position-matrix.js`), where reading
+/// `marginPx` alone answers 0.
+///
+/// Only the two shapes the matrix measures are modelled: both margins auto
+/// (centred) and the near one auto (pushed to the far edge). A negative
+/// remainder gives 0 rather than pulling the box out of its container.
+fn staticInlineOffset(
+    self: *Element,
+    frame: *Frame,
+    available: ?f64,
+    own: f64,
+    containing: *?f64,
+    depth: u8,
+) f64 {
+    if (!self.marginIsAuto("margin-left", frame)) {
+        return self.containerMarginPx("margin-left", frame, containing, depth);
+    }
+    const box = available orelse return 0;
+    const free = box - own;
+    if (free <= 0) {
+        return 0;
+    }
+    if (self.marginIsAuto("margin-right", frame)) {
+        return free / 2;
+    }
+    return free - self.containerMarginPx("margin-right", frame, containing, depth);
 }
 
 /// One margin in px, from the cascade, so a stylesheet rule counts.
@@ -4314,10 +4364,45 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 continue;
             }
             if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
-            if (!extent.counts(CSSStyleDeclaration.flowKind(el, frame))) continue;
+            const kind = CSSStyleDeclaration.flowKind(el, frame);
+            if (!extent.counts(kind)) {
+                // A float leaves the block flow but still starts where the flow
+                // had got to, which is what Chrome reports: the float and the
+                // block after it both sit at `d=0,0` in
+                // `scratch/b74/expr-inflow-position-matrix.js`. So it takes a
+                // position and does not advance `total`.
+                //
+                // Only floats. A positioned box is placed by `outOfFlowPosition`
+                // and its readers ask that first, so a flow position for one
+                // would be a row nothing reads and everything has to explain.
+                if (kind == .floated) {
+                    if (pass) |p| {
+                        const float_box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+                        p.record(frame, el, .{
+                            .x = p.x + el.staticInlineOffset(
+                                frame,
+                                content_width,
+                                float_box.width + float_box.padding_x + float_box.border_x,
+                                &margin_containing,
+                                depth,
+                            ),
+                            .y = p.y + total,
+                        });
+                    }
+                }
+                continue;
+            }
             if (el.atomicInlineHalves(frame)) |halves| {
                 const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
-                flow.placeAtomic(halves.above, halves.below, box.width + box.padding_x + box.border_x);
+                const at = flow.placeAtomic(halves.above, halves.below, box.width + box.padding_x + box.border_x);
+                // An atomic inline shares a line, so its inline position is the
+                // line cursor before it was placed -- Chrome puts a pair of
+                // 80px inline-blocks at `d=0,0` and `d=80,0`. The block axis is
+                // where the run of lines has got to; only the single-line case
+                // is in the matrix, so that is the only one measured.
+                if (pass) |p| {
+                    p.record(frame, el, .{ .x = p.x + at.inline_at, .y = p.y + total + at.block_at });
+                }
                 continue;
             }
             // A block box ends the run of lines above it, and opens a new one
@@ -4384,7 +4469,13 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 placement.join(el.containerMarginPx("margin-top", frame, &margin_containing, depth));
                 const gap = if (placed or !escapes.top) placement.gap() else 0;
                 const child_y = p.y + total + gap;
-                const child_x = p.x + el.containerMarginPx("margin-left", frame, &margin_containing, depth);
+                const child_x = p.x + el.staticInlineOffset(
+                    frame,
+                    content_width,
+                    box.width + box.padding_x + box.border_x,
+                    &margin_containing,
+                    depth,
+                );
                 p.record(frame, el, .{ .x = child_x, .y = child_y });
                 child_pass = .{
                     .table = p.table,
@@ -5092,7 +5183,7 @@ pub fn clone(self: *Element, deep: bool, frame: *Frame) !*Node {
 pub fn scrollIntoViewIfNeeded(self: *Element, center_if_needed: ?bool, frame: *Frame) void {
     _ = center_if_needed;
     const y = documentPosition(self.asNode(), frame);
-    const scroll_y: f64 = @floatFromInt(frame.window.getScrollY());
+    const scroll_y = frame.window.getScrollY();
     const viewport_height: f64 = @floatFromInt(frame.window.getInnerHeight(frame));
     if (y >= scroll_y and y <= scroll_y + viewport_height) {
         return;
@@ -5110,7 +5201,7 @@ pub fn scrollIntoView(self: *Element, opts: ?ScrollIntoViewOpts, frame: *Frame) 
     // Positions come from the faux-layout document position (top = preorder
     // depth-scaled y), the same source getBoundingClientRect uses.
     const y = documentPosition(self.asNode(), frame);
-    frame.window.scrollTo(.{ .x = 0 }, @intFromFloat(@max(0, y)), frame) catch {};
+    frame.window.scrollTo(.{ .x = 0 }, @max(0, y), frame) catch {};
 }
 
 const ScrollToOpts = union(enum) {

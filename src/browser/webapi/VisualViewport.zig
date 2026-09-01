@@ -31,11 +31,11 @@ pub fn asEventTarget(self: *VisualViewport) *EventTarget {
     return self._proto;
 }
 
-pub fn getPageLeft(_: *const VisualViewport, frame: *Frame) u32 {
+pub fn getPageLeft(_: *const VisualViewport, frame: *Frame) f64 {
     return frame.window.getScrollX();
 }
 
-pub fn getPageTop(_: *const VisualViewport, frame: *Frame) u32 {
+pub fn getPageTop(_: *const VisualViewport, frame: *Frame) f64 {
     return frame.window.getScrollY();
 }
 

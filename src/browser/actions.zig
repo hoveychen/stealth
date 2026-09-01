@@ -260,7 +260,11 @@ pub fn scroll(node: ?*DOMNode, x: ?i32, y: ?i32, frame: *Frame) !void {
             lp.log.err(.app, "dispatch scroll event failed", .{ .err = err });
         };
     } else {
-        frame.window.scrollTo(.{ .x = x orelse 0 }, y, frame) catch |err| {
+        // The action layer speaks in whole CSS pixels; the window's offset is
+        // fractional because a scroll offset is.
+        const to_x: f64 = @floatFromInt(x orelse 0);
+        const to_y: ?f64 = if (y) |v| @floatFromInt(v) else null;
+        frame.window.scrollTo(.{ .x = to_x }, to_y, frame) catch |err| {
             lp.log.err(.app, "scroll failed", .{ .err = err });
             return error.ActionFailed;
         };
