@@ -756,12 +756,18 @@ fn addRawRuleAtDepth(self: *StyleManager, build_arena: Allocator, selector_text:
 /// Bucket one rule's selectors so element matching can find them.
 fn indexRule(self: *StyleManager, build_arena: Allocator, props: RuleProperties, selector_text: []const u8, layer: u16) !void {
     const selectors = SelectorParser.parseList(self.arena.allocator(), selector_text) catch return;
+    // Every selector in the list shares one declaration block, so the masks are
+    // hashed once for the whole rule rather than once per selector.
+    const longhand_names = namesMask(props.longhands);
+    const custom_names = namesMask(props.custom);
     for (selectors) |selector| {
         const rightmost = if (selector.segments.len > 0) selector.segments[selector.segments.len - 1].compound else selector.first;
         const bucket_key = getBucketKey(rightmost) orelse continue;
         const rule = Rule{
             .props = props,
             .selector = selector,
+            .longhand_names = longhand_names,
+            .custom_names = custom_names,
             .priority = (@as(u64, computeSpecificity(selector)) << SPEC_SHIFT) | @min(self.next_doc_order, MAX_DOC_ORDER),
         };
         self.next_doc_order += 1;
@@ -1450,6 +1456,11 @@ fn addRule(self: *StyleManager, build_arena: Allocator, style_rule: *CSSStyleRul
         return;
     }
 
+    // Every selector in the list shares one declaration block, so the masks are
+    // hashed once for the whole rule rather than once per selector.
+    const longhand_names = namesMask(props.longhands);
+    const custom_names = namesMask(props.custom);
+
     // Create one rule per selector - each has its own specificity
     // e.g., "#id, .class { display: none }" becomes two rules with different specificities
     for (selectors) |selector| {
@@ -1465,6 +1476,8 @@ fn addRule(self: *StyleManager, build_arena: Allocator, style_rule: *CSSStyleRul
         const rule = Rule{
             .props = props,
             .selector = selector,
+            .longhand_names = longhand_names,
+            .custom_names = custom_names,
             .priority = (@as(u64, computeSpecificity(selector)) << SPEC_SHIFT) | @min(self.next_doc_order, MAX_DOC_ORDER),
         };
         self.next_doc_order += 1;
@@ -1822,9 +1835,43 @@ fn namedDeclaration(arena: Allocator, name: []const u8, raw: []const u8, importa
     };
 }
 
+/// Two bits per name in a 128-bit word, so a property read can ask "can this
+/// rule possibly declare it" without touching the rule's declaration list.
+///
+/// `declared_longhands` already answers that question for the document as a
+/// whole; this answers it per rule, which is the loop that costs. A read walks
+/// every rule keyed to the element's id, classes and tag, and inside each one
+/// compared the wanted name against every declaration the rule carries. That
+/// inner scan is what the cost tracks: holding the rule and node counts fixed
+/// and only growing the declarations per rule took one read from 127ms at one
+/// declaration to 963ms at twenty-four (scratch/b99/cascade-cost.mjs --decls).
+///
+/// A false positive costs only the scan that used to happen unconditionally, so
+/// the filter can never change an answer -- it can only skip rules that were
+/// always going to miss.
+fn nameMask(name: []const u8) u128 {
+    const h = std.hash.Wyhash.hash(0, name);
+    const a: u7 = @truncate(h);
+    const b: u7 = @truncate(h >> 32);
+    return (@as(u128, 1) << a) | (@as(u128, 1) << b);
+}
+
+/// The union of `nameMask` over a declaration list, built once per rule.
+fn namesMask(declarations: []const NamedDeclaration) u128 {
+    var mask: u128 = 0;
+    for (declarations) |declaration| mask |= nameMask(declaration.name);
+    return mask;
+}
+
 const Rule = struct {
     selector: Selector.Selector, // Single selector, not a list
     props: RuleProperties,
+
+    /// `nameMask` over props.longhands and props.custom respectively. Kept on
+    /// the Rule rather than in RuleProperties so the reject reads one word out
+    /// of a MultiArrayList column instead of reaching into the properties.
+    longhand_names: u128,
+    custom_names: u128,
 
     // Packed priority: layer_rank:12 | specificity:30 | doc_order:22.
     // The rank bits are 0 until finalizeLayerRanks stamps them (the rank
@@ -2529,14 +2576,23 @@ fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8,
     var best_priority: u64 = 0;
     var best_important = false;
 
+    // Hashed once for the whole read, then tested against each rule's mask.
+    const wanted_mask = nameMask(name);
+
     const checkRules = struct {
-        fn check(rules: *const RuleList, wanted: []const u8, list: NamedList, winner: *?Declaration, priority: *u64, important: *bool, elem: *Element, frame: *Frame) void {
-            for (rules.items(.priority), rules.items(.props), rules.items(.selector)) |p, props, selector| {
+        fn check(rules: *const RuleList, wanted: []const u8, wanted_bits: u128, list: NamedList, winner: *?Declaration, priority: *u64, important: *bool, elem: *Element, frame: *Frame) void {
+            const masks = switch (list) {
+                .custom => rules.items(.custom_names),
+                .longhand => rules.items(.longhand_names),
+            };
+            for (rules.items(.priority), rules.items(.props), rules.items(.selector), masks) |p, props, selector, mask| {
+                // Subsumes the empty-list check: a rule that declares nothing in
+                // this list has a zero mask and no name hashes to zero bits.
+                if (mask & wanted_bits != wanted_bits) continue;
                 const declarations = switch (list) {
                     .custom => props.custom,
                     .longhand => props.longhands,
                 };
-                if (declarations.len == 0) continue;
                 var matched: ?NamedDeclaration = null;
                 // Within one rule the last declaration of a name wins.
                 for (declarations) |declaration| {
@@ -2562,7 +2618,7 @@ fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8,
 
     if (el.getAttributeSafe(comptime .wrap("id"))) |id| {
         if (self.id_rules.get(id)) |rules| {
-            checkRules(&rules, name, which, &best, &best_priority, &best_important, el, self.frame);
+            checkRules(&rules, name, wanted_mask, which, &best, &best_priority, &best_important, el, self.frame);
         }
     }
 
@@ -2570,16 +2626,16 @@ fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8,
         var it = std.mem.tokenizeAny(u8, class_attr, &std.ascii.whitespace);
         while (it.next()) |class| {
             if (self.class_rules.get(class)) |rules| {
-                checkRules(&rules, name, which, &best, &best_priority, &best_important, el, self.frame);
+                checkRules(&rules, name, wanted_mask, which, &best, &best_priority, &best_important, el, self.frame);
             }
         }
     }
 
     if (self.tag_rules.get(el.getTag())) |rules| {
-        checkRules(&rules, name, which, &best, &best_priority, &best_important, el, self.frame);
+        checkRules(&rules, name, wanted_mask, which, &best, &best_priority, &best_important, el, self.frame);
     }
 
-    checkRules(&self.other_rules, name, which, &best, &best_priority, &best_important, el, self.frame);
+    checkRules(&self.other_rules, name, wanted_mask, which, &best, &best_priority, &best_important, el, self.frame);
 
     return best;
 }
@@ -2772,4 +2828,28 @@ test "StyleManager: packed priority bounds" {
 
     // Real layer ranks fit the 12 rank bits below the unlayered sentinel.
     try testing.expect(MAX_LAYERS < UNLAYERED_RANK);
+}
+
+test "StyleManager: nameMask never rejects a name the rule declares" {
+    // The filter's one safety requirement: a false positive only costs the scan
+    // that used to happen anyway, but a false NEGATIVE would silently drop a
+    // winning declaration and change what the page computes. Every name in the
+    // list must therefore survive its own mask.
+    const declarations = [_]NamedDeclaration{
+        .{ .name = "margin-top", .value = "1px", .important = false },
+        .{ .name = "display", .value = "block", .important = false },
+        .{ .name = "--brand", .value = "red", .important = false },
+        .{ .name = "border-bottom-left-radius", .value = "2px", .important = false },
+        .{ .name = "", .value = "x", .important = false },
+    };
+    const mask = namesMask(&declarations);
+    for (declarations) |declaration| {
+        const wanted = nameMask(declaration.name);
+        try testing.expect(mask & wanted == wanted);
+    }
+
+    // An empty list rejects everything, which is what lets the mask test stand
+    // in for the old `declarations.len == 0` check.
+    try testing.expectEqual(@as(u128, 0), namesMask(&.{}));
+    try testing.expect(nameMask("margin-top") != 0);
 }
