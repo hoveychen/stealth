@@ -25550,3 +25550,87 @@ address, and `one-sweep-cannot-tell-a-door-from-a-window` is the memory for it.
 Every Akamai station, px-wayfair, ks-canadagoose, x-sony, x-zillow and the six
 passing Cloudflare stations are unchanged; `cf-scrapingcourse` and `x-hyatt` are
 still the two real gaps.
+
+## The last uncached cascade path, and the layout pass clears its budget (B99, 2026-09-01)
+
+`visibility-cascade-cache` is the fourth and last of the caches, and the one that
+put the shelved layout pass inside its budget.
+
+### Why it was left out, and why the reason was wrong
+
+`isElementHidden` ran its rule scan **seeded with the element's inline style**, so
+the scan pruned against those values and the answer depended on them. That is why
+the first three caches skipped it, and with them in place it was what remained:
+under the layout-pass prototype a sample of ak-homedepot put it at 16.5% of the
+busy thread and the selector matching it drives at 50.8%.
+
+The reading that shaped the fix was that `CSSStyleDeclaration.zig` **never calls
+`Frame.domChanged`** — `grep -c` returns 0 — so `el.style.display = 'none'` looked
+like a change no `dom_version`-keyed cache could hear about. **That inference was
+wrong**, and the experiment that caught it is worth more than the fix: a
+deliberately broken variant that cached the whole predicate, inline included, was
+run twice. Sharing the `dom_version` invalidation, the inline assertions all
+passed; with **no invalidation at all**, four of them went red immediately. So
+`dom_version` does move on an inline write — via
+`CSSStyleDeclaration.syncStyleAttribute` writing back to the `style` attribute,
+which reaches `Attribute.List.putSafe` and `domChanged` one level out of the file
+that was grepped.
+
+**A grep over one file answers "does this file contain that call", not "does this
+operation invalidate".** The second question is a property of the whole call
+stack, and the way to answer it is to switch the invalidation off and see whether
+an assertion notices. That same experiment is what showed the four inline
+assertions had teeth, rather than assuming it.
+
+So the split stands, but for a different reason than correctness: `ruleHiding`'s
+answer takes no `options`, so one entry per element serves every caller, where
+caching the predicate would need up to sixteen. It also matches what
+`computedDisplay` and `declaredDeclaration` already do — read inline outside the
+cache and merge it on top. The refactor landed and the suite ran green **before**
+any cache went in, which is what says the two forms are equivalent; the merge
+reaches the seeded loop's verdict because `beatenBy` is a total order and max is
+associative.
+
+### One document-wide pass, priced four times
+
+| station | B75 | + name filter, cross-read | + fixed properties | + this | µs per measured box |
+|---|---:|---:|---:|---:|---|
+| homedepot | 5 265 ms | 2 714 ms | 582 ms | **88 ms** | 197 → 90.8 → 21.3 → **3.22** |
+| macys | 836 ms | 314 ms | 40 ms | **54 ms** | 94 → 35.7 → 5.2 → **4.64** |
+| sony | 291 ms | 74 ms | 21 ms | **8 ms** | 98 → 24.9 → 7.0 → **2.64** |
+
+**3.22 µs a box on homedepot is the plain-markup floor.** The same walk over 800
+bare divs costs 3.05 µs a box today and 3.98 over 3 200
+(`scratch/b75/page/scale-flat-*.html`, unchanged by any of these caches because
+plain markup has no cascade work to save). B75 measured real markup at 197 µs
+against that floor's 2.9 — **68x — and attributed it to "`dimensionsIn` meeting a
+real page … percentages, inline runs, replaced elements". None of that was it.**
+All of it was the cascade being re-resolved, and the gap is now 1.06x.
+
+### The budget, and the gate it opens
+
+The pass count is B75's measurement and was not re-measured: 59 passes on
+homedepot, 53 on macys, 15 on sony. Those are already the **cached** counts —
+the parent plan's E2 measured read *clusters*, "the number of first-reads after a
+DOM or style change" — so there is no further memo to add, a thing this session
+got wrong once and had to correct.
+
+| station | when B75 priced it | today |
+|---|---:|---:|
+| homedepot | 59 × 5 265 ms = **311 s** | 59 × 88 ms = **5.2 s** |
+| macys | 53 × 836 ms = 44.3 s | 53 × 54 ms = **2.9 s** |
+| sony | 15 × 291 ms = 4.4 s | 15 × 8 ms = **0.1 s** |
+
+Against a 25-second station settle and a 30-second watchdog, and against the
+~1.1 s the page's own geometry reads already cost on homedepot — reads the pass
+would serve rather than add to — **all three are inside the budget.** The gate
+`inflow-static-position` was waiting behind ("if that plan says over budget, this
+one is not done") is open.
+
+What that unblocks is a reading, not a performance number:
+**26 of 27 in-flow offsets wrong, every element's x equal to its y, and one
+expression sees it.** The prototype is still on `prd/layout-pass-reprice`,
+unmerged, because nothing reads its table yet — wiring
+`calculateDocumentPosition` and `calculateSiblingPosition` to it is that plan's
+P2, and its ground truth has to be re-read from Chrome first: the 27 rows were
+measured but never saved, only summarised.
