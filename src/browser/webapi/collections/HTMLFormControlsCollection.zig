@@ -163,10 +163,7 @@ pub const JsApi = struct {
     pub const @"[int]" = bridge.indexed(HTMLFormControlsCollection.getAtIndex, getIndexes, .{ .null_as_undefined = true });
 
     /// The indices are own properties, as in RadioNodeList -- see the note
-    /// there. The *named* entries are own properties in Chrome too, and
-    /// enumerable here unlike HTMLCollection's, but that half needs the
-    /// supported-property-names machinery HTMLCollection carries and is not
-    /// wired up yet.
+    /// there.
     fn getIndexes(self: *HTMLFormControlsCollection, frame: *Frame) !js.Array {
         const len = self.length(frame);
         var arr = frame.js.local.?.newArray(len);
@@ -175,7 +172,29 @@ pub const JsApi = struct {
         }
         return arr;
     }
-    pub const @"[str]" = bridge.namedIndexed(HTMLFormControlsCollection.namedItem, null, null, null, null, .{ .null_as_undefined = true });
+
+    pub const @"[str]" = bridge.namedIndexed(getByName, null, null, getNames, queryByName, .{ .null_as_undefined = true });
+
+    // A name this collection does not have is not a property of it at all:
+    // declining here is what keeps `'anything' in form.elements` false, since
+    // an interceptor that answers undefined has still answered.
+    fn getByName(self: *HTMLFormControlsCollection, name: []const u8, frame: *Frame) !NamedItemResult {
+        return (try self.namedItem(name, frame)) orelse error.NotHandled;
+    }
+
+    fn getNames(self: *HTMLFormControlsCollection, frame: *Frame) !js.Array {
+        return HTMLCollection.supportedNames(self, HTMLCollection.anyHtmlElement, frame);
+    }
+
+    // Unlike HTMLCollection's, these named entries are enumerable: Chrome puts
+    // them in Object.keys as well as getOwnPropertyNames, and they are
+    // read-only and configurable (measured, scratch/b78/expr-named-query.js).
+    fn queryByName(self: *HTMLFormControlsCollection, name: []const u8, frame: *Frame) !u32 {
+        if (name.len > 0 and (try self.namedItem(name, frame)) != null) {
+            return js.v8.ReadOnly;
+        }
+        return error.NotHandled;
+    }
     pub const namedItem = bridge.function(HTMLFormControlsCollection.namedItem, .{});
 };
 

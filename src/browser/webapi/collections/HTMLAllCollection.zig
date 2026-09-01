@@ -24,6 +24,7 @@ const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
 const TreeWalker = @import("../TreeWalker.zig");
 const NodeLive = @import("node_live.zig").NodeLive;
+const HTMLCollection = @import("HTMLCollection.zig");
 const Execution = js.Execution;
 
 const HTMLAllCollection = @This();
@@ -71,7 +72,7 @@ pub fn getByName(self: *HTMLAllCollection, name: []const u8, frame: *Frame) ?*El
 // Every element in the collection is exposed by its id, but only these are
 // exposed by their name.
 // https://html.spec.whatwg.org/multipage/dom.html#dom-document-all
-fn isAllNamed(el: *Element) bool {
+pub fn isAllNamed(el: *Element) bool {
     if (el._namespace != .html) {
         return false;
     }
@@ -127,9 +128,7 @@ pub const JsApi = struct {
     pub const @"[int]" = bridge.indexed(HTMLAllCollection.getAtIndex, getIndexes, .{ .null_as_undefined = true });
 
     /// The indices are own properties, as in RadioNodeList -- see the note
-    /// there. `document.all` is `[LegacyUnenumerableNamedProperties]` like
-    /// HTMLCollection, so its ids belong in the own list but not in
-    /// `Object.keys`; that half is not wired up here yet.
+    /// there.
     fn getIndexes(self: *HTMLAllCollection, frame: *Frame) !js.Array {
         const len = self.length(frame);
         var arr = frame.js.local.?.newArray(len);
@@ -138,7 +137,32 @@ pub const JsApi = struct {
         }
         return arr;
     }
-    pub const @"[str]" = bridge.namedIndexed(HTMLAllCollection.getByName, null, null, null, null, .{ .null_as_undefined = true });
+
+    pub const @"[str]" = bridge.namedIndexed(getNamed, null, null, getNames, queryByName, .{ .null_as_undefined = true });
+
+    // A name the document does not carry is not a property of `document.all`
+    // at all: declining here is what keeps `'anything' in document.all` false,
+    // since an interceptor that answers undefined has still answered.
+    fn getNamed(self: *HTMLAllCollection, name: []const u8, frame: *Frame) !*Element {
+        if (name.len == 0) {
+            return error.NotHandled;
+        }
+        return HTMLAllCollection.getByName(self, name, frame) orelse error.NotHandled;
+    }
+
+    fn getNames(self: *HTMLAllCollection, frame: *Frame) !js.Array {
+        return HTMLCollection.supportedNames(self, HTMLAllCollection.isAllNamed, frame);
+    }
+
+    // `document.all` is `[LegacyUnenumerableNamedProperties]` like
+    // HTMLCollection: the ids and names belong in getOwnPropertyNames but not
+    // in Object.keys, and they are configurable and read-only.
+    fn queryByName(self: *HTMLAllCollection, name: []const u8, frame: *Frame) !u32 {
+        if (name.len > 0 and HTMLAllCollection.getByName(self, name, frame) != null) {
+            return js.v8.DontEnum | js.v8.ReadOnly;
+        }
+        return error.NotHandled;
+    }
 
     pub const item = bridge.function(_item, .{});
     // `item(optional DOMString nameOrIndex)`: the argument is optional, so a

@@ -197,6 +197,61 @@ pub const Iterator = GenericIterator(struct {
     }
 }, null);
 
+/// The supported property names of a collection of elements: for each element
+/// it represents, in tree order, its id and (for HTML elements) its name
+/// attribute, skipping empty values and duplicates.
+///
+/// Shared rather than copied because four collections need exactly this list
+/// -- HTMLCollection, HTMLFormControlsCollection, HTMLOptionsCollection and
+/// HTMLAllCollection -- and they differ only in how they reach their elements,
+/// which is what `length` and `getAtIndex` already abstract, and in which
+/// elements a `name` counts for, which is `exposesName`: everywhere but
+/// `document.all` that is every HTML element, and there it is a fixed list of
+/// tags that leaves `<option name=…>` out. Without the list,
+/// a named-property interceptor has no enumerator, and without an enumerator
+/// `Object.getOwnPropertyNames` reports the indices alone where Chrome reports
+/// both.
+pub fn supportedNames(collection: anytype, comptime exposesName: fn (*Element) bool, frame: *Frame) !js.Array {
+    var names: std.ArrayList([]const u8) = .empty;
+    const arena = frame.local_arena;
+
+    const len = collection.length(frame);
+    for (0..len) |i| {
+        const element = collection.getAtIndex(i, frame) orelse break;
+        if (element.getAttributeSafe(comptime .wrap("id"))) |id| {
+            if (id.len > 0 and !containsName(names.items, id)) {
+                try names.append(arena, id);
+            }
+        }
+        if (exposesName(element)) {
+            if (element.getAttributeSafe(comptime .wrap("name"))) |name| {
+                if (name.len > 0 and !containsName(names.items, name)) {
+                    try names.append(arena, name);
+                }
+            }
+        }
+    }
+
+    var arr = frame.js.local.?.newArray(@intCast(names.items.len));
+    for (names.items, 0..) |name, i| {
+        _ = try arr.set(@intCast(i), name, .{});
+    }
+    return arr;
+}
+
+/// The ordinary rule: any HTML element in the collection is exposed by its
+/// `name` attribute as well as its id.
+pub fn anyHtmlElement(element: *Element) bool {
+    return element._namespace == .html;
+}
+
+fn containsName(names: []const []const u8, name: []const u8) bool {
+    for (names) |n| {
+        if (std.mem.eql(u8, n, name)) return true;
+    }
+    return false;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(HTMLCollection);
 
@@ -291,42 +346,8 @@ pub const JsApi = struct {
         return arr;
     }
 
-    // The supported property names: for each element represented by the
-    // collection, in tree order, its id and (for HTML elements) its name
-    // attribute, skipping empty values and duplicates.
     fn getNames(self: *HTMLCollection, frame: *Frame) !js.Array {
-        var names: std.ArrayList([]const u8) = .empty;
-        const arena = frame.local_arena;
-
-        const len = self.length(frame);
-        for (0..len) |i| {
-            const element = self.getAtIndex(i, frame) orelse break;
-            if (element.getAttributeSafe(comptime .wrap("id"))) |id| {
-                if (id.len > 0 and !contains(names.items, id)) {
-                    try names.append(arena, id);
-                }
-            }
-            if (element._namespace == .html) {
-                if (element.getAttributeSafe(comptime .wrap("name"))) |name| {
-                    if (name.len > 0 and !contains(names.items, name)) {
-                        try names.append(arena, name);
-                    }
-                }
-            }
-        }
-
-        var arr = frame.js.local.?.newArray(@intCast(names.items.len));
-        for (names.items, 0..) |name, i| {
-            _ = try arr.set(@intCast(i), name, .{});
-        }
-        return arr;
-    }
-
-    fn contains(names: []const []const u8, name: []const u8) bool {
-        for (names) |n| {
-            if (std.mem.eql(u8, n, name)) return true;
-        }
-        return false;
+        return supportedNames(self, anyHtmlElement, frame);
     }
 
     // Supported indexed and named properties can't be deleted (delete returns

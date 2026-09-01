@@ -2030,6 +2030,15 @@ test "WebApi: webidl dictionary conversion" {
     try testing.htmlRunner("webidl_dictionary.html", .{});
 }
 
+// What a named-property interceptor answers for a name it does not support,
+// across the five objects that had a null query callback and therefore said
+// yes to everything. Here rather than on any one of them because the contract
+// is this file's: a getter that declines has to return error.NotHandled, and a
+// query is what decides `in`, hasOwnProperty and the attribute bits.
+test "WebApi: named property query" {
+    try testing.htmlRunner("named_property_query.html", .{});
+}
+
 // The read log's answer to "431 calls to matchMedia asking what?". Only the
 // key-building half is testable without a page; that a call reaches it at all
 // is what the prop_arg scope on a real run shows.

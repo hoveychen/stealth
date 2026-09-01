@@ -703,7 +703,49 @@ pub const NamedNodeMap = struct {
 
         pub const length = bridge.accessor(NamedNodeMap.length, null, .{});
         pub const @"[int]" = bridge.indexed(NamedNodeMap.getAtIndex, getIndexes, .{ .null_as_undefined = true });
-        pub const @"[str]" = bridge.namedIndexed(NamedNodeMap.getByName, null, null, getNames, null, .{ .null_as_undefined = true });
+        pub const @"[str]" = bridge.namedIndexedFull(getAttr, null, null, getNames, queryByName, null, describeByName, .{ .null_as_undefined = true });
+
+        // A name no attribute answers to is not a property of the map at all.
+        // Without this the interceptor answered undefined, which still counts
+        // as answering, so `'anything' in el.attributes` came back true.
+        fn getAttr(self: *const NamedNodeMap, name: String, frame: *Frame) !*Attribute {
+            return (try self.getByName(name, frame)) orelse error.NotHandled;
+        }
+
+        // The three questions come apart here, and Chrome's answers are
+        // measured (scratch/b78/expr-named-query.js): the supported property
+        // names are the qualified names exactly as written, so `'Id' in
+        // el.attributes` is false -- while the *lookup* an HTML document does
+        // is case-insensitive, so `el.attributes.Id` still hands back the
+        // `id` Attr and still has a descriptor. Hence a query that compares
+        // exactly and a descriptor callback that does not.
+        fn queryByName(self: *const NamedNodeMap, name: []const u8, frame: *Frame) !u32 {
+            for (try self.list().getNames(frame.local_arena)) |attr_name| {
+                if (std.mem.eql(u8, attr_name, name)) {
+                    // [LegacyUnenumerableNamedProperties]: out of Object.keys,
+                    // in getOwnPropertyNames, and read-only.
+                    return js.v8.DontEnum | js.v8.ReadOnly;
+                }
+            }
+            return error.NotHandled;
+        }
+
+        const Descriptor = struct {
+            value: *Attribute,
+            writable: bool,
+            enumerable: bool,
+            configurable: bool,
+        };
+
+        fn describeByName(self: *const NamedNodeMap, name: String, frame: *Frame) !Descriptor {
+            const attribute = (try self.getByName(name, frame)) orelse return error.NotHandled;
+            return .{
+                .value = attribute,
+                .writable = false,
+                .enumerable = false,
+                .configurable = true,
+            };
+        }
 
         fn getIndexes(self: *const NamedNodeMap, frame: *Frame) !js.Array {
             const len = self.length();
