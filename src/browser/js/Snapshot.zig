@@ -242,6 +242,26 @@ fn build() !Snapshot {
             const prototype = v8.v8__FunctionTemplate__PrototypeTemplate(window_properties);
             v8.v8__Template__Set(@ptrCast(prototype), v8.v8__Symbol__GetToStringTag(isolate), brand, v8.ReadOnly + v8.DontEnum);
 
+            // ...and it is the object the named properties themselves live on:
+            // `window.myDiv` reads through the chain rather than off the
+            // global, which is what makes `'myDiv' in window` true while
+            // hasOwnProperty is false and the window has no descriptor for it.
+            // Non-masking, because a name any link of the chain already
+            // answers is not visible here: a `<span id=addEventListener>` does
+            // not shadow EventTarget.prototype's method, though this object
+            // sits below it (measured, scratch/b79/window-names.mjs).
+            v8.v8__ObjectTemplate__SetNamedHandler(@ptrCast(prototype), &.{
+                .getter = bridge.namedWindowPropertyCallback,
+                .setter = null,
+                .query = bridge.namedWindowPropertyQueryCallback,
+                .deleter = null,
+                .enumerator = null,
+                .definer = null,
+                .descriptor = null,
+                .data = null,
+                .flags = v8.kOnlyInterceptStrings | v8.kNonMasking,
+            });
+
             v8.v8__FunctionTemplate__Inherit(window_properties, templates[event_target_index]);
             v8.v8__FunctionTemplate__Inherit(templates[window_index], window_properties);
         }
@@ -707,6 +727,12 @@ fn countExternalReferences() comptime_int {
     // +1 for unknownWindowPropertyCallback used on Window's global template
     count += 1;
 
+    // +2 for the getter and query the named properties object carries: named
+    // element access lives on that object, not on the global. An uncounted
+    // entry is an isolate that aborts on deserialisation with "Unknown
+    // external reference".
+    count += 2;
+
     // +1 for the access-check callback the cross-origin window proxy's template
     // carries. Unconditional rather than counted per interface: it is one
     // shared C function whatever number of templates install it, and an
@@ -791,6 +817,12 @@ fn collectExternalReferences() [countExternalReferences()]isize {
     idx += 1;
 
     references[idx] = @bitCast(@intFromPtr(&bridge.unknownWindowPropertyCallback));
+    idx += 1;
+
+    references[idx] = @bitCast(@intFromPtr(&bridge.namedWindowPropertyCallback));
+    idx += 1;
+
+    references[idx] = @bitCast(@intFromPtr(&bridge.namedWindowPropertyQueryCallback));
     idx += 1;
 
     references[idx] = @bitCast(@intFromPtr(access_check.callbackAddress()));

@@ -24,6 +24,16 @@
   with an element's id before its name when it contributes both.
 -->
 
+<script src="../testing.js"></script>
+
+<script id="a_lookup_while_parsing_does_not_freeze_the_list">
+  // Deliberately first, before any of the named elements exist. The list is
+  // cached against the page's DOM version and the *parser does not move it*,
+  // so a list built here would still be this page's empty one when the
+  // assertions below run. Every block after this one is the check.
+  testing.expectEqual(undefined, document.nxForm);
+</script>
+
 <div id="nxDiv" name="nxDivName"></div>
 <form name="nxForm" id="nxFormId"><input name="nxField"></form>
 <img name="nxImg" id="nxImgId" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
@@ -38,7 +48,6 @@
 <select id="nxSelect" name="nxSelectName"></select>
 <a name="nxAnchor"></a>
 
-<script src="../testing.js"></script>
 
 <script id="named_objects_are_own_enumerable_properties">
 {
