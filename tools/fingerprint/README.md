@@ -25285,3 +25285,268 @@ one stall turns the twenty stations after it into errors — not the change.
 `antibot-stations-pass-in-windows` already said "只能交替对拍"; the lesson is that
 **alternate means per station**, A then B on the same station before moving on,
 not per arm.
+
+## The layout pass was never 51x too expensive; the cascade was (B99, 2026-09-01)
+
+`layout-pass-reprice` re-priced the prototype B75 shelved. Its verdict was
+"the pass is right and 51x too expensive", and the chapter above already showed
+that the cost term it exonerated -- the cascade -- was exonerated by a benchmark
+page whose rules were unreachable. This is what the pass costs once the cascade
+is actually paid for.
+
+The prototype (`prd/layout-pass-cost-prototype`, two commits, 253 lines) merges
+onto today's main with **no conflicts** and the suite stays green, so B75's other
+half -- "the pass is right" -- still holds a month and three caches later.
+
+### Three caches, measured one at a time
+
+| station | B75 | + name filter, + cross-read cache | + fixed-property cache | total |
+|---|---:|---:|---:|---:|
+| homedepot | 5 265 ms | 2 714 ms | **582 ms** | **9.0x** |
+| macys | 836 ms | 314 ms | **40 ms** | **20.9x** |
+| sony | 291 ms | 74 ms | **21 ms** | **13.9x** |
+
+Per measured box: homedepot 197 -> 90.8 -> **21.3 us**, macys 94 -> 35.7 ->
+**5.2**, sony 98 -> 24.9 -> **7.0**. Node counts match B75's within a few
+percent (sony's `placed=386 / measured=2962` is identical), so these are the same
+pages doing the same work for less.
+
+The third cache is the one that moved it most, and it was invisible until the
+second was in place. Five properties -- `display`, `visibility`, `font-size`,
+`font-family`, `text-transform` -- are lifted out of the declaration list into
+named fields on the rule and read through `cascadedDeclaration`, a different
+function with its own walk. With `cascadedNamedDeclaration` cached they were
+what was left: 6.8% of the busy thread themselves and 26.1% underneath in
+selector matching on plain main, 17.6% and 65.1% under the prototype. Cached,
+ak-homedepot's whole cascade-and-selector family falls from **61.8% of the busy
+thread to 1.6%**, and the engine's total self time by 89% -- while building
+slightly *more* DOM than the uncached arm (3 351 nodes against 3 254), which is
+what says the win is not the page failing to load.
+
+### The denominator moved too, so the ratio is the wrong way to say it
+
+What one layout read costs the page on ak-homedepot, timed in place:
+
+| build | mean | worst single read | layout total per load |
+|---|---:|---:|---:|
+| main before B99 | ~21 ms | ~2 500 ms | ~4 580 ms |
+| + first two caches | ~15 ms | ~1 607 ms | ~3 695 ms |
+| + fixed-property cache | **~3.1 ms** | **~420 ms** | **~1 130 ms** |
+
+Mean 6.8x, worst read 6x, total 4x. **The worst single read went from two and a
+half seconds to four hundred milliseconds**, which is where the watchdog margin
+comes from and why the offline stall cell now finishes in half the threshold.
+
+So state the verdict in absolute cost rather than as a ratio, since both sides
+fell. Enabling the pass costs `passes needed x one pass` (counts are B75's):
+
+* **sony 15 x 21ms = 0.3 s** -- affordable.
+* **macys 53 x 40ms = 2.1 s** -- affordable.
+* **homedepot 59 x 582ms = 34 s** -- still fatal on its own; the watchdog is 30.
+
+**"51x too expensive" is dead as a description, but it did not become "ship
+it".** It became one remaining term, and a measured one: the pass *count*.
+88.5% of homedepot's layout reads sit on a document nothing has mutated since
+the previous read, so memoising the pass itself on `Page.dom_version` -- the same
+key the cascade caches already use -- puts homedepot at roughly 7 passes,
+**4.1 s**. That is the next plan's shape, and until it exists the prototype stays
+on `prd/layout-pass-reprice`, unmerged.
+
+Two limits on the numbers above: only homedepot's denominator was re-measured
+(macys and sony reuse B75's), and the pass counts 59/53/15 are B75's and were not
+re-measured either.
+
+### The in-flow offset tell is no longer blocked by an unknown
+
+`in-flow-block-position`'s reading stands: **26 of 27 offsets wrong, every
+element's x equal to its y, and one expression sees it.** What has changed is
+that it is no longer waiting on a cost nobody had located. It is waiting on one
+named, priced, mechanically-familiar piece of work.
+
+## The last four ways a document answers to a name (B80, 2026-09-01)
+
+`four-name-questions-sweep` closed with four differences left and a ranking by
+"can one expression see it". All four are closed now, and the last of them
+uncovered something worth more than the four together.
+
+### The two names that were deliberately absent
+
+`CSS.registerProperty` and `CSS.paintWorklet` were left off the CSS namespace
+object on the grounds that a present-but-inert name is its own kind of lie, and
+the file said what each would have to do to earn its place. Both now do it.
+
+A registration reaches the cascade, and all four of its effects are
+page-visible (Chrome 151, `scratch/b80/registered.mjs` and `scratch/b80/q6.js`):
+
+| | before | after |
+|---|---|---|
+| enumerated by `getComputedStyle` on every element | absent | yes |
+| `<length>` `2em` against a 10px font | absent | `20px` |
+| `<color>` `red` | absent | `rgb(255, 0, 0)` |
+| `<angle>` `0.5turn` / `<time>` `500ms` / `<resolution>` `96dpi` | absent | `180deg` / `0.5s` / `1dppx` |
+| a value that does not parse for the syntax | absent | falls back to the initial value |
+| `inherits: false` on a child | absent | the initial value, not the parent's |
+
+The initial value is computed once, at registration, because the spec asks it to
+be *computationally independent* -- `initialValue: '2em'` is refused with a
+message of its own, which is what makes one stored string enough for every
+element. Twelve refusals are Chrome's wording verbatim, including the reading
+order: `inherits` is checked before the name, so `{name: 'x', syntax: '*'}`
+reports the missing member rather than the bad name.
+
+`CSS.paintWorklet` hands out the `Worklet` Web Audio already had, and the paint
+half of `addModule` loads for real: the URL is resolved against the document
+base, the module is fetched -- filed as a `script` resource entry the way
+Chrome's is -- and compiled, so a module that does not parse rejects with V8's
+parse message. Seven settle cases agree with Chrome exactly
+(`scratch/b80/addmodule.mjs`), including `AbortError: Unable to load a worklet's
+module.` for a 404 and `SyntaxError: 'http://[::' is not a valid URL.` for an
+unparseable one. The audio half still rejects everything, and that stays
+deliberate: AudioWorkletNode refuses to construct *because* no module loaded, so
+a resolved `audioWorklet.addModule` would contradict it. Nothing downstream of a
+paint worklet contradicts anything, because nothing rasterises.
+
+### location.valueOf, and the slot that carries the order
+
+`Object.getOwnPropertyNames(location)` opens with `valueOf` in every browser and
+did not here. HTML's "create a Location object" steps define it before any IDL
+member, which is both why it exists and why it sorts first, and the value has to
+be the realm's own `%Object.prototype.valueOf%` -- true per realm, so a child
+frame's Location carries the child's.
+
+The source said a template cannot carry a per-context object, which is right.
+What it can carry is the *slot*: the template reserves `valueOf` before the
+unforgeable members, writable and configurable, and the wrap replaces the value
+with the realm's function and Chrome's attribute bits. Redefining an own
+property keeps its insertion position, and the position is the whole point.
+Five readings agree, in the child realm as well as the page's.
+
+### document.all, and four expectations that came from us
+
+One name reaching more than one element answers an HTMLCollection, not the first
+match, and the lookup is one set: any element whose `id` matches plus the
+"all"-named kinds whose `name` does, in tree order. Measured over every way two
+elements can share a name.
+
+The call form had two bugs beside it. `document.all()` with no argument threw
+"invalid argument", and every miss -- absent argument, out-of-range index,
+negative index, unknown name -- answered `undefined` where Chrome answers
+`null`. **The four `undefined` expectations in the test had been written from
+this engine's own answer**, which is the third instance of that failure mode in
+this repo's tests and the reason a hand-written expectation gets a probe.
+
+### One row asserted as it is: collections have no identity here
+
+`document.forms === document.forms` is true in Chrome and false here. So are
+`images`, `all`, `getElementsByTagName('div')` and `body.children` -- five for
+five (`scratch/b80/q9.js`), because every accessor builds a fresh wrapper: the
+bridge's identity map keys on the Zig pointer and each call allocates a new one.
+
+That is one expression, it needs no knowledge of the page, and it is *cheaper*
+than anything else left in this family -- one change covers five or more
+accessors. It is asserted in `document/all_collection.html` as
+`same=false (Chrome: true)` rather than skipped, so fixing it turns that row red
+instead of leaving it silent.
+
+### [LegacyOverrideBuiltIns], and what it cost
+
+`<form name="title">` makes `document.title` the form in every browser. Thirteen
+names measured, covering an accessor, an operation and Object.prototype's own:
+all thirteen lose to the form. The handler was `kNonMasking`, so a name any link
+of the chain answered never reached it.
+
+Masking it means the ordering question becomes ours to answer, because V8
+consults a masking interceptor *before* the own properties while the spec puts
+named properties after them, and the vendored V8 C API has no
+`HasRealNamedProperty` to ask with (asking through `Object.Has` re-enters the
+handler). `location` is the whole list -- the only `[LegacyUnforgeable]` member a
+Document has, therefore its only own property -- so the handler declines that one
+name, with a comptime check to keep the list honest. The name stays *listed*
+either way, because it is a supported property name whether or not it wins.
+
+It also means every property read on `document` enters the getter, so the cost
+of the named-object list became the cost of reading `document.body`:
+
+| 2000 reads, 4000-element page | before | after |
+|---|---|---|
+| settled document (`scratch/b79/named-cost.mjs`) | 2ms | 2ms |
+| **during the parse** (`scratch/b80/parse-cost.mjs`) | **1249ms** | **2ms** |
+
+The list is cached against `Page.dom_version`, and the parser does not move that
+version -- the previous answer to that was to rebuild per lookup while the
+document is loading, which is where the 1249ms comes from and which was
+affordable only because most reads did not reach the handler. So the parser now
+keeps its own counter, `Page.parser_dom_version`, which the named-object cache
+checks alongside the DOM version and nothing else looks at. Chrome is 1ms.
+
+Isolation-checked both ways: with the parser half of the key removed, the list
+freezes empty again -- all eight named objects read `undefined` and neither
+`getOwnPropertyNames` nor `keys` lists them, which is the bug
+`document/named_objects.html`'s first block exists to catch.
+
+### The bug that was underneath: a thrown exception's message is borrowed
+
+Turning the handler masking made `WebApi: TimeRanges` fail with a message no
+browser writes: `currentScriptcute 'start' on 'TimeRanges': ...`. Thirteen bytes
+of `Failed to exe` replaced by thirteen bytes of `currentScript`.
+
+**It predates all of this.** `DOMException.init` borrows both of its strings, and
+a caller that formatted a message -- `TimeRanges`'s bounds sentence -- had it on
+the per-call scratch arena. The struct is copied into the context arena when it
+becomes a JS object; the strings are not. Measured on main's own binary
+(`scratch/b80/q12.js`):
+
+```
+first       "Failed to execute 'start' on '"
+afterAlloc  "aVeryLongIdNobodyHastart' on '"   <- one getElementById later
+afterAlloc2 "currentScriptbodyHastart' on '"   <- one more
+```
+
+Masking only made the clobbering allocation land on a path the test suite walks.
+And it is not a corner: a guard catches exceptions and reads them back later --
+Kasada rejects twenty-five promises in a row on x-hyatt to collect the messages
+(README, x-hyatt) -- so what it read here was text no browser produces.
+
+Fixed at the mechanism rather than at the call site. `Local.mapZigInstanceToJs`
+already copies a by-value struct into the context arena; a type that borrows
+strings now says so with `ownStrings` and takes them along in the same move,
+which covers every `init` caller whatever the provenance of what it passed
+instead of auditing the fifty that hand over a variable.
+
+**The repro needs a task boundary, and that is why the existing test was green.**
+`domexception.html`'s older block churns the arena inside one task and passes:
+those three paths go through `Context.fail`, which copies as it throws, and
+within one task the arena only bumps forward rather than landing back on the
+message's head. Catch in one task, read in the next with one short string
+crossing the bridge in between, and it fails -- which is the shape a page uses.
+A sentinel proved the same-task rows really ran, so their green was a wrong
+repro shape rather than a false green.
+
+### Where the doors are
+
+Unmoved. `19/29` on the merged binary against `20/29` on the pre-merge one, and
+the difference is `dd-leboncoin` -- the DataDome column this README has a whole
+section about.
+
+That is not an inference from the section. Both binaries were run station by
+station over the eight DataDome stations, alternating, twice each in one sitting
+(`scratch/b80/dd-ab.sh`, `scratch/b80/dd-{base,new}-{1,2}.json`). Every cell
+agrees between the two arms except one, and it is not a disagreement between
+them:
+
+```
+                base r1   base r2   new r1    new r2
+  dd-leboncoin  pass      challenge challenge challenge
+  dd-etsy       pass      pass      pass      pass
+  dd-seloger    pass      pass      pass      pass
+  everything else        identical across all four
+```
+
+**The pre-merge binary stopped passing leboncoin between its own two rounds**,
+before the merged binary's second round ran. The window closed for the arm that
+had it. One pass in eight station-visits is what this vendor looks like from this
+address, and `one-sweep-cannot-tell-a-door-from-a-window` is the memory for it.
+
+Every Akamai station, px-wayfair, ks-canadagoose, x-sony, x-zillow and the six
+passing Cloudflare stations are unchanged; `cf-scrapingcourse` and `x-hyatt` are
+still the two real gaps.
