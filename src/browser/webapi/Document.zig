@@ -78,6 +78,18 @@ _current_script: ?*Element.Html.Script = null,
 _elements_by_id: std.StringHashMapUnmanaged(*Element) = .empty,
 // Track IDs that were removed from the map - they might have duplicates in the tree
 _removed_ids: std.StringHashMapUnmanaged(void) = .empty,
+// The document's named objects (`document.myForm`), rebuilt when the DOM
+// version moves. Cached because the handler behind them answers every name
+// nothing else answers, and walking the tree per read cost 0.26ms on a
+// 4000-element page -- 88x what the same reads cost before the handler existed
+// (scratch/b79/named-cost.mjs).
+_named_objects: std.ArrayListUnmanaged(NamedObjectEntry) = .empty,
+_named_objects_version: ?usize = null,
+// Named objects a script has deleted. `delete document.myForm` takes the name
+// away for good in Chrome -- the element stays in the tree, the property does
+// not come back, not even after a DOM change (measured, scratch/b79/edges.mjs)
+// -- and only a Document behaves that way; a form keeps its deleted names.
+_named_objects_deleted: std.StringHashMapUnmanaged(void) = .empty,
 _active_element: ?*Element = null,
 _style_sheets: ?*StyleSheetList = null,
 // The cascade's own list; see cascadeStyleSheets.
@@ -501,6 +513,217 @@ pub fn getElementsByName(self: *Document, name: []const u8, frame: *Frame) !coll
 
 pub fn getChildren(self: *Document, frame: *Frame) !collections.NodeLive(.child_elements) {
     return collections.NodeLive(.child_elements).init(self.asNode(), {}, frame);
+}
+
+/// What `document.myForm` reaches. An iframe's name reaches its window rather
+/// than the element, which is why this is a union and not an `*Element`.
+pub const NamedObject = union(enum) {
+    element: *Element,
+    window: *Window,
+    cross_origin: *Window.CrossOriginWindow,
+};
+
+/// Which of an element's two attributes name it on the document.
+///
+/// Five element kinds earn a name from `name` -- embed, form, iframe, img,
+/// object; an `object` earns one from `id` as well; and an `img` earns one
+/// from `id` only when it also carries a non-empty `name`. Nothing else in the
+/// tree contributes, however it is labelled: a div with an id, a select with a
+/// name and an anchor with a name are all invisible here (measured on Chrome
+/// 151, scratch/b79/named-objects.mjs).
+/// https://html.spec.whatwg.org/multipage/dom.html#dom-document-nameditem
+fn nameSources(element: *Element) struct { id: bool, name: bool } {
+    if (element._namespace != .html) {
+        return .{ .id = false, .name = false };
+    }
+    const Html = Element.Html;
+    if (element.is(Html.Object) != null) {
+        return .{ .id = true, .name = true };
+    }
+    if (element.is(Html.Image) != null) {
+        const named = if (element.getAttributeSafe(comptime .wrap("name"))) |n| n.len > 0 else false;
+        return .{ .id = named, .name = true };
+    }
+    if (element.is(Html.Form) != null or element.is(Html.Embed) != null or element.is(Html.IFrame) != null) {
+        return .{ .id = false, .name = true };
+    }
+    return .{ .id = false, .name = false };
+}
+
+fn attributeIs(element: *Element, comptime attribute: String, value: []const u8) bool {
+    const have = element.getAttributeSafe(attribute) orelse return false;
+    return have.len > 0 and std.mem.eql(u8, have, value);
+}
+
+const NamedObjectEntry = struct {
+    name: []const u8,
+    element: *Element,
+};
+
+/// Every name the document answers to and what each one names, in tree order,
+/// an element's id before its name when it contributes both, ignoring later
+/// duplicates.
+///
+/// The names are borrowed from the attributes they came from and the elements
+/// are held raw, which is safe for exactly as long as the cache is: every
+/// mutation that could invalidate either -- an attribute written, a node
+/// inserted or removed -- moves the page's DOM version, and the whole list is
+/// rebuilt when it has.
+fn namedObjectEntries(self: *Document, frame: *Frame) ![]const NamedObjectEntry {
+    const version = frame._page.dom_version;
+    if (self._named_objects_version == version) {
+        return self._named_objects.items;
+    }
+
+    const arena = frame.arena;
+    var entries = &self._named_objects;
+    entries.clearRetainingCapacity();
+
+    var tw = TreeWalker.Full.Elements.init(self.asNode(), .{});
+    while (tw.next()) |element| {
+        const sources = nameSources(element);
+        if (sources.id) {
+            if (element.getAttributeSafe(comptime .wrap("id"))) |id| {
+                if (id.len > 0 and !containsName(entries.items, id)) {
+                    try entries.append(arena, .{ .name = id, .element = element });
+                }
+            }
+        }
+        if (sources.name) {
+            if (element.getAttributeSafe(comptime .wrap("name"))) |name| {
+                if (name.len > 0 and !containsName(entries.items, name)) {
+                    try entries.append(arena, .{ .name = name, .element = element });
+                }
+            }
+        }
+    }
+
+    self._named_objects_version = version;
+    return entries.items;
+}
+
+/// The first element in tree order that this name names, as the value the name
+/// reads back as.
+pub fn namedObject(self: *Document, name: []const u8, frame: *Frame) ?NamedObject {
+    if (name.len == 0) {
+        return null;
+    }
+
+    if (self.namedObjectDeleted(name)) {
+        return null;
+    }
+
+    const entries = self.namedObjectEntries(frame) catch return null;
+    for (entries) |entry| {
+        if (!std.mem.eql(u8, entry.name, name)) {
+            continue;
+        }
+        if (entry.element.is(Element.Html.IFrame)) |iframe| {
+            // A frame with no window of its own names nothing.
+            const access = iframe.getContentWindow(frame) orelse return null;
+            return switch (access) {
+                .window => |window| .{ .window = window },
+                .cross_origin => |window| .{ .cross_origin = window },
+            };
+        }
+        return .{ .element = entry.element };
+    }
+    return null;
+}
+
+/// The names alone, for the enumerator behind getOwnPropertyNames.
+pub fn namedObjects(self: *Document, frame: *Frame) ![]const NamedObjectEntry {
+    return self.namedObjectEntries(frame);
+}
+
+/// Whether a script has deleted this name off the document.
+pub fn namedObjectDeleted(self: *const Document, name: []const u8) bool {
+    if (self._named_objects_deleted.count() == 0) {
+        return false;
+    }
+    return self._named_objects_deleted.contains(name);
+}
+
+pub fn deleteNamedObject(self: *Document, name: []const u8, frame: *Frame) !void {
+    return self._named_objects_deleted.put(frame.arena, try frame.dupeString(name), {});
+}
+
+fn containsName(entries: []const NamedObjectEntry, name: []const u8) bool {
+    for (entries) |entry| {
+        if (std.mem.eql(u8, entry.name, name)) return true;
+    }
+    return false;
+}
+
+/// The four callbacks behind `document.myForm`, generated for whichever
+/// concrete document interface the instance belongs to. V8 does not hand a
+/// derived instance template its base's named handler -- an interceptor
+/// declared on Document alone never fires for the HTMLDocument that every page
+/// has -- so each interface installs its own, and they all land here.
+pub fn NamedObjectAccess(comptime T: type) type {
+    return struct {
+        fn document(self: *T) *Document {
+            return if (comptime T == Document) self else self.asDocument();
+        }
+
+        pub fn get(self: *T, name: []const u8, frame: *Frame) !NamedObject {
+            return document(self).namedObject(name, frame) orelse error.NotHandled;
+        }
+
+        pub fn names(self: *T, frame: *Frame) !js.Array {
+            const doc = document(self);
+            const supported = try doc.namedObjects(frame);
+
+            var live: u32 = 0;
+            for (supported) |entry| {
+                if (!doc.namedObjectDeleted(entry.name)) live += 1;
+            }
+
+            var arr = frame.js.local.?.newArray(live);
+            var i: u32 = 0;
+            for (supported) |entry| {
+                if (doc.namedObjectDeleted(entry.name)) {
+                    continue;
+                }
+                _ = try arr.set(i, entry.name, .{});
+                i += 1;
+            }
+            return arr;
+        }
+
+        /// A deleted name is gone for good, which is what Chrome does with it:
+        /// the element stays, the property does not come back.
+        pub fn delete(self: *T, name: []const u8, frame: *Frame) !bool {
+            const doc = document(self);
+            if (doc.namedObject(name, frame) == null) {
+                return error.NotHandled;
+            }
+            try doc.deleteNamedObject(name, frame);
+            return true;
+        }
+
+        /// Enumerable, configurable and writable: unlike a collection's named
+        /// entries these look like ordinary data properties, so they come out
+        /// of Object.keys as well as getOwnPropertyNames (measured on Chrome
+        /// 151, scratch/b79/named-objects.mjs).
+        pub fn query(self: *T, name: []const u8, frame: *Frame) !u32 {
+            if (document(self).namedObject(name, frame) != null) {
+                return js.v8.None;
+            }
+            return error.NotHandled;
+        }
+
+        /// Writable in the descriptor and unassignable all the same: there is
+        /// no named setter, so the define that [[Set]] falls back to is
+        /// refused -- silently outside strict mode, which is what Chrome does
+        /// with it.
+        pub fn define(self: *T, name: []const u8, frame: *Frame) !bool {
+            if (document(self).namedObject(name, frame) != null) {
+                return false;
+            }
+            return error.NotHandled;
+        }
+    };
 }
 
 pub fn getDocumentElement(self: *Document) ?*Element {
@@ -2617,6 +2840,10 @@ pub const JsApi = struct {
     pub const onscrollsnapchanging = bridge.accessor(handlerAccessor(.onscrollsnapchanging).get, handlerAccessor(.onscrollsnapchanging).set, .{});
     pub const customElementRegistry = bridge.accessor(Document.getCustomElementRegistry, null, .{});
     pub const ariaNotify = bridge.function(Document.ariaNotify, .{});
+
+    /// `document.myForm`; see Document.NamedObjectAccess.
+    const named_objects = Document.NamedObjectAccess(Document);
+    pub const @"[str]" = bridge.namedIndexedFull(named_objects.get, null, named_objects.delete, named_objects.names, named_objects.query, named_objects.define, null, .{ .null_as_undefined = true });
 
     fn getCharacterSet(self: *const Document) []const u8 {
         return self.getCharset();

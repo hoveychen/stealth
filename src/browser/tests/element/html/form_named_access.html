@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>form named access</title>
+</head>
+<body>
+
+<!--
+  `form[0]` and `form.myField`: a form is indexable and nameable itself, not
+  only through `form.elements`. This engine had `form.elements` right and the
+  form itself bare -- Chrome reports four indexed own properties where we
+  reported none, and `form.fixtureField` was undefined
+  (scratch/b78/name-questions.json).
+
+  The two halves answer differently, which is the whole reason to measure
+  rather than assume: the indices are enumerable and listed, the names are
+  neither listed nor enumerable yet still answer `in` and hasOwnProperty. A
+  name shared by two radios reaches a RadioNodeList, and a control's id names
+  it just as its name does.
+
+  Measured on Chrome 151 with scratch/b79/named-objects.mjs against this same
+  markup.
+-->
+
+<form name="fxForm" id="fxFormId">
+  <input name="fxField" id="fxFieldId" value="v">
+  <input name="fxField2">
+  <input type="radio" name="fxRadio" value="a">
+  <input type="radio" name="fxRadio" value="b">
+  <button name="fxButton"></button>
+</form>
+
+<script src="../../testing.js"></script>
+
+<script id="a_form_indexes_its_listed_elements">
+{
+  const form = document.getElementById('fxFormId');
+  const row = (n) => {
+    const d = Object.getOwnPropertyDescriptor(form, n);
+    const v = form[n];
+    return `${n} in=${n in form} own=${Object.prototype.hasOwnProperty.call(form, n)} ` +
+      (d ? `${d.get || d.set ? 'accessor' : 'data'} e=${d.enumerable} c=${d.configurable} w=${d.writable}` : 'absent') +
+      ` read=${v === undefined ? 'undefined' : v.constructor.name}`;
+  };
+  const want = [
+    'length 5',
+    // The indices are listed and enumerable; the names are neither, so both
+    // lists are the indices alone.
+    'own 0,1,2,3,4',
+    'keys 0,1,2,3,4',
+    '0 in=true own=true data e=true c=true w=false read=HTMLInputElement',
+    '3 in=true own=true data e=true c=true w=false read=HTMLInputElement',
+    '4 in=true own=true data e=true c=true w=false read=HTMLButtonElement',
+    '5 in=false own=false absent read=undefined',
+  ].join('\n');
+  const got = [
+    'length ' + form.length,
+    'own ' + Object.getOwnPropertyNames(form).join(','),
+    'keys ' + Object.keys(form).join(','),
+    row('0'), row('3'), row('4'), row('5'),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="a_form_names_its_controls_without_listing_them">
+{
+  const form = document.getElementById('fxFormId');
+  const row = (n) => {
+    const d = Object.getOwnPropertyDescriptor(form, n);
+    const v = form[n];
+    return `${n} in=${n in form} own=${Object.prototype.hasOwnProperty.call(form, n)} ` +
+      (d ? `${d.get || d.set ? 'accessor' : 'data'} e=${d.enumerable} c=${d.configurable} w=${d.writable}` : 'absent') +
+      ` read=${v === undefined ? 'undefined' : v.constructor.name}`;
+  };
+  const want = [
+    'fxField in=true own=true data e=false c=true w=false read=HTMLInputElement',
+    // A control's id names it too.
+    'fxFieldId in=true own=true data e=false c=true w=false read=HTMLInputElement',
+    'fxField2 in=true own=true data e=false c=true w=false read=HTMLInputElement',
+    // One name, two radios: a live list rather than the first of them.
+    'fxRadio in=true own=true data e=false c=true w=false read=RadioNodeList',
+    'radio length 2',
+    'fxButton in=true own=true data e=false c=true w=false read=HTMLButtonElement',
+    // The form's own name and id are names of the document, not of the form.
+    'fxForm in=false own=false absent read=undefined',
+    'fxFormId in=false own=false absent read=undefined',
+    'FxField in=false own=false absent read=undefined',
+    'fxNope in=false own=false absent read=undefined',
+  ].join('\n');
+  const got = [
+    row('fxField'), row('fxFieldId'), row('fxField2'), row('fxRadio'),
+    'radio length ' + form.fxRadio.length,
+    row('fxButton'), row('fxForm'), row('fxFormId'), row('FxField'), row('fxNope'),
+  ].join('\n');
+  testing.expectEqual(want, got);
+}
+</script>
+
+<script id="an_image_in_the_form_names_it_only_where_no_control_does">
+{
+  const form = document.getElementById('fxFormId');
+  const image = document.createElement('img');
+  image.setAttribute('name', 'fxImage');
+  form.appendChild(image);
+  const alsoNamedField = document.createElement('img');
+  alsoNamedField.setAttribute('name', 'fxField');
+  form.appendChild(alsoNamedField);
+
+  const want = [
+    // An img is form-associated without being listed: it names the form
+    // without being in form.elements and without taking an index.
+    'fxImage in=true read=HTMLImageElement',
+    'elements in=false',
+    'length 5',
+    // A name a control already answers stays the control's -- the images are
+    // consulted only when the listed elements have nothing.
+    'fxField read=HTMLInputElement',
+  ].join('\n');
+  const got = [
+    'fxImage in=' + ('fxImage' in form) + ' read=' + form.fxImage.constructor.name,
+    'elements in=' + ('fxImage' in form.elements),
+    'length ' + form.length,
+    'fxField read=' + form.fxField.constructor.name,
+  ].join('\n');
+  image.remove();
+  alsoNamedField.remove();
+  testing.expectEqual(want, got);
+}
+</script>
+
+</body>
+</html>
