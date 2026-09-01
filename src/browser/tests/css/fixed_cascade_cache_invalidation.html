@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`cascade_cache_invalidation.html` covers the cache behind
+`cascadedNamedDeclaration`, which every ordinary longhand goes through. Five
+properties do NOT: `display`, `visibility`, `font-size`, `font-family` and
+`text-transform` are lifted out of the declaration list into named fields on the
+rule, read by the hidden-element path per element per layout question, and
+answered by `cascadedDeclaration` out of a SECOND cache with its own map.
+
+Same invalidation code serves both, but a second map is a second thing that can
+be left behind, and these five are the ones whose staleness a page would notice
+first: `display` and `visibility` decide whether an element is hidden at all.
+
+Each property is exercised twice, once per mechanism:
+  * a class change, which moves `Page.dom_version`;
+  * `insertRule` on a live sheet, which changes the rule set WITHOUT touching the
+    DOM -- the one shape `dom_version` cannot see.
+Every case reads before as well as after: the read before is what puts the stale
+answer in the cache.
+-->
+
+<script id=fixed_cascade_cache_invalidation>
+{
+  const wrong = [];
+  const base = document.createElement('style');
+  base.textContent = `
+    .d-before { display: block }
+    .d-after  { display: inline-flex }
+    .v-before { visibility: visible }
+    .v-after  { visibility: hidden }
+    .fs-before { font-size: 11px }
+    .fs-after  { font-size: 29px }
+    .ff-before { font-family: Georgia }
+    .ff-after  { font-family: Verdana }
+    .tt-before { text-transform: uppercase }
+    .tt-after  { text-transform: lowercase }
+    .kids > div:nth-child(2) { display: inline-block }
+  `;
+  document.head.appendChild(base);
+
+  const live = document.createElement('style');
+  document.head.appendChild(live);
+
+  const step = (label, el, prop, want) => {
+    const got = getComputedStyle(el)[prop];
+    if (got !== want) wrong.push(label + ': want ' + want + ', got ' + got);
+  };
+
+  // Each of the five, through a class change.
+  const cases = [
+    ['display', 'display', 'd-before', 'block', 'd-after', 'inline-flex'],
+    ['visibility', 'visibility', 'v-before', 'visible', 'v-after', 'hidden'],
+    ['fontSize', 'fontSize', 'fs-before', '11px', 'fs-after', '29px'],
+    ['fontFamily', 'fontFamily', 'ff-before', 'Georgia', 'ff-after', 'Verdana'],
+    ['textTransform', 'textTransform', 'tt-before', 'uppercase', 'tt-after', 'lowercase'],
+  ];
+  for (const [label, prop, clsA, wantA, clsB, wantB] of cases) {
+    const el = document.createElement('div');
+    el.className = clsA;
+    document.body.appendChild(el);
+    step(label + '_class_before', el, prop, wantA);
+    el.className = clsB;
+    step(label + '_class_after', el, prop, wantB);
+  }
+
+  // Each of the five, through the CSSOM on a sheet already in the document.
+  const cssom = [
+    ['display', 'display', 'x-display', 'grid'],
+    ['visibility', 'visibility', 'x-visibility', 'hidden'],
+    ['fontSize', 'fontSize', 'x-fontsize', '37px'],
+    ['fontFamily', 'fontFamily', 'x-fontfamily', 'Verdana'],
+    ['textTransform', 'textTransform', 'x-texttransform', 'capitalize'],
+  ];
+  const declared = {
+    display: 'display: grid', visibility: 'visibility: hidden',
+    fontSize: 'font-size: 37px', fontFamily: 'font-family: Verdana',
+    textTransform: 'text-transform: capitalize',
+  };
+  for (const [label, prop, cls, want] of cssom) {
+    const el = document.createElement('div');
+    el.className = cls;
+    document.body.appendChild(el);
+    const before = getComputedStyle(el)[prop];
+    if (before === want) wrong.push(label + '_cssom_before: already ' + want + ', the case proves nothing');
+    live.sheet.insertRule('.' + cls + ' { ' + declared[prop] + ' }', 0);
+    step(label + '_cssom_after_insert', el, prop, want);
+    live.sheet.deleteRule(0);
+    const after = getComputedStyle(el)[prop];
+    if (after !== before) wrong.push(label + '_cssom_after_delete: want ' + before + ', got ' + after);
+  }
+
+  // display through a tree move, which changes what :nth-child(2) selects for an
+  // element nobody touched -- the shape that makes wholesale invalidation
+  // necessary rather than merely convenient.
+  const kids = document.createElement('div');
+  kids.className = 'kids';
+  const k1 = document.createElement('div');
+  const k2 = document.createElement('div');
+  kids.appendChild(k1);
+  kids.appendChild(k2);
+  document.body.appendChild(kids);
+  step('nth_k1_before', k1, 'display', 'block');
+  step('nth_k2_before', k2, 'display', 'inline-block');
+  kids.insertBefore(document.createElement('div'), k1);
+  step('nth_k1_after_insert', k1, 'display', 'inline-block');
+  step('nth_k2_after_insert', k2, 'display', 'block');
+
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

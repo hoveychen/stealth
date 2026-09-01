@@ -137,6 +137,17 @@ keyframes: std.StringHashMapUnmanaged([]const Keyframe) = .empty,
 /// why the map is reset there rather than cleared.
 cascade_cache: CascadeCache = .empty,
 
+/// The same, for `cascadedDeclaration`'s five fixed properties. Separate map
+/// rather than a third `NamedList` variant because the key needs no name: the
+/// property is an enum, so this one is a pointer and a tag.
+///
+/// Worth its own entry because the named cache leaves it as the largest term.
+/// With `cascadedNamedDeclaration` cached, a sample of ak-homedepot puts
+/// `cascadedDeclaration` at 6.8% of the busy thread and the selector matching it
+/// drives at 26.1%; under the layout-pass prototype, which measures every box
+/// on the page, those become 17.6% and 65.1%.
+fixed_cascade_cache: FixedCascadeCache = .empty,
+
 /// The `Page.dom_version` the cache's contents were computed under. Any DOM
 /// mutation moves it -- `Frame.domChanged` covers structure and, through
 /// `Attribute.List.put`/`remove`, class and id -- and every entry is stale at
@@ -1047,9 +1058,10 @@ fn rebuildIfDirty(self: *StyleManager) !void {
 
     self.arena.resetRetain();
 
-    // Both the cached answers and the map holding them were allocated from that
-    // arena, so this is `.empty` rather than a clear: the buckets are gone.
+    // Both the cached answers and the maps holding them were allocated from that
+    // arena, so these are `.empty` rather than a clear: the buckets are gone.
     self.cascade_cache = .empty;
+    self.fixed_cascade_cache = .empty;
 
     self.next_doc_order = 1;
 
@@ -1888,6 +1900,13 @@ const CascadeCache = std.HashMapUnmanaged(CascadeKey, ?Declaration, struct {
     }
 }, 80);
 
+const FixedCascadeKey = struct {
+    element: *Element,
+    property: CascadedProperty,
+};
+
+const FixedCascadeCache = std.AutoHashMapUnmanaged(FixedCascadeKey, ?Declaration);
+
 /// Ceiling on cached answers. A page with a hundred thousand elements would
 /// otherwise hold an entry per element per property asked, and the cache is
 /// meant to pay for repeated reads of the same document, not to grow with it
@@ -2345,8 +2364,27 @@ const CascadedProperty = enum { font_size, font_family, text_transform, display,
 /// The winning declaration of `property` among the stylesheet rules matching
 /// `el`, or null when none match. Importance outranks specificity, which is
 /// why the two are tracked apart rather than folded into `priority`.
+/// Both caches answer for a document that has not moved, so one mutation drops
+/// both. `clearRetainingCapacity` keeps the buckets: the arena cannot give
+/// memory back, and a page that mutates a thousand times must not pay for a
+/// thousand maps.
+fn dropCachesIfDomMoved(self: *StyleManager) void {
+    const dom_version = self.frame._page.dom_version;
+    if (dom_version == self.cache_dom_version) {
+        return;
+    }
+    self.cascade_cache.clearRetainingCapacity();
+    self.fixed_cascade_cache.clearRetainingCapacity();
+    self.cache_dom_version = dom_version;
+}
+
 fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProperty) ?Declaration {
     self.rebuildIfDirty() catch return null;
+
+    self.dropCachesIfDomMoved();
+    if (self.fixed_cascade_cache.get(.{ .element = el, .property = property })) |cached| {
+        return cached;
+    }
 
     var best: ?Declaration = null;
     var best_priority: u64 = 0;
@@ -2392,6 +2430,16 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
     }
 
     checkRules(&self.other_rules, property, &best, &best_priority, &best_important, el, self.frame);
+
+    // Misses cached alongside hits, as in the named cache: "no rule sets display
+    // on this element" is the usual answer and it cost the same walk.
+    if (self.fixed_cascade_cache.count() < MAX_CASCADE_CACHE) {
+        self.fixed_cascade_cache.put(
+            self.arena.allocator(),
+            .{ .element = el, .property = property },
+            best,
+        ) catch {};
+    }
 
     return best;
 }
@@ -2691,15 +2739,8 @@ fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8,
         return null;
     }
 
-    const dom_version = self.frame._page.dom_version;
-    if (dom_version != self.cache_dom_version) {
-        // One mutation invalidates every answer, so this keeps the map's
-        // buckets and drops only its contents -- the arena cannot give memory
-        // back, and a page that mutates a thousand times must not pay for a
-        // thousand maps.
-        self.cascade_cache.clearRetainingCapacity();
-        self.cache_dom_version = dom_version;
-    } else if (self.cascade_cache.get(.{ .element = el, .name = name, .which = which })) |cached| {
+    self.dropCachesIfDomMoved();
+    if (self.cascade_cache.get(.{ .element = el, .name = name, .which = which })) |cached| {
         return cached;
     }
 
