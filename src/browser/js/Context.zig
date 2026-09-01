@@ -770,6 +770,32 @@ fn evaluateModule(self: *Context, comptime want_result: bool, mod: js.Module, ur
     return if (comptime want_result) entry.* else {};
 }
 
+/// Compile `src` as a module and throw the module away -- no instantiation, no
+/// evaluation, no cache entry. `CSS.paintWorklet.addModule` is the caller: the
+/// module belongs to a paint worklet global this engine does not have, so it
+/// cannot be run, but a module that does not *parse* has to reject with the
+/// parse error and only V8 can word that. On failure the message V8 gave is
+/// written to `message` (out of `allocator`) and `error.JsException` returned.
+pub fn compileModuleSyntaxOnly(
+    local: *const js.Local,
+    allocator: Allocator,
+    src: []const u8,
+    url: []const u8,
+    message: *[]const u8,
+) !void {
+    const owned_url = try allocator.dupeZ(u8, url);
+
+    var try_catch: js.TryCatch = undefined;
+    try_catch.init(local);
+    defer try_catch.deinit();
+
+    _ = compileModule(local, src, owned_url) catch |err| {
+        const caught = try_catch.caughtOrError(allocator, err);
+        message.* = caught.exception orelse "Unable to load a worklet's module.";
+        return error.JsException;
+    };
+}
+
 fn compileModule(local: *const js.Local, src: []const u8, name: []const u8) !js.Module {
     var origin_handle: v8.ScriptOrigin = undefined;
     v8.v8__ScriptOrigin__CONSTRUCT2(

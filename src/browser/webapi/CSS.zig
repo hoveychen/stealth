@@ -21,6 +21,7 @@ const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const units = @import("../css/units.zig");
 const HighlightRegistry = @import("css/highlights.zig").HighlightRegistry;
+const Worklet = @import("audio/worklet.zig").Worklet;
 const supports_condition = @import("css/supports.zig");
 const typed_om = @import("css/typed_om.zig");
 
@@ -223,12 +224,11 @@ pub const JsApi = struct {
     // probes/expr-b85-css-namespace.js. The declarations below are in that
     // order because the bridge emits own properties in declaration order.
     //
-    // Two of Chrome's 69 names are deliberately absent rather than stubbed:
-    // `registerProperty`, which is only meaningful once the cascade honours a
-    // registered custom property's syntax and initial value, and
-    // `paintWorklet`, which needs a Worklet that can actually load a module.
-    // A present-but-inert name is a different lie from an absent one and this
-    // repo has no way to measure which a guard prefers, so neither is invented.
+    // All 69 are here. Two of them were absent for a long time on the grounds
+    // that a present-but-inert name is its own kind of lie -- and that bar is
+    // what each of them had to clear: `registerProperty` reaches the cascade
+    // (css/registered_property.zig) and `paintWorklet` really fetches and
+    // compiles a module (css/paint_worklet.zig).
 
     // `CSS.highlights` is an own accessor on the namespace object and answers
     // the same HighlightRegistry every time (measured on Chrome 150).
@@ -317,6 +317,15 @@ pub const JsApi = struct {
     pub const vmin = bridge.function(unitFactory(.vmin), .{ .static = true });
     pub const vw = bridge.function(unitFactory(.vw), .{ .static = true });
     pub const x = bridge.function(unitFactory(.x), .{ .static = true });
+
+    /// Last in Chrome's own-name order -- after every unit factory, where the
+    /// alphabetical run does not put it (measured,
+    /// probes/expr-b85-css-namespace.js). An accessor answering the same
+    /// Worklet on every read, like `highlights`.
+    pub const paintWorklet = bridge.accessor(_paintWorklet, null, .{ .static = true });
+    fn _paintWorklet(frame: *Frame) *Worklet {
+        return frame.window.getPaintWorklet();
+    }
 };
 
 const testing = @import("../../testing.zig");
@@ -330,4 +339,12 @@ test "WebApi: CSS namespace" {
 
 test "WebApi: CSS supports" {
     try testing.htmlRunner("css/supports_condition.html", .{});
+}
+
+test "WebApi: CSS registerProperty" {
+    try testing.htmlRunner("css/registered_property.html", .{});
+}
+
+test "WebApi: CSS paintWorklet" {
+    try testing.htmlRunner("css/paint_worklet.html", .{});
 }

@@ -65,5 +65,62 @@
     const plainDoc = new Document();
     testing.expectEqual('undefined', typeof plainDoc.all);
   </script>
+
+  <script id=all_collection_repeated_name>
+  {
+    // One name, more than one element: `document.all` answers an
+    // HTMLCollection, not the first match. Measured on Chrome 151
+    // (scratch/b80/remnants.mjs, scratch/b80/.q2.js) over every way two
+    // elements can share a name here -- an `id` twice, a name twice, an id and
+    // a name, and two different element kinds -- because the lookup is one set:
+    // every element whose `id` matches plus every "all"-named element whose
+    // `name` matches, in tree order.
+    const holder = document.createElement('div');
+    holder.innerHTML = '<a name="q2a"></a><div id="q2a"></div>' +
+      '<div id="q2b"></div><div id="q2b"></div>' +
+      '<a name="q2c"></a><a name="q2c"></a>' +
+      '<span name="q2d"></span><span name="q2d"></span>' +
+      '<input name="q2e"><a name="q2e"></a>';
+    document.body.appendChild(holder);
+
+    const all = document.all;
+    const shape = (v) => v === undefined ? 'undefined' : v === null ? 'null'
+      : (v.constructor ? v.constructor.name : '?') + (v.length !== undefined ? '[' + v.length + ']' : '');
+    const tags = (v) => v && v.length !== undefined
+      ? Array.prototype.map.call(v, (e) => e.tagName).join('+')
+      : (v ? v.tagName : '-');
+
+    testing.expectEqual(
+      ['q2a prop=HTMLCollection[2] named=HTMLCollection[2] call=HTMLCollection[2] tags=A+DIV',
+       'q2b prop=HTMLCollection[2] named=HTMLCollection[2] call=HTMLCollection[2] tags=DIV+DIV',
+       'q2c prop=HTMLCollection[2] named=HTMLCollection[2] call=HTMLCollection[2] tags=A+A',
+       'q2d prop=undefined named=null call=null tags=-',
+       'q2e prop=HTMLCollection[2] named=HTMLCollection[2] call=HTMLCollection[2] tags=INPUT+A'].join('\n'),
+      ['q2a', 'q2b', 'q2c', 'q2d', 'q2e'].map((n) => n +
+        ' prop=' + shape(all[n]) + ' named=' + shape(all.namedItem(n)) +
+        ' call=' + shape(all(n)) + ' tags=' + tags(all[n])).join('\n'));
+
+    // The collection is live and it is the same object on every read, and the
+    // property carrying it has the same bits a single match gets.
+    const collection = all.q2b;
+    const before = collection.length;
+    const extra = document.createElement('div');
+    extra.id = 'q2b';
+    document.body.appendChild(extra);
+    const after = collection.length;
+    extra.remove();
+    const d = Object.getOwnPropertyDescriptor(all, 'q2b');
+    testing.expectEqual(
+      ['live=2->3', 'same=true', 'tag=[object HTMLCollection]',
+       'desc=data e=false c=true w=false'].join('\n'),
+      ['live=' + before + '->' + after,
+       'same=' + (all.q2b === all.q2b),
+       'tag=' + Object.prototype.toString.call(collection),
+       'desc=' + (d ? ('value' in d ? 'data' : 'accessor') +
+         ' e=' + d.enumerable + ' c=' + d.configurable + ' w=' + d.writable : 'absent')].join('\n'));
+
+    holder.remove();
+  }
+  </script>
 </body>
 </html>

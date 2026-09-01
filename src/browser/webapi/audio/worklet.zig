@@ -20,16 +20,22 @@
 //! hang off a context.
 //!
 //! There is no AudioWorkletGlobalScope here — no second JS realm, no render
-//! thread to run a processor on — so `addModule()` rejects. That is not a stub
-//! standing in for something better: it is the same answer Chrome gives when
-//! the module will not load (measured: `AbortError: Unable to load a worklet's
-//! module.`), and it keeps the rest of the surface self-consistent, because
-//! AudioWorkletNode refuses to construct for exactly that reason and says so
-//! in Chrome's own words. A resolved addModule() followed by a
+//! thread to run a processor on — so `audioWorklet.addModule()` rejects. That
+//! is not a stub standing in for something better: it is the same answer Chrome
+//! gives when the module will not load (measured: `AbortError: Unable to load a
+//! worklet's module.`), and it keeps the rest of the surface self-consistent,
+//! because AudioWorkletNode refuses to construct for exactly that reason and
+//! says so in Chrome's own words. A resolved addModule() followed by a
 //! still-refusing AudioWorkletNode would be the contradiction.
 //!
 //! The one place Chrome differs is a `data:` URL, which it loads and resolves.
 //! Reproducing that would mean claiming a global scope we do not have.
+//!
+//! `CSS.paintWorklet` is the same interface and does *not* take that line: a
+//! paint module is fetched and compiled for real (../css/paint_worklet.zig).
+//! Nothing downstream of it contradicts a resolved load, because nothing
+//! rasterises at all — there is no paint-worklet equivalent of
+//! AudioWorkletNode saying "you never loaded a module".
 //!
 //! AudioParamMap is likewise shape-only: it is reachable through
 //! AudioWorkletNode.parameters and nowhere else, so no script can obtain one.
@@ -42,6 +48,7 @@ const js = @import("../../js/js.zig");
 
 const idl = @import("idl.zig");
 const DOMException = @import("../DOMException.zig");
+const paint_worklet = @import("../css/paint_worklet.zig");
 const AudioNode = @import("AudioNode.zig");
 const AudioParam = @import("AudioParam.zig");
 
@@ -58,19 +65,33 @@ pub fn registerTypes() []const type {
     };
 }
 
-/// window.Worklet — the base AudioWorklet inherits from. Chrome exposes it
+/// window.Worklet — the base AudioWorklet inherits from, and the exact type
+/// `CSS.paintWorklet` hands out (measured: its constructor is `Worklet` and its
+/// chain is `Worklet<Object`, with no subclass in between). Chrome exposes it
 /// globally even though nothing can construct one.
 pub const Worklet = struct {
     _type: Type,
 
     pub const Type = union(enum) {
         audio: *AudioWorklet,
+        // CSS.paintWorklet. A bare Worklet, so the variant carries nothing;
+        // `Local.resolveValue` maps a void payload to this type's own class.
+        paint: void,
     };
 
-    pub fn addModule(_: *Worklet, url: ?js.Value, exec: *const Execution) !js.Promise {
+    /// The two halves of this interface answer differently, and the split is
+    /// deliberate. A paint module is fetched and compiled for real
+    /// (../css/paint_worklet.zig); an audio one still rejects, because
+    /// resolving it would contradict the AudioWorkletNode below, which refuses
+    /// to construct in Chrome's own words *because* no module was loaded. See
+    /// this file's header.
+    pub fn addModule(self: *Worklet, url: ?js.Value, exec: *const Execution) !js.Promise {
         const local = exec.js.local.?;
         if (url == null) return local.rejectPromise(.{ .type_error = "Failed to execute 'addModule' on " ++
             "'Worklet': 1 argument required, but only 0 present." });
+        if (self._type == .paint) {
+            return paint_worklet.addModule(try url.?.toStringSlice(), exec);
+        }
         var resolver = local.createPromiseResolver();
         resolver.reject("Worklet.addModule", DOMException.init("Unable to load a worklet's module.", "AbortError"));
         return resolver.promise();
