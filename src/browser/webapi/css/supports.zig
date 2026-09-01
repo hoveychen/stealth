@@ -312,7 +312,7 @@ fn declarationSupported(name_raw: []const u8, value_raw: []const u8) bool {
 
 /// Every CSS name a declaration answers to. Two maps rather than one because
 /// the generated lists are in two different vocabularies: `computed` holds the
-/// 475 longhands already spelled the CSS way, while `aliases` holds the 736 IDL
+/// 475 longhands already spelled the CSS way, while `aliases` holds the 745 IDL
 /// attribute names -- lowerCamelCase, `textWrap` and `webkitAppearance` -- so
 /// they have to be turned back into property names before they can answer a
 /// question about `(text-wrap: balance)`.
@@ -332,7 +332,9 @@ const computed_set = blk: {
 };
 
 const alias_set = blk: {
-    @setEvalBranchQuota(64 * chrome_properties.aliases.len);
+    // 512 rather than 64 per name: the `alias_set.has` below is a hash lookup
+    // over 736 entries and it runs once per candidate.
+    @setEvalBranchQuota(512 * chrome_properties.aliases.len);
     var kvs: [chrome_properties.aliases.len]struct { []const u8, void } = undefined;
     var i: usize = 0;
     for (chrome_properties.aliases) |name| {
@@ -341,6 +343,13 @@ const alias_set = blk: {
         // which `computed` already carries, and deriving `css-float` from it
         // would invent a name Chrome does not have.
         if (std.mem.eql(u8, name, "cssFloat")) continue;
+        // Nine names in that list are ones Chrome only ever *lists* -- the
+        // `epub*` block, which getOwnPropertyNames reports and nothing else
+        // answers. Their dashed spellings (`-epub-word-break`) are real
+        // property aliases in Chrome and no part of this engine parses one, so
+        // claiming support here would put @supports out of step with what a
+        // declaration retains, which is the one invariant this file has.
+        if (!chrome_properties.alias_set.has(name)) continue;
         kvs[i] = .{ propertyNameOf(name), {} };
         i += 1;
     }
