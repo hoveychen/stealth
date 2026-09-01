@@ -571,7 +571,14 @@ const NamedObjectEntry = struct {
 /// rebuilt when it has.
 fn namedObjectEntries(self: *Document, frame: *Frame) ![]const NamedObjectEntry {
     const version = frame._page.dom_version;
-    if (self._named_objects_version == version) {
+
+    // The parser does not move the DOM version -- only the DOM APIs do -- so a
+    // list built while the document is still being parsed would never see the
+    // rest of the page. An inline script that reads one unknown name early is
+    // enough to trigger that, and it left every named object of the document
+    // missing for the whole run. While loading, walk every time.
+    const cacheable = self._ready_state != .loading;
+    if (cacheable and self._named_objects_version == version) {
         return self._named_objects.items;
     }
 
@@ -598,7 +605,7 @@ fn namedObjectEntries(self: *Document, frame: *Frame) ![]const NamedObjectEntry 
         }
     }
 
-    self._named_objects_version = version;
+    self._named_objects_version = if (cacheable) version else null;
     return entries.items;
 }
 
@@ -627,6 +634,22 @@ pub fn namedObject(self: *Document, name: []const u8, frame: *Frame) ?NamedObjec
             };
         }
         return .{ .element = entry.element };
+    }
+    return null;
+}
+
+/// What `window.<name>` reaches, which is the document's named objects plus
+/// the id of *any* element -- a window is named by an id a document is not
+/// (measured on Chrome 151, scratch/b79/window-names.mjs: `window.someDivId`
+/// is the div, `document.someDivId` is undefined). The document's list already
+/// answers a frame's name with its window, which is the one case where a name
+/// and an id reach different things.
+pub fn windowNamedObject(self: *Document, name: []const u8, frame: *Frame) ?NamedObject {
+    if (self.namedObject(name, frame)) |named| {
+        return named;
+    }
+    if (self.getElementById(name, frame)) |element| {
+        return .{ .element = element };
     }
     return null;
 }
