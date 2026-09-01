@@ -33,7 +33,12 @@ pub const JsApi = struct {
     /// The only member of its own Chrome has here: a live HTMLCollection of the
     /// datalist's <option> descendants (measured, length 2 for two options).
     pub const options = bridge.accessor(_options, null, .{});
-    fn _options(self: *DataList, frame: *Frame) !collections.NodeLive(.tag) {
-        return collections.NodeLive(.tag).init(self.asNode(), .option, frame);
+    fn _options(self: *DataList, frame: *Frame) !*collections.HTMLCollection {
+        const root = self.asNode();
+        return collections.identity.get(
+            frame,
+            .{ .root = root, .kind = .data_list_options, .name = "" },
+            collections.NodeLive(.tag).init(root, .option, frame).htmlCollectionValue(),
+        );
     }
 };

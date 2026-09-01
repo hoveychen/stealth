@@ -31,6 +31,7 @@ const Event = @import("../../Event.zig");
 const ValidityState = @import("ValidityState.zig");
 
 const popover = @import("../popover.zig");
+const collections = @import("../../collections.zig");
 
 const Button = @This();
 
@@ -59,7 +60,7 @@ pub fn getForm(self: *Button, frame: *Frame) ?*Form {
     return Form.ownerOf(self.asElement(), frame);
 }
 
-pub fn getLabels(self: *Button, frame: *Frame) !js.Array {
+pub fn getLabels(self: *Button, frame: *Frame) !*collections.NodeList {
     return @import("Label.zig").getControlLabels(self.asElement(), frame);
 }
 

@@ -28,6 +28,7 @@ const ValidityState = @import("ValidityState.zig");
 const barred_validation = @import("barred_validation.zig");
 
 const HtmlElement = @import("../Html.zig");
+const collections = @import("../../collections.zig");
 
 const Output = @This();
 
@@ -50,7 +51,7 @@ pub fn asNode(self: *Output) *Node {
     return self.asElement().asNode();
 }
 
-pub fn getLabels(self: *Output, frame: *Frame) !js.Array {
+pub fn getLabels(self: *Output, frame: *Frame) !*collections.NodeList {
     return @import("Label.zig").getControlLabels(self.asElement(), frame);
 }
 

@@ -50,6 +50,9 @@ const Mode = enum {
     selected_options,
     links,
     anchors,
+    // The labels of one control: every <label> whose labelled control is it,
+    // in tree order. A NodeList rather than an HTMLCollection, like `.name`.
+    labels,
     form,
     form_submittable,
     fieldset,
@@ -96,6 +99,7 @@ const Filters = union(Mode) {
     selected_options,
     links,
     anchors,
+    labels: struct { control: *Element, frame: *Frame },
     form: struct { form: *Form, form_id: ?[]const u8 },
     form_submittable: struct { form: *Form, form_id: ?[]const u8 },
     fieldset,
@@ -115,7 +119,7 @@ const Filters = union(Mode) {
 // But, if the version hasn't changed, then we can leverage other stateful data
 // to improve performance. For example, we cache the length property. So once
 // we've walked the tree to figure the length, we can re-use the cached property
-// if the DOM is unchanged (i.e. if our _cached_version == page.dom_version).
+// if the DOM is unchanged (i.e. if our _cached_version == page.liveVersion()).
 //
 // We do something similar for indexed getter (e.g. coll[4]), by preserving the
 // last node visited in the tree (implicitly by not resetting the TreeWalker).
@@ -128,7 +132,7 @@ const Filters = union(Mode) {
 pub fn NodeLive(comptime mode: Mode) type {
     const Filter = Filters.TypeOf(mode);
     const TW = switch (mode) {
-        .tag, .tag_name, .tag_name_ns, .class_name, .name, .all_named, .all_elements, .links, .anchors, .form, .form_submittable, .fieldset => TreeWalker.FullExcludeSelf,
+        .tag, .tag_name, .tag_name_ns, .class_name, .name, .all_named, .all_elements, .links, .anchors, .labels, .form, .form_submittable, .fieldset => TreeWalker.FullExcludeSelf,
         .child_elements, .child_tag, .cells => TreeWalker.Children,
         // Not a tree-order walk: see TreeWalker.TableRows.
         .table_rows => TreeWalker.TableRows,
@@ -160,7 +164,7 @@ pub fn NodeLive(comptime mode: Mode) type {
                 ._last_length = null,
                 ._filter = filter,
                 ._tw = TW.init(root, .{}),
-                ._cached_version = frame._page.dom_version,
+                ._cached_version = frame._page.liveVersion(),
             };
         }
 
@@ -427,6 +431,12 @@ pub fn NodeLive(comptime mode: Mode) type {
                     if (el.is(Anchor) == null) return false;
                     return el.hasAttributeSafe(comptime .wrap("name"));
                 },
+                .labels => {
+                    const el = node.is(Element) orelse return false;
+                    if (el.getTag() != .label) return false;
+                    const label = el.is(Element.Html.Label) orelse return false;
+                    return label.getControl(self._filter.frame) == self._filter.control;
+                },
                 .form, .form_submittable => {
                     const el = node.is(Element) orelse return false;
                     const ok = if (mode == .form)
@@ -507,7 +517,7 @@ pub fn NodeLive(comptime mode: Mode) type {
         }
 
         fn versionCheck(self: *Self, frame: *const Frame) bool {
-            const current = frame._page.dom_version;
+            const current = frame._page.liveVersion();
             if (current == self._cached_version) {
                 return true;
             }
@@ -522,9 +532,12 @@ pub fn NodeLive(comptime mode: Mode) type {
         const HTMLCollection = @import("HTMLCollection.zig");
         const NodeList = @import("NodeList.zig");
 
-        pub fn runtimeGenericWrap(self: Self, frame: *Frame) !if (mode == .name) *NodeList else *HTMLCollection {
+        pub fn runtimeGenericWrap(self: Self, frame: *Frame) !if (mode == .name or mode == .labels) *NodeList else *HTMLCollection {
             if (comptime mode == .name) {
                 return frame._factory.create(NodeList{ ._data = .{ .name = self } });
+            }
+            if (comptime mode == .labels) {
+                return frame._factory.create(NodeList{ ._data = .{ .labels = self } });
             }
             return frame._factory.create(self.htmlCollectionValue());
         }
@@ -532,6 +545,7 @@ pub fn NodeLive(comptime mode: Mode) type {
         pub fn htmlCollectionValue(self: Self) HTMLCollection {
             return switch (mode) {
                 .name => @compileError("name mode wraps as a NodeList"),
+                .labels => @compileError("labels mode wraps as a NodeList"),
                 .tag => .{ ._data = .{ .tag = self } },
                 .tag_name => .{ ._data = .{ .tag_name = self } },
                 .tag_name_ns => .{ ._data = .{ .tag_name_ns = self } },
@@ -557,6 +571,11 @@ pub fn NodeLive(comptime mode: Mode) type {
 const testing = @import("../../../testing.zig");
 test "WebApi: NodeLive" {
     try testing.htmlRunner("collections/live_collections.html", .{});
+}
+
+test "WebApi: NodeLive identity" {
+    try testing.htmlRunner("collections/identity.html", .{});
+    try testing.htmlRunner("collections/parse_liveness.html", .{});
 }
 
 // Indexed access is linear when the cursor works and quadratic when it doesn't,

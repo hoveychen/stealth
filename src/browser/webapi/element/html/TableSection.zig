@@ -26,8 +26,13 @@ pub fn asNode(self: *TableSection) *Node {
     return self.asElement().asNode();
 }
 
-pub fn getRows(self: *TableSection, frame: *Frame) collections.NodeLive(.child_tag) {
-    return collections.NodeLive(.child_tag).init(self.asNode(), .tr, frame);
+pub fn getRows(self: *TableSection, frame: *Frame) !*collections.HTMLCollection {
+    const root = self.asNode();
+    return collections.identity.get(
+        frame,
+        .{ .root = root, .kind = .section_rows, .name = "" },
+        collections.NodeLive(.child_tag).init(root, .tr, frame).htmlCollectionValue(),
+    );
 }
 
 pub fn insertRow(self: *TableSection, index_: ?i32, frame: *Frame) !*Node {
@@ -40,7 +45,7 @@ pub fn deleteRow(self: *TableSection, index: i32, frame: *Frame) !void {
     if (index < -1) {
         return error.IndexSizeError;
     }
-    var rows = self.getRows(frame);
+    const rows = try self.getRows(frame);
     const len: i32 = @intCast(rows.length(frame));
     const at = if (index == -1) len - 1 else index;
     if (at < 0 or at >= len) {

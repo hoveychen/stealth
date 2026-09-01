@@ -219,24 +219,33 @@
   document.body.appendChild(plainDiv);
   testing.expectEqual('block', window.getComputedStyle(plainDiv).getPropertyValue('display'));
 
-  // Repeated calls return the same object (as in Chrome); distinct per element.
-  testing.expectTrue(window.getComputedStyle(div) === window.getComputedStyle(div));
-  testing.expectTrue(window.getComputedStyle(div) === cs);
-  testing.expectFalse(window.getComputedStyle(div) === window.getComputedStyle(plainDiv));
-  // The cached object stays a live view.
-  div.style.setProperty('text-transform', 'lowercase');
-  testing.expectEqual('lowercase', window.getComputedStyle(div).getPropertyValue('text-transform'));
-
-  // Pseudo-elements get their own cache entry, keyed per (element, pseudo);
-  // the legacy single-colon form maps to the same entry as the double-colon
-  // one, and a pseudoElt without a leading colon is ignored (CSSOM).
+  // Every call mints a new declaration. This used to assert the opposite, with
+  // "(as in Chrome)" next to it -- the expectation had been written from our
+  // own output. Chrome 151 answers false to all eleven of these, and so do we
+  // now (scratch/b81/gcs5.js, both arms cell for cell).
   const before = window.getComputedStyle(div, ':before');
-  testing.expectTrue(before === window.getComputedStyle(div, '::before'));
-  testing.expectTrue(before === window.getComputedStyle(div, ':BEFORE'));
-  testing.expectFalse(before === cs);
-  testing.expectFalse(before === window.getComputedStyle(div, '::after'));
-  testing.expectTrue(cs === window.getComputedStyle(div, 'before'));
-  testing.expectTrue(cs === window.getComputedStyle(div, ''));
+  testing.expectEqual(
+    ['twice=false', 'vsHeld=false', 'vsOther=false',
+     'beforeVsDouble=false', 'beforeVsUpper=false', 'beforeVsPlain=false',
+     'beforeVsAfter=false', 'plainVsNoColon=false', 'plainVsEmpty=false'].join('\n'),
+    ['twice=' + (window.getComputedStyle(div) === window.getComputedStyle(div)),
+     'vsHeld=' + (window.getComputedStyle(div) === cs),
+     'vsOther=' + (window.getComputedStyle(div) === window.getComputedStyle(plainDiv)),
+     'beforeVsDouble=' + (before === window.getComputedStyle(div, '::before')),
+     'beforeVsUpper=' + (before === window.getComputedStyle(div, ':BEFORE')),
+     'beforeVsPlain=' + (before === cs),
+     'beforeVsAfter=' + (before === window.getComputedStyle(div, '::after')),
+     'plainVsNoColon=' + (cs === window.getComputedStyle(div, 'before')),
+     'plainVsEmpty=' + (cs === window.getComputedStyle(div, ''))].join('\n'));
+
+  // A declaration already handed out stays a live view of the element, which is
+  // what identity was standing in for here. Both arms read `lowercase` from the
+  // held object and from a fresh one.
+  div.style.setProperty('text-transform', 'lowercase');
+  testing.expectEqual('lowercase|lowercase|lowercase',
+    [cs.getPropertyValue('text-transform'),
+     window.getComputedStyle(div).getPropertyValue('text-transform'),
+     window.getComputedStyle(div, '::before').getPropertyValue('text-transform')].join('|'));
 
   // A normal declaration must not override an earlier !important one, and the
   // computed and inline (el.style) paths must agree on which declaration won.

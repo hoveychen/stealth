@@ -39,6 +39,7 @@ const filesystem = @import("../../filesystem.zig");
 const handler_property = @import("../../handler_property.zig");
 const reflection = @import("../reflection.zig");
 const text_selection = @import("text_selection.zig");
+const collections = @import("../../collections.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
 /// function is a listener like any other, so it lives in the event manager's
@@ -1002,10 +1003,11 @@ pub fn setSelectionRange(
     try self.dispatchSelectionChangeEvent(frame);
 }
 
-pub fn getLabels(self: *Input, frame: *Frame) !js.Array {
-    if (self._input_type == .hidden) {
-        return frame.js.local.?.newArray(0);
-    }
+pub fn getLabels(self: *Input, frame: *Frame) !*collections.NodeList {
+    // A hidden input is not labellable, so nothing can name it -- which the
+    // shared walk already answers, because `Label.getControl` never returns a
+    // hidden input. One path, so the empty case is an empty NodeList rather
+    // than an empty Array of a different type.
     return @import("Label.zig").getControlLabels(self.asElement(), frame);
 }
 
