@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A collapsing `white-space` renders a run of document white space as ONE space,
+and drops it entirely at either end of the line. This engine rendered every
+character: `a   b` was five characters wide where Chrome makes it three, and
+`   ab` was five where Chrome makes it two. That is the default value on any
+page whose HTML is indented, so it was most of the text on most of them.
+
+Measured on Chrome 151 at `--force-device-scale-factor=2` -- the factor this
+engine's persona claims, and the one text_advance_grid.html explains -- on
+https://example.com with the headed user agent. Probes
+scratch/b84/expr-b84-testcases.js, which builds these cases in this DOM shape so
+the numbers below are Chrome's own rather than arithmetic; readings in
+scratch/b84/tc-cr2.json. The wider survey they came out of is
+scratch/b83/expr-b83-ws-truth.js, 26 of whose 38 readings this engine had wrong.
+
+The font is `72px monospace`, so one character is 43.4px and a width says how
+many characters were measured: 43 is one, 87 is two, 130 is three, 173 is four,
+217 is five and 303 is seven.
+
+Three separate paths measure text and all three had to learn this, which is why
+the cases below are grouped by the path they reach rather than by the value:
+
+  * an inline box goes through inlineInk -- a <span> with text of its own;
+  * a shrink-to-fit block goes through textLayout's one-line shortcut;
+  * a block whose content needs line boxes goes through flowInline, which is
+    the case with an inline child.
+
+`white-space: pre` is here as the control: nothing about it changes, so a
+collapse that fired where it should not shows up as a `pre` case going wrong.
+
+Not asserted here, because it is line BREAKING rather than collapsing and the
+next task owns it: a preserved newline (`pre`, `pre-wrap`, `pre-line`,
+`break-spaces`) makes a line of its own, so `a\nb` under `pre-line` is 43 wide
+and 168 tall in Chrome and one 130x84 line here.
+-->
+
+<script id=collapsing_white_space_renders_a_run_as_one_space>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;left:-9999px;top:0;width:2000px;font:72px monospace;');
+  document.body.appendChild(host);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // One <span> per reading, built by the caller so a case can hand it more than
+  // one text node, and thrown away after: the host holds one box at a time so
+  // nothing measured here is a sibling's.
+  const box = (ws, build) => {
+    host.innerHTML = '';
+    const el = document.createElement('span');
+    if (ws) el.style.whiteSpace = ws;
+    build(el);
+    host.appendChild(el);
+    return el;
+  };
+  const text = (s) => (el) => el.appendChild(document.createTextNode(s));
+  const size = (what, ws, build, width, height) => {
+    const el = box(ws, build);
+    eq(what + ' width', el.offsetWidth, width);
+    eq(what + ' height', el.offsetHeight, height);
+  };
+
+  // The three values that collapse: `normal` and `nowrap` are
+  // `white-space-collapse: collapse`, `pre-line` is `preserve-breaks`, and
+  // preserving the breaks does not preserve the spaces.
+  for (const ws of ['normal', 'nowrap', 'pre-line']) {
+    // A single space between two words is already what it renders as.
+    size(ws + ' one space', ws, text('a b'), 130, 84);
+    // A run of them is one space.
+    size(ws + ' three spaces', ws, text('a   b'), 130, 84);
+    // At either end of the line it is nothing at all.
+    size(ws + ' leading', ws, text('   ab'), 87, 84);
+    size(ws + ' trailing', ws, text('ab   '), 87, 84);
+    size(ws + ' both ends', ws, text('  a b  '), 130, 84);
+    // Every character CSS calls document white space collapses, not just the
+    // space: a tab is one space, and so is a run mixing all of them.
+    size(ws + ' tab', ws, text('a\tb'), 130, 84);
+    size(ws + ' mixed run', ws, text('a \t\r b'), 130, 84);
+    // A non-breaking space is NOT document white space, so two of them are two
+    // characters however the property reads.
+    size(ws + ' nbsp', ws, text('a  b'), 173, 84);
+    // Text with nothing but white space in it collapses away entirely, so the
+    // box has no line and no size.
+    size(ws + ' space only', ws, text('   '), 0, 0);
+    // The run crosses a text node boundary in both directions: two nodes
+    // holding one word are one word, and a space either side of the boundary is
+    // still one space.
+    size(ws + ' split word', ws, (el) => {
+      el.appendChild(document.createTextNode('ab'));
+      el.appendChild(document.createTextNode('cd'));
+    }, 173, 84);
+    size(ws + ' split space', ws, (el) => {
+      el.appendChild(document.createTextNode('a '));
+      el.appendChild(document.createTextNode(' b'));
+    }, 130, 84);
+    // And across an inline child, which is a second box on the same line: the
+    // space before it and the space after it are each one space, so `a  <b>b</b>
+    //   c` is the five characters of `a b c`. A plain <span> and not a <b>:
+    // the point here is the run, and a bold face measures differently.
+    size(ws + ' inline child', ws, (el) => {
+      el.appendChild(document.createTextNode('a  '));
+      const b = document.createElement('span');
+      b.appendChild(document.createTextNode('b'));
+      el.appendChild(b);
+      el.appendChild(document.createTextNode('  c'));
+    }, 217, 84);
+  }
+
+  // The control. `pre` preserves, so every one of those readings is the
+  // character count of the string as written.
+  size('pre one space', 'pre', text('a b'), 130, 84);
+  size('pre both ends', 'pre', text('  a b  '), 303, 84);
+  size('pre nbsp', 'pre', text('a  b'), 173, 84);
+  size('pre space only', 'pre', text('   '), 130, 84);
+
+  // The same question asked of a block box rather than an inline one, which is
+  // the other two paths. Absolutely positioned so the box is its content and
+  // not the line it sits on.
+  {
+    const shrink = 'position:absolute;left:0;top:0;';
+    const blk = (what, css, build, width) => {
+      host.innerHTML = '';
+      const el = document.createElement('div');
+      el.setAttribute('style', shrink + css);
+      build(el);
+      host.appendChild(el);
+      eq(what, el.offsetWidth, width);
+    };
+    blk('block three spaces', '', text('a   b'), 130);
+    blk('block leading', '', text('   ab'), 87);
+    blk('block trailing', '', text('ab   '), 87);
+    blk('block pre three spaces', 'white-space:pre', text('a   b'), 217);
+    // An inline child sends the block through the line walk instead of the
+    // one-line shortcut.
+    blk('block inline child', '', (el) => {
+      el.appendChild(document.createTextNode('a  '));
+      const b = document.createElement('span');
+      b.appendChild(document.createTextNode('b'));
+      el.appendChild(b);
+      el.appendChild(document.createTextNode('  c'));
+    }, 217);
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+The other half. A PRESERVING `white-space` keeps the run as written, which this
+engine already measured right, but it also makes a newline a line of its own and
+sends a tab to the next eight-character stop, neither of which reached the box:
+`a\nb` came out one 130x84 line where Chrome makes two 43x84 ones, and `a\tb`
+was three characters where Chrome makes nine.
+
+The line rules are the ones flowInline already had for a block, and the readings
+here are what put them there: one more line than there are breaks, less one when
+the content ends with a break -- so `a\nb\n` is two lines and `a\n\nb` is three
+-- and the box is as wide as its WIDEST line rather than as the sum of them. A
+<br> is a break on the same terms, whatever white-space says, which is why the
+last case is a collapsing one.
+
+The tab grid is eight spaces wide and a tab always moves: `a\tb` is 9 characters,
+`\tb` is 9 as well, `a\t\tb` is 17, and `aaaaaaaaa\tb` -- already past the first
+stop -- is 17 too.
+
+Same probe and same Chrome as the block above: scratch/b84/expr-b84-preserve.js,
+readings in scratch/b84/pre-cr.json, 39 of whose 52 this engine had wrong. The
+carriage-return cases are scratch/b84/expr-b84-cr.js.
+-->
+
+<script id=preserved_white_space_breaks_lines_and_walks_to_tab_stops>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;left:-9999px;top:0;width:2000px;font:72px monospace;');
+  document.body.appendChild(host);
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+  const text = (s) => (el) => el.appendChild(document.createTextNode(s));
+  const broken = (el) => {
+    el.appendChild(document.createTextNode('a'));
+    el.appendChild(document.createElement('br'));
+    el.appendChild(document.createTextNode('bb'));
+  };
+  const span = (what, ws, build, width, height) => {
+    host.innerHTML = '';
+    const el = document.createElement('span');
+    el.style.whiteSpace = ws;
+    build(el);
+    host.appendChild(el);
+    eq('span ' + what + ' width', el.offsetWidth, width);
+    eq('span ' + what + ' height', el.offsetHeight, height);
+  };
+  const blk = (what, ws, build, width, height) => {
+    host.innerHTML = '';
+    const el = document.createElement('div');
+    el.setAttribute('style', 'position:absolute;left:0;top:0;white-space:' + ws);
+    build(el);
+    host.appendChild(el);
+    eq('block ' + what + ' width', el.offsetWidth, width);
+    eq('block ' + what + ' height', el.offsetHeight, height);
+  };
+
+  // The three values that preserve. They differ from each other in how a line
+  // too long for its box breaks, which nothing here is, so all three answer the
+  // same to all of this.
+  for (const ws of ['pre', 'pre-wrap', 'break-spaces']) {
+    // Preserved, which already worked and is here so it keeps working.
+    span(ws + ' spaces', ws, text('a   b'), 217, 84);
+    span(ws + ' leading', ws, text('   ab'), 217, 84);
+    span(ws + ' trailing', ws, text('ab   '), 217, 84);
+    // One more line than there are breaks...
+    span(ws + ' newline', ws, text('a\nb'), 43, 168);
+    span(ws + ' two newlines', ws, text('a\nbb\nccc'), 130, 252);
+    span(ws + ' blank line', ws, text('a\n\nb'), 43, 252);
+    span(ws + ' leading newline', ws, text('\na'), 43, 168);
+    // ... less one when the content ends with one.
+    span(ws + ' trailing newline', ws, text('a\nb\n'), 43, 168);
+    // The tab grid, from the start of the line.
+    span(ws + ' tab', ws, text('a\tb'), 390, 84);
+    span(ws + ' leading tab', ws, text('\tb'), 390, 84);
+    span(ws + ' two tabs', ws, text('a\t\tb'), 737, 84);
+    span(ws + ' tab past stop', ws, text('aaaaaaaaa\tb'), 737, 84);
+    // A <br> is a break of its own.
+    span(ws + ' br', ws, broken, 87, 168);
+    // And the same three questions of a block box, which is the other path.
+    blk(ws + ' newline', ws, text('a\nbb'), 87, 168);
+    blk(ws + ' spaces', ws, text('a   b'), 217, 84);
+    blk(ws + ' tab', ws, text('a\tb'), 390, 84);
+  }
+
+  // `pre-line` preserves the breaks and collapses the spaces, so it is the one
+  // value that needs both halves at once: the run either side of a break
+  // collapses away against it, leaving two lines of `a` and `bb`.
+  span('pre-line newline', 'pre-line', text('a\nbb'), 87, 168);
+  span('pre-line spaced newline', 'pre-line', text('a   \n   bb'), 87, 168);
+  blk('pre-line newline', 'pre-line', text('a\nbb'), 87, 168);
+
+  // Only a LINE FEED is a segment break. A carriage return is not, under any
+  // value: preserved it renders as nothing, so `a\rb` is two characters on one
+  // line, and collapsed it is a space like any other white space. `a\r\nb` is
+  // two lines because of the line feed in it, not because of the pair -- a
+  // source document has its CRLF normalised away by the parser, so a CR in a
+  // text node came from script or from a character reference.
+  span('pre CR', 'pre', text('a\rb'), 87, 84);
+  span('pre CRLF', 'pre', text('a\r\nb'), 43, 168);
+  span('pre-line CR', 'pre-line', text('a\rb'), 130, 84);
+  span('normal CR', 'normal', text('a\rb'), 130, 84);
+
+  // A <br> under a collapsing value breaks the line too -- it is an element and
+  // not white space, so no value of this property has a say in it.
+  span('normal br', 'normal', broken, 87, 168);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+And the reading that made this a task at all: innerText. It reports the RENDERED
+text, so what it preserves is what `white-space` preserves -- and the flag here
+was the TAG, `pre` and nothing else. That got a <pre> right and everything else
+wrong in both directions: a <span style="white-space:pre"> collapsed its run,
+and a <pre style="white-space:normal"> kept one.
+
+Sixteen of the thirty-two readings in scratch/b84/expr-b84-innertext.js were
+wrong. Chrome 151, headed user agent, example.com; readings in
+scratch/b84/it-cr2.json.
+
+Two things this pins that are easy to guess wrong:
+
+  * a preserved carriage return is written OUT, not normalised to a line feed:
+    `a&#13;b` reads back with the CR in it. (The layout side does something
+    else again -- there a CR renders as nothing -- so the two are measured
+    separately.)
+  * `preserve-breaks` (which is what `pre-line` expands to) writes its breaks
+    literally rather than arming the pending-break counter that a block
+    boundary uses, because a leading one SURVIVES: `\na` reads "\na" where a
+    block boundary in the same position writes nothing.
+-->
+
+<script id=inner_text_preserves_what_white_space_preserves>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;left:-9999px;top:0;width:2000px;');
+  document.body.appendChild(host);
+
+  const wrong = [];
+  const eq = (what, got, want) => {
+    if (got !== want) wrong.push(what + ': want ' + JSON.stringify(want) + ', got ' + JSON.stringify(got));
+  };
+  const read = (what, html, want) => {
+    host.innerHTML = html;
+    eq(what, host.innerText, want);
+  };
+
+  const body = 'a   b\nc\td';
+  const kept = 'a   b\nc\td';
+  const collapsed = 'a b c d';
+  const breaks_only = 'a b\nc d';
+
+  // The shorthand, on an inline box and on a block one. `normal` and `nowrap`
+  // collapse both; `pre`, `pre-wrap` and `break-spaces` keep both; `pre-line`
+  // keeps the break and collapses the spaces.
+  for (const [ws, want] of [['normal', collapsed], ['nowrap', collapsed], ['pre', kept],
+                            ['pre-wrap', kept], ['pre-line', breaks_only], ['break-spaces', kept]]) {
+    read('span ' + ws, '<span style="white-space:' + ws + '">' + body + '</span>', want);
+    read('div ' + ws, '<div style="white-space:' + ws + '">' + body + '</div>', want);
+  }
+
+  // The longhand the shorthand expands to, which is the property actually read.
+  read('longhand collapse', '<div style="white-space-collapse:collapse">' + body + '</div>', collapsed);
+  read('longhand preserve', '<div style="white-space-collapse:preserve">' + body + '</div>', kept);
+  read('longhand preserve-breaks', '<div style="white-space-collapse:preserve-breaks">' + body + '</div>', breaks_only);
+  read('longhand break-spaces', '<div style="white-space-collapse:break-spaces">' + body + '</div>', kept);
+
+  // The tag is not the criterion, in either direction: a <pre> preserves
+  // because the UA stylesheet says so, and an author who says otherwise wins.
+  read('pre tag', '<pre>' + body + '</pre>', kept);
+  read('pre tag overridden', '<pre style="white-space:normal">' + body + '</pre>', collapsed);
+
+  // It inherits, so a child with no declaration of its own answers its
+  // ancestor's -- and one with a declaration answers its own.
+  read('inherited', '<div style="white-space:pre"><span>' + body + '</span></div>', kept);
+  read('inherited then off', '<div style="white-space:pre"><span style="white-space:normal">' + body + '</span></div>', collapsed);
+  read('off then inherited', '<div><span style="white-space:pre">' + body + '</span></div>', kept);
+
+  // `pre-line` is the value that needs both halves at once.
+  read('pre-line around break', '<div style="white-space:pre-line">a   \n   bb</div>', 'a\nbb');
+  read('pre-line blank line', '<div style="white-space:pre-line">a\n\nb</div>', 'a\n\nb');
+  read('pre-line leading break', '<div style="white-space:pre-line">\na</div>', '\na');
+  read('pre-line trailing break', '<div style="white-space:pre-line">a\n</div>', 'a\n');
+  read('pre-line leading spaces', '<div style="white-space:pre-line">   a</div>', 'a');
+  read('pre-line tab', '<div style="white-space:pre-line">a\tb</div>', 'a b');
+
+  // A preserved carriage return is written out as it stands.
+  read('pre CR', '<div style="white-space:pre">a&#13;b</div>', 'a\rb');
+  read('pre CRLF', '<div style="white-space:pre">a&#13;&#10;b</div>', 'a\r\nb');
+  read('pre trailing break', '<div style="white-space:pre">a\n</div>', 'a\n');
+
+  // The runs at either end, which only a preserving value keeps.
+  read('pre edges', '<div style="white-space:pre">   a   </div>', '   a   ');
+  read('normal edges', '<div style="white-space:normal">   a   </div>', 'a');
+
+  // Already right before any of this, and here so they stay right: a <br> and a
+  // block boundary are breaks of their own inside preserved text.
+  read('pre br', '<div style="white-space:pre">a<br>b</div>', 'a\nb');
+  read('pre nested block', '<div style="white-space:pre">a<div>b</div>c</div>', 'a\nb\nc');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
