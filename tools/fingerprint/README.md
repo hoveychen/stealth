@@ -25180,3 +25180,108 @@ resemblance is an assertion to test, not a backdrop. When a synthetic reading is
 flat where theory says it should not be, suspect the page before the engine, and
 cross-check against a `sample` of a live station -- which is the ground truth for
 exactly this class of premise.
+
+## The cache pays where the page does not mutate, and that is most of it (B99, 2026-08-31)
+
+`cascade-per-element-memo` is the second of the two levers the chapter above
+named, and the one that carries the repeated-read factor. It is merged.
+
+### The premise B73 left, measured
+
+B73's memo over the height walk died on live pages, and its note reads "页面自己在
+建 DOM，几乎每次读之间都失效". Any cross-read cache inherits that objection, so it
+was worth one measurement before writing a line of it.
+`scratch/b99/mutation-between-reads-sync.mjs` installs a document-start hook that
+wraps the mutation entry points **synchronously** — appendChild and friends,
+setAttribute and friends, `classList`, and the `className` / `id` / `innerHTML` /
+`textContent` setters — plus `getBoundingClientRect` and five layout accessors,
+and counts whether anything landed since the previous read. Synchronously,
+because a MutationObserver reads optimistic by construction: its callback is a
+microtask, so a script doing mutate-read-mutate-read inside one task has not been
+told about any of it yet, and every one of those reads counts clean. (The
+observer version said 91.2% on homedepot against the synchronous 88.5% — a small
+bias, in the direction predicted.)
+
+| station | layout reads | mutations | reads with a mutation since the last | would hit | longest clean run |
+|---|---:|---:|---:|---:|---:|
+| homedepot | 314 | 2 898 | 36 | 88.5% | 87 |
+| kohls | 1 943 | 2 066 | 25 | 98.7% | 1 295 |
+| macys | **21 695** | 40 094 | 35 | **99.8%** | 19 286 |
+
+So B73's sentence does not survive contact with the number: a real page asks for
+its own geometry thousands of times per load — macys 21 695 times — and touches
+the document between almost none of those asks. **B73's memo failed because it
+was on the wrong layer, not because pages mutate too often**, and that sentence
+should stop being quoted as an argument against caching across reads.
+
+### What it moved
+
+`cascadedNamedDeclaration` keeps what it answered per element and property,
+misses included, and drops everything when `Page.dom_version` moves or the rules
+are rebuilt. Wholesale, because one inserted node changes what `:nth-child`, `+`
+and `~` match for elements nobody touched.
+
+| build | cascade+selector share of the busy thread | `cascadedNamedDeclaration` self |
+|---|---:|---:|
+| main before B99 | 88.7% | 5 393 |
+| + name filter | 79.3% | 2 694 |
+| + this cache | **33.6%** | **82** |
+
+The synthetic stall cell goes from `stalled_ms=30237`-and-killed to 15 557ms —
+half the watchdog rather than three seconds under it. The B75-shaped page (8 000
+rules over 801 boxes) goes from 8 381ms to **191**, a shape the name filter could
+not touch at all because its rules declare two names.
+
+### And where it does not: the real-station number is a third, not a half
+
+Timing the page's own reads in place on ak-homedepot (`live-read-cost.mjs`, four
+samples per arm, arms alternated):
+
+| | mean per read | worst single read | layout total per load |
+|---|---|---|---|
+| main | ~21 ms | median ~2 500 ms (2 354–4 247) | ~4 580 ms |
+| merged | ~15 ms | median ~1 607 ms (1 571–2 572) | ~3 695 ms |
+
+**−29% on the mean, −35% on the worst read** — real, and well short of the
+synthetic 2x. The reason is in the table above rather than in the code: the
+synthetic page never mutates, homedepot mutates before 36 of its 314 reads, and
+every one of those empties the cache. The expensive reads are exactly the ones
+that follow a mutation with nothing left to hit.
+
+That prices the next lever, which is **not invalidating wholesale**. It is also
+the hard one: a per-element or per-subtree scheme has to account for the
+siblings and ancestors whose match changed without being touched, which is the
+reason this one is wholesale. Measured, not planned.
+
+### What could not be answered, and the arithmetic saying so
+
+`datadome-watchdog-stall` E4 asks whether dd-datadome's verdict changes once the
+stall is fixed. It cannot be answered here, and the numbers are worth writing
+down so nobody spends the twenty hours finding out:
+
+* dd-datadome has 83 archived runs with a first status: 59 challenges, 20 passes,
+  and 4 where it served `200` and the stall turned the run into an error. Fixing
+  the stall moves the pass rate from **24.1% to 28.9%** — 4.8 points. Two
+  proportions at 80% power and α=0.05 want **1 343 runs per arm**, about
+  20.5 hours each at 55s a run. Same wall as
+  `hyatt-now-issues-tickets-sometimes`.
+* The obvious cheaper proxy, "how often does a sweep survive", is no better: the
+  archived stall rate on ak-homedepot is 3 in 64, and ten runs on the
+  **unfixed** build already produced none.
+
+What is verifiable is the margin, because every load yields a reading rather than
+waiting on a rare event: the offline repro moved from killed-at-30s to half the
+threshold, and the worst real-station read fell by a third. That is the answer
+E4 gets.
+
+### One more thing today's sweeps showed, twice
+
+Both A/B pairs ran as blocks — arm A's 29 stations, then arm B's. In both pairs
+the **first** arm was handed dd-datadome's real page (`doc=200`, and stalled),
+and the **second** got the challenge (`doc=403->200`). Two out of two. The
+station hardens against a repeat visit inside a window, so which arm ran first is
+a confound, and the striking `6/29 vs 21/29` in both pairs is the stall cascade —
+one stall turns the twenty stations after it into errors — not the change.
+`antibot-stations-pass-in-windows` already said "只能交替对拍"; the lesson is that
+**alternate means per station**, A then B on the same station before moving on,
+not per arm.
