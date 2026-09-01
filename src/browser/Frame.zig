@@ -1748,7 +1748,7 @@ var layout_pass_probe: ?LayoutPassProbe = null;
 
 /// Where `element` sits in the document, or null when the table cannot say --
 /// during the pass itself, or for an element the pass did not place.
-pub fn positionOf(self: *Frame, element: *Element) ?Element.Point {
+pub fn positionOf(self: *Frame, element: *Element) ?Element.PlacedBox {
     if (self.position_table_building) {
         return null;
     }

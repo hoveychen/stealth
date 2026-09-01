@@ -3120,6 +3120,15 @@ fn marginPx(self: *Element, name: []const u8, frame: *Frame, containing: *?f64, 
     if (CSSStyleDeclaration.cascadedComputedValue(self, name, frame)) |declared| {
         if (CSS.parseDimensionViewport(declared, frame)) |px| return px;
     }
+    // The UA sheet, last, because nothing in the cascade carries it: `<p>`'s
+    // `margin: 1em 0` reaches `getComputedStyle` off the per-tag table and never
+    // reached this walk, so every paragraph stacked flush against its neighbour
+    // while the computed style said 16px. `<body>` had the only case for it
+    // (`bodyMarginPx`, still routed there by `containerMarginPx` so its own
+    // shape does not move); this is the same fix for the other thirty-odd tags.
+    if (StyleManager.userAgentValue(self, name)) |ua| {
+        if (CSS.parseDimensionViewport(ua, frame)) |px| return px;
+    }
     return 0;
 }
 
@@ -3189,6 +3198,62 @@ fn marginEscapes(self: *Element, frame: *Frame, containing: *?f64, depth: u8) st
         .top = CSSStyleDeclaration.blockEdgePx(self, "top", frame, containing, depth) == 0,
         .bottom = CSSStyleDeclaration.blockEdgePx(self, "bottom", frame, containing, depth) == 0,
     };
+}
+
+/// The top margin that leaves `self` through its own top edge, collapsed.
+///
+/// `self`'s OWN margin is not in it -- the caller joins that separately. This is
+/// what its first in-flow child contributes from inside, which a box with no top
+/// border or padding cannot stop.
+///
+/// Needed because a child's position is recorded before the walk descends into
+/// it, and by then the group holds only the child's own margin. The height half
+/// does not have the problem: it joins `held.escaped_top` after the recursion,
+/// which is too late to place the box but in time to size the parent. Chrome, on
+/// `<div style="margin-top:40px">` as body's only child, puts BODY at y=40 --
+/// the child's margin collapses out through body and lands above it, and body's
+/// own 8px UA margin loses the max (scratch/b99/expr-body-collapse.js, four
+/// shapes; a 1px border on body stops it and body goes back to 8 with the child
+/// at 49).
+///
+/// A walk down the first-child chain, not over the subtree: it stops at the
+/// first box that has an edge, is not an element, or has content in front of it.
+/// So it costs the depth of that chain.
+fn escapedTopMargin(self: *Element, frame: *Frame, containing: *?f64, depth: u8) MarginGroup {
+    var out: MarginGroup = .{};
+    var current = self;
+    var level = depth;
+    while (level < MAX_CONTAINING_BLOCK_DEPTH) : (level += 1) {
+        if (!current.marginEscapes(frame, containing, level).top) {
+            return out;
+        }
+        const child = current.firstFlowChild(frame) orelse return out;
+        out.join(child.containerMarginPx("margin-top", frame, containing, level + 1));
+        current = child;
+    }
+    return out;
+}
+
+/// The first thing in `self` that a margin could adjoin, or null when the first
+/// thing is content -- text stops a margin from reaching the edge as surely as a
+/// border does.
+fn firstFlowChild(self: *Element, frame: *Frame) ?*Element {
+    var node = self.asNode().firstChild();
+    while (node) |n| : (node = n.nextSibling()) {
+        if (n.is(CData.Text)) |text| {
+            // Whitespace between tags is not content; anything else is.
+            if (std.mem.trim(u8, text.asCData().getData().str(), " \t\r\n\x0c").len == 0) continue;
+            return null;
+        }
+        const el = n.is(Element) orelse continue;
+        if (el.getTag() == .br) return null;
+        if (!el.checkVisibilityCached(null, frame)) continue;
+        if (CSSStyleDeclaration.flowKind(el, frame) != .in_flow) continue;
+        if (CSSStyleDeclaration.defaultDisplayIsInline(el) and CSSStyleDeclaration.isInlineBox(el, frame)) return null;
+        if (el.atomicInlineHalves(frame) != null) return null;
+        return el;
+    }
+    return null;
 }
 
 /// The CONTENT box an element has because of what it is rather than what it
@@ -4049,7 +4114,7 @@ pub fn boundingClientRectValuesForVisible(self: *Element, frame: *Frame) DOMRect
     return self.boundingClientRectValuesAt(frame, 0);
 }
 
-fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
+pub fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
     const dims = self.getElementDimensions(frame);
 
     // getBoundingClientRect is the BORDER box, the same box offsetWidth
@@ -4199,8 +4264,17 @@ pub fn getScrollHeight(self: *Element, frame: *Frame) f64 {
 /// nothing is scrolled.
 pub const Point = struct { x: f64, y: f64 };
 
+/// A placed border box: where it is and how big it is.
+///
+/// The size rides along because the pass has already measured it and because
+/// `elementFromPoint` needs it. Asking `boundingClientRectValuesAt` per
+/// candidate instead is what took `document/element_from_point.html` from its
+/// budget to 51 951ms over 400 paragraphs -- that call resolves a client box,
+/// which can walk an element's text.
+pub const PlacedBox = struct { x: f64, y: f64, width: f64, height: f64 };
+
 /// Every in-flow box's position, filled by one pass over the document.
-pub const PositionTable = std.AutoHashMapUnmanaged(*Element, Point);
+pub const PositionTable = std.AutoHashMapUnmanaged(*Element, PlacedBox);
 
 /// The document-wide layout pass, threaded through the walk that already stacks
 /// the children.
@@ -4229,7 +4303,7 @@ pub const PositionPass = struct {
     x: f64,
     y: f64,
 
-    fn record(self: PositionPass, frame: *Frame, element: *Element, at: Point) void {
+    fn record(self: PositionPass, frame: *Frame, element: *Element, at: PlacedBox) void {
         self.nodes.* += 1;
         // A prototype that is only ever measured: a table this pass could not
         // grow is a missing row, not a failed page load.
@@ -4257,7 +4331,12 @@ pub fn layoutPassPositions(root: *Element, frame: *Frame, table: *PositionTable)
     var visibility_cache: VisibilityCache = .{};
     const dims = root.getElementDimensions(frame);
     var containing: ?f64 = null;
-    table.put(frame.arena, root, .{ .x = 0, .y = 0 }) catch {};
+    table.put(frame.arena, root, .{
+        .x = 0,
+        .y = 0,
+        .width = dims.width + dims.padding_x + dims.border_x,
+        .height = dims.height + dims.padding_y + dims.border_y,
+    }) catch {};
     _ = root.contentHeight(frame, &visibility_cache, .in_flow, dims.width, 0, .{
         .table = table,
         .nodes = &nodes,
@@ -4387,6 +4466,8 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                                 depth,
                             ),
                             .y = p.y + total,
+                            .width = float_box.width + float_box.padding_x + float_box.border_x,
+                            .height = float_box.height + float_box.padding_y + float_box.border_y,
                         });
                     }
                 }
@@ -4401,7 +4482,12 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 // where the run of lines has got to; only the single-line case
                 // is in the matrix, so that is the only one measured.
                 if (pass) |p| {
-                    p.record(frame, el, .{ .x = p.x + at.inline_at, .y = p.y + total + at.block_at });
+                    p.record(frame, el, .{
+                        .x = p.x + at.inline_at,
+                        .y = p.y + total + at.block_at,
+                        .width = box.width + box.padding_x + box.border_x,
+                        .height = box.height + box.padding_y + box.border_y,
+                    });
                 }
                 continue;
             }
@@ -4467,6 +4553,11 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 // walk keeps the number it has always had.
                 var placement = group;
                 placement.join(el.containerMarginPx("margin-top", frame, &margin_containing, depth));
+                // What will escape out of this child from inside. It collapses
+                // with the child's own margin, and the max of the two is where
+                // the child's border box lands -- so it has to be known before
+                // the position is written, which is before the walk descends.
+                placement.joinGroup(el.escapedTopMargin(frame, &margin_containing, depth));
                 const gap = if (placed or !escapes.top) placement.gap() else 0;
                 const child_y = p.y + total + gap;
                 const child_x = p.x + el.staticInlineOffset(
@@ -4476,7 +4567,12 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                     &margin_containing,
                     depth,
                 );
-                p.record(frame, el, .{ .x = child_x, .y = child_y });
+                p.record(frame, el, .{
+                    .x = child_x,
+                    .y = child_y,
+                    .width = box.width + box.padding_x + box.border_x,
+                    .height = box.height + box.padding_y + box.border_y,
+                });
                 child_pass = .{
                     .table = p.table,
                     .nodes = p.nodes,
@@ -4500,6 +4596,16 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             if (depth < MAX_CONTAINING_BLOCK_DEPTH and (!box.explicit_height or child_pass != null)) {
                 held = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1, child_pass);
                 if (!box.explicit_height) inner = @max(inner, held.total) else held = .{};
+            }
+            // The height the child ENDS UP with, now that the walk knows what it
+            // holds. The row went in before the recursion because the position
+            // had to; a box whose own content box is 0 and which wraps three
+            // lines of text is 0 tall until this correction, and
+            // `elementFromPoint` would never land inside it.
+            if (pass) |p| {
+                if (p.table.getPtr(el)) |row| {
+                    row.height = inner + box.padding_y + box.border_y;
+                }
             }
             group.joinGroup(held.escaped_top);
             if (inner == 0 and box.padding_y == 0 and box.border_y == 0) {

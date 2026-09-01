@@ -1285,13 +1285,20 @@ pub fn elementFromVerticalPoint(self: *Document, y: f64, frame: *Frame) !?*Eleme
 }
 
 fn elementFromPointImpl(self: *Document, x: f64, y: f64, ignore_x: bool, frame: *Frame) !?*Element {
-    // DFS in document order; topmost = last visited element whose rect contains (x, y).
+    // DFS in document order; topmost = last visited element whose rect contains
+    // (x, y).
     //
-    // Faux-layout shortcut: rect.top is calculateDocumentPosition × 5, which is
-    // monotonically increasing in document order. So we maintain a running
-    // preorder counter instead of calling calculateDocumentPosition per node
-    // (which itself is O(N)). Once the counter's y passes the query y, no
-    // later element can contain the point, and we can return.
+    // This used to run its own faux layout -- `preorder_index * 5.0`, used as
+    // the box's left AND its top, which is the same node-count stand-in that
+    // made every element's x equal its y. It could then stop early, because a
+    // number that counts nodes only ever grows in document order.
+    //
+    // With one layout pass placing the boxes, the position is a lookup and the
+    // ordering guarantee is gone -- a float or a positioned box sits wherever it
+    // is declared. So the walk is complete and the shortcut is retired. That is
+    // not the loss it looks: the old comment's reason for the counter was that
+    // `calculateDocumentPosition` is itself O(N) per node, and a table read is
+    // not.
     //
     // The elements whose box contains the point share one VisibilityCache, so
     // the ancestor walk inside isHidden is paid once per ancestor rather than
@@ -1303,38 +1310,48 @@ fn elementFromPointImpl(self: *Document, x: f64, y: f64, ignore_x: bool, frame: 
     try stack.append(frame.local_arena, root);
 
     var visibility_cache: Element.VisibilityCache = .{};
-    var preorder_index: f64 = 0;
 
     while (stack.items.len > 0) {
         const node = stack.pop() orelse break;
-        const pos = preorder_index * 5.0;
-
-        if (pos > y) {
-            // Monotonic: no later element has top <= y, so none can contain (x, y).
-            return topmost;
-        }
-
-        preorder_index += 1;
         if (node.is(Element)) |element| {
-            // x and y both come from preorder position in our faux layout, so
-            // `pos` is the box's left and its top both.
-            //
-            // Three tests, cheapest first, because all three have to hold and
-            // every one of them rejects nearly everything: a height, then a
-            // width, then a computed visibility. The order is what keeps this
-            // walk affordable -- a height is a couple of table reads, a width
-            // can be a walk over every character of the element's text, and a
-            // visibility is a CSS cascade. Of the thousands of elements a call
-            // passes, single digits get as far as the last one.
+            // Cheapest first, because all three have to hold and each rejects
+            // nearly everything: the vertical band, then the horizontal one,
+            // then a computed visibility -- a couple of table reads, then a
+            // width that can walk the element's text, then a CSS cascade.
             hit: {
-                if (y < pos or y > pos + element.getElementHeight(frame)) {
+                // The pass's own row, not `boundingClientRectValuesAt`: that
+                // call resolves a client box and can walk the element's text,
+                // which is 3ms an element on a page of paragraphs. The row is a
+                // hash lookup.
+                //
+                // An inline box has no row -- the pass hands it to the line flow
+                // rather than stacking it -- and it is exactly what this call
+                // should answer with: Chrome returns the `<a>` inside an `<h2>`,
+                // not the `<h2>`. So one is measured properly, but only after
+                // the nearest placed ancestor says the point is inside it at
+                // all, which keeps the expensive path to the handful of boxes
+                // the query actually lands in.
+                const rect = frame.positionOf(element) orelse blk: {
+                    var ancestor = element.parentElement();
+                    const holder = while (ancestor) |a| {
+                        if (frame.positionOf(a)) |row| break row;
+                        ancestor = a.parentElement();
+                    } else break :hit;
+                    if (y < holder.y or y > holder.y + holder.height) break :hit;
+                    if (!ignore_x and (x < holder.x or x > holder.x + holder.width)) break :hit;
+                    const own = element.boundingClientRectValuesAt(frame, 0);
+                    break :blk Element.PlacedBox{
+                        .x = own.x,
+                        .y = own.y,
+                        .width = own.width,
+                        .height = own.height,
+                    };
+                };
+                if (y < rect.y or y > rect.y + rect.height) {
                     break :hit;
                 }
-                if (!ignore_x) {
-                    const dims = element.getElementDimensions(frame);
-                    if (x < pos or x > pos + dims.width) {
-                        break :hit;
-                    }
+                if (!ignore_x and (x < rect.x or x > rect.x + rect.width)) {
+                    break :hit;
                 }
                 if (element.checkVisibilityCached(&visibility_cache, frame)) {
                     topmost = element;

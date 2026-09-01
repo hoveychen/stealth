@@ -2185,6 +2185,20 @@ fn computedFontSizeAt(self: *StyleManager, element: ?*Element, depth: u8) f64 {
 /// makes none. The same table `getComputedStyle` answers from, so the layout
 /// and the computed-style surface cannot drift apart again.
 fn userAgentFontProperty(element: *Element, comptime property: []const u8) ?[]const u8 {
+    return userAgentValue(element, property);
+}
+
+/// Any declaration the UA stylesheet makes on this tag, or null where it makes
+/// none -- the same table, opened up because the fonts were not the only thing
+/// reading it out of the cascade's reach.
+///
+/// The margins are the other: nothing but `<body>` had a case for them, so the
+/// stacking walk read 0 for `<p>`'s `margin: 1em 0` while `getComputedStyle`
+/// answered `16px` off this table. Chrome puts `<div><p>x</p></div>` as body's
+/// first child at y=16 and this engine put it at 8
+/// (scratch/b99/expr-escape-with-text.js: an explicit `margin-top:16px` on a
+/// plain div was already right, so it was the UA half alone).
+pub fn userAgentValue(element: *Element, property: []const u8) ?[]const u8 {
     const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse return null;
     return rows.get(property);
 }
