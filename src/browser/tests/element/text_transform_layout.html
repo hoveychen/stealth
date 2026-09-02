@@ -338,8 +338,17 @@ engine's table rather than because they are hard:
       const key = line.split(' ')[0];
       tally[key] = (tally[key] || 0) + 1;
     }
+    // One example per section too, so the head of the value carries a line from
+    // every section rather than the first N lines of whichever section is
+    // longest.
+    const first = {};
+    for (const line of wrong) {
+      const key = line.split(' ')[0];
+      if (first[key] === undefined) first[key] = line;
+    }
     wrong.unshift(wrong.length + ' wrong: ' +
-      Object.keys(tally).map((k) => k + '=' + tally[k]).join(' '));
+      Object.keys(tally).map((k) => k + '=' + tally[k]).join(' ') + '\n  # ' +
+      Object.keys(first).map((k) => first[k]).join('\n  # '));
   }
   testing.expectEqual('', wrong.join('\n  | '));
 }

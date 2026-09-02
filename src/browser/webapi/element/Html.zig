@@ -24,6 +24,7 @@ const Factory = @import("../../Factory.zig");
 
 const Frame = @import("../../Frame.zig");
 const StyleManager = @import("../../StyleManager.zig");
+const text_case = @import("../../text_case.zig");
 const reflection = @import("reflection.zig");
 const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
@@ -373,7 +374,7 @@ pub fn getInnerText(self: *HtmlElement, writer: *std.Io.Writer, frame: *Frame) !
         // costs: every element below answers with its own declaration or with
         // this one.
         .white_space = WhiteSpace.of(CSSStyleDeclaration.whiteSpaceCollapse(self.asElement(), frame)),
-        .transform = TextTransform.of(frame._style_manager.computedTextTransform(self.asElement())),
+        .transform = text_case.Transform.of(frame._style_manager.computedTextTransform(self.asElement())),
         // Seeded from the element's own computed value, which is an ancestor walk
         // because `visibility` inherits -- reading innerText off a hidden element
         // is `""` in Chrome 151 (probe w1-visibility) even though the hiding
@@ -1916,7 +1917,7 @@ const InnerTextState = struct {
     // Resolved per element rather than threaded down, because
     // computedTextTransform already walks ancestors -- inheritance comes from
     // that walk, and a descendant's own declaration overrides it for free.
-    transform: TextTransform = .none,
+    transform: text_case.Transform = .none,
 
     // Whether the next letter starts a word, for `capitalize`. Lives here and
     // not in the per-node write so a word split across text nodes or element
@@ -2093,7 +2094,7 @@ fn handleChildElement(
     // This element's own computed value, restored on the way out.
     const outer_transform = state.transform;
     defer state.transform = outer_transform;
-    state.transform = TextTransform.of(state.frame._style_manager.computedTextTransform(he.asElement()));
+    state.transform = text_case.Transform.of(state.frame._style_manager.computedTextTransform(he.asElement()));
 
     // And its own `white-space-collapse`, on the same terms as `visibility`
     // above: only its own declaration is looked up, because what it inherits is
@@ -2340,52 +2341,44 @@ fn isAllAsciiWhitespace(s: []const u8) bool {
 // `uppercase` / `lowercase` / `capitalize`, ASCII only. The non-ASCII cases need
 // Unicode case tables we do not carry; a byte above 0x7F passes through, which
 // is wrong for those scripts and right for the Latin text every detector reads.
-const TextTransform = enum {
-    none,
-    uppercase,
-    lowercase,
-    capitalize,
-
-    fn of(value: ?[]const u8) TextTransform {
-        const raw = value orelse return .none;
-        const trimmed = std.mem.trim(u8, raw, &std.ascii.whitespace);
-        if (std.ascii.eqlIgnoreCase(trimmed, "uppercase")) return .uppercase;
-        if (std.ascii.eqlIgnoreCase(trimmed, "lowercase")) return .lowercase;
-        if (std.ascii.eqlIgnoreCase(trimmed, "capitalize")) return .capitalize;
-        // `none`, `full-width`, `math-auto`, anything unrecognised: unchanged.
-        return .none;
-    }
-};
-
 // Writes `s` with the current text-transform applied, updating the word-start
 // flag so `capitalize` survives a word split across nodes.
+//
+// The mapping itself is `text_case`, shared with the measurement. It used to be
+// here, byte by byte over ASCII, and the measurement had no transform at all --
+// so an element read as uppercase and measured as though it did not. Three
+// things were wrong in this copy besides: the word-start flag reset on white
+// space alone, where Chrome resets on every separator ('x-ray' -> 'X-Ray', not
+// 'X-ray'); `'` and U+00AD and U+00B7 join a word rather than separating it;
+// and no Latin-1 character mapped at all.
+//
+// A codepoint at a time rather than through `text_case.write`, because there is
+// a writer here and no buffer to size.
 fn writeTransformed(state: *InnerTextState, s: []const u8) !void {
     const writer = state.writer;
-    switch (state.transform) {
-        .none => try writer.writeAll(s),
-        .uppercase => for (s) |b| try writer.writeByte(std.ascii.toUpper(b)),
-        .lowercase => for (s) |b| try writer.writeByte(std.ascii.toLower(b)),
-        // Maintains the flag byte by byte, so it returns rather than falling
-        // through to the run-level update below.
-        .capitalize => {
-            for (s) |b| {
-                if (std.ascii.isWhitespace(b)) {
-                    state.at_word_start = true;
-                    try writer.writeByte(b);
-                } else if (state.at_word_start) {
-                    state.at_word_start = false;
-                    try writer.writeByte(std.ascii.toUpper(b));
-                } else {
-                    try writer.writeByte(b);
-                }
-            }
-            return;
-        },
+    if (state.transform == .none) {
+        return writer.writeAll(s);
     }
-    // The others only need to record whether this run ended mid-word, so that a
-    // `capitalize` sibling continues the word rather than restarting it.
-    if (s.len > 0) {
-        state.at_word_start = std.ascii.isWhitespace(s[s.len - 1]);
+    var it = std.unicode.Utf8Iterator{ .bytes = s, .i = 0 };
+    while (it.i < s.len) {
+        const before = it.i;
+        const codepoint = it.nextCodepoint() orelse {
+            // Invalid UTF-8: the bytes as written, which is what every other
+            // path in this file does with them.
+            try writer.writeAll(s[before..]);
+            return;
+        };
+        const mapped = text_case.map(codepoint, state.transform, &state.at_word_start);
+        var buf: [4]u8 = undefined;
+        const first = std.unicode.utf8Encode(mapped.first, &buf) catch {
+            try writer.writeAll(s[before..it.i]);
+            continue;
+        };
+        try writer.writeAll(buf[0..first]);
+        if (mapped.second) |second| {
+            const extra = std.unicode.utf8Encode(second, &buf) catch continue;
+            try writer.writeAll(buf[0..extra]);
+        }
     }
 }
 
