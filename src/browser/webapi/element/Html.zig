@@ -374,7 +374,7 @@ pub fn getInnerText(self: *HtmlElement, writer: *std.Io.Writer, frame: *Frame) !
         // costs: every element below answers with its own declaration or with
         // this one.
         .white_space = WhiteSpace.of(CSSStyleDeclaration.whiteSpaceCollapse(self.asElement(), frame)),
-        .transform = text_case.Transform.of(frame._style_manager.computedTextTransform(self.asElement())),
+        .transform = frame._style_manager.computedTextTransform(self.asElement()),
         // Seeded from the element's own computed value, which is an ancestor walk
         // because `visibility` inherits -- reading innerText off a hidden element
         // is `""` in Chrome 151 (probe w1-visibility) even though the hiding
@@ -2094,7 +2094,7 @@ fn handleChildElement(
     // This element's own computed value, restored on the way out.
     const outer_transform = state.transform;
     defer state.transform = outer_transform;
-    state.transform = text_case.Transform.of(state.frame._style_manager.computedTextTransform(he.asElement()));
+    state.transform = state.frame._style_manager.computedTextTransform(he.asElement());
 
     // And its own `white-space-collapse`, on the same terms as `visibility`
     // above: only its own declaration is looked up, because what it inherits is

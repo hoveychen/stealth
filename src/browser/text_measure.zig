@@ -22,6 +22,7 @@ const lp = @import("lightpanda");
 const font_metrics = @import("font_metrics.zig");
 const font_kerning = @import("font_kerning.zig");
 const font_space_kerning = @import("font_space_kerning.zig");
+const text_case = @import("text_case.zig");
 const font_variants = @import("font_variants.zig");
 const emoji_metrics = @import("emoji_metrics.zig");
 const emoji_properties = @import("emoji_properties.zig");
@@ -170,12 +171,25 @@ pub const Face = struct {
     /// nothing, with no reading to hold it to. Those two declarations are
     /// asserted as no-ops in `element/text_kerning_off.html` instead.
     kerning: bool = true,
+    /// `text-transform`, applied as the pen walks rather than by rewriting the
+    /// string first. Measured: a transformed box is EXACTLY as wide as the
+    /// transformed string written out with nothing declared -- 60 of 60 rows in
+    /// one probe and 105 of 105 in another (scratch/b102/expr-tt-final.js) --
+    /// so there is no width model here, only the character mapping, and the
+    /// kern pairs then fall on the transformed characters as they should.
+    ///
+    /// Carried on the face rather than passed to `measure`, because every
+    /// measuring path already threads a face down to the kernel and none of the
+    /// forty callers that do not care should have to name it. `capitalize`'s
+    /// word-start flag cannot live here -- a face is a value and the flag has to
+    /// come back out -- so that one is `measureAt`'s pointer.
+    transform: text_case.Transform = .none,
 
     /// The face `weight` and `italic` select. The threshold is measured: at
     /// 16px serif 'M' is 14.2265625 at 500 and 15.1015625 at 600, 700 and 900
     /// alike, so `bold` the keyword is 700 arriving here and not a case of its
     /// own.
-    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing, surface: Surface, kerning: bool) Face {
+    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing, surface: Surface, kerning: bool, transform: text_case.Transform) Face {
         const variant = font_variants.variantFor(weight, italic);
         return .{
             .family = family,
@@ -188,6 +202,7 @@ pub const Face = struct {
             else
                 .{},
             .kerning = kerning,
+            .transform = transform,
         };
     }
 
@@ -243,7 +258,22 @@ pub fn kernBetween(face: Face, a: u21, b: u21, size: f64) f64 {
     return toPixels(font_kerning.kern(face.space_kerns, a, b), size);
 }
 
+/// Measures `text` in `face` at `size`, starting a `capitalize` at a word.
+///
+/// The entry point every caller that has not thought about `text-transform`
+/// wants, which is all but the handful of layout walks that have to carry the
+/// word-start flag from one text node to the next.
 pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
+    var at_word_start = true;
+    return measureAt(face, text, size, &at_word_start);
+}
+
+/// The same, with `capitalize`'s word-start flag carried in and out.
+///
+/// A word can straddle two text nodes -- `ab` and `cd` are one word, `a ` and
+/// ` b` are two -- so the flag belongs to the run and not to the call. Every
+/// path that measures a run in pieces owns one; see `Face.transform`.
+pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) Metrics {
     const box = font_metrics.boundingBox(face.family, size);
     var metrics = Metrics{
         .fontBoundingBoxAscent = box.ascent,
@@ -347,72 +377,87 @@ pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
         }
 
         var codepoints = std.unicode.Utf8Iterator{ .bytes = shaped, .i = 0 };
-        while (codepoints.nextCodepoint()) |codepoint| {
-            if (previous) |prev| {
-                pen_basis += font_kerning.kern(kerns, prev, codepoint);
-                // Gated on one of the two being a space rather than looked up
-                // unconditionally: this is per character of every string the
-                // engine measures, and the second table can only ever answer at
-                // a space.
-                if (prev == ' ' or codepoint == ' ') {
-                    pen_basis += font_kerning.kern(space_kerns, prev, codepoint);
+        while (codepoints.nextCodepoint()) |source| {
+            // `text-transform` maps here, one source codepoint to one or two.
+            // Two happens once in the range this maps -- U+00DF uppercases to
+            // 'SS' -- and the inner loop is what pays for it: everything below
+            // prices the character it is GIVEN, so the pairs and the ink and the
+            // fallback state all follow the transformed text, which is what
+            // makes a transformed box exactly as wide as the transformed string.
+            //
+            // `letter-spacing` is charged by the `defer` above, once for the
+            // source cluster and not once per character it produced. Whether
+            // Chrome charges the transformed count has not been measured, and
+            // one character in the whole range can differ.
+            const mapped = text_case.map(source, face.transform, at_word_start);
+            const pair = [2]u21{ mapped.first, mapped.second orelse 0 };
+            for (pair[0..mapped.len()]) |codepoint| {
+                if (previous) |prev| {
+                    pen_basis += font_kerning.kern(kerns, prev, codepoint);
+                    // Gated on one of the two being a space rather than looked up
+                    // unconditionally: this is per character of every string the
+                    // engine measures, and the second table can only ever answer at
+                    // a space.
+                    if (prev == ' ' or codepoint == ' ') {
+                        pen_basis += font_kerning.kern(space_kerns, prev, codepoint);
+                    }
                 }
-            }
-            previous = codepoint;
+                previous = codepoint;
 
-            var glyph = face.glyph(codepoint) orelse {
-                // A joiner, a variation selector or a combining mark rides on
-                // the glyph before it: Chrome makes 'a' and 'a' U+0301 both
-                // 8.898 at 16px sans-serif, and a lone U+FE0F zero.
-                //
-                // Whether an untabulated codepoint would seed the fallback is
-                // not something we have measured, so it leaves the state alone.
-                if (!isZeroWidth(codepoint)) pen_basis += meanAdvance(face.family);
-                continue;
-            };
+                var glyph = face.glyph(codepoint) orelse {
+                    // A joiner, a variation selector or a combining mark rides on
+                    // the glyph before it: Chrome makes 'a' and 'a' U+0301 both
+                    // 8.898 at 16px sans-serif, and a lone U+FE0F zero.
+                    //
+                    // Whether an untabulated codepoint would seed the fallback is
+                    // not something we have measured, so it leaves the state alone.
+                    if (!isZeroWidth(codepoint)) pen_basis += meanAdvance(face.family);
+                    continue;
+                };
 
-            if (font_metrics.afterFallback(face.family, codepoint)) |on_last_resort| {
-                // A codepoint the primary font cannot draw but some fallback
-                // font can, so what it costs depends on which font the run
-                // already settled on.
-                switch (fallback) {
-                    .last_resort => glyph = on_last_resort,
-                    // Only a codepoint that draws something seeds a font.
-                    // U+007F draws nothing and does not: Chrome makes U+007F
-                    // U+0098 U+0080 32 at 16px sans-serif, so the U+0098 still
-                    // got to seed the last resort from behind it, where
-                    // U+007F U+0080 is 8.898 and the U+0080 seeded its own.
-                    .none => if (!isBlank(glyph)) {
-                        fallback = .own;
-                    },
-                    .own => {},
+                if (font_metrics.afterFallback(face.family, codepoint)) |on_last_resort| {
+                    // A codepoint the primary font cannot draw but some fallback
+                    // font can, so what it costs depends on which font the run
+                    // already settled on.
+                    switch (fallback) {
+                        .last_resort => glyph = on_last_resort,
+                        // Only a codepoint that draws something seeds a font.
+                        // U+007F draws nothing and does not: Chrome makes U+007F
+                        // U+0098 U+0080 32 at 16px sans-serif, so the U+0098 still
+                        // got to seed the last resort from behind it, where
+                        // U+007F U+0080 is 8.898 and the U+0080 seeded its own.
+                        .none => if (!isBlank(glyph)) {
+                            fallback = .own;
+                        },
+                        .own => {},
+                    }
+                } else if (fallback == .none and font_metrics.seedsLastResort(face.family, codepoint)) {
+                    fallback = .last_resort;
                 }
-            } else if (fallback == .none and font_metrics.seedsLastResort(face.family, codepoint)) {
-                fallback = .last_resort;
-            }
 
-            // A blank glyph (the space) has no ink box to fold in.
-            if (!isBlank(glyph)) {
-                // Seeded from the first inked glyph rather than from zero: an
-                // ink boundary is signed, and a running max that starts at
-                // zero can never report a negative one. Chrome makes U+0022's
-                // descent -6.883 at 16px sans-serif — its ink is wholly above
-                // the baseline — and U+0084's ascent -1.594.
-                const first = !any_ink;
-                foldInk(
-                    &ink_min,
-                    &ink_max,
-                    &any_ink,
-                    toPixels(pen_basis - glyph.left, size) + pen_pixels,
-                    toPixels(pen_basis + glyph.right, size) + pen_pixels,
-                );
-                const glyph_ascent = toPixels(glyph.ascent, size);
-                const glyph_descent = toPixels(glyph.descent, size);
-                ascent = if (first) glyph_ascent else @max(ascent, glyph_ascent);
-                descent = if (first) glyph_descent else @max(descent, glyph_descent);
-            }
+                // A blank glyph (the space) has no ink box to fold in.
+                if (!isBlank(glyph)) {
+                    // Seeded from the first inked glyph rather than from zero: an
+                    // ink boundary is signed, and a running max that starts at
+                    // zero can never report a negative one. Chrome makes U+0022's
+                    // descent -6.883 at 16px sans-serif — its ink is wholly above
+                    // the baseline — and U+0084's ascent -1.594.
+                    const first = !any_ink;
+                    foldInk(
+                        &ink_min,
+                        &ink_max,
+                        &any_ink,
+                        toPixels(pen_basis - glyph.left, size) + pen_pixels,
+                        toPixels(pen_basis + glyph.right, size) + pen_pixels,
+                    );
+                    const glyph_ascent = toPixels(glyph.ascent, size);
+                    const glyph_descent = toPixels(glyph.descent, size);
+                    ascent = if (first) glyph_ascent else @max(ascent, glyph_ascent);
+                    descent = if (first) glyph_descent else @max(descent, glyph_descent);
+                }
 
-            pen_basis += glyph.advance;
+                pen_basis += glyph.advance;
+            }
         }
     }
 
@@ -695,8 +740,8 @@ test "text_measure: the kerning bit turns off both tables" {
     // `element/text_kerning_off.html` asserts this through the CSS layer; this
     // asserts the kernel on its own, because the bit has to reach two tables and
     // the CSS test cannot say which of them answered.
-    const on: Face = .of(font_metrics.serif, 400, false, .{}, .layout, true);
-    const off: Face = .of(font_metrics.serif, 400, false, .{}, .layout, false);
+    const on: Face = .of(font_metrics.serif, 400, false, .{}, .layout, true, .none);
+    const off: Face = .of(font_metrics.serif, 400, false, .{}, .layout, false, .none);
 
     // The ordinary pairs. 'AV' at 16px serif is 21.046875 kerned and 23.109375
     // unkerned -- both Chrome's, both this engine's advance table.
@@ -718,8 +763,8 @@ test "text_measure: the kerning bit turns off both tables" {
     // The canvas surface has no space table either way, so the bit is the only
     // difference there -- and its unkerned width is the same 115.5390625,
     // because with no pairs at all the two surfaces cannot disagree.
-    const canvas_on: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, true);
-    const canvas_off: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, false);
+    const canvas_on: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, true, .none);
+    const canvas_off: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, false, .none);
     try std.testing.expectEqual(@as(f64, 105.9765625), measure(canvas_on, "AVATAR To Wo", 16).width);
     try std.testing.expectEqual(@as(f64, 115.5390625), measure(canvas_off, "AVATAR To Wo", 16).width);
 }

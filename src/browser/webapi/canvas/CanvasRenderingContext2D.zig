@@ -121,7 +121,12 @@ pub fn measureText(self: *const CanvasRenderingContext2D, text: []const u8, exec
                 // follows a later change of `font` -- see context_state.Spacing.
                 .letter = self._state.letter_spacing.pixels(self._font.size, self._font.family),
                 .word = self._state.word_spacing.pixels(self._font.size, self._font.family),
-            }, .canvas, state.kerns(self._state.font_kerning)),
+            }, .canvas, state.kerns(self._state.font_kerning),
+                // The canvas has no `text-transform`: there is no attribute for it
+                // and `measureText` sees none of the element's style. Measured --
+                // 'hello world' is 73.3203125 through measureText whatever the
+                // canvas element's own `text-transform` says.
+                .none),
             text,
             self._font.size,
         ),

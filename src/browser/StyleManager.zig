@@ -35,6 +35,7 @@ const CSSStyleRule = @import("webapi/css/CSSStyleRule.zig");
 const CSSStyleSheet = @import("webapi/css/CSSStyleSheet.zig");
 const chrome_per_tag_values = @import("webapi/css/chrome_per_tag_values.zig");
 const CSSStyleDeclaration = @import("webapi/css/CSSStyleDeclaration.zig");
+const text_case = @import("text_case.zig");
 const CSSStyleProperty = @import("webapi/css/CSSStyleDeclaration.zig").Property;
 const shorthand = @import("webapi/css/shorthand.zig");
 const registered_property = @import("webapi/css/registered_property.zig");
@@ -2266,38 +2267,71 @@ pub fn userAgentValue(element: *Element, property: []const u8) ?[]const u8 {
     return rows.get(property);
 }
 
-/// Cascaded `text-transform` keyword, or null when nothing declares one
-/// anywhere up the chain. Same source order and inheritance walk as
-/// computedFontFamily, minus its presentational-attribute step: `text-transform`
-/// has no HTML attribute form. `innerText` is the caller -- it is defined in
-/// terms of layout, so it reports text the way this says it is rendered.
-pub fn computedTextTransform(self: *StyleManager, element: ?*Element) ?[]const u8 {
-    return self.computedTextTransformAt(element, 0);
+/// Cascaded, inherited `text-transform`.
+///
+/// `innerText` is this caller -- it is defined in terms of layout, so it reports
+/// text the way this says it is rendered -- and it asks once per element in its
+/// own walk, where a walk of its own costs nothing worth folding. The
+/// MEASUREMENT asks for the same thing inside `computedTextStyle`, which sits
+/// under `offsetWidth` and cannot afford one walk per property. The two share
+/// `cascadedCandidates` and `parseTransform`, so the cascade order and the
+/// keyword table are one implementation asked from two loops -- which is the
+/// point: the whole defect this replaced was `innerText` transforming and the
+/// measurement not.
+pub fn computedTextTransform(self: *StyleManager, element: ?*Element) text_case.Transform {
+    self.rebuildIfDirty() catch {};
+    const in_sheets = self.declared_longhands.contains("text-transform");
+    var current = element;
+    var depth: u8 = 0;
+    while (current) |el| {
+        if (depth >= MAX_FONT_ANCESTOR_DEPTH) break;
+        const style = inlineStyleFor(el, self.frame);
+        if (style != null or in_sheets) {
+            if (self.transformOn(el, in_sheets, style)) |transform| return transform;
+        }
+        current = el.parentElement();
+        depth += 1;
+    }
+    return .none;
 }
 
-fn computedTextTransformAt(self: *StyleManager, element: ?*Element, depth: u8) ?[]const u8 {
-    if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
-        return null;
+/// What one element declares for `text-transform`, or null when it declares
+/// nothing usable and the value has to come from an ancestor.
+fn transformOn(
+    self: *StyleManager,
+    el: *Element,
+    in_sheets: bool,
+    style: ?*CSSStyleDeclaration,
+) ?text_case.Transform {
+    for (self.cascadedCandidates(el, "text-transform", .text_transform, in_sheets, style)) |candidate| {
+        const raw = candidate orelse continue;
+        if (parseTransform(raw)) |transform| return transform;
     }
-    const current = element orelse return null;
+    return null;
+}
 
-    // "text-transform" is 14 bytes, past String's 12-byte SSO limit, so the
-    // wrap has to happen at runtime -- same as String.wrap("preserveAspectRatio").
-    const inline_property = getInlineStyleProperty(current, String.wrap("text-transform"), self.frame);
-    const rule = self.cascadedDeclaration(current, .text_transform);
-
-    if (rule) |declaration| {
-        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
-            return declaration.value;
-        }
-    }
-    if (inline_property) |property| {
-        return property._value.str();
-    }
-    if (rule) |declaration| {
-        return declaration.value;
-    }
-    return self.computedTextTransformAt(current.parentElement(), depth + 1);
+/// One `text-transform` declaration as the enum, or null when it says nothing
+/// this can use and the answer has to come from an ancestor.
+///
+/// `none` is a real answer rather than a refusal: an explicit
+/// `text-transform: none` on a child has to beat an inherited `uppercase`
+/// instead of falling through to it. The property inherits, so `inherit`,
+/// `unset` and `revert` all fall through -- `revert` because there is no UA or
+/// user declaration for it to roll back to.
+///
+/// Anything else unrecognised also falls through, which is unreachable in
+/// practice and deliberate anyway: Chrome REFUSES `full-width` and
+/// `full-size-kana` at parse, so a refused keyword never reaches the cascade,
+/// and this engine agrees with it (the keyword block of
+/// element/text_transform_layout.html asserts all twelve).
+fn parseTransform(raw: []const u8) ?text_case.Transform {
+    const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(value, "none")) return .none;
+    if (std.ascii.eqlIgnoreCase(value, "initial")) return .none;
+    if (std.ascii.eqlIgnoreCase(value, "uppercase")) return .uppercase;
+    if (std.ascii.eqlIgnoreCase(value, "lowercase")) return .lowercase;
+    if (std.ascii.eqlIgnoreCase(value, "capitalize")) return .capitalize;
+    return null;
 }
 
 /// Cascaded `display` keyword, or null when neither a stylesheet rule nor the
@@ -2629,22 +2663,25 @@ fn computedFontItalicAt(self: *StyleManager, element: ?*Element, depth: u8) bool
 /// do to EACH OTHER -- a parent's `"kern" 0` against a child's
 /// `font-kerning: normal` -- has not been measured, so the AND is a choice and
 /// not a reading; nothing asserts it.
-pub fn computedTextStyle(self: *StyleManager, element: ?*Element) struct { letter: f64, word: f64, kerning: bool } {
+pub fn computedTextStyle(self: *StyleManager, element: ?*Element) struct { letter: f64, word: f64, kerning: bool, transform: text_case.Transform } {
     // Probed once per read rather than once per ancestor level per property.
     self.rebuildIfDirty() catch {};
     const in_sheets_letter = self.declared_longhands.contains("letter-spacing");
     const in_sheets_word = self.declared_longhands.contains("word-spacing");
     const in_sheets_kerning = self.declared_longhands.contains("font-kerning");
     const in_sheets_features = self.declared_longhands.contains("font-feature-settings");
+    const in_sheets_transform = self.declared_longhands.contains("text-transform");
 
     var letter: f64 = 0;
     var word: f64 = 0;
     var kerning = true;
     var features_kern = true;
+    var transform: text_case.Transform = .none;
     var want_letter = true;
     var want_word = true;
     var want_kerning = true;
     var want_features = true;
+    var want_transform = true;
 
     var current = element;
     var depth: u8 = 0;
@@ -2681,11 +2718,22 @@ pub fn computedTextStyle(self: *StyleManager, element: ?*Element) struct { lette
                 want_features = false;
             }
         }
-        if (!want_letter and !want_word and !want_kerning and !want_features) break;
+        if (want_transform and (style != null or in_sheets_transform)) {
+            if (self.transformOn(el, in_sheets_transform, style)) |on| {
+                transform = on;
+                want_transform = false;
+            }
+        }
+        if (!want_letter and !want_word and !want_kerning and !want_features and !want_transform) break;
         current = el.parentElement();
         depth += 1;
     }
-    return .{ .letter = letter, .word = word, .kerning = kerning and features_kern };
+    return .{
+        .letter = letter,
+        .word = word,
+        .kerning = kerning and features_kern,
+        .transform = transform,
+    };
 }
 
 /// The declarations that could answer for `property` on `el`, most authoritative

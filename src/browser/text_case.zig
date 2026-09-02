@@ -197,6 +197,42 @@ pub fn map(codepoint: u21, transform: Transform, at_word_start: *bool) Mapped {
     }
 }
 
+/// The same mapping, without touching the caller's word-start flag.
+///
+/// For a caller that wants one character as it will RENDER and is not walking a
+/// run: the codepoints on either side of a space, which the layout paths charge
+/// a kern pair for and which have to be the transformed ones.
+pub fn mapAt(codepoint: u21, transform: Transform, at_word_start: bool) Mapped {
+    var flag = at_word_start;
+    return map(codepoint, transform, &flag);
+}
+
+/// The first and last codepoints of `src` as `transform` renders them.
+///
+/// The layout paths chop text at white space and charge the space themselves,
+/// which means they hold the characters either side of the chop and ask the
+/// space-pair table about them (see font_space_kerning.zig). Those characters
+/// have to be the transformed ones: 'hello world' under `uppercase` kerns
+/// ' W' and not ' w', and the two differ by 0.28125 at 16px serif -- exactly
+/// the residual every box row of element/text_transform_layout.html showed
+/// while this walked the source text instead.
+///
+/// The whole slice is walked rather than just its ends, because the LAST
+/// character's mapping depends on the flag as it stood when the walk reached it:
+/// under `capitalize`, 'a' alone is 'A' and the 'a' of 'ab' is not.
+pub fn edges(src: []const u8, transform: Transform, at_word_start: bool) struct { first: ?u21, last: ?u21 } {
+    var flag = at_word_start;
+    var first: ?u21 = null;
+    var last: ?u21 = null;
+    var it = std.unicode.Utf8Iterator{ .bytes = src, .i = 0 };
+    while (it.nextCodepoint()) |codepoint| {
+        const mapped = map(codepoint, transform, &flag);
+        if (first == null) first = mapped.first;
+        last = mapped.second orelse mapped.first;
+    }
+    return .{ .first = first, .last = last };
+}
+
 /// `src` transformed, written into `dest`, which must be at least `src.len`
 /// long. Returns the written slice.
 ///
@@ -335,8 +371,44 @@ test "text_case: titlecase is not uppercase for U+00DF" {
     var at_word_start = true;
     try testing.expectEqualStrings("\u{00df}xy", write(&buf, "\u{00df}xy", .capitalize, &at_word_start));
     at_word_start = true;
-    try testing.expectEqualStrings("SSxy", write(&buf, "\u{00df}xy", .uppercase, &at_word_start));
+    // ...where `uppercase` takes the 'x' and the 'y' with it, since it maps
+    // every character and not only the one at a word start.
+    try testing.expectEqualStrings("SSXY", write(&buf, "\u{00df}xy", .uppercase, &at_word_start));
     // ...and the word after it still capitalises.
     at_word_start = true;
     try testing.expectEqualStrings("\u{00df} Stra\u{00df}e", write(&buf, "\u{00df} stra\u{00df}e", .capitalize, &at_word_start));
+}
+
+test "text_case: edges reports the characters a kern pair would see" {
+    // 'hello world' uppercased kerns ' W', not ' w'.
+    const upper_word = edges("world", .uppercase, true);
+    try testing.expectEqual(@as(?u21, 'W'), upper_word.first);
+    try testing.expectEqual(@as(?u21, 'D'), upper_word.last);
+
+    // Under capitalize the last character of a multi-character word is NOT at a
+    // word start, so it stays as written -- and a one-character word is.
+    const cap_word = edges("world", .capitalize, true);
+    try testing.expectEqual(@as(?u21, 'W'), cap_word.first);
+    try testing.expectEqual(@as(?u21, 'd'), cap_word.last);
+    const cap_one = edges("a", .capitalize, true);
+    try testing.expectEqual(@as(?u21, 'A'), cap_one.first);
+    try testing.expectEqual(@as(?u21, 'A'), cap_one.last);
+    // ...and a word reached mid-word keeps its first character too.
+    const cap_mid = edges("world", .capitalize, false);
+    try testing.expectEqual(@as(?u21, 'w'), cap_mid.first);
+
+    // The two-character mapping reports the SECOND character as the last one,
+    // because that is what the next pair sees.
+    const two = edges("stra\u{00df}", .uppercase, true);
+    try testing.expectEqual(@as(?u21, 'S'), two.first);
+    try testing.expectEqual(@as(?u21, 'S'), two.last);
+
+    // Nothing declared is the characters as written.
+    const plain = edges("world", .none, true);
+    try testing.expectEqual(@as(?u21, 'w'), plain.first);
+    try testing.expectEqual(@as(?u21, 'd'), plain.last);
+    // And an empty slice has no ends.
+    const empty = edges("", .uppercase, true);
+    try testing.expectEqual(@as(?u21, null), empty.first);
+    try testing.expectEqual(@as(?u21, null), empty.last);
 }
