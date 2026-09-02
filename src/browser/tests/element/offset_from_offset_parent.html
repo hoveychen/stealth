@@ -120,6 +120,51 @@
     Number.isInteger(fractional.offsetLeft) + ',' + Number.isInteger(fractional.offsetTop));
   document.body.removeChild(holder);
 
+  // The offset parent's padding edge is memoised per parent, because measuring
+  // it costs three cascade reads and two hundred siblings share one answer.
+  //
+  // Only the middle case below tests that memo, and it was worth finding out
+  // which: with `Frame.offset_parent_edges` deliberately left undropped, this
+  // block reads `10,10 -> 10,50` for host-moved and stays correct for the other
+  // two. A box inserted BEFORE the host moves the host, so the cached edge goes
+  // stale under a child that moved with it -- that is the one that can fail. The
+  // other two move the CHILD and leave the parent's padding edge exactly where
+  // it was, so a memo that never dropped still answers them correctly. They
+  // stay because they pin the reading down in the other direction: the offset
+  // has to be relative to the parent, changing with the child's own position
+  // (padding, sibling) and not with the parent's (host-moved, whose rect moves
+  // 40px while its offset must not budge).
+  function reparent() {
+    document.body.innerHTML =
+      '<div id="h" style="' + HOST + '"><div id="a" style="' + BOX + '"></div></div>';
+    return document.getElementById('a');
+  }
+  const makeSpacer = () => {
+    const d = document.createElement('div');
+    d.setAttribute('style', 'margin:0;height:40px;');
+    return d;
+  };
+  const at = (el) => el.offsetLeft + ',' + el.offsetTop;
+
+  let a = reparent();
+  const padding_before = at(a);
+  document.getElementById('h').style.padding = '40px';
+  want.push('memo padding 10,10 -> 40,40');
+  got.push('memo padding ' + padding_before + ' -> ' + at(a));
+
+  a = reparent();
+  const moved_before = at(a);
+  document.body.insertBefore(makeSpacer(), document.getElementById('h'));
+  want.push('memo host-moved 10,10 -> 10,10 rect=63');
+  got.push('memo host-moved ' + moved_before + ' -> ' + at(a) +
+    ' rect=' + Math.round(a.getBoundingClientRect().top));
+
+  a = reparent();
+  const sibling_before = at(a);
+  document.getElementById('h').insertBefore(makeSpacer(), a);
+  want.push('memo child-moved 10,10 -> 10,50');
+  got.push('memo child-moved ' + sibling_before + ' -> ' + at(a));
+
   testing.expectEqual(want.join('\n'), got.join('\n'));
 </script>
 </body>

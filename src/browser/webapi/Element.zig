@@ -4959,10 +4959,20 @@ fn boxOrigin(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
 fn offsetParentPaddingEdge(self: *Element, frame: *Frame) DOMRect.Data {
     const parent = self.getOffsetParent(frame) orelse return .{};
     if (parent.getTag() == .body) return .{};
-    const origin = parent.boxOrigin(frame, 0);
+    return frame.offsetParentEdge(parent);
+}
+
+/// The uncached half of the above, for `Frame.offsetParentEdge` to fill with.
+///
+/// Three cascade reads on the parent -- its position, and each of its two border
+/// widths through the visibility and inline-box tests `clientLeft` applies --
+/// which is why the answer is memoised per parent rather than per reader. Two
+/// hundred siblings in one positioned host share one entry.
+pub fn paddingEdgeOf(self: *Element, frame: *Frame) DOMRect.Data {
+    const origin = self.boxOrigin(frame, 0);
     return .{
-        .x = origin.x + parent.getClientLeft(frame),
-        .y = origin.y + parent.getClientTop(frame),
+        .x = origin.x + self.getClientLeft(frame),
+        .y = origin.y + self.getClientTop(frame),
     };
 }
 

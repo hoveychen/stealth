@@ -475,6 +475,9 @@ position_table: Element.PositionTable = .empty,
 /// a page left `auto`; see `PositionPass.static_table` for why it is not merged
 /// into the table above.
 static_position_table: Element.PositionTable = .empty,
+/// Memo for `offsetParentEdge`, dropped with the two tables above because it is
+/// keyed on the same thing they are.
+offset_parent_edges: std.AutoHashMapUnmanaged(*Element, Element.DOMRect.Data) = .empty,
 position_table_version: usize = 0,
 /// True while the pass is running. `layoutPassPositions` measures boxes, and
 /// measuring an out-of-flow box asks its containing block where it is -- which
@@ -1764,6 +1767,34 @@ pub fn staticPositionOf(self: *Frame, element: *Element) ?Element.PlacedBox {
     return if (self.fillPositionTables()) self.static_position_table.get(element) else null;
 }
 
+/// The padding edge `offsetLeft`/`offsetTop` are measured from, memoised.
+///
+/// Every read of either used to be one document coordinate; measuring the offset
+/// parent as well made a pass over 300 rows twice as expensive -- 5.0ms to
+/// 10.3ms median over eight interleaved runs per arm, against an unchanged
+/// `getBoundingClientRect` control that read 5.8ms on both
+/// (`scratch/h86/www/offset-cost.html`). The cost is per reader and the answer
+/// is per parent, so a page whose rows share one positioned host pays for it
+/// once.
+///
+/// Keyed on the position table's own version, and dropped where the table is:
+/// the edge is the parent's border-box origin plus its border, and nothing can
+/// move either without moving that counter.
+pub fn offsetParentEdge(self: *Frame, parent: *Element) Element.DOMRect.Data {
+    if (!self.fillPositionTables()) {
+        return parent.paddingEdgeOf(self);
+    }
+    if (self.offset_parent_edges.get(parent)) |cached| {
+        return cached;
+    }
+    const edge = parent.paddingEdgeOf(self);
+    // A page with thousands of distinct offset parents is not the case this
+    // exists for, and an entry it could not store is a slower read rather than
+    // a wrong one.
+    self.offset_parent_edges.put(self.arena, parent, edge) catch {};
+    return edge;
+}
+
 /// Brings both tables up to date, or reports that they cannot be read right now.
 fn fillPositionTables(self: *Frame) bool {
     if (self.position_table_building) {
@@ -1784,6 +1815,7 @@ fn fillPositionTables(self: *Frame) bool {
         defer self.position_table_building = false;
         self.position_table = .empty;
         self.static_position_table = .empty;
+        self.offset_parent_edges = .empty;
         _ = Element.layoutPassPositions(root, self, &self.position_table, &self.static_position_table);
         self.position_table_version = version;
         self.position_table_filled = true;
