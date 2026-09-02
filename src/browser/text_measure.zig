@@ -151,12 +151,31 @@ pub const Face = struct {
     /// 1500ms budget where the same tree without this read under it, four runs
     /// each, alternating, at load 1.9. Empty on the canvas surface.
     space_kerns: font_kerning.Table = .{},
+    /// Whether the font's kern pairs are charged at all. False under
+    /// `font-kerning: none` and `font-feature-settings: "kern" 0`, which Chrome
+    /// treats as one thing: identical on all 48 rows of six families by eight
+    /// pairs (scratch/b100/expr-kern-table.js).
+    ///
+    /// It turns BOTH tables off, which is a measurement and not a symmetry
+    /// argument: 'AVATAR To Wo' at 16px serif is 105.4140625 in layout and
+    /// 115.5390625 with kerning off, and the 10.125 between them is 9.5625 of
+    /// ordinary pairs plus the 0.5625 of space pairs that layout alone charges.
+    /// Leaving `space_kerns` on would land on 114.9765625.
+    ///
+    /// The other half of Chrome's feature -- ligatures, which
+    /// `font-variant-ligatures: none` and `text-rendering: optimizeSpeed` turn
+    /// off and which leave kerning alone -- has no bit here on purpose. This
+    /// engine forms no ligatures at all: 'Waffle fi' comes out narrower than
+    /// Chrome's own no-ligature width, so a switch would be a switch over
+    /// nothing, with no reading to hold it to. Those two declarations are
+    /// asserted as no-ops in `element/text_kerning_off.html` instead.
+    kerning: bool = true,
 
     /// The face `weight` and `italic` select. The threshold is measured: at
     /// 16px serif 'M' is 14.2265625 at 500 and 15.1015625 at 600, 700 and 900
     /// alike, so `bold` the keyword is 700 arriving here and not a case of its
     /// own.
-    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing, surface: Surface) Face {
+    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing, surface: Surface, kerning: bool) Face {
         const variant = font_variants.variantFor(weight, italic);
         return .{
             .family = family,
@@ -164,10 +183,11 @@ pub const Face = struct {
             .table = font_variants.tableFor(family, variant),
             .spacing = spacing,
             .surface = surface,
-            .space_kerns = if (surface == .layout)
+            .space_kerns = if (surface == .layout and kerning)
                 font_space_kerning.tableFor(family, variant)
             else
                 .{},
+            .kerning = kerning,
         };
     }
 
@@ -279,7 +299,10 @@ pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
     // which one `measureText` sees. The table is looked up once here rather than
     // once per character, and carries a bitmap of the ~40 characters that start
     // a pair so the common character costs a shift and an AND.
-    const kerns = font_kerning.tableFor(face.family, face.variant);
+    // Empty rather than skipped at the use site: the pair lookup below is per
+    // character of every string the engine measures, and an empty table already
+    // answers zero from its start bitmap without a branch of its own.
+    const kerns = if (face.kerning) font_kerning.tableFor(face.family, face.variant) else font_kerning.Table{};
     // The pairs with a space on one side, which Chrome applies in layout and
     // not in the canvas. Resolved once when the face was built, so this costs
     // nothing here; empty on the canvas surface and for the 142 families that

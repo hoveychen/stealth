@@ -702,6 +702,10 @@ fn addRawRuleAtDepth(self: *StyleManager, build_arena: Allocator, selector_text:
             props.letter_spacing = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "word-spacing")) {
             props.word_spacing = .{ .value = val, .important = decl.important };
+        } else if (std.ascii.eqlIgnoreCase(name, "font-kerning")) {
+            props.font_kerning = .{ .value = val, .important = decl.important };
+        } else if (std.ascii.eqlIgnoreCase(name, "font-feature-settings")) {
+            props.font_feature_settings = .{ .value = val, .important = decl.important };
         }
 
         if (CSSStyleDeclaration.isCustomProperty(name)) {
@@ -1727,6 +1731,20 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
         };
     }
 
+    if (decl.findProperty(String.wrap("font-kerning"))) |property| {
+        props.font_kerning = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
+    }
+
+    if (decl.findProperty(String.wrap("font-feature-settings"))) |property| {
+        props.font_feature_settings = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
+    }
+
     if (decl.findProperty(comptime .wrap("display"))) |property| {
         props.display_none = property._value.eql(comptime .wrap("none"));
         props.display_none_important = property._important;
@@ -1918,6 +1936,11 @@ const RuleProperties = struct {
     // compare alone.
     letter_spacing: ?Declaration = null,
     word_spacing: ?Declaration = null,
+    /// Here for the same reason, and read in the same walk: `resolveFont` needs
+    /// to know whether the font's kern pairs are charged, and Chrome spells that
+    /// two ways -- `font-kerning: none` and `font-feature-settings: "kern" 0`.
+    font_kerning: ?Declaration = null,
+    font_feature_settings: ?Declaration = null,
     // Every custom property the rule declares, in declaration order. Unlike
     // the fields above there is no fixed set of names to pick from, and a page
     // can read any of them back through getComputedStyle.
@@ -1944,6 +1967,8 @@ const RuleProperties = struct {
             self.text_transform != null or
             self.letter_spacing != null or
             self.word_spacing != null or
+            self.font_kerning != null or
+            self.font_feature_settings != null or
             self.custom.len > 0 or
             self.longhands.len > 0;
     }
@@ -2435,6 +2460,15 @@ fn carryFontProp(props: *RuleProperties, name: []const u8, value: []const u8, im
         props.font_size = .{ .value = value, .important = important };
     } else if (std.ascii.eqlIgnoreCase(name, "font-family")) {
         props.font_family = .{ .value = value, .important = important };
+    } else if (std.ascii.eqlIgnoreCase(name, "font-kerning")) {
+        // Both are longhands of `font`, so a sheet that writes the shorthand has
+        // reset them -- to `auto` and `normal` respectively, per
+        // `shorthand.font_initials`. Without this a rule `.x{font:16px serif}`
+        // would leave an inherited `font-kerning: none` in force where Chrome
+        // clears it.
+        props.font_kerning = .{ .value = value, .important = important };
+    } else if (std.ascii.eqlIgnoreCase(name, "font-feature-settings")) {
+        props.font_feature_settings = .{ .value = value, .important = important };
     }
 }
 
@@ -2558,9 +2592,11 @@ fn computedFontItalicAt(self: *StyleManager, element: ?*Element, depth: u8) bool
     return self.computedFontItalicAt(current.parentElement(), depth + 1);
 }
 
-/// Cascaded, inherited `letter-spacing` and `word-spacing`, in CSS pixels.
+/// Everything about the cascade a text measurement needs beyond the font
+/// itself: `letter-spacing` and `word-spacing` in CSS pixels, and whether the
+/// font's kern pairs are charged.
 ///
-/// Both reach a measurement rather than only `getComputedStyle`: without them
+/// All of them reach a measurement rather than only `getComputedStyle`: without them
 /// `letter-spacing: 10px` measured a string at exactly the width it measures
 /// without it, which is one expression apart from Chrome.
 ///
@@ -2580,22 +2616,41 @@ fn computedFontItalicAt(self: *StyleManager, element: ?*Element, depth: u8) bool
 /// says when it declares neither property in a stylesheet and every level of
 /// the walk stops at `declared_longhands`; the site declares `letter-spacing`,
 /// so every level walked its rules instead.
-pub fn computedTextSpacing(self: *StyleManager, element: ?*Element) struct { letter: f64, word: f64 } {
+///
+/// `font-kerning` and `font-feature-settings` ride the same walk for the same
+/// reason: they are read per element per layout off `resolveFont` too, and a
+/// walk of their own would be the third one this function exists to avoid. Both
+/// inherit, both answer one question -- are the font's kern pairs charged -- and
+/// they are resolved independently, so `kerning` is the AND of the two rather
+/// than one property shadowing the other. Measured: a child's
+/// `font-kerning: normal` overrides a parent's `none`, and
+/// `font-feature-settings: "kern" 0` on a parent reaches a child that declares
+/// nothing (scratch/b100/expr-kern-table.js, the `inherit` block). What the two
+/// do to EACH OTHER -- a parent's `"kern" 0` against a child's
+/// `font-kerning: normal` -- has not been measured, so the AND is a choice and
+/// not a reading; nothing asserts it.
+pub fn computedTextStyle(self: *StyleManager, element: ?*Element) struct { letter: f64, word: f64, kerning: bool } {
     // Probed once per read rather than once per ancestor level per property.
     self.rebuildIfDirty() catch {};
     const in_sheets_letter = self.declared_longhands.contains("letter-spacing");
     const in_sheets_word = self.declared_longhands.contains("word-spacing");
+    const in_sheets_kerning = self.declared_longhands.contains("font-kerning");
+    const in_sheets_features = self.declared_longhands.contains("font-feature-settings");
 
     var letter: f64 = 0;
     var word: f64 = 0;
+    var kerning = true;
+    var features_kern = true;
     var want_letter = true;
     var want_word = true;
+    var want_kerning = true;
+    var want_features = true;
 
     var current = element;
     var depth: u8 = 0;
     while (current) |el| {
         if (depth >= MAX_FONT_ANCESTOR_DEPTH) break;
-        // Once per level for both names, not once per name.
+        // Once per level for all four names, not once per name.
         const style = inlineStyleFor(el, self.frame);
         if (want_letter) {
             if (self.spacingOn(el, "letter-spacing", .letter_spacing, in_sheets_letter, style)) |px| {
@@ -2609,25 +2664,80 @@ pub fn computedTextSpacing(self: *StyleManager, element: ?*Element) struct { let
                 want_word = false;
             }
         }
-        if (!want_letter and !want_word) break;
+        // `style != null or in_sheets` is the whole of what could answer, so a
+        // level with neither is skipped rather than asked. It is behaviour for
+        // free -- the call would return null -- and it matters because these two
+        // are the ones nothing declares on the usual page: with both false the
+        // level costs a branch instead of two calls.
+        if (want_kerning and (style != null or in_sheets_kerning)) {
+            if (self.kerningOn(el, "font-kerning", .font_kerning, in_sheets_kerning, style, parseFontKerning)) |on| {
+                kerning = on;
+                want_kerning = false;
+            }
+        }
+        if (want_features and (style != null or in_sheets_features)) {
+            if (self.kerningOn(el, "font-feature-settings", .font_feature_settings, in_sheets_features, style, parseFeatureKern)) |on| {
+                features_kern = on;
+                want_features = false;
+            }
+        }
+        if (!want_letter and !want_word and !want_kerning and !want_features) break;
         current = el.parentElement();
         depth += 1;
     }
-    return .{ .letter = letter, .word = word };
+    return .{ .letter = letter, .word = word, .kerning = kerning and features_kern };
 }
 
-/// What one element declares for one of the two, or null when it declares
-/// nothing usable and the value has to come from an ancestor.
+/// The declarations that could answer for `property` on `el`, most authoritative
+/// first, with the ones that do not exist left null.
+///
+/// The order is `computedFontFamilyAt`'s: an important rule beats inline, inline
+/// beats a normal rule. Shared rather than written per property because a caller
+/// cannot get it wrong in only one place -- and because the fall-through matters:
+/// a source that parses to nothing usable must hand the question to the next
+/// source, not to the ancestor walk.
 ///
 /// `in_sheets` is the document-wide answer to "can any rule declare this name",
-/// hoisted out of the walk: without it the only source left is the inline
-/// style, and `style` is that, looked up once per level for both names.
+/// hoisted out of the walk by the caller: without it the only source left is the
+/// inline style, and `style` is that, looked up once per level for every name.
 ///
 /// The rule side goes through the enum-keyed cache and not the name-keyed one,
 /// so neither the cache probe nor the per-rule test hashes or compares a
 /// string. The UA sheet is not consulted at all -- zero rows in
-/// `chrome_per_tag_values` declare either name, so the probe could only ever
-/// return null. If one is ever added, this is where to put it back.
+/// `chrome_per_tag_values` declare any of these names, so the probe could only
+/// ever return null. If one is ever added, this is where to put it back.
+fn cascadedCandidates(
+    self: *StyleManager,
+    el: *Element,
+    comptime property: []const u8,
+    comptime which: CascadedProperty,
+    in_sheets: bool,
+    style: ?*CSSStyleDeclaration,
+) [3]?[]const u8 {
+    // The wrap is inside the `if` rather than above it because a name past
+    // String's 12-byte SSO limit -- `font-feature-settings` is 21 -- cannot be
+    // wrapped at comptime, and an element with no style attribute has nothing to
+    // ask. That is the common case on the path this sits under: the cost
+    // instrument's 400 paragraphs declare nothing inline.
+    const inline_property = if (style) |declaration| declaration.findProperty(
+        if (comptime property.len <= 12) comptime String.wrap(property) else String.wrap(property),
+    ) else null;
+    const rule = if (in_sheets) self.cascadedDeclaration(el, which) else null;
+
+    const important_rule = if (rule) |declaration|
+        declaration.important and !(inline_property != null and inline_property.?._important)
+    else
+        false;
+
+    return .{
+        if (important_rule) rule.?.value else null,
+        if (inline_property) |property_value| property_value._value.str() else null,
+        if (rule) |declaration| declaration.value else null,
+    };
+}
+
+/// What one element declares for `letter-spacing` or `word-spacing`, or null
+/// when it declares nothing usable and the value has to come from an ancestor.
 fn spacingOn(
     self: *StyleManager,
     el: *Element,
@@ -2636,24 +2746,98 @@ fn spacingOn(
     in_sheets: bool,
     style: ?*CSSStyleDeclaration,
 ) ?f64 {
-    const wrapped = if (comptime property.len <= 12) comptime String.wrap(property) else String.wrap(property);
-    const inline_property = if (style) |declaration| declaration.findProperty(wrapped) else null;
-    const rule = if (in_sheets) self.cascadedDeclaration(el, which) else null;
-
-    // The order `computedFontFamilyAt` established: an important rule beats
-    // inline, inline beats a normal rule.
-    if (rule) |declaration| {
-        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
-            if (self.parseSpacing(declaration.value, el, property)) |px| return px;
-        }
-    }
-    if (inline_property) |property_value| {
-        if (self.parseSpacing(property_value._value.str(), el, property)) |px| return px;
-    }
-    if (rule) |declaration| {
-        if (self.parseSpacing(declaration.value, el, property)) |px| return px;
+    for (self.cascadedCandidates(el, property, which, in_sheets, style)) |candidate| {
+        const raw = candidate orelse continue;
+        if (self.parseSpacing(raw, el, property)) |px| return px;
     }
     return null;
+}
+
+/// The same, for one of the two properties that says whether kerning is on.
+/// `parse` is which one: the two spell the answer differently and share nothing
+/// but the cascade order.
+fn kerningOn(
+    self: *StyleManager,
+    el: *Element,
+    comptime property: []const u8,
+    comptime which: CascadedProperty,
+    in_sheets: bool,
+    style: ?*CSSStyleDeclaration,
+    comptime parse: fn ([]const u8) ?bool,
+) ?bool {
+    for (self.cascadedCandidates(el, property, which, in_sheets, style)) |candidate| {
+        const raw = candidate orelse continue;
+        if (parse(raw)) |on| return on;
+    }
+    return null;
+}
+
+/// One `font-kerning` declaration as "are the kern pairs charged", or null when
+/// it says nothing this can use and the answer has to come from an ancestor.
+///
+/// Chrome's three keywords are two answers: `auto` and `normal` both kern and
+/// `none` does not -- 'AV' at 16px serif is 21.046875, 21.046875 and 23.109375
+/// (scratch/b100/expr-kern-table.js). `auto` means "let the font decide" in the
+/// spec, and for every family measured the font decides yes, so it is not a
+/// third state here.
+///
+/// The property inherits, so `inherit`, `unset` and `revert` all fall through to
+/// the ancestor walk -- `revert` because there is no UA or user declaration for
+/// it to roll back to. `initial` asks for `auto` by name, which kerns.
+fn parseFontKerning(raw: []const u8) ?bool {
+    const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(value, "none")) return false;
+    if (std.ascii.eqlIgnoreCase(value, "auto")) return true;
+    if (std.ascii.eqlIgnoreCase(value, "normal")) return true;
+    if (std.ascii.eqlIgnoreCase(value, "initial")) return true;
+    return null;
+}
+
+/// One `font-feature-settings` declaration, reduced to the same question.
+///
+/// Only the `kern` feature is read, and only whether it is switched off: the
+/// other tags select glyph substitutions this engine does not model, so
+/// answering for them would be inventing a measurement. `"kern" 0` and
+/// `"kern" off` are off, `"kern"` bare and `"kern" 1`/`on` are on -- a tag with
+/// no value means 1 -- and a list is scanned for the tag anywhere in it, since
+/// `"liga" 0, "kern" 0` is one declaration.
+///
+/// `normal` is the initial value and a real answer rather than a refusal: a
+/// child's `font-feature-settings: normal` has to beat a parent's `"kern" 0`
+/// instead of falling through to it.
+fn parseFeatureKern(raw: []const u8) ?bool {
+    const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (value.len == 0) return null;
+    if (std.ascii.eqlIgnoreCase(value, "normal")) return true;
+    if (std.ascii.eqlIgnoreCase(value, "initial")) return true;
+    if (std.ascii.eqlIgnoreCase(value, "inherit") or std.ascii.eqlIgnoreCase(value, "unset") or
+        std.ascii.eqlIgnoreCase(value, "revert"))
+    {
+        return null;
+    }
+
+    var it = std.mem.splitScalar(u8, value, ',');
+    while (it.next()) |entry| {
+        const feature = std.mem.trim(u8, entry, &std.ascii.whitespace);
+        // The tag is a four-character string, so quoted -- either kind of quote.
+        if (feature.len < 6) continue;
+        const quote = feature[0];
+        if (quote != '"' and quote != '\'') continue;
+        if (feature[5] != quote) continue;
+        if (!std.mem.eql(u8, feature[1..5], "kern")) continue;
+        const setting = std.mem.trim(u8, feature[6..], &std.ascii.whitespace);
+        // A tag on its own means 1, so only an explicit off turns it off.
+        if (setting.len == 0) return true;
+        if (std.ascii.eqlIgnoreCase(setting, "off")) return false;
+        if (std.ascii.eqlIgnoreCase(setting, "on")) return true;
+        const n = std.fmt.parseInt(u32, setting, 10) catch return null;
+        return n != 0;
+    }
+    // A well-formed list that never mentions `kern` leaves it alone -- and it is
+    // still an answer, because the property has been declared here. Falling
+    // through would let a parent's `"kern" 0` reach a child that overrode it
+    // with `"liga" 0`, which is not what the cascade means.
+    return true;
 }
 
 /// One `letter-spacing` or `word-spacing` declaration as CSS pixels, or null
@@ -2764,7 +2948,7 @@ fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
     return self.cascadedDeclaration(el, .font_size);
 }
 
-const CascadedProperty = enum { font_size, font_family, text_transform, letter_spacing, word_spacing, display, visibility };
+const CascadedProperty = enum { font_size, font_family, text_transform, letter_spacing, word_spacing, font_kerning, font_feature_settings, display, visibility };
 
 /// The winning declaration of `property` among the stylesheet rules matching
 /// `el`, or null when none match. Importance outranks specificity, which is
@@ -2805,6 +2989,8 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
                     .text_transform => props.text_transform,
                     .letter_spacing => props.letter_spacing,
                     .word_spacing => props.word_spacing,
+                    .font_kerning => props.font_kerning,
+                    .font_feature_settings => props.font_feature_settings,
                     .display => props.display,
                     .visibility => props.visibility,
                 }) orelse continue;
