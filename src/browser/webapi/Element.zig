@@ -1833,19 +1833,21 @@ fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, 
     // measurement reads. Without them every weight measured as the regular one,
     // so `font-weight: bold` widened nothing and the same string came back the
     // same number of pixels in both -- one expression apart from Chrome.
+    // `letter-spacing` and `word-spacing` are not the font, but they are the
+    // rest of what it costs to advance the pen, and every path that measures
+    // text already carries the face down to the kernel. Without them a string
+    // measured the same width whatever either property said, which is one
+    // expression apart from Chrome. Both come back from ONE walk: a walk each
+    // was measurably slower on a real page -- see computedTextSpacing.
+    const spacing = style_manager.computedTextSpacing(self);
     return .{
         .face = .of(
             family orelse font_metrics.fallback,
             style_manager.computedFontWeight(self),
             style_manager.computedFontItalic(self),
-            // `letter-spacing` and `word-spacing` are not the font, but they are
-            // the rest of what it costs to advance the pen, and every path that
-            // measures text already carries the face down to the kernel.
-            // Without them a string measured the same width whatever either
-            // property said, which is one expression apart from Chrome.
             .{
-                .letter = style_manager.computedLetterSpacing(self),
-                .word = style_manager.computedWordSpacing(self),
+                .letter = spacing.letter,
+                .word = spacing.word,
                 // Layout leaves an opening U+0020 unpaid where `measureText`
                 // charges it -- see text_measure.Spacing.
                 .charges_lead_space = false,
