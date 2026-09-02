@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`letter-spacing` and `word-spacing` reach nothing that measures text. The two
+names are in the property tables and the canvas keeps them as attributes, but no
+layout path and no measurement reads either one, so `letter-spacing: 10px`
+measures a string at exactly the width it measures without it -- one expression
+apart from Chrome, the same shape of tell as bold text measuring the width of
+regular text.
+
+Every expectation below is a reading from Chrome 151, headed, at
+`--force-device-scale-factor=2` (scratch/b100/expr-spacing-table.js and
+scratch/b100/expr-spacing-cluster.js). The model those readings pin:
+
+  * letter-spacing adds its length after EVERY grapheme cluster, the last one
+    included. Per cluster and not per code point: a regional-indicator pair and
+    an `e` with a combining acute are each charged once, though each is two code
+    points.
+  * word-spacing adds its length at every U+0020 and U+00A0. A U+0020 in the
+    first character position is not charged; a U+00A0 there is. U+3000 and
+    U+200B are not word separators at all.
+  * both are charged on the text AS RENDERED, so a collapsing run charges the
+    one space that survives and nothing for the runs that collapse away.
+  * both inherit, and an `em` resolves against the element's own font-size.
+  * the canvas path does NOT have the first-position exemption: ' ab' with
+    `wordSpacing = '5px'` is 24.1015625 through `measureText` and 19.1015625
+    through layout. Both are asserted, because they disagree on purpose.
+
+Every string here is free of ligature candidates. Chrome forms 'fi' and 'ffl'
+and this engine forms none, so a string carrying one would be wrong for two
+reasons at once and neither could be attributed -- and a non-zero
+letter-spacing suppresses common ligatures in Chrome, which would fold the
+ligature gap into these numbers. All the plain widths below were checked to
+agree bit for bit across the two arms before any expectation was written
+(scratch/b100/expr-spacing-baseline.js).
+
+The colour-emoji rows are deltas rather than absolute widths on purpose: the
+two arms disagree on what one emoji advances (Chrome 16, this engine 20), which
+is a separate gap. A delta is immune to it and still says whether the charge is
+per cluster or per code point.
+
+Traps this test is built to avoid:
+
+  * a tab. Under `white-space: pre` a tab advances to the next tab stop, which
+    quantises the whole line and swallows the property: the first attempt at
+    measuring word-spacing used 'a b\tc' and read 'word-spacing:5px' as
+    identical to none, which is exactly what an unimplemented property looks
+    like.
+  * `word-spacing` on a string with no separator ('monotone'), and
+    `letter-spacing: normal` / `0px`, which must NOT move. They are kept as
+    controls.
+-->
+
+<script id=text_spacing_properties>
+{
+  const NB = '\u00a0';
+  const IDEO = '\u3000';
+  const ZWSP = '\u200b';
+
+  // [declaration, text, width]. `white-space:pre` where the written text is
+  // what renders; without it the collapsed rendering is.
+  const LAYOUT = [
+    // letter-spacing: eight amounts on one 8-cluster string.
+    ['white-space:pre;letter-spacing:normal', 'monotone', 63.9921875],
+    ['white-space:pre;letter-spacing:0px', 'monotone', 63.9921875],
+    ['white-space:pre;letter-spacing:1px', 'monotone', 71.9921875],
+    ['white-space:pre;letter-spacing:2px', 'monotone', 79.9921875],
+    ['white-space:pre;letter-spacing:10px', 'monotone', 143.9921875],
+    ['white-space:pre;letter-spacing:-1px', 'monotone', 55.9921875],
+    ['white-space:pre;letter-spacing:0.5em', 'monotone', 127.9921875],
+    ['white-space:pre;letter-spacing:0.25em', 'monotone', 95.9921875],
+    // A space is a rendered character, so letter-spacing charges it too: five
+    // clusters here, not three.
+    ['white-space:pre;letter-spacing:normal', 'a b c', 30.203125],
+    ['white-space:pre;letter-spacing:2px', 'a b c', 40.203125],
+
+    // word-spacing: five amounts, two separators.
+    ['white-space:pre;word-spacing:normal', 'a b c', 30.203125],
+    ['white-space:pre;word-spacing:0px', 'a b c', 30.203125],
+    ['white-space:pre;word-spacing:5px', 'a b c', 40.203125],
+    ['white-space:pre;word-spacing:1em', 'a b c', 62.203125],
+    ['white-space:pre;word-spacing:-2px', 'a b c', 26.203125],
+    // Control: no separator, so nothing moves.
+    ['white-space:pre;word-spacing:5px', 'monotone', 63.9921875],
+
+    // Which characters count, and where. A U+0020 in the first position is
+    // exempt and a U+00A0 in the same position is not.
+    ['white-space:pre;word-spacing:5px', ' ab', 19.1015625],
+    ['white-space:pre;word-spacing:5px', 'ab ', 24.1015625],
+    ['white-space:pre;word-spacing:5px', '  ab', 28.1015625],
+    ['white-space:pre;word-spacing:5px', '   ab', 37.1015625],
+    ['white-space:pre;word-spacing:5px', 'a b', 24.1015625],
+    ['white-space:pre;word-spacing:5px', NB + 'ab', 24.1015625],
+    ['white-space:pre;word-spacing:5px', NB + NB + 'ab', 33.1015625],
+    ['white-space:pre;word-spacing:5px', 'a' + NB + 'b', 24.1015625],
+
+    // Both at once: 5 clusters x 2 plus 2 separators x 5.
+    ['white-space:pre;letter-spacing:2px;word-spacing:5px', 'a b c', 50.203125],
+
+    // The collapsing path charges the rendering, not the source: all three of
+    // these render as the same five characters.
+    ['letter-spacing:2px', 'ab cd', 44.203125],
+    ['letter-spacing:2px', 'ab   cd', 44.203125],
+    ['letter-spacing:2px', '   ab   cd   ', 44.203125],
+    ['letter-spacing:2px', 'ab cd ef', 66.6328125],
+    ['word-spacing:5px', 'ab cd', 39.203125],
+    ['word-spacing:5px', 'ab   cd', 39.203125],
+    ['word-spacing:5px', '   ab   cd   ', 39.203125],
+    ['word-spacing:5px', 'ab cd ef', 60.6328125],
+    ['letter-spacing:2px;word-spacing:5px', 'ab cd', 49.203125],
+    ['letter-spacing:2px;word-spacing:5px', 'ab   cd', 49.203125],
+    ['letter-spacing:2px;word-spacing:5px', '   ab   cd   ', 49.203125],
+    ['letter-spacing:2px;word-spacing:5px', 'ab cd ef', 76.6328125],
+
+    // Other families and another size, so this cannot be met by adding a
+    // constant to serif at 16px.
+    ['white-space:pre;font-family:sans-serif;letter-spacing:2px', 'monotone', 87.1640625],
+    ['white-space:pre;font-family:monospace;letter-spacing:2px', 'monotone', 93.0625],
+    ['white-space:pre;font-size:32px;letter-spacing:0.5em', 'monotone', 255.984375],
+    ['white-space:pre;font-size:32px;word-spacing:0.5em', 'a b c', 92.40625],
+
+    // One cluster made of two code points: charged once, not twice.
+    ['white-space:pre;letter-spacing:10px', 'e\u0301', 17.1015625],
+  ];
+
+  // U+3000 and U+200B are not word separators: `word-spacing` must add nothing
+  // for either. Asserted as a delta rather than a width because this engine
+  // charges both of them the family's mean ASCII advance -- everything above
+  // U+00FF outside the colour emoji is priced that way (see text_measure) --
+  // where Chrome makes U+3000 an ideographic space and U+200B nothing at all.
+  // That gap is real and is not this plan's; a delta cannot see it.
+  const NOT_SEPARATORS = ['a' + IDEO + 'b', 'a' + ZWSP + 'b', 'monotone'];
+
+  // Deltas, in clusters, for strings whose plain width the two arms do not
+  // agree on. `letter-spacing:10px` must add 10 per cluster.
+  const CLUSTERS = [
+    ['\u{1f600}', 1],
+    ['\u{1f600}\u{1f600}', 2],
+    ['\u{1f1fa}\u{1f1f8}', 1],
+    ['\u{1f468}\u200d\u{1f4bb}', 1],
+    ['\u2600\ufe0f', 1],
+    ['ab', 2],
+  ];
+
+  const CANVAS = [
+    // letterSpacing, wordSpacing, text, width
+    ['0px', '0px', 'a b c', 30.203125],
+    ['2px', '0px', 'a b c', 40.203125],
+    ['0px', '5px', 'a b c', 40.203125],
+    ['2px', '5px', 'a b c', 50.203125],
+    ['-1px', '0px', 'monotone', 55.9921875],
+    ['0.5em', '0px', 'monotone', 127.9921875],
+    ['0px', '5px', 'monotone', 63.9921875],
+    // No first-position exemption here -- layout says 19.1015625 for this one.
+    ['0px', '5px', ' ab', 24.1015625],
+    ['0px', '5px', NB + 'ab', 24.1015625],
+    ['0px', '5px', 'ab ', 24.1015625],
+  ];
+
+  const show = (s) => JSON.stringify(s).replace(/[\u0080-\uffff]/g,
+    (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+
+  const wrong = [];
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:-9999px;top:0;width:4000px';
+  document.body.appendChild(host);
+
+  const layoutWidth = (decl, text) => {
+    const span = document.createElement('span');
+    span.style.cssText = 'font:16px serif;' + decl;
+    span.textContent = text;
+    host.appendChild(span);
+    const w = span.getBoundingClientRect().width;
+    span.remove();
+    return w;
+  };
+
+  for (const [decl, text, want] of LAYOUT) {
+    const got = layoutWidth(decl, text);
+    if (got !== want) {
+      wrong.push('layout {' + decl + '} ' + show(text) + ': want ' + want + ', got ' + got);
+    }
+  }
+
+  for (const text of NOT_SEPARATORS) {
+    const plain = layoutWidth('white-space:pre;word-spacing:0px', text);
+    const spaced = layoutWidth('white-space:pre;word-spacing:5px', text);
+    if (spaced !== plain) {
+      wrong.push('separators ' + show(text) + ': want +0, got +' + (spaced - plain));
+    }
+  }
+
+  for (const [text, clusters] of CLUSTERS) {
+    const plain = layoutWidth('white-space:pre;letter-spacing:0px', text);
+    const spaced = layoutWidth('white-space:pre;letter-spacing:10px', text);
+    const want = clusters * 10;
+    if (spaced - plain !== want) {
+      wrong.push('clusters ' + show(text) + ': want +' + want + ', got +' + (spaced - plain));
+    }
+  }
+
+  // Both properties inherit, so a child that declares neither is spaced by its
+  // parent: 5 clusters x 3px plus 2 separators x 7px on top of 30.203125.
+  const outer = document.createElement('div');
+  outer.style.cssText = 'font:16px serif;white-space:pre;letter-spacing:3px;word-spacing:7px';
+  const inner = document.createElement('span');
+  inner.textContent = 'a b c';
+  outer.appendChild(inner);
+  host.appendChild(outer);
+  const inherited = inner.getBoundingClientRect().width;
+  outer.remove();
+  if (inherited !== 59.203125) {
+    wrong.push('inherited: want 59.203125, got ' + inherited);
+  }
+
+  const ctx = document.createElement('canvas').getContext('2d');
+  for (const [ls, ws, text, want] of CANVAS) {
+    ctx.font = '16px serif';
+    ctx.letterSpacing = ls;
+    ctx.wordSpacing = ws;
+    const got = ctx.measureText(text).width;
+    if (got !== want) {
+      wrong.push('canvas ls=' + ls + ' ws=' + ws + ' ' + show(text) +
+        ': want ' + want + ', got ' + got);
+    }
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join('\n  | '));
+}
+</script>

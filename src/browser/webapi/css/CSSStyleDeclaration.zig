@@ -1417,7 +1417,7 @@ fn twoAxisPosition(property_name: []const u8) bool {
 /// Only a value that is one calc() and nothing else. A multi-component value
 /// like `padding: calc(1em + 1px) calc(5px)` keeps the behaviour it had, so
 /// this cannot make a list worse while the single case is being got right.
-fn computedCalcText(style_manager: *StyleManager, element: *Element, property_name: []const u8, value: []const u8) ?[]const u8 {
+pub fn computedCalcText(style_manager: *StyleManager, element: *Element, property_name: []const u8, value: []const u8) ?[]const u8 {
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
     if (trimmed.len < 6) return null;
     if (trimmed[trimmed.len - 1] != ')') return null;
@@ -1678,7 +1678,12 @@ pub fn computedLengthText(style_manager: *StyleManager, element: *Element, prope
 }
 
 /// What one token of a declaration has to become.
-const LengthFactor = union(enum) {
+///
+/// Public because the computed-style surface is not the only caller any more:
+/// `StyleManager.computedLetterSpacing` needs the same answer as a number, and
+/// the alternative was a second table of what a unit means on a property. One
+/// oracle feeding both is the point.
+pub const LengthFactor = union(enum) {
     /// Already what a computed style carries; the token goes through as it is.
     verbatim,
     /// CSS pixels per unit, to multiply the token's number by.
@@ -1687,7 +1692,7 @@ const LengthFactor = union(enum) {
     unresolvable,
 };
 
-fn lengthFactor(style_manager: *StyleManager, element: *Element, property_name: []const u8, unit: units.Unit) LengthFactor {
+pub fn lengthFactor(style_manager: *StyleManager, element: *Element, property_name: []const u8, unit: units.Unit) LengthFactor {
     const on_font_size = std.mem.eql(u8, property_name, "font-size");
     const on_line_height = std.mem.eql(u8, property_name, "line-height");
 

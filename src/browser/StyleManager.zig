@@ -698,6 +698,10 @@ fn addRawRuleAtDepth(self: *StyleManager, build_arena: Allocator, selector_text:
             props.font_family = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "text-transform")) {
             props.text_transform = .{ .value = val, .important = decl.important };
+        } else if (std.ascii.eqlIgnoreCase(name, "letter-spacing")) {
+            props.letter_spacing = .{ .value = val, .important = decl.important };
+        } else if (std.ascii.eqlIgnoreCase(name, "word-spacing")) {
+            props.word_spacing = .{ .value = val, .important = decl.important };
         }
 
         if (CSSStyleDeclaration.isCustomProperty(name)) {
@@ -1709,6 +1713,20 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
         };
     }
 
+    if (decl.findProperty(String.wrap("letter-spacing"))) |property| {
+        props.letter_spacing = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
+    }
+
+    if (decl.findProperty(String.wrap("word-spacing"))) |property| {
+        props.word_spacing = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
+    }
+
     if (decl.findProperty(comptime .wrap("display"))) |property| {
         props.display_none = property._value.eql(comptime .wrap("none"));
         props.display_none_important = property._important;
@@ -1892,6 +1910,14 @@ const RuleProperties = struct {
     font_size: ?Declaration = null,
     font_family: ?Declaration = null,
     text_transform: ?Declaration = null,
+    // Kept here rather than in `longhands` for the same reason as the fields
+    // above: they are read per element per layout, off `resolveFont`. Through
+    // the name-keyed list instead, ak-homedepot -- 107 of its 4857 rules
+    // declare `letter-spacing`, and its tree is 32 deep, which is the walk's
+    // own ceiling -- spent 14% of its wall clock on the string hash and
+    // compare alone.
+    letter_spacing: ?Declaration = null,
+    word_spacing: ?Declaration = null,
     // Every custom property the rule declares, in declaration order. Unlike
     // the fields above there is no fixed set of names to pick from, and a page
     // can read any of them back through getComputedStyle.
@@ -1916,6 +1942,8 @@ const RuleProperties = struct {
             self.font_size != null or
             self.font_family != null or
             self.text_transform != null or
+            self.letter_spacing != null or
+            self.word_spacing != null or
             self.custom.len > 0 or
             self.longhands.len > 0;
     }
@@ -2080,7 +2108,18 @@ const INLINE_PRIORITY: u64 = std.math.maxInt(u64);
 // `frame` is the StyleManager's frame, which callers guarantee is el's owner
 // frame (el.ownerFrame) — the map where the materialized style lives.
 fn getInlineStyleProperty(el: *Element, property_name: String, frame: *Frame) ?*CSSStyleProperty {
-    const style = frame._element_styles.get(el) orelse blk: {
+    const style = inlineStyleFor(el, frame) orelse return null;
+    return style.findProperty(property_name);
+}
+
+/// The element's parsed inline style, or null when it has none.
+///
+/// Split out of `getInlineStyleProperty` for the caller that wants two
+/// properties off the same element: the miss path here ends in
+/// `getAttributeSafe`, which walks the element's attributes, and a walk asking
+/// for both spacing properties was paying that twice per ancestor.
+fn inlineStyleFor(el: *Element, frame: *Frame) ?*CSSStyleDeclaration {
+    return frame._element_styles.get(el) orelse blk: {
         // No JS-set style object and no style attribute -> nothing inline to read.
         if (el.getAttributeSafe(comptime .wrap("style")) == null) return null;
         break :blk el.getOrCreateStyle(frame) catch |err| {
@@ -2088,7 +2127,6 @@ fn getInlineStyleProperty(el: *Element, property_name: String, frame: *Frame) ?*
             return null;
         };
     };
-    return style.findProperty(property_name);
 }
 
 /// Resolved value of an element's inline `style=` declaration for `property_name`,
@@ -2501,11 +2539,191 @@ fn computedFontItalicAt(self: *StyleManager, element: ?*Element, depth: u8) bool
     return self.computedFontItalicAt(current.parentElement(), depth + 1);
 }
 
+/// Cascaded, inherited `letter-spacing` and `word-spacing`, in CSS pixels.
+///
+/// Both reach a measurement rather than only `getComputedStyle`: without them
+/// `letter-spacing: 10px` measured a string at exactly the width it measures
+/// without it, which is one expression apart from Chrome.
+///
+/// The recursion resolves the declaration on the element that CARRIES it and
+/// inherits the absolute result, which is what CSS means by a computed value
+/// and is measured rather than read off the spec: `letter-spacing: 0.5em` on a
+/// 16px parent charges 8px to a child whose own font-size is 8px, 16px or 32px
+/// alike (scratch/b100/expr-spacing-inherit.js -- the delta is 64 for an
+/// 8-cluster string in all three). Re-resolving the `em` on the child would
+/// give three different answers and look just as plausible.
+/// ONE ancestor walk for both, and not two, because this sits under
+/// `offsetWidth`. The first version made a walk per property and cost
+/// ak-homedepot real time: five alternating runs against the same tree without
+/// them read 36.3s / 34.0s / 47.3s / 35.3s / 28.0s where this arm read 55.3s
+/// (timed out) / 26.8s / 47.9s / 52.7s / 63.9s -- half the runs close to or past
+/// the 50s budget. A synthetic page said +6%, which is what a synthetic page
+/// says when it declares neither property in a stylesheet and every level of
+/// the walk stops at `declared_longhands`; the site declares `letter-spacing`,
+/// so every level walked its rules instead.
+pub fn computedTextSpacing(self: *StyleManager, element: ?*Element) struct { letter: f64, word: f64 } {
+    // Probed once per read rather than once per ancestor level per property.
+    self.rebuildIfDirty() catch {};
+    const in_sheets_letter = self.declared_longhands.contains("letter-spacing");
+    const in_sheets_word = self.declared_longhands.contains("word-spacing");
+
+    var letter: f64 = 0;
+    var word: f64 = 0;
+    var want_letter = true;
+    var want_word = true;
+
+    var current = element;
+    var depth: u8 = 0;
+    while (current) |el| {
+        if (depth >= MAX_FONT_ANCESTOR_DEPTH) break;
+        // Once per level for both names, not once per name.
+        const style = inlineStyleFor(el, self.frame);
+        if (want_letter) {
+            if (self.spacingOn(el, "letter-spacing", .letter_spacing, in_sheets_letter, style)) |px| {
+                letter = px;
+                want_letter = false;
+            }
+        }
+        if (want_word) {
+            if (self.spacingOn(el, "word-spacing", .word_spacing, in_sheets_word, style)) |px| {
+                word = px;
+                want_word = false;
+            }
+        }
+        if (!want_letter and !want_word) break;
+        current = el.parentElement();
+        depth += 1;
+    }
+    return .{ .letter = letter, .word = word };
+}
+
+/// What one element declares for one of the two, or null when it declares
+/// nothing usable and the value has to come from an ancestor.
+///
+/// `in_sheets` is the document-wide answer to "can any rule declare this name",
+/// hoisted out of the walk: without it the only source left is the inline
+/// style, and `style` is that, looked up once per level for both names.
+///
+/// The rule side goes through the enum-keyed cache and not the name-keyed one,
+/// so neither the cache probe nor the per-rule test hashes or compares a
+/// string. The UA sheet is not consulted at all -- zero rows in
+/// `chrome_per_tag_values` declare either name, so the probe could only ever
+/// return null. If one is ever added, this is where to put it back.
+fn spacingOn(
+    self: *StyleManager,
+    el: *Element,
+    comptime property: []const u8,
+    comptime which: CascadedProperty,
+    in_sheets: bool,
+    style: ?*CSSStyleDeclaration,
+) ?f64 {
+    const wrapped = if (comptime property.len <= 12) comptime String.wrap(property) else String.wrap(property);
+    const inline_property = if (style) |declaration| declaration.findProperty(wrapped) else null;
+    const rule = if (in_sheets) self.cascadedDeclaration(el, which) else null;
+
+    // The order `computedFontFamilyAt` established: an important rule beats
+    // inline, inline beats a normal rule.
+    if (rule) |declaration| {
+        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
+            if (self.parseSpacing(declaration.value, el, property)) |px| return px;
+        }
+    }
+    if (inline_property) |property_value| {
+        if (self.parseSpacing(property_value._value.str(), el, property)) |px| return px;
+    }
+    if (rule) |declaration| {
+        if (self.parseSpacing(declaration.value, el, property)) |px| return px;
+    }
+    return null;
+}
+
+/// One `letter-spacing` or `word-spacing` declaration as CSS pixels, or null
+/// when it declares nothing this can use -- an unparseable value, or one of the
+/// CSS-wide keywords, both of which have to fall through to the inherited
+/// value rather than resolve to zero.
+///
+/// The unit table is `CSSStyleDeclaration.lengthFactor`, the same one the
+/// computed-style surface answers from, so the two cannot drift apart. Measured
+/// against Chrome across 49 readings: `2px`, `1em`, `1rem`, `2ex`, `3ch`,
+/// `calc(1px + 1px)` and `-3px` all resolve, a bare `2` is refused, and `0` is
+/// accepted (zero needs no unit).
+fn parseSpacing(self: *StyleManager, raw: []const u8, element: *Element, comptime property: []const u8) ?f64 {
+    const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (value.len == 0) return null;
+    // `normal` is the initial value of both and charges nothing. It is a real
+    // answer and not a refusal: `letter-spacing: normal` on a child must beat an
+    // inherited `3px` rather than fall through to it.
+    // `normal` is the initial value of both, and `initial` asks for it by name.
+    // Both are real answers rather than refusals: `letter-spacing: normal` on a
+    // child has to beat an inherited `3px` instead of falling through to it.
+    if (std.ascii.eqlIgnoreCase(value, "normal")) return 0;
+    if (std.ascii.eqlIgnoreCase(value, "initial")) return 0;
+    // Both properties inherit, so `unset` means `inherit` for them, and
+    // `revert` reaches the same place: neither has a UA or user declaration to
+    // roll back to. All three fall through to the ancestor walk.
+    if (std.ascii.eqlIgnoreCase(value, "inherit") or std.ascii.eqlIgnoreCase(value, "unset") or
+        std.ascii.eqlIgnoreCase(value, "revert"))
+    {
+        return null;
+    }
+
+    // A math function. Resolved through the same walk the computed-style
+    // surface uses, and only on this branch: it costs an arena write and a
+    // reparse, where the common case below is a parse and a multiply, and this
+    // sits under `offsetWidth`. Falling through instead would charge the
+    // INHERITED spacing to an element that declared its own, which is a wrong
+    // answer rather than a missing one.
+    if (std.mem.indexOfScalar(u8, value, '(') != null) {
+        const text = CSSStyleDeclaration.computedCalcText(self, element, property, value) orelse
+            return null;
+        const folded = units.parse(text) catch return null;
+        if (units.absoluteLengthFactor(folded.unit)) |factor| {
+            const px = folded.value * factor;
+            return if (std.math.isFinite(px)) px else null;
+        }
+        return null;
+    }
+
+    const parsed = units.parse(value) catch return null;
+    // A percentage of the element's own font size. It is not in the unit table
+    // because the computed-style surface prints it as written, the way Chrome
+    // does, so the resolution has to happen here.
+    if (parsed.unit == .percentage) {
+        const px = parsed.value * self.computedFontSize(element) / 100.0;
+        return if (std.math.isFinite(px)) px else null;
+    }
+    // A bare non-zero number is not a length: Chrome drops `letter-spacing: 2`
+    // and keeps `letter-spacing: 0`.
+    if (parsed.unit == .none) {
+        return if (parsed.value == 0) 0 else null;
+    }
+    // `px` before the unit table, because the table answers `.verbatim` for it:
+    // a computed style prints a px length as written and has no conversion to
+    // report, which is the right answer for that caller and reads as "no number
+    // here" to this one. Without this line every px declaration fell through to
+    // the inherited value while `1pc`, `12pt` and `1em` -- all of which do
+    // convert -- worked, so `letter-spacing: 2px` measured as nothing and
+    // `letter-spacing: 0.125em` measured correctly.
+    const factor: f64 = if (parsed.unit == .px) 1 else switch (CSSStyleDeclaration.lengthFactor(self, element, property, parsed.unit)) {
+        .pixels => |f| f,
+        .verbatim, .unresolvable => return null,
+    };
+    const px = parsed.value * factor;
+    return if (std.math.isFinite(px)) px else null;
+}
+
 /// The declaration that wins `name` on `el` among the inline style and the
 /// stylesheet rules, in the order `computedFontFamilyAt` established: an
 /// important rule beats inline, inline beats a normal rule.
+///
+/// `String.wrap` is comptime only up to 12 bytes, which "letter-spacing" is two
+/// past, so the wrap happens at runtime for a long name and at comptime for
+/// every name short enough -- the fast path the font properties took stays the
+/// fast path. Same split as `computedTextTransformAt`, which met the limit
+/// first.
 fn declaredValue(self: *StyleManager, el: *Element, comptime name: []const u8) ?[]const u8 {
-    const inline_property = getInlineStyleProperty(el, comptime .wrap(name), self.frame);
+    const wrapped = if (comptime name.len <= 12) comptime String.wrap(name) else String.wrap(name);
+    const inline_property = getInlineStyleProperty(el, wrapped, self.frame);
     const rule = self.cascadedNamedDeclaration(el, name, .longhand);
     if (rule) |declaration| {
         if (declaration.important and !(inline_property != null and inline_property.?._important)) {
@@ -2527,7 +2745,7 @@ fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
     return self.cascadedDeclaration(el, .font_size);
 }
 
-const CascadedProperty = enum { font_size, font_family, text_transform, display, visibility };
+const CascadedProperty = enum { font_size, font_family, text_transform, letter_spacing, word_spacing, display, visibility };
 
 /// The winning declaration of `property` among the stylesheet rules matching
 /// `el`, or null when none match. Importance outranks specificity, which is
@@ -2566,6 +2784,8 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
                     .font_size => props.font_size,
                     .font_family => props.font_family,
                     .text_transform => props.text_transform,
+                    .letter_spacing => props.letter_spacing,
+                    .word_spacing => props.word_spacing,
                     .display => props.display,
                     .visibility => props.visibility,
                 }) orelse continue;

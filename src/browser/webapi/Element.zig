@@ -1833,11 +1833,25 @@ fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, 
     // measurement reads. Without them every weight measured as the regular one,
     // so `font-weight: bold` widened nothing and the same string came back the
     // same number of pixels in both -- one expression apart from Chrome.
+    // `letter-spacing` and `word-spacing` are not the font, but they are the
+    // rest of what it costs to advance the pen, and every path that measures
+    // text already carries the face down to the kernel. Without them a string
+    // measured the same width whatever either property said, which is one
+    // expression apart from Chrome. Both come back from ONE walk: a walk each
+    // was measurably slower on a real page -- see computedTextSpacing.
+    const spacing = style_manager.computedTextSpacing(self);
     return .{
         .face = .of(
             family orelse font_metrics.fallback,
             style_manager.computedFontWeight(self),
             style_manager.computedFontItalic(self),
+            .{
+                .letter = spacing.letter,
+                .word = spacing.word,
+                // Layout leaves an opening U+0020 unpaid where `measureText`
+                // charges it -- see text_measure.Spacing.
+                .charges_lead_space = false,
+            },
         ),
         .size = style_manager.computedFontSize(self),
     };
@@ -1903,10 +1917,20 @@ const CollapsedRun = struct {
             const start = i;
             while (i < str.len and std.mem.indexOfScalar(u8, css_whitespace, str[i]) == null) i += 1;
             width += self.open(face, size);
-            // Advances are additive and nothing here kerns (see text_measure),
-            // so measuring the words and the spaces apart sums to measuring the
-            // rendered string -- which is why a run that collapses to itself
-            // comes out bit-identical to the one-call measurement it replaced.
+            // Advances are additive, and so is what the two spacing properties
+            // charge -- `letter-spacing` per cluster and `word-spacing` per
+            // separator -- so measuring the words and the spaces apart sums to
+            // measuring the rendered string.
+            //
+            // The kernel does kern now, and a kern pair cannot be seen across
+            // two calls, so this split would lose one that straddled a chop
+            // point. None does: of the 265 840 pairs in font_kerning.zig, zero
+            // have U+0020 on either side. U+00A0 has 1347 of them and is not a
+            // chop point -- it is not collapsible white space, so it stays
+            // inside a word and keeps its pairs. So a run that collapses to
+            // itself still comes out bit-identical to the one-call measurement
+            // this replaced. (The comment here used to say this engine kerns
+            // nothing at all, which stopped being true when the table landed.)
             width += text_measure.measure(face, str[start..i], size).width;
         }
         return width;
@@ -1927,7 +1951,11 @@ const CollapsedRun = struct {
             self.emitted = true;
         }
         if (!self.pending or !self.emitted) return 0;
-        return text_measure.measure(face, " ", size).width;
+        // A space this returns has something rendered on either side of it, so
+        // it is never the run's opening character and `word-spacing` is owed.
+        // The kernel cannot see that from a one-character call, which is why it
+        // is added here -- see text_measure.Spacing.charges_lead_space.
+        return text_measure.measure(face, " ", size).width + face.spacing.word;
     }
 
     /// Whether the run rendered anything at all: text that is all white space
@@ -1949,9 +1977,11 @@ const CollapsedRun = struct {
 /// a stack of child boxes and contentHeight owns it, and no content at all means
 /// there is no line.
 ///
-/// Advances are additive and we model no kerning (see `text_measure`), so the
-/// runs are summed rather than concatenated into a buffer: this sits under
-/// `offsetWidth`, which pages read in loops.
+/// Advances are additive, as is what `letter-spacing` and `word-spacing`
+/// charge, so the runs are summed rather than concatenated into a buffer: this
+/// sits under `offsetWidth`, which pages read in loops. A kern pair straddling
+/// a chop point is the one thing a sum loses, and no pair in the table does --
+/// see the note in `CollapsedRun.measure`.
 ///
 /// Because a plain one-line element's height is its strut and nothing else, a
 /// caller that wants only the height can pass `measure_width = false` and skip
@@ -2038,7 +2068,7 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
         .collapses = !CSSStyleDeclaration.preservesWhitespace(self, frame),
         .wraps = available != null and CSSStyleDeclaration.wrapsText(self, frame),
         .box = available orelse 0,
-        .space = text_measure.measure(font.face, " ", font.size).width,
+        .space = .of(font.face, font.size),
         .strut_above = strut.above,
         .strut_below = strut.below,
         .open_above = strut.above,
@@ -2210,6 +2240,41 @@ fn flowInline(self: *Element, frame: *Frame, flow: *LineFlow, face: text_measure
 /// A hard break ends a SEGMENT, and each segment is wrapped on its own. The
 /// last one is dropped when it is empty, which is the whole of why `a\nb\n` is
 /// two lines and `a\n\nb` is three.
+/// What one rendered U+0020 is worth on a line, in the three different senses
+/// the line builder needs it in.
+///
+/// One number was enough until `letter-spacing` and `word-spacing` reached the
+/// measurement: a space is a rendered character, so it earns both, but the tab
+/// grid is a count of space ADVANCES and the first space of a run goes without
+/// the word part.
+const SpaceCost = struct {
+    /// Advance plus `letter-spacing`. NOT `word-spacing`: a lone " " handed to
+    /// the kernel is in the opening position of its own measurement, and the
+    /// face layout builds exempts that one (see text_measure.Spacing). The two
+    /// callers below add the word part where it is owed, which is also the only
+    /// place that can tell whether the space opens the run.
+    charged: f64,
+    /// The advance alone. `tab-size` is a number of space characters, and
+    /// whether Chrome scales that grid by `letter-spacing` has not been
+    /// measured -- so the grid stays what it was rather than becoming a guess.
+    advance: f64,
+    /// The `word-spacing` part on its own, so the opening space of a run can be
+    /// charged without it: Chrome makes `' ab'` under `word-spacing: 5px`
+    /// exactly as wide as without, where `'ab '` is 5 wider and `'  ab'` is 5
+    /// (scratch/b100/expr-spacing-table.js).
+    word: f64,
+
+    fn of(face: text_measure.Face, size: f64) SpaceCost {
+        var bare = face;
+        bare.spacing = .{};
+        return .{
+            .charged = text_measure.measure(face, " ", size).width,
+            .advance = text_measure.measure(bare, " ", size).width,
+            .word = face.spacing.word,
+        };
+    }
+};
+
 const LineFlow = struct {
     keeps_newlines: bool,
     /// Whether a run of document white space renders as one space. It is what
@@ -2220,7 +2285,7 @@ const LineFlow = struct {
     collapses: bool = true,
     wraps: bool,
     box: f64,
-    space: f64,
+    space: SpaceCost,
     /// The block's own line box, split at the baseline: every line carries it.
     strut_above: f64,
     strut_below: f64,
@@ -2316,10 +2381,14 @@ const LineFlow = struct {
                     // Chrome, `\tb` is nine as well, and `aaaaaaaaa\tb`, already
                     // past the first stop, is seventeen.
                     self.placed = switch (str[i]) {
-                        '\t' => tabStop(self.placed, self.space),
+                        '\t' => tabStop(self.placed, self.space.advance),
                         // Preserved, and rendered as nothing at all.
                         '\r' => self.placed,
-                        else => self.placed + self.space,
+                        // `self.any` is still false for the first thing to
+                        // land in the run, which is exactly when Chrome charges
+                        // no `word-spacing` -- see SpaceCost.word.
+                        else => self.placed + self.space.charged +
+                            if (self.any) self.space.word else 0,
                     };
                     self.segment_has_word = true;
                     self.any = true;
@@ -2330,11 +2399,14 @@ const LineFlow = struct {
             const start = i;
             while (i < str.len and std.mem.indexOfScalar(u8, css_whitespace, str[i]) == null) i += 1;
             // The word may span two text nodes, so its width is carried across
-            // them rather than measured per node. Advances are additive and there
-            // is no kerning here (see text_measure), so two fragments of one word
-            // sum to the word: two nodes holding `wordwordwordwo` and
-            // `rdword word` are two lines in a 100px box in Chrome and here. Two
-            // spans holding the halves are the same word for the same reason.
+            // them rather than measured per node. Advances are additive and so
+            // is the spacing charge, so two fragments of one word sum to the
+            // word: two nodes holding `wordwordwordwo` and `rdword word` are two
+            // lines in a 100px box in Chrome and here. Two spans holding the
+            // halves are the same word for the same reason. A kern pair split
+            // across the two NODES is lost, which no amount of table checking
+            // fixes -- unlike the split at white space, where no pair exists to
+            // lose (see `CollapsedRun.measure`).
             self.word += text_measure.measure(face, str[start..i], size).width;
             self.have_word = true;
         }
@@ -2416,7 +2488,7 @@ const LineFlow = struct {
         // whole of what collapsing a run of them means. A preserving one has
         // already placed the space it had, and adding another would count it
         // twice.
-        const gap = if (self.collapses and self.placed > 0) self.space else 0;
+        const gap = if (self.collapses and self.placed > 0) self.space.charged + self.space.word else 0;
         const joined = self.placed + gap + self.word;
         // The break goes BEFORE the word that does not fit, and never inside one:
         // a word wider than the whole box overflows instead, which is why
@@ -2702,7 +2774,7 @@ fn inlineInkLines(self: *Element, frame: *Frame, depth: u8, containing: *?f64) I
         // makes it, and a line ends here only where something ends it.
         .wraps = false,
         .box = 0,
-        .space = text_measure.measure(font.face, " ", font.size).width,
+        .space = .of(font.face, font.size),
         .strut_above = line_box,
         .strut_below = 0,
         .open_above = line_box,
@@ -4407,7 +4479,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
         .keeps_newlines = CSSStyleDeclaration.preservesNewlines(self, frame),
         .wraps = content_width != null and CSSStyleDeclaration.wrapsText(self, frame),
         .box = content_width orelse 0,
-        .space = text_measure.measure(font.face, " ", font.size).width,
+        .space = .of(font.face, font.size),
         .strut_above = strut.above,
         .strut_below = strut.below,
         .open_above = strut.above,

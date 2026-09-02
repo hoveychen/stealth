@@ -114,7 +114,14 @@ pub fn setFont(self: *CanvasRenderingContext2D, value: []const u8, exec: *Execut
 pub fn measureText(self: *const CanvasRenderingContext2D, text: []const u8, exec: *Execution) !*TextMetrics {
     return exec._factory.create(TextMetrics{
         ._metrics = text_measure.measure(
-            .of(self._font.family, self._font.weight, self._font.italic),
+            .of(self._font.family, self._font.weight, self._font.italic, .{
+                // Both attributes were kept and never read, so a string came
+                // back the same width whatever either one said. A relative unit
+                // resolves here rather than where it was set, because it
+                // follows a later change of `font` -- see context_state.Spacing.
+                .letter = self._state.letter_spacing.pixels(self._font.size, self._font.family),
+                .word = self._state.word_spacing.pixels(self._font.size, self._font.family),
+            }),
             text,
             self._font.size,
         ),
@@ -252,9 +259,9 @@ pub const JsApi = struct {
     pub const fontKerning = bridge.accessor(attr.keyword("font_kerning", &state.font_kernings).get, attr.keyword("font_kerning", &state.font_kernings).set, .{});
     pub const fontStretch = bridge.accessor(attr.keyword("font_stretch", &state.font_stretches).get, attr.keyword("font_stretch", &state.font_stretches).set, .{});
     pub const fontVariantCaps = bridge.accessor(attr.keyword("font_variant_caps", &state.font_variant_caps_values).get, attr.keyword("font_variant_caps", &state.font_variant_caps_values).set, .{});
-    pub const letterSpacing = bridge.accessor(attr.freeform("letter_spacing").get, attr.freeform("letter_spacing").set, .{});
+    pub const letterSpacing = bridge.accessor(attr.spacing("letter_spacing").get, attr.spacing("letter_spacing").set, .{});
     pub const textRendering = bridge.accessor(attr.keyword("text_rendering", &state.text_renderings).get, attr.keyword("text_rendering", &state.text_renderings).set, .{});
-    pub const wordSpacing = bridge.accessor(attr.freeform("word_spacing").get, attr.freeform("word_spacing").set, .{});
+    pub const wordSpacing = bridge.accessor(attr.spacing("word_spacing").get, attr.spacing("word_spacing").set, .{});
     pub const globalCompositeOperation = bridge.accessor(attr.keyword("global_composite_operation", &state.composite_operations).get, attr.keyword("global_composite_operation", &state.composite_operations).set, .{});
     pub const filter = bridge.accessor(attr.freeform("filter").get, attr.freeform("filter").set, .{});
     pub const imageSmoothingQuality = bridge.accessor(attr.keyword("image_smoothing_quality", &state.smoothing_qualities).get, attr.keyword("image_smoothing_quality", &state.smoothing_qualities).set, .{});
