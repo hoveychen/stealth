@@ -2493,23 +2493,42 @@ fn computedFontWeightAt(self: *StyleManager, element: ?*Element, depth: u8) u16 
     const inherited = self.computedFontWeightAt(current.parentElement(), depth + 1);
 
     if (self.declaredValue(current, "font-weight")) |raw| {
-        const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
-        if (std.ascii.eqlIgnoreCase(value, "normal")) return 400;
-        if (std.ascii.eqlIgnoreCase(value, "bold")) return 700;
-        // Relative to the INHERITED value, which is the reason this resolves on
-        // the way back out of the recursion rather than on the way in.
-        if (std.ascii.eqlIgnoreCase(value, "bolder")) return if (inherited < 400) 400 else if (inherited < 600) 700 else 900;
-        if (std.ascii.eqlIgnoreCase(value, "lighter")) return if (inherited < 600) 100 else if (inherited < 800) 400 else 700;
-        if (std.fmt.parseFloat(f64, value)) |n| {
-            if (std.math.isFinite(n) and n >= 1 and n <= 1000) {
-                return @intFromFloat(@round(n));
-            }
-        } else |_| {}
+        if (parseFontWeight(raw, inherited)) |weight| {
+            return weight;
+        }
     }
     if (userAgentValue(current, "font-weight")) |raw| {
-        if (std.ascii.eqlIgnoreCase(std.mem.trim(u8, raw, &std.ascii.whitespace), "bold")) return 700;
+        if (parseFontWeight(raw, inherited)) |weight| {
+            return weight;
+        }
     }
     return inherited;
+}
+
+/// One `font-weight` value as a number, or null when it is not one.
+///
+/// Written once and called from both sources, because they had drifted: the UA
+/// branch tested for the keyword `bold` and nothing else, and Chrome's UA sheet
+/// declares `<b>` and `<strong>` as `font-weight: 700` -- the NUMBER. So the
+/// test never matched, the walk fell through to the inherited 400, and a
+/// `<b>` measured at the regular face while `getComputedStyle` beside it read
+/// `700` off the same table. 'To' at 16px serif came out 16.65625 where Chrome
+/// says 17.203125 (scratch/b100/expr-b-bold.js). An author's
+/// `font-weight: bold` was always right, which is what made it look like the
+/// bold face rather than this branch.
+///
+/// `bolder` and `lighter` are relative to the INHERITED value, which is why
+/// that is a parameter and why the caller resolves on the way back out of its
+/// recursion rather than on the way in.
+fn parseFontWeight(raw: []const u8, inherited: u16) ?u16 {
+    const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(value, "normal")) return 400;
+    if (std.ascii.eqlIgnoreCase(value, "bold")) return 700;
+    if (std.ascii.eqlIgnoreCase(value, "bolder")) return if (inherited < 400) 400 else if (inherited < 600) 700 else 900;
+    if (std.ascii.eqlIgnoreCase(value, "lighter")) return if (inherited < 600) 100 else if (inherited < 800) 400 else 700;
+    const n = std.fmt.parseFloat(f64, value) catch return null;
+    if (!std.math.isFinite(n) or n < 1 or n > 1000) return null;
+    return @intFromFloat(@round(n));
 }
 
 /// Cascaded, inherited `font-style`, as the one bit a measurement wants.

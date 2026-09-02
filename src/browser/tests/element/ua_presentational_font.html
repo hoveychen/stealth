@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`<b>`, `<strong>`, `<i>` and `<em>` get their bold and italic from Chrome's UA
+sheet rather than from anything the page writes, and this engine loses each of
+them on a different surface:
+
+                       fontWeight       fontStyle          width of 'To'
+                    Chrome   here     Chrome    here      Chrome       here
+  <b>, <strong>     700      700      normal    normal    17.203125    16.65625
+  <i>, <em>         400      400      italic    NORMAL    15.4296875   15.4296875
+
+So the bold reaches the computed style and not the measurement, and the italic
+reaches the measurement and not the computed style -- opposite directions, and
+Chrome has them agreeing. One
+expression separates the engines either way: an element whose
+`getComputedStyle().fontWeight` is `700` measuring at the regular face's width
+is not something a browser does.
+
+Measured on Chrome 151, headed, at `--force-device-scale-factor=2`
+(scratch/b100/expr-b-bold.js). `<span style="font-weight:bold">` is the control
+that already passes: the author declaration reaches both surfaces, so what is
+broken is the UA sheet's half of each path and not the bold face itself -- the
+bold advances have been right since the table landed.
+
+`serif`'s bold 'x' is the same width as its regular 'x', so a string of them
+measures green against an engine that ignores weight entirely. 'To' is used
+throughout instead: bold widens it AND the pair kerns, and the two do not
+cancel.
+-->
+
+<script id=ua_presentational_font>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:-9999px;top:0;font:16px serif;white-space:pre';
+  document.body.appendChild(host);
+
+  // tag, expected computed font-weight, expected computed font-style,
+  // expected width of 'To' at 16px serif
+  const CASES = [
+    ['b', '700', 'normal', 17.203125],
+    ['strong', '700', 'normal', 17.203125],
+    ['i', '400', 'italic', 15.4296875],
+    ['em', '400', 'italic', 15.4296875],
+    // Controls: a plain span, and the same two effects declared by the page
+    // rather than by the UA sheet. These pass already.
+    ['span', '400', 'normal', 16.65625],
+  ];
+
+  const wrong = [];
+  for (const [tag, wantWeight, wantStyle, wantWidth] of CASES) {
+    const el = document.createElement(tag);
+    el.textContent = 'To';
+    host.appendChild(el);
+    const cs = getComputedStyle(el);
+    const gotWeight = cs.fontWeight;
+    const gotStyle = cs.fontStyle;
+    const gotWidth = el.getBoundingClientRect().width;
+    el.remove();
+    if (gotWeight !== wantWeight) {
+      wrong.push('<' + tag + '> computed font-weight: want ' + wantWeight + ', got ' + gotWeight);
+    }
+    if (gotStyle !== wantStyle) {
+      wrong.push('<' + tag + '> computed font-style: want ' + wantStyle + ', got ' + gotStyle);
+    }
+    if (gotWidth !== wantWidth) {
+      wrong.push('<' + tag + '> width of "To": want ' + wantWidth + ', got ' + gotWidth);
+    }
+  }
+
+  // The author-declared controls, which say the faces themselves are fine.
+  for (const [decl, wantWidth] of [
+    ['font-weight:bold', 17.203125],
+    ['font-weight:700', 17.203125],
+    ['font-style:italic', 15.4296875],
+  ]) {
+    const el = document.createElement('span');
+    el.style.cssText = decl;
+    el.textContent = 'To';
+    host.appendChild(el);
+    const got = el.getBoundingClientRect().width;
+    el.remove();
+    if (got !== wantWidth) {
+      wrong.push('control {' + decl + '} width of "To": want ' + wantWidth + ', got ' + got);
+    }
+  }
+
+  // Nested, because both properties inherit and the UA declares them on the
+  // ANCESTOR: Chrome makes a plain span inside a <b> bold and one inside an
+  // <i> italic, on both surfaces.
+  for (const [outerTag, wantWeight, wantStyle, wantWidth] of [
+    ['b', '700', 'normal', 17.203125],
+    ['strong', '700', 'normal', 17.203125],
+    ['i', '400', 'italic', 15.4296875],
+  ]) {
+    const outer = document.createElement(outerTag);
+    const inner = document.createElement('span');
+    inner.textContent = 'To';
+    outer.appendChild(inner);
+    host.appendChild(outer);
+    const cs = getComputedStyle(inner);
+    const gotWeight = cs.fontWeight;
+    const gotStyle = cs.fontStyle;
+    const gotWidth = inner.getBoundingClientRect().width;
+    outer.remove();
+    const where = '<' + outerTag + '><span> ';
+    if (gotWeight !== wantWeight) {
+      wrong.push(where + 'computed font-weight: want ' + wantWeight + ', got ' + gotWeight);
+    }
+    if (gotStyle !== wantStyle) {
+      wrong.push(where + 'computed font-style: want ' + wantStyle + ', got ' + gotStyle);
+    }
+    if (gotWidth !== wantWidth) {
+      wrong.push(where + 'width of "To": want ' + wantWidth + ', got ' + gotWidth);
+    }
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join('\n  | '));
+}
+</script>
