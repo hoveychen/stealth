@@ -117,7 +117,7 @@ pub fn measureText(self: *const OffscreenCanvasRenderingContext2D, text: []const
                 // follows a later change of `font` -- see context_state.Spacing.
                 .letter = self._state.letter_spacing.pixels(self._font.size, self._font.family),
                 .word = self._state.word_spacing.pixels(self._font.size, self._font.family),
-            }),
+            }, .canvas),
             text,
             self._font.size,
         ),

@@ -83,21 +83,35 @@ pub const Metrics = struct {
 ///   * `word` is charged at every U+0020 and U+00A0. It is NOT charged for
 ///     U+3000 or U+200B, which are not word separators.
 ///
-/// The two paths disagree about one character and `charges_lead_space` is that
-/// disagreement: Chrome charges `word` for a U+0020 in the first character
-/// position through `measureText` and not through layout. `' ab'` under
-/// `word-spacing: 5px` is 24.1015625 from `ctx.measureText` and 19.1015625 from
-/// `getBoundingClientRect`, on the same font and the same string.
 pub const Spacing = struct {
     letter: f64 = 0,
     word: f64 = 0,
-    charges_lead_space: bool = true,
 
     /// Whether either property is set, so the common case can skip the counting.
     pub fn any(self: Spacing) bool {
         return self.letter != 0 or self.word != 0;
     }
 };
+
+/// Which of Chrome's two text-measuring surfaces a reading is for.
+///
+/// Not a detail: Chrome answers them differently, and both answers are Chrome's.
+/// Two measured differences so far, and they are what this enum exists to
+/// carry rather than a bool each:
+///
+///   * `word-spacing` is charged for a U+0020 in the FIRST character position
+///     through `measureText` and not through layout. `' ab'` under
+///     `word-spacing: 5px` is 24.1015625 one way and 19.1015625 the other, same
+///     font, same string.
+///   * a space next to a capital kerns in LAYOUT and not in the canvas.
+///     'AVATAR To Wo' at 16px serif is 105.4140625 through
+///     `getBoundingClientRect` and 105.9765625 through `measureText`. See
+///     `font_space_kerning.zig`.
+///
+/// The two happen to point opposite ways, which is exactly why naming the
+/// surface beats naming the behaviours: a third difference reads the same enum
+/// instead of adding a third flag whose polarity has to be remembered.
+pub const Surface = enum { canvas, layout };
 
 /// Measures `text` in `family` at `size`, from Chrome's own numbers.
 ///
@@ -126,18 +140,34 @@ pub const Face = struct {
     variant: font_variants.Variant = .regular,
     table: font_variants.Table = .{},
     spacing: Spacing = .{},
+    /// Defaults to the canvas, because `Face.regular` is the SVG caller and
+    /// SVG text measures the way the canvas does -- and because a caller that
+    /// has not thought about it gets the surface that adds nothing.
+    surface: Surface = .canvas,
+    /// The pairs with a space on one side, resolved HERE and not at each use.
+    /// `font_space_kerning.tableFor` walks a row per family per face, and the
+    /// layout paths ask for a pair at every space they price: resolving it per
+    /// space put `document/element_from_point.html` at 2104-2171ms against its
+    /// 1500ms budget where the same tree without this read under it, four runs
+    /// each, alternating, at load 1.9. Empty on the canvas surface.
+    space_kerns: font_kerning.Table = .{},
 
     /// The face `weight` and `italic` select. The threshold is measured: at
     /// 16px serif 'M' is 14.2265625 at 500 and 15.1015625 at 600, 700 and 900
     /// alike, so `bold` the keyword is 700 arriving here and not a case of its
     /// own.
-    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing) Face {
+    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing, surface: Surface) Face {
         const variant = font_variants.variantFor(weight, italic);
         return .{
             .family = family,
             .variant = variant,
             .table = font_variants.tableFor(family, variant),
             .spacing = spacing,
+            .surface = surface,
+            .space_kerns = if (surface == .layout)
+                font_space_kerning.tableFor(family, variant)
+            else
+                .{},
         };
     }
 
@@ -156,6 +186,42 @@ pub const Face = struct {
         return font_metrics.glyph(self.family, codepoint);
     }
 };
+
+/// Whether two faces shape as one run, so a kern pair may cross between them.
+///
+/// Measured: Chrome charges the pair across a space only when the text either
+/// side is in the SAME font. `ab <span>To</span> cd` at 16px serif is
+/// 54.578125 -- the pair applied -- and the same markup with
+/// `font-weight: bold`, `font-style: italic` or `font-size: 32px` on the span
+/// is 0.28125 wider than the sum of its parts says, which is exactly the pair
+/// NOT applied (scratch/b100/expr-inline-child-bold.js). A font change breaks
+/// the shaping run, and a pair cannot straddle the break.
+pub fn shapesAsOneRun(a: Face, a_size: f64, b: Face, b_size: f64) bool {
+    return a.family.glyphs.ptr == b.family.glyphs.ptr and
+        a.variant == b.variant and
+        a_size == b_size;
+}
+
+/// What the font adjusts across `a` then `b`, in CSS pixels at `size`, for a
+/// caller that measures the two sides in SEPARATE calls to `measure` and so
+/// cannot get it from there.
+///
+/// `Element.CollapsedRun` is that caller: it renders a collapsing run by
+/// measuring each word and charging one space between them, so the pair either
+/// side of that space falls in the gap between two calls. Chrome kerns those --
+/// 'ab   To   cd' renders as 'ab To cd' and is 54.578125 at 16px serif, where
+/// the words and the space measured apart sum to 54.859375.
+///
+/// Both tables, so the caller does not have to know there are two. On the
+/// canvas surface the second is empty and this is just `font_kerning`.
+pub fn kernBetween(face: Face, a: u21, b: u21, size: f64) f64 {
+    // Only the space table is consulted, and that is a fact about the data
+    // rather than a shortcut: one of `a` and `b` is always a space here, and
+    // `font_kerning.zig` has no pair with a space on either side -- zero of its
+    // 265 840. So the ordinary table could not answer even if it were asked,
+    // and asking it would mean a `tableFor` walk per space.
+    return toPixels(font_kerning.kern(face.space_kerns, a, b), size);
+}
 
 pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
     const box = font_metrics.boundingBox(face.family, size);
@@ -214,6 +280,11 @@ pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
     // once per character, and carries a bitmap of the ~40 characters that start
     // a pair so the common character costs a shift and an AND.
     const kerns = font_kerning.tableFor(face.family, face.variant);
+    // The pairs with a space on one side, which Chrome applies in layout and
+    // not in the canvas. Resolved once when the face was built, so this costs
+    // nothing here; empty on the canvas surface and for the 142 families that
+    // kern no space pair either way.
+    const space_kerns = face.space_kerns;
     var previous: ?u21 = null;
 
     var offset: usize = 0;
@@ -238,7 +309,7 @@ pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
         // emoji is charged like any other cluster.
         const at_start = offset == cluster.bytes;
         defer if (face.spacing.any()) {
-            pen_pixels += clusterSpacing(face.spacing, shaped, at_start);
+            pen_pixels += clusterSpacing(face.spacing, face.surface, shaped, at_start);
         };
 
         if (isColourEmoji(shaped)) {
@@ -256,6 +327,13 @@ pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
         while (codepoints.nextCodepoint()) |codepoint| {
             if (previous) |prev| {
                 pen_basis += font_kerning.kern(kerns, prev, codepoint);
+                // Gated on one of the two being a space rather than looked up
+                // unconditionally: this is per character of every string the
+                // engine measures, and the second table can only ever answer at
+                // a space.
+                if (prev == ' ' or codepoint == ' ') {
+                    pen_basis += font_kerning.kern(space_kerns, prev, codepoint);
+                }
             }
             previous = codepoint;
 
@@ -329,11 +407,11 @@ pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
 ///
 /// `letter` once for the cluster, and `word` once for each word separator in
 /// it, less the opening U+0020 a layout run does not charge (see
-/// `Spacing.charges_lead_space`). A separator is U+0020 or U+00A0 and nothing else: U+3000 and U+200B were
+/// `Surface`). A separator is U+0020 or U+00A0 and nothing else: U+3000 and U+200B were
 /// measured under `word-spacing: 5px` and moved nothing (the test asserts both
 /// as deltas, since this engine prices them from the mean-advance fallback and
 /// Chrome does not).
-fn clusterSpacing(spacing: Spacing, shaped: []const u8, at_start: bool) f64 {
+fn clusterSpacing(spacing: Spacing, surface: Surface, shaped: []const u8, at_start: bool) f64 {
     var total = spacing.letter;
     if (spacing.word != 0) {
         var codepoints = std.unicode.Utf8Iterator{ .bytes = shaped, .i = 0 };
@@ -346,7 +424,7 @@ fn clusterSpacing(spacing: Spacing, shaped: []const u8, at_start: bool) f64 {
             // charged: `'\u00a0ab'` gains 5 from `word-spacing: 5px` where
             // `' ab'` gains nothing, and two leading U+00A0 gain 10 where two
             // leading U+0020 gain 5.
-            if (lead and codepoint == ' ' and !spacing.charges_lead_space) continue;
+            if (lead and codepoint == ' ' and surface == .layout) continue;
             total += spacing.word;
         }
     }

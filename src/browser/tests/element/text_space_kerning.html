@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Chrome kerns a space against a capital in LAYOUT and not in the canvas, and
+this engine answers the canvas number down both paths.
+
+  'AVATAR To Wo' at 16px serif    getBoundingClientRect  105.4140625
+                                  measureText            105.9765625
+
+Both of those readings are Chrome's. So its layout is 0.5625 narrower than its
+canvas for that string, and this engine's layout is 0.5625 too wide -- for that
+string and for any text with a space beside a capital, which is most English
+prose. One expression comparing the two readings tells the engines apart, which
+is why BOTH columns are asserted below: the canvas one is already correct and
+must stay correct, and the two being unequal is the whole point.
+
+Measured on Chrome 151, headed, at `--force-device-scale-factor=2`
+(scratch/b100/expr-spacekern-table.js). Of these 96 rows the canvas column
+agreed with this engine on all 96 before the fix and the layout column on 59:
+the 37 that differed are exactly the strings carrying a space pair, and the
+pairs they implicate are exactly the ones the generated table holds -- twelve
+for serif (A, L, P, T, V, W, Y), eight for sans-serif (A, L, P, T, Y) -- which
+is an independent check on the generator.
+
+Verdana is the control: it kerns no space pair, so its layout and canvas agree
+and both arms already matched. 'monotone' and 'ab cd' are the controls within
+each family -- no capital beside a space, nothing to kern.
+
+The collapsing rows are not decoration. The layout paths chop text at white
+space and price the space themselves, so a pair across the chop is one the
+measurement kernel never sees: 'ab To cd' renders with a space either side of
+'To' and both carry a pair. All three spellings of it render the same five
+words and must measure the same, while their CANVAS widths differ from each
+other -- the canvas does not collapse anything.
+-->
+
+<script id=text_space_kerning>
+{
+  // [family, declaration, text, layout width, canvas width]
+  const CASES = [
+    ["serif", "white-space:pre", " A", 14.6796875, 15.5546875],
+    ["serif", "white-space:pre", "A ", 14.6796875, 15.5546875],
+    ["serif", "white-space:pre", " T", 13.4921875, 13.7734375],
+    ["serif", "white-space:pre", "T ", 13.4921875, 13.7734375],
+    ["serif", "white-space:pre", " V", 15.2734375, 15.5546875],
+    ["serif", "white-space:pre", "V ", 15.2734375, 15.5546875],
+    ["serif", "white-space:pre", " W", 18.8203125, 19.1015625],
+    ["serif", "white-space:pre", "W ", 18.8203125, 19.1015625],
+    ["serif", "white-space:pre", " Y", 14.96875, 15.5546875],
+    ["serif", "white-space:pre", "Y ", 14.96875, 15.5546875],
+    ["serif", "white-space:pre", " L", 13.7734375, 13.7734375],
+    ["serif", "white-space:pre", "L ", 13.1875, 13.7734375],
+    ["serif", "white-space:pre", " P", 12.8984375, 12.8984375],
+    ["serif", "white-space:pre", "P ", 12.3125, 12.8984375],
+    ["serif", "white-space:pre", " o", 12, 12],
+    ["serif", "white-space:pre", "o ", 12, 12],
+    ["serif", "white-space:pre", " x", 12, 12],
+    ["serif", "white-space:pre", "x ", 12, 12],
+    ["serif", "white-space:pre", "x Tx", 29.4921875, 29.7734375],
+    ["serif", "white-space:pre", "x Ax", 30.6796875, 31.5546875],
+    ["serif", "white-space:pre", "x ox", 28, 28],
+    ["serif", "white-space:pre", "AVATAR To Wo", 105.4140625, 105.9765625],
+    ["serif", "white-space:pre", "To Wo", 42.203125, 42.484375],
+    ["serif", "white-space:pre", "A A", 25.359375, 27.109375],
+    ["serif", "white-space:pre", "T T", 22.984375, 23.546875],
+    ["serif", "", "ab To cd", 54.578125, 54.859375],
+    ["serif", "", "ab   To   cd", 54.578125, 70.859375],
+    ["serif", "", "  ab To cd  ", 54.578125, 70.859375],
+    ["serif", "white-space:pre", "monotone", 63.9921875, 63.9921875],
+    ["serif", "", "monotone", 63.9921875, 63.9921875],
+    ["serif", "white-space:pre", "ab cd", 34.203125, 34.203125],
+    ["serif", "", "ab cd", 34.203125, 34.203125],
+    ["sans-serif", "white-space:pre", " A", 14.2421875, 15.1171875],
+    ["sans-serif", "white-space:pre", "A ", 14.2421875, 15.1171875],
+    ["sans-serif", "white-space:pre", " T", 13.9375, 14.21875],
+    ["sans-serif", "white-space:pre", "T ", 13.9375, 14.21875],
+    ["sans-serif", "white-space:pre", " V", 15.1171875, 15.1171875],
+    ["sans-serif", "white-space:pre", "V ", 15.1171875, 15.1171875],
+    ["sans-serif", "white-space:pre", " W", 19.546875, 19.546875],
+    ["sans-serif", "white-space:pre", "W ", 19.546875, 19.546875],
+    ["sans-serif", "white-space:pre", " Y", 14.8359375, 15.1171875],
+    ["sans-serif", "white-space:pre", "Y ", 14.8359375, 15.1171875],
+    ["sans-serif", "white-space:pre", " L", 13.34375, 13.34375],
+    ["sans-serif", "white-space:pre", "L ", 12.7578125, 13.34375],
+    ["sans-serif", "white-space:pre", " P", 15.1171875, 15.1171875],
+    ["sans-serif", "white-space:pre", "P ", 14.8359375, 15.1171875],
+    ["sans-serif", "white-space:pre", " o", 13.34375, 13.34375],
+    ["sans-serif", "white-space:pre", "o ", 13.34375, 13.34375],
+    ["sans-serif", "white-space:pre", " x", 12.4453125, 12.4453125],
+    ["sans-serif", "white-space:pre", "x ", 12.4453125, 12.4453125],
+    ["sans-serif", "white-space:pre", "x Tx", 29.9375, 30.21875],
+    ["sans-serif", "white-space:pre", "x Ax", 30.2421875, 31.1171875],
+    ["sans-serif", "white-space:pre", "x ox", 29.34375, 29.34375],
+    ["sans-serif", "white-space:pre", "AVATAR To Wo", 108.5234375, 108.8046875],
+    ["sans-serif", "white-space:pre", "To Wo", 45.0625, 45.0625],
+    ["sans-serif", "white-space:pre", "A A", 24.0390625, 25.7890625],
+    ["sans-serif", "white-space:pre", "T T", 23.4296875, 23.9921875],
+    ["sans-serif", "", "ab To cd", 60.203125, 60.484375],
+    ["sans-serif", "", "ab   To   cd", 60.203125, 78.265625],
+    ["sans-serif", "", "  ab To cd  ", 60.203125, 78.265625],
+    ["sans-serif", "white-space:pre", "monotone", 71.1640625, 71.1640625],
+    ["sans-serif", "", "monotone", 71.1640625, 71.1640625],
+    ["sans-serif", "white-space:pre", "ab cd", 39.140625, 39.140625],
+    ["sans-serif", "", "ab cd", 39.140625, 39.140625],
+    ["Verdana", "white-space:pre", " A", 16.5625, 16.5625],
+    ["Verdana", "white-space:pre", "A ", 16.5625, 16.5625],
+    ["Verdana", "white-space:pre", " T", 15.484375, 15.484375],
+    ["Verdana", "white-space:pre", "T ", 15.484375, 15.484375],
+    ["Verdana", "white-space:pre", " V", 16.5625, 16.5625],
+    ["Verdana", "white-space:pre", "V ", 16.5625, 16.5625],
+    ["Verdana", "white-space:pre", " W", 21.4453125, 21.4453125],
+    ["Verdana", "white-space:pre", "W ", 21.4453125, 21.4453125],
+    ["Verdana", "white-space:pre", " Y", 15.46875, 15.46875],
+    ["Verdana", "white-space:pre", "Y ", 15.46875, 15.46875],
+    ["Verdana", "white-space:pre", " L", 14.53125, 14.53125],
+    ["Verdana", "white-space:pre", "L ", 14.53125, 14.53125],
+    ["Verdana", "white-space:pre", " P", 15.2734375, 15.2734375],
+    ["Verdana", "white-space:pre", "P ", 15.2734375, 15.2734375],
+    ["Verdana", "white-space:pre", " o", 15.3359375, 15.3359375],
+    ["Verdana", "white-space:pre", "o ", 15.3359375, 15.3359375],
+    ["Verdana", "white-space:pre", " x", 15.09375, 15.09375],
+    ["Verdana", "white-space:pre", "x ", 15.09375, 15.09375],
+    ["Verdana", "white-space:pre", "x Tx", 34.421875, 34.421875],
+    ["Verdana", "white-space:pre", "x Ax", 35.5, 35.5],
+    ["Verdana", "white-space:pre", "x ox", 34.1171875, 34.1171875],
+    ["Verdana", "white-space:pre", "AVATAR To Wo", 115.7734375, 115.7734375],
+    ["Verdana", "white-space:pre", "To Wo", 48.2265625, 48.2265625],
+    ["Verdana", "white-space:pre", "A A", 27.5, 27.5],
+    ["Verdana", "white-space:pre", "T T", 25.34375, 25.34375],
+    ["Verdana", "", "ab To cd", 66.984375, 66.984375],
+    ["Verdana", "", "ab   To   cd", 66.984375, 89.484375],
+    ["Verdana", "", "  ab To cd  ", 66.984375, 89.484375],
+    ["Verdana", "white-space:pre", "monotone", 80.78125, 80.78125],
+    ["Verdana", "", "monotone", 80.78125, 80.78125],
+    ["Verdana", "white-space:pre", "ab cd", 43.5078125, 43.5078125],
+    ["Verdana", "", "ab cd", 43.5078125, 43.5078125],
+  ];
+
+
+  // The line-building path. Everything above is a <span>, whose width comes
+  // from the whole-text-node measurement -- so it gets the pairs from the
+  // measurement kernel and none of these cases can reach the OTHER chopping
+  // path, the one that builds lines. A <br>, a preserved newline, an inline
+  // child and wrapping each engage it, and it prices the space itself.
+  //
+  // The heights are asserted beside the widths on purpose. Making the width
+  // right in the kernel while leaving this path wide made the two disagree,
+  // and an `inline-block` sized by the first and laid out by the second
+  // wrapped onto a second line for want of the 0.5625 the first had taken
+  // off: 'AVATAR To Wo' came out 105.4140625 wide and 37 tall where Chrome
+  // says 18.5. A width-only assertion would have called that a pass.
+  //
+  // The three children with a font of their own are the measured boundary of
+  // the rule: Chrome carries a pair across the space only when both sides
+  // shape as one run, so `font-weight`, `font-style` or `font-size` on the
+  // child suppresses it. All three are 0.28125 wider than the same markup
+  // with a plain <span>, which is the pair not applied.
+  //
+  // NOT here: 'ab <b>To</b> cd', which Chrome makes 55.40625 and this engine
+  // 54.578125. That gap is <b>, not the kerning: `getComputedStyle` agrees the
+  // element is 700 in both engines while the measurement uses the regular face
+  // here, so the child's font never differs and the pair is charged where
+  // Chrome suppresses it. Asserting the row would be asserting two defects at
+  // once. Measured in scratch/b100/expr-b-bold.js, which also finds <i> and
+  // <em> failing the other way round -- the measurement italicises them and
+  // the computed style says `normal`.
+  const BOXES = [
+    // declaration, markup, width, height
+    ["display:inline-block", "AVATAR To Wo<br>x", 105.4140625, 37],
+    ["display:inline-block", "monotone<br>x", 63.9921875, 37],
+    ["white-space:pre;display:inline-block", "AVATAR To Wo\nx", 105.4140625, 37],
+    ["display:inline-block", "AVATAR To Wo", 105.4140625, 18.5],
+    ["display:inline-block", "AVATAR   To   Wo", 105.4140625, 18.5],
+    ["width:60px", "AVATAR To Wo and more words here", 60, 92.5],
+    ["display:inline-block", "ab <b>xx</b> cd", 54.203125, 18.5],
+    ["display:inline-block", "ab <span>To</span> cd", 54.578125, 18.5],
+    ["display:inline-block", "ab <span style=\"font-weight:bold\">To</span> cd", 55.40625, 18.5],
+    ["display:inline-block", "ab <span style=\"font-style:italic\">To</span> cd", 53.6328125, 18.5],
+    ["display:inline-block", "ab <span style=\"font-size:32px\">To</span> cd", 71.515625, 37.0],
+  ];
+
+  const wrong = [];
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:-9999px;top:0;width:4000px';
+  document.body.appendChild(host);
+  const ctx = document.createElement('canvas').getContext('2d');
+
+  for (const [family, decl, text, wantLayout, wantCanvas] of CASES) {
+    const span = document.createElement('span');
+    span.style.cssText = 'font:16px ' + family + ';' + decl;
+    span.textContent = text;
+    host.appendChild(span);
+    const gotLayout = span.getBoundingClientRect().width;
+    span.remove();
+
+    ctx.font = '16px ' + family;
+    const gotCanvas = ctx.measureText(text).width;
+
+    const where = family + ' {' + (decl || 'collapsing') + '} ' + JSON.stringify(text);
+    if (gotLayout !== wantLayout) {
+      wrong.push('layout ' + where + ': want ' + wantLayout + ', got ' + gotLayout);
+    }
+    if (gotCanvas !== wantCanvas) {
+      wrong.push('canvas ' + where + ': want ' + wantCanvas + ', got ' + gotCanvas);
+    }
+  }
+  for (const [decl, html, wantWidth, wantHeight] of BOXES) {
+    const box = document.createElement('div');
+    box.style.cssText = 'font:16px serif;' + decl;
+    box.innerHTML = html;
+    host.appendChild(box);
+    const rect = box.getBoundingClientRect();
+    box.remove();
+    const where = '{' + decl + '} ' + JSON.stringify(html);
+    if (rect.width !== wantWidth) {
+      wrong.push('box width ' + where + ': want ' + wantWidth + ', got ' + rect.width);
+    }
+    if (rect.height !== wantHeight) {
+      wrong.push('box height ' + where + ': want ' + wantHeight + ', got ' + rect.height);
+    }
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join('\n  | '));
+}
+</script>

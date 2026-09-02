@@ -1845,13 +1845,11 @@ fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, 
             family orelse font_metrics.fallback,
             style_manager.computedFontWeight(self),
             style_manager.computedFontItalic(self),
-            .{
-                .letter = spacing.letter,
-                .word = spacing.word,
-                // Layout leaves an opening U+0020 unpaid where `measureText`
-                // charges it -- see text_measure.Spacing.
-                .charges_lead_space = false,
-            },
+            .{ .letter = spacing.letter, .word = spacing.word },
+            // Layout, not the canvas: it leaves an opening U+0020 unpaid where
+            // `measureText` charges it, and it kerns a space against a capital
+            // where `measureText` does not. See text_measure.Surface.
+            .layout,
         ),
         .size = style_manager.computedFontSize(self),
     };
@@ -1865,6 +1863,29 @@ fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, 
 /// (U+200B) are not collapsible, and their UTF-8 bytes are all >= 0x80, so they
 /// fall out of this on their own. Both measured at a full line in Chrome.
 const css_whitespace = " \t\n\r\x0c";
+
+/// The run of rendered characters starting at `from`, or an empty slice when
+/// there is none before the end. What a preserved space needs to know to charge
+/// the kern pair on its RIGHT, which the caller cannot have seen yet.
+fn nextRendered(str: []const u8, from: usize) []const u8 {
+    var i = from;
+    while (i < str.len and std.mem.indexOfScalar(u8, css_whitespace, str[i]) != null) i += 1;
+    return str[i..];
+}
+
+/// The first and last codepoint of a UTF-8 slice, for the two callers that need
+/// the characters on either side of a chop point rather than the bytes.
+fn firstCodepoint(str: []const u8) ?u21 {
+    var it = std.unicode.Utf8Iterator{ .bytes = str, .i = 0 };
+    return it.nextCodepoint();
+}
+
+fn lastCodepoint(str: []const u8) ?u21 {
+    var it = std.unicode.Utf8Iterator{ .bytes = str, .i = 0 };
+    var last: ?u21 = null;
+    while (it.nextCodepoint()) |cp| last = cp;
+    return last;
+}
 
 fn isCollapsibleWhitespace(str: []const u8) bool {
     for (str) |c| {
@@ -1898,6 +1919,10 @@ const CollapsedRun = struct {
     /// Whether the collapsed rendering is anything other than the bytes as
     /// written.
     seen_difference: bool = false,
+    /// The last codepoint rendered, so the space this charges between two words
+    /// can carry the kern pair on its left. Null before anything has rendered
+    /// and after an inline box, whose last character this cannot see.
+    previous: ?u21 = null,
 
     /// One text node's contribution to the run's width, in `family` at `size`.
     fn measure(self: *CollapsedRun, str: []const u8, face: text_measure.Face, size: f64) f64 {
@@ -1916,22 +1941,24 @@ const CollapsedRun = struct {
             }
             const start = i;
             while (i < str.len and std.mem.indexOfScalar(u8, css_whitespace, str[i]) == null) i += 1;
-            width += self.open(face, size);
+            const word = str[start..i];
+            width += self.open(face, size, firstCodepoint(word));
             // Advances are additive, and so is what the two spacing properties
             // charge -- `letter-spacing` per cluster and `word-spacing` per
             // separator -- so measuring the words and the spaces apart sums to
             // measuring the rendered string.
             //
-            // The kernel does kern now, and a kern pair cannot be seen across
-            // two calls, so this split would lose one that straddled a chop
-            // point. None does: of the 265 840 pairs in font_kerning.zig, zero
-            // have U+0020 on either side. U+00A0 has 1347 of them and is not a
-            // chop point -- it is not collapsible white space, so it stays
-            // inside a word and keeps its pairs. So a run that collapses to
-            // itself still comes out bit-identical to the one-call measurement
-            // this replaced. (The comment here used to say this engine kerns
-            // nothing at all, which stopped being true when the table landed.)
-            width += text_measure.measure(face, str[start..i], size).width;
+            // What a sum LOSES is a kern pair straddling a chop point, and the
+            // chop point here is a space. Chrome kerns those in layout: 'ab
+            // To cd' is 54.578125 at 16px serif where the words and the space
+            // measured apart sum to 54.859375. So the pair on either side of
+            // the space is charged by `open`, from the codepoints this tracks
+            // on its behalf -- see font_space_kerning.zig. The pairs INSIDE a
+            // word are the kernel's and need nothing here. (This comment used
+            // to say no pair has a space on either side, which was true of
+            // font_kerning.zig alone and wrong about Chrome.)
+            width += text_measure.measure(face, word, size).width;
+            self.previous = lastCodepoint(word);
         }
         return width;
     }
@@ -1941,11 +1968,21 @@ const CollapsedRun = struct {
     /// leading one. Returns the width of that space, in the run's own font
     /// rather than the box's.
     fn box(self: *CollapsedRun, face: text_measure.Face, size: f64) f64 {
-        return self.open(face, size);
+        // No codepoint either side: the box's own first character is inside a
+        // width this does not measure, so the space in front of it is charged
+        // without a pair. Chrome presumably kerns there too; nobody has
+        // measured it, and inventing the reading would be worse than the gap.
+        const width = self.open(face, size, null);
+        self.previous = null;
+        return width;
     }
 
     /// The white space owed in front of whatever is about to be rendered.
-    fn open(self: *CollapsedRun, face: text_measure.Face, size: f64) f64 {
+    ///
+    /// `next` is the first codepoint of that content, so the space can carry
+    /// the kern pair on its right; the pair on its left comes from
+    /// `self.previous`. Null for either means no pair on that side.
+    fn open(self: *CollapsedRun, face: text_measure.Face, size: f64, next: ?u21) f64 {
         defer {
             self.pending = false;
             self.emitted = true;
@@ -1954,8 +1991,11 @@ const CollapsedRun = struct {
         // A space this returns has something rendered on either side of it, so
         // it is never the run's opening character and `word-spacing` is owed.
         // The kernel cannot see that from a one-character call, which is why it
-        // is added here -- see text_measure.Spacing.charges_lead_space.
-        return text_measure.measure(face, " ", size).width + face.spacing.word;
+        // is added here -- see text_measure.Surface.
+        var width = text_measure.measure(face, " ", size).width + face.spacing.word;
+        if (self.previous) |prev| width += text_measure.kernBetween(face, prev, ' ', size);
+        if (next) |cp| width += text_measure.kernBetween(face, ' ', cp, size);
+        return width;
     }
 
     /// Whether the run rendered anything at all: text that is all white space
@@ -2069,6 +2109,8 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
         .wraps = available != null and CSSStyleDeclaration.wrapsText(self, frame),
         .box = available orelse 0,
         .space = .of(font.face, font.size),
+        .space_face = font.face,
+        .space_size = font.size,
         .strut_above = strut.above,
         .strut_below = strut.below,
         .open_above = strut.above,
@@ -2286,6 +2328,12 @@ const LineFlow = struct {
     wraps: bool,
     box: f64,
     space: SpaceCost,
+    /// The face and size `space` was priced in -- the BLOCK's font, not a
+    /// nested inline child's. The kern pairs a space carries are charged in the
+    /// same font as the space itself, which is what makes them consistent with
+    /// `space` rather than with whichever text node happens to be either side.
+    space_face: text_measure.Face,
+    space_size: f64,
     /// The block's own line box, split at the baseline: every line carries it.
     strut_above: f64,
     strut_below: f64,
@@ -2314,6 +2362,27 @@ const LineFlow = struct {
     placed: f64 = 0,
     word: f64 = 0,
     have_word: bool = false,
+    /// The characters either side of a chop point, so the space between two
+    /// words can carry its kern pairs. `previous` is the last codepoint placed
+    /// and `word_first` the first of the word being built; both null when there
+    /// is none, which is what an atomic inline leaves behind. Chrome kerns a
+    /// space against a capital in layout, and this path prices the space
+    /// itself, so without these the pair is lost -- see font_space_kerning.zig.
+    ///
+    /// Not optional: `inlineInk` measures a whole text node in one call and so
+    /// gets the pairs from the kernel. Leaving this path without them made the
+    /// two disagree, and an `inline-block` sized by the first and laid out by
+    /// the second wrapped onto a second line for want of the 0.5625 the first
+    /// had already taken off.
+    previous: ?u21 = null,
+    word_first: ?u21 = null,
+    word_last: ?u21 = null,
+    /// Whether the text either side of a chop point shapes as one run with the
+    /// space between them. A nested inline child in a different font breaks the
+    /// run, and Chrome does not carry the pair across the break -- see
+    /// text_measure.shapesAsOneRun.
+    previous_joins: bool = false,
+    word_joins: bool = false,
     width: f64 = 0,
     /// Whether a word or a break has landed in this run at all.
     any: bool = false,
@@ -2327,6 +2396,11 @@ const LineFlow = struct {
 
     /// Starts a fresh run, which is what a block box between two of them does.
     fn restart(self: *LineFlow) void {
+        self.previous = null;
+        self.word_first = null;
+        self.word_last = null;
+        self.previous_joins = false;
+        self.word_joins = false;
         self.total = 0;
         self.open_above = self.strut_above;
         self.open_below = self.strut_below;
@@ -2357,6 +2431,9 @@ const LineFlow = struct {
     fn addText(self: *LineFlow, str: []const u8, face: text_measure.Face, size: f64) void {
         if (str.len == 0) return;
         self.raise();
+        // Every character this call sees is in this face, so one answer covers
+        // the words it accumulates and the look-ahead a preserved space does.
+        const joins = text_measure.shapesAsOneRun(face, size, self.space_face, self.space_size);
         var i: usize = 0;
         while (i < str.len) {
             if (std.mem.indexOfScalar(u8, css_whitespace, str[i]) != null) {
@@ -2388,10 +2465,15 @@ const LineFlow = struct {
                         // land in the run, which is exactly when Chrome charges
                         // no `word-spacing` -- see SpaceCost.word.
                         else => self.placed + self.space.charged +
-                            if (self.any) self.space.word else 0,
+                            (if (self.any) self.space.word else 0) +
+                            self.spacePairs(firstCodepoint(nextRendered(str, i + 1)), joins),
                     };
                     self.segment_has_word = true;
                     self.any = true;
+                    if (str[i] == ' ') {
+                        self.previous = ' ';
+                        self.previous_joins = true;
+                    }
                 }
                 i += 1;
                 continue;
@@ -2407,7 +2489,14 @@ const LineFlow = struct {
             // across the two NODES is lost, which no amount of table checking
             // fixes -- unlike the split at white space, where no pair exists to
             // lose (see `CollapsedRun.measure`).
-            self.word += text_measure.measure(face, str[start..i], size).width;
+            const word = str[start..i];
+            self.word += text_measure.measure(face, word, size).width;
+            if (!self.have_word) {
+                self.word_first = firstCodepoint(word);
+                self.word_joins = joins;
+            }
+            self.word_last = lastCodepoint(word);
+            self.word_joins = self.word_joins and joins;
             self.have_word = true;
         }
     }
@@ -2488,7 +2577,10 @@ const LineFlow = struct {
         // whole of what collapsing a run of them means. A preserving one has
         // already placed the space it had, and adding another would count it
         // twice.
-        const gap = if (self.collapses and self.placed > 0) self.space.charged + self.space.word else 0;
+        const gap = if (self.collapses and self.placed > 0)
+            self.space.charged + self.space.word + self.spacePairs(self.word_first, self.word_joins)
+        else
+            0;
         const joined = self.placed + gap + self.word;
         // The break goes BEFORE the word that does not fit, and never inside one:
         // a word wider than the whole box overflows instead, which is why
@@ -2503,6 +2595,32 @@ const LineFlow = struct {
         self.have_word = false;
         self.segment_has_word = true;
         self.any = true;
+        self.previous = self.word_last;
+        self.previous_joins = self.word_joins;
+        self.word_first = null;
+        self.word_last = null;
+        self.word_joins = false;
+    }
+
+    /// The kern pairs a space carries: one against whatever was placed before
+    /// it, one against whatever comes after. Zero on the canvas surface and
+    /// zero for a family that kerns no space pair, which is most of them.
+    /// `next` is the first codepoint after the space and `next_joins` whether
+    /// it shapes as one run with the space; the left-hand side comes from what
+    /// was placed before.
+    fn spacePairs(self: *const LineFlow, next: ?u21, next_joins: bool) f64 {
+        var total: f64 = 0;
+        if (self.previous_joins) {
+            if (self.previous) |prev| {
+                total += text_measure.kernBetween(self.space_face, prev, ' ', self.space_size);
+            }
+        }
+        if (next_joins) {
+            if (next) |cp| {
+                total += text_measure.kernBetween(self.space_face, ' ', cp, self.space_size);
+            }
+        }
+        return total;
     }
 
     fn endSegment(self: *LineFlow) void {
@@ -2775,6 +2893,8 @@ fn inlineInkLines(self: *Element, frame: *Frame, depth: u8, containing: *?f64) I
         .wraps = false,
         .box = 0,
         .space = .of(font.face, font.size),
+        .space_face = font.face,
+        .space_size = font.size,
         .strut_above = line_box,
         .strut_below = 0,
         .open_above = line_box,
@@ -4480,6 +4600,8 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
         .wraps = content_width != null and CSSStyleDeclaration.wrapsText(self, frame),
         .box = content_width orelse 0,
         .space = .of(font.face, font.size),
+        .space_face = font.face,
+        .space_size = font.size,
         .strut_above = strut.above,
         .strut_below = strut.below,
         .open_above = strut.above,
