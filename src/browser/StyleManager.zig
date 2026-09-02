@@ -2436,6 +2436,91 @@ fn computedFontFamilyAt(self: *StyleManager, element: ?*Element, depth: u8) ?[]c
     return self.computedFontFamilyAt(current.parentElement(), depth + 1);
 }
 
+/// Cascaded, inherited `font-weight` as a number. `bold` is 700 and `normal`
+/// is 400; `bolder` and `lighter` are one step from the inherited value, which
+/// is what the recursion here already has.
+///
+/// The threshold a measurement cares about is 600 -- 500 measures as regular
+/// and 600, 700 and 900 all measure as bold -- so this answers the number
+/// rather than a boolean, and `font_variants.variantFor` owns the comparison.
+pub fn computedFontWeight(self: *StyleManager, element: ?*Element) u16 {
+    return self.computedFontWeightAt(element, 0);
+}
+
+fn computedFontWeightAt(self: *StyleManager, element: ?*Element, depth: u8) u16 {
+    if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
+        return 400;
+    }
+    const current = element orelse return 400;
+    const inherited = self.computedFontWeightAt(current.parentElement(), depth + 1);
+
+    if (self.declaredValue(current, "font-weight")) |raw| {
+        const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        if (std.ascii.eqlIgnoreCase(value, "normal")) return 400;
+        if (std.ascii.eqlIgnoreCase(value, "bold")) return 700;
+        // Relative to the INHERITED value, which is the reason this resolves on
+        // the way back out of the recursion rather than on the way in.
+        if (std.ascii.eqlIgnoreCase(value, "bolder")) return if (inherited < 400) 400 else if (inherited < 600) 700 else 900;
+        if (std.ascii.eqlIgnoreCase(value, "lighter")) return if (inherited < 600) 100 else if (inherited < 800) 400 else 700;
+        if (std.fmt.parseFloat(f64, value)) |n| {
+            if (std.math.isFinite(n) and n >= 1 and n <= 1000) {
+                return @intFromFloat(@round(n));
+            }
+        } else |_| {}
+    }
+    if (userAgentValue(current, "font-weight")) |raw| {
+        if (std.ascii.eqlIgnoreCase(std.mem.trim(u8, raw, &std.ascii.whitespace), "bold")) return 700;
+    }
+    return inherited;
+}
+
+/// Cascaded, inherited `font-style`, as the one bit a measurement wants.
+/// `oblique` selects the same face as `italic` here: the synthesised slant
+/// Chrome applies to a family with no italic face measures the same either way.
+pub fn computedFontItalic(self: *StyleManager, element: ?*Element) bool {
+    return self.computedFontItalicAt(element, 0);
+}
+
+fn computedFontItalicAt(self: *StyleManager, element: ?*Element, depth: u8) bool {
+    if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
+        return false;
+    }
+    const current = element orelse return false;
+    if (self.declaredValue(current, "font-style")) |raw| {
+        const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        if (std.ascii.eqlIgnoreCase(value, "normal")) return false;
+        if (std.ascii.eqlIgnoreCase(value, "italic")) return true;
+        if (std.ascii.startsWithIgnoreCase(value, "oblique")) return true;
+    }
+    if (userAgentValue(current, "font-style")) |raw| {
+        const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        if (std.ascii.eqlIgnoreCase(value, "italic") or std.ascii.startsWithIgnoreCase(value, "oblique")) {
+            return true;
+        }
+    }
+    return self.computedFontItalicAt(current.parentElement(), depth + 1);
+}
+
+/// The declaration that wins `name` on `el` among the inline style and the
+/// stylesheet rules, in the order `computedFontFamilyAt` established: an
+/// important rule beats inline, inline beats a normal rule.
+fn declaredValue(self: *StyleManager, el: *Element, comptime name: []const u8) ?[]const u8 {
+    const inline_property = getInlineStyleProperty(el, comptime .wrap(name), self.frame);
+    const rule = self.cascadedNamedDeclaration(el, name, .longhand);
+    if (rule) |declaration| {
+        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
+            return declaration.value;
+        }
+    }
+    if (inline_property) |property| {
+        return property._value.str();
+    }
+    if (rule) |declaration| {
+        return declaration.value;
+    }
+    return null;
+}
+
 /// The winning `font-size` declaration among the stylesheet rules matching
 /// `el`, or null when none match.
 fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {

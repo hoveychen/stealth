@@ -62,11 +62,19 @@ css: []const u8,
 size: f64,
 /// The measured family the first resolvable name in the list maps to.
 family: font_metrics.Family,
+/// The computed weight, and whether the style is italic. Both are parsed out
+/// of the shorthand anyway; they are kept because the family alone does not say
+/// which of its four tables a measurement wants, and without them `bold 16px
+/// serif` measures a string at exactly the width `16px serif` does.
+weight: u16,
+italic: bool,
 
 pub const default: Font = .{
     .css = default_css,
     .size = default_size,
     .family = font_metrics.sans_serif,
+    .weight = 400,
+    .italic = false,
 };
 
 const Style = enum { normal, italic };
@@ -159,6 +167,8 @@ pub fn parse(arena: Allocator, input: []const u8) ?Font {
         .css = serialised.written(),
         .size = size,
         .family = family,
+        .weight = weight,
+        .italic = style == .italic,
     };
 }
 

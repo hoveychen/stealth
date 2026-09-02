@@ -21,6 +21,7 @@ const lp = @import("lightpanda");
 
 const font_metrics = @import("font_metrics.zig");
 const font_kerning = @import("font_kerning.zig");
+const font_variants = @import("font_variants.zig");
 const emoji_metrics = @import("emoji_metrics.zig");
 const emoji_properties = @import("emoji_properties.zig");
 
@@ -78,8 +79,49 @@ pub const Metrics = struct {
 ///   * every colour emoji is charged what U+1F600 measures. All ten the
 ///     Turnstile widget asks about agree with it to the last decimal, but
 ///     ten is the whole of the evidence.
-pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics {
-    const box = font_metrics.boundingBox(family, size);
+/// A resolved font: the family, plus which of its four tables the weight and
+/// style select. Carried as one value because every measurement wants both and
+/// because a `Family` is a value with no room for the answer.
+///
+/// Built once per string rather than once per glyph -- `tableFor` walks the
+/// variant rows, which is the same reason `font_kerning.tableFor` is hoisted
+/// out of the loop below it.
+pub const Face = struct {
+    family: font_metrics.Family,
+    variant: font_variants.Variant = .regular,
+    table: font_variants.Table = .{},
+
+    /// The face `weight` and `italic` select. The threshold is measured: at
+    /// 16px serif 'M' is 14.2265625 at 500 and 15.1015625 at 600, 700 and 900
+    /// alike, so `bold` the keyword is 700 arriving here and not a case of its
+    /// own.
+    pub fn of(family: font_metrics.Family, weight: u16, italic: bool) Face {
+        const variant = font_variants.variantFor(weight, italic);
+        return .{
+            .family = family,
+            .variant = variant,
+            .table = font_variants.tableFor(family, variant),
+        };
+    }
+
+    /// The face a caller that has not resolved a weight yet wants. SVG text is
+    /// the one left: `font-weight` reaches it as a presentation attribute this
+    /// engine does not read into a face, so its measurements are still the
+    /// regular ones. That is unchanged behaviour rather than a new gap.
+    pub fn regular(family: font_metrics.Family) Face {
+        return .{ .family = family };
+    }
+
+    pub fn glyph(self: Face, codepoint: u21) ?font_metrics.Glyph {
+        if (self.table.get(codepoint)) |g| {
+            return g;
+        }
+        return font_metrics.glyph(self.family, codepoint);
+    }
+};
+
+pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
+    const box = font_metrics.boundingBox(face.family, size);
     var metrics = Metrics{
         .fontBoundingBoxAscent = box.ascent,
         .fontBoundingBoxDescent = box.descent,
@@ -134,7 +176,7 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
     // which one `measureText` sees. The table is looked up once here rather than
     // once per character, and carries a bitmap of the ~40 characters that start
     // a pair so the common character costs a shift and an AND.
-    const kerns = font_kerning.tableFor(family);
+    const kerns = font_kerning.tableFor(face.family, face.variant);
     var previous: ?u21 = null;
 
     var offset: usize = 0;
@@ -142,7 +184,7 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
         // Only the boundary is taken from the cluster; what it costs is a
         // question canvas answers for itself, from a different table than the
         // SVG advance `nextCluster` computes.
-        const cluster = nextCluster(family, text[offset..]);
+        const cluster = nextCluster(face, text[offset..]);
         if (cluster.bytes == 0) break;
         const shaped = text[offset..][0..cluster.bytes];
         offset += cluster.bytes;
@@ -165,18 +207,18 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
             }
             previous = codepoint;
 
-            var glyph = font_metrics.glyph(family, codepoint) orelse {
+            var glyph = face.glyph(codepoint) orelse {
                 // A joiner, a variation selector or a combining mark rides on
                 // the glyph before it: Chrome makes 'a' and 'a' U+0301 both
                 // 8.898 at 16px sans-serif, and a lone U+FE0F zero.
                 //
                 // Whether an untabulated codepoint would seed the fallback is
                 // not something we have measured, so it leaves the state alone.
-                if (!isZeroWidth(codepoint)) pen_basis += meanAdvance(family);
+                if (!isZeroWidth(codepoint)) pen_basis += meanAdvance(face.family);
                 continue;
             };
 
-            if (font_metrics.afterFallback(family, codepoint)) |on_last_resort| {
+            if (font_metrics.afterFallback(face.family, codepoint)) |on_last_resort| {
                 // A codepoint the primary font cannot draw but some fallback
                 // font can, so what it costs depends on which font the run
                 // already settled on.
@@ -192,7 +234,7 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
                     },
                     .own => {},
                 }
-            } else if (fallback == .none and font_metrics.seedsLastResort(family, codepoint)) {
+            } else if (fallback == .none and font_metrics.seedsLastResort(face.family, codepoint)) {
                 fallback = .last_resort;
             }
 
@@ -396,7 +438,7 @@ test "text_measure: plain text is not charged for the emoji table" {
     const started = lp.datetime.microTimestamp(.boot);
     var total: f64 = 0;
     for (0..iterations) |_| {
-        total += measure(font_metrics.sans_serif, line, 16).width;
+        total += measure(Face.regular(font_metrics.sans_serif), line, 16).width;
     }
     const elapsed_ms = (lp.datetime.microTimestamp(.boot) - started) / 1000;
 
@@ -418,7 +460,7 @@ test "text_measure: every emoji cluster is still reachable" {
         // either itself or a longer cluster that starts with it.
         try std.testing.expect(std.mem.startsWith(u8, found.text, cluster.text) or
             std.mem.startsWith(u8, cluster.text, found.text));
-        try std.testing.expect(measure(font_metrics.sans_serif, cluster.text, 100).width > 0);
+        try std.testing.expect(measure(Face.regular(font_metrics.sans_serif), cluster.text, 100).width > 0);
     }
 
     // A lead byte no cluster uses, and the empty string, are both misses.
@@ -429,7 +471,7 @@ test "text_measure: every emoji cluster is still reachable" {
 
 test "text_measure: reproduces Chrome's measureText" {
     // Straight from sections.text of the graphics dump.
-    const sample = measure(font_metrics.sans_serif, "mmmmmmmmmmlli", 10);
+    const sample = measure(Face.regular(font_metrics.sans_serif), "mmmmmmmmmmlli", 10);
     try std.testing.expectEqual(@as(f64, 89.9658203125), sample.width);
     try std.testing.expectEqual(@as(f64, -0.64453125), sample.actualBoundingBoxLeft);
     try std.testing.expectEqual(@as(f64, 89.2822265625), sample.actualBoundingBoxRight);
@@ -441,7 +483,7 @@ test "text_measure: reproduces Chrome's measureText" {
     try std.testing.expectEqual(@as(f64, 0), sample.alphabeticBaseline);
     try std.testing.expectEqual(@as(f64, -2), sample.ideographicBaseline);
 
-    const pangram = measure(font_metrics.arial, "Cwm fjordbank glyphs vext quiz", 14);
+    const pangram = measure(Face.regular(font_metrics.arial), "Cwm fjordbank glyphs vext quiz", 14);
     try std.testing.expectEqual(@as(f64, 196.861328125), pangram.width);
     try std.testing.expectEqual(@as(f64, -0.697265625), pangram.actualBoundingBoxLeft);
     try std.testing.expectEqual(@as(f64, 196.560546875), pangram.actualBoundingBoxRight);
@@ -452,7 +494,7 @@ test "text_measure: reproduces Chrome's measureText" {
     try std.testing.expectEqual(@as(f64, 10.399999618530273), pangram.hangingBaseline);
     try std.testing.expectEqual(@as(f64, -3), pangram.ideographicBaseline);
 
-    const empty = measure(font_metrics.sans_serif, "", 10);
+    const empty = measure(Face.regular(font_metrics.sans_serif), "", 10);
     try std.testing.expectEqual(@as(f64, 0), empty.width);
     try std.testing.expectEqual(@as(f64, 0), empty.actualBoundingBoxLeft);
     try std.testing.expectEqual(@as(f64, 0), empty.actualBoundingBoxRight);
@@ -460,15 +502,15 @@ test "text_measure: reproduces Chrome's measureText" {
     try std.testing.expectEqual(@as(f64, 8), empty.hangingBaseline);
 
     // Exactly linear in size, which is why one table is enough.
-    try std.testing.expectEqual(@as(f64, 8.330078125), measure(font_metrics.sans_serif, "m", 10).width);
-    try std.testing.expectEqual(@as(f64, 83.30078125), measure(font_metrics.sans_serif, "m", 100).width);
-    try std.testing.expectEqual(@as(f64, 899.658203125), measure(font_metrics.sans_serif, "mmmmmmmmmmlli", 100).width);
+    try std.testing.expectEqual(@as(f64, 8.330078125), measure(Face.regular(font_metrics.sans_serif), "m", 10).width);
+    try std.testing.expectEqual(@as(f64, 83.30078125), measure(Face.regular(font_metrics.sans_serif), "m", 100).width);
+    try std.testing.expectEqual(@as(f64, 899.658203125), measure(Face.regular(font_metrics.sans_serif), "mmmmmmmmmmlli", 100).width);
 
     // Sums of advances, all of which Chrome agrees with.
-    try std.testing.expectEqual(@as(f64, 55.01953125), measure(font_metrics.sans_serif, "Hello, world!", 10).width);
-    try std.testing.expectEqual(@as(f64, 140.615234375), measure(font_metrics.sans_serif, "Cwm fjordbank glyphs vext quiz", 10).width);
-    try std.testing.expectEqual(@as(f64, 28.3154296875), measure(font_metrics.sans_serif, "WWW", 10).width);
-    try std.testing.expectEqual(@as(f64, 6.6650390625), measure(font_metrics.sans_serif, "iii", 10).width);
+    try std.testing.expectEqual(@as(f64, 55.01953125), measure(Face.regular(font_metrics.sans_serif), "Hello, world!", 10).width);
+    try std.testing.expectEqual(@as(f64, 140.615234375), measure(Face.regular(font_metrics.sans_serif), "Cwm fjordbank glyphs vext quiz", 10).width);
+    try std.testing.expectEqual(@as(f64, 28.3154296875), measure(Face.regular(font_metrics.sans_serif), "WWW", 10).width);
+    try std.testing.expectEqual(@as(f64, 6.6650390625), measure(Face.regular(font_metrics.sans_serif), "iii", 10).width);
 
     // The kerned pairs, where we knowingly differ: Chrome says 12.6025390625
     // and 10.5615234375 because it kerns; we report the plain sums.
@@ -476,8 +518,8 @@ test "text_measure: reproduces Chrome's measureText" {
     // 'AV' is a kerning pair and this used to answer the sum. The number on the
     // right is the one this file's own header carried for a long time as
     // Chrome's, beside the note that we did not model kerning.
-    try std.testing.expectEqual(@as(f64, 12.6025390625), measure(font_metrics.sans_serif, "AV", 10).width);
-    try std.testing.expectEqual(@as(f64, 10.5615234375), measure(font_metrics.sans_serif, "To", 10).width);
+    try std.testing.expectEqual(@as(f64, 12.6025390625), measure(Face.regular(font_metrics.sans_serif), "AV", 10).width);
+    try std.testing.expectEqual(@as(f64, 10.5615234375), measure(Face.regular(font_metrics.sans_serif), "To", 10).width);
 }
 
 test "text_measure: the ten strings the Turnstile widget actually measures" {
@@ -520,7 +562,7 @@ test "text_measure: the ten strings the Turnstile widget actually measures" {
         },
     };
     for (cases) |case| {
-        const metrics = measure(sans, case.text, 16);
+        const metrics = measure(Face.regular(sans), case.text, 16);
         try std.testing.expectEqual(case.width, metrics.width);
         try std.testing.expectEqual(case.ascent, metrics.actualBoundingBoxAscent);
         try std.testing.expectEqual(case.descent, metrics.actualBoundingBoxDescent);
@@ -535,7 +577,7 @@ test "text_measure: one fallback font per run, seeded by the first character tha
     // run already settled on.
     const width = struct {
         fn f(text: []const u8) f64 {
-            return measure(font_metrics.sans_serif, text, 16).width;
+            return measure(Face.regular(font_metrics.sans_serif), text, 16).width;
         }
     }.f;
 
@@ -591,25 +633,25 @@ test "text_measure: an ink boundary can be negative" {
     // so its ascent is. Headed Chrome at 16px sans-serif, from the
     // perCodePoint block of expr-turnstile-mojibake-metrics.chrome.json.
     const sans = font_metrics.sans_serif;
-    const quote = measure(sans, "\"", 16);
+    const quote = measure(Face.regular(sans), "\"", 16);
     try std.testing.expectEqual(@as(f64, 11.4765625), quote.actualBoundingBoxAscent);
     try std.testing.expectEqual(@as(f64, -6.8828125), quote.actualBoundingBoxDescent);
 
-    const underscore = measure(sans, "_", 16);
+    const underscore = measure(Face.regular(sans), "_", 16);
     try std.testing.expectEqual(@as(f64, -1.2109375), underscore.actualBoundingBoxAscent);
     try std.testing.expectEqual(@as(f64, 2), underscore.actualBoundingBoxDescent);
 
-    const c1 = measure(sans, "\u{84}", 16);
+    const c1 = measure(Face.regular(sans), "\u{84}", 16);
     try std.testing.expectEqual(@as(f64, -1.59375), c1.actualBoundingBoxAscent);
     try std.testing.expectEqual(@as(f64, 2), c1.actualBoundingBoxDescent);
 
     // Still a max once there is more than one glyph: the quotation mark's
     // negative descent loses to the comma's positive one, and the underscore's
     // negative ascent loses to the quotation mark's.
-    const both = measure(sans, "\",", 16);
+    const both = measure(Face.regular(sans), "\",", 16);
     try std.testing.expectEqual(@as(f64, 11.4765625), both.actualBoundingBoxAscent);
     try std.testing.expectEqual(@as(f64, 2.375), both.actualBoundingBoxDescent);
-    const pair = measure(sans, "_\"", 16);
+    const pair = measure(Face.regular(sans), "_\"", 16);
     try std.testing.expectEqual(@as(f64, 11.4765625), pair.actualBoundingBoxAscent);
     try std.testing.expectEqual(@as(f64, 2), pair.actualBoundingBoxDescent);
 }
@@ -620,7 +662,7 @@ test "text_measure: a colour emoji measures the strike Chrome picked" {
     // Turnstile widget measures its ten at exactly this font.
     const sans = font_metrics.sans_serif;
     for ([_][]const u8{ "😀", "🤣", "😱", "👍", "🔥", "🚀", "🧠", "🐶", "🏠", "☀️" }) |emoji| {
-        const metrics = measure(sans, emoji, 16);
+        const metrics = measure(Face.regular(sans), emoji, 16);
         try std.testing.expectEqual(@as(f64, 20), metrics.width);
         try std.testing.expectEqual(@as(f64, 1), metrics.actualBoundingBoxLeft);
         try std.testing.expectEqual(@as(f64, 21), metrics.actualBoundingBoxRight);
@@ -635,35 +677,35 @@ test "text_measure: a colour emoji measures the strike Chrome picked" {
     // A whole cluster is one emoji, whatever it is made of: a flag is two
     // regional indicators, a profession is a ZWJ sequence, a thumb is a base
     // and a skin tone. Chrome charges each of them once.
-    try std.testing.expectEqual(@as(f64, 20), measure(sans, "🇺🇸", 16).width);
-    try std.testing.expectEqual(@as(f64, 20), measure(sans, "👨‍💻", 16).width);
-    try std.testing.expectEqual(@as(f64, 20), measure(sans, "👍🏽", 16).width);
+    try std.testing.expectEqual(@as(f64, 20), measure(Face.regular(sans), "🇺🇸", 16).width);
+    try std.testing.expectEqual(@as(f64, 20), measure(Face.regular(sans), "👨‍💻", 16).width);
+    try std.testing.expectEqual(@as(f64, 20), measure(Face.regular(sans), "👍🏽", 16).width);
 
     // And a selector on its own is not an emoji, it is nothing: Chrome
     // measures a bare U+FE0F zero, and a combining mark rides on the letter
     // before it rather than being charged again.
-    try std.testing.expectEqual(@as(f64, 0), measure(sans, "\u{fe0f}", 16).width);
+    try std.testing.expectEqual(@as(f64, 0), measure(Face.regular(sans), "\u{fe0f}", 16).width);
     try std.testing.expectEqual(
-        measure(sans, "a", 16).width,
-        measure(sans, "a\u{0301}", 16).width,
+        measure(Face.regular(sans), "a", 16).width,
+        measure(Face.regular(sans), "a\u{0301}", 16).width,
     );
 
     // Two emoji are two advances, and the ink box spans both.
-    const pair = measure(sans, "😀😀", 16);
+    const pair = measure(Face.regular(sans), "😀😀", 16);
     try std.testing.expectEqual(@as(f64, 40), pair.width);
     try std.testing.expectEqual(@as(f64, 1), pair.actualBoundingBoxLeft);
     try std.testing.expectEqual(@as(f64, 41), pair.actualBoundingBoxRight);
 
     // Mixed with text, the pen keeps both kinds of advance. 'x' is 8 at 16px
     // in both engines, so the emoji starts there and its ink ends at 29.
-    const mixed = measure(sans, "x😀", 16);
+    const mixed = measure(Face.regular(sans), "x😀", 16);
     try std.testing.expectEqual(@as(f64, 28), mixed.width);
     try std.testing.expectEqual(@as(f64, 29), mixed.actualBoundingBoxRight);
     try std.testing.expectEqual(@as(f64, 17), mixed.actualBoundingBoxAscent);
 
     // Printable ASCII is untouched by any of it — same string, same bits.
-    try std.testing.expectEqual(@as(f64, 89.9658203125), measure(sans, "mmmmmmmmmmlli", 10).width);
-    try std.testing.expectEqual(@as(f64, -0.64453125), measure(sans, "mmmmmmmmmmlli", 10).actualBoundingBoxLeft);
+    try std.testing.expectEqual(@as(f64, 89.9658203125), measure(Face.regular(sans), "mmmmmmmmmmlli", 10).width);
+    try std.testing.expectEqual(@as(f64, -0.64453125), measure(Face.regular(sans), "mmmmmmmmmmlli", 10).actualBoundingBoxLeft);
 }
 
 test "text_measure: the emoji strike is a table, not a ratio" {
@@ -687,8 +729,8 @@ test "text_measure: the emoji strike is a table, not a ratio" {
     try std.testing.expectEqual(@as(f64, 5), emojiBox(4).advance);
 
     // Non-finite and non-positive sizes never reach the table.
-    try std.testing.expectEqual(@as(f64, 0), measure(font_metrics.sans_serif, "😀", 0).width);
-    try std.testing.expectEqual(@as(f64, 0), measure(font_metrics.sans_serif, "😀", -3).width);
+    try std.testing.expectEqual(@as(f64, 0), measure(Face.regular(font_metrics.sans_serif), "😀", 0).width);
+    try std.testing.expectEqual(@as(f64, 0), measure(Face.regular(font_metrics.sans_serif), "😀", -3).width);
 }
 
 test "text_measure: a variation selector decides which font a glyph comes from" {
@@ -712,7 +754,7 @@ test "text_measure: a variation selector decides which font a glyph comes from" 
     // text font. We answer the mean-advance guess instead; the selector form
     // above is the one the widget asks about, and that one is right.
     try std.testing.expectEqual(
-        measure(font_metrics.sans_serif, "\u{2600}", 16).width,
+        measure(Face.regular(font_metrics.sans_serif), "\u{2600}", 16).width,
         meanAdvance(font_metrics.sans_serif) * 16 / font_metrics.basis,
     );
 }
@@ -734,10 +776,11 @@ fn unitLength(codepoint: u21) u32 {
 
 /// Total advance of `text` at `font_size`, cluster by cluster.
 pub fn svgWidth(family: font_metrics.Family, text: []const u8, font_size: f64) f64 {
+    const face = Face.regular(family);
     var offset: usize = 0;
     var total: f64 = 0;
     while (offset < text.len) {
-        const cluster = nextCluster(family, text[offset..]);
+        const cluster = nextCluster(face, text[offset..]);
         total += cluster.advance;
         offset += cluster.bytes;
     }
@@ -774,6 +817,7 @@ fn toPixels(value: f64, font_size: f64) f64 {
 /// addressing either half of a surrogate pair — or any code unit inside a ZWJ
 /// sequence — yields the whole glyph, like Chrome does.
 fn clusterRange(family: font_metrics.Family, text: []const u8, charnum: u32, nchars: u32) !struct { before: f64, advance: f64 } {
+    const face = Face.regular(family);
     if (charnum >= utf16Length(text)) {
         return error.IndexSizeError;
     }
@@ -784,7 +828,7 @@ fn clusterRange(family: font_metrics.Family, text: []const u8, charnum: u32, nch
     var before: f64 = 0;
     var inside: f64 = 0;
     while (offset < text.len) {
-        const cluster = nextCluster(family, text[offset..]);
+        const cluster = nextCluster(face, text[offset..]);
         if (unit >= end) break;
         if (unit + cluster.units > charnum) {
             inside += cluster.advance;
@@ -810,7 +854,7 @@ const Cluster = struct {
 /// outright; otherwise a base character absorbs the joiners, variation
 /// selectors, skin-tone modifiers and combining marks that follow it, which
 /// is what makes a ZWJ sequence one glyph wide instead of several.
-fn nextCluster(family: font_metrics.Family, text: []const u8) Cluster {
+fn nextCluster(face: Face, text: []const u8) Cluster {
     if (emoji_metrics.match(text)) |measured| {
         return .{
             .bytes = measured.text.len,
@@ -824,7 +868,7 @@ fn nextCluster(family: font_metrics.Family, text: []const u8) Cluster {
     var cluster = Cluster{
         .bytes = iterator.i,
         .units = unitLength(base),
-        .advance = advance(family, base),
+        .advance = advance(face, base),
     };
 
     // A flag is a pair of regional indicators and one glyph.
@@ -876,8 +920,8 @@ fn isClusterExtender(codepoint: u21) bool {
 
 /// One character's advance at the 100px basis. Tabulated for the ASCII we
 /// measured; a guess, and marked as one, outside it.
-fn advance(family: font_metrics.Family, codepoint: u21) f64 {
-    if (font_metrics.glyph(family, codepoint)) |g| {
+fn advance(face: Face, codepoint: u21) f64 {
+    if (face.glyph(codepoint)) |g| {
         return g.advance;
     }
     if (isZeroWidth(codepoint)) return 0;
