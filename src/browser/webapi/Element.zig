@@ -1837,19 +1837,23 @@ fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, 
     // rest of what it costs to advance the pen, and every path that measures
     // text already carries the face down to the kernel. Without them a string
     // measured the same width whatever either property said, which is one
-    // expression apart from Chrome. Both come back from ONE walk: a walk each
-    // was measurably slower on a real page -- see computedTextSpacing.
-    const spacing = style_manager.computedTextSpacing(self);
+    // expression apart from Chrome. Whether the font's kern pairs are charged at
+    // all is the third thing the same walk answers -- `font-kerning: none` and
+    // `font-feature-settings: "kern" 0` both turn them off and both inherit --
+    // and it is one walk for all three because a walk each was measurably slower
+    // on a real page. See computedTextStyle.
+    const text_style = style_manager.computedTextStyle(self);
     return .{
         .face = .of(
             family orelse font_metrics.fallback,
             style_manager.computedFontWeight(self),
             style_manager.computedFontItalic(self),
-            .{ .letter = spacing.letter, .word = spacing.word },
+            .{ .letter = text_style.letter, .word = text_style.word },
             // Layout, not the canvas: it leaves an opening U+0020 unpaid where
             // `measureText` charges it, and it kerns a space against a capital
             // where `measureText` does not. See text_measure.Surface.
             .layout,
+            text_style.kerning,
         ),
         .size = style_manager.computedFontSize(self),
     };

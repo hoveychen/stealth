@@ -156,6 +156,15 @@ pub const text_aligns = [_][]const u8{ "start", "end", "left", "right", "center"
 pub const text_baselines = [_][]const u8{ "top", "hanging", "middle", "alphabetic", "ideographic", "bottom" };
 pub const directions = [_][]const u8{ "ltr", "rtl", "inherit" };
 pub const font_kernings = [_][]const u8{ "auto", "normal", "none" };
+
+/// Whether `fontKerning` leaves the font's kern pairs on. The third of the three
+/// keywords is the only one that does not: measured on Chrome 151, 'AV' at 16px
+/// serif is 21.046875 under `auto` and `normal` alike and 23.109375 under
+/// `none`, and an unrecognised value keeps the previous keyword rather than
+/// reaching here at all (scratch/b100/expr-kern-table.js).
+pub fn kerns(font_kerning: []const u8) bool {
+    return !std.mem.eql(u8, font_kerning, "none");
+}
 pub const font_stretches = [_][]const u8{ "ultra-condensed", "extra-condensed", "condensed", "semi-condensed", "normal", "semi-expanded", "expanded", "extra-expanded", "ultra-expanded" };
 pub const font_variant_caps_values = [_][]const u8{ "normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps", "unicase", "titling-caps" };
 pub const text_renderings = [_][]const u8{ "auto", "optimizeSpeed", "optimizeLegibility", "geometricPrecision" };

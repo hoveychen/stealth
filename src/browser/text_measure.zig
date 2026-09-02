@@ -151,12 +151,31 @@ pub const Face = struct {
     /// 1500ms budget where the same tree without this read under it, four runs
     /// each, alternating, at load 1.9. Empty on the canvas surface.
     space_kerns: font_kerning.Table = .{},
+    /// Whether the font's kern pairs are charged at all. False under
+    /// `font-kerning: none` and `font-feature-settings: "kern" 0`, which Chrome
+    /// treats as one thing: identical on all 48 rows of six families by eight
+    /// pairs (scratch/b100/expr-kern-table.js).
+    ///
+    /// It turns BOTH tables off, which is a measurement and not a symmetry
+    /// argument: 'AVATAR To Wo' at 16px serif is 105.4140625 in layout and
+    /// 115.5390625 with kerning off, and the 10.125 between them is 9.5625 of
+    /// ordinary pairs plus the 0.5625 of space pairs that layout alone charges.
+    /// Leaving `space_kerns` on would land on 114.9765625.
+    ///
+    /// The other half of Chrome's feature -- ligatures, which
+    /// `font-variant-ligatures: none` and `text-rendering: optimizeSpeed` turn
+    /// off and which leave kerning alone -- has no bit here on purpose. This
+    /// engine forms no ligatures at all: 'Waffle fi' comes out narrower than
+    /// Chrome's own no-ligature width, so a switch would be a switch over
+    /// nothing, with no reading to hold it to. Those two declarations are
+    /// asserted as no-ops in `element/text_kerning_off.html` instead.
+    kerning: bool = true,
 
     /// The face `weight` and `italic` select. The threshold is measured: at
     /// 16px serif 'M' is 14.2265625 at 500 and 15.1015625 at 600, 700 and 900
     /// alike, so `bold` the keyword is 700 arriving here and not a case of its
     /// own.
-    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing, surface: Surface) Face {
+    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing, surface: Surface, kerning: bool) Face {
         const variant = font_variants.variantFor(weight, italic);
         return .{
             .family = family,
@@ -164,10 +183,11 @@ pub const Face = struct {
             .table = font_variants.tableFor(family, variant),
             .spacing = spacing,
             .surface = surface,
-            .space_kerns = if (surface == .layout)
+            .space_kerns = if (surface == .layout and kerning)
                 font_space_kerning.tableFor(family, variant)
             else
                 .{},
+            .kerning = kerning,
         };
     }
 
@@ -279,7 +299,10 @@ pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
     // which one `measureText` sees. The table is looked up once here rather than
     // once per character, and carries a bitmap of the ~40 characters that start
     // a pair so the common character costs a shift and an AND.
-    const kerns = font_kerning.tableFor(face.family, face.variant);
+    // Empty rather than skipped at the use site: the pair lookup below is per
+    // character of every string the engine measures, and an empty table already
+    // answers zero from its start bitmap without a branch of its own.
+    const kerns = if (face.kerning) font_kerning.tableFor(face.family, face.variant) else font_kerning.Table{};
     // The pairs with a space on one side, which Chrome applies in layout and
     // not in the canvas. Resolved once when the face was built, so this costs
     // nothing here; empty on the canvas surface and for the 142 families that
@@ -666,6 +689,39 @@ test "text_measure: the space pairs Chrome kerns in layout and not in the canvas
     // the ones the canvas misses, so 'AV' -- which the canvas does kern -- is
     // not in it.
     try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(serif, 'A', 'V'));
+}
+
+test "text_measure: the kerning bit turns off both tables" {
+    // `element/text_kerning_off.html` asserts this through the CSS layer; this
+    // asserts the kernel on its own, because the bit has to reach two tables and
+    // the CSS test cannot say which of them answered.
+    const on: Face = .of(font_metrics.serif, 400, false, .{}, .layout, true);
+    const off: Face = .of(font_metrics.serif, 400, false, .{}, .layout, false);
+
+    // The ordinary pairs. 'AV' at 16px serif is 21.046875 kerned and 23.109375
+    // unkerned -- both Chrome's, both this engine's advance table.
+    try std.testing.expectEqual(@as(f64, 21.046875), measure(on, "AV", 16).width);
+    try std.testing.expectEqual(@as(f64, 23.109375), measure(off, "AV", 16).width);
+
+    // The space pairs, which only the layout surface charges. Empty when the bit
+    // is off, so `kernBetween` -- the caller that prices a space between two
+    // separate measurements -- answers zero without knowing about the bit.
+    try std.testing.expectEqual(@as(f64, -0.28125), kernBetween(on, ' ', 'T', 16));
+    try std.testing.expectEqual(@as(f64, 0), kernBetween(off, ' ', 'T', 16));
+
+    // And both at once: 'AVATAR To Wo' is 105.4140625 in layout, and the
+    // 10.125 the switch adds is 9.5625 of ordinary pairs plus 0.5625 of space
+    // pairs. Leaving the space table on would land on 114.9765625.
+    try std.testing.expectEqual(@as(f64, 105.4140625), measure(on, "AVATAR To Wo", 16).width);
+    try std.testing.expectEqual(@as(f64, 115.5390625), measure(off, "AVATAR To Wo", 16).width);
+
+    // The canvas surface has no space table either way, so the bit is the only
+    // difference there -- and its unkerned width is the same 115.5390625,
+    // because with no pairs at all the two surfaces cannot disagree.
+    const canvas_on: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, true);
+    const canvas_off: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, false);
+    try std.testing.expectEqual(@as(f64, 105.9765625), measure(canvas_on, "AVATAR To Wo", 16).width);
+    try std.testing.expectEqual(@as(f64, 115.5390625), measure(canvas_off, "AVATAR To Wo", 16).width);
 }
 
 test "text_measure: reproduces Chrome's measureText" {
