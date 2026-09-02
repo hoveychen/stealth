@@ -389,9 +389,22 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
             // source cluster and not once per character it produced. Whether
             // Chrome charges the transformed count has not been measured, and
             // one character in the whole range can differ.
-            const mapped = text_case.map(source, face.transform, at_word_start);
-            const pair = [2]u21{ mapped.first, mapped.second orelse 0 };
-            for (pair[0..mapped.len()]) |codepoint| {
+            // The `.none` case is spelled out rather than left to `map`: this
+            // runs once per codepoint of every string the engine measures, and
+            // almost every one of them declares no transform. Through `map` and
+            // the two-element loop it cost 3.6% of the 60k-measurement budget
+            // test in a debug build.
+            const mapped: text_case.Mapped = if (face.transform == .none)
+                .{ .first = source }
+            else
+                text_case.map(source, face.transform, at_word_start);
+            // A counted loop rather than a slice of a two-element array: the
+            // array wanted a stack write and the slice a bounds check, per
+            // codepoint of every string, and this loop runs exactly once unless
+            // the transform lengthened the character.
+            var emitted: u2 = 0;
+            while (emitted < mapped.len()) : (emitted += 1) {
+                const codepoint = if (emitted == 0) mapped.first else mapped.second.?;
                 if (previous) |prev| {
                     pen_basis += font_kerning.kern(kerns, prev, codepoint);
                     // Gated on one of the two being a space rather than looked up

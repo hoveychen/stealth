@@ -175,7 +175,12 @@ pub fn title(codepoint: u21) Mapped {
 
 /// One codepoint under `transform`, with `at_word_start` carried across the
 /// call so `capitalize` survives a word split over two text nodes.
-pub fn map(codepoint: u21, transform: Transform, at_word_start: *bool) Mapped {
+/// `inline` because the measurement kernel calls this once per codepoint of
+/// every string the engine measures, `.none` included. Left as an ordinary
+/// function it cost 3.6% of that kernel in a debug build -- 730ms against
+/// 704ms over the 60k-measurement budget test, eight alternating pairs, every
+/// pair slower.
+pub inline fn map(codepoint: u21, transform: Transform, at_word_start: *bool) Mapped {
     switch (transform) {
         .none => return .{ .first = codepoint },
         .uppercase => return upper(codepoint),
