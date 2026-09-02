@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<head>
+  <title>geometry read during the parse</title>
+  <meta charset="UTF-8">
+</head>
+<body>
+<div id="host" style="width:800px;font:20px/24px monospace;">
+  <p id="p" style="margin:0;">one</p>
+  <div id="m" style="margin:0;">M</div>
+</div>
+
+<!--
+  Reading geometry from an inline script fills the document-wide position table.
+  The parser then keeps appending, and it deliberately moves `parser_dom_version`
+  rather than `dom_version` -- so a table keyed on `dom_version` alone stays
+  filled with the half-document that existed at the first read, and every
+  element parsed after it falls back to the count-based stand-in that puts boxes
+  five pixels apart in preorder.
+
+  This block has no id on purpose: it makes the reading happen, it asserts
+  nothing, and the runner only tracks blocks that carry one.
+-->
+<script>
+  window.__early_m_top = document.getElementById('m').getBoundingClientRect().top;
+</script>
+
+<div id="filler" style="width:800px;font:20px/24px monospace;">
+  <p style="margin:0;">filler 1</p>
+  <p style="margin:0;">filler 2</p>
+  <p style="margin:0;">filler 3</p>
+  <p style="margin:0;">filler 4</p>
+  <p style="margin:0;">filler 5</p>
+  <p style="margin:0;">filler 6</p>
+  <p style="margin:0;">filler 7</p>
+  <p style="margin:0;">filler 8</p>
+  <p style="margin:0;">filler 9</p>
+  <p style="margin:0;">filler 10</p>
+</div>
+<div id="tail" style="width:800px;font:20px/24px monospace;margin:0;">T</div>
+
+<script src="../testing.js"></script>
+<script id="boxes_parsed_after_a_geometry_read_are_still_placed">
+  const box = (id) => document.getElementById(id).getBoundingClientRect();
+
+  // Relative, so the reading does not depend on the device scale factor, on the
+  // body's margin, or on which monospace face resolves: `tail` is the next
+  // in-flow box after `filler`, both margin-free, so its top is filler's bottom.
+  const filler = box('filler');
+  const tail = box('tail');
+  const gap = Math.round(tail.top - (filler.top + filler.height));
+
+  // Guards against the identity holding for the wrong reason: a filler that
+  // measured as nothing would make any tail position satisfy it.
+  const grew = filler.height >= 10 * 24;
+
+  testing.expectEqual(
+    'filler-grew=true tail-at-filler-bottom=true',
+    'filler-grew=' + grew + ' tail-at-filler-bottom=' + (gap === 0) +
+      (gap === 0 ? '' : ' (gap=' + gap + ' fillerH=' + Math.round(filler.height) + ')'));
+
+  // The element that DID exist when the table was filled keeps its place. This
+  // separates "the table went stale" from "the pass never ran".
+  testing.expectEqual(window.__early_m_top, box('m').top);
+</script>
+</body>

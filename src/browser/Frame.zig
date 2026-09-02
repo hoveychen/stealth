@@ -1752,13 +1752,22 @@ pub fn positionOf(self: *Frame, element: *Element) ?Element.PlacedBox {
     if (self.position_table_building) {
         return null;
     }
-    if (!self.position_table_filled or self.position_table_version != self._page.dom_version) {
+    // `liveVersion`, not `dom_version`: the parser's insertions have to count.
+    // A table keyed on `dom_version` alone is filled by the first inline script
+    // that reads geometry and then never rebuilt for the rest of the parse, so
+    // every element parsed after that read is missing from it and falls back to
+    // `calculateDocumentPosition` -- five pixels per node in preorder, which put
+    // a box 75px above the bottom of the block it follows
+    // (`element/parse_time_position.html`). Same reason the live collections and
+    // the named-object cache read this counter; see `Page.liveVersion`.
+    const version = self._page.liveVersion();
+    if (!self.position_table_filled or self.position_table_version != version) {
         const root = self.document.getDocumentElement() orelse return null;
         self.position_table_building = true;
         defer self.position_table_building = false;
         self.position_table = .empty;
         _ = Element.layoutPassPositions(root, self, &self.position_table);
-        self.position_table_version = self._page.dom_version;
+        self.position_table_version = version;
         self.position_table_filled = true;
     }
     return self.position_table.get(element);
