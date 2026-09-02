@@ -31,16 +31,22 @@
 // is. That makes this file the engine's font list, and its size the number a
 // detector reports.
 //
-// Two facts from the measurement make one table enough per family:
+// One fact from the measurement makes one table enough per family PER FACE:
+// advances are exactly linear in font size ('m' is 8.330078125 at 10px and
+// 83.30078125 at 100px), so a 100px table scales.
 //
-//   * advances are exactly linear in font size ('m' is 8.330078125 at 10px
-//     and 83.30078125 at 100px), so a 100px table scales;
+// Two things it is not enough for, both measured the same way and both kept in
+// files of their own so that adding them did not put the font list in a diff:
+//
 //   * a string's width is the plain sum of its glyphs' advances, except
 //     across a kerning pair. 'mmmmmmmmmmlli', 'Hello, world!' and
 //     'Cwm fjordbank glyphs vext quiz' all sum exactly; 'AV' and 'To' do
-//     not. Those pairs live in `font_kerning.zig` now, measured the same way
-//     and kept out of this file so adding them did not put the font list in a
-//     diff.
+//     not. Those pairs are in `font_kerning.zig`.
+//   * the tables here are the REGULAR face. Bold is not a scale of it and
+//     italic is not a slant of it: 'M' at 16px serif is 14.2265625 regular and
+//     15.1015625 bold while 'x' is 64 either way, so the difference is per
+//     glyph. `font_variants.zig` holds bold, italic and bold-italic, and it
+//     adds no NAMES -- which is what keeps this file's own claim below true.
 //
 // fontBoundingBox is the exception: CoreText quantises it per size (16px
 // sans-serif reports an ascent of 14 where scaling 100px's 92 would say 15),

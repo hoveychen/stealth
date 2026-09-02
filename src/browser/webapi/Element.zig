@@ -1823,14 +1823,22 @@ const default_font_size = 16.0;
 /// declaration with `!important` ordering, the legacy presentational
 /// attributes, and inheritance up the chain with the same depth cap this walk
 /// had. Asking it is the whole fix.
-fn resolveFont(self: *Element, frame: *Frame) struct { family: font_metrics.Family, size: f64 } {
+fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, size: f64 } {
     const style_manager = &self.ownerFrame(frame)._style_manager;
     const family = if (style_manager.computedFontFamily(self)) |declared|
         font_metrics.findInList(declared)
     else
         null;
+    // The weight and the style pick which of the family's four tables the
+    // measurement reads. Without them every weight measured as the regular one,
+    // so `font-weight: bold` widened nothing and the same string came back the
+    // same number of pixels in both -- one expression apart from Chrome.
     return .{
-        .family = family orelse font_metrics.fallback,
+        .face = .of(
+            family orelse font_metrics.fallback,
+            style_manager.computedFontWeight(self),
+            style_manager.computedFontItalic(self),
+        ),
         .size = style_manager.computedFontSize(self),
     };
 }
@@ -1878,7 +1886,7 @@ const CollapsedRun = struct {
     seen_difference: bool = false,
 
     /// One text node's contribution to the run's width, in `family` at `size`.
-    fn measure(self: *CollapsedRun, str: []const u8, family: font_metrics.Family, size: f64) f64 {
+    fn measure(self: *CollapsedRun, str: []const u8, face: text_measure.Face, size: f64) f64 {
         var width: f64 = 0;
         var i: usize = 0;
         while (i < str.len) {
@@ -1894,12 +1902,12 @@ const CollapsedRun = struct {
             }
             const start = i;
             while (i < str.len and std.mem.indexOfScalar(u8, css_whitespace, str[i]) == null) i += 1;
-            width += self.open(family, size);
+            width += self.open(face, size);
             // Advances are additive and nothing here kerns (see text_measure),
             // so measuring the words and the spaces apart sums to measuring the
             // rendered string -- which is why a run that collapses to itself
             // comes out bit-identical to the one-call measurement it replaced.
-            width += text_measure.measure(family, str[start..i], size).width;
+            width += text_measure.measure(face, str[start..i], size).width;
         }
         return width;
     }
@@ -1908,18 +1916,18 @@ const CollapsedRun = struct {
     /// rendered content: a run before it is a space, and a run after it is not a
     /// leading one. Returns the width of that space, in the run's own font
     /// rather than the box's.
-    fn box(self: *CollapsedRun, family: font_metrics.Family, size: f64) f64 {
-        return self.open(family, size);
+    fn box(self: *CollapsedRun, face: text_measure.Face, size: f64) f64 {
+        return self.open(face, size);
     }
 
     /// The white space owed in front of whatever is about to be rendered.
-    fn open(self: *CollapsedRun, family: font_metrics.Family, size: f64) f64 {
+    fn open(self: *CollapsedRun, face: text_measure.Face, size: f64) f64 {
         defer {
             self.pending = false;
             self.emitted = true;
         }
         if (!self.pending or !self.emitted) return 0;
-        return text_measure.measure(family, " ", size).width;
+        return text_measure.measure(face, " ", size).width;
     }
 
     /// Whether the run rendered anything at all: text that is all white space
@@ -1984,7 +1992,7 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
     }
 
     const font = self.resolveFont(frame);
-    const strut = self.lineBoxHalves(frame, font.family, font.size);
+    const strut = self.lineBoxHalves(frame, font.face, font.size);
 
     // One line of this element's own text is the whole of most boxes, and it is
     // answerable without the cascade reads and the per-word walk the flow below
@@ -2005,7 +2013,7 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
                     const str = Factory.protoOf(text)._data.str();
                     // Each text node meets the grid on its own -- see
                     // textAdvanceUnit, where the two-node cases that say so are.
-                    width += textAdvanceUnit(run.measure(str, font.family, font.size));
+                    width += textAdvanceUnit(run.measure(str, font.face, font.size));
                 }
             }
             // Text already in its collapsed form -- single spaces between the
@@ -2030,7 +2038,7 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
         .collapses = !CSSStyleDeclaration.preservesWhitespace(self, frame),
         .wraps = available != null and CSSStyleDeclaration.wrapsText(self, frame),
         .box = available orelse 0,
-        .space = text_measure.measure(font.family, " ", font.size).width,
+        .space = text_measure.measure(font.face, " ", font.size).width,
         .strut_above = strut.above,
         .strut_below = strut.below,
         .open_above = strut.above,
@@ -2039,7 +2047,7 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
         .line_below = strut.below,
         .measure_width = measure_width or available != null,
     };
-    self.flowInline(frame, &flow, font.family, font.size, 0);
+    self.flowInline(frame, &flow, font.face, font.size, 0);
     const height = flow.finish();
     return .{ .width = flow.width, .height = height };
 }
@@ -2146,7 +2154,7 @@ fn scanInline(self: *Element, frame: *Frame, scan: *InlineScan, depth: u8) void 
 /// which is why this recurses rather than reading the text off one string: a
 /// `<span style="font-size:32px">` of ten words in a 100px column is ten lines
 /// of 37 in Chrome, where the block's own 16px font would make five of 18.5.
-fn flowInline(self: *Element, frame: *Frame, flow: *LineFlow, family: font_metrics.Family, size: f64, depth: u8) void {
+fn flowInline(self: *Element, frame: *Frame, flow: *LineFlow, face: text_measure.Face, size: f64, depth: u8) void {
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(Element)) |el| {
@@ -2166,12 +2174,12 @@ fn flowInline(self: *Element, frame: *Frame, flow: *LineFlow, family: font_metri
             // An inline box raises every line its content lands on, including
             // the ones a wrap opens inside it, which is why this is a stack and
             // not a one-off `raise`.
-            const halves = el.lineBoxHalves(frame, font.family, font.size);
+            const halves = el.lineBoxHalves(frame, font.face, font.size);
             const outer_above = flow.open_above;
             const outer_below = flow.open_below;
             flow.open_above = @max(outer_above, halves.above);
             flow.open_below = @max(outer_below, halves.below);
-            el.flowInline(frame, flow, font.family, font.size, depth + 1);
+            el.flowInline(frame, flow, font.face, font.size, depth + 1);
             flow.open_above = outer_above;
             flow.open_below = outer_below;
             continue;
@@ -2181,7 +2189,7 @@ fn flowInline(self: *Element, frame: *Frame, flow: *LineFlow, family: font_metri
         // words. It used to be the sum of the text nodes as written, which
         // counted a run of spaces once per character and counted the two sides
         // of a hard break as one line.
-        flow.addText(Factory.protoOf(text)._data.str(), family, size);
+        flow.addText(Factory.protoOf(text)._data.str(), face, size);
     }
 }
 
@@ -2281,7 +2289,7 @@ const LineFlow = struct {
     }
 
     /// One text node's words, measured in the font that reaches them.
-    fn addText(self: *LineFlow, str: []const u8, family: font_metrics.Family, size: f64) void {
+    fn addText(self: *LineFlow, str: []const u8, face: text_measure.Face, size: f64) void {
         if (str.len == 0) return;
         self.raise();
         var i: usize = 0;
@@ -2327,7 +2335,7 @@ const LineFlow = struct {
             // sum to the word: two nodes holding `wordwordwordwo` and
             // `rdword word` are two lines in a 100px box in Chrome and here. Two
             // spans holding the halves are the same word for the same reason.
-            self.word += text_measure.measure(family, str[start..i], size).width;
+            self.word += text_measure.measure(face, str[start..i], size).width;
             self.have_word = true;
         }
     }
@@ -2470,7 +2478,7 @@ const LineFlow = struct {
 ///
 /// The `normal` half asks font_metrics for a measured line box and NOT for
 /// `boundingBox().ascent + .descent`, which is what it used to sum. Those two
-/// are the same number at a device pixel ratio of 1 -- sixty of sixty (family,
+/// are the same number at a device pixel ratio of 1 -- sixty of sixty (face,
 /// size) pairs -- and different at the 2 this engine claims, for thirty-four of
 /// the same sixty: 16px serif is 18 by the canvas metrics and 18.5 on the page,
 /// 20px monospace is 24 and 23, and 10px serif is 13 and 11.5. That last one is
@@ -2479,8 +2487,8 @@ const LineFlow = struct {
 /// The canvas box itself does not move with the scale, so `boundingBox` is
 /// unchanged and correct where it is read (src/browser/tests/element/
 /// line_box_height.html).
-fn lineBoxHeight(self: *Element, frame: *Frame, family: font_metrics.Family, size: f64) f64 {
-    const halves = self.lineBoxHalves(frame, family, size);
+fn lineBoxHeight(self: *Element, frame: *Frame, face: text_measure.Face, size: f64) f64 {
+    const halves = self.lineBoxHalves(frame, face, size);
     return halves.above + halves.below;
 }
 
@@ -2496,8 +2504,8 @@ fn lineBoxHeight(self: *Element, frame: *Frame, family: font_metrics.Family, siz
 /// strut's 14.5, and the strut's own 4 below against the span's -0.5. The
 /// tallest-line-height model says 20 to the same page, and 19.5 where Chrome
 /// says 19.5 only because both halves happen to lose there.
-fn lineBoxHalves(self: *Element, frame: *Frame, family: font_metrics.Family, size: f64) struct { above: f64, below: f64 } {
-    const box = font_metrics.layoutBox(family, size);
+fn lineBoxHalves(self: *Element, frame: *Frame, face: text_measure.Face, size: f64) struct { above: f64, below: f64 } {
+    const box = font_metrics.layoutBox(face.family, size);
     const declared = CSSStyleDeclaration.cascadedComputedLength(self, "line-height", frame) orelse
         return .{ .above = box.ascent, .below = box.descent };
     const height = layoutUnit(@max(0, declared));
@@ -2534,7 +2542,7 @@ pub fn minContentWidth(self: *Element, frame: *Frame) ?f64 {
         var words = std.mem.tokenizeAny(u8, Factory.protoOf(text)._data.str(), &std.ascii.whitespace);
         while (words.next()) |word| {
             seen = true;
-            widest = @max(widest, text_measure.measure(font.family, word, font.size).width);
+            widest = @max(widest, text_measure.measure(font.face, word, font.size).width);
         }
     }
     if (!seen) return null;
@@ -2584,8 +2592,8 @@ fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) InkBox
             has_text = true;
             // Per text node, the same as textLayout's walk -- see
             // textAdvanceUnit.
-            text_width += textAdvanceUnit(text_measure.measure(font.family, str, font.size).width);
-            collapsed_width += textAdvanceUnit(run.measure(str, font.family, font.size));
+            text_width += textAdvanceUnit(text_measure.measure(font.face, str, font.size).width);
+            collapsed_width += textAdvanceUnit(run.measure(str, font.face, font.size));
             continue;
         }
         if (node.is(Element)) |el| {
@@ -2616,7 +2624,7 @@ fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) InkBox
             // it is measured against: `a <b>x</b> c` is three words with two
             // spaces. One that renders nothing is not, and must not eat the
             // space beside it -- an empty <span> between two words leaves ONE.
-            if (outer > 0) collapsed_width += textAdvanceUnit(run.box(font.family, font.size));
+            if (outer > 0) collapsed_width += textAdvanceUnit(run.box(font.face, font.size));
         }
     }
 
@@ -2638,7 +2646,7 @@ fn inlineInk(self: *Element, frame: *Frame, depth: u8, containing: *?f64) InkBox
         // that declare a line-height -- an inline box ignores the declaration
         // and keeps the font's own line either way, which is why this asks
         // font_metrics directly rather than going through lineBoxHeight.
-        height = @max(height, font_metrics.lineBox(font.family, font.size));
+        height = @max(height, font_metrics.lineBox(font.face.family, font.size));
     }
     return .{ .width = width, .height = height };
 }
@@ -2686,7 +2694,7 @@ fn inlineNeedsLines(self: *Element) bool {
 /// total a line is worth is read back out.
 fn inlineInkLines(self: *Element, frame: *Frame, depth: u8, containing: *?f64) InkBox {
     const font = self.resolveFont(frame);
-    const line_box = font_metrics.lineBox(font.family, font.size);
+    const line_box = font_metrics.lineBox(font.face.family, font.size);
     var flow: LineFlow = .{
         .keeps_newlines = CSSStyleDeclaration.preservesNewlines(self, frame),
         .collapses = !CSSStyleDeclaration.preservesWhitespace(self, frame),
@@ -2694,7 +2702,7 @@ fn inlineInkLines(self: *Element, frame: *Frame, depth: u8, containing: *?f64) I
         // makes it, and a line ends here only where something ends it.
         .wraps = false,
         .box = 0,
-        .space = text_measure.measure(font.family, " ", font.size).width,
+        .space = text_measure.measure(font.face, " ", font.size).width,
         .strut_above = line_box,
         .strut_below = 0,
         .open_above = line_box,
@@ -2710,7 +2718,7 @@ fn inlineInkLines(self: *Element, frame: *Frame, depth: u8, containing: *?f64) I
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(CData.Text)) |text| {
-            flow.addText(Factory.protoOf(text)._data.str(), font.family, font.size);
+            flow.addText(Factory.protoOf(text)._data.str(), font.face, font.size);
             continue;
         }
         if (node.is(Element)) |el| {
@@ -3471,8 +3479,8 @@ fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?IntrinsicBox {
                 // at 100px, which are `textAdvanceUnit` of the label's advance
                 // to the last bit. The scale-1 basis needed a nudge here to keep
                 // the client box off a rounding boundary; this one does not.
-                .width = textAdvanceUnit(text_measure.measure(font.family, label, font.size).width),
-                .height = deviceRound(font_metrics.lineBox(font.family, font.size)),
+                .width = textAdvanceUnit(text_measure.measure(font.face, label, font.size).width),
+                .height = deviceRound(font_metrics.lineBox(font.face.family, font.size)),
             };
         }
     }
@@ -3490,7 +3498,7 @@ fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?IntrinsicBox {
     // table: monospace comes out 15.556 and Arial 15.333, where Chrome answers
     // 15.5 to both. Snapping to the device pixel lands both, which the previous
     // dpr-1 floor could not do.
-    const line = deviceRound(font_metrics.lineBox(font.family, font.size));
+    const line = deviceRound(font_metrics.lineBox(font.face.family, font.size));
 
     return switch (tag) {
         // A <progress> and a <meter> are 160x16 and 80x16 at the 16px they
@@ -3517,8 +3525,8 @@ fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?IntrinsicBox {
             // below 24px; at scale 2 they are used as measured and the fit is
             // better for it -- see the ceil below.
             const scale = font.size / font_metrics.basis;
-            const avg = font.family.avg_char_width * scale;
-            const max = font.family.max_char_width * scale;
+            const avg = font.face.family.avg_char_width * scale;
+            const max = font.face.family.max_char_width * scale;
             const columns: f64 = if (tag == .textarea)
                 @floatFromInt(self.attributeUnsignedOr("cols", 20))
             else
@@ -4155,7 +4163,7 @@ pub fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMR
     // both and the canvas sum in neither.
     if (self.getTag() == .br) {
         const font = self.resolveFont(frame);
-        height = font_metrics.lineBox(font.family, font.size);
+        height = font_metrics.lineBox(font.face.family, font.size);
     }
 
     // An out-of-flow box is placed by its own declaration, which is the half of
@@ -4380,12 +4388,12 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
     var escaped_bottom: MarginGroup = .{};
 
     const font = self.resolveFont(frame);
-    const strut = self.lineBoxHalves(frame, font.family, font.size);
+    const strut = self.lineBoxHalves(frame, font.face, font.size);
     var flow: LineFlow = .{
         .keeps_newlines = CSSStyleDeclaration.preservesNewlines(self, frame),
         .wraps = content_width != null and CSSStyleDeclaration.wrapsText(self, frame),
         .box = content_width orelse 0,
-        .space = text_measure.measure(font.family, " ", font.size).width,
+        .space = text_measure.measure(font.face, " ", font.size).width,
         .strut_above = strut.above,
         .strut_below = strut.below,
         .open_above = strut.above,
@@ -4432,7 +4440,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             }
             if (CSSStyleDeclaration.defaultDisplayIsInline(el) and CSSStyleDeclaration.isInlineBox(el, frame)) {
                 const child_font = el.resolveFont(frame);
-                const halves = el.lineBoxHalves(frame, child_font.family, child_font.size);
+                const halves = el.lineBoxHalves(frame, child_font.face, child_font.size);
                 const outer_above = flow.open_above;
                 const outer_below = flow.open_below;
                 flow.open_above = @max(outer_above, halves.above);
@@ -4446,7 +4454,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 // 27.5 of height (scratch/b99/expr-bounding-rect-page.js).
                 const line_x = flow.placed;
                 const line_y = flow.total;
-                el.flowInline(frame, &flow, child_font.family, child_font.size, 1);
+                el.flowInline(frame, &flow, child_font.face, child_font.size, 1);
                 if (pass) |p| {
                     // Only a box that stayed on its line: a wrapped inline is a
                     // union of line boxes and nothing here has measured one.
@@ -4658,7 +4666,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             continue;
         }
         if (node.is(CData.Text)) |text| {
-            flow.addText(Factory.protoOf(text)._data.str(), font.family, font.size);
+            flow.addText(Factory.protoOf(text)._data.str(), font.face, font.size);
         }
     }
 
@@ -4709,7 +4717,7 @@ fn atomicInlineHalves(self: *Element, frame: *Frame) ?struct { above: f64, below
         return .{ .above = height, .below = 0 };
     }
     const font = self.resolveFont(frame);
-    const below = @min(height, font_metrics.layoutBox(font.family, font.size).descent);
+    const below = @min(height, font_metrics.layoutBox(font.face.family, font.size).descent);
     return .{ .above = height - below, .below = below };
 }
 

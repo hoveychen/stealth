@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Bold text is wider than regular text and italic text is narrower, and this
+engine returns the same number for all three: `bold 16px serif` measures
+'Campfire Commerce' at exactly the width `16px serif` does, to the last decimal
+place. Two lines of script tell the two engines apart, which is the same shape
+of tell as every element reporting the same x as its y.
+
+Chrome 151 at `--force-device-scale-factor=2`, headed, measured twice with no
+reading moving between the runs (scratch/b99/expr-bold-italic-exact.js). The
+canvas and the layout answer the same width there, so both are asserted -- text
+is measured down three separate paths in here and fixing one leaves the others
+wrong (memory: text-width-has-three-paths).
+
+Two of the obvious probes are traps, and both are kept below as controls
+precisely because they do NOT move:
+
+  * 'xxxxxxxx' at 16px serif is 64 in Chrome bold or regular. A test built on
+    that string passes against an engine that ignores weight completely.
+  * so is 'AV' at 21.046875 -- bold widens both glyphs and then kerns them
+    further together, and in this face the two cancel exactly.
+
+The weight threshold is a real boundary rather than a keyword: 500 measures as
+regular, 600 and 700 and 900 all measure as bold, so `bold` is not a separate
+case from the numbers. And italic-bold is a fourth answer, not the two effects
+composed -- 136.4375, where bold alone is 142.9375 and italic alone is
+131.6953125.
+-->
+
+<script id=text_weight_and_style>
+{
+  const CAMPFIRE = 'Campfire Commerce';
+  const EXPECTED = [
+    // font, text, width
+    ['16px serif', CAMPFIRE, 133.7421875],
+    ['bold 16px serif', CAMPFIRE, 142.9375],
+    ['italic 16px serif', CAMPFIRE, 131.6953125],
+    ['italic bold 16px serif', CAMPFIRE, 136.4375],
+
+    ['16px serif', 'M', 14.2265625],
+    ['bold 16px serif', 'M', 15.1015625],
+    ['italic 16px serif', 'M', 13.328125],
+
+    // The threshold sits between 500 and 600, so `bold` is the numbers.
+    ['500 16px serif', 'M', 14.2265625],
+    ['600 16px serif', 'M', 15.1015625],
+    ['700 16px serif', 'M', 15.1015625],
+    ['900 16px serif', 'M', 15.1015625],
+
+    // Other families, so this cannot be met by special-casing serif.
+    ['bold 16px sans-serif', CAMPFIRE, 156.5],
+    ['bold 16px monospace', CAMPFIRE, 163.7578125],
+    ['italic 16px sans-serif', CAMPFIRE, 147.5859375],
+
+    // Controls: Chrome gives the same width bold as regular for these two, so
+    // an engine that ignores weight looks correct here. They must stay put.
+    ['16px serif', 'xxxxxxxx', 64],
+    ['bold 16px serif', 'xxxxxxxx', 64],
+    ['16px serif', 'AV', 21.046875],
+    ['bold 16px serif', 'AV', 21.046875],
+  ];
+
+  const wrong = [];
+  const ctx = document.createElement('canvas').getContext('2d');
+
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:-9999px;white-space:pre';
+  document.body.appendChild(host);
+
+  for (const [font, text, want] of EXPECTED) {
+    ctx.font = font;
+    const canvas = ctx.measureText(text).width;
+    if (canvas !== want) {
+      wrong.push('canvas ' + font + ' "' + text + '": want ' + want + ', got ' + canvas);
+    }
+
+    const span = document.createElement('span');
+    span.style.cssText = 'font:' + font + ';white-space:pre';
+    span.textContent = text;
+    host.appendChild(span);
+    const laid = span.getBoundingClientRect().width;
+    span.remove();
+    if (laid !== want) {
+      wrong.push('layout ' + font + ' "' + text + '": want ' + want + ', got ' + laid);
+    }
+  }
+  host.remove();
+
+  testing.expectEqual('', wrong.join('\n  | '));
+}
+</script>

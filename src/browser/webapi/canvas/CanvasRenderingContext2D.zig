@@ -113,7 +113,11 @@ pub fn setFont(self: *CanvasRenderingContext2D, value: []const u8, exec: *Execut
 /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/measureText
 pub fn measureText(self: *const CanvasRenderingContext2D, text: []const u8, exec: *Execution) !*TextMetrics {
     return exec._factory.create(TextMetrics{
-        ._metrics = text_measure.measure(self._font.family, text, self._font.size),
+        ._metrics = text_measure.measure(
+            .of(self._font.family, self._font.weight, self._font.italic),
+            text,
+            self._font.size,
+        ),
     });
 }
 
