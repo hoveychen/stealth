@@ -25834,3 +25834,56 @@ box plus the strut's 4 hanging under the baseline the boxes sit on. **The first
 run was cold, this engine was right, and the defect did not exist.** A Chrome
 reading destined for a test expectation is worth running twice, especially
 anything that depends on font metrics.
+
+## Four caches and real coordinates later, the two doors have not moved (B99, 2026-09-01)
+
+The session that removed `x == y` and took the engine several times faster ends
+where it should: asking the closed stations whether any of that mattered. It did
+not, and the reading is worth writing down because it is the cleanest negative
+this chain has had.
+
+### Which stations were even worth asking
+
+Across **425 archived lightpanda sweeps**, seven stations sit at zero. Three of
+them are not doors: `dd-g2`, `dd-saks` and `dd-allopneus` answer `first=200` in
+**0%** of ~80 runs each — the refusal lands on the first document, before any
+JavaScript, and headed Chrome is refused beside us. Nothing an engine does moves
+those. That leaves the Cloudflare challenge family and Kasada:
+
+| station | archived | this build | combined |
+|---|---:|---:|---:|
+| cf-scrapingcourse | 0 / 73 | **0 / 25** | 0 / 98 |
+| cf-nopecha | 0 / 68 | **0 / 25** | 0 / 93 |
+| cf-zeroclover | 0 / 68 | **0 / 25** | 0 / 93 |
+| x-hyatt | 1 / 89 | 1 / 25 | 2 / 114 |
+
+x-hyatt's one pass is inside the ticket rate it already had
+(`hyatt-now-issues-tickets-sometimes`: 5 in 157), and one event at n=25 separates
+nothing.
+
+### And the guards' own verdicts, which are a step earlier
+
+A station's pass/refuse is the end of a chain. Both guards can be asked directly,
+and both say the same thing:
+
+* **Cloudflare**, six visits: `served=false` and `ticket=(absent)` every time,
+  with all three rounds reading `chl-gen` — the challenge never settles. `r3` is
+  87–90KB, the same order as Chrome's, which `cf-r3-is-not-short` already
+  established.
+* **Kasada**, ten visits: `x-kpsdk-r` **absent all ten**, `/tl` answering 200
+  `text/plain` at **0 bytes** with `x-kpsdk-cr: true`. Byte for byte the reading
+  from months ago: cleared to hold a cookie, never handed a ticket.
+
+### What this does and does not say
+
+25 runs per station detects a door swinging open, not a few points of movement:
+at n=25 the 95% upper bound on a true rate of zero observations is about 11%. So
+the honest statement is that **nothing large changed**, and that the two guards'
+own answers are unchanged in shape as well as in outcome.
+
+Which is the same conclusion five earlier chapters reached by other routes, and
+it should be read the way they were: the engine-side surface these two read is
+not where the remaining difference is. The work this session merged was worth
+merging on its own terms — a one-expression detector removed, a 30-second stall
+given real margin, UA margins reaching the layout at last — and none of it was a
+door.
