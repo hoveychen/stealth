@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<head>
+  <title>offsetLeft/offsetTop and the box an offsetParent gives</title>
+  <meta charset="UTF-8">
+</head>
+<body>
+<div id="anchor" style="position:absolute;left:0;top:0;width:0;height:0;">a</div>
+
+<!--
+  Every expected number below is Chrome 151's, measured two arms on one page
+  with scratch/h86/expr-h86-offsetparent.js. The host is deliberately given BOTH
+  a border and padding, because a border-less host cannot tell the border edge
+  from the padding edge and that is exactly the distinction each rule turns on:
+
+    1. offsetLeft/offsetTop are measured from the offsetParent's PADDING edge --
+       except when the offsetParent is the body element or null, where Chrome
+       subtracts nothing at all and the reading is the document coordinate.
+    2. An absolutely (or fixed) positioned box's containing block is the
+       positioned ancestor's PADDING box, so `left:3px` lands 3px inside that
+       edge and not 3px inside its border edge.
+    3. An `auto` offset falls back to the box's static position -- where the
+       flow would have put it, inside the CONTENT box and after its preceding
+       siblings -- and it does so per axis, so `left:3px` with `top:auto` takes
+       the declared x and the static y.
+    4. Both are `long` in the IDL, so neither is ever a fraction.
+
+  Everything is in CSS pixels and every box declares its own size, so none of it
+  depends on the device scale factor the two engines report differently. The
+  anchor above is out of flow for the same reason: a line box at the top of the
+  body would move every y here, and the numbers were measured on a page whose
+  body was empty.
+-->
+<script src="../testing.js"></script>
+<script id="offset_is_measured_from_the_offset_parents_padding_edge">
+  document.body.setAttribute('style', 'margin:8px;');
+
+  const HOST = 'position:relative;margin:0;border:5px solid;padding:10px;width:300px;height:200px;';
+  const BOX = 'margin:0;width:60px;height:20px;';
+
+  const want = [];
+  const got = [];
+
+  function build(html) {
+    const holder = document.createElement('div');
+    holder.setAttribute('style', 'margin:0;');
+    holder.innerHTML = html;
+    document.body.appendChild(holder);
+    return holder;
+  }
+
+  function probe(name, html, expect_rect, expect_offset) {
+    const holder = build(html);
+    const el = document.getElementById('a');
+    const r = el.getBoundingClientRect();
+    want.push(name + ' rect=' + expect_rect + ' offset=' + expect_offset);
+    got.push(name +
+      ' rect=' + Math.round(r.x) + ',' + Math.round(r.y) +
+      ' offset=' + el.offsetLeft + ',' + el.offsetTop);
+    document.body.removeChild(holder);
+  }
+
+  const host = (inner) => '<div id="h" style="' + HOST + '">' + inner + '</div>';
+  const spacer = '<div style="margin:0;height:40px;"></div>';
+
+  // The two cases Chrome subtracts nothing for. Both already agree, and they
+  // are here so a fix that subtracts unconditionally is caught.
+  probe('in_body', '<div id="a" style="' + BOX + '"></div>', '8,8', '8,8');
+  probe('fixed_declared',
+    host('<div id="a" style="' + BOX + 'position:fixed;left:70px;top:90px;"></div>'),
+    '70,90', '70,90');
+
+  // Rule 1: the padding edge of #h is 13,13 -- its border box starts at 8,8 and
+  // its border is 5.
+  probe('in_bordered_host', host('<div id="a" style="' + BOX + '"></div>'), '23,23', '10,10');
+  probe('through_static_wrapper',
+    host('<div style="margin:0;padding:7px;"><div id="a" style="' + BOX + '"></div></div>'),
+    '30,30', '17,17');
+  probe('relative_in_host',
+    host('<div id="a" style="' + BOX + 'position:relative;left:3px;top:4px;"></div>'),
+    '26,27', '13,14');
+  probe('second_child_in_host', host(spacer + '<div id="a" style="' + BOX + '"></div>'),
+    '23,63', '10,50');
+  // A table cell is an offsetParent for a static descendant without being
+  // positioned, and it has no border here, so its padding edge is its origin.
+  probe('in_table_cell',
+    '<table style="margin:0;border-collapse:collapse;"><tr><td id="c" style="padding:0;">' +
+      '<div id="a" style="' + BOX + '"></div></td></tr></table>',
+    '8,8', '0,0');
+
+  // Rule 2: left/top count from 13,13, not from 8,8.
+  probe('absolute_in_host',
+    host('<div id="a" style="' + BOX + 'position:absolute;left:3px;top:4px;"></div>'),
+    '16,17', '3,4');
+  // #h's border box is 330x230, so its padding box is 320x220 starting at 13,13
+  // and ending at 333,233.
+  probe('absolute_right_bottom',
+    host('<div id="a" style="' + BOX + 'position:absolute;right:3px;bottom:4px;"></div>'),
+    '270,209', '257,196');
+
+  // Rule 3: auto takes the static position, per axis, and fixed does it too.
+  probe('absolute_auto',
+    host(spacer + '<div id="a" style="' + BOX + 'position:absolute;"></div>'),
+    '23,63', '10,50');
+  probe('absolute_auto_left_only',
+    host(spacer + '<div id="a" style="' + BOX + 'position:absolute;left:3px;"></div>'),
+    '16,63', '3,50');
+  probe('fixed_auto',
+    host(spacer + '<div id="a" style="' + BOX + 'position:fixed;"></div>'),
+    '23,63', '23,63');
+
+  // Rule 4, asserted without a number of its own. A line box above the target
+  // makes the static position a fraction, and Chrome still reports an integer
+  // (28 where its own rect is 41.4). Its exact value is not asserted because the
+  // line's height is a font metric the two engines round differently -- what is
+  // asserted is the type.
+  const holder = build(host('<div style="margin:0;">x</div><div id="a" style="' + BOX + '"></div>'));
+  const fractional = document.getElementById('a');
+  want.push('fractional_static integer=true,true');
+  got.push('fractional_static integer=' +
+    Number.isInteger(fractional.offsetLeft) + ',' + Number.isInteger(fractional.offsetTop));
+  document.body.removeChild(holder);
+
+  testing.expectEqual(want.join('\n'), got.join('\n'));
+</script>
+</body>

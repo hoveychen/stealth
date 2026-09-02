@@ -4158,18 +4158,10 @@ pub fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMR
         height = font_metrics.lineBox(font.family, font.size);
     }
 
-    // An out-of-flow box is placed by its own declaration, which is the half of
-    // positioning this engine can compute exactly.
-    if (self.outOfFlowPosition(frame, depth)) |placed| {
-        return .{ .x = placed.x, .y = placed.y, .width = width, .height = height };
-    }
-
-    const y = documentPosition(self.asNode(), frame);
-    const x = siblingPosition(self.asNode(), frame);
-
+    const origin = self.boxOrigin(frame, depth);
     return .{
-        .x = x,
-        .y = y,
+        .x = origin.x,
+        .y = origin.y,
         .width = width,
         .height = height,
     };
@@ -4297,6 +4289,15 @@ pub const PositionTable = std.AutoHashMapUnmanaged(*Element, PlacedBox);
 /// is a separate decision that the cost has to clear first.
 pub const PositionPass = struct {
     table: *PositionTable,
+    /// Where a positioned box WOULD have stood had it stayed in flow.
+    ///
+    /// A separate table on purpose. `table` answers "where is this box", which
+    /// is what the rect accessors and `elementFromPoint` ask; an absolutely
+    /// positioned box's static position is emphatically not that, and putting
+    /// the two in one map would hand every such reader a coordinate the box was
+    /// moved away from. The only reader here is `outOfFlowPosition`, for the
+    /// axes a page left `auto`.
+    static_table: *PositionTable,
     /// Nodes placed, so the cost can be reported per node rather than per page.
     nodes: *usize,
     /// The absolute position of the content box currently being filled.
@@ -4308,6 +4309,13 @@ pub const PositionPass = struct {
         // A prototype that is only ever measured: a table this pass could not
         // grow is a missing row, not a failed page load.
         self.table.put(frame.arena, element, at) catch {};
+    }
+
+    /// Same, for the static position of a box the flow does not place. Kept out
+    /// of the `nodes` count so the pass's cost-per-node reading stays the one
+    /// the prototype was priced with.
+    fn recordStatic(self: PositionPass, frame: *Frame, element: *Element, at: PlacedBox) void {
+        self.static_table.put(frame.arena, element, at) catch {};
     }
 };
 
@@ -4326,7 +4334,12 @@ pub fn layoutPassHeightOnly(root: *Element, frame: *Frame) f64 {
 /// The root's own content box is the origin every position is relative to, so
 /// the pass starts inside `<html>`'s border and padding -- and records the root
 /// itself at 0,0, which is where Chrome reports it with nothing scrolled.
-pub fn layoutPassPositions(root: *Element, frame: *Frame, table: *PositionTable) usize {
+pub fn layoutPassPositions(
+    root: *Element,
+    frame: *Frame,
+    table: *PositionTable,
+    static_table: *PositionTable,
+) usize {
     var nodes: usize = 0;
     var visibility_cache: VisibilityCache = .{};
     const dims = root.getElementDimensions(frame);
@@ -4339,6 +4352,7 @@ pub fn layoutPassPositions(root: *Element, frame: *Frame, table: *PositionTable)
     }) catch {};
     _ = root.contentHeight(frame, &visibility_cache, .in_flow, dims.width, 0, .{
         .table = table,
+        .static_table = static_table,
         .nodes = &nodes,
         .x = CSSStyleDeclaration.blockEdgePx(root, "left", frame, &containing, 0),
         .y = CSSStyleDeclaration.blockEdgePx(root, "top", frame, &containing, 0),
@@ -4472,24 +4486,37 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 // `scratch/b74/expr-inflow-position-matrix.js`. So it takes a
                 // position and does not advance `total`.
                 //
-                // Only floats. A positioned box is placed by `outOfFlowPosition`
-                // and its readers ask that first, so a flow position for one
-                // would be a row nothing reads and everything has to explain.
-                if (kind == .floated) {
-                    if (pass) |p| {
-                        const float_box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
-                        p.record(frame, el, .{
-                            .x = p.x + el.staticInlineOffset(
-                                frame,
-                                content_width,
-                                float_box.width + float_box.padding_x + float_box.border_x,
-                                &margin_containing,
-                                depth,
-                            ),
-                            .y = p.y + total,
-                            .width = float_box.width + float_box.padding_x + float_box.border_x,
-                            .height = float_box.height + float_box.padding_y + float_box.border_y,
-                        });
+                if (pass) |p| {
+                    const out_box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+                    const at: PlacedBox = .{
+                        .x = p.x + el.staticInlineOffset(
+                            frame,
+                            content_width,
+                            out_box.width + out_box.padding_x + out_box.border_x,
+                            &margin_containing,
+                            depth,
+                        ),
+                        .y = p.y + total,
+                        .width = out_box.width + out_box.padding_x + out_box.border_x,
+                        .height = out_box.height + out_box.padding_y + out_box.border_y,
+                    };
+                    // A float leaves the block flow but still starts where the
+                    // flow had got to, which is what Chrome reports: the float
+                    // and the block after it both sit at `d=0,0` in
+                    // `scratch/b74/expr-inflow-position-matrix.js`. So it takes
+                    // a position and does not advance `total`.
+                    //
+                    // A positioned box takes the same reading, but into the
+                    // static table rather than this one: it is where the box
+                    // WOULD be, which is the answer `left:auto` resolves to and
+                    // nothing else. Chrome puts an `position:absolute` box with
+                    // no offsets at exactly the spot the flow had reached --
+                    // 23,63 behind a 40px sibling in a host whose content box
+                    // starts at 23,23 (scratch/h86/expr-h86-offsetparent.js).
+                    switch (kind) {
+                        .floated => p.record(frame, el, at),
+                        .positioned => p.recordStatic(frame, el, at),
+                        .in_flow => {},
                     }
                 }
                 continue;
@@ -4596,6 +4623,7 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 });
                 child_pass = .{
                     .table = p.table,
+                    .static_table = p.static_table,
                     .nodes = p.nodes,
                     .x = child_x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &margin_containing, depth),
                     .y = child_y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &margin_containing, depth),
@@ -4901,24 +4929,60 @@ pub fn getOffsetWidth(self: *Element, frame: *Frame) f64 {
     return @round(self.getClientWidthWithCache(frame, &visibility_cache) + dims.border_x);
 }
 
+/// Where this element's border box starts, in the same coordinates its rect is
+/// in. The one dispatch both the rect and the offsets have to agree on: a box
+/// the page positioned is placed by its own declaration, and everything else by
+/// the flow.
+fn boxOrigin(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
+    if (self.outOfFlowPosition(frame, depth)) |placed| {
+        return .{ .x = placed.x, .y = placed.y };
+    }
+    return .{
+        .x = siblingPosition(self.asNode(), frame),
+        .y = documentPosition(self.asNode(), frame),
+    };
+}
+
+/// What `offsetLeft` and `offsetTop` are measured from: the PADDING edge of the
+/// offsetParent.
+///
+/// Measured across twelve shapes in `scratch/h86/expr-h86-offsetparent.js`. In a
+/// host at 8,8 with a 5px border, `rect - offset` is 13,13 for every descendant
+/// -- a static one, a relative one, an absolute one, one reached through a
+/// static wrapper -- and for a table cell, which is an offsetParent without
+/// being positioned, it is the cell's own origin.
+///
+/// The two exceptions subtract nothing at all, and both were already right: a
+/// null offsetParent (a fixed box), and the body element, where Chrome reports
+/// the document coordinate even though body's padding edge is 8,8 under the
+/// default margin.
+fn offsetParentPaddingEdge(self: *Element, frame: *Frame) DOMRect.Data {
+    const parent = self.getOffsetParent(frame) orelse return .{};
+    if (parent.getTag() == .body) return .{};
+    const origin = parent.boxOrigin(frame, 0);
+    return .{
+        .x = origin.x + parent.getClientLeft(frame),
+        .y = origin.y + parent.getClientTop(frame),
+    };
+}
+
+/// Both are a `long` in the IDL, so both round -- the same way `offsetWidth` and
+/// `offsetHeight` above do. A line box above the target makes the static
+/// position a fraction, and this engine handed back the raw 41.5 where Chrome
+/// answers 28: `Number.isInteger(el.offsetTop)` was false, which no browser
+/// produces.
 pub fn getOffsetTop(self: *Element, frame: *Frame) f64 {
     if (!self.checkVisibilityCached(null, frame)) {
         return 0.0;
     }
-    if (self.outOfFlowPosition(frame, 0)) |placed| {
-        return placed.offset_y;
-    }
-    return documentPosition(self.asNode(), frame);
+    return @round(self.boxOrigin(frame, 0).y - self.offsetParentPaddingEdge(frame).y);
 }
 
 pub fn getOffsetLeft(self: *Element, frame: *Frame) f64 {
     if (!self.checkVisibilityCached(null, frame)) {
         return 0.0;
     }
-    if (self.outOfFlowPosition(frame, 0)) |placed| {
-        return placed.offset_x;
-    }
-    return siblingPosition(self.asNode(), frame);
+    return @round(self.boxOrigin(frame, 0).x - self.offsetParentPaddingEdge(frame).x);
 }
 
 /// Where the element's box sits when the flow does not decide it, or null when
@@ -4935,21 +4999,17 @@ pub fn getOffsetLeft(self: *Element, frame: *Frame) f64 {
 /// siblings, and that sum needs their heights, which are still content-derived
 /// guesses; the synthetic walk stands until there is a flow to replace it.
 ///
-/// `offset_*` is what `offsetLeft`/`offsetTop` report and `x`/`y` is the
-/// viewport rect, and the two differ by the containing block's own origin --
-/// which may itself still be synthetic. That keeps the pair *consistent* even
-/// where neither is Chrome's number: a script comparing `getBoundingClientRect`
-/// against `offsetLeft` is comparing the relation between them.
+/// Only the rect is returned. `offsetLeft`/`offsetTop` used to come out of here
+/// as a second pair, because the two differ by the containing block's origin and
+/// computing them together kept them consistent. They are `boxOrigin` less the
+/// offsetParent's padding edge now, which is a different ancestor from the
+/// containing block whenever the two disagree -- a table cell is an offsetParent
+/// without being positioned, and body is one that Chrome subtracts nothing for.
 ///
-/// A declaration this engine cannot resolve, and the `auto` case Chrome places
-/// at the static position, both come out 0 -- there is no static position to
-/// fall back to.
-fn outOfFlowPosition(self: *Element, frame: *Frame, depth: u8) ?struct {
-    x: f64,
-    y: f64,
-    offset_x: f64,
-    offset_y: f64,
-} {
+/// The `auto` case no longer comes out 0. Chrome places such a box at its static
+/// position and the document-wide pass now records that, so what is left over is
+/// a declaration this engine cannot resolve, and a box the pass has not reached.
+fn outOfFlowPosition(self: *Element, frame: *Frame, depth: u8) ?DOMRect.Data {
     if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return null;
 
     const position = CSSStyleDeclaration.cascadedComputedValue(self, "position", frame) orelse return null;
@@ -4973,24 +5033,53 @@ fn outOfFlowPosition(self: *Element, frame: *Frame, depth: u8) ?struct {
         };
     };
 
-    const offset_x = self.edgeOffset(frame, "left", "right", box.width, dims.width);
-    const offset_y = self.edgeOffset(frame, "top", "bottom", box.height, dims.height);
+    // The containing block is the ancestor's PADDING box, not its border box:
+    // measured on a host with `border:5px;padding:10px;width:300px`, Chrome puts
+    // `left:3px` at 16 -- 13 for the padding edge plus 3 -- and `right:3px` on a
+    // 60px box at 270, which is the padding box's 320 of width from 13 less the
+    // two (scratch/h86/expr-h86-offsetparent.js). The engine counted from the
+    // border edge and from the content width, which is short by the border on
+    // one side and by the padding on the other.
+    //
+    // The viewport branch below carries no edges, so a fixed box is unaffected.
+    const origin: DOMRect.Data = if (containing) |cb| blk: {
+        const rect = cb.boundingClientRectValuesAt(frame, depth + 1);
+        break :blk .{
+            .x = rect.x + cb.getClientLeft(frame),
+            .y = rect.y + cb.getClientTop(frame),
+        };
+    } else .{};
 
-    const origin: DOMRect.Data = if (containing) |cb|
-        cb.boundingClientRectValuesAt(frame, depth + 1)
+    // `auto` on both edges of an axis means the box keeps its static position --
+    // where the flow would have put it. The pass records that for every box it
+    // steps over out of flow; it answers null while itself running, and for a
+    // box no pass has reached, and 0 is what this engine has always said then.
+    //
+    // Asked for only when an axis is actually `auto`. `staticPositionOf` lays
+    // the whole document out when the table is cold, and a box that declares
+    // both edges has no use for the answer -- fetching it unconditionally turns
+    // one `getBoundingClientRect` on one absolute box into a document-wide pass.
+    const declared_x = self.edgeOffset(frame, "left", "right", box.width + box.padding_x, dims.width);
+    const declared_y = self.edgeOffset(frame, "top", "bottom", box.height + box.padding_y, dims.height);
+    const static: ?PlacedBox = if (declared_x == null or declared_y == null)
+        frame.staticPositionOf(self)
     else
-        .{};
+        null;
+    const offset_x = declared_x orelse if (static) |s| s.x - origin.x else 0;
+    const offset_y = declared_y orelse if (static) |s| s.y - origin.y else 0;
 
     return .{
         .x = origin.x + offset_x,
         .y = origin.y + offset_y,
-        .offset_x = offset_x,
-        .offset_y = offset_y,
     };
 }
 
 /// One axis of an out-of-flow box's offset: the near edge if it is declared,
-/// otherwise the far edge subtracted from the containing block, otherwise zero.
+/// otherwise the far edge subtracted from the containing block, otherwise null
+/// -- which is the `auto` case the caller answers with the static position.
+///
+/// Per axis, because Chrome resolves them per axis: `left:3px` with no `top`
+/// takes the declared 3 on one and the static position on the other.
 fn edgeOffset(
     self: *Element,
     frame: *Frame,
@@ -4998,14 +5087,14 @@ fn edgeOffset(
     comptime far: []const u8,
     available: f64,
     own: f64,
-) f64 {
+) ?f64 {
     if (CSSStyleDeclaration.cascadedComputedValue(self, near, frame)) |declared| {
         if (CSS.parseDimensionViewport(declared, frame)) |px| return px;
     }
     if (CSSStyleDeclaration.cascadedComputedValue(self, far, frame)) |declared| {
         if (CSS.parseDimensionViewport(declared, frame)) |px| return available - px - own;
     }
-    return 0;
+    return null;
 }
 
 /// The ancestor an absolutely positioned box is placed against: the nearest one
