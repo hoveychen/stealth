@@ -64,6 +64,40 @@ pub const Metrics = struct {
     ideographicBaseline: f64 = 0,
 };
 
+/// `letter-spacing` and `word-spacing`, resolved to CSS pixels.
+///
+/// Both are lengths the cascade hands down, not properties of a font, so they
+/// ride on `Face` rather than living in it: every caller that measures text
+/// already carries a `Face` down to the kernel, and the alternative was a
+/// second parameter on `measure` and on the four layout walks between it and
+/// the cascade.
+///
+/// The arithmetic is measured, on Chrome 151 headed at dpr 2
+/// (scratch/b100/expr-spacing-table.js, expr-spacing-cluster.js):
+///
+///   * `letter` is charged after every grapheme CLUSTER, the last one included.
+///     Per cluster and not per code point: a regional-indicator pair, an `e`
+///     with a combining acute, and a ZWJ sequence are each charged once, though
+///     they are two, two and three code points.
+///   * `word` is charged at every U+0020 and U+00A0. It is NOT charged for
+///     U+3000 or U+200B, which are not word separators.
+///
+/// The two paths disagree about one character and `charges_lead_space` is that
+/// disagreement: Chrome charges `word` for a U+0020 in the first character
+/// position through `measureText` and not through layout. `' ab'` under
+/// `word-spacing: 5px` is 24.1015625 from `ctx.measureText` and 19.1015625 from
+/// `getBoundingClientRect`, on the same font and the same string.
+pub const Spacing = struct {
+    letter: f64 = 0,
+    word: f64 = 0,
+    charges_lead_space: bool = true,
+
+    /// Whether either property is set, so the common case can skip the counting.
+    pub fn any(self: Spacing) bool {
+        return self.letter != 0 or self.word != 0;
+    }
+};
+
 /// Measures `text` in `family` at `size`, from Chrome's own numbers.
 ///
 /// Exact for printable ASCII, because advances are linear in size and a
@@ -90,17 +124,19 @@ pub const Face = struct {
     family: font_metrics.Family,
     variant: font_variants.Variant = .regular,
     table: font_variants.Table = .{},
+    spacing: Spacing = .{},
 
     /// The face `weight` and `italic` select. The threshold is measured: at
     /// 16px serif 'M' is 14.2265625 at 500 and 15.1015625 at 600, 700 and 900
     /// alike, so `bold` the keyword is 700 arriving here and not a case of its
     /// own.
-    pub fn of(family: font_metrics.Family, weight: u16, italic: bool) Face {
+    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing) Face {
         const variant = font_variants.variantFor(weight, italic);
         return .{
             .family = family,
             .variant = variant,
             .table = font_variants.tableFor(family, variant),
+            .spacing = spacing,
         };
     }
 
@@ -189,6 +225,21 @@ pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
         const shaped = text[offset..][0..cluster.bytes];
         offset += cluster.bytes;
 
+        // `letter-spacing` is charged once for this cluster and `word-spacing`
+        // once per separator in it, both AFTER the cluster's own advance. The
+        // ordering is what keeps the ink boxes right: charging first would push
+        // the opening cluster off zero, where Chrome leaves it there and moves
+        // only the clusters behind it. The total width is the same either way,
+        // so the ink is the only thing that says which.
+        //
+        // A `defer` and not a line at the bottom of the loop, because the
+        // colour-emoji branch below leaves the iteration with `continue` and an
+        // emoji is charged like any other cluster.
+        const at_start = offset == cluster.bytes;
+        defer if (face.spacing.any()) {
+            pen_pixels += clusterSpacing(face.spacing, shaped, at_start);
+        };
+
         if (isColourEmoji(shaped)) {
             const glyph = emojiBox(size);
             const pen = toPixels(pen_basis, size) + pen_pixels;
@@ -271,6 +322,39 @@ pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
         metrics.actualBoundingBoxRight = ink_max;
     }
     return metrics;
+}
+
+/// What one shaped cluster earns from the two spacing properties, in CSS pixels.
+///
+/// `letter` once for the cluster, and `word` once for each word separator in
+/// it, less the opening U+0020 a layout run does not charge (see
+/// `Spacing.charges_lead_space`). A separator is U+0020 or U+00A0 and nothing else: U+3000 and U+200B were
+/// measured under `word-spacing: 5px` and moved nothing (the test asserts both
+/// as deltas, since this engine prices them from the mean-advance fallback and
+/// Chrome does not).
+fn clusterSpacing(spacing: Spacing, shaped: []const u8, at_start: bool) f64 {
+    var total = spacing.letter;
+    if (spacing.word != 0) {
+        var codepoints = std.unicode.Utf8Iterator{ .bytes = shaped, .i = 0 };
+        var first = true;
+        while (codepoints.nextCodepoint()) |codepoint| {
+            const lead = at_start and first;
+            first = false;
+            if (!isWordSeparator(codepoint)) continue;
+            // Only U+0020 is exempt in the opening position. A U+00A0 there is
+            // charged: `'\u00a0ab'` gains 5 from `word-spacing: 5px` where
+            // `' ab'` gains nothing, and two leading U+00A0 gain 10 where two
+            // leading U+0020 gain 5.
+            if (lead and codepoint == ' ' and !spacing.charges_lead_space) continue;
+            total += spacing.word;
+        }
+    }
+    return total;
+}
+
+/// Whether `word-spacing` is charged for this codepoint.
+pub fn isWordSeparator(codepoint: u21) bool {
+    return codepoint == ' ' or codepoint == 0xA0;
 }
 
 /// Whether a glyph draws nothing — the space, a zero-width control, or a
