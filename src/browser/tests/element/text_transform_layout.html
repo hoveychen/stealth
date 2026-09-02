@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`text-transform` reaches `innerText` and nothing else. The engine resolves the
+property already -- `StyleManager.computedTextTransform` and
+`Html.TextTransform` -- so a page can read the transformed text off an element
+whose box is exactly the size the UNtransformed text would be. One expression
+apart from Chrome, and the engine disagreeing with itself.
+
+The model is one line and it was measured, not assumed: the layout width of
+`text-transform: X` on a string is EXACTLY the width of the transformed string
+written out with nothing declared. 60 of 60 rows in one probe and 105 of 105 in
+another, no exceptions (scratch/b102/expr-tt-final.js,
+scratch/b102/expr-text-transform.js). So there is no new width model here --
+only the character mapping, applied where the pen already walks.
+
+Every expectation is Chrome 151, headed, at `--force-device-scale-factor=2`. The
+absolute widths are safe because the 15 untransformed widths agree with this
+engine bit for bit, 0 of 15 differing, so a red line is about the transform.
+
+Every non-ASCII character in the assertions below is a `\u` escape, and every
+text assertion prints codepoints beside the string. That is not fussiness. The
+first pass of the probe behind these numbers read 'a b' capitalising to 'A b',
+and 'ecole' to 'Ecole' with an accent this engine's byte-wise ASCII toUpper
+cannot produce. Both were the probe's own source: a NBSP had got in where a
+space was typed, and the accented word was NFD, so a bare 'e' was uppercased and
+the combining mark rendered over the 'E'. Neither was a bug, and neither was
+visible in the text.
+
+TWO FAMILIES ARE OUT OF SCOPE, both because their target has no advance in this
+engine's table rather than because they are hard:
+
+  * U+00FF uppercases to U+0178 and U+00B5 to U+039C, and those two characters
+    are outside U+0000..U+00FF. Measured: U+0178 is 11.5546875 in Chrome and
+    8.1640625 here -- the family's mean ASCII advance, which is what everything
+    above U+00FF is charged. So their WIDTHS are asserted nowhere. Their TEXT is
+    asserted below, because a codepoint mapping needs no advance to be right.
+  * anything above U+00FF: U+01F3, U+FB01, the fullwidth forms, the kana. Their
+    UNtransformed widths already disagree (U+01F3 U+01C6 U+01C9 spaced out is 46.8203125
+    in Chrome and 32.484375 here), so there is no reachable expectation. That is
+    the pre-existing gap text_measure.zig documents, not this one.
+-->
+
+<script id=text_transform_layout>
+{
+  const wrong = [];
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:-9999px;top:0;width:4000px';
+  document.body.appendChild(host);
+
+  const cps = (s) => [...s].map((c) => c.codePointAt(0)).join(',');
+  const show = (s) => JSON.stringify(s) + ' [' + cps(s) + ']';
+
+  const KEYWORDS = ['none', 'uppercase', 'lowercase', 'capitalize'];
+
+  const spanWidth = (text, decl) => {
+    const el = document.createElement('span');
+    el.style.cssText = 'font:16px serif;white-space:pre;' + decl;
+    el.textContent = text;
+    host.appendChild(el);
+    const w = el.getBoundingClientRect().width;
+    el.remove();
+    return w;
+  };
+
+  // text, then the width under none / uppercase / lowercase / capitalize
+  const SPANS = [
+    ['hello world', 73.3203125, 114.8046875, 73.3203125, 78.8671875],
+    ['a b', 19.1015625, 25.3515625, 19.1015625, 25.3515625],
+    // U+00A0 is a word separator for `capitalize` and it is WIDER than a space,
+    // which is why these two rows differ from the ASCII ones above in both
+    // columns that move.
+    ['a\u00a0b', 19.1015625, 26.2265625, 19.1015625, 26.2265625],
+    ['hello\u00a0world', 73.3203125, 115.0859375, 73.3203125, 79.1484375],
+    // The three characters that decide the word boundary rule, as widths.
+    ['x-ray', 33.7578125, 49.1953125, 33.7578125, 42.65625],
+    ['(paren) [brack]', 96.375, 131.421875, 96.375, 99.9453125],
+    ["o'neill", 39.3203125, 60.640625, 39.3203125, 42.875],
+    ['_under score', 82.1875, 118.6796875, 82.1875, 84.859375],
+    ['3d printing', 70.6640625, 98.21875, 70.6640625, 71.5625],
+    // Latin-1, which is worth mapping precisely because these widths ARE
+    // reachable: every one of these characters has an advance.
+    ['caf\u00e9 na\u00efve \u00fcber', 97.7109375, 141.3359375, 97.7109375, 108.390625],
+    ['CAF\u00c9 NA\u00cfVE \u00dcBER', 141.3359375, 141.3359375, 97.7109375, 141.3359375],
+    // U+00DF uppercases to two characters, so the transform can lengthen a
+    // string: 'SS STRASSE' is 90.265625 where the source is 50.203125.
+    ['\u00df stra\u00dfe', 50.203125, 90.265625, 50.203125, 52.875],
+    // NFD: the base letter is ASCII and the mark is not, so `uppercase` moves
+    // 'e' and leaves U+0301 to render over the 'E'.
+    ['e\u0301cole', 33.75, 51.546875, 33.75, 36.421875],
+  ];
+
+  for (const [text, ...want] of SPANS) {
+    for (let i = 0; i < KEYWORDS.length; i++) {
+      const decl = KEYWORDS[i] === 'none' ? '' : 'text-transform:' + KEYWORDS[i];
+      const got = spanWidth(text, decl);
+      if (got !== want[i]) {
+        wrong.push('span ' + show(text) + ' ' + KEYWORDS[i] + ': want ' + want[i] + ', got ' + got);
+      }
+    }
+  }
+
+  // The three measurement paths and the line breaking, which the spans above
+  // cannot reach. A plain span is priced by the whole-text-node measurement; a
+  // <br>, a preserved newline, an inline child and wrapping reach the line
+  // builder. Heights are asserted beside the widths because the last plan in
+  // this family shipped a width-correct build whose inline-block wrapped onto a
+  // second line, and a width-only assertion called it a pass.
+  //
+  // The last row is the one that says the transform reaches line BREAKING and
+  // not only measurement: uppercase is wider, so the same words need five lines
+  // where they needed four. 74 -> 129.5.
+  const BOXES = [
+    ['display:inline-block', 'hello world', [73.3203125, 18.5], [114.8046875, 18.5], [73.3203125, 18.5], [78.8671875, 18.5]],
+    ['display:inline-block', 'hello world<br>x', [73.3203125, 37], [114.8046875, 37], [73.3203125, 37], [78.8671875, 37]],
+    ['white-space:pre;display:inline-block', 'hello world\nx', [73.3203125, 37], [114.8046875, 37], [73.3203125, 37], [78.8671875, 37]],
+    ['display:inline-block', 'hello   world', [73.3203125, 18.5], [114.8046875, 18.5], [73.3203125, 18.5], [78.8671875, 18.5]],
+    ['display:inline-block', 'ab <span>to</span> cd', [50.6484375, 18.5], [73.21875, 18.5], [50.6484375, 18.5], [62.6015625, 18.5]],
+    ['display:inline-block', 'ab <b>to</b> cd', [51.53125, 18.5], [75.2890625, 18.5], [51.53125, 18.5], [63.4296875, 18.5]],
+    ['width:80px', 'hello world and some more words here', [80, 74], [80, 129.5], [80, 74], [80, 74]],
+  ];
+
+  for (const [decl, html, ...want] of BOXES) {
+    for (let i = 0; i < KEYWORDS.length; i++) {
+      const box = document.createElement('div');
+      box.style.cssText = 'font:16px serif;' + decl +
+        (KEYWORDS[i] === 'none' ? '' : ';text-transform:' + KEYWORDS[i]);
+      box.innerHTML = html;
+      host.appendChild(box);
+      const r = box.getBoundingClientRect();
+      box.remove();
+      const where = 'box {' + decl + '} ' + JSON.stringify(html) + ' ' + KEYWORDS[i];
+      if (r.width !== want[i][0]) wrong.push(where + ' width: want ' + want[i][0] + ', got ' + r.width);
+      if (r.height !== want[i][1]) wrong.push(where + ' height: want ' + want[i][1] + ', got ' + r.height);
+    }
+  }
+
+  // The property inherits, and a child can turn it back off.
+  const inherited = (outerDecl, innerDecl) => {
+    const outer = document.createElement('div');
+    outer.style.cssText = 'font:16px serif;white-space:pre;' + outerDecl;
+    const inner = document.createElement('span');
+    inner.style.cssText = innerDecl;
+    inner.textContent = 'hello world';
+    outer.appendChild(inner);
+    host.appendChild(outer);
+    const w = inner.getBoundingClientRect().width;
+    outer.remove();
+    return w;
+  };
+  const INHERIT = [
+    ['nothing on the wrapper', '', '', 73.3203125],
+    ['uppercase inherits', 'text-transform:uppercase', '', 114.8046875],
+    ['child turns it off', 'text-transform:uppercase', 'text-transform:none', 73.3203125],
+    ['child overrides it', 'text-transform:uppercase', 'text-transform:lowercase', 73.3203125],
+  ];
+  for (const [name, outerDecl, innerDecl, want] of INHERIT) {
+    const got = inherited(outerDecl, innerDecl);
+    if (got !== want) wrong.push('inherit ' + name + ': want ' + want + ', got ' + got);
+  }
+
+  // The TEXT half, read through `innerText`. Half of it already works and half
+  // of it is wrong today: the implementation resets its word-start flag on ASCII
+  // whitespace alone, where Chrome uses UAX#29 word boundaries.
+  //
+  // Three classes, and it is three rather than two -- that is the whole finding:
+  //
+  //   separator  resets the flag, so the next letter is capitalised
+  //   joiner     neither resets it nor consumes it: `'xy` -> `'Xy` AND
+  //              `x'y` -> `X'y`
+  //   word       consumes the flag, and is itself titlecased if it can be
+  //
+  // Measured over every character in U+0000..U+00FF
+  // (scratch/b102/expr-tt-detail.js and scratch/b102/expr-tt-latin1-boundary.js).
+  const capitalized = (text) => {
+    const el = document.createElement('span');
+    el.style.cssText = 'font:16px serif;white-space:pre;text-transform:capitalize';
+    el.textContent = text;
+    host.appendChild(el);
+    const out = el.innerText;
+    el.remove();
+    return out;
+  };
+  // [class, character, 'x<c>y' becomes, '<c>xy' becomes]
+  const BOUNDARY = [
+    ['separator', ' ', 'X Y', ' Xy'],
+    ['separator', '-', 'X-Y', '-Xy'],
+    ['separator', '(', 'X(Y', '(Xy'],
+    ['separator', '.', 'X.Y', '.Xy'],
+    ['separator', '!', 'X!Y', '!Xy'],
+    ['separator', '/', 'X/Y', '/Xy'],
+    ['separator', '\u00a0', 'X\u00a0Y', '\u00a0Xy'],
+    ['separator', '\u00a1', 'X\u00a1Y', '\u00a1Xy'],
+    ['separator', '\u00ab', 'X\u00abY', '\u00abXy'],
+    ['separator', '\u00bf', 'X\u00bfY', '\u00bfXy'],
+    // The two Latin-1 characters that look like letters and are not: the
+    // multiplication and division signs.
+    ['separator', '\u00d7', 'X\u00d7Y', '\u00d7Xy'],
+    ['separator', '\u00f7', 'X\u00f7Y', '\u00f7Xy'],
+    ['joiner', "'", "X'y", "'Xy"],
+    ['joiner', '\u00ad', 'X\u00ady', '\u00adXy'],
+    ['joiner', '\u00b7', 'X\u00b7y', '\u00b7Xy'],
+    ['word', '_', 'X_y', '_xy'],
+    ['word', '1', 'X1y', '1xy'],
+    ['word', 'a', 'Xay', 'Axy'],
+    ['word', '\u00aa', 'X\u00aay', '\u00aaxy'],
+    ['word', '\u00ba', 'X\u00bay', '\u00baxy'],
+    ['word', '\u00b8', 'X\u00b8y', '\u00b8xy'],
+    // A letter at a word start is titlecased, so this row is the mapping and the
+    // boundary at once.
+    ['word', '\u00e9', 'X\u00e9y', '\u00c9xy'],
+    ['word', '\u00c9', 'X\u00c9y', '\u00c9xy'],
+    // U+00DF has no titlecase, so it consumes the flag and stays itself.
+    ['word', '\u00df', 'X\u00dfy', '\u00dfxy'],
+    // The two whose titlecase leaves Latin-1. Their TEXT is assertable even
+    // though their width is not.
+    ['word', '\u00ff', 'X\u00ffy', '\u0178xy'],
+    ['word', '\u00b5', 'X\u00b5y', '\u039cxy'],
+  ];
+  for (const [klass, ch, between, leading] of BOUNDARY) {
+    const gotBetween = capitalized('x' + ch + 'y');
+    if (gotBetween !== between) {
+      wrong.push('capitalize ' + klass + ' ' + show(ch) + ' between: want ' + show(between) + ', got ' + show(gotBetween));
+    }
+    const gotLeading = capitalized(ch + 'xy');
+    if (gotLeading !== leading) {
+      wrong.push('capitalize ' + klass + ' ' + show(ch) + ' leading: want ' + show(leading) + ', got ' + show(gotLeading));
+    }
+  }
+
+  // The Latin-1 case mappings themselves, as text. The regular range is
+  // +/-0x20 and the exceptions are what a rule alone would get wrong.
+  const transformed = (text, keyword) => {
+    const el = document.createElement('span');
+    el.style.cssText = 'font:16px serif;white-space:pre;text-transform:' + keyword;
+    el.textContent = text;
+    host.appendChild(el);
+    const out = el.innerText;
+    el.remove();
+    return out;
+  };
+  // character, uppercase, lowercase
+  const MAPPING = [
+    ['\u00e0', '\u00c0', '\u00e0'],
+    ['\u00e9', '\u00c9', '\u00e9'],
+    ['\u00ef', '\u00cf', '\u00ef'],
+    ['\u00f6', '\u00d6', '\u00f6'],
+    ['\u00f8', '\u00d8', '\u00f8'],
+    ['\u00fe', '\u00de', '\u00fe'],
+    ['\u00c0', '\u00c0', '\u00e0'],
+    ['\u00dc', '\u00dc', '\u00fc'],
+    ['\u00de', '\u00de', '\u00fe'],
+    // Not letters: the two signs that sit inside the letter runs and break the
+    // +/-0x20 rule.
+    ['\u00d7', '\u00d7', '\u00d7'],
+    ['\u00f7', '\u00f7', '\u00f7'],
+    // Two characters out of one.
+    ['\u00df', 'SS', '\u00df'],
+    // Targets outside Latin-1.
+    ['\u00ff', '\u0178', '\u00ff'],
+    ['\u00b5', '\u039c', '\u00b5'],
+    // No case at all.
+    ['\u00aa', '\u00aa', '\u00aa'],
+    ['\u00ba', '\u00ba', '\u00ba'],
+    ['\u00ad', '\u00ad', '\u00ad'],
+    ['\u00a0', '\u00a0', '\u00a0'],
+  ];
+  for (const [ch, upper, lower] of MAPPING) {
+    const gotUpper = transformed(ch, 'uppercase');
+    if (gotUpper !== upper) {
+      wrong.push('uppercase ' + show(ch) + ': want ' + show(upper) + ', got ' + show(gotUpper));
+    }
+    const gotLower = transformed(ch, 'lowercase');
+    if (gotLower !== lower) {
+      wrong.push('lowercase ' + show(ch) + ': want ' + show(lower) + ', got ' + show(gotLower));
+    }
+  }
+
+  // Which keywords Chrome accepts. Already right in this engine and asserted so
+  // it stays right: `full-width` and `full-size-kana` are REFUSED by Chrome 151
+  // -- the previous value survives -- and `math-auto` is accepted and does
+  // nothing to Latin text. A build that started transforming for a refused
+  // keyword would be inventing behaviour no browser has.
+  const KEYWORD_CASES = [
+    ['none', 'none', 'none'],
+    ['uppercase', 'uppercase', 'uppercase'],
+    ['lowercase', 'lowercase', 'lowercase'],
+    ['capitalize', 'capitalize', 'capitalize'],
+    ['full-width', 'lowercase', 'lowercase'],
+    ['full-size-kana', 'lowercase', 'lowercase'],
+    ['math-auto', 'math-auto', 'math-auto'],
+    ['UPPERCASE', 'uppercase', 'uppercase'],
+    ['bogus', 'lowercase', 'lowercase'],
+    ['initial', 'initial', 'none'],
+    ['inherit', 'inherit', 'none'],
+    ['unset', 'unset', 'none'],
+  ];
+  for (const [value, wantInline, wantComputed] of KEYWORD_CASES) {
+    const el = document.createElement('div');
+    el.style.cssText = 'font:16px serif';
+    // A non-initial value first, so a refusal is visible as the old one kept.
+    el.style.textTransform = 'lowercase';
+    el.style.textTransform = value;
+    host.appendChild(el);
+    const gotInline = el.style.textTransform;
+    const gotComputed = getComputedStyle(el).textTransform;
+    el.remove();
+    if (gotInline !== wantInline) {
+      wrong.push('keyword ' + value + ' inline: want ' + wantInline + ', got ' + gotInline);
+    }
+    if (gotComputed !== wantComputed) {
+      wrong.push('keyword ' + value + ' computed: want ' + wantComputed + ', got ' + gotComputed);
+    }
+  }
+
+  // The canvas has no text-transform, so `measureText` sees none of this. Both
+  // rows already pass; they are here so a build that reached for the property
+  // from the canvas would be caught. The 0.28125 between the layout uppercase
+  // width above (114.8046875) and the canvas 'HELLO WORLD' (115.0859375) is the
+  // ' W' space pair that layout charges and the canvas does not -- which also
+  // says the transformed text goes through the space-pair table.
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = '16px serif';
+  for (const [text, want] of [['hello world', 73.3203125], ['HELLO WORLD', 115.0859375]]) {
+    const got = ctx.measureText(text).width;
+    if (got !== want) wrong.push('canvas ' + JSON.stringify(text) + ': want ' + want + ', got ' + got);
+  }
+
+  host.remove();
+  // A tally in front of the list, because the runner truncates a long value and
+  // the shape of the failure -- which sections are red, which are already green
+  // -- is what a red light has to say before its first line scrolls away.
+  if (wrong.length > 0) {
+    const tally = {};
+    for (const line of wrong) {
+      const key = line.split(' ')[0];
+      tally[key] = (tally[key] || 0) + 1;
+    }
+    wrong.unshift(wrong.length + ' wrong: ' +
+      Object.keys(tally).map((k) => k + '=' + tally[k]).join(' '));
+  }
+  testing.expectEqual('', wrong.join('\n  | '));
+}
+</script>
