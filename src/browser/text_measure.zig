@@ -21,6 +21,7 @@ const lp = @import("lightpanda");
 
 const font_metrics = @import("font_metrics.zig");
 const font_kerning = @import("font_kerning.zig");
+const font_space_kerning = @import("font_space_kerning.zig");
 const font_variants = @import("font_variants.zig");
 const emoji_metrics = @import("emoji_metrics.zig");
 const emoji_properties = @import("emoji_properties.zig");
@@ -551,6 +552,42 @@ test "text_measure: every emoji cluster is still reachable" {
     try std.testing.expectEqual(@as(?emoji_metrics.Cluster, null), emoji_metrics.match(""));
     try std.testing.expectEqual(@as(?emoji_metrics.Cluster, null), emoji_metrics.match("a"));
     try std.testing.expectEqual(@as(?emoji_metrics.Cluster, null), emoji_metrics.match("\u{00e9}"));
+}
+
+test "text_measure: the space pairs Chrome kerns in layout and not in the canvas" {
+    // The generated table's own reason for existing, checked against the two
+    // readings in its header. 'AVATAR To Wo' at 16px serif is 105.4140625
+    // through getBoundingClientRect and 105.9765625 through measureText -- both
+    // of those are Chrome -- and the 0.5625 between them is exactly the two
+    // space pairs in the string: U+0020 before 'T' and U+0020 before 'W'.
+    const serif = font_space_kerning.tableFor(font_metrics.serif, .regular);
+    try std.testing.expectEqual(@as(f64, -225.0 / 128.0), font_kerning.kern(serif, ' ', 'T'));
+    try std.testing.expectEqual(@as(f64, -225.0 / 128.0), font_kerning.kern(serif, ' ', 'W'));
+    try std.testing.expectEqual(@as(f64, -0.5625), (font_kerning.kern(serif, ' ', 'T') +
+        font_kerning.kern(serif, ' ', 'W')) * 16.0 / font_metrics.basis);
+
+    // Both directions for 'A', one direction only for 'L' and 'P': a space
+    // before either of those two is not a pair, which is why the table is a
+    // list of pairs and not a set of characters.
+    try std.testing.expectEqual(@as(f64, -700.0 / 128.0), font_kerning.kern(serif, ' ', 'A'));
+    try std.testing.expectEqual(@as(f64, -700.0 / 128.0), font_kerning.kern(serif, 'A', ' '));
+    try std.testing.expectEqual(@as(f64, -469.0 / 128.0), font_kerning.kern(serif, 'L', ' '));
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(serif, ' ', 'L'));
+
+    // Per family, and not a constant: sans-serif kerns a space against 'A',
+    // 'T' and 'Y' but not against 'V' or 'W', and Verdana kerns none at all --
+    // its 'AVATAR To Wo' is the same width through both surfaces.
+    const sans = font_space_kerning.tableFor(font_metrics.sans_serif, .regular);
+    try std.testing.expectEqual(@as(f64, -225.0 / 128.0), font_kerning.kern(sans, ' ', 'T'));
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(sans, ' ', 'W'));
+    const verdana = font_space_kerning.tableFor(font_metrics.verdana, .regular);
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(verdana, ' ', 'A'));
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(verdana, ' ', 'T'));
+
+    // And nothing outside the space pairs leaked in: this table carries only
+    // the ones the canvas misses, so 'AV' -- which the canvas does kern -- is
+    // not in it.
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(serif, 'A', 'V'));
 }
 
 test "text_measure: reproduces Chrome's measureText" {
