@@ -20,6 +20,7 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const font_metrics = @import("font_metrics.zig");
+const font_kerning = @import("font_kerning.zig");
 const emoji_metrics = @import("emoji_metrics.zig");
 const emoji_properties = @import("emoji_properties.zig");
 
@@ -68,12 +69,8 @@ pub const Metrics = struct {
 /// string's width is the sum of its glyphs'. Text is walked one shaped
 /// cluster at a time so a colour emoji — which is neither a text glyph nor
 /// necessarily one codepoint — can be priced from `emoji_sizes` instead.
-/// Three known departures, all measured rather than assumed:
+/// Two known departures, all measured rather than assumed:
 ///
-///   * no kerning. Chrome makes 'AV' 12.6025390625 at 10px sans-serif where
-///     the sum of the two advances is 13.33984375. Only pairs the font kerns
-///     differ, which for the strings fingerprinters actually use — 'mmmmmmm-
-///     mmlli', 'Cwm fjordbank glyphs vext quiz' — is none of them.
 ///   * above U+00FF, outside the colour emoji, we have no table, so each
 ///     glyph is charged the family's mean ASCII advance and contributes no
 ///     ink. That is a guess, not a measurement — and a visible one: Chrome
@@ -131,6 +128,15 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
     //                                    between and changes nothing.
     var fallback: enum { none, own, last_resort } = .none;
 
+    // A string's width is the sum of its glyphs' advances PLUS what the font
+    // adjusts across a pair. Chrome makes 'AV' 21.046875 at 16px serif where the
+    // two advances sum to 23.109375; without this the engine answered the sum,
+    // which one `measureText` sees. The table is looked up once here rather than
+    // once per character, and carries a bitmap of the ~40 characters that start
+    // a pair so the common character costs a shift and an AND.
+    const kerns = font_kerning.tableFor(family);
+    var previous: ?u21 = null;
+
     var offset: usize = 0;
     while (offset < text.len) {
         // Only the boundary is taken from the cluster; what it costs is a
@@ -154,6 +160,11 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
 
         var codepoints = std.unicode.Utf8Iterator{ .bytes = shaped, .i = 0 };
         while (codepoints.nextCodepoint()) |codepoint| {
+            if (previous) |prev| {
+                pen_basis += font_kerning.kern(kerns, prev, codepoint);
+            }
+            previous = codepoint;
+
             var glyph = font_metrics.glyph(family, codepoint) orelse {
                 // A joiner, a variation selector or a combining mark rides on
                 // the glyph before it: Chrome makes 'a' and 'a' U+0301 both
@@ -461,8 +472,12 @@ test "text_measure: reproduces Chrome's measureText" {
 
     // The kerned pairs, where we knowingly differ: Chrome says 12.6025390625
     // and 10.5615234375 because it kerns; we report the plain sums.
-    try std.testing.expectEqual(@as(f64, 13.33984375), measure(font_metrics.sans_serif, "AV", 10).width);
-    try std.testing.expectEqual(@as(f64, 11.669921875), measure(font_metrics.sans_serif, "To", 10).width);
+    // 12.6025390625 and not 13.33984375, which is the sum of the two advances:
+    // 'AV' is a kerning pair and this used to answer the sum. The number on the
+    // right is the one this file's own header carried for a long time as
+    // Chrome's, beside the note that we did not model kerning.
+    try std.testing.expectEqual(@as(f64, 12.6025390625), measure(font_metrics.sans_serif, "AV", 10).width);
+    try std.testing.expectEqual(@as(f64, 10.5615234375), measure(font_metrics.sans_serif, "To", 10).width);
 }
 
 test "text_measure: the ten strings the Turnstile widget actually measures" {

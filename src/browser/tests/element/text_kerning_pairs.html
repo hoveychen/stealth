@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A string's width is the sum of its glyphs' advances, except across a kerning
+pair. `font_metrics.zig`'s own header has said so for a long time -- "'AV' and
+'To' do not [sum], and we do not model kerning, so those come out a little wide"
+-- and this is that sentence as a test.
+
+Measured on Chrome 151 at `--force-device-scale-factor=2`, headed
+(scratch/b99/expr-kern-exact.js). The canvas and the layout answer byte-identical
+widths there, so one set of numbers covers both, and asserting BOTH is the point:
+this engine measures text down three separate paths and fixing one of them leaves
+the other two wrong (memory: text-width-has-three-paths).
+
+Latin-1 is a sparse table's worth of this: 234 of the 50 176 pairs kern in serif,
+228 in sans-serif, 140 in monospace (scratch/b99/expr-kern-census.js). The six
+kerning pairs below are the shape; the three controls underneath are pairs that
+do NOT kern, so a fix that simply subtracts something everywhere fails too.
+-->
+
+<script id=text_kerning_pairs>
+{
+  const EXPECTED = [
+    // pair, width at 16px serif
+    ['AV', 21.046875],
+    ['To', 16.65625],
+    ['Wa', 20.9296875],
+    ['AT', 19.5546875],
+    ['AY', 21.640625],
+    ['Av', 18.375],
+    // Controls: these do not kern, and must not move.
+    ['xx', 16],
+    ['Co', 18.671875],
+    ['mm', 24.890625],
+    // A real string, which is where this is actually read.
+    ['Campfire Commerce', 133.7421875],
+  ];
+
+  const wrong = [];
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = '16px serif';
+
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:-9999px;white-space:pre';
+  document.body.appendChild(host);
+
+  for (const [text, want] of EXPECTED) {
+    const canvas = ctx.measureText(text).width;
+    if (canvas !== want) {
+      wrong.push('canvas "' + text + '": want ' + want + ', got ' + canvas);
+    }
+
+    const span = document.createElement('span');
+    span.style.cssText = 'font:16px serif;white-space:pre';
+    span.textContent = text;
+    host.appendChild(span);
+    const laid = span.getBoundingClientRect().width;
+    span.remove();
+    if (laid !== want) {
+      wrong.push('layout "' + text + '": want ' + want + ', got ' + laid);
+    }
+  }
+  host.remove();
+
+  testing.expectEqual('', wrong.join('\n  | '));
+}
+</script>
