@@ -470,6 +470,14 @@ _referrer: ?[]const u8 = null,
 /// caches in place a pass costs 88ms on homedepot, 54 on macys, 8 on sony --
 /// 5.2s, 2.9s and 0.1s for a whole page load.
 position_table: Element.PositionTable = .empty,
+/// The same pass's other half: where each box the flow does NOT place would
+/// have stood if it had. Only `Element.outOfFlowPosition` reads it, for the axes
+/// a page left `auto`; see `PositionPass.static_table` for why it is not merged
+/// into the table above.
+static_position_table: Element.PositionTable = .empty,
+/// Memo for `offsetParentEdge`, dropped with the two tables above because it is
+/// keyed on the same thing they are.
+offset_parent_edges: std.AutoHashMapUnmanaged(*Element, Element.DOMRect.Data) = .empty,
 position_table_version: usize = 0,
 /// True while the pass is running. `layoutPassPositions` measures boxes, and
 /// measuring an out-of-flow box asks its containing block where it is -- which
@@ -1749,8 +1757,48 @@ var layout_pass_probe: ?LayoutPassProbe = null;
 /// Where `element` sits in the document, or null when the table cannot say --
 /// during the pass itself, or for an element the pass did not place.
 pub fn positionOf(self: *Frame, element: *Element) ?Element.PlacedBox {
+    return if (self.fillPositionTables()) self.position_table.get(element) else null;
+}
+
+/// Where a box the flow does not place would have stood. Null for everything the
+/// flow does place -- that is `positionOf`'s table -- and null while the pass is
+/// running, which is what stops `outOfFlowPosition` re-entering it.
+pub fn staticPositionOf(self: *Frame, element: *Element) ?Element.PlacedBox {
+    return if (self.fillPositionTables()) self.static_position_table.get(element) else null;
+}
+
+/// The padding edge `offsetLeft`/`offsetTop` are measured from, memoised.
+///
+/// Every read of either used to be one document coordinate; measuring the offset
+/// parent as well made a pass over 300 rows twice as expensive -- 5.0ms to
+/// 10.3ms median over eight interleaved runs per arm, against an unchanged
+/// `getBoundingClientRect` control that read 5.8ms on both
+/// (`scratch/h86/www/offset-cost.html`). The cost is per reader and the answer
+/// is per parent, so a page whose rows share one positioned host pays for it
+/// once.
+///
+/// Keyed on the position table's own version, and dropped where the table is:
+/// the edge is the parent's border-box origin plus its border, and nothing can
+/// move either without moving that counter.
+pub fn offsetParentEdge(self: *Frame, parent: *Element) Element.DOMRect.Data {
+    if (!self.fillPositionTables()) {
+        return parent.paddingEdgeOf(self);
+    }
+    if (self.offset_parent_edges.get(parent)) |cached| {
+        return cached;
+    }
+    const edge = parent.paddingEdgeOf(self);
+    // A page with thousands of distinct offset parents is not the case this
+    // exists for, and an entry it could not store is a slower read rather than
+    // a wrong one.
+    self.offset_parent_edges.put(self.arena, parent, edge) catch {};
+    return edge;
+}
+
+/// Brings both tables up to date, or reports that they cannot be read right now.
+fn fillPositionTables(self: *Frame) bool {
     if (self.position_table_building) {
-        return null;
+        return false;
     }
     // `liveVersion`, not `dom_version`: the parser's insertions have to count.
     // A table keyed on `dom_version` alone is filled by the first inline script
@@ -1762,15 +1810,17 @@ pub fn positionOf(self: *Frame, element: *Element) ?Element.PlacedBox {
     // the named-object cache read this counter; see `Page.liveVersion`.
     const version = self._page.liveVersion();
     if (!self.position_table_filled or self.position_table_version != version) {
-        const root = self.document.getDocumentElement() orelse return null;
+        const root = self.document.getDocumentElement() orelse return false;
         self.position_table_building = true;
         defer self.position_table_building = false;
         self.position_table = .empty;
-        _ = Element.layoutPassPositions(root, self, &self.position_table);
+        self.static_position_table = .empty;
+        self.offset_parent_edges = .empty;
+        _ = Element.layoutPassPositions(root, self, &self.position_table, &self.static_position_table);
         self.position_table_version = version;
         self.position_table_filled = true;
     }
-    return self.position_table.get(element);
+    return true;
 }
 
 /// Time one document-wide layout pass and report what it cost.
@@ -1831,9 +1881,10 @@ fn timeLayoutPass(self: *Frame, mode: LayoutPassProbe, tick: u32) void {
     var round: u8 = 0;
     while (round < 3) : (round += 1) {
         var table: Element.PositionTable = .{};
+        var static_table: Element.PositionTable = .{};
         Element.measure_entries = 0;
         const started_us = lp.datetime.microTimestamp(.boot);
-        const placed = Element.layoutPassPositions(root, self, &table);
+        const placed = Element.layoutPassPositions(root, self, &table, &static_table);
         const elapsed_us = lp.datetime.microTimestamp(.boot) - started_us;
         const measured = Element.measure_entries;
 
