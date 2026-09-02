@@ -158,14 +158,14 @@ other -- the canvas does not collapse anything.
   // child suppresses it. All three are 0.28125 wider than the same markup
   // with a plain <span>, which is the pair not applied.
   //
-  // NOT here: 'ab <b>To</b> cd', which Chrome makes 55.40625 and this engine
-  // 54.578125. That gap is <b>, not the kerning: `getComputedStyle` agrees the
-  // element is 700 in both engines while the measurement uses the regular face
-  // here, so the child's font never differs and the pair is charged where
-  // Chrome suppresses it. Asserting the row would be asserting two defects at
-  // once. Measured in scratch/b100/expr-b-bold.js, which also finds <i> and
-  // <em> failing the other way round -- the measurement italicises them and
-  // the computed style says `normal`.
+  // 'ab <b>To</b> cd' is the cross-check on both halves at once. Chrome makes
+  // it 55.40625, which is bold 'To' with NO pair -- the UA sheet's bold on the
+  // child means the child's font differs from the space's, so the run breaks.
+  // A build that lost either half gets it wrong in a different direction: with
+  // the bold missing it is 54.578125 (regular 'To', pair charged), and with the
+  // one-run rule missing it is 55.125 (bold 'To', pair charged). The row was
+  // held out of this file until <b> reached the measurement -- see
+  // ua_presentational_font.html.
   const BOXES = [
     // declaration, markup, width, height
     ["display:inline-block", "AVATAR To Wo<br>x", 105.4140625, 37],
@@ -175,6 +175,7 @@ other -- the canvas does not collapse anything.
     ["display:inline-block", "AVATAR   To   Wo", 105.4140625, 18.5],
     ["width:60px", "AVATAR To Wo and more words here", 60, 92.5],
     ["display:inline-block", "ab <b>xx</b> cd", 54.203125, 18.5],
+    ["display:inline-block", "ab <b>To</b> cd", 55.40625, 18.5],
     ["display:inline-block", "ab <span>To</span> cd", 54.578125, 18.5],
     ["display:inline-block", "ab <span style=\"font-weight:bold\">To</span> cd", 55.40625, 18.5],
     ["display:inline-block", "ab <span style=\"font-style:italic\">To</span> cd", 53.6328125, 18.5],

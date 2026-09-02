@@ -575,6 +575,8 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
             // in the store.
             if (wrapped.eql(comptime .wrap("font-weight"))) {
                 return computedFontWeight(style_manager, element, frame, depth);
+            } else if (wrapped.eql(comptime .wrap("font-style"))) {
+                return computedFontStyle(style_manager, element, depth);
             } else if (wrapped.eql(comptime .wrap("font-stretch"))) {
                 return computedFontStretch(style_manager, element, wrapped);
             } else if (wrapped.eql(comptime .wrap("font"))) {
@@ -2103,6 +2105,39 @@ fn computedStretchKeyword(stretch: []const u8) ?[]const u8 {
 fn computedFontWeight(style_manager: *StyleManager, element: *Element, frame: *Frame, depth: u8) []const u8 {
     const weight = resolvedFontWeight(style_manager, element, depth);
     return std.fmt.allocPrint(frame.local_arena, "{d}", .{weight}) catch "400";
+}
+
+/// Cascaded, inherited `font-style` -- the keyword, not a boolean.
+///
+/// It needs a walk of its own for the same reason `font-weight` does: the
+/// generic inherited walk (`cascadedRawDeclaration`) only looks at AUTHOR
+/// declarations, and Chrome's UA sheet is where `<i>` and `<em>` get their
+/// italic. Without this an `<i>` read `normal` here while the measurement
+/// beside it italicised the text off the same table -- the mirror of the
+/// `<b>` defect, where the measurement missed what this surface saw.
+/// Measured, scratch/b100/expr-font-style-computed.js: Chrome answers
+/// `italic` for an `<i>`, for an `<em>`, and for a plain `<span>` inside
+/// either.
+///
+/// The keyword is answered verbatim, which is what Chrome does for every value
+/// that reaches here -- `italic`, `oblique` and `oblique 20deg` all compute to
+/// themselves. `oblique 0deg` is the one that does not, and it is not this
+/// function's business: Chrome canonicalises it to `normal` when the
+/// declaration is STORED (`el.style.fontStyle` reads back `normal`), so it
+/// never arrives as an angle. This engine keeps the angle instead, which is a
+/// defect in the value store rather than here.
+fn computedFontStyle(style_manager: *StyleManager, element: *Element, depth: u8) []const u8 {
+    if (depth >= MAX_COMPUTED_DEPTH) return "normal";
+    const wrapped = comptime String.wrap("font-style");
+    switch (declaredValue(style_manager, element, "font-style", wrapped, .computed)) {
+        .value => |value| return std.mem.trim(u8, value, &std.ascii.whitespace),
+        .unreportable, .none => {},
+    }
+    if (uaValue(element, "font-style")) |value| {
+        return std.mem.trim(u8, value, &std.ascii.whitespace);
+    }
+    const parent = element.parentElement() orelse return "normal";
+    return computedFontStyle(style_manager, parent, depth + 1);
 }
 
 /// The initial `font-weight`, and what every path here falls back to.
