@@ -31,6 +31,7 @@ const CData = @import("CData.zig");
 const Node = @import("Node.zig");
 const font_metrics = @import("../font_metrics.zig");
 const text_measure = @import("../text_measure.zig");
+const text_case = @import("../text_case.zig");
 const ShadowRoot = @import("ShadowRoot.zig");
 const EventTarget = @import("EventTarget.zig");
 const collections = @import("collections.zig");
@@ -1840,8 +1841,11 @@ fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, 
     // expression apart from Chrome. Whether the font's kern pairs are charged at
     // all is the third thing the same walk answers -- `font-kerning: none` and
     // `font-feature-settings: "kern" 0` both turn them off and both inherit --
-    // and it is one walk for all three because a walk each was measurably slower
-    // on a real page. See computedTextStyle.
+    // and `text-transform` is the fourth: without it a `text-transform:
+    // uppercase` element measured exactly as wide as its lower-case text, which
+    // is one expression apart from Chrome AND from this engine's own
+    // `innerText`. It is one walk for all of them because a walk each was
+    // measurably slower on a real page. See computedTextStyle.
     const text_style = style_manager.computedTextStyle(self);
     return .{
         .face = .of(
@@ -1854,6 +1858,7 @@ fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, 
             // where `measureText` does not. See text_measure.Surface.
             .layout,
             text_style.kerning,
+            text_style.transform,
         ),
         .size = style_manager.computedFontSize(self),
     };
@@ -1875,6 +1880,14 @@ fn nextRendered(str: []const u8, from: usize) []const u8 {
     var i = from;
     while (i < str.len and std.mem.indexOfScalar(u8, css_whitespace, str[i]) != null) i += 1;
     return str[i..];
+}
+
+/// The first codepoint of a slice as `transform` renders it, for the look-ahead
+/// a preserved space does. Always at a word start: the space in front of it is a
+/// separator in every one of text_case's tables.
+fn renderedFirst(str: []const u8, transform: text_case.Transform) ?u21 {
+    const codepoint = firstCodepoint(str) orelse return null;
+    return text_case.mapAt(codepoint, transform, true).first;
 }
 
 /// The first and last codepoint of a UTF-8 slice, for the two callers that need
@@ -1927,6 +1940,9 @@ const CollapsedRun = struct {
     /// can carry the kern pair on its left. Null before anything has rendered
     /// and after an inline box, whose last character this cannot see.
     previous: ?u21 = null,
+    /// `text-transform: capitalize`'s word start, which belongs to the RUN: a
+    /// word can straddle two text nodes, so the flag cannot be a local.
+    at_word_start: bool = true,
 
     /// One text node's contribution to the run's width, in `family` at `size`.
     fn measure(self: *CollapsedRun, str: []const u8, face: text_measure.Face, size: f64) f64 {
@@ -1940,13 +1956,22 @@ const CollapsedRun = struct {
                 // advances the way the space it becomes does.
                 if (self.pending or !self.emitted or str[i] != ' ') self.seen_difference = true;
                 self.pending = true;
+                // Every collapsible character is a separator in text_case's
+                // table, so whatever follows opens a word -- and this loop skips
+                // them, so nothing else would say so.
+                self.at_word_start = true;
                 i += 1;
                 continue;
             }
             const start = i;
             while (i < str.len and std.mem.indexOfScalar(u8, css_whitespace, str[i]) == null) i += 1;
             const word = str[start..i];
-            width += self.open(face, size, firstCodepoint(word));
+            // The characters either side of the chop AS RENDERED, so the space
+            // pair is charged for the transformed text. Taken before the
+            // measurement below, which advances the word-start flag past this
+            // word. See text_case.edges.
+            const ends = text_case.edges(word, face.transform, self.at_word_start);
+            width += self.open(face, size, ends.first);
             // Advances are additive, and so is what the two spacing properties
             // charge -- `letter-spacing` per cluster and `word-spacing` per
             // separator -- so measuring the words and the spaces apart sums to
@@ -1961,8 +1986,8 @@ const CollapsedRun = struct {
             // word are the kernel's and need nothing here. (This comment used
             // to say no pair has a space on either side, which was true of
             // font_kerning.zig alone and wrong about Chrome.)
-            width += text_measure.measure(face, word, size).width;
-            self.previous = lastCodepoint(word);
+            width += text_measure.measureAt(face, word, size, &self.at_word_start).width;
+            self.previous = ends.last;
         }
         return width;
     }
@@ -2344,6 +2369,9 @@ const LineFlow = struct {
     /// Whether the width of the text is wanted at all: the height-only callers
     /// skip a measure per text node by saying no.
     measure_width: bool,
+    /// `text-transform: capitalize`'s word start, for the same reason
+    /// CollapsedRun has one: a word can straddle two text nodes.
+    at_word_start: bool = true,
 
     /// The tallest ascent and deepest descent among the inline boxes open around
     /// the text being placed, so a box that spans a wrap raises both lines.
@@ -2450,6 +2478,10 @@ const LineFlow = struct {
                 // script or from a character reference, and this is what Chrome
                 // does with it. Measured, scratch/b84/expr-b84-cr.js.
                 const newline = str[i] == '\n';
+                // Collapsed or preserved, a run of white space is a word
+                // separator -- see text_case.classify -- and this branch is the
+                // only place the flow sees one.
+                self.at_word_start = true;
                 self.placeWord();
                 if (newline and self.keeps_newlines) {
                     self.endSegment();
@@ -2470,7 +2502,10 @@ const LineFlow = struct {
                         // no `word-spacing` -- see SpaceCost.word.
                         else => self.placed + self.space.charged +
                             (if (self.any) self.space.word else 0) +
-                            self.spacePairs(firstCodepoint(nextRendered(str, i + 1)), joins),
+                            self.spacePairs(renderedFirst(
+                                nextRendered(str, i + 1),
+                                face.transform,
+                            ), joins),
                     };
                     self.segment_has_word = true;
                     self.any = true;
@@ -2494,12 +2529,14 @@ const LineFlow = struct {
             // fixes -- unlike the split at white space, where no pair exists to
             // lose (see `CollapsedRun.measure`).
             const word = str[start..i];
-            self.word += text_measure.measure(face, word, size).width;
+            // Before the measurement, which advances the flag past this word.
+            const ends = text_case.edges(word, face.transform, self.at_word_start);
+            self.word += text_measure.measureAt(face, word, size, &self.at_word_start).width;
             if (!self.have_word) {
-                self.word_first = firstCodepoint(word);
+                self.word_first = ends.first;
                 self.word_joins = joins;
             }
-            self.word_last = lastCodepoint(word);
+            self.word_last = ends.last;
             self.word_joins = self.word_joins and joins;
             self.have_word = true;
         }
