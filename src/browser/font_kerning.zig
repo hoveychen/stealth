@@ -14,12 +14,15 @@ const font_metrics = @import("font_metrics.zig");
 
 pub const Pair = struct { first: u8, second: u8, kern: f64 };
 
-/// One family's pairs, plus a bitmap of the characters that start one.
+/// One family's pairs, sorted by (first, second), plus a bitmap of the
+/// characters that start one.
 ///
-/// The bitmap is what keeps this affordable. A pair lookup happens once per
-/// character of every string this engine measures, and only about forty distinct
-/// characters start a kerning pair at all -- so the common case is one shift and
-/// one AND, and the scan below runs on the few that survive it.
+/// A lookup happens once per character of every string this engine measures, so
+/// both halves earn their place. The bitmap answers most characters in a shift
+/// and an AND -- 28 of the 224 start a pair in the average family. But the ones
+/// that do are the common ones: every capital, and 'o', 'r', 'v', 'w', 'y'. So
+/// ordinary prose reaches the pairs on most of its letters, which is why they
+/// are bisected and not scanned.
 pub const Table = struct {
     pairs: []const Pair = &.{},
     starts: [4]u64 = .{ 0, 0, 0, 0 },
@@ -575,9 +578,24 @@ pub fn kern(table: Table, a: u21, b: u21) f64 {
     if (table.starts[byte >> 6] & (@as(u64, 1) << @intCast(byte & 63)) == 0) {
         return 0;
     }
-    for (table.pairs) |pair| {
-        if (pair.first == byte and pair.second == b) {
+    // Scanning here instead cost 2.75x on the whole of text layout -- 16ms to
+    // 44ms measuring 4000 spans of prose, deterministic across four rounds
+    // (scratch/b99/kerncost). The tables run to 6458 pairs, and the family a
+    // page is most likely to ask for, system-ui, has 3791.
+    const want = (@as(u16, byte) << 8) | @as(u16, @intCast(b));
+    var lo: usize = 0;
+    var hi: usize = table.pairs.len;
+    while (lo < hi) {
+        const mid = lo + (hi - lo) / 2;
+        const pair = table.pairs[mid];
+        const key = (@as(u16, pair.first) << 8) | @as(u16, pair.second);
+        if (key == want) {
             return pair.kern;
+        }
+        if (key < want) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
         }
     }
     return 0;
