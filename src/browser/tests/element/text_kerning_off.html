@@ -236,6 +236,73 @@ alone. Sixteen of the 48 rows are theirs and 32 move.
     if (got !== want) wrong.push('inherit ' + name + ': want ' + want + ', got ' + got);
   }
 
+  // The STYLESHEET path, which none of the above reaches: a rule goes through
+  // the document's declared-name set and the enum-keyed cascade cache, where an
+  // inline declaration goes through the declaration's own property list. The
+  // two can also disagree, and the ordering when they do is the one thing only
+  // this block asserts: an `!important` rule beats inline, and inline beats a
+  // normal rule.
+  //
+  // The wrapper's font is written as LONGHANDS on purpose. `font` is a
+  // shorthand over `font-kerning` -- it resets it to `auto` -- and an inline
+  // declaration beats a normal rule, so `wrap.style.font = '16px serif'` would
+  // silently defeat every rule here. The first version of the probe behind these
+  // numbers did exactly that and read `auto` everywhere, which looks identical
+  // to the rule not matching at all. The last row keeps that trap as a reading
+  // rather than a footnote: the rule says `none`, the inline `font` shorthand
+  // resets it to `auto`, and 105.4140625 -- the kerned width -- is Chrome's
+  // answer.
+  const sheetCase = (css, wrapAttr, wrapStyle, spanId, spanStyle) => {
+    const sheet = document.createElement('style');
+    sheet.textContent = css;
+    document.head.appendChild(sheet);
+
+    const wrap = document.createElement('div');
+    if (wrapAttr) wrap.setAttribute(wrapAttr[0], wrapAttr[1]);
+    wrap.style.cssText = wrapStyle;
+    const span = document.createElement('span');
+    if (spanId) span.id = spanId;
+    span.style.cssText = spanStyle;
+    span.textContent = 'AVATAR To Wo';
+    wrap.appendChild(span);
+    host.appendChild(wrap);
+    const w = span.getBoundingClientRect().width;
+    wrap.remove();
+    sheet.remove();
+    return w;
+  };
+  // Longhands, so the rule under test is not overridden by a `font` shorthand.
+  const LONGHAND_FONT = 'font-size:16px;font-family:serif;white-space:pre';
+  const SHEET = [
+    // name, css, wrapper attribute, wrapper style, span id, span style, width
+    ['rule by id on the wrapper', '#kwrap{font-kerning:none}', ['id', 'kwrap'], LONGHAND_FONT, '', '', 115.5390625],
+    ['rule by class on the wrapper', '.kwrapc{font-kerning:none}', ['class', 'kwrapc'], LONGHAND_FONT, '', '', 115.5390625],
+    ['rule by id on the span', '#kspan{font-kerning:none}', null, LONGHAND_FONT, 'kspan', '', 115.5390625],
+    ['rule "kern" 0 on the span', '#kspan{font-feature-settings:"kern" 0}', null, LONGHAND_FONT, 'kspan', '', 115.5390625],
+    ['inline normal beats the rule', '#kspan{font-kerning:none}', null, LONGHAND_FONT, 'kspan', 'font-kerning:normal', 105.4140625],
+    ['important rule beats inline', '#kspan{font-kerning:none!important}', null, LONGHAND_FONT, 'kspan', 'font-kerning:normal', 115.5390625],
+    ['inline none beats the rule', '#kspan{font-kerning:normal}', null, LONGHAND_FONT, 'kspan', 'font-kerning:none', 115.5390625],
+    ['a rule about something else', '#kspan{color:red}', null, LONGHAND_FONT, 'kspan', '', 105.4140625],
+    // The `font` shorthand resets `font-kerning` to `auto`, and it is inline, so
+    // it wins: 105.4140625 and not 115.5390625.
+    ['inline font shorthand resets it', '#kwrap{font-kerning:none}', ['id', 'kwrap'], 'font:16px serif;white-space:pre', '', '', 105.4140625],
+    // ...and the same shorthand written in a RULE, which is a different path in
+    // this engine: the raw-sheet parser keeps the fixed font properties in a
+    // struct of their own, so `font`'s reset has to be carried into it or an
+    // inherited `none` survives a rule Chrome says clears it. The last two rows
+    // are the declaration order inside one rule, which decides the answer.
+    ['sheet font shorthand on the span resets it', '#kwrap{font-kerning:none}#kspan{font:16px serif}', ['id', 'kwrap'], LONGHAND_FONT, 'kspan', '', 105.4140625],
+    ['sheet font shorthand after the longhand', '#kwrap{font-kerning:none;font:16px serif}', ['id', 'kwrap'], LONGHAND_FONT, 'kspan', '', 105.4140625],
+    ['sheet font shorthand before the longhand', '#kwrap{font:16px serif;font-kerning:none}', ['id', 'kwrap'], LONGHAND_FONT, 'kspan', '', 115.5390625],
+    // `font` resets the other spelling too, to `normal`.
+    ['sheet "kern" 0 by rule', '#kwrap{font-feature-settings:"kern" 0}', ['id', 'kwrap'], LONGHAND_FONT, 'kspan', '', 115.5390625],
+    ['sheet font shorthand resets "kern" 0', '#kwrap{font-feature-settings:"kern" 0}#kspan{font:16px serif}', ['id', 'kwrap'], LONGHAND_FONT, 'kspan', '', 105.4140625],
+  ];
+  for (const [name, css, wrapAttr, wrapStyle, spanId, spanStyle, want] of SHEET) {
+    const got = sheetCase(css, wrapAttr, wrapStyle, spanId, spanStyle);
+    if (got !== want) wrong.push('sheet ' + name + ': want ' + want + ', got ' + got);
+  }
+
   // The canvas has its own switch, `ctx.fontKerning`, and it reads back already
   // -- it is the measurement it does not reach. 'bogus' is the CSS-attribute
   // rule the 2D context uses throughout: an unrecognised value is ignored and
