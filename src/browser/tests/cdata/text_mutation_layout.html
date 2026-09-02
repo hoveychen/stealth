@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<head>
+  <title>character data mutation and the boxes below it</title>
+  <meta charset="UTF-8">
+</head>
+<body>
+  <div id="host" style="width:800px;font:20px/24px monospace;"></div>
+</body>
+<script src="../testing.js"></script>
+
+<!--
+  Growing a paragraph's text has to move the box under it.
+
+  Every reading here is relative -- "the gap between the paragraph's top and the
+  next box's top is the paragraph's height" -- so it does not depend on the
+  device scale factor, on the body's margin, or on which monospace face the host
+  resolves. What it does depend on is the paragraph wrapping, which each case
+  asserts separately: an engine that stopped wrapping would satisfy the gap
+  identity trivially.
+
+  The mutation is always made AFTER a geometry read, because that read is what
+  fills the document-wide position table. The `Node`/`Element` paths call
+  `frame.domChanged()` and drop it; the `CharacterData` paths did not, so a page
+  that measured, then rewrote a text node, then measured again was answered with
+  the geometry from before its own write.
+-->
+<script id="character_data_write_moves_the_next_box">
+  const LINE = 24;
+  const SHORT = 'one';
+  const LONG = 'word '.repeat(120).trim();
+
+  const host = document.getElementById('host');
+
+  function build(text) {
+    host.innerHTML = '<p id="p" style="margin:0;">' + text + '</p>' +
+                     '<div id="m" style="margin:0;">M</div>';
+    return { p: document.getElementById('p'), m: document.getElementById('m') };
+  }
+
+  // The gap identity plus the shape the case is supposed to produce, as one
+  // string: a failed expectEqual prints both sides, and that is the diagnosis.
+  function report(name, p, m, want_lines) {
+    const ph = p.getBoundingClientRect().height;
+    const gap = m.getBoundingClientRect().top - p.getBoundingClientRect().top;
+    const lines = Math.round(ph / LINE);
+    const shape = want_lines > 1
+      ? (lines >= want_lines ? 'wrapped' : 'not-wrapped(' + lines + ' lines)')
+      : (lines === 1 ? 'one-line' : 'not-one-line(' + lines + ' lines)');
+    const identity = Math.round(gap) === Math.round(ph)
+      ? 'gap=height'
+      : 'gap=' + Math.round(gap) + ' height=' + Math.round(ph);
+    return name + ': ' + shape + ' ' + identity;
+  }
+
+  // One assertion for all of them. `expectEqual` throws, and a throw ends the
+  // block -- asserting per case would report the first broken entry point and
+  // leave the other eight unrun, which is the shape that makes a partial fix
+  // look complete.
+  const want = [];
+  const got = [];
+
+  function grows(name, mutate) {
+    const { p, m } = build(SHORT);
+    m.getBoundingClientRect();
+    mutate(p.firstChild, p);
+    want.push(name + ': wrapped gap=height');
+    got.push(report(name, p, m, 6));
+  }
+
+  function shrinks(name, mutate) {
+    const { p, m } = build(LONG);
+    m.getBoundingClientRect();
+    mutate(p.firstChild, p);
+    want.push(name + ': one-line gap=height');
+    got.push(report(name, p, m, 1));
+  }
+
+  grows('data', (t) => { t.data = LONG; });
+  grows('nodeValue', (t) => { t.nodeValue = LONG; });
+  grows('textContent', (t) => { t.textContent = LONG; });
+  grows('appendData', (t) => { t.appendData(' ' + LONG); });
+  grows('insertData', (t) => { t.insertData(0, LONG + ' '); });
+  grows('replaceData', (t) => { t.replaceData(0, SHORT.length, LONG); });
+
+  shrinks('deleteData', (t) => { t.deleteData(SHORT.length, t.length - SHORT.length); });
+  shrinks('data-shrink', (t) => { t.data = SHORT; });
+
+  // The control: `innerHTML` reaches the same layout through `Element`, which
+  // has always dropped the table. It is here so a red run separates "this entry
+  // point does not invalidate" from "this engine cannot lay the text out".
+  grows('control-innerHTML', (_, p) => { p.innerHTML = LONG; });
+
+  testing.expectEqual(want.join(' | '), got.join(' | '));
+</script>

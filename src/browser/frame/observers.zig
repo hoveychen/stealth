@@ -412,6 +412,19 @@ pub fn notifyCharacterDataChange(frame: *Frame, target: *Node, old_value: String
     // appendData, insertData, deleteData, replaceData -- which makes it the one
     // place a <style> element's text can change under us without a node being
     // inserted or removed. Its rules are parsed from that text and cached.
+    //
+    // For the same reason it is where the document's version has to move. A
+    // text rewrite is a layout change: `Frame.positionOf` keys the
+    // document-wide position table on `Page.dom_version`, so a page that read a
+    // box's top, grew the paragraph above it, then read again was answered with
+    // the geometry from before its own write -- one expression apart from
+    // Chrome (`cdata/text_mutation_layout.html`). It is a cascade change too:
+    // `:empty` matches on a text node's length (`selector/List.zig`), which is
+    // why this cannot be a private counter that only the position table reads.
+    // The parser does not come through here -- it writes `_data` directly and
+    // keeps its own counter -- so this costs a parse nothing.
+    frame.domChanged();
+
     frame.styleTextChanged(target._parent);
 
     var it: ?*std.DoublyLinkedList.Node = frame._mutation.observers.first;
