@@ -691,6 +691,39 @@ test "text_measure: the space pairs Chrome kerns in layout and not in the canvas
     try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(serif, 'A', 'V'));
 }
 
+test "text_measure: the kerning bit turns off both tables" {
+    // `element/text_kerning_off.html` asserts this through the CSS layer; this
+    // asserts the kernel on its own, because the bit has to reach two tables and
+    // the CSS test cannot say which of them answered.
+    const on: Face = .of(font_metrics.serif, 400, false, .{}, .layout, true);
+    const off: Face = .of(font_metrics.serif, 400, false, .{}, .layout, false);
+
+    // The ordinary pairs. 'AV' at 16px serif is 21.046875 kerned and 23.109375
+    // unkerned -- both Chrome's, both this engine's advance table.
+    try std.testing.expectEqual(@as(f64, 21.046875), measure(on, "AV", 16).width);
+    try std.testing.expectEqual(@as(f64, 23.109375), measure(off, "AV", 16).width);
+
+    // The space pairs, which only the layout surface charges. Empty when the bit
+    // is off, so `kernBetween` -- the caller that prices a space between two
+    // separate measurements -- answers zero without knowing about the bit.
+    try std.testing.expectEqual(@as(f64, -0.28125), kernBetween(on, ' ', 'T', 16));
+    try std.testing.expectEqual(@as(f64, 0), kernBetween(off, ' ', 'T', 16));
+
+    // And both at once: 'AVATAR To Wo' is 105.4140625 in layout, and the
+    // 10.125 the switch adds is 9.5625 of ordinary pairs plus 0.5625 of space
+    // pairs. Leaving the space table on would land on 114.9765625.
+    try std.testing.expectEqual(@as(f64, 105.4140625), measure(on, "AVATAR To Wo", 16).width);
+    try std.testing.expectEqual(@as(f64, 115.5390625), measure(off, "AVATAR To Wo", 16).width);
+
+    // The canvas surface has no space table either way, so the bit is the only
+    // difference there -- and its unkerned width is the same 115.5390625,
+    // because with no pairs at all the two surfaces cannot disagree.
+    const canvas_on: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, true);
+    const canvas_off: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, false);
+    try std.testing.expectEqual(@as(f64, 105.9765625), measure(canvas_on, "AVATAR To Wo", 16).width);
+    try std.testing.expectEqual(@as(f64, 115.5390625), measure(canvas_off, "AVATAR To Wo", 16).width);
+}
+
 test "text_measure: reproduces Chrome's measureText" {
     // Straight from sections.text of the graphics dump.
     const sample = measure(Face.regular(font_metrics.sans_serif), "mmmmmmmmmmlli", 10);
