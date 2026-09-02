@@ -38,7 +38,9 @@
 //   * a string's width is the plain sum of its glyphs' advances, except
 //     across a kerning pair. 'mmmmmmmmmmlli', 'Hello, world!' and
 //     'Cwm fjordbank glyphs vext quiz' all sum exactly; 'AV' and 'To' do
-//     not, and we do not model kerning, so those come out a little wide.
+//     not. Those pairs live in `font_kerning.zig` now, measured the same way
+//     and kept out of this file so adding them did not put the font list in a
+//     diff.
 //
 // fontBoundingBox is the exception: CoreText quantises it per size (16px
 // sans-serif reports an ascent of 14 where scaling 100px's 92 would say 15),
