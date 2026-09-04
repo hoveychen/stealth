@@ -110,3 +110,31 @@ export async function evaluate(cdp, sessionId, expression, { awaitPromise = fals
 }
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The device scale factor this engine reports to every page, unconditionally.
+// A Chrome reference arm launched without `--force-device-scale-factor` answers
+// 1, so every two-arm reading with devicePixelRatio anywhere in it comes out
+// systematically different -- and reads as a defect in this engine.
+//
+// That is not hypothetical: on cf-scrapingcourse the largest surface the guard
+// reads, `JSON.stringify(getComputedStyle(el))`, showed 8 of 736 values
+// disagreeing (the three rule widths, 1.5px here against 3px there) against a
+// dpr-1 arm. At matched scale the whole 30918-byte span is byte-identical. The
+// engine was right the entire time -- 1.5px is three device pixels, which
+// `src/browser/tests/css/rule_width_keywords.html` already records.
+//
+// `Emulation.setDeviceMetricsOverride` cannot substitute for the switch, and
+// passing `deviceScaleFactor: 1` there actively creates the mismatch: this
+// engine ignores that parameter outright (`src/cdp/domains/emulation.zig` warns
+// for anything but 0/1 and applies none of them) while Chrome honours it, so
+// the value only ever moves the reference arm -- to the wrong scale.
+export const PERSONA_DEVICE_SCALE_FACTOR = 2;
+
+// Launch flags pinning a Chrome reference arm to the persona's scale, unless
+// the caller already asked for a scale of its own -- the same guard
+// `dump-fonts.mjs` grew for the same reason. Returns [] for a caller that did.
+export function personaScaleFlags(chromeArgs = []) {
+    return chromeArgs.some((a) => String(a).startsWith('--force-device-scale-factor'))
+        ? []
+        : [`--force-device-scale-factor=${PERSONA_DEVICE_SCALE_FACTOR}`];
+}

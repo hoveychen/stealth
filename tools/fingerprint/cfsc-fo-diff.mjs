@@ -31,7 +31,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, personaScaleFlags, sleep } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -113,6 +113,7 @@ const proc = engine === 'chrome'
         `--user-data-dir=${profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-fo-'))}`,
         '--no-first-run', '--no-default-browser-check', '--window-size=1920,1080',
         '--headless=new',
+        ...personaScaleFlags(),
         ...(state.userAgentOverride ? [`--user-agent=${state.userAgentOverride}`] : []),
     ], { stdio: ['ignore', 'pipe', 'pipe'] })
     : spawn(LIGHTPANDA, ['serve', '--host', '127.0.0.1', '--port', String(PORT),

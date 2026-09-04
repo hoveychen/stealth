@@ -43,7 +43,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, newPage, goto, evaluate, sleep } from './cdp.mjs';
+import { Cdp, newPage, goto, evaluate, personaScaleFlags, PERSONA_DEVICE_SCALE_FACTOR, sleep } from './cdp.mjs';
 import { ANTIBOT, extractAntibot } from './sites.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -252,6 +252,7 @@ async function launch() {
             ...(headed ? [] : ['--headless=new']),
             ...(proxy ? [`--proxy-server=${proxy}`] : []),
             ...(userAgentOverride ? [`--user-agent=${userAgentOverride}`] : []),
+            ...personaScaleFlags(chromeArgs),
             ...chromeArgs,
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
     } else {
@@ -574,8 +575,17 @@ try {
                 .catch(() => { /* lightpanda has one process and no OOPIFs */ });
         }
         const [w, h] = windowSize.split(',').map(Number);
+        // The scale here has to agree with the launch switch, or it undoes it:
+        // Chrome honours this parameter and would be pulled back to 1, which is
+        // exactly the mismatch that made this engine's readings look wrong (see
+        // PERSONA_DEVICE_SCALE_FACTOR in cdp.mjs). This engine ignores the
+        // parameter either way, so it keeps the 1 that costs it no
+        // `not_implemented` warning -- the value only ever moves Chrome.
         await cdp.send('Emulation.setDeviceMetricsOverride', {
-            width: w, height: h, deviceScaleFactor: 1, mobile: false,
+            width: w,
+            height: h,
+            deviceScaleFactor: engine === 'chrome' ? PERSONA_DEVICE_SCALE_FACTOR : 1,
+            mobile: false,
         }, sessionId);
         if (injects.length) {
             // Chrome answers Page.addScriptToEvaluateOnNewDocument with an

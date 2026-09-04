@@ -23,7 +23,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, personaScaleFlags, sleep } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REPO = path.resolve(HERE, '../..');
@@ -89,6 +89,7 @@ export async function runTrace({
             `--user-data-dir=${profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-pt-'))}`,
             '--no-first-run', '--no-default-browser-check', '--window-size=1920,1080',
             '--headless=new',
+            ...personaScaleFlags(),
             ...(userAgentOverride ? [`--user-agent=${userAgentOverride}`] : []),
         ], { stdio: ['ignore', 'pipe', 'pipe'] })
         : spawn(LIGHTPANDA, ['serve', '--host', '127.0.0.1', '--port', String(port),
