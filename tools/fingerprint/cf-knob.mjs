@@ -34,7 +34,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, personaScaleFlags, sleep } from './cdp.mjs';
+import { Cdp, personaScaleFlags, sleep, assertPersonaParity, pinPersonaMedia } from './cdp.mjs';
 import { CF_KNOBS } from './cf-knobs.mjs';
 import { parsePropReads, contextsOf } from './prop-read-log.mjs';
 
@@ -378,6 +378,12 @@ async function once(port) {
                 } catch { /* session gone, or nothing stashed there */ }
             }
         };
+
+        // Persona parity, on about:blank before the station sees anything: an
+        // arm off the persona's scale or theme produces readings that are not
+        // comparable, and both have already been mistaken for engine defects.
+        await pinPersonaMedia(cdp, sessionId);
+        await assertPersonaParity(cdp, sessionId, { label: engine });
 
         await install(sessionId);
         await cdp.send('Page.navigate', { url: target }, sessionId);

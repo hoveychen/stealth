@@ -43,7 +43,10 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, newPage, goto, evaluate, personaScaleFlags, PERSONA_DEVICE_SCALE_FACTOR, sleep } from './cdp.mjs';
+import {
+    Cdp, newPage, goto, evaluate, assertPersonaParity, personaScaleFlags, pinPersonaMedia,
+    PERSONA_DEVICE_SCALE_FACTOR, sleep,
+} from './cdp.mjs';
 import { ANTIBOT, extractAntibot } from './sites.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -516,6 +519,10 @@ const snapshot = {
     windowSize,
     chromeArgs,
     userAgentOverride,
+    // What the arm actually answered for each persona axis, filled in once the
+    // page exists. Recorded so a snapshot can never be compared with one taken
+    // on a different scale or theme without that being visible in the file.
+    personaAxes: null,
     startedAt: new Date().toISOString(),
     egress: null,
     version: null,
@@ -587,6 +594,16 @@ try {
             deviceScaleFactor: engine === 'chrome' ? PERSONA_DEVICE_SCALE_FACTOR : 1,
             mobile: false,
         }, sessionId);
+
+        // The theme, which no launch switch carries and which a headless Chrome
+        // inherits from a host that may change it by the hour. Then read every
+        // axis back and refuse the sweep outright on an arm that is not on the
+        // persona: a station's verdict compared across mismatched arms is not a
+        // comparison, and a sweep that reports rows anyway is worse than one
+        // that stops.
+        await pinPersonaMedia(cdp, sessionId);
+        snapshot.personaAxes = await assertPersonaParity(cdp, sessionId, { label: engine });
+
         if (injects.length) {
             // Chrome answers Page.addScriptToEvaluateOnNewDocument with an
             // identifier whether or not the Page domain is on, and only *runs*

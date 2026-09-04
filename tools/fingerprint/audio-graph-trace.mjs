@@ -377,6 +377,13 @@ for (const r of state.records) {
     }
 }
 console.log(`FINAL ${JSON.stringify(state.final)}`);
-if (state.error) console.log(`ERROR ${state.error}`);
+if (state.error) {
+    // A run that threw is not a reading. Exiting non-zero is the point: a
+    // parity failure printed on stdout of a tool that exits 0 is invisible to
+    // the loop that called it, and reads exactly like a knob that changed
+    // nothing.
+    console.log(`ERROR ${state.error}`);
+    process.exitCode = 1;
+}
 
 if (OUT) await writeRun(OUT, state);

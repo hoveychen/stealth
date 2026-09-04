@@ -138,3 +138,73 @@ export function personaScaleFlags(chromeArgs = []) {
         ? []
         : [`--force-device-scale-factor=${PERSONA_DEVICE_SCALE_FACTOR}`];
 }
+
+// The other axis a launch flag cannot carry, and the one that drifts on its
+// own: this engine hardcodes `prefers-color-scheme: light`
+// (css/MediaQuery.zig), while a headless Chrome inherits the HOST's appearance
+// -- which on a Mac set to Auto changes with the time of day. Two runs of the
+// same command nine hours apart were measured answering `dark` and then
+// `light`, so this is not a constant to look up once and trust.
+//
+// It is not a value that comes out slightly different either. Turnstile puts
+// the theme in the program's URL
+// (`.../<sitekey>/dark/fbE/new/normal` against `.../light/...`), verified in
+// both directions here: emulating `dark` moves the URL to `dark` and emulating
+// `light` moves it back. So the arms are handed DIFFERENT BUILDS of the widget,
+// and every byte of its stylesheet -- and every pixel it draws of itself -- is
+// then a different question rather than a different answer.
+//
+// Nine bytes of that stylesheet were read as a serialisation defect in this
+// engine before the theme was noticed. The engine was right
+// (tests/css/declaration_serialize.html#a_zero_in_a_transform_function_keeps_its_unit).
+export const PERSONA_PREFERS_COLOR_SCHEME = 'light';
+
+// Pin the media features on a Chrome arm. This engine's
+// Emulation.setEmulatedMedia is a noop, and it already answers the persona's
+// values, so sending this to both arms is harmless and keeps call sites from
+// having to branch. Failures are swallowed for the same reason.
+export async function pinPersonaMedia(cdp, sessionId) {
+    await cdp.send('Emulation.setEmulatedMedia', {
+        features: [{ name: 'prefers-color-scheme', value: PERSONA_PREFERS_COLOR_SCHEME }],
+    }, sessionId).catch(() => { /* noop on this engine */ });
+}
+
+// What the page actually answers for each axis the persona claims. Read back
+// rather than assumed: passing a flag is not the same as the arm being on it,
+// and a stale browser reusing the port will answer for the flags IT was given.
+export const PERSONA_AXES_EXPR = `({
+  devicePixelRatio: window.devicePixelRatio,
+  prefersColorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+  innerWidth: window.innerWidth,
+  innerHeight: window.innerHeight,
+  screenWidth: screen.width,
+  screenHeight: screen.height,
+})`;
+
+// Throws unless the arm is on the persona's scale and theme.
+//
+// ⚠️ Call this on the SETUP page, before navigating to a station. It is a
+// `Runtime.evaluate` against the page, and on a live challenge an extra
+// execution -- or any text it leaves in the realm -- is itself a variable
+// (see the payload-size readings in tools/fingerprint/README.md).
+//
+// `innerWidth`/`screen` are reported but NOT asserted: the display persona is a
+// separate axis this does not claim to have aligned (a dpr-2 Chrome answers
+// screen 400x300 against this engine's 1920x1200), and failing on it would stop
+// every harness. They are printed so a reading that turns on them is not
+// mistaken for one that does not.
+export async function assertPersonaParity(cdp, sessionId, { label = '' } = {}) {
+    const axes = await evaluate(cdp, sessionId, PERSONA_AXES_EXPR);
+    const wrong = [];
+    if (axes.devicePixelRatio !== PERSONA_DEVICE_SCALE_FACTOR) {
+        wrong.push(`devicePixelRatio ${axes.devicePixelRatio} (want ${PERSONA_DEVICE_SCALE_FACTOR})`);
+    }
+    if (axes.prefersColorScheme !== PERSONA_PREFERS_COLOR_SCHEME) {
+        wrong.push(`prefers-color-scheme ${axes.prefersColorScheme} (want ${PERSONA_PREFERS_COLOR_SCHEME})`);
+    }
+    if (wrong.length) {
+        throw new Error(`persona parity${label ? ` [${label}]` : ''}: ${wrong.join('; ')}` +
+            ` -- readings taken on an arm off the persona are not comparable`);
+    }
+    return axes;
+}
