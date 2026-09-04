@@ -22469,10 +22469,30 @@ binary-searching that number to twenty bits), so 1.5px is the matching answer.
 `webapi/css/chrome_initial_values.zig` carries a `do-not-hand-edit` banner and a
 line naming its source: `HeadlessChrome/151.0.0.0`. Every value in it that
 resolves against the device pixel ratio is therefore a dpr-1 value, and these
-three names are the ones that showed. The undeclared answer is overridden in
-`CSSStyleDeclaration` rather than in the generated file; whether any of the
-other 689 entries are dpr-dependent is not known, and regenerating that table
-against a headed arm is its own piece of work.
+three names are the ones that showed. The undeclared answer was overridden in
+`CSSStyleDeclaration` rather than in the generated file.
+
+### The other 689 entries: none of them (B104, 2026-09-04)
+
+That override was the wrong half to fix, and the open question above -- whether
+anything else in the table is dpr-dependent -- has an answer now that the
+generator pins the persona's scale (`personaScaleFlags`, `cdp.mjs`).
+
+Regenerating both tables at dpr 2 moves **twelve values and no others**: the
+eight rule-width names in `chrome_initial_values.zig` (`column-rule-width`,
+`row-rule-width`, `rule-width`, `-webkit-column-rule-width` and the four
+shorthands that carry a width) and the four inside `hr`'s entry in
+`chrome_per_tag_values.zig`, every one of them `3px` to `1.5px`. Two
+regenerations agree entry for entry, so the arm is deterministic. `outline` keeps
+its `3px`, which is the distinction stated above holding up: a declared `medium`
+is three CSS pixels and only the undeclared rule default is three device ones.
+
+So the override in `CSSStyleDeclaration` is gone -- `undeclared` is null for the
+rule widths and the recorded value stands on its own. The engine's answer does
+not move: measured on the cf-scrapingcourse widget against a dpr-2 arm, all
+eight names already read 1.5px, shorthands included, so the join was reaching
+the overridden longhand rather than the table's own shorthand entry. What moves
+is that the table stops disagreeing with the engine it is the reference for.
 
 After the fix all 22 fixture cases and all nine element cases are identical to
 Chrome's, property for property.
