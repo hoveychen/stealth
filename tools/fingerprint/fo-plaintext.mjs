@@ -58,6 +58,7 @@
 //   node tools/fingerprint/fo-plaintext.mjs <lightpanda|chrome>
 //        [--headed-ua] [--url u] [--settle ms] [--out path] [--port n]
 //        [--min n] [--max-records n] [--inject-worker]
+//        [--r2] [--r2-min n] [--r2-budget n]
 // env: LP_BIN, CHROME
 //
 // The launch/arm/collect machinery lives in fo-harness.mjs; what is here is the
@@ -82,6 +83,34 @@ const headedUa = has('--headed-ua');
 // Capturing a worker's source text only reads it; prepending the recorder to it
 // changes what the worker runs. Two separate questions, so two separate runs.
 const injectWorker = has('--inject-worker');
+// `--r2` adds the three hooks that stand between the plaintext of round 2 and
+// the wire. The funnels above never see it: r2's body is assembled in the
+// widget's own realm without a stringify, an encode or a btoa anywhere in it
+// (P1 of `cf-r2-185-bytes`), so the only places left to stand are the ones the
+// assembly itself uses -- join("") over the characters of the ciphertext, and
+// `charCodeAt`/`charAt` whose *receiver* is whatever was cut into them.
+//
+// Off by default because the last two are hot: they fire per character, and a
+// recorder that hashes on every call is quadratic in the body length and the
+// challenge never finishes a round. The dedup key here is length plus the first
+// and last code unit, read through an unhooked charCodeAt, and nothing shorter
+// than R2_MIN is looked at twice.
+//
+// Alongside those, five cold instruments that answer the next question an input
+// that differs raises -- where did it come from? A string the page assembled is
+// a cause; one the server handed it is the shape of a decision already taken.
+// So: `document.cookie` snapshots, the `responseText`/`response` getters, the
+// resolved text of a `Response`, `message` events from the parent, and both
+// sides of `JSON.parse`. None of them is hot.
+//
+// This is the console channel, not the wire one. `report-r2-body --beacon` in
+// cf-knobs.mjs asked the same question through a few dozen requests into the
+// widget's origin and pushed r2 from 4898 bytes to 21751 -- the instrument, not
+// the station. The same hooks with the wire off left r2 at 4898, so the hooks
+// are free and only the traffic was not.
+const r2 = has('--r2');
+const R2_MIN = Number(arg('--r2-min', '2000'));
+const R2_BUDGET = Number(arg('--r2-budget', '40'));
 // The recorder. Runs before the document's own code in every realm it is
 // installed in. `MARK` prefixes each console line so the collector can tell its
 // own records from the page's chatter.
@@ -194,6 +223,145 @@ const CORE = `(function () {
       }, origFetch);
     }
   } catch (e) {}
+
+  // The round-2 hooks. Everything above watches a funnel the payload passes
+  // through; these watch the assembly itself, and they only exist when --r2
+  // asked for them.
+  if (${r2 ? 'true' : 'false'}) (function () {
+    var R2_MIN = ${R2_MIN};
+    var left = ${R2_BUDGET};
+    var origCode = String.prototype.charCodeAt;
+    var origJoin = Array.prototype.join;
+    var seen = Object.create(null);
+    // Cheap enough to run per character: a length test, then two code units.
+    function note(label, s) {
+      var n = s.length;
+      if (n < R2_MIN || left <= 0) return;
+      var key = n + ':' + origCode.call(s, 0) + ':' + origCode.call(s, n - 1);
+      if (seen[key]) return;
+      seen[key] = 1;
+      left--;
+      if (n >= 900) snapCookie();
+      emit({ k: label, a: { t: 'str', n: n, v: String(s) },
+             url: String((globalThis.location || {}).href || '?').slice(0, 120) });
+    }
+    // Whether an input that differs between the arms is a cause or an effect
+    // turns on where it came from. A string the page assembled is a cause; a
+    // string the server handed it is the shape of a decision already made
+    // before this round. The cookie jar is the difference, so snapshot it
+    // alongside the records rather than in a second run that would have its own
+    // session and its own tokens.
+    var cookieSeen = Object.create(null);
+    function snapCookie() {
+      try {
+        var c = (globalThis.document || {}).cookie;
+        if (typeof c !== 'string' || cookieSeen[c.length]) return;
+        cookieSeen[c.length] = 1;
+        emit({ k: 'r2.cookie', a: { t: 'str', n: c.length, v: c },
+               url: String((globalThis.location || {}).href || '?').slice(0, 120) });
+      } catch (e) { /* opaque realm */ }
+    }
+    function hotString(key, label) {
+      var original = String.prototype[key];
+      if (typeof original !== 'function') return;
+      try {
+        // One declared argument and call() rather than apply(): this runs once
+        // per character of a body thousands of characters long, so the wrapper
+        // has to cost about what the call it replaces costs.
+        String.prototype[key] = disguise(function (i) {
+          // The receiver is a boxed String in a sloppy-mode call, so reading .length
+          // off it is free but coercing it is not -- only do that once the
+          // length says this is a receiver worth recording.
+          if (this && this.length >= R2_MIN) { try { note(label, this); } catch (e) {} }
+          return original.call(this, i);
+        }, original);
+      } catch (e) { /* non-writable */ }
+    }
+    // Where a differing input came from decides whether it is worth chasing,
+    // and the only channel left that could have delivered one is the reply to
+    // the round before it. The response text is read through a getter, so a
+    // getter is where to stand.
+    try {
+      var xp = globalThis.XMLHttpRequest && globalThis.XMLHttpRequest.prototype;
+      ['responseText', 'response'].forEach(function (key) {
+        var rt = xp && Object.getOwnPropertyDescriptor(xp, key);
+        if (!rt || typeof rt.get !== 'function') return;
+        var origGet = rt.get;
+        Object.defineProperty(xp, key, {
+          configurable: true, enumerable: rt.enumerable,
+          set: rt.set,
+          get: function () {
+            var v = origGet.call(this);
+            if (typeof v === 'string' && v.length >= R2_MIN) { try { note('r2.' + key, v); } catch (e) {} }
+            return v;
+          },
+        });
+      });
+    } catch (e) { /* sealed */ }
+
+    // The other half of the same question: a reply read through fetch rather
+    // than XHR. Recording the resolved text costs a promise hop and nothing
+    // else -- the page's own then() still sees the value it would have seen.
+    try {
+      var rp = globalThis.Response && globalThis.Response.prototype;
+      if (rp && typeof rp.text === 'function') {
+        var origText = rp.text;
+        rp.text = disguise(function () {
+          var p = origText.apply(this, arguments);
+          try {
+            p.then(function (v) {
+              if (typeof v === 'string' && v.length >= R2_MIN) { try { note('r2.fetchText', v); } catch (e) {} }
+            }, function () {});
+          } catch (e) { /* not a promise */ }
+          return p;
+        }, origText);
+      }
+    } catch (e) { /* sealed */ }
+
+    // The widget is handed its challenge parameters by the page over
+    // postMessage, so a string that appears in the widget's realm without any
+    // network read or any assembly behind it came across that boundary. An
+    // extra listener observes it without displacing the page's own.
+    try {
+      globalThis.addEventListener('message', function (ev) {
+        try {
+          var d = ev.data;
+          var v = typeof d === 'string' ? d : JSON.stringify(d);
+          if (typeof v === 'string' && v.length >= R2_MIN) note('r2.message', v);
+        } catch (e) { /* unserialisable */ }
+      }, true);
+    } catch (e) { /* no listener */ }
+
+    // A parse is cold enough to record both sides of: the text that went in and
+    // any long string that came out.
+    try {
+      var origParse = globalThis.JSON.parse;
+      globalThis.JSON.parse = disguise(function (text) {
+        var out = origParse.apply(this, arguments);
+        try {
+          if (typeof text === 'string' && text.length >= R2_MIN) note('r2.parse.in', text);
+          if (out && typeof out === 'object') {
+            for (var k in out) {
+              if (typeof out[k] === 'string' && out[k].length >= R2_MIN) note('r2.parse.' + k, out[k]);
+            }
+          }
+        } catch (e) { /* keep going */ }
+        return out;
+      }, origParse);
+    } catch (e) { /* frozen */ }
+
+    hotString('charCodeAt', 'r2.charCodeAt');
+    hotString('charAt', 'r2.charAt');
+    try {
+      Array.prototype.join = disguise(function () {
+        var out = origJoin.apply(this, arguments);
+        if (typeof out === 'string' && out.length >= R2_MIN) {
+          try { note('r2.join', out); } catch (e) {}
+        }
+        return out;
+      }, origJoin);
+    } catch (e) { /* non-writable */ }
+  })();
 
   // Alongside the fact that the recorder is here: the four realm facts the
   // trampoline's answers turn on. Chrome's clock clamp is 100us normally and
@@ -319,7 +487,7 @@ const RECORDER = `${WORKER_HOOK}\n${CORE}`;
 const state = {
     engine, url: URL_, headedUa, settleMs: SETTLE, min: MIN,
     userAgentOverride: null,
-    injectWorker,
+    injectWorker, r2, r2Min: r2 ? R2_MIN : null,
     posts: [],       // the fo/ POSTs on the wire, to key the records against
 };
 
@@ -355,7 +523,7 @@ await runTrace({
 });
 
 // --- report ---------------------------------------------------------------
-console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''}${injectWorker ? ' --inject-worker' : ''} ===`);
+console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''}${injectWorker ? ' --inject-worker' : ''}${r2 ? ` --r2 --r2-min ${R2_MIN}` : ''} ===`);
 console.log(`realms armed: ${state.realms.filter((r) => r.installed).length}/${state.realms.length}`);
 const tally = new Map();
 for (const r of state.records) tally.set(r.k, (tally.get(r.k) ?? 0) + 1);
