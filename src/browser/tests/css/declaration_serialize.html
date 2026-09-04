@@ -1591,5 +1591,62 @@ function withStyle(text) {
   testing.expectEqual('0%=translateY(2px) | 100%=translateY(0px)', vSteps.join(' | '));
   testing.expectEqual('#b106u { transform: rotate(0deg) scale(1); }', uPlain);
   testing.expectEqual('#b106v { transform: translateY(0px); }', vPlain);
+
+  // The whole slot census, so the next reader does not have to trust that the
+  // two shapes above are the extent of it. Measured on Chrome 151 at dpr 2 /
+  // light with probes/expr-b107-unitless-zero-census.js, which also measured
+  // this engine: 34 of the 36 categories in it already agree. The TOP-LEVEL
+  // length path is right -- `width: 0` is `0px` here already, and so are
+  // margin/top/border-width/padding/letter-spacing/text-indent/outline-offset/
+  // font-size/flex-basis, plus standalone `translate: 0` -- so what is missing
+  // is only the canonicalisation of a zero inside a FUNCTION argument.
+  const slot = (decl) => {
+    const e = document.createElement('style');
+    e.textContent = '#b107{' + decl + '}';
+    document.head.appendChild(e);
+    const got = e.sheet.cssRules[0].style.cssText;
+    e.remove();
+    return got;
+  };
+
+  const rows = [
+    ['transform:rotate(0)', 'transform: rotate(0deg);'],
+    ['transform:rotateX(0)', 'transform: rotateX(0deg);'],
+    ['transform:rotateZ(0)', 'transform: rotateZ(0deg);'],
+    ['transform:rotate3d(1,1,1,0)', 'transform: rotate3d(1, 1, 1, 0deg);'],
+    ['transform:skew(0)', 'transform: skew(0deg);'],
+    ['transform:skewY(0)', 'transform: skewY(0deg);'],
+    ['transform:translateX(0)', 'transform: translateX(0px);'],
+    ['transform:translate(0,0)', 'transform: translate(0px, 0px);'],
+    ['transform:translateZ(0)', 'transform: translateZ(0px);'],
+    ['transform:perspective(0)', 'transform: perspective(0px);'],
+    // The alias serialises under the unprefixed name, which is its own measured
+    // behaviour and not part of this question.
+    ['-webkit-transform:rotate(0)', 'transform: rotate(0deg);'],
+    // A NUMBER slot keeps its bare zero. These are the controls that stop a fix
+    // from appending a unit everywhere.
+    ['transform:scale(0)', 'transform: scale(0);'],
+    ['transform:matrix(1,0,0,1,0,0)', 'transform: matrix(1, 0, 0, 1, 0, 0);'],
+    // The top-level paths, already correct, asserted so a fix cannot regress
+    // them while reaching into functions.
+    ['width:0', 'width: 0px;'],
+    ['letter-spacing:0', 'letter-spacing: 0px;'],
+    ['translate:0', 'translate: 0px;'],
+    ['scale:0', 'scale: 0;'],
+    // A unitless zero is not a <time> and not a standalone <angle>: Chrome
+    // drops the whole declaration, and so does this engine.
+    ['rotate:0', ''],
+    ['transition-duration:0', ''],
+    // Unitless numbers that are legal and must never gain a unit.
+    ['line-height:0', 'line-height: 0;'],
+    ['z-index:0', 'z-index: 0;'],
+    ['opacity:0', 'opacity: 0;'],
+  ];
+  const wrong = [];
+  for (const [decl, want] of rows) {
+    const got = slot(decl);
+    if (got !== want) wrong.push(decl + ': want ' + JSON.stringify(want) + ', got ' + JSON.stringify(got));
+  }
+  testing.expectEqual('', wrong.join(' | '));
 }
 </script>
