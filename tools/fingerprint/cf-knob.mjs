@@ -34,7 +34,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, personaScaleFlags, sleep } from './cdp.mjs';
 import { CF_KNOBS } from './cf-knobs.mjs';
 import { parsePropReads, contextsOf } from './prop-read-log.mjs';
 
@@ -137,6 +137,7 @@ async function once(port) {
     const proc = engine === 'chrome'
         ? spawn(CHROME, [`--remote-debugging-port=${port}`, `--user-data-dir=${tmp}`,
             '--no-first-run', '--no-default-browser-check',
+            ...personaScaleFlags(),
             ...(realUa ? [] : [`--user-agent=${UA}`]),
             ...(headless ? ['--headless=new'] : [])],
         { stdio: ['ignore', 'pipe', 'pipe'] })
