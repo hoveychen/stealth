@@ -19,6 +19,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { personaScaleFlags, PERSONA_DEVICE_SCALE_FACTOR } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -40,7 +41,7 @@ const LIGHTPANDA = process.env.LP_BIN || path.join(REPO, 'zig-out/bin/lightpanda
 let proc, prof;
 if (engine === 'chrome') {
     prof = await fs.mkdtemp(path.join(os.tmpdir(), 'creep-speech-'));
-    const args = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check', '--window-size=1920,1080'];
+    const args = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--window-size=1920,1080'];
     if (!headed) args.push('--headless=new');
     proc = spawn(CHROME, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {
@@ -62,7 +63,7 @@ if (engine === 'chrome') {
     await cdp.send('Runtime.enable', {}, sessionId);
 }
 const [w, h] = [1920, 1080];
-await cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false }, sessionId);
+await cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: engine === 'chrome' ? PERSONA_DEVICE_SCALE_FACTOR : 1, mobile: false }, sessionId);
 
 const out = { engine, headed, warm, settle };
 if (warm) {

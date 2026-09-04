@@ -28,7 +28,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 import { withLinuxChrome } from './linux-chrome.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -122,7 +122,7 @@ async function measure(endpoint) {
 // --- macOS: the Chrome installed on this machine ------------------------------
 const PORT = 9463;
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-audio-'));
-const flags = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`, '--no-first-run', '--no-default-browser-check'];
+const flags = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`, '--no-first-run', '--no-default-browser-check', ...personaScaleFlags()];
 if (!headed) flags.push('--headless=new');
 const chrome = spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
 chrome.stdout.resume();

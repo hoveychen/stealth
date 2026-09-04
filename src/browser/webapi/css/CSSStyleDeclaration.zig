@@ -2244,10 +2244,13 @@ fn computedFontStretch(style_manager: *StyleManager, element: *Element, wrapped:
 ///     part of its device profile (`Window.getDevicePixelRatio`), so 1.5px is
 ///     the number that matches it.
 ///
-/// `chrome_initial_values.zig` records 3px for the three rule widths because
-/// that table is generated against a HEADLESS Chrome, which is dpr 1. It is
-/// generated and carries a do-not-hand-edit banner, so the undeclared answer is
-/// overridden here instead.
+/// `chrome_initial_values.zig` used to record 3px for the three rule widths,
+/// because its generator launched Chrome without `--force-device-scale-factor`
+/// and so measured a dpr-1 arm. The undeclared answer was overridden here to
+/// compensate. The generator now pins the persona's scale
+/// (`personaScaleFlags` in `tools/fingerprint/cdp.mjs`), the table records
+/// 1.5px, and the override is gone -- `undeclared` is null for the rule widths
+/// and the recorded value stands on its own.
 const RuleWidthScale = struct {
     thin: []const u8,
     medium: []const u8,
@@ -2266,7 +2269,7 @@ const RuleWidthScale = struct {
 
 fn ruleWidthScale(name: []const u8) ?RuleWidthScale {
     const BORDER: RuleWidthScale = .{ .thin = "1px", .medium = "3px", .thick = "5px", .undeclared = null, .device_grid = true };
-    const RULE: RuleWidthScale = .{ .thin = "1px", .medium = "3px", .thick = "5px", .undeclared = "1.5px", .device_grid = true };
+    const RULE: RuleWidthScale = .{ .thin = "1px", .medium = "3px", .thick = "5px", .undeclared = null, .device_grid = true };
     const STROKE: RuleWidthScale = .{ .thin = "0.666667px", .medium = "2px", .thick = "3.33333px", .undeclared = null, .device_grid = false };
     const NAMES = [_]struct { []const u8, RuleWidthScale }{
         .{ "outline-width", BORDER },

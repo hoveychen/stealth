@@ -21,7 +21,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, newPage, goto, evaluate, sleep } from './cdp.mjs';
+import { Cdp, newPage, goto, evaluate, sleep, personaScaleFlags } from './cdp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -58,7 +58,7 @@ const PROBE = `(() => {
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'lp-currentcolor-'));
 const args = [
     `--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`,
-    '--no-first-run', '--no-default-browser-check', '--force-color-profile=srgb',
+    '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--force-color-profile=srgb',
 ];
 if (!headed) args.push('--headless=new');
 const chrome = spawn(CHROME, args, { stdio: 'ignore' });

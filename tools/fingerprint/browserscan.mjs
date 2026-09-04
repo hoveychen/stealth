@@ -16,7 +16,7 @@
 //   node tools/fingerprint/browserscan.mjs --diff a.json b.json
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { Cdp, newPage, sleep } from './cdp.mjs';
+import { Cdp, newPage, sleep, PERSONA_DEVICE_SCALE_FACTOR } from './cdp.mjs';
 
 const PORT = 9487;
 const LIGHTPANDA = 'zig-out/bin/lightpanda';
@@ -135,7 +135,7 @@ cdp.on((m) => {
 // Both engines at one viewport: the page is responsive, and a different
 // breakpoint renders a different number of nodes for no fingerprint reason.
 await cdp.send('Emulation.setDeviceMetricsOverride', {
-  width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false,
+  width: 1920, height: 1080, deviceScaleFactor: PERSONA_DEVICE_SCALE_FACTOR, mobile: false,
 }, sessionId).catch(() => {});
 await cdp.send('Page.enable', {}, sessionId).catch(() => {});
 await cdp.send('Page.navigate', { url: 'https://www.browserscan.net/' }, sessionId);

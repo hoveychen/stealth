@@ -23,7 +23,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, newPage, goto, sleep } from './cdp.mjs';
+import { Cdp, newPage, goto, sleep, personaScaleFlags } from './cdp.mjs';
 import { startH2Echo, selfSignedCert } from './h2-echo.mjs';
 import { startEchoServer } from './header-echo.mjs';
 
@@ -109,7 +109,7 @@ if (engine === 'chrome') {
         `--remote-debugging-port=${PORT}`,
         `--user-data-dir=${profile}`,
         '--no-first-run',
-        '--no-default-browser-check',
+        '--no-default-browser-check', ...personaScaleFlags(),
         '--headless=new',
         ...(h1 ? [] : ['--ignore-certificate-errors']),
         ...chromeArgs,

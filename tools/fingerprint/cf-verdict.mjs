@@ -66,7 +66,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -117,7 +117,7 @@ async function once(port) {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-verdict-'));
     const proc = engine === 'chrome'
         ? spawn(CHROME, [`--remote-debugging-port=${port}`, `--user-data-dir=${tmp}`,
-            '--no-first-run', '--no-default-browser-check', `--user-agent=${UA}`,
+            '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), `--user-agent=${UA}`,
             ...(headless ? ['--headless=new'] : [])],
         { stdio: ['ignore', 'pipe', 'pipe'] })
         : spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(port)],

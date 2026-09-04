@@ -28,10 +28,11 @@
       devicePixelRatio 2 as a fixed part of its device profile
       (Window.getDevicePixelRatio), so 1.5px is the number that matches it.
 
-  webapi/css/chrome_initial_values.zig records 3px for the three rule widths
-  because that table was generated against a HEADLESS Chrome, which is dpr 1.
-  It is generated and not hand-edited, so the three names are overridden in
-  CSSStyleDeclaration instead.
+  webapi/css/chrome_initial_values.zig used to record 3px for the three rule
+  widths, because its generator launched Chrome with no
+  --force-device-scale-factor and so measured a dpr-1 arm. The generator now
+  pins the persona's scale, the table records 1.5px, and the override that used
+  to compensate for it in CSSStyleDeclaration is gone.
 
   Cloudflare's widget encodes `JSON.stringify(getComputedStyle(el))` whole, so
   all five names travel in the payload of every page it challenges.

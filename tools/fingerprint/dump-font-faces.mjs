@@ -32,7 +32,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, newPage, goto, evaluate, sleep } from './cdp.mjs';
+import { Cdp, newPage, goto, evaluate, sleep, personaScaleFlags } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -88,7 +88,7 @@ const chrome = spawn(CHROME, [
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=${profile}`,
     '--no-first-run',
-    '--no-default-browser-check',
+    '--no-default-browser-check', ...personaScaleFlags(),
 ], { stdio: 'ignore' });
 
 let loaded;

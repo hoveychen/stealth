@@ -24,7 +24,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -58,7 +58,7 @@ const proc = spawn(CHROME, [
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=${profile}`,
     '--no-first-run',
-    '--no-default-browser-check',
+    '--no-default-browser-check', ...personaScaleFlags(),
     '--window-size=1920,1080',
     ...(headless ? ['--headless=new'] : []),
 ], { stdio: 'ignore' });

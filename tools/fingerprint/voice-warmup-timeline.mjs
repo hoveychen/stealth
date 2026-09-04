@@ -25,6 +25,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { personaScaleFlags } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -120,7 +121,7 @@ let proc, prof;
 const spawnedAt = Date.now();
 if (engine === 'chrome') {
     prof = await fs.mkdtemp(path.join(os.tmpdir(), 'voice-warm-'));
-    const args = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check', '--window-size=1920,1080'];
+    const args = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--window-size=1920,1080'];
     if (!headed) args.push('--headless=new');
     proc = spawn(CHROME, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {

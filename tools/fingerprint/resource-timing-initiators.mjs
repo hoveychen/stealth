@@ -25,6 +25,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { personaScaleFlags } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -132,7 +133,7 @@ if (engine === 'chrome') {
         `--remote-debugging-port=${PORT}`,
         `--user-data-dir=${profile}`,
         '--no-first-run',
-        '--no-default-browser-check',
+        '--no-default-browser-check', ...personaScaleFlags(),
         '--headless=new',
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {

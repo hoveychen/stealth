@@ -58,7 +58,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -351,7 +351,7 @@ const proc = engine === 'chrome'
         `--remote-debugging-port=${PORT}`,
         `--user-data-dir=${profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-exc-'))}`,
         '--no-first-run',
-        '--no-default-browser-check',
+        '--no-default-browser-check', ...personaScaleFlags(),
         '--window-size=1920,1080',
         ...(has('--headed') ? [] : ['--headless=new']),
     ], { stdio: ['ignore', 'pipe', 'pipe'] })

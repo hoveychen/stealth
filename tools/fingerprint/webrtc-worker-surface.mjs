@@ -14,6 +14,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { personaScaleFlags } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -31,7 +32,7 @@ if (engine === 'chrome') {
     const headed = process.argv.includes('--headed');
     proc = spawn(CHROME, [
         ...(headed ? [] : ['--headless=new']), `--remote-debugging-port=${PORT}`,
-        `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check',
+        `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(),
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {
     proc = spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(PORT)], { stdio: ['ignore', 'pipe', 'pipe'] });

@@ -28,7 +28,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -94,7 +94,7 @@ process.stderr.write(`${families.length} families to measure\n`);
 
 const chrome = spawn(CHROME, [
     `--remote-debugging-port=${PORT}`,
-    '--no-first-run', '--no-default-browser-check',
+    '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(),
     '--user-data-dir=' + (await fs.mkdtemp('/tmp/kern-')),
     ...(headed ? [] : ['--headless=new']),
     ...chromeArgs,

@@ -30,7 +30,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -240,7 +240,7 @@ const proc = engine === 'chrome'
     ? spawn(CHROME, [
         `--remote-debugging-port=${PORT}`,
         `--user-data-dir=${profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-po-'))}`,
-        '--no-first-run', '--no-default-browser-check', '--window-size=1920,1080',
+        '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--window-size=1920,1080',
         ...(has('--same-process')
             ? ['--disable-features=IsolateOrigins,site-per-process', '--disable-site-isolation-trials']
             : []),
