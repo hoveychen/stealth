@@ -31,7 +31,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, personaScaleFlags, sleep } from './cdp.mjs';
+import { Cdp, personaScaleFlags, sleep, assertPersonaParity, pinPersonaMedia } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -250,6 +250,12 @@ try {
     // maxPostDataSize is the difference between reading round 1's telemetry and
     // only being told it existed.
     await cdp.send('Network.enable', { maxPostDataSize: 1048576 }, pageSession).catch(() => { });
+
+    // Persona parity, on about:blank before the station sees anything: an
+    // arm off the persona's scale or theme produces readings that are not
+    // comparable, and both have already been mistaken for engine defects.
+    await pinPersonaMedia(cdp, pageSession);
+    await assertPersonaParity(cdp, pageSession, { label: engine });
 
     await cdp.send('Page.navigate', { url: URL_ }, pageSession);
     await sleep(SETTLE);

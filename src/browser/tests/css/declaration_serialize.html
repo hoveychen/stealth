@@ -1378,3 +1378,57 @@ function withStyle(text) {
       longhand.style.cssText);
 }
 </script>
+
+<script id="a_zero_in_a_transform_function_keeps_its_unit">
+{
+  // `rotate(0deg)` is not `rotate(0)`: Chrome keeps the author's dimension on a
+  // ZERO inside a transform function, on every path a page can read it back
+  // from. This engine already does too, and this block is here to keep it that
+  // way, because a zero is exactly the value a serialiser is tempted to
+  // normalise.
+  //
+  // It is also a correction. A diff of Cloudflare's widget stylesheet put four
+  // of these on the engine's side -- `rotate(0)` against the oracle's
+  // `rotate(0deg)`, nine bytes on an otherwise identical 22972-byte span -- and
+  // that read as a serialisation defect. It was not: the two arms had been
+  // served DIFFERENT builds of the widget. The theme is part of the program's
+  // URL (`.../dark/fbE/new/normal` against `.../light/...`) and this engine
+  // hardcodes `prefers-color-scheme: light` (css/MediaQuery.zig), so the
+  // reference arm was reading a different stylesheet, not serialising the same
+  // one differently. Two confounders on that comparison, the scale factor and
+  // the theme; pin both before calling anything there a defect.
+  //
+  // Measured on Chrome 151 with tools/fingerprint/probes/expr-b105-transform-zero.js,
+  // identical at --force-device-scale-factor=1 and =2, so the reading is not a
+  // device-grid one: it is the author's text surviving serialisation.
+  const text = (style) => withStyle(style).style.cssText;
+
+  // Set through the property, read back through the property and the attribute.
+  const prop = withStyle('');
+  prop.style.transform = 'rotate(0deg) translateY(0px) scale(1)';
+  testing.expectEqual('rotate(0deg) translateY(0px) scale(1)', prop.style.transform);
+  testing.expectEqual('transform: rotate(0deg) translateY(0px) scale(1);', prop.style.cssText);
+
+  // Parsed from an attribute the author wrote.
+  testing.expectEqual('transform: rotate(0deg) translateY(0px);',
+      text('transform: rotate(0deg) translateY(0px)'));
+
+  // Every unit the family takes, not just deg and px.
+  testing.expectEqual('transform: skewX(0deg) rotate(0rad) translateX(0em) translateZ(0px);',
+      text('transform: skewX(0deg) rotate(0rad) translateX(0em) translateZ(0px)'));
+
+  // The stylesheet path, which is the one the guard reads. Asserted as a
+  // substring so this block does not also own @keyframes' whitespace shape.
+  const st = document.createElement('style');
+  st.textContent = '@keyframes b105 { 0% { transform: rotate(2deg) translateY(2px); }' +
+      ' 100% { transform: rotate(0deg) translateY(0px); } }\n' +
+      '#b105 { transform: rotate(0deg) translateY(0px); }';
+  document.head.appendChild(st);
+  const rules = Array.from(st.sheet.cssRules).map((r) => r.cssText);
+  st.remove();
+
+  testing.expectEqual('#b105 { transform: rotate(0deg) translateY(0px); }', rules[1]);
+  testing.expectEqual('keyframes keep it: true',
+      'keyframes keep it: ' + rules[0].includes('rotate(0deg) translateY(0px)'));
+}
+</script>

@@ -23,7 +23,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, personaScaleFlags, sleep } from './cdp.mjs';
+import { Cdp, assertPersonaParity, personaScaleFlags, pinPersonaMedia, sleep } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REPO = path.resolve(HERE, '../..');
@@ -182,6 +182,14 @@ export async function runTrace({
             }
             onMessage?.(msg, state);
         });
+
+        // On about:blank, before the station sees anything: pin the media
+        // features a launch flag cannot carry, then read every persona axis
+        // back and refuse to continue on an arm that is not on them. A reading
+        // taken at the wrong scale or the wrong theme is not comparable, and
+        // both have already been mistaken for defects in this engine.
+        await pinPersonaMedia(cdp, pageSession);
+        state.personaAxes = await assertPersonaParity(cdp, pageSession, { label: engine });
 
         await arm(pageSession, 'page', 'page');
         await cdp.send('Page.navigate', { url }, pageSession);

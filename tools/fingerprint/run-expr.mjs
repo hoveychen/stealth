@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
-const { Cdp, sleep } = await import(path.join(HERE, 'cdp.mjs'));
+const { Cdp, evaluate, personaScaleFlags, sleep, PERSONA_AXES_EXPR } = await import(path.join(HERE, 'cdp.mjs'));
 
 const engine = process.argv[2];
 const exprPath = process.argv[3];
@@ -121,6 +121,11 @@ if (engine === 'chrome') {
         ...(headed ? [] : ['--headless=new']),
         `--window-size=${windowSize ?? '1920,1080'}`,
         ...(userAgentOverride ? [`--user-agent=${userAgentOverride}`] : []),
+        // The persona's scale by default, so the arm this prints beside its
+        // reading is the arm the engine is compared against. An explicit
+        // `--chrome-arg --force-device-scale-factor=1` still wins, which is
+        // what the two-run attribution above needs.
+        ...personaScaleFlags(chromeArgs),
         ...chromeArgs,
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {
@@ -185,6 +190,18 @@ try {
     } else {
         console.log(JSON.stringify(res.result.value, null, 2));
     }
+
+    // Every reading printed above, labelled with the arm it was taken on.
+    //
+    // NOT asserted here, unlike the station harnesses: varying these axes is
+    // this tool's job -- `--chrome-arg --force-device-scale-factor=1` twice over
+    // one probe is how a value gets attributed to the ratio rather than to the
+    // browser -- so refusing an off-persona arm would remove the measurement it
+    // exists to make. Printed instead, because the failure this prevents is not
+    // taking the reading, it is quoting one later without saying which arm it
+    // came from.
+    const axes = await evaluate(cdp, sessionId, PERSONA_AXES_EXPR).catch(() => null);
+    if (axes) console.error(`# arm ${engine}: ${JSON.stringify(axes)}`);
 } finally {
     proc.kill('SIGKILL');
 }
