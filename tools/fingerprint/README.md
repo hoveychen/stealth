@@ -22808,6 +22808,34 @@ the Turnstile checkbox drawing itself, not a probe -- and then, with **no
 measuring call in between**, does `crypto.subtle` + `TextEncoder.encode` once per
 value. The values are computed inside the VM well before they are hashed.
 
+#### Re-confirmed B109, with the loophole closed
+
+Everything above was measured before the persona pins and before the widget
+stylesheet's unitless zeros were fixed, so it was re-run on `4911549bb` once the
+residual account had closed: same four values, `4998.22265625` / `84` / `16` /
+`0.639611171875`, and the same last six reads before every one of them --
+`Window.window`, `Window.crypto`, `Window.window`, `Window.crypto`,
+`Crypto.subtle`, `TextEncoder.encode`. Two runs agreed hash for hash, while the
+oracle's four move between sittings (`5002.609375` in B104, `5000.266115188599`
+in B109): **this engine's four are frozen and Chrome's are not.**
+
+The reading above had one loophole: the run-up ring is filled by
+`recordPropertyRead`, which only sees members this engine HAS, so "no measuring
+call" could have meant "none this engine can see". `runup-live.mjs` now takes
+`--scopes`, and the ring fills in any Debug build whether or not `prop_read` is
+on, so the second scope is swappable. Run again with
+`+text_encode,+unknown_prop`: the widget realm makes **149 unknown-member reads
+and not one of them can produce a number** -- `console`, `chrome`,
+`SharedArrayBuffer` and `CSS` ten times each (presence probes) and the guard's
+own obfuscated globals (`runProgram`, `global`, `xVQL7`, …) twice each. So the
+negative is "there is nothing there", not "we cannot see it".
+
+One tempting lead, killed in the same sitting: this engine's first value is an
+exact multiple of 1/256 where B109's oracle value is a multiple of 1/2^20, which
+reads like a coarser geometry quantisation -- but B104's oracle value
+(`5002.609375`) is a multiple of 1/64, so the granularity is not a property of
+the arm. Do not open a plan on it.
+
 ### Reading the guard's program, and why that is where this stops
 
 `cf-knob.mjs` records every challenge response but slices the body to 4000
