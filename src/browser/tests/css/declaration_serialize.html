@@ -1483,5 +1483,113 @@ function withStyle(text) {
       '@keyframes success-badge-orbit-in { \n  0% { transform: rotate(-12deg) scale(0.6); opacity: 0; }\n' +
       '  70% { transform: rotate(2deg) scale(1.06); opacity: 1; }\n' +
       '  100% { transform: rotate(0deg) scale(1); opacity: 1; }\n}', vb);
+
+  // The accessor the STATION's answer actually came off, which is not the one
+  // above. Read live in the widget's realm with a beacon knob
+  // (scratch/b106/knobs.mjs): `@keyframes success-badge-orbit-in`'s 100% step
+  // answered `rotate(0)` here, while its 0% step answered `rotate(-12deg)`
+  // correctly -- so the whole-rule cssText assertions above can pass while the
+  // nested keyframe's own declaration is wrong, and they did, three times.
+  //
+  // Chrome 151 at dpr 2 / light (probes/expr-b106-keyframe-style.js).
+  const nested = document.createElement('style');
+  nested.textContent = '@keyframes b106 { \n' +
+      '  0% { transform: rotate(-12deg) scale(0.6); opacity: 0; }\n' +
+      '  70% { transform: rotate(2deg) scale(1.06); opacity: 1; }\n' +
+      '  100% { transform: rotate(0deg) scale(1); opacity: 1; }\n}\n' +
+      '@keyframes b106b { 0% { transform: translateY(2px); } 100% { transform: translateY(0px); } }';
+  document.head.appendChild(nested);
+  const steps = Array.from(nested.sheet.cssRules[0].cssRules)
+      .map((k) => k.keyText + '=' + k.style.transform);
+  const lone = Array.from(nested.sheet.cssRules[1].cssRules)
+      .map((k) => k.keyText + '=' + k.style.transform);
+  const step100 = nested.sheet.cssRules[0].cssRules[2];
+  const step100Css = step100.style.cssText;
+  const step100Rule = step100.cssText;
+  nested.remove();
+
+  testing.expectEqual(
+      '0%=rotate(-12deg) scale(0.6) | 70%=rotate(2deg) scale(1.06) | 100%=rotate(0deg) scale(1)',
+      steps.join(' | '));
+  testing.expectEqual('0%=translateY(2px) | 100%=translateY(0px)', lone.join(' | '));
+  testing.expectEqual('transform: rotate(0deg) scale(1); opacity: 1;', step100Css);
+  testing.expectEqual('100% { transform: rotate(0deg) scale(1); opacity: 1; }', step100Rule);
+
+  // The one property of the station's sheet none of the shapes above have: its
+  // SIZE. The live sheet carries 225 rules (read off it with the beacon knob,
+  // `prov=owner=STYLE,href=no,adopted=false,rules=225`), and it is an ordinary
+  // <style> with no href and not adopted -- so provenance is not the
+  // difference and the count is the last candidate left.
+  const big = document.createElement('style');
+  const filler = [];
+  for (let i = 0; i < 220; i++) {
+    filler.push('.b106f' + i + ' { color: rgb(' + (i % 256) + ', 0, 0); margin-top: ' + i + 'px; }');
+  }
+  big.textContent = filler.join('\n') + '\n@keyframes b106big { \n' +
+      '  0% { transform: rotate(-12deg) scale(0.6); opacity: 0; }\n' +
+      '  70% { transform: rotate(2deg) scale(1.06); opacity: 1; }\n' +
+      '  100% { transform: rotate(0deg) scale(1); opacity: 1; }\n}';
+  document.head.appendChild(big);
+  const bigRules = big.sheet.cssRules;
+  const bigKf = bigRules[bigRules.length - 1];
+  const bigSteps = Array.from(bigKf.cssRules).map((k) => k.keyText + '=' + k.style.transform);
+  big.remove();
+
+  testing.expectEqual('221 rules', bigRules.length + ' rules');
+  testing.expectEqual(
+      '0%=rotate(-12deg) scale(0.6) | 70%=rotate(2deg) scale(1.06) | 100%=rotate(0deg) scale(1)',
+      bigSteps.join(' | '));
+
+  // Every shape above was written the way this engine SERIALISES the rule,
+  // because that is what the capture shows -- but the station ships its
+  // stylesheet MINIFIED, and a minified declaration is a different parse: no
+  // spaces, and a leading-dot number where the serialisation prints a zero.
+  const min = document.createElement('style');
+  min.textContent = '@keyframes b106min{0%{transform:rotate(-12deg) scale(.6);opacity:0}' +
+      '70%{transform:rotate(2deg) scale(1.06);opacity:1}' +
+      '100%{transform:rotate(0deg) scale(1);opacity:1}}';
+  document.head.appendChild(min);
+  const minSteps = Array.from(min.sheet.cssRules[0].cssRules)
+      .map((k) => k.keyText + '=' + k.style.transform);
+  min.remove();
+
+  testing.expectEqual(
+      '0%=rotate(-12deg) scale(0.6) | 70%=rotate(2deg) scale(1.06) | 100%=rotate(0deg) scale(1)',
+      minSteps.join(' | '));
+
+  // ...and here is the input every shape above was missing. The station does
+  // not ship `rotate(0deg)`; it ships a UNITLESS `rotate(0)`, read straight off
+  // `ownerNode.textContent` on the live page with a beacon knob:
+  //
+  //   100%{transform:rotate(0) scale(1);opacity:1}
+  //
+  // Chrome CANONICALISES that to the property's unit -- `rotate(0)` serialises
+  // as `rotate(0deg)` and `translateY(0)` as `translateY(0px)` -- which is the
+  // whole nine bytes, in four places, of the widget-stylesheet difference. So
+  // the defect is not that this engine drops a unit the author wrote (it keeps
+  // those, asserted above); it is that it echoes a unitless zero the author
+  // wrote where Chrome supplies the canonical unit.
+  //
+  // Six shapes were guessed off the SERIALISED capture before the SOURCE was
+  // read, and all six passed, because every one of them wrote the unit in.
+  //
+  // Chrome 151 at dpr 2 / light (probes/expr-b106-unitless-zero.js).
+  const unitless = document.createElement('style');
+  unitless.textContent = '@keyframes b106u{0%{transform:rotate(-12deg) scale(.6);opacity:0}' +
+      '100%{transform:rotate(0) scale(1);opacity:1}}' +
+      '@keyframes b106v{0%{transform:translateY(2px)}100%{transform:translateY(0)}}' +
+      '#b106u{transform:rotate(0) scale(1)}#b106v{transform:translateY(0)}';
+  document.head.appendChild(unitless);
+  const uSheet = unitless.sheet;
+  const uSteps = Array.from(uSheet.cssRules[0].cssRules).map((k) => k.keyText + '=' + k.style.transform);
+  const vSteps = Array.from(uSheet.cssRules[1].cssRules).map((k) => k.keyText + '=' + k.style.transform);
+  const uPlain = uSheet.cssRules[2].cssText;
+  const vPlain = uSheet.cssRules[3].cssText;
+  unitless.remove();
+
+  testing.expectEqual('0%=rotate(-12deg) scale(0.6) | 100%=rotate(0deg) scale(1)', uSteps.join(' | '));
+  testing.expectEqual('0%=translateY(2px) | 100%=translateY(0px)', vSteps.join(' | '));
+  testing.expectEqual('#b106u { transform: rotate(0deg) scale(1); }', uPlain);
+  testing.expectEqual('#b106v { transform: translateY(0px); }', vPlain);
 }
 </script>
