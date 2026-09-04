@@ -22162,6 +22162,16 @@ ticketed — so the comparison is against a passing arm.
 
 ### Fifteen calls each, and what is in them
 
+> ⚠️ **This table is superseded. Do not repair anything off it.** It was taken
+> against a Chrome arm on neither of the persona's axes -- `fo-harness.mjs`
+> pinned no device scale factor until B104, and nothing pinned the theme until
+> B105 -- so its "this engine" column contains phantoms. Re-measured with both
+> pinned, four of its rows are byte-identical (the computed style, the
+> `0|0|0|…` pair, `readPixels`, and the font probe list, whose "41" here is
+> flatly wrong -- both arms answer the same 69-byte string). What survives is
+> below in "The same fifteen, with both axes pinned". Two sessions have now
+> spent time repairing entries from this table that were never defects.
+
 | what | Chrome | this engine |
 |---|---|---|
 | `getImageData` 48x48 | 9216 `1ly97t5` | 9216 `1xof2yz` |
@@ -22215,6 +22225,41 @@ repaired three of these values on the arm that passes — was refused. It is fil
 as what it is: a list of 41 named, reproducible, off-site-testable defects on
 the single largest surface any guard in this file reads, obtained by an
 instrument the guard cannot see.
+
+### The same fifteen, with both axes pinned (B105, 2026-09-04)
+
+Both arms on `devicePixelRatio` 2 and `prefers-color-scheme: light`, asserted in
+the run rather than assumed (`assertPersonaParity`), oracle cleared and this
+engine refused in the same sitting:
+
+| what | verdict |
+|---|---|
+| `JSON.stringify(getComputedStyle(el))`, 30918 | **byte-identical** |
+| `0\|0\|0\|…`, 15361, twice | **byte-identical** |
+| `readPixels` 16x16, 1024 | **byte-identical** |
+| font probe list, 69 | **byte-identical** |
+| the widget's own CSS rules, 22972 / 22963 | 9 bytes, four `@keyframes` zeros |
+| `getImageData` 48x48 / 49x44 x3 / WebGPU 32x32 | right length, wrong content |
+| the four short values | 17/16/1/18 against 13/2/2/14 |
+
+So the "41 defects on the largest surface" line above is spent: at matched
+scale that surface agrees to the byte, and the earlier 41 were the scale. The
+font list's "41 bytes against 69" was never a defect at all.
+
+**The nine bytes are real and this repo cannot yet reproduce them.** All four
+are `rotate(0deg)`→`rotate(0)` and `translateY(0px)`→`translateY(0)` inside
+`@keyframes`. Three shapes were tried in
+`tests/css/declaration_serialize.html` and all three pass: a zero followed by a
+zero, the live shapes (a zero followed by a non-zero, and a lone zero
+translate), and the live rule verbatim including its negative first step,
+asserted whole against Chrome's `cssText`. The station's stylesheet lives in a
+cross-origin child document and the runner's page is not one, so the next
+reading has to come off the live document -- this engine's own `cssText` for
+that rule beside what the guard encoded -- and not off a fourth guessed shape.
+
+⚠️ A local test passing is not grounds to retract a difference measured on the
+station. It was used that way here, and it retracted a real defect for half a
+session.
 ## The channel nobody had pointed an instrument at is the access log (B69, 2026-08-30)
 
 Seven sessions closed cf-scrapingcourse from inside the page: the read set, the
