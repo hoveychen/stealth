@@ -22855,6 +22855,60 @@ that calls `TextEncoder`. Every frame between the encode and the top is the
 interpreter. The logic that computes the four values is in the bytecode, not in
 the JavaScript, so reading it statically means writing a disassembler for this
 VM -- a different plan, not a next step in this one.
+
+### The byte transplant, and what it leaves standing (B110, 2026-09-04)
+
+The disassembler was never needed, because the question it was going to answer
+turned out not to be the question. By B108 six of the fifteen encoded strings
+were byte-identical between the arms and **every remaining difference was in two
+families** -- three pixel buffers (9216, 8624 x3, 4096) and the four short
+computed values -- which are exactly the two families memory records as "not
+weighed", from knobs that SUBTRACTED on Chrome. Both propositions could not
+hold.
+
+So the fifteen strings were made identical instead of explained. A knob wraps
+`TextEncoder.prototype.encode`, keys each argument by `<utf16 length>:<djb2>`,
+and encodes the oracle's captured string in its place -- substitution at the one
+point where the plaintext is defined, which needs no rasteriser and no
+disassembler. `scratch/b110/knobs-b110.mjs`, table in
+`scratch/b110/oracle-segments.json`, both taken from the same-window capture in
+`tools/fingerprint/scratch/b108/p3`.
+
+Three things had to be proven before the reading counted, and each has its own
+run:
+
+* **The content changed.** Under a Debug binary with `+text_encode`
+  (`scratch/b110/transplant-live.mjs`), this arm's fifteen segments come out as
+  `69:mt6m58 9216:1ly97t5 1024:ard9mt 8624:1m3v0nt x3 30918:t3o0bu 4096:sq54p1
+  17:1qum1nx 16:w2taxk 1:3t05 18:vc38ex 15361:3coxr6 x2 22972:1bqvk9l` -- the
+  oracle's set, item for item. The engine's `utf16Djb2` was re-implemented in JS
+  to compute those targets and checked against four values the engine had
+  already printed before it was trusted.
+* **The control is a control.** `oracle-bytes-passthru` wraps the same native,
+  does the same table lookup, and then encodes the original: its fifteen
+  segments are this engine's baseline, unchanged.
+* **The knob runs where it matters.** It carries no beacon on purpose -- a
+  report is either request-name bytes into the widget's origin (cf's one known
+  lever) or an array on the realm's global (which the collector walks) -- so one
+  separate run with `--knob oracle-bytes+alive --beacon` proves cf-knob's
+  injection executes in `challenges.cloudflare.com/frame`. That run's r2 grew
+  from ~4940B to 5026B, which is the pollution being avoided, and it is not in
+  the tally.
+
+**The tally: 0/11 served on the transplant arm, 0/11 on the passthru arm, all
+twenty-two runs with three rounds away, and a same-window Chrome control taking
+its ticket at the end of the series.** Making this engine's payload plaintext
+byte-identical to a passing arm's does not move the verdict.
+
+That resolves the fork the other way: neither of the two "not weighed" negatives
+was wrong -- **the verdict is not made from the content of these fifteen strings
+at all.** What is left standing is everything that is not that content: the
+payload's envelope, the VM's execution rather than its output, edge-side session
+state, and the one measured difference this never touched -- **r2, which is
+4908-4951B here against 4738-4759B on the oracle, the same ~185 bytes recorded in
+`cf-r3-is-not-short`.** Read it through fo-plaintext's console channel, never a
+wire beacon: the beacon is what pushed r2 to 21751 the last time someone looked.
+
 ## Six digits, not six decimals — and the rotation was never exact (B69, 2026-08-30)
 
 `transform` is the last of the 736 computed properties to disagree with Chrome,
