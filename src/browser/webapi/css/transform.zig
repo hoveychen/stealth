@@ -760,6 +760,44 @@ fn scalarType(name: []const u8, index: usize) Scalar {
     return .length;
 }
 
+/// The unit Chrome supplies when an author leaves a zero in this slot without
+/// one, or null when the slot takes a `<number>` -- and null as well for a name
+/// this file does not model, where there is no measurement to serialise by.
+///
+/// Measured on Chrome 151 at dpr 2 / light, one unitless zero per slot
+/// (probes/expr-b107-unitless-zero-census.js): `rotate(0)` reads back
+/// `rotate(0deg)` and `translateX(0)` reads back `translateX(0px)`, while
+/// `scale(0)` and `matrix(1, 0, 0, 1, 0, 0)` keep the bare zero. That is the
+/// same split `scalarType` already draws for the parse, which is why this asks
+/// it rather than carrying a second table: a table that disagreed with the
+/// parse would accept an argument and then serialise it as something else.
+pub fn zeroUnit(name: []const u8, index: usize) ?[]const u8 {
+    if (!isTransformFunction(name)) return null;
+    return switch (scalarType(name, index)) {
+        .angle => "deg",
+        .length => "px",
+        .number => null,
+    };
+}
+
+/// Whether `name` is one of the `<transform-function>`s, which is the only
+/// place the slot table above means anything. A `blur(0)` or a
+/// `linear-gradient(0, red, blue)` also gains a unit in Chrome, but from a
+/// grammar this file has never measured, so both come through untouched.
+fn isTransformFunction(name: []const u8) bool {
+    const names = [_][]const u8{
+        "matrix",      "matrix3d",    "translate", "translatex", "translatey",
+        "translatez",  "translate3d", "scale",     "scalex",     "scaley",
+        "scalez",      "scale3d",     "rotate",    "rotatex",    "rotatey",
+        "rotatez",     "rotate3d",    "skew",      "skewx",      "skewy",
+        "perspective",
+    };
+    for (names) |candidate| {
+        if (std.ascii.eqlIgnoreCase(name, candidate)) return true;
+    }
+    return false;
+}
+
 fn parseScalar(arg: []const u8, kind: Scalar, percent: Percent, basis: Basis) ?f64 {
     // A math function is resolved before anything else looks at the token: its
     // answer is a length, an angle or a number like any other argument, and

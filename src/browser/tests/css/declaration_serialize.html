@@ -1648,5 +1648,47 @@ function withStyle(text) {
     if (got !== want) wrong.push(decl + ': want ' + JSON.stringify(want) + ', got ' + JSON.stringify(got));
   }
   testing.expectEqual('', wrong.join(' | '));
+
+  // The three paths a stylesheet rule does not cover -- a `style` attribute,
+  // `setProperty`, and an IDL assignment -- because each is its own parse here
+  // and a fix at one of them is not a fix at the others.
+  //
+  // Chrome 151 at dpr 2 / light, both arms byte for byte
+  // (probes/expr-b108-unitless-zero-paths.js). The attribute itself keeps the
+  // author's text: only the CSSOM view of it gains the unit.
+  const attrHost = document.createElement('div');
+  attrHost.setAttribute('style', 'transform:rotate(0) translateY(0) scale(0)');
+  document.body.appendChild(attrHost);
+  const setHost = document.createElement('div');
+  setHost.style.setProperty('transform', 'skewY(0) translateX(0) matrix(1,0,0,1,0,0)');
+  document.body.appendChild(setHost);
+  const idlHost = document.createElement('div');
+  idlHost.style.transform = 'perspective(0) rotate3d(1,1,1,0)';
+  document.body.appendChild(idlHost);
+  const computedHost = document.createElement('div');
+  computedHost.style.transform = 'rotate(0) translateY(0)';
+  document.body.appendChild(computedHost);
+
+  const paths = [
+    ['attr prop', 'rotate(0deg) translateY(0px) scale(0)', attrHost.style.transform],
+    ['attr cssText', 'transform: rotate(0deg) translateY(0px) scale(0);', attrHost.style.cssText],
+    ['attr attribute', 'transform:rotate(0) translateY(0) scale(0)', attrHost.getAttribute('style')],
+    ['setProperty prop', 'skewY(0deg) translateX(0px) matrix(1, 0, 0, 1, 0, 0)', setHost.style.transform],
+    ['setProperty cssText', 'transform: skewY(0deg) translateX(0px) matrix(1, 0, 0, 1, 0, 0);', setHost.style.cssText],
+    ['idl prop', 'perspective(0px) rotate3d(1, 1, 1, 0deg)', idlHost.style.transform],
+    ['idl cssText', 'transform: perspective(0px) rotate3d(1, 1, 1, 0deg);', idlHost.style.cssText],
+    // A regression reading rather than a serialisation one: the appended unit
+    // must not change what the zero MEANS.
+    ['computed', 'matrix(1, 0, 0, 1, 0, 0)', getComputedStyle(computedHost).transform],
+  ];
+  const pathsWrong = [];
+  for (const [what, want, got] of paths) {
+    if (got !== want) pathsWrong.push(what + ': want ' + JSON.stringify(want) + ', got ' + JSON.stringify(got));
+  }
+  attrHost.remove();
+  setHost.remove();
+  idlHost.remove();
+  computedHost.remove();
+  testing.expectEqual('', pathsWrong.join(' | '));
 }
 </script>

@@ -5063,11 +5063,19 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
     // of identifiers is only a family name once a number has gone past. Before
     // that the run is `italic bold`, which stays two keywords.
     var seen_number = false;
+    // Which function argument the walk is inside, for the one rewrite that
+    // depends on the slot rather than on the token: a zero the author left
+    // unitless.
+    var calls: CallStack = .{};
+    // The function name just written, whose `(` is the next byte the walk sees.
+    var pending_call: ?[]const u8 = null;
     var i: usize = 0;
     while (i < value.len) {
         const c = value[i];
         const before_i = i;
         const before_len = buf.written().len;
+        const opening_call = pending_call;
+        pending_call = null;
 
         // Chrome re-serialises a value's punctuation rather than echoing it:
         // whatever the author wrote, every comma comes back `, ` and every
@@ -5091,6 +5099,7 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
 
         if (c == ',' or c == '/') {
             if (c == ',') {
+                calls.nextSlot();
                 try buf.writer.writeAll(", ");
             } else {
                 try buf.writer.writeAll(if (buf.written().len == 0) "/ " else " / ");
@@ -5156,6 +5165,11 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
                 try buf.writer.writeAll(spelling);
                 changed = changed or !std.mem.eql(u8, spelling, name);
                 i = end;
+                // The `(` is the walk's next byte, where the frame opens. A
+                // url() never gets there -- writeUrl below swallows both parens
+                // -- and neither does a folded colour, so both stay balanced by
+                // never being pushed at all.
+                pending_call = name;
                 // A url()'s content is one token rather than a value, and it
                 // gets its own serialisation: measured, Chrome answers a path
                 // in double quotes however it was written.
@@ -5206,6 +5220,18 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
                 try writeCssNumber(&buf.writer, value[i..end]);
             }
             seen_number = true;
+            // Measured: Chrome answers a zero an author left unitless with the
+            // unit of the slot it sits in -- `transform: rotate(0)` reads back
+            // `rotate(0deg)` and `translateY(0)` reads back `translateY(0px)`,
+            // which is the whole of Cloudflare's widget-stylesheet difference.
+            // Only inside a function: the top-level path already answers
+            // `width: 0` as `0px` elsewhere, and a `<number>` slot
+            // (`scale(0)`, every `matrix()` argument) must keep the bare zero.
+            if (!dimension and isZeroToken(value[i..end])) {
+                if (calls.zeroUnit()) |unit| {
+                    try buf.writer.writeAll(unit);
+                }
+            }
             i = end;
             if (i < value.len and isIdentStart(value, i)) {
                 const unit_end = identEnd(value, i);
@@ -5217,6 +5243,11 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
             continue;
         }
 
+        if (c == '(') {
+            calls.push(opening_call);
+        } else if (c == ')') {
+            calls.pop();
+        }
         try buf.writer.writeByte(c);
         i += 1;
     }
@@ -5228,6 +5259,72 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
         return value;
     }
     return buf.written();
+}
+
+/// Where in a function's argument list `canonicaliseValue`'s walk is, which is
+/// what a unitless zero's unit depends on: the slot, not the token. A nested
+/// call moves it -- the zero in `translateX(min(0px, 0))` is `min`'s argument
+/// and not `translateX`'s, and `min` has no measured slot table, so it stays as
+/// written.
+const CallStack = struct {
+    /// Deeper than any measured value nests. Past it the walk stops tracking
+    /// slots rather than guessing one, and a zero comes through untouched.
+    const MAX_DEPTH = 8;
+
+    const Call = struct { name: []const u8, slot: usize };
+
+    frames: [MAX_DEPTH]Call = undefined,
+    depth: usize = 0,
+    /// Parens opened past `MAX_DEPTH`, counted so their closers pop them rather
+    /// than the frames underneath.
+    overflow: usize = 0,
+
+    /// A paren with no function name in front of it -- the grouping one of
+    /// `(1 + 2)` -- takes a frame too, so that its comma and its closer belong
+    /// to it and not to the call outside.
+    fn push(self: *CallStack, name: ?[]const u8) void {
+        if (self.depth == MAX_DEPTH) {
+            self.overflow += 1;
+            return;
+        }
+        self.frames[self.depth] = .{ .name = name orelse "", .slot = 0 };
+        self.depth += 1;
+    }
+
+    fn pop(self: *CallStack) void {
+        if (self.overflow != 0) {
+            self.overflow -= 1;
+            return;
+        }
+        if (self.depth != 0) {
+            self.depth -= 1;
+        }
+    }
+
+    fn nextSlot(self: *CallStack) void {
+        if (self.overflow != 0 or self.depth == 0) {
+            return;
+        }
+        self.frames[self.depth - 1].slot += 1;
+    }
+
+    /// The unit a unitless zero takes right here, or null when it takes none:
+    /// outside any call, in a `<number>` slot, or in a function whose grammar
+    /// has no measurement.
+    fn zeroUnit(self: *const CallStack) ?[]const u8 {
+        if (self.overflow != 0 or self.depth == 0) {
+            return null;
+        }
+        const frame = self.frames[self.depth - 1];
+        return transform.zeroUnit(frame.name, frame.slot);
+    }
+};
+
+/// Whether the number token is a zero, whichever way it is spelled: `0`, `0.0`,
+/// `-0` and `+0` are all the zero Chrome gives a unit to.
+fn isZeroToken(text: []const u8) bool {
+    const number = std.fmt.parseFloat(f64, text) catch return false;
+    return number == 0;
 }
 
 /// Serialise the `url(...)` whose opening paren is at `open`, and answer the
