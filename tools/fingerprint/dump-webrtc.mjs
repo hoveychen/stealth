@@ -22,6 +22,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { personaScaleFlags } from './cdp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -65,7 +66,7 @@ const PROBE = `(async () => {
 })()`;
 
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-webrtc-'));
-const flags = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`, '--no-first-run', '--no-default-browser-check'];
+const flags = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`, '--no-first-run', '--no-default-browser-check', ...personaScaleFlags()];
 if (!headed) flags.push('--headless=new');
 // CDP_ENDPOINT points this at a Chrome we did not spawn -- the Linux container
 // from linux-chrome.mjs, whose tables are the ones that belong in the tree now

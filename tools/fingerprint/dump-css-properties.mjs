@@ -41,7 +41,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, newPage, evaluate, sleep } from './cdp.mjs';
+import { Cdp, newPage, evaluate, sleep, personaScaleFlags } from './cdp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -117,7 +117,7 @@ const prof = await fs.mkdtemp(path.join(os.tmpdir(), 'cssprops-'));
 const proc = ENDPOINT ? null : spawn(CHROME, [
     ...(process.argv.includes('--headed') ? [] : ['--headless=new']),
     `--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`,
-    '--no-first-run', '--no-default-browser-check',
+    '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(),
 ], { stdio: ['ignore', 'pipe', 'pipe'] });
 const ws = proc ? createWriteStream(path.join(os.tmpdir(), 'cssprops-chrome.log')) : null;
 if (proc) {

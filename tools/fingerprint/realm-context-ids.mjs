@@ -18,7 +18,7 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const engine = process.argv[2];
 const arg = (n, d) => {
@@ -53,7 +53,7 @@ const server = await new Promise((r) => {
 let profile;
 const proc = engine === 'chrome'
     ? spawn(CHROME, [`--remote-debugging-port=${PORT}`, `--user-data-dir=${profile = await fs.mkdtemp(path.join(os.tmpdir(), 'rcid-'))}`,
-        '--no-first-run', '--no-default-browser-check', '--headless=new'], { stdio: ['ignore', 'pipe', 'pipe'] })
+        '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--headless=new'], { stdio: ['ignore', 'pipe', 'pipe'] })
     : spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(PORT)], { stdio: ['ignore', 'pipe', 'pipe'] });
 proc.stdout.on('data', () => { });
 proc.stderr.on('data', () => { });

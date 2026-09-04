@@ -16,7 +16,7 @@ import { createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { Cdp, newPage, evaluate, sleep } from './cdp.mjs';
+import { Cdp, newPage, evaluate, sleep, personaScaleFlags } from './cdp.mjs';
 
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.PORT ?? 9481);
@@ -45,7 +45,7 @@ const prof = await fs.mkdtemp(path.join(os.tmpdir(), 'emoji-'));
 const proc = spawn(CHROME, [
   ...(HEADED ? [] : ['--headless=new']),
   `--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`,
-  '--no-first-run', '--no-default-browser-check',
+  '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(),
 ], { stdio: ['ignore', 'pipe', 'pipe'] });
 const log = createWriteStream('/tmp/dump-emoji-chrome.log');
 proc.stdout.pipe(log);

@@ -21,7 +21,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, goto, evaluate, sleep } from './cdp.mjs';
+import { Cdp, goto, evaluate, sleep, personaScaleFlags } from './cdp.mjs';
 import { startEchoServer } from './header-echo.mjs';
 import { extractSannysoft, extractCreepJs, SANNYSOFT_URL, CREEPJS_URL } from './sites.mjs';
 
@@ -51,7 +51,7 @@ const flags = [
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=${profile}`,
     '--no-first-run',
-    '--no-default-browser-check',
+    '--no-default-browser-check', ...personaScaleFlags(),
 ];
 if (!headed) flags.push('--headless=new');
 flags.push(...chromeArgs);

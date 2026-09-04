@@ -15,7 +15,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const engine = process.argv[2];
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i < 0 ? d : process.argv[i + 1]; };
@@ -99,7 +99,7 @@ const proc = engine === 'chrome'
     ? spawn(CHROME, [
         `--remote-debugging-port=${PORT}`,
         `--user-data-dir=${profile = await fs.mkdtemp(path.join(os.tmpdir(), 'peek-'))}`,
-        '--no-first-run', '--no-default-browser-check', '--headless=new',
+        '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--headless=new',
         '--window-size=1920,1080', `--user-agent=${UA}`,
     ], { stdio: ['ignore', 'pipe', 'pipe'] })
     : spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(PORT)], { stdio: ['ignore', 'pipe', 'pipe'] });

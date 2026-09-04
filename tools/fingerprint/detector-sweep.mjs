@@ -11,7 +11,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, newPage, goto, evaluate, sleep } from './cdp.mjs';
+import { Cdp, newPage, goto, evaluate, sleep, personaScaleFlags, PERSONA_DEVICE_SCALE_FACTOR } from './cdp.mjs';
 import { DETECTORS, VERDICT_WORDS, extractReach } from './sites.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -74,7 +74,7 @@ if (ENDPOINT) {
         `--remote-debugging-port=${PORT}`,
         `--user-data-dir=${profile}`,
         '--no-first-run',
-        '--no-default-browser-check',
+        '--no-default-browser-check', ...personaScaleFlags(),
         `--window-size=${windowSize}`,
         ...(headed ? [] : ['--headless=new']),
         ...(proxy ? [`--proxy-server=${proxy}`] : []),
@@ -135,11 +135,17 @@ try {
     // the display, so asking for 1920 on a 1512-wide screen quietly gives
     // 1512 and the baseline disagrees with lightpanda's 1920 default all over
     // again. Both engines implement setDeviceMetricsOverride, so state the
-    // viewport rather than inherit it. deviceScaleFactor 1 keeps lightpanda
-    // from logging it as unimplemented.
+    // viewport rather than inherit it.
+    //
+    // The scale has to agree with the launch switch or it undoes it. Only
+    // Chrome is moved by this parameter: lightpanda ignores it outright
+    // (src/cdp/domains/emulation.zig warns for anything but 0/1 and applies
+    // none of them), so it keeps the 1 that costs it no warning while Chrome
+    // gets the scale the engine claims to every page. Passing 1 to both -- the
+    // shape this line had -- pinned only the reference arm, to the wrong scale.
     const [w, h] = windowSize.split(',').map(Number);
     await cdp.send('Emulation.setDeviceMetricsOverride', {
-        width: w, height: h, deviceScaleFactor: 1, mobile: false,
+        width: w, height: h, deviceScaleFactor: engine === 'chrome' ? PERSONA_DEVICE_SCALE_FACTOR : 1, mobile: false,
     }, sessionId);
 
     for (const { name, url, settleMs } of DETECTORS) {

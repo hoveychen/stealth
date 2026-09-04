@@ -28,6 +28,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { personaScaleFlags } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -276,7 +277,7 @@ try {
 let proc, prof;
 if (engine === 'chrome') {
     prof = await fs.mkdtemp(path.join(os.tmpdir(), 'cors-echo-'));
-    const args = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check', '--window-size=1920,1080'];
+    const args = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--window-size=1920,1080'];
     if (!headed) args.push('--headless=new');
     proc = spawn(CHROME, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {

@@ -29,7 +29,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const arg = (n, d) => {
     const i = process.argv.indexOf(n);
@@ -96,7 +96,7 @@ async function runVariant(variant) {
     const proc = spawn(CHROME, [
         `--remote-debugging-port=${PORT}`,
         `--user-data-dir=${profile}`,
-        '--no-first-run', '--no-default-browser-check', '--headless=new',
+        '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--headless=new',
     ], { stdio: 'ignore' });
     let cdp = null;
     try {

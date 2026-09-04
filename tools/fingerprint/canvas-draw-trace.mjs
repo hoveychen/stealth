@@ -56,7 +56,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -449,7 +449,7 @@ async function headedUserAgent() {
     const probe = spawn(CHROME, [
         `--remote-debugging-port=${PORT + 1}`,
         `--user-data-dir=${dir}`,
-        '--no-first-run', '--no-default-browser-check', '--headless=new',
+        '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--headless=new',
     ], { stdio: 'ignore' });
     try {
         for (let i = 0; i < 100; i++) {
@@ -493,7 +493,7 @@ const proc = engine === 'chrome'
     ? spawn(CHROME, [
         `--remote-debugging-port=${PORT}`,
         `--user-data-dir=${profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-cdt-'))}`,
-        '--no-first-run', '--no-default-browser-check', '--window-size=1920,1080',
+        '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--window-size=1920,1080',
         '--headless=new',
         ...(state.userAgentOverride ? [`--user-agent=${state.userAgentOverride}`] : []),
     ], { stdio: ['ignore', 'pipe', 'pipe'] })

@@ -47,7 +47,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, newPage, evaluate, sleep } from './cdp.mjs';
+import { Cdp, newPage, evaluate, sleep, personaScaleFlags } from './cdp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -1255,7 +1255,7 @@ async function measure() {
     const proc = spawn(CHROME, [
         ...(process.argv.includes('--headed') ? [] : ['--headless=new']),
         `--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`,
-        '--no-first-run', '--no-default-browser-check',
+        '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(),
     ], { stdio: ['ignore', 'ignore', 'ignore'] });
     try {
         const names = await candidateNames();

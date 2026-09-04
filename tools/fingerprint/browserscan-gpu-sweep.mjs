@@ -21,7 +21,7 @@
 //   node tools/fingerprint/browserscan-gpu-sweep.mjs control swiftshader both-apple
 //   node tools/fingerprint/browserscan-gpu-sweep.mjs --list
 import { spawn } from 'node:child_process';
-import { Cdp, newPage, sleep } from './cdp.mjs';
+import { Cdp, newPage, sleep, PERSONA_DEVICE_SCALE_FACTOR } from './cdp.mjs';
 
 const LIGHTPANDA = 'zig-out/bin/lightpanda';
 const PORT = Number(process.env.SWEEP_PORT ?? 9492);
@@ -157,7 +157,7 @@ for (const name of wanted) {
     }, sessionId);
   }
   await cdp.send('Emulation.setDeviceMetricsOverride', {
-    width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false,
+    width: 1920, height: 1080, deviceScaleFactor: PERSONA_DEVICE_SCALE_FACTOR, mobile: false,
   }, sessionId).catch(() => {});
   const t0 = Date.now();
   await cdp.send('Page.navigate', { url: 'https://www.browserscan.net/' }, sessionId);

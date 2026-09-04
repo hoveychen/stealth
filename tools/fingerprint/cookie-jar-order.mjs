@@ -33,7 +33,7 @@ import http2 from 'node:http2';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, newPage, goto, sleep } from './cdp.mjs';
+import { Cdp, newPage, goto, sleep, personaScaleFlags } from './cdp.mjs';
 import { selfSignedCert } from './h2-echo.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -156,7 +156,7 @@ async function runCase(name, index) {
     if (engine === 'chrome') {
         profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-jar-'));
         proc = spawn(CHROME, [`--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`,
-            '--no-first-run', '--no-default-browser-check', '--headless=new', '--ignore-certificate-errors'],
+            '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--headless=new', '--ignore-certificate-errors'],
         { stdio: ['ignore', 'pipe', 'pipe'] });
     } else {
         proc = spawn(bin, ['serve', '--host', '127.0.0.1', '--port', String(PORT), '--ca-cert', cert.cert],

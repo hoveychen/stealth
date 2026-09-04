@@ -29,7 +29,7 @@
 // called (RTCPeerConnection) breaks if wrapped this way, so check that the
 // run's own outcome still matches an untraced one before trusting a trace.
 import { spawn } from 'node:child_process';
-import { Cdp, newPage, sleep } from './cdp.mjs';
+import { Cdp, newPage, sleep, PERSONA_DEVICE_SCALE_FACTOR } from './cdp.mjs';
 
 const SETTLE_MS = Number(process.env.SETTLE_MS ?? 30000);
 const PAGE_URL = process.env.URL ?? 'https://www.browserscan.net/';
@@ -256,7 +256,7 @@ await cdp.send('Page.enable', {}, sessionId).catch(() => {});
 await cdp.send('Runtime.enable', {}, sessionId).catch(() => {});
 await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: TRACE(pair) }, sessionId);
 await cdp.send('Emulation.setDeviceMetricsOverride',
-  { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false }, sessionId).catch(() => {});
+  { width: 1920, height: 1080, deviceScaleFactor: PERSONA_DEVICE_SCALE_FACTOR, mobile: false }, sessionId).catch(() => {});
 await cdp.send('Page.navigate', { url: PAGE_URL }, sessionId);
 await sleep(SETTLE_MS);
 

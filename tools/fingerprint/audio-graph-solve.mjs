@@ -36,7 +36,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -234,7 +234,7 @@ globalThis.__render = async function (c, frames) {
 
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'audio-solve-'));
 const flags = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`,
-    '--no-first-run', '--no-default-browser-check'];
+    '--no-first-run', '--no-default-browser-check', ...personaScaleFlags()];
 if (!headed) flags.push('--headless=new');
 const chrome = spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
 chrome.stdout.resume();

@@ -27,7 +27,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
+import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i !== -1 ? process.argv[i + 1] : d; };
@@ -54,7 +54,7 @@ const proc = spawn(CHROME, [
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${profileDir}`,
     '--no-first-run',
-    '--no-default-browser-check',
+    '--no-default-browser-check', ...personaScaleFlags(),
     '--window-size=1920,1080',
     ...(headed ? [] : ['--headless=new']),
 ], { stdio: ['ignore', 'pipe', 'pipe'] });
