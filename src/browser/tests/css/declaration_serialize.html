@@ -1387,16 +1387,21 @@ function withStyle(text) {
   // way, because a zero is exactly the value a serialiser is tempted to
   // normalise.
   //
-  // It is also a correction. A diff of Cloudflare's widget stylesheet put four
-  // of these on the engine's side -- `rotate(0)` against the oracle's
-  // `rotate(0deg)`, nine bytes on an otherwise identical 22972-byte span -- and
-  // that read as a serialisation defect. It was not: the two arms had been
-  // served DIFFERENT builds of the widget. The theme is part of the program's
-  // URL (`.../dark/fbE/new/normal` against `.../light/...`) and this engine
-  // hardcodes `prefers-color-scheme: light` (css/MediaQuery.zig), so the
-  // reference arm was reading a different stylesheet, not serialising the same
-  // one differently. Two confounders on that comparison, the scale factor and
-  // the theme; pin both before calling anything there a defect.
+  // ⚠️ These pass, and the station still disagrees. A diff of Cloudflare's
+  // widget stylesheet puts four of these on the engine's side -- `rotate(0)`
+  // against the oracle's `rotate(0deg)`, nine bytes on an otherwise identical
+  // 22972-byte span -- and that reading SURVIVES pinning both of the
+  // confounders that were suspected of it (the device scale factor and the
+  // theme, cdp.mjs). So the defect is real and this file does not reproduce it,
+  // including from the live rule copied verbatim below.
+  //
+  // Which makes these blocks a guard rather than a repro, and locates the
+  // remaining question: the widget's stylesheet lives in a cross-origin child
+  // document, and the runner's page is not that
+  // ([[test-runner-page-differs-from-serve]]). The next reading has to come off
+  // the live document -- read this engine's own cssText for that rule there and
+  // compare it with what the guard encoded -- rather than off another shape
+  // guessed in this file. Two shapes were already guessed and both passed.
   //
   // Measured on Chrome 151 with tools/fingerprint/probes/expr-b105-transform-zero.js,
   // identical at --force-device-scale-factor=1 and =2, so the reading is not a
@@ -1430,5 +1435,53 @@ function withStyle(text) {
   testing.expectEqual('#b105 { transform: rotate(0deg) translateY(0px); }', rules[1]);
   testing.expectEqual('keyframes keep it: true',
       'keyframes keep it: ' + rules[0].includes('rotate(0deg) translateY(0px)'));
+
+  // The shapes the widget's own stylesheet actually uses, copied off the live
+  // capture rather than invented -- a zero followed by a NON-zero function, and
+  // a lone zero translate. The first version of this block asserted
+  // `rotate(0deg) translateY(0px)`, a zero followed by a zero, which this
+  // engine already got right; picking the shapes from memory instead of from
+  // the evidence is what made a real defect read as a phantom.
+  //
+  // All four measured on Chrome 151 at dpr 2, prefers-color-scheme light
+  // (probes/expr-b105-keyframe-zero.js).
+  const live = document.createElement('style');
+  live.textContent =
+      '@keyframes b105a { 70% { transform: rotate(2deg) scale(1.06); opacity: 1; }' +
+      ' 100% { transform: rotate(0deg) scale(1); opacity: 1; } }\n' +
+      '@keyframes b105b { 0% { transform: translateY(2px); opacity: 0; }' +
+      ' 100% { transform: translateY(0px); opacity: 1; } }\n' +
+      '#b105k { transform: rotate(0deg) scale(1); }\n' +
+      '#b105j { transform: translateY(0px); }';
+  document.head.appendChild(live);
+  const liveRules = Array.from(live.sheet.cssRules).map((r) => r.cssText);
+  live.remove();
+
+  testing.expectEqual('#b105k { transform: rotate(0deg) scale(1); }', liveRules[2]);
+  testing.expectEqual('#b105j { transform: translateY(0px); }', liveRules[3]);
+  testing.expectEqual('zero before a non-zero: true',
+      'zero before a non-zero: ' + liveRules[0].includes('transform: rotate(0deg) scale(1)'));
+  testing.expectEqual('a lone zero translate: true',
+      'a lone zero translate: ' + liveRules[1].includes('transform: translateY(0px)'));
+
+  // And through the inline path, same two shapes.
+  testing.expectEqual('transform: rotate(0deg) scale(1);', text('transform: rotate(0deg) scale(1)'));
+  testing.expectEqual('transform: translateY(0px);', text('transform: translateY(0px)'));
+
+  // The rule VERBATIM off the live capture, three steps and a negative first
+  // one. Neither of the shorter shapes above reproduces what the station sees,
+  // which is why this is copied rather than paraphrased.
+  const verbatim = document.createElement('style');
+  verbatim.textContent = '@keyframes success-badge-orbit-in { \n' +
+      '  0% { transform: rotate(-12deg) scale(0.6); opacity: 0; }\n' +
+      '  70% { transform: rotate(2deg) scale(1.06); opacity: 1; }\n' +
+      '  100% { transform: rotate(0deg) scale(1); opacity: 1; }\n}';
+  document.head.appendChild(verbatim);
+  const vb = verbatim.sheet.cssRules[0].cssText;
+  verbatim.remove();
+  testing.expectEqual(
+      '@keyframes success-badge-orbit-in { \n  0% { transform: rotate(-12deg) scale(0.6); opacity: 0; }\n' +
+      '  70% { transform: rotate(2deg) scale(1.06); opacity: 1; }\n' +
+      '  100% { transform: rotate(0deg) scale(1); opacity: 1; }\n}', vb);
 }
 </script>
