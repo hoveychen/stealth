@@ -50,7 +50,15 @@ const OUT = arg('--out', null);
 // and not block-level. On a station that hardens with each visit, running all of
 // arm A and then all of arm B gives the arm that went first a page the other one
 // never sees.
-const ARM_SPECS = (arg('--arms', null) ?? process.argv[2] ?? '').split(',').filter(Boolean);
+// `--selftest` is the tool checking itself against the station rather than
+// against a number written down here. The absolute readings drift between days,
+// so an expected 1279/1514 hard-coded in a test would go red on a day when
+// nothing is wrong. What does not drift is the shape: each arm reads one value,
+// and the arm whose user agent does not say HeadlessChrome reads fewer blocks
+// than the one that does.
+const selfTest = has('--selftest');
+const ARM_SPECS = selfTest ? ['chrome', 'chrome:headed-ua']
+    : (arg('--arms', null) ?? process.argv[2] ?? '').split(',').filter(Boolean);
 const ARMS = ARM_SPECS.map((spec, i) => {
     const [engine, ...opts] = spec.split(':');
     // The bare `--headed-ua` flag is the single-arm spelling. With several arms
@@ -59,7 +67,7 @@ const ARMS = ARM_SPECS.map((spec, i) => {
     const headedUa = opts.includes('headed-ua') || (ARM_SPECS.length === 1 && has('--headed-ua'));
     return { spec: headedUa && !opts.length ? `${spec}:headed-ua` : spec, engine, headedUa, port: BASE_PORT + i * 4 };
 });
-const PAIRS = Number(arg('--pairs', '1'));
+const PAIRS = Number(arg('--pairs', selfTest ? '2' : '1'));
 // Readings are only comparable inside one window, so the arm everything else is
 // measured against has to be one of the arms in this same alternation.
 const REF = arg('--ref', null);
@@ -254,3 +262,28 @@ for (const [spec, a] of perArm) {
 }
 if (!refArm) console.log('(no arm was served in this window: no reference to measure the gap against)');
 if (runs.some((r) => r.state.error)) process.exitCode = 1;
+
+if (selfTest) {
+    const failures = [];
+    for (const [spec, a] of perArm) {
+        const w = uniq(a.widget);
+        if (w.includes(null) || !w.length) failures.push(`${spec}: no widget token in ${a.n} runs`);
+        else if (w.length > 1) failures.push(`${spec}: widget blocks jittered ${w.join('/')} over ${a.n} runs`);
+    }
+    const bare = uniq(perArm.get('chrome')?.widget ?? []);
+    const headed = uniq(perArm.get('chrome:headed-ua')?.widget ?? []);
+    // Only when both arms actually read something: "null is not fewer than
+    // null" is the first failure restated, not a second finding.
+    if (bare.length === 1 && headed.length === 1 && bare[0] !== null && headed[0] !== null
+        && !(headed[0] < bare[0])) {
+        failures.push(`chrome:headed-ua read ${headed[0]} blocks, not fewer than bare chrome's ${bare[0]}`);
+    }
+    console.log('');
+    if (failures.length) {
+        for (const f of failures) console.log(`SELFTEST FAIL  ${f}`);
+        process.exitCode = 1;
+    } else {
+        console.log(`SELFTEST OK  each arm one value over ${PAIRS} runs,`
+            + ` and headed-ua reads ${bare[0] - headed[0]} block(s) fewer than bare headless`);
+    }
+}
