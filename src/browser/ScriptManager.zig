@@ -437,6 +437,7 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
                     .cookie_jar = &frame._session.cookie_jar,
                     .cookie_origin = frame.url,
                     .resource_type = .script,
+                    .partition = frame.storagePartition(),
                     .cors = element_cors,
                     .notification = frame._session.notification,
                     .shutdown_callback = HttpClient.noopShutdown, // syncRequest installs its own

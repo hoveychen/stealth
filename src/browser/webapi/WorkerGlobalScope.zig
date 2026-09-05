@@ -335,7 +335,9 @@ pub fn isSameOrigin(self: *const WorkerGlobalScope, url: [:0]const u8) bool {
 }
 
 pub fn makeRequest(self: *WorkerGlobalScope, req: HttpClient.Request) !void {
-    const transfer = try self._session.browser.http_client.newRequest(req, &self._http_owner);
+    var r = req;
+    r.partition = self._frame.storagePartition();
+    const transfer = try self._session.browser.http_client.newRequest(r, &self._http_owner);
     {
         errdefer transfer.deinit();
         try self.headersForRequest(transfer);
@@ -347,6 +349,9 @@ pub fn makeRequest(self: *WorkerGlobalScope, req: HttpClient.Request) !void {
 pub fn newRequest(self: *WorkerGlobalScope, req: HttpClient.Request) !*HttpClient.Transfer {
     var r = req;
     r.document_frame_id = self._frame._frame_id;
+    // Same delegation as headersForRequest above, and for the same reason: the
+    // partition a worker's requests sit in is the owning document's.
+    r.partition = self._frame.storagePartition();
     return self._session.browser.http_client.newRequest(r, &self._http_owner);
 }
 
@@ -548,6 +553,7 @@ fn importScript(self: *WorkerGlobalScope, arena: Allocator, url: [:0]const u8) !
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = self.url,
         .resource_type = .script,
+        .partition = self._frame.storagePartition(),
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown, // syncRequest installs its own
     }, &self._http_owner) catch |err| {

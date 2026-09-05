@@ -28,7 +28,8 @@ const Watchdog = @import("../Watchdog.zig");
 const URL = @import("../browser/URL.zig");
 const referrer = @import("../browser/referrer.zig");
 const WebSocket = @import("../browser/webapi/net/WebSocket.zig");
-const CookieJar = @import("../browser/webapi/storage/Cookie.zig").Jar;
+const Cookie = @import("../browser/webapi/storage/Cookie.zig");
+const CookieJar = Cookie.Jar;
 
 const Config = @import("../Config.zig");
 const http = @import("http.zig");
@@ -483,6 +484,29 @@ fn fetchSite(initiator: []const u8, url: []const u8) FetchSite {
     return .cross_site;
 }
 
+// Whether two URLs are same-site the way a *storage partition key* is: scheme
+// plus registrable domain, port ignored.
+//
+// Not fetchSite's suffix approximation, which answers `cross-site` for two
+// ports of one host and for two subdomains of one registrable domain. That is
+// tolerable in a Sec-Fetch-Site value, which is wrong in the same direction
+// Chrome's would be only on the shapes nobody measured; it is not tolerable
+// here, where a false `cross-site` puts a whole header on requests Chrome sends
+// bare. The real eTLD+1 walk already exists for cookies -- reuse it.
+pub fn sameSiteForStorage(a: []const u8, b: []const u8) bool {
+    if (!std.mem.eql(u8, URL.getProtocol(a), URL.getProtocol(b))) {
+        return false;
+    }
+    const host_a = URL.getHostname(a);
+    const host_b = URL.getHostname(b);
+    // An empty host is about:blank, data: and friends: no site to compare, so
+    // nothing is same-site with it -- not even another one of them.
+    if (host_a.len == 0 or host_b.len == 0) {
+        return false;
+    }
+    return std.mem.eql(u8, Cookie.findSecondLevelDomain(host_a), Cookie.findSecondLevelDomain(host_b));
+}
+
 const Origin = struct { scheme: []const u8, host: []const u8 };
 
 fn originOf(url: []const u8) Origin {
@@ -758,6 +782,11 @@ pub fn newRequest(self: *Client, req: Request, owner: ?*Owner) anyerror!*Transfe
         owned.cookie_origin = try arena.dupeZ(u8, req.cookie_origin);
         if (req.credentials) |c| {
             owned.credentials = try arena.dupeZ(u8, c);
+        }
+        // Same reason: the top-level URL lives in the root frame's arena, and a
+        // queued navigation's transfer can outlive the frame that filled it in.
+        if (req.partition) |p| {
+            owned.partition.?.top_level_url = try arena.dupe(u8, p.top_level_url);
         }
 
         // The body can be larger, so callers can signal, via the
@@ -1961,6 +1990,24 @@ pub const Request = struct {
     // mode is not implied by what they are fetching.
     pub const Mode = enum { navigate, no_cors, cors };
 
+    // Where this request sits in the storage partition tree, which is what
+    // Sec-Fetch-Storage-Access reports. Filled by the frame that asks for the
+    // request; null on the loads with no document behind them at all (a
+    // preflight, robots.txt, the web-bot-auth probe), which Chrome does not
+    // send the field on either.
+    pub const Partition = struct {
+        // The top-level document's URL. The partition key: a request whose own
+        // URL is cross-site with this one carries partitioned cookies.
+        top_level_url: []const u8,
+        // The asking document is itself not same-site with the top-level one --
+        // Chrome's ancestor-chain bit. Such a document's requests are
+        // partitioned even when they point back AT the top-level site, which is
+        // the row that separates this from a plain cross-site test (measured,
+        // `/sub/back-to-top-from-cross-site-frame` in
+        // tools/fingerprint/scratch/b117/sa-chrome-p2.json).
+        third_party_client: bool = false,
+    };
+
     // Fetch-metadata inputs for a document request that only the navigating
     // frame knows. Absent on subresources, where cookie_origin and
     // resource_type are enough.
@@ -1986,6 +2033,7 @@ pub const Request = struct {
     resource_type: ResourceType,
     // Only meaningful when resource_type == .document.
     nav: ?Navigation = null,
+    partition: ?Partition = null,
 
     // A subresource whose element carried `crossorigin`, which puts the load
     // in CORS mode: it announces an Origin and says `cors` in Sec-Fetch-Mode
@@ -3403,6 +3451,11 @@ pub const Transfer = struct {
         "Sec-Fetch-Mode",
         "Sec-Fetch-User",
         "Sec-Fetch-Dest",
+        // Behind Dest and ahead of Referer -- measured on the cross-site
+        // subframe navigation of scratch/b117/sa-chrome-p2.json, the one
+        // navigation shape that carries it (a top-level document is never in a
+        // third-party partition, so it never does).
+        "Sec-Fetch-Storage-Access",
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
@@ -3445,6 +3498,10 @@ pub const Transfer = struct {
         "Sec-Fetch-Site",
         "Sec-Fetch-Mode",
         "Sec-Fetch-Dest",
+        // Same place as on a navigation -- measured on the cross-site image and
+        // the four cross-site fetches of scratch/b117/sa-chrome-p2.json, five
+        // rows agreeing.
+        "Sec-Fetch-Storage-Access",
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
@@ -3795,6 +3852,30 @@ pub const Transfer = struct {
             }
         else
             "none", .{ .source = .cdp });
+
+        // Sec-Fetch-Storage-Access, which Chrome puts on a request whose cookies
+        // are partitioned -- and only there. Two halves, and both are needed:
+        //
+        //   * the request is CREDENTIALED. Three cross-site fetches differing
+        //     only in `credentials` split this half off by themselves: `include`
+        //     carries the field, the same-origin default and `omit` do not.
+        //     Here that is exactly "a jar is attached".
+        //   * its cookies are THIRD-PARTY, i.e. either the request is cross-site
+        //     with the top-level document, or the asking document already is --
+        //     a cross-site frame carries the field even on a request pointing
+        //     back at the top-level site.
+        //
+        // Measured over sixteen rows across two top-level documents,
+        // tools/fingerprint/scratch/b117/sa-chrome-p2.json. `active` is the only
+        // value ever observed; the spec's `none` and `inactive` never appeared,
+        // so nothing here tries to guess when they would.
+        if (req.cookie_jar != null) {
+            if (req.partition) |p| {
+                if (p.third_party_client or !sameSiteForStorage(p.top_level_url, req.url)) {
+                    try self.setHeader("Sec-Fetch-Storage-Access", "active", .{ .source = .cdp });
+                }
+            }
+        }
 
         try self.seedOrigin();
 
@@ -4533,9 +4614,119 @@ test "HttpClient: fetchSite classifies initiator against request URL" {
     try testing.expectEqual(FetchSite.cross_site, fetchSite("https://example.com/a", "https://notexample.com/b"));
 }
 
+test "HttpClient: sameSiteForStorage compares scheme and registrable domain" {
+    try testing.expect(sameSiteForStorage("https://example.com/a", "https://example.com/b"));
+    // A port is not part of a site, and neither is a subdomain -- both of which
+    // fetchSite's approximation calls cross-site.
+    try testing.expect(sameSiteForStorage("http://localhost:9590/top", "http://localhost:9591/sub"));
+    try testing.expect(sameSiteForStorage("https://example.com/a", "https://cdn.example.com/b"));
+    // The scheme is.
+    try testing.expect(!sameSiteForStorage("http://example.com/a", "https://example.com/b"));
+    try testing.expect(!sameSiteForStorage("http://localhost:9590/", "http://127.0.0.1:9591/"));
+    try testing.expect(!sameSiteForStorage("https://example.com/a", "https://example.org/b"));
+    // Nothing is same-site with an opaque origin, including another one.
+    try testing.expect(!sameSiteForStorage("about:blank", "about:blank"));
+}
+
 // "" when absent, so a test can assert absence as well as a value.
 fn seededValue(transfer: *const Transfer, name: []const u8) []const u8 {
     return transfer.findRequestHeader(name) orelse "";
+}
+
+test "HttpClient: seedFetchMetadata reports a third-party storage partition" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+
+    // Never dereferenced: `Sec-Fetch-Storage-Access` asks only whether a jar is
+    // attached, which is this engine's spelling of "the request is credentialed".
+    var jar: CookieJar = undefined;
+
+    const Case = struct {
+        what: []const u8,
+        url: [:0]const u8,
+        top: []const u8,
+        third_party_client: bool,
+        credentialed: bool,
+        expect: []const u8,
+    };
+
+    // Every row measured on Chrome 151, tools/fingerprint/scratch/b117/sa-chrome-p2.json.
+    for ([_]Case{
+        .{
+            .what = "cross-site image from the top-level document",
+            .url = "http://127.0.0.1:9591/img",
+            .top = "http://localhost:9590/top",
+            .third_party_client = false,
+            .credentialed = true,
+            .expect = "active",
+        },
+        .{
+            // The half `credentials` splits off by itself: same request, no jar.
+            .what = "cross-site fetch with credentials omitted",
+            .url = "http://127.0.0.1:9591/sub",
+            .top = "http://localhost:9590/top",
+            .third_party_client = false,
+            .credentialed = false,
+            .expect = "",
+        },
+        .{
+            // The half the ancestor chain splits off: same-site with the top,
+            // yet asked for by a cross-site frame.
+            .what = "cross-site frame reaching back at the top-level site",
+            .url = "http://localhost:9590/sub",
+            .top = "http://localhost:9590/top",
+            .third_party_client = true,
+            .credentialed = true,
+            .expect = "active",
+        },
+        .{
+            .what = "same-origin subresource of the top-level document",
+            .url = "http://localhost:9590/sub",
+            .top = "http://localhost:9590/top",
+            .third_party_client = false,
+            .credentialed = true,
+            .expect = "",
+        },
+        .{
+            // Another port of the same host is the same site, so a credentialed
+            // request there is first-party -- where Sec-Fetch-Site, on its
+            // coarser test, says `cross-site`.
+            .what = "same-site subresource on another port",
+            .url = "http://localhost:9591/sub",
+            .top = "http://localhost:9590/top",
+            .third_party_client = false,
+            .credentialed = true,
+            .expect = "",
+        },
+        .{
+            .what = "no partition at all -- an internal request",
+            .url = "http://127.0.0.1:9591/sub",
+            .top = "",
+            .third_party_client = false,
+            .credentialed = true,
+            .expect = "",
+        },
+    }) |case| {
+        const arena = try pool.acquire(.small, "test");
+        defer arena.release();
+
+        var transfer = testTransfer(arena);
+        transfer.req.resource_type = .fetch;
+        transfer.req.url = case.url;
+        transfer.req.cookie_origin = "http://localhost:9590/top";
+        transfer.req.cookie_jar = if (case.credentialed) &jar else null;
+        transfer.req.partition = if (case.top.len == 0) null else .{
+            .top_level_url = case.top,
+            .third_party_client = case.third_party_client,
+        };
+        try transfer.seedFetchMetadata();
+
+        // The description rides along so a red light names the row.
+        try testing.expectString(
+            case.what,
+            if (std.mem.eql(u8, case.expect, seededValue(&transfer, "Sec-Fetch-Storage-Access"))) case.what else "",
+        );
+    }
 }
 
 test "HttpClient: seedFetchMetadata sends Chrome's set for a top-level navigation" {
@@ -4627,7 +4818,10 @@ test "HttpClient: seedFetchMetadata labels a cross-origin image" {
 // The wire order emitHeaders produces for a subresource carrying `present`:
 // the leading bracket, then the map block the model lays out, then the trailing
 // one. `present` is the map-block set in the renderer's insertion order.
-fn subresourceWire(present: []const []const u8, buf: [][]const u8) []const []const u8 {
+// `present` is the map-block names, whose order is derived; the two bracketing
+// tables are emitted whole, minus whatever `absent` names this request does not
+// carry -- a table entry nothing set simply doesn't match at emission time.
+fn subresourceWire(present: []const []const u8, absent: []const []const u8, buf: [][]const u8) []const []const u8 {
     var n: usize = 0;
     for (Transfer.chrome_subresource_before_map) |name| {
         buf[n] = name;
@@ -4639,7 +4833,10 @@ fn subresourceWire(present: []const []const u8, buf: [][]const u8) []const []con
         buf[n] = present[slot];
         n += 1;
     }
-    for (Transfer.chrome_subresource_after_map) |name| {
+    outer: for (Transfer.chrome_subresource_after_map) |name| {
+        for (absent) |skip| {
+            if (std.mem.eql(u8, name, skip)) continue :outer;
+        }
         buf[n] = name;
         n += 1;
     }
@@ -4657,6 +4854,9 @@ test "HttpClient: a POST's three extra headers sit where Chrome puts them" {
     // of names on the request. That they still come out byte for byte is the
     // check that the derivation is Chrome's and not a story that fits one page.
     var buf: [32][]const u8 = undefined;
+    // Both captures are same-origin POSTs from a top-level document, so their
+    // cookies are first-party and Sec-Fetch-Storage-Access is not on either.
+    const no_storage_access: []const []const u8 = &.{"Sec-Fetch-Storage-Access"};
 
     // Unhinted, measured: the same-origin `POST /sub/xhr-*` of
     // tools/fingerprint/results/xhr-post-nohints-chrome.json -- the same probe
@@ -4684,7 +4884,7 @@ test "HttpClient: a POST's three extra headers sit where Chrome puts them" {
         "sec-ch-ua-platform",
         "sec-ch-ua-mobile",
         "content-type",
-    }, &buf));
+    }, no_storage_access, &buf));
 
     // Hinted, measured: the same-origin `POST /sub/xhr-*` of
     // tools/fingerprint/results/acceptch-chrome.json. content-type follows
@@ -4713,7 +4913,7 @@ test "HttpClient: a POST's three extra headers sit where Chrome puts them" {
         "Accept-Language",
         "Cookie",
         "priority",
-    }, subresourceWire(&Transfer.blink_map_insertion, &buf));
+    }, subresourceWire(&Transfer.blink_map_insertion, no_storage_access, &buf));
 }
 
 test "HttpClient: the body's length is a header of ours, not curl's afterthought" {
