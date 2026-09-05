@@ -873,6 +873,49 @@ pub fn headersForRequest(self: *Frame, transfer: *HttpClient.Transfer) !void {
     }
 }
 
+// The storage partition this frame's requests belong to, which is what
+// Sec-Fetch-Storage-Access reports. Two things the network layer cannot see for
+// itself: the top-level document's URL, and whether this frame sits under a
+// cross-site ancestor.
+//
+// Read off each frame's origin rather than its url, so an about:blank child --
+// whose url stays "about:blank" but whose origin is its creator's -- counts as
+// the site it actually is. A frame with neither (a sandboxed or data: document)
+// is skipped rather than guessed at.
+pub fn storagePartition(self: *const Frame) ?HttpClient.Request.Partition {
+    var top: *const Frame = self;
+    while (top.parent) |p| top = p;
+
+    const top_site = top.origin orelse top.url;
+    // An about:blank or data: top-level document has an opaque site, so there
+    // is no partition to name. Nothing measured says what Chrome sends there;
+    // say nothing.
+    if (URL.getHostname(top_site).len == 0) {
+        return null;
+    }
+
+    // Chrome's ancestor chain bit: any cross-site frame between here and the
+    // top makes this document third-party, even when it is same-site with the
+    // top itself. `self` is included -- for a subresource it is the asking
+    // document, and for this frame's own navigation its url is already the
+    // target, which the request-URL half of the test would catch anyway.
+    var third_party = false;
+    var frame: *const Frame = self;
+    while (frame.parent) |parent| : (frame = parent) {
+        const site = frame.origin orelse frame.url;
+        if (URL.getHostname(site).len == 0) {
+            // No origin of its own; it inherits, so its ancestors answer for it.
+            continue;
+        }
+        if (!HttpClient.sameSiteForStorage(top_site, site)) {
+            third_party = true;
+            break;
+        }
+    }
+
+    return .{ .top_level_url = top_site, .third_party_client = third_party };
+}
+
 pub fn getArena(self: *Frame, size_or_bucket: anytype, debug: []const u8) !*lp.Arena {
     return self._session.getArena(size_or_bucket, debug);
 }
@@ -1245,6 +1288,9 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = opts.initiator_url orelse self.url,
         .resource_type = .document,
+        // `self.url` is already the target here, so a cross-site subframe
+        // navigation reads as third-party off its own URL.
+        .partition = self.storagePartition(),
         .nav = .{
             // An address-bar / bookmark navigation has no initiator document,
             // which Sec-Fetch-Site reports as "none".
@@ -1515,7 +1561,9 @@ fn canScheduleNavigation(self: *Frame, new_target_type: NavigationType) bool {
 }
 
 pub fn makeRequest(self: *Frame, req: HttpClient.Request) !void {
-    const transfer = try self._session.browser.http_client.newRequest(req, &self._http_owner);
+    var r = req;
+    r.partition = self.storagePartition();
+    const transfer = try self._session.browser.http_client.newRequest(r, &self._http_owner);
     {
         errdefer transfer.deinit();
         try self.headersForRequest(transfer);
@@ -1527,6 +1575,7 @@ pub fn makeRequest(self: *Frame, req: HttpClient.Request) !void {
 pub fn newRequest(self: *Frame, req: HttpClient.Request) !*HttpClient.Transfer {
     var r = req;
     r.document_frame_id = self._frame_id;
+    r.partition = self.storagePartition();
     return self._session.browser.http_client.newRequest(r, &self._http_owner);
 }
 
@@ -3283,6 +3332,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = self.url,
         .resource_type = .stylesheet,
+        .partition = self.storagePartition(),
         .cors = elementRequestsCors(element),
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown, // syncRequest installs its own

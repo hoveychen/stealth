@@ -94,6 +94,16 @@ const framePage = (label) => `<!DOCTYPE html>
 <body>${label}
 <script>
 fetch('/sub/from-' + ${JSON.stringify(label)}).then(function (r) { return r.text(); });
+// The frame reaching BACK to the top page's own site, credentialed. This is
+// the row that says which of two rules the header follows: "the request's URL
+// is cross-site with the top-level document" -- in which case this one is
+// same-site with the top and carries nothing -- or "this request's client is
+// in a third-party partition", in which case the cross-site frame carries it
+// even when the target is the top's own site. Nothing in the P1 capture told
+// these apart, because every credentialed request there had both properties
+// or neither.
+fetch('${TOP}/sub/back-to-top-from-' + ${JSON.stringify(label)},
+      { mode: 'no-cors', credentials: 'include' });
 </script>
 </body></html>`;
 
