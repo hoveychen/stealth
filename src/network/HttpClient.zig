@@ -2920,10 +2920,29 @@ pub const Transfer = struct {
     //
     // Navigations only -- an `Accept-CH` on a subresource response is ignored,
     // which is Chrome's rule (Chromium persists hints from
-    // NavigationRequest::OnResponseStarted and from nowhere else). Both frames
-    // count: Cloudflare's Turnstile widget is an OOPIF and sends the header on
-    // its own document, and a Chrome that took that ask and a Chrome that
-    // didn't are two different clients.
+    // NavigationRequest::OnResponseStarted and from nowhere else).
+    //
+    // Top-level navigations only, at that. A subframe's ask is worth nothing,
+    // and this file used to say the opposite -- that "both frames count",
+    // reasoning from Cloudflare's Turnstile widget sending the header on its own
+    // OOPIF document. That was an inference, and it was backwards: the widget
+    // sends `Accept-CH` from a place a real browser must refuse it, and honouring
+    // it is what put the six high-entropy hints on every request the widget then
+    // made. Measured three ways against a bare headless Chrome
+    // (`accept-ch-echo.mjs --scenario frame`, two loopback origins):
+    //
+    //   subframe asks                       Chrome sends 0 of the six, and does
+    //                                       not restart for the Critical-CH
+    //   ...after a top-level visit to the
+    //      same origin, so its ask is on
+    //      record                           still 0
+    //   ...and with the top document
+    //      delegating ch-ua-* by
+    //      Permissions-Policy and `allow=`  still 0
+    //
+    // So the gate is which frame did the asking, not which origin, and there is
+    // no delegated path to build behind it -- no arm was found in which Chrome
+    // gives a cross-origin frame these hints at all.
     //
     // A response *without* the header leaves the origin's set alone rather than
     // clearing it, also Chrome's rule -- measured, the `/revisit` navigation in
@@ -2932,6 +2951,14 @@ pub const Transfer = struct {
     fn negotiateClientHints(self: *Transfer) !void {
         if (self.req.resource_type != .document) {
             return;
+        }
+        // A navigation this engine did not label is a top-level one: `nav` is
+        // only absent on requests built outside Frame.navigate, which is where
+        // subframes come from.
+        if (self.req.nav) |nav| {
+            if (nav.subframe) {
+                return;
+            }
         }
         for (self.res.headers) |hdr| {
             if (std.ascii.eqlIgnoreCase(hdr.name, "accept-ch") == false) {
