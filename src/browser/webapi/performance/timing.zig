@@ -90,6 +90,12 @@ pub const Timing = struct {
     render_blocking_status: []const u8 = "non-blocking",
     content_type: []const u8 = "",
     content_encoding: []const u8 = "",
+    /// The response's `Server-Timing` header, verbatim. Kept as the raw header
+    /// rather than as parsed members because an entry is a value struct that
+    /// gets copied and restated on other documents' clocks, and because the
+    /// members are built fresh on every read -- Chrome hands back a different
+    /// array object each time (measured, probes/expr-b111-server-timing.js).
+    server_timing: []const u8 = "",
 
     worker_start: f64 = 0,
     redirect_start: f64 = 0,
@@ -184,6 +190,12 @@ pub const Timing = struct {
             return;
         }
         self.next_hop_protocol = "";
+        // Server-Timing rides on the same opt-in as the sizes: a cross-origin
+        // response that did not send Timing-Allow-Origin reports an empty list
+        // even though the header arrived (measured -- the `/plain` column of
+        // probes/expr-b111-server-timing.js is 0 members against 6 for the same
+        // response with TAO on).
+        self.server_timing = "";
         self.encoded_body_size = 0;
         self.decoded_body_size = 0;
         // Not "collapsed onto fetchStart", which is what a REUSED connection
@@ -330,7 +342,7 @@ pub const ResourceTiming = struct {
         serverTiming: []const *ServerTiming,
     };
 
-    pub fn json(self: *const ResourceTiming) Json {
+    pub fn json(self: *const ResourceTiming, exec: *const Execution) !Json {
         const t = self._timing;
         return .{
             .name = self._proto._name,
@@ -366,7 +378,7 @@ pub const ResourceTiming = struct {
             .encodedBodySize = @floatFromInt(t.encoded_body_size),
             .decodedBodySize = @floatFromInt(t.decoded_body_size),
             .responseStatus = t.response_status,
-            .serverTiming = &.{},
+            .serverTiming = try ServerTiming.parse(t.server_timing, exec),
         };
     }
 
@@ -474,8 +486,8 @@ pub const ResourceTiming = struct {
         return "";
     }
 
-    fn serverTiming(_: *const ResourceTiming) js.FrozenArray(*ServerTiming) {
-        return .empty;
+    fn serverTiming(self: *const ResourceTiming, exec: *const Execution) !js.FrozenArray(*ServerTiming) {
+        return .{ .items = try ServerTiming.parse(self._timing.server_timing, exec) };
     }
 
     pub const JsApi = struct {
@@ -583,8 +595,8 @@ pub const NavigationTiming = struct {
         confidence: *TimingConfidence,
     };
 
-    pub fn json(self: *NavigationTiming) Json {
-        const base = self._proto.json();
+    pub fn json(self: *NavigationTiming, exec: *const Execution) !Json {
+        const base = try self._proto.json(exec);
         const t = self._proto._timing;
         return .{
             .name = base.name,
@@ -764,11 +776,31 @@ pub const TimingConfidence = struct {
     };
 };
 
-/// A Server-Timing header entry. Nothing parses that header here yet, so the
-/// class exists for the global count and for resourceTiming.serverTiming's
-/// element type.
+/// One member of a `Server-Timing` header.
+///
+/// The grammar is RFC 8941's structured-field list, but what matters here is
+/// what Chrome 151 actually does with the malformed corners of it, measured on
+/// a two-origin fixture (tools/fingerprint/probes/expr-b111-server-timing.js
+/// against scratch/b111/st-server.mjs):
+///
+///   `  spaced ; dur = 1.5 ; desc = plain `  name "spaced", 1.5, "plain"
+///   `esc;desc="a\"b"`                       description `a"b` -- backslash escapes
+///   `miss;desc="a, b"`                      one member: a comma inside quotes
+///                                           does not separate
+///   `dup;dur=1;dur=2`                       1 -- the first occurrence wins
+///   `unk;foo=1;desc=z`                      an unknown parameter is ignored
+///   `up;DUR=2`                              2 -- parameter names fold case
+///   `a;dur=1;desc=x y`                      description "x" -- an unquoted
+///                                           value is a token and stops at the
+///                                           space, and the rest is not an error
+///   `hex;dur=abc`                           the member survives with 0
+///   `a;dur=1, ;dur=9, b;dur=2`              ONE member. An empty name does not
+///                                           just drop itself: it ends the
+///                                           header, and `b` never appears.
 pub const ServerTiming = struct {
-    _pad: bool = false,
+    _name: []const u8 = "",
+    _duration: f64 = 0,
+    _description: []const u8 = "",
 
     pub const Json = struct {
         name: []const u8,
@@ -776,16 +808,144 @@ pub const ServerTiming = struct {
         description: []const u8,
     };
 
-    fn json(_: *const ServerTiming) Json {
-        return .{ .name = "", .duration = 0, .description = "" };
+    fn json(self: *const ServerTiming) Json {
+        return .{ .name = self._name, .duration = self._duration, .description = self._description };
     }
 
-    fn empty(_: *const ServerTiming) []const u8 {
-        return "";
+    fn name(self: *const ServerTiming) []const u8 {
+        return self._name;
     }
 
-    fn zero(_: *const ServerTiming) f64 {
-        return 0;
+    fn duration(self: *const ServerTiming) f64 {
+        return self._duration;
+    }
+
+    fn description(self: *const ServerTiming) []const u8 {
+        return self._description;
+    }
+
+    /// Walks the header and builds one object per member, in header order.
+    ///
+    /// Fresh objects on every call because Chrome hands back a different array
+    /// object on every read of the same entry (measured: `e.serverTiming ===
+    /// e.serverTiming` is false), and the members are what the array holds.
+    pub fn parse(header: []const u8, exec: *const Execution) ![]const *ServerTiming {
+        if (header.len == 0) {
+            return &.{};
+        }
+        var members: std.ArrayList(*ServerTiming) = .empty;
+        var at: usize = 0;
+        while (at < header.len) {
+            const end = memberEnd(header, at);
+            const member = header[at..end];
+            at = end + 1;
+
+            const semi = std.mem.indexOfScalar(u8, member, ';') orelse member.len;
+            const member_name = std.mem.trim(u8, member[0..semi], " \t");
+            // Not `continue`: an empty name ends the header. Measured -- `b`
+            // never arrives in `a;dur=1, ;dur=9, b;dur=2`.
+            if (member_name.len == 0) {
+                break;
+            }
+
+            var entry: ServerTiming = .{ ._name = member_name };
+            var seen_dur = false;
+            var seen_desc = false;
+            var params = member[@min(semi + 1, member.len)..];
+            while (params.len > 0) {
+                const cut = paramEnd(params);
+                const param = std.mem.trim(u8, params[0..cut], " \t");
+                params = params[@min(cut + 1, params.len)..];
+                if (param.len == 0) {
+                    continue;
+                }
+                const eq = std.mem.indexOfScalar(u8, param, '=') orelse param.len;
+                const key = std.mem.trim(u8, param[0..eq], " \t");
+                const raw = if (eq == param.len) "" else param[eq + 1 ..];
+                if (!seen_dur and std.ascii.eqlIgnoreCase(key, "dur")) {
+                    seen_dur = true;
+                    const text = try paramValue(raw, exec);
+                    entry._duration = std.fmt.parseFloat(f64, text) catch 0;
+                } else if (!seen_desc and std.ascii.eqlIgnoreCase(key, "desc")) {
+                    seen_desc = true;
+                    entry._description = try paramValue(raw, exec);
+                }
+            }
+
+            const stored = try exec._factory.create(entry);
+            try members.append(exec.call_arena, stored);
+        }
+        return members.items;
+    }
+
+    /// Where this member ends: the next comma that is not inside a quoted
+    /// string. `desc="a, b"` is one member, not two.
+    fn memberEnd(header: []const u8, from: usize) usize {
+        var i = from;
+        var quoted = false;
+        while (i < header.len) : (i += 1) {
+            const c = header[i];
+            if (quoted) {
+                if (c == '\\') {
+                    i += 1;
+                } else if (c == '"') {
+                    quoted = false;
+                }
+            } else if (c == '"') {
+                quoted = true;
+            } else if (c == ',') {
+                return i;
+            }
+        }
+        return header.len;
+    }
+
+    /// The same walk one level down: parameters are separated by semicolons,
+    /// and a semicolon inside a quoted description is not one.
+    fn paramEnd(params: []const u8) usize {
+        var i: usize = 0;
+        var quoted = false;
+        while (i < params.len) : (i += 1) {
+            const c = params[i];
+            if (quoted) {
+                if (c == '\\') {
+                    i += 1;
+                } else if (c == '"') {
+                    quoted = false;
+                }
+            } else if (c == '"') {
+                quoted = true;
+            } else if (c == ';') {
+                return i;
+            }
+        }
+        return params.len;
+    }
+
+    /// A parameter value is either a quoted string -- backslash escapes, and the
+    /// quotes are not part of it -- or a bare token that ends at the first space.
+    fn paramValue(raw: []const u8, exec: *const Execution) ![]const u8 {
+        const trimmed = std.mem.trim(u8, raw, " \t");
+        if (trimmed.len == 0 or trimmed[0] != '"') {
+            // Measured: `desc=x y` is "x". The token ends at the space and what
+            // follows is dropped without failing the member.
+            const stop = std.mem.indexOfAny(u8, trimmed, " \t") orelse trimmed.len;
+            return trimmed[0..stop];
+        }
+        var out: std.ArrayList(u8) = .empty;
+        var i: usize = 1;
+        while (i < trimmed.len) : (i += 1) {
+            const c = trimmed[i];
+            if (c == '\\' and i + 1 < trimmed.len) {
+                i += 1;
+                try out.append(exec.call_arena, trimmed[i]);
+            } else if (c == '"') {
+                break;
+            } else {
+                try out.append(exec.call_arena, c);
+            }
+        }
+        return out.items;
     }
 
     pub const JsApi = struct {
@@ -795,14 +955,13 @@ pub const ServerTiming = struct {
             pub const name = "PerformanceServerTiming";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
         };
 
         const S = ServerTiming;
 
-        pub const name = bridge.accessor(S.empty, null, .{});
-        pub const duration = bridge.accessor(S.zero, null, .{});
-        pub const description = bridge.accessor(S.empty, null, .{});
+        pub const name = bridge.accessor(S.name, null, .{});
+        pub const duration = bridge.accessor(S.duration, null, .{});
+        pub const description = bridge.accessor(S.description, null, .{});
         pub const toJSON = bridge.function(S.json, .{});
     };
 };

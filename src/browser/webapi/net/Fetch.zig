@@ -338,6 +338,7 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
         .next_hop_protocol = self._perf_next_hop_protocol,
         .content_type = self._perf_labels.contentType(),
         .content_encoding = self._perf_labels.contentEncoding(),
+        .server_timing = self._perf_labels.serverTiming(),
         .fetch_start = self._perf_fetch_start,
         .response_end = exec.performance().now(),
         .response_status = response._status,

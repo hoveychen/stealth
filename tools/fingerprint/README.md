@@ -26034,3 +26034,74 @@ not where the remaining difference is. The work this session merged was worth
 merging on its own terms — a one-expression detector removed, a 30-second stall
 given real margin, UA margins reaching the layout at last — and none of it was a
 door.
+
+## Round 2's window, and the field we filed blank that Cloudflare never sends us (B111, 2026-09-04)
+
+Round 2 was the last of the three telemetry POSTs still carrying a difference:
+round 1 is the same length on both arms and round 3's contents were settled by
+the byte transplant. Ours runs about 200 bytes longer than the arm that clears.
+
+The way in was to stop treating the body as opaque. Its plaintext never passes
+`JSON.stringify`, `TextEncoder.encode` or `btoa` — the funnels `fo-plaintext.mjs`
+already stood in — but it is *assembled*, and the assembly uses `join("")` over
+the characters of the ciphertext and `charCodeAt`/`charAt` over whatever was cut
+into them. `--r2` stands there instead. It is the console channel, not the wire
+one: the earlier `report-r2-body --beacon` asked the same question through a few
+dozen requests into the widget's origin and pushed round 2 from 4898 bytes to
+21751, which was the instrument and not the station. This one is measured
+neutral — Chrome keeps its `cf-chl-out` and its "You bypassed" page with the
+hooks in, four runs of four, and our own round 2 stays at 4908–4930 against a
+4908–4951 baseline.
+
+**The window between the two POSTs is 27 events long and identical in kind and
+in order on both arms.** Not one event happens on one arm and not the other.
+Three of the 27 differ in length:
+
+| input | Chrome (clears) | Chrome (headless UA) | this engine |
+|---|---|---|---|
+| the resource timing entry, stringified | 1057 | 1077 | 1011 |
+| a `<43>-<unix ts>-1.2.1.1-<blob>` token | **1514** | 1535 | **1663** |
+| an `Error` stack string | 1338 | 1348 | 1338 |
+| → round 2 itself | 4727 | 4812 | 4930 |
+
+The token is the only one that is stable and points the right way: +149 on every
+run of four, where the other two wobble run to run (one run had the stack
+identical on both arms). It does not explain round 2 arithmetically — the three
+arms' (token, round 2) pairs are not collinear — and **where it comes from is
+still open**: six instruments (`document.cookie`, `responseText`, `response`,
+`Response.text()`, the parent's `message` events, both sides of `JSON.parse`) all
+came back negative, so it is either assembled character by character inside the
+guard's VM or it arrives by a channel none of those six covers.
+
+The other differing input, the timing entry, was the one with a named defect
+behind it. `PerformanceResourceTiming.serverTiming` answered an empty
+`FrozenArray` for every response this engine had ever loaded — the accessor was
+`return .empty`, nothing read the header — while Chrome's entry for the widget's
+api.js carries `cfExtPri`. That entry is stringified into the widget as
+`apiJsResourceTiming`, so the one member of the object with structure in it was
+the one we filed empty. It is fixed: the header rides along with contentType and
+contentEncoding through `ResponseLabels` and is parsed on read, with every corner
+of the grammar measured against Chrome 151 rather than read off RFC 8941
+(`probes/expr-b111-server-timing.js`; the sharpest is that an empty member name
+ends the header rather than dropping itself).
+
+**Ten alternating pairs later, `served=` is 0 of 10 on both binaries, and round
+2's length did not move at all** — both arms land on the same quantised lattice,
+{4919, 4930, 4940, 4951}. The reason is the part worth keeping:
+
+| capture | nextHopProtocol | serverTiming |
+|---|---|---|
+| chrome, clears | h3 | `[{"name":"cfExtPri"}]` |
+| chrome, headless UA | h3 | `[{"name":"cfExtPri"}]` |
+| **chrome, this run over h2** | **h2** | **`[]`** |
+| this engine, before | h2 | `[]` |
+| this engine, after | h2 | `[]` |
+
+`cfExtPri` is Cloudflare's HTTP/3 extensible-priorities timing and is only sent
+over h3 — a plain h2 curl carrying Origin, Referer and a Chrome UA gets
+`timing-allow-origin` back and no `server-timing` at all, and a *Chrome* capture
+that happened to negotiate h2 reports the empty list too. So "serverTiming is a
+real gap" was, on this station, a restatement of the h3/h2 difference, and that
+one has been causally closed since a Chrome with QUIC disabled cleared 6 of 6.
+The engine fix is worth keeping on its own terms — we answered an empty array for
+every response, not just Cloudflare's — but it cannot fire here.

@@ -392,6 +392,7 @@ pub fn navigationResponseStarted(
     status: u16,
     content_type: []const u8,
     content_encoding: []const u8,
+    server_timing: []const u8,
     next_hop_protocol: []const u8,
     times: http.ResponseTimes,
     redirect: http.RedirectTiming,
@@ -417,6 +418,7 @@ pub fn navigationResponseStarted(
     self._nav.responded = status != 0;
     self._nav.content_type = content_type;
     self._nav.content_encoding = content_encoding;
+    self._nav.server_timing = server_timing;
     self._nav.next_hop_protocol = next_hop_protocol;
     self._nav_phase = .response;
 }
@@ -624,7 +626,7 @@ pub fn resourceLoaded(
         same_origin or timingAllowed(opts.timing_allow_origin, self._nav_name),
     );
 
-    // The two response labels are the only fields whose bytes belong to
+    // The three response labels are the only fields whose bytes belong to
     // whoever performed the fetch -- an inline buffer on a Script, an
     // ImageRequest or a SyncResponse, all of which are released well before
     // the buffer is read back. Everything else in `t` is a number or a
@@ -633,6 +635,7 @@ pub fn resourceLoaded(
     // does not take arena space to say nothing.
     stored.content_type = try exec.arena.dupe(u8, stored.content_type);
     stored.content_encoding = try exec.arena.dupe(u8, stored.content_encoding);
+    stored.server_timing = try exec.arena.dupe(u8, stored.server_timing);
 
     const entry = try exec._factory.chained(.{
         Entry{
