@@ -242,8 +242,16 @@ const CORE = `(function () {
       seen[key] = 1;
       left--;
       if (n >= 900) snapCookie();
-      emit({ k: label, a: { t: 'str', n: n, v: String(s) },
-             url: String((globalThis.location || {}).href || '?').slice(0, 120) });
+      var rec = { k: label, a: { t: 'str', n: n, v: String(s) },
+                  url: String((globalThis.location || {}).href || '?').slice(0, 120) };
+      // Six channels came back negative on where the long token comes from, so
+      // stop asking where it was BUILT and ask who is READING it: a stack taken
+      // at the first sighting names the call site in the guard's own program,
+      // line and column, which is a file we can then go and read.
+      if (TOKEN_RE.test(rec.a.v)) {
+        try { rec.stack = String(new Error().stack || '').slice(0, 2000); } catch (e) { /* no stack */ }
+      }
+      emit(rec);
     }
     // Whether an input that differs between the arms is a cause or an effect
     // turns on where it came from. A string the page assembled is a cause; a
@@ -251,6 +259,10 @@ const CORE = `(function () {
     // before this round. The cookie jar is the difference, so snapshot it
     // alongside the records rather than in a second run that would have its own
     // session and its own tokens.
+    // 43 chars, a unix second count, 1.2.1.1, then a blob: Cloudflare's own
+    // token grammar, and the shape of the one input in the round-2 window that
+    // is 149 bytes longer on this engine on every run.
+    var TOKEN_RE = /^[A-Za-z0-9._-]{20,}-1[0-9]{9}-1\.[0-9]\.[0-9]\.[0-9]-/;
     var cookieSeen = Object.create(null);
     function snapCookie() {
       try {
@@ -349,6 +361,21 @@ const CORE = `(function () {
         return out;
       }, origParse);
     } catch (e) { /* frozen */ }
+
+    // btoa was already instrumented and atob was not, which leaves the obvious
+    // way a token could arrive -- decoded rather than fetched -- unwatched. The
+    // URI pair is here for the same reason: all three are cold.
+    ['atob', 'decodeURIComponent', 'decodeURI', 'unescape'].forEach(function (key) {
+      try {
+        var original = globalThis[key];
+        if (typeof original !== 'function') return;
+        globalThis[key] = disguise(function (a) {
+          var out = original.call(globalThis, a);
+          if (typeof out === 'string' && out.length >= R2_MIN) { try { note('r2.' + key, out); } catch (e) {} }
+          return out;
+        }, original);
+      } catch (e) { /* frozen */ }
+    });
 
     hotString('charCodeAt', 'r2.charCodeAt');
     hotString('charAt', 'r2.charAt');
