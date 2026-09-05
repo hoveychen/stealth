@@ -180,7 +180,10 @@ export async function runTrace({
                     ?? p.exceptionDetails?.text ?? '').split('\n')[0].slice(0, 200));
                 return;
             }
-            onMessage?.(msg, state);
+            // The client is handed over too: a caller that wants the *body* of a
+            // response, not just its headers, has to ask for it on the same
+            // session the event arrived on, and only while the run is still up.
+            onMessage?.(msg, state, cdp);
         });
 
         // On about:blank, before the station sees anything: pin the media
