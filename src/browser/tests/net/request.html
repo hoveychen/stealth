@@ -517,6 +517,15 @@
   testing.expectEqual('function', typeof r.textStream);
 
   testing.expectEqual('no-cors', new Request('https://example.com/x', { mode: 'no-cors' }).mode);
+  testing.expectEqual('same-origin', new Request('https://example.com/x', { mode: 'same-origin' }).mode);
+  // Two of the five modes the Fetch spec names are not constructible: `navigate`
+  // is refused outright, and `websocket` is not even in the RequestMode IDL
+  // enum, so it fails the same way a nonsense string does. Measured on Chrome
+  // 151 (tools/fingerprint/scratch/b118/expr-fetch-mode-throw.js): both throw a
+  // TypeError, where this engine used to hand back a Request carrying the value.
+  testing.expectError('TypeError', () => new Request('https://example.com/x', { mode: 'navigate' }));
+  testing.expectError('TypeError', () => new Request('https://example.com/x', { mode: 'websocket' }));
+  testing.expectError('TypeError', () => new Request('https://example.com/x', { mode: 'nonsense' }));
   testing.expectEqual('', new Request('https://example.com/x', { referrer: '' }).referrer);
   testing.expectEqual(true, new Request('https://example.com/x', { keepalive: true }).keepalive);
   testing.expectEqual('sha256-x', new Request('https://example.com/x', { integrity: 'sha256-x' }).integrity);

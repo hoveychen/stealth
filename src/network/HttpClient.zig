@@ -1988,7 +1988,14 @@ pub const Request = struct {
     // Fetch request mode, as Sec-Fetch-Mode reports it. Every request has one
     // by destination; `Request.mode` overrides that default for the loads whose
     // mode is not implied by what they are fetching.
-    pub const Mode = enum { navigate, no_cors, cors };
+    //
+    // Four values, all four measured coming out of Chrome
+    // (tools/fingerprint/scratch/b118/fm-chrome.json crosses mode against
+    // cross-siteness and method; `navigate` is the document row of the older
+    // captures). `same_origin` is only reachable through `fetch(u, {mode:
+    // 'same-origin'})`, and only same-origin: Chrome does not put such a
+    // request on the wire at all when it points elsewhere.
+    pub const Mode = enum { navigate, no_cors, cors, same_origin };
 
     // Where this request sits in the storage partition tree, which is what
     // Sec-Fetch-Storage-Access reports. Filled by the frame that asks for the
@@ -3842,6 +3849,7 @@ pub const Transfer = struct {
             .navigate => "navigate",
             .no_cors => "no-cors",
             .cors => "cors",
+            .same_origin => "same-origin",
         }, .{ .source = .cdp });
 
         try self.setHeader("Sec-Fetch-Site", if (self.initiatorOrigin()) |origin|
@@ -4017,12 +4025,22 @@ pub const Transfer = struct {
             .stylesheet, .script, .image, .font => true,
             .document, .fetch, .xhr, .eventsource => false,
         };
+        const safe_method = req.method == .GET or req.method == .HEAD;
         if (!element_cors) {
             switch (req.resource_type) {
                 // A no-cors request names nobody, whatever its destination:
                 // `<link rel=preload as=fetch>` has a fetch's destination and a
                 // no-cors mode, and Chrome sends it without an Origin.
-                .fetch, .xhr, .eventsource => if (!cors_mode) return null,
+                //
+                // Unless the METHOD names it anyway. Chrome puts an Origin on
+                // every non-GET/HEAD request whatever the mode -- measured, the
+                // twelve POST rows of
+                // tools/fingerprint/scratch/b118/fm-chrome.json, which include
+                // no-cors and same-origin. This branch used to be unreachable
+                // for a fetch (every fetch was cors here, because the page's
+                // `mode` was dropped on the way down), so returning early was
+                // right for as long as it never ran.
+                .fetch, .xhr, .eventsource => if (!cors_mode and safe_method) return null,
                 .document, .stylesheet, .script, .image, .font => return null,
             }
         }
@@ -4033,7 +4051,6 @@ pub const Transfer = struct {
         if (origin.len == 0) return null;
 
         const tainting_cors = fetchSite(origin, req.url) != .same_origin;
-        const safe_method = req.method == .GET or req.method == .HEAD;
         if (!element_cors and !tainting_cors and safe_method) return null;
 
         // The initiator's origin, serialized: scheme, host, non-default port,
