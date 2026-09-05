@@ -75,6 +75,11 @@ export async function headedUserAgent(port) {
 export async function runTrace({
     engine, url, settleMs, port, recorder, mark,
     userAgentOverride = null, logLevel = 'info', state = {}, onMessage = null,
+    // Extra command line for the engine under test, appended last so it can
+    // override anything above it. This is how a knob that lives in the engine's
+    // own flags -- a user agent, an accept-language, a header -- gets into an
+    // arm without a second copy of the launch code.
+    engineArgs = [],
 }) {
     state.records ??= [];   // one per instrumented call, in arrival order
     state.blobs ??= [];     // blob source text, stitched back from console chunks
@@ -91,9 +96,11 @@ export async function runTrace({
             '--headless=new',
             ...personaScaleFlags(),
             ...(userAgentOverride ? [`--user-agent=${userAgentOverride}`] : []),
+            ...engineArgs,
         ], { stdio: ['ignore', 'pipe', 'pipe'] })
         : spawn(LIGHTPANDA, ['serve', '--host', '127.0.0.1', '--port', String(port),
-            '--log_level', logLevel], { stdio: ['ignore', 'pipe', 'pipe'] });
+            '--log_level', logLevel, ...engineArgs], { stdio: ['ignore', 'pipe', 'pipe'] });
+    state.engineArgs = engineArgs;
 
     const engineLog = [];
     proc.stdout.on('data', (d) => engineLog.push(String(d)));

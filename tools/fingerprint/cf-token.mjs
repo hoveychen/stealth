@@ -59,13 +59,24 @@ const OUT = arg('--out', null);
 const selfTest = has('--selftest');
 const ARM_SPECS = selfTest ? ['chrome', 'chrome:headed-ua']
     : (arg('--arms', null) ?? process.argv[2] ?? '').split(',').filter(Boolean);
+// The knob under test. Each `--knob-arg X` contributes one argv token to the
+// engine command line of the arms marked `:knob`, so a value with spaces in it
+// -- a user agent, say -- survives without a quoting convention of its own:
+//   --arms lightpanda,lightpanda:knob --knob-arg --user-agent --knob-arg 'Mozilla/5.0 …'
+const KNOB_ARGS = process.argv.reduce((out, a, i) =>
+    (a === '--knob-arg' && process.argv[i + 1] !== undefined ? [...out, process.argv[i + 1]] : out), []);
+
 const ARMS = ARM_SPECS.map((spec, i) => {
     const [engine, ...opts] = spec.split(':');
     // The bare `--headed-ua` flag is the single-arm spelling. With several arms
     // it would be ambiguous which one it meant, so there it has to be written
     // into the arm as `chrome:headed-ua`.
     const headedUa = opts.includes('headed-ua') || (ARM_SPECS.length === 1 && has('--headed-ua'));
-    return { spec: headedUa && !opts.length ? `${spec}:headed-ua` : spec, engine, headedUa, port: BASE_PORT + i * 4 };
+    return {
+        spec: headedUa && !opts.length ? `${spec}:headed-ua` : spec,
+        engine, headedUa, port: BASE_PORT + i * 4,
+        engineArgs: opts.includes('knob') ? KNOB_ARGS : [],
+    };
 });
 const PAIRS = Number(arg('--pairs', selfTest ? '2' : '1'));
 // Readings are only comparable inside one window, so the arm everything else is
@@ -130,7 +141,7 @@ const RECORDER = `(function(){try{console.log(${JSON.stringify(MARK)}+JSON.strin
 /// One run of one arm. Everything the reading depends on is rebuilt per run --
 /// the token set, the body bookkeeping -- so a second run of the same arm cannot
 /// inherit the first one's tokens and read as jitter-free when it is not.
-async function readOnce({ engine, headedUa, port }) {
+async function readOnce({ engine, headedUa, port, engineArgs = [] }) {
     const state = {
         engine, url: URL_, headedUa, settleMs: SETTLE,
         userAgentOverride: null,
@@ -187,6 +198,7 @@ async function readOnce({ engine, headedUa, port }) {
     await runTrace({
         engine, url: URL_, settleMs: SETTLE, port, recorder: RECORDER, mark: MARK,
         userAgentOverride: state.userAgentOverride, logLevel: arg('--log-level', 'info'), state,
+        engineArgs,
         onMessage(msg, st, cdp) {
             const p = msg.params ?? {};
             if (msg.method === 'Network.responseReceived') {
