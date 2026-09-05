@@ -949,6 +949,47 @@ fn corsQueryParam(query: []const u8, key: []const u8) ?[]const u8 {
 // a plausible small number.
 const TIMING_ALLOW_BODY = "t" ** 512;
 
+// Every corner of the `Server-Timing` grammar this engine claims to handle, in
+// one response, so the parse can be asserted against Chrome's answer for the
+// same header rather than against the RFC. What Chrome 151 makes of it was
+// measured by tools/fingerprint/probes/expr-b111-server-timing.js against
+// tools/fingerprint/scratch/b111/st-server.mjs -- see the table on
+// `ServerTiming` in timing.zig.
+//
+// The trailing `;dur=9, gone;dur=1` is the sharp end: an empty member name does
+// not drop only itself, it ends the header, so `gone` must not appear.
+const SERVER_TIMING_HEADER =
+    "cfExtPri, cache;desc=\"a, b\",   spaced ; dur = 1.5 ; desc = plain , " ++
+    "esc;desc=\"q\\\"r\", dup;dur=1;dur=2, unk;foo=1;desc=z, up;DUR=3, " ++
+    "tok;desc=x y, hex;dur=abc, ;dur=9, gone;dur=1";
+
+fn serverTimingHandler(req: *std.http.Server.Request, raw_path: []const u8) !bool {
+    const path = if (std.mem.indexOfScalar(u8, raw_path, '?')) |i| raw_path[0..i] else raw_path;
+    if (!std.mem.eql(u8, path, "/server-timing")) {
+        return false;
+    }
+    try req.respond("st", .{ .extra_headers = &.{
+        .{ .name = "Content-Type", .value = "text/plain" },
+        .{ .name = "Server-Timing", .value = SERVER_TIMING_HEADER },
+    } });
+    return true;
+}
+
+// Two copies of the header on one response. A proxy adds its members rather
+// than replacing the origin's, and the page is supposed to see one list.
+fn serverTimingTwiceHandler(req: *std.http.Server.Request, raw_path: []const u8) !bool {
+    const path = if (std.mem.indexOfScalar(u8, raw_path, '?')) |i| raw_path[0..i] else raw_path;
+    if (!std.mem.eql(u8, path, "/server-timing-twice")) {
+        return false;
+    }
+    try req.respond("st", .{ .extra_headers = &.{
+        .{ .name = "Content-Type", .value = "text/plain" },
+        .{ .name = "Server-Timing", .value = "first;dur=1" },
+        .{ .name = "Server-Timing", .value = "second;dur=2" },
+    } });
+    return true;
+}
+
 fn timingAllowHandler(req: *std.http.Server.Request, raw_path: []const u8) !bool {
     // The query is dropped rather than matched on: a test needs two entries
     // whose names differ but whose RESPONSE is identical -- same
@@ -979,7 +1020,7 @@ fn timingAllowHandler(req: *std.http.Server.Request, raw_path: []const u8) !bool
     else
         return false;
 
-    var headers: [3]std.http.Header = undefined;
+    var headers: [4]std.http.Header = undefined;
     var n: usize = 0;
     headers[n] = .{ .name = "Content-Type", .value = if (framed) "text/html" else if (scripted) "application/javascript" else "text/plain" };
     n += 1;
@@ -992,6 +1033,12 @@ fn timingAllowHandler(req: *std.http.Server.Request, raw_path: []const u8) !bool
         headers[n] = .{ .name = "Timing-Allow-Origin", .value = "*" };
         n += 1;
     }
+    // Sent by both halves of the pair, which is the point: `Server-Timing`
+    // rides on the same opt-in the sizes do, so the two responses differ in
+    // Timing-Allow-Origin alone and the member list is present on one and
+    // empty on the other.
+    headers[n] = .{ .name = "Server-Timing", .value = "cfExtPri" };
+    n += 1;
     try req.respond(if (framed) TIMING_ALLOW_BODY_HTML else if (scripted) TIMING_ALLOW_BODY_JS else TIMING_ALLOW_BODY, .{ .extra_headers = headers[0..n] });
     return true;
 }
@@ -1107,6 +1154,8 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
 
     if (try corsHandler(req, path)) return;
     if (try timingAllowHandler(req, path)) return;
+    if (try serverTimingHandler(req, path)) return;
+    if (try serverTimingTwiceHandler(req, path)) return;
     if (try xoHandler(req, path)) return;
 
     if (std.mem.eql(u8, path, "/xhr")) {

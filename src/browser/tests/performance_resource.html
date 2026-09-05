@@ -410,15 +410,92 @@
           // reports something at or after fetchStart.
           ' walk=' + ([e.domainLookupStart, e.domainLookupEnd, e.connectStart, e.connectEnd, e.requestStart]
             .every((v) => v === 0) ? 'zero' : 'nonzero') +
-          ' rstart=' + (e.responseStart === 0 ? 'zero' : 'nonzero')
+          ' rstart=' + (e.responseStart === 0 ? 'zero' : 'nonzero') +
+          // Server-Timing rides the same opt-in the sizes do: the header is on
+          // both responses and only the opted-in one reports its members
+          // (measured, the `/plain` column of probes/expr-b111-server-timing.js).
+          ' st=' + e.serverTiming.map((v) => v.name).join('+')
         : '(no entry)';
       testing.expectEqual(
-        'same: enc=512 dec=512 xfer=812 proto=real status=200 type=real walk=nonzero rstart=nonzero\n' +
-        'tao:  enc=512 dec=512 xfer=812 proto=real status=200 type=real walk=nonzero rstart=nonzero\n' +
-        'off:  enc=0 dec=0 xfer=0 proto=empty status=200 type=real walk=zero rstart=zero',
+        'same: enc=512 dec=512 xfer=812 proto=real status=200 type=real walk=nonzero rstart=nonzero st=cfExtPri\n' +
+        'tao:  enc=512 dec=512 xfer=812 proto=real status=200 type=real walk=nonzero rstart=nonzero st=cfExtPri\n' +
+        'off:  enc=0 dec=0 xfer=0 proto=empty status=200 type=real walk=zero rstart=zero st=',
         'same: ' + row(at(SAME)) + '\n' +
         'tao:  ' + row(at(XO_ON)) + '\n' +
         'off:  ' + row(at(XO_OFF)));
+    });
+  </script>
+
+  <script id=a_resource_entry_parses_its_server_timing_header type=module>
+    const state = await testing.async();
+    // `Server-Timing` is the one response header a Resource Timing entry hands
+    // back as structured data rather than as a string, and this engine handed
+    // back an empty list for every response ever: `serverTiming = &.{}`, with
+    // nothing in src/ so much as reading the header. Cloudflare sends
+    // `cfExtPri` on the widget's api.js, and the challenge page posts that
+    // entry into the widget as `apiJsResourceTiming` -- so the one field the
+    // guard is handed with structure in it was the one field we filed blank.
+    //
+    // Every corner below is measured on Chrome 151 rather than read off the
+    // RFC: tools/fingerprint/probes/expr-b111-server-timing.js against
+    // scratch/b111/st-server.mjs, serving the same header src/testing.zig
+    // serves here. Chrome's answer for it is nine members, in this order.
+    const ST = testing.ORIGIN + '/server-timing';
+    await fetch(ST).then((r) => r.text());
+    await new Promise((r) => setTimeout(r, 20));
+    state.resolve();
+    await state.done(() => {
+      const e = performance.getEntriesByName(ST, 'resource')[0];
+      // One string, not a field at a time: the runner never prints a `desc`,
+      // so the red light has to say which member went wrong by itself.
+      const got = e
+        ? e.serverTiming.map((s) => s.name + '|' + s.duration + '|' + s.description).join('\n')
+        : '(no entry)';
+      testing.expectEqual(
+        'cfExtPri|0|\n' +
+        'cache|0|a, b\n' +
+        'spaced|1.5|plain\n' +
+        'esc|0|q"r\n' +
+        'dup|1|\n' +
+        'unk|0|z\n' +
+        'up|3|\n' +
+        'tok|0|x\n' +
+        'hex|0|',
+        got);
+      // The members are PerformanceServerTiming objects, and the array is a
+      // FrozenArray: frozen, and a different array object on every read
+      // (measured -- `e.serverTiming === e.serverTiming` is false on Chrome).
+      testing.expectEqual(
+        'PerformanceServerTiming frozen=true same=false json=' +
+          JSON.stringify({ name: 'cache', duration: 0, description: 'a, b' }),
+        e.serverTiming[1].constructor.name +
+          ' frozen=' + Object.isFrozen(e.serverTiming) +
+          ' same=' + (e.serverTiming === e.serverTiming) +
+          ' json=' + JSON.stringify(e.serverTiming[1].toJSON()));
+      // toJSON on the entry carries the same members, which is the surface the
+      // challenge page actually walks: it stringifies the whole entry.
+      testing.expectEqual(
+        JSON.stringify([
+          { name: 'cfExtPri', duration: 0, description: '' },
+          { name: 'cache', duration: 0, description: 'a, b' },
+        ]),
+        JSON.stringify(e.toJSON().serverTiming.slice(0, 2)));
+    });
+  </script>
+
+  <script id=a_repeated_server_timing_header_is_one_list type=module>
+    const state = await testing.async();
+    // Two copies of the header on one response. A proxy adds its members
+    // rather than replacing the origin's, so the page sees one list.
+    const ST2 = testing.ORIGIN + '/server-timing-twice';
+    await fetch(ST2).then((r) => r.text());
+    await new Promise((r) => setTimeout(r, 20));
+    state.resolve();
+    await state.done(() => {
+      const e = performance.getEntriesByName(ST2, 'resource')[0];
+      testing.expectEqual(
+        'first|1\nsecond|2',
+        e ? e.serverTiming.map((s) => s.name + '|' + s.duration).join('\n') : '(no entry)');
     });
   </script>
 

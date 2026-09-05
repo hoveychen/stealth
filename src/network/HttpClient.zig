@@ -3059,6 +3059,35 @@ pub const Transfer = struct {
             @memcpy(hdr._content_encoding[0..len], value[0..len]);
         }
 
+        // The only one of the four that may legitimately arrive more than once:
+        // a proxy adds its own members rather than replacing the origin's, and
+        // the page sees one list either way. Joined with a comma, which is what
+        // the header's own grammar says two copies mean.
+        {
+            var i: usize = 0;
+            while (conn.getResponseHeader("server-timing", i)) |st| : (i += 1) {
+                var hdr = &self.res.header.?;
+                const value = std.mem.trim(u8, st.value, " \t");
+                if (value.len == 0) {
+                    continue;
+                }
+                var at = hdr._server_timing_len;
+                if (at > 0) {
+                    if (at + 2 > http.ResponseLabels.MAX_SERVER_TIMING_LEN) {
+                        break;
+                    }
+                    @memcpy(hdr._server_timing[at..][0..2], ", ");
+                    at += 2;
+                }
+                const len = @min(value.len, http.ResponseLabels.MAX_SERVER_TIMING_LEN - at);
+                @memcpy(hdr._server_timing[at..][0..len], value[0..len]);
+                hdr._server_timing_len = at + len;
+                if (len < value.len) {
+                    break;
+                }
+            }
+        }
+
         if (conn.getResponseHeader("timing-allow-origin", 0)) |tao| {
             var hdr = &self.res.header.?;
             const value = tao.value;
@@ -4094,7 +4123,19 @@ pub const Transfer = struct {
         if (self.timingAllowOrigin()) |tao| {
             labels.setTimingAllowOrigin(tao);
         }
+        if (self.serverTiming()) |st| {
+            labels.addServerTiming(st);
+        }
         return labels;
+    }
+
+    /// The response's `Server-Timing` members, joined if it sent the header more
+    /// than once. Empty when it sent none.
+    pub fn serverTiming(self: *Transfer) ?[]const u8 {
+        if (self.res.header) |*rh| {
+            return rh.serverTiming();
+        }
+        return null;
     }
 
     /// The response's `Timing-Allow-Origin`, if it sent one. Whether it permits

@@ -248,6 +248,12 @@ pub const ResponseHead = struct {
     // knows.
     _timing_allow_len: usize = 0,
     _timing_allow: [MAX_TIMING_ALLOW_LEN]u8 = undefined,
+    // The `Server-Timing` members, already joined if the response sent the
+    // header more than once. Parsed into PerformanceServerTiming objects up in
+    // the timing layer, which is the only place that knows whose origin is
+    // reading them.
+    _server_timing_len: usize = 0,
+    _server_timing: [ResponseLabels.MAX_SERVER_TIMING_LEN]u8 = undefined,
 
     pub fn contentType(self: *ResponseHead) ?[]u8 {
         if (self._content_type_len == 0) {
@@ -268,6 +274,13 @@ pub const ResponseHead = struct {
             return null;
         }
         return self._timing_allow[0..self._timing_allow_len];
+    }
+
+    pub fn serverTiming(self: *ResponseHead) ?[]u8 {
+        if (self._server_timing_len == 0) {
+            return null;
+        }
+        return self._server_timing[0..self._server_timing_len];
     }
 };
 
@@ -333,6 +346,12 @@ pub const ResponseLabels = struct {
     pub const MAX_CONTENT_ENCODING_LEN = 48;
 
     pub const MAX_TIMING_ALLOW_LEN = ResponseHead.MAX_TIMING_ALLOW_LEN;
+    // `Server-Timing` is the one response header a Resource Timing entry quotes
+    // back as structured data rather than as a string. Held raw for the same
+    // reason the other three are -- the entry is filed after the transfer that
+    // owned the headers is gone -- and parsed on read. A longer header is
+    // truncated, which costs the trailing members and never invents one.
+    pub const MAX_SERVER_TIMING_LEN = 256;
 
     _type_len: u8 = 0,
     _type: [MAX_CONTENT_TYPE_LEN]u8 = undefined,
@@ -343,6 +362,8 @@ pub const ResponseLabels = struct {
     // gone, and the opacity decision needs this header.
     _timing_allow_len: u16 = 0,
     _timing_allow: [MAX_TIMING_ALLOW_LEN]u8 = undefined,
+    _server_timing_len: u16 = 0,
+    _server_timing: [MAX_SERVER_TIMING_LEN]u8 = undefined,
 
     pub fn contentType(self: *const ResponseLabels) []const u8 {
         return self._type[0..self._type_len];
@@ -383,6 +404,33 @@ pub const ResponseLabels = struct {
         const len = @min(trimmed.len, MAX_TIMING_ALLOW_LEN);
         @memcpy(self._timing_allow[0..len], trimmed[0..len]);
         self._timing_allow_len = @intCast(len);
+    }
+
+    pub fn serverTiming(self: *const ResponseLabels) []const u8 {
+        return self._server_timing[0..self._server_timing_len];
+    }
+
+    /// Appends, because `Server-Timing` may be sent more than once and the
+    /// members of every copy belong to one list -- which is what joining them
+    /// with a comma says. Stops at the buffer rather than wrapping: a member cut
+    /// in half would parse as a shorter member with the same name, and dropping
+    /// it is the reading that claims less.
+    pub fn addServerTiming(self: *ResponseLabels, raw: []const u8) void {
+        const trimmed = std.mem.trim(u8, raw, " \t");
+        if (trimmed.len == 0) {
+            return;
+        }
+        var at: usize = self._server_timing_len;
+        if (at > 0) {
+            if (at + 2 > MAX_SERVER_TIMING_LEN) {
+                return;
+            }
+            @memcpy(self._server_timing[at..][0..2], ", ");
+            at += 2;
+        }
+        const len = @min(trimmed.len, MAX_SERVER_TIMING_LEN - at);
+        @memcpy(self._server_timing[at..][0..len], trimmed[0..len]);
+        self._server_timing_len = @intCast(at + len);
     }
 };
 

@@ -867,6 +867,7 @@ pub const Script = struct {
             .next_hop_protocol = self.perf_next_hop_protocol,
             .content_type = self.perf_labels.contentType(),
             .content_encoding = self.perf_labels.contentEncoding(),
+            .server_timing = self.perf_labels.serverTiming(),
             .render_blocking_status = if (render_blocking) "blocking" else "non-blocking",
             .fetch_start = self.perf_fetch_start,
             .response_end = perf.now(),
