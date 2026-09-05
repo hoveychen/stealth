@@ -15,10 +15,37 @@
 //   /accept-ch    Accept-CH only    -> hints appear on the *next* request
 //   /critical-ch  Accept-CH + Critical-CH -> the same request is retried at once
 //
+// `--scenario frame` asks the other half of the question, the one the two pages
+// above cannot reach: *who* is allowed to do the asking. On the live
+// cf-scrapingcourse challenge the `Accept-CH` arrives on the Turnstile widget's
+// own document -- a cross-site iframe -- and a bare headless Chrome measured
+// there sends the widget origin none of the six high-entropy hints while this
+// engine sends all six. So the frame scenario stands the same shape up locally:
+//
+//   top      http://127.0.0.1:<port>/top            no Accept-CH, embeds the frame
+//   frame    http://127.0.0.1:<frame-port>/frame    Accept-CH + Critical-CH
+//
+// The two differ by port, so they are cross-*origin* where the live pair is
+// cross-*site*. That is the gate under test either way: both the client-hint
+// store and the Permissions-Policy allowlist that guards it are keyed by origin,
+// not by site. Both are loopback, so both are trustworthy origins and nothing is
+// refused merely for being insecure. Three arms separate the two candidate gates
+// -- does the ask get persisted at all from a subframe, or does it get persisted
+// and then withheld for want of delegation:
+//
+//   --scenario frame                 the frame origin is only ever a subframe
+//   --scenario frame --pre-top       visit the frame origin top-level first, so
+//                                    its ask is on record, then embed it
+//   --scenario frame --pre-top --delegate   ...and have the top document
+//                                    delegate the hints to it by Permissions-
+//                                    Policy, which is the only way a real
+//                                    browser sends them to a cross-origin frame
+//
 // The raw-socket server is header-echo.mjs's, for the same reason: node:http
 // reorders headers and order is part of what is being measured.
 //
-// usage: node tools/fingerprint/accept-ch-echo.mjs <lightpanda|chrome> [--headed-ua] [--hints list] [--out p]
+// usage: node tools/fingerprint/accept-ch-echo.mjs <lightpanda|chrome> [--headed-ua]
+//          [--hints list] [--scenario top|frame] [--pre-top] [--delegate] [--out p]
 // env: LP_BIN, CHROME
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -44,9 +71,19 @@ if (engine !== 'lightpanda' && engine !== 'chrome') {
 }
 
 const HTTP_PORT = Number(arg('--http-port', '9586'));
+// The frame origin. A different host name as well as a different port, so the
+// pair is cross-site and not merely cross-origin.
+const FRAME_PORT = Number(arg('--frame-port', '9587'));
 const CDP_PORT = Number(arg('--port', engine === 'chrome' ? '9254' : '9255'));
 const OUT = arg('--out', null);
 const headedUa = has('--headed-ua');
+const SCENARIO = arg('--scenario', 'top');
+const PRE_TOP = has('--pre-top');
+const DELEGATE = has('--delegate');
+if (SCENARIO !== 'top' && SCENARIO !== 'frame') {
+    console.error('--scenario takes top or frame');
+    process.exit(2);
+}
 const LIGHTPANDA = process.env.LP_BIN ?? path.join(REPO, 'zig-out/bin/lightpanda');
 const CHROME = process.env.CHROME
     ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -80,46 +117,103 @@ x.setRequestHeader('content-type', 'text/plain;charset=UTF-8'); x.send('probe');
 </script>
 </body></html>`;
 
+// The nine policy-controlled features that gate client hints, and the frame
+// origin they would be delegated to. `allow=` on the iframe and the header
+// allowlist are both set in the --delegate arm: if that arm still comes back
+// with no hints, it has to be because the browser refuses, not because the
+// delegation was spelled in the one place this browser ignores.
+const FRAME_ORIGIN = `http://127.0.0.1:${FRAME_PORT}`;
+const CH_FEATURES = ['ch-ua', 'ch-ua-arch', 'ch-ua-bitness', 'ch-ua-full-version',
+    'ch-ua-full-version-list', 'ch-ua-mobile', 'ch-ua-model', 'ch-ua-platform',
+    'ch-ua-platform-version'];
+const DELEGATE_HEADER = `Permissions-Policy: `
+    + CH_FEATURES.map((f) => `${f}=(self "${FRAME_ORIGIN}")`).join(', ') + `\r\n`;
+
+// The top document of the frame scenario. It asks for nothing itself -- the
+// whole question is what the *frame's* ask is worth.
+const TOP_PAGE = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>top</title></head>
+<body>top
+<iframe src="${FRAME_ORIGIN}/frame"${DELEGATE ? ` allow="${CH_FEATURES.join('; ')}"` : ''}></iframe>
+</body></html>`;
+
+const FRAME_PAGE = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>frame</title></head>
+<body>frame
+<script>
+// Same-origin subresource of the frame's own origin: the request that carries
+// the hints if the frame's ask was worth anything.
+fetch('/sub/frame-fetch').then(function (r) { return r.text(); });
+</script>
+</body></html>`;
+
 const hits = [];
 
-const server = net.createServer((sock) => {
-    let buf = Buffer.alloc(0);
-    sock.on('data', (chunk) => {
-        buf = Buffer.concat([buf, chunk]);
-        const end = buf.indexOf('\r\n\r\n');
-        if (end < 0) return;
-        const head = buf.subarray(0, end).toString('latin1');
-        buf = buf.subarray(end + 4);
-        const lines = head.split('\r\n');
-        const [method, target] = lines[0].split(' ');
-        hits.push({
-            n: hits.length,
-            method,
-            target,
-            // Order preserved and names left exactly as they arrived: casing and
-            // position are both part of what is being compared.
-            headers: lines.slice(1).map((l) => {
-                const i = l.indexOf(':');
-                return [l.slice(0, i), l.slice(i + 1).trim()];
-            }),
-        });
+/// What to answer a given request target with. `who` labels the origin so the
+/// two servers' hits stay tellable apart in the report.
+function respond(who, target) {
+    const isCritical = target.startsWith('/critical-ch');
+    if (target.startsWith('/accept-ch') || isCritical) {
+        return {
+            html: PAGE(isCritical ? 'critical-ch' : 'accept-ch'),
+            extra: `Accept-CH: ${HINTS}\r\n`
+                + (isCritical ? `Critical-CH: ${HINTS}\r\nVary: ${HINTS}\r\n` : ''),
+        };
+    }
+    // The frame scenario. The top document never asks for a hint; the frame
+    // document asks for all of them, exactly as the live widget does.
+    if (who === 'top' && target.startsWith('/top')) {
+        return { html: TOP_PAGE, extra: DELEGATE ? DELEGATE_HEADER : '' };
+    }
+    if (who === 'frame' && target.startsWith('/frame')) {
+        return {
+            html: FRAME_PAGE,
+            extra: `Accept-CH: ${HINTS}\r\nCritical-CH: ${HINTS}\r\nVary: ${HINTS}\r\n`,
+        };
+    }
+    return { html: null, extra: '' };
+}
 
-        const isCritical = target.startsWith('/critical-ch');
-        const isPage = target.startsWith('/accept-ch') || isCritical;
-        const body = Buffer.from(isPage ? PAGE(isCritical ? 'critical-ch' : 'accept-ch') : 'ok');
-        const extra = isPage
-            ? `Accept-CH: ${HINTS}\r\n` + (isCritical ? `Critical-CH: ${HINTS}\r\nVary: ${HINTS}\r\n` : '')
-            : '';
-        sock.write(`HTTP/1.1 200 OK\r\n`
-            + `Content-Type: ${isPage ? 'text/html; charset=utf-8' : 'text/plain'}\r\n`
-            + `Content-Length: ${body.length}\r\n`
-            + extra
-            + `Connection: keep-alive\r\n\r\n`);
-        sock.write(body);
+function startServer(who, port) {
+    const server = net.createServer((sock) => {
+        let buf = Buffer.alloc(0);
+        sock.on('data', (chunk) => {
+            buf = Buffer.concat([buf, chunk]);
+            const end = buf.indexOf('\r\n\r\n');
+            if (end < 0) return;
+            const head = buf.subarray(0, end).toString('latin1');
+            buf = buf.subarray(end + 4);
+            const lines = head.split('\r\n');
+            const [method, target] = lines[0].split(' ');
+            hits.push({
+                n: hits.length,
+                who,
+                method,
+                target,
+                // Order preserved and names left exactly as they arrived: casing and
+                // position are both part of what is being compared.
+                headers: lines.slice(1).map((l) => {
+                    const i = l.indexOf(':');
+                    return [l.slice(0, i), l.slice(i + 1).trim()];
+                }),
+            });
+
+            const { html, extra } = respond(who, target);
+            const body = Buffer.from(html ?? 'ok');
+            sock.write(`HTTP/1.1 200 OK\r\n`
+                + `Content-Type: ${html ? 'text/html; charset=utf-8' : 'text/plain'}\r\n`
+                + `Content-Length: ${body.length}\r\n`
+                + extra
+                + `Connection: keep-alive\r\n\r\n`);
+            sock.write(body);
+        });
+        sock.on('error', () => { });
     });
-    sock.on('error', () => { });
-});
-await new Promise((r) => server.listen(HTTP_PORT, '127.0.0.1', r));
+    return new Promise((r) => server.listen(port, '127.0.0.1', () => r(server)));
+}
+
+const servers = [await startServer('top', HTTP_PORT)];
+if (SCENARIO === 'frame') servers.push(await startServer('frame', FRAME_PORT));
 
 async function headedUserAgent() {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-ua-'));
@@ -143,7 +237,11 @@ async function headedUserAgent() {
     }
 }
 
-const state = { engine, headedUa, userAgentOverride: null, hits };
+const state = {
+    engine, headedUa, userAgentOverride: null,
+    scenario: SCENARIO, preTop: PRE_TOP, delegate: DELEGATE,
+    hits,
+};
 if (headedUa) {
     if (engine !== 'chrome') { console.error('--headed-ua is a chrome arm'); process.exit(2); }
     state.userAgentOverride = await headedUserAgent();
@@ -174,30 +272,50 @@ try {
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
 
-    for (const p of ['/critical-ch', '/accept-ch']) {
-        hits.push({ mark: p });
-        await cdp.send('Page.navigate', { url: `http://127.0.0.1:${HTTP_PORT}${p}` }, sessionId);
-        await sleep(2500);
+    if (SCENARIO === 'top') {
+        for (const p of ['/critical-ch', '/accept-ch']) {
+            hits.push({ mark: p });
+            await cdp.send('Page.navigate', { url: `http://127.0.0.1:${HTTP_PORT}${p}` }, sessionId);
+            await sleep(2500);
+        }
+        // A second visit to the same origin: whatever hint state the engine kept
+        // from the first two pages shows up on this navigation.
+        hits.push({ mark: '/revisit' });
+        await cdp.send('Page.navigate', { url: `http://127.0.0.1:${HTTP_PORT}/revisit` }, sessionId);
+        await sleep(2000);
+    } else {
+        if (PRE_TOP) {
+            // Put the frame origin's ask on record from a top-level navigation,
+            // so the later embed is asking only about delegation and not about
+            // whether a subframe's ask is remembered at all.
+            hits.push({ mark: 'frame-origin top-level first' });
+            await cdp.send('Page.navigate', { url: `${FRAME_ORIGIN}/frame` }, sessionId);
+            await sleep(2500);
+        }
+        hits.push({ mark: `/top (embeds the frame${DELEGATE ? ', delegated' : ''})` });
+        await cdp.send('Page.navigate', { url: `http://127.0.0.1:${HTTP_PORT}/top` }, sessionId);
+        await sleep(3500);
     }
-    // A second visit to the same origin: whatever hint state the engine kept
-    // from the first two pages shows up on this navigation.
-    hits.push({ mark: '/revisit' });
-    await cdp.send('Page.navigate', { url: `http://127.0.0.1:${HTTP_PORT}/revisit` }, sessionId);
-    await sleep(2000);
 } catch (err) {
     state.error = String(err.message ?? err);
 } finally {
     cdp?.close();
     proc.kill('SIGKILL');
-    server.close();
+    for (const s of servers) s.close();
     if (profile) await fs.rm(profile, { recursive: true, force: true }).catch(() => { });
 }
 
-console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''} ===`);
+// The six that are the whole question. The three low-entropy ones go out unasked
+// and would pad every count by three, hiding the difference this measures.
+const HIGH_ENTROPY = /^sec-ch-ua-(arch|bitness|full-version|full-version-list|model|platform-version)$/i;
+
+console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''}`
+    + ` scenario=${SCENARIO}${PRE_TOP ? ' --pre-top' : ''}${DELEGATE ? ' --delegate' : ''} ===`);
 for (const h of hits) {
-    if (h.mark) { console.log(`--- navigate ${h.mark}`); continue; }
+    if (h.mark) { console.log(`--- ${h.mark}`); continue; }
     const ch = h.headers.filter(([k]) => /^(sec-ch|ua-)/i.test(k));
-    console.log(`  ${h.method} ${h.target}  hints=${ch.length}`);
+    const high = h.headers.filter(([k]) => HIGH_ENTROPY.test(k));
+    console.log(`  [${h.who}] ${h.method} ${h.target}  hints=${ch.length} high-entropy=${high.length}`);
     for (const [k, v] of ch) console.log(`      ${k}: ${v}`);
 }
 if (state.error) console.log(`ERROR ${state.error}`);
