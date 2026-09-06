@@ -1218,7 +1218,7 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
             .frame_id = self._frame_id,
             .loader_id = self._loader_id,
             .url = committed_url,
-            .timestamp = lp.datetime.timestamp(.boot),
+            .timestamp = lp.datetime.fractionalTimestamp(.boot),
         });
 
         self.recordNavigateTelemetry(false);
@@ -1233,7 +1233,7 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
                 .method = opts.method,
             },
             .url = committed_url,
-            .timestamp = lp.datetime.timestamp(.boot),
+            .timestamp = lp.datetime.fractionalTimestamp(.boot),
         });
 
         if (self.parent == null) {
@@ -1347,7 +1347,7 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
         .req_id = transfer.id,
         .frame_id = self._frame_id,
         .loader_id = self._loader_id,
-        .timestamp = lp.datetime.timestamp(.boot),
+        .timestamp = lp.datetime.fractionalTimestamp(.boot),
         .is_pending_root = is_pending_root,
     });
 
@@ -1640,7 +1640,7 @@ pub fn _documentIsLoaded(self: *Frame) !void {
         .req_id = self._req_id,
         .frame_id = self._frame_id,
         .loader_id = self._loader_id,
-        .timestamp = lp.datetime.timestamp(.boot),
+        .timestamp = lp.datetime.fractionalTimestamp(.boot),
     });
 
     // Where Chrome's first style resolution falls: the document is complete,
@@ -1769,7 +1769,7 @@ fn _documentIsComplete(self: *Frame) !void {
         .req_id = self._req_id,
         .frame_id = self._frame_id,
         .loader_id = self._loader_id,
-        .timestamp = lp.datetime.timestamp(.boot),
+        .timestamp = lp.datetime.fractionalTimestamp(.boot),
     });
 
     if (self._event_manager.hasDirectListeners(window_target, "pageshow", null)) {
@@ -2082,7 +2082,7 @@ fn frameHeaderDoneCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.
             .req_id = self._req_id,
             .frame_id = self._frame_id,
             .loader_id = self._loader_id,
-            .timestamp = lp.datetime.timestamp(.boot),
+            .timestamp = lp.datetime.fractionalTimestamp(.boot),
         });
     }
 
@@ -2598,7 +2598,7 @@ fn frameErrorCallback(ctx: *anyopaque, err: anyerror) void {
         self._session.notification.dispatch(.frame_navigate_failed, &.{
             .frame_id = self._frame_id,
             .loader_id = self._loader_id,
-            .timestamp = lp.datetime.timestamp(.boot),
+            .timestamp = lp.datetime.fractionalTimestamp(.boot),
             .url = self.url,
             .err = err,
             .opts = self._navigated_options orelse .{},
@@ -2737,7 +2737,7 @@ pub fn iframeAddedCallback(self: *Frame, iframe: *IFrame) !void {
         .parent_id = self._frame_id,
         .frame_id = new_frame._frame_id,
         .loader_id = new_frame._loader_id,
-        .timestamp = lp.datetime.timestamp(.boot),
+        .timestamp = lp.datetime.fractionalTimestamp(.boot),
     });
 
     const url = blk: {
@@ -4214,7 +4214,7 @@ pub fn notifyNetworkIdle(self: *Frame) void {
         .req_id = self._req_id,
         .frame_id = self._frame_id,
         .loader_id = self._loader_id,
-        .timestamp = lp.datetime.timestamp(.boot),
+        .timestamp = lp.datetime.fractionalTimestamp(.boot),
     });
 }
 
@@ -4224,7 +4224,7 @@ pub fn notifyNetworkAlmostIdle(self: *Frame) void {
         .req_id = self._req_id,
         .frame_id = self._frame_id,
         .loader_id = self._loader_id,
-        .timestamp = lp.datetime.timestamp(.boot),
+        .timestamp = lp.datetime.fractionalTimestamp(.boot),
     });
 }
 
