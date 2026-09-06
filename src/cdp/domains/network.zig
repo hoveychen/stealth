@@ -695,7 +695,7 @@ fn initialPriority(resource_type: HttpClient.Request.ResourceType) []const u8 {
         // `.font` grouped with the High set rather than measured: this string
         // is CDP's own initialPriority, which no fixture here reads back, and
         // the wire hint that IS measured says `u=1` -- the same as a script.
-        .script, .xhr, .fetch, .eventsource, .font => "High",
+        .script, .worker, .xhr, .fetch, .eventsource, .font => "High",
         // Chrome starts images at Low and only boosts them once layout finds
         // them in the viewport, which this engine never does.
         .image => "Low",

@@ -164,6 +164,18 @@ pub fn init(input: Input, options: ?InitOpts, exec: *const Execution) !js.Promis
         // whether an Origin is named. Left null for the two members fetch()
         // cannot legitimately be given, so those keep the destination's default
         // rather than a value nothing was measured sending.
+        // Same story as `mode` below: the member was parsed into the Request
+        // and never left it, so every fetch went out with no Cache-Control at
+        // all -- including the `no-cache` one the cf-scrapingcourse challenge
+        // makes (scratch/b120).
+        .cache = switch (request._cache) {
+            .default => .default,
+            .@"no-store" => .no_store,
+            .reload => .reload,
+            .@"no-cache" => .no_cache,
+            .@"force-cache" => .force_cache,
+            .@"only-if-cached" => .only_if_cached,
+        },
         .mode = switch (request._mode) {
             .cors => .cors,
             .@"no-cors" => .no_cors,
