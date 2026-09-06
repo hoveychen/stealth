@@ -516,6 +516,13 @@ const state = {
     userAgentOverride: null,
     injectWorker, r2, r2Min: r2 ? R2_MIN : null,
     posts: [],       // the fo/ POSTs on the wire, to key the records against
+    // Every challenge-platform request, with the two things `posts` cannot
+    // answer: WHEN it happened and what came back. The collected payload is a
+    // constant per client (8 Chrome runs, one signature, 6 served and 2 not),
+    // so whatever decides the verdict is not in the payload -- and the places
+    // left to look are the timing of the exchange and the replies that shaped
+    // it, including the size of the guard program CF hands back in round 1.
+    exchange: [],
 };
 
 if (headedUa) {
@@ -534,6 +541,7 @@ await runTrace({
     // record is only interesting once it is the body of one of these.
     onMessage(msg, st) {
         const p = msg.params ?? {};
+        const isChallenge = (u) => /challenge-platform|\/cdn-cgi\//.test(String(u ?? ''));
         if (msg.method === 'Network.requestWillBeSent' && /\/fo\//.test(String(p.request?.url ?? ''))) {
             st.posts.push({
                 url: String(p.request.url).slice(0, 120),
@@ -545,6 +553,38 @@ await runTrace({
             const verdict = Object.keys(hdrs).filter((k) => /^cf-chl/i.test(k)).sort();
             const last = st.posts[st.posts.length - 1];
             if (last && !last.verdict) last.verdict = verdict.join('+');
+        }
+
+        // The exchange, whole. Timestamps are CDP's monotonic seconds, so only
+        // differences between them mean anything -- which is what is wanted:
+        // every leg is measured against this run's own first challenge request.
+        if (msg.method === 'Network.requestWillBeSent' && isChallenge(p.request?.url)) {
+            st.exchange.push({
+                id: p.requestId,
+                t: p.timestamp,
+                method: p.request.method,
+                url: String(p.request.url).slice(0, 140),
+                postLen: p.request.postData?.length ?? (p.request.hasPostData ? -1 : 0),
+            });
+        }
+        if (msg.method === 'Network.responseReceived' && isChallenge(p.response?.url)) {
+            const e = st.exchange.find((x) => x.id === p.requestId);
+            if (e) {
+                const h = p.response.headers ?? {};
+                const want = ['cf-ray', 'cf-mitigated', 'cf-cache-status', 'server-timing',
+                    'content-length', 'content-type', 'date', 'cf-chl-out', 'cf-chl-gen'];
+                e.status = p.response.status;
+                e.resT = p.timestamp;
+                e.hdr = Object.fromEntries(Object.entries(h)
+                    .filter(([k]) => want.includes(k.toLowerCase()))
+                    .map(([k, v]) => [k.toLowerCase(), String(v).slice(0, 120)]));
+            }
+        }
+        // Round 1's reply is the guard program itself; its size is the cheapest
+        // way to notice CF handing out a different one.
+        if (msg.method === 'Network.loadingFinished') {
+            const e = st.exchange.find((x) => x.id === p.requestId);
+            if (e) { e.doneT = p.timestamp; e.encoded = p.encodedDataLength; }
         }
     },
 });
@@ -564,6 +604,14 @@ for (const b of state.blobs) {
         + `${b.gapAt !== undefined ? ` GAP@${b.gapAt}` : ''} type=${JSON.stringify(b.type)}`);
 }
 for (const p of state.posts) console.log(`  POST ${String(p.postLen).padStart(7)} ${p.verdict ?? '?'}  ${p.url.slice(-40)}`);
+const t0 = state.exchange[0]?.t ?? 0;
+for (const e of state.exchange) {
+    const ms = (x) => (x === undefined ? '    -' : String(Math.round((x - t0) * 1000)).padStart(5));
+    console.log(`  ${ms(e.t)}ms ${String(e.method).padEnd(4)} ${String(e.status ?? '-').padEnd(3)}`
+        + ` req=${String(e.postLen).padStart(6)} resp=${String(e.encoded ?? -1).padStart(6)}`
+        + ` +${ms(e.doneT)}  ${e.url.slice(-46)}`
+        + (e.hdr?.['cf-mitigated'] ? `  MITIGATED=${e.hdr['cf-mitigated']}` : ''));
+}
 // The verdict this run got, on the same criterion cf-token.mjs uses: the ticket
 // is handed out to arms that are then refused the page, so `served` reads the
 // page itself. Without it a captured plaintext says nothing about which side of
