@@ -475,7 +475,9 @@ const FetchSite = enum { same_origin, same_site, cross_site };
 // comparison never even stripped. The same capture also settles the scheme:
 // https -> http on one host is `cross-site`, so this is the schemeful notion of
 // same site, exactly what sameSiteForStorage already computes.
-fn fetchSite(initiator: []const u8, url: []const u8) FetchSite {
+fn fetchSite(initiator_: []const u8, url_: []const u8) FetchSite {
+    const initiator = withoutBlobPrefix(initiator_);
+    const url = withoutBlobPrefix(url_);
     const a = originOf(initiator);
     const b = originOf(url);
     if (std.mem.eql(u8, a.scheme, b.scheme) and std.mem.eql(u8, a.host, b.host)) {
@@ -491,7 +493,18 @@ fn fetchSite(initiator: []const u8, url: []const u8) FetchSite {
 // The real eTLD+1 walk already exists for cookies; reuse it rather than
 // approximating with a suffix comparison, which gets two sibling subdomains
 // wrong in the direction that matters.
-pub fn sameSiteForStorage(a: []const u8, b: []const u8) bool {
+// A blob: URL is as same-site as the origin it was minted from, the same
+// unwrapping URL.isPotentiallyTrustworthy does. Without it the "blob:" prefix
+// reads as the scheme and a document loaded from a blob URL is cross-site with
+// its own host -- which the cf-scrapingcourse challenge, whose last two
+// requests come out of a blob: document, would notice.
+fn withoutBlobPrefix(url: []const u8) []const u8 {
+    return if (std.mem.startsWith(u8, url, "blob:")) url["blob:".len..] else url;
+}
+
+pub fn sameSiteForStorage(a_: []const u8, b_: []const u8) bool {
+    const a = withoutBlobPrefix(a_);
+    const b = withoutBlobPrefix(b_);
     if (!std.mem.eql(u8, URL.getProtocol(a), URL.getProtocol(b))) {
         return false;
     }
@@ -4641,6 +4654,14 @@ test "HttpClient: fetchSite classifies initiator against request URL" {
     try testing.expectEqual(FetchSite.same_site, fetchSite("http://127.0.0.1:9600/a", "http://127.0.0.1:9601/b"));
     try testing.expectEqual(FetchSite.cross_site, fetchSite("http://127.0.0.1:9600/a", "http://10.0.0.1:9601/b"));
     try testing.expectEqual(FetchSite.cross_site, fetchSite("http://[::1]:9600/a", "http://127.0.0.1:9601/b"));
+    // A blob: URL's origin is the origin it was minted from. The live
+    // cf-scrapingcourse challenge runs its last two requests out of a
+    // `blob:https://challenges.cloudflare.com/<uuid>` document, and Chrome calls
+    // the one back at that host `same-origin` (b119, the /pat request in
+    // /tmp-captured extraInfo).
+    try testing.expectEqual(FetchSite.same_origin, fetchSite("blob:https://challenges.cloudflare.com/6491bd57", "https://challenges.cloudflare.com/x"));
+    try testing.expectEqual(FetchSite.same_site, fetchSite("blob:https://challenges.cloudflare.com/6491bd57", "https://brunhild.challenges.cloudflare.com/x"));
+    try testing.expectEqual(FetchSite.cross_site, fetchSite("blob:https://challenges.cloudflare.com/6491bd57", "https://example.com/x"));
 }
 
 test "HttpClient: sameSiteForStorage compares scheme and registrable domain" {
