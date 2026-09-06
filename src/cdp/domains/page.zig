@@ -122,7 +122,7 @@ fn setLifecycleEventsEnabled(cmd: *CDP.Command) !void {
         const frame_id = &id.toFrameId(frame._frame_id);
         const loader_id = &id.toLoaderId(frame._loader_id);
 
-        const now = lp.datetime.timestamp(.boot);
+        const now = lp.datetime.fractionalTimestamp(.boot);
         try sendPageLifecycle(bc, "DOMContentLoaded", now, frame_id, loader_id);
         try sendPageLifecycle(bc, "load", now, frame_id, loader_id);
 
@@ -817,7 +817,7 @@ pub fn frameNetworkAlmostIdle(bc: *CDP.BrowserContext, event: *const Notificatio
     return sendPageLifecycle(bc, "networkAlmostIdle", event.timestamp, &id.toFrameId(event.frame_id), &id.toLoaderId(event.loader_id));
 }
 
-fn sendPageLifecycle(bc: *CDP.BrowserContext, name: []const u8, timestamp: u64, frame_id: []const u8, loader_id: []const u8) !void {
+fn sendPageLifecycle(bc: *CDP.BrowserContext, name: []const u8, timestamp: f64, frame_id: []const u8, loader_id: []const u8) !void {
     // detachTarget could be called, in which case, we still have a frame doing
     // things, but no session.
     const session_id = bc.session_id orelse return;
@@ -952,7 +952,7 @@ const LifecycleEvent = struct {
     frameId: []const u8,
     loaderId: ?[]const u8,
     name: []const u8,
-    timestamp: u64,
+    timestamp: f64,
 };
 
 const Viewport = struct {

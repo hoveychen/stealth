@@ -137,7 +137,7 @@ pub const FrameNavigate = struct {
     req_id: u32,
     frame_id: u32,
     loader_id: u32,
-    timestamp: u64,
+    timestamp: f64,
     url: [:0]const u8,
     opts: Frame.NavigateOpts,
     // True when this navigation is being issued against a Page that is in
@@ -151,7 +151,7 @@ pub const FrameNavigated = struct {
     req_id: u32,
     frame_id: u32,
     loader_id: u32,
-    timestamp: u64,
+    timestamp: f64,
     url: [:0]const u8,
     opts: Frame.NavigatedOpts,
 };
@@ -180,7 +180,7 @@ pub const FrameNavigatedWithinDocument = struct {
 pub const FrameNavigateFailed = struct {
     frame_id: u32,
     loader_id: u32,
-    timestamp: u64,
+    timestamp: f64,
     url: [:0]const u8,
     err: anyerror,
     opts: Frame.NavigatedOpts,
@@ -190,35 +190,35 @@ pub const FrameNetworkIdle = struct {
     req_id: u32,
     frame_id: u32,
     loader_id: u32,
-    timestamp: u64,
+    timestamp: f64,
 };
 
 pub const FrameNetworkAlmostIdle = struct {
     req_id: u32,
     frame_id: u32,
     loader_id: u32,
-    timestamp: u64,
+    timestamp: f64,
 };
 
 pub const FrameChildFrameCreated = struct {
     frame_id: u32,
     loader_id: u32,
     parent_id: u32,
-    timestamp: u64,
+    timestamp: f64,
 };
 
 pub const FrameDOMContentLoaded = struct {
     req_id: u32,
     frame_id: u32,
     loader_id: u32,
-    timestamp: u64,
+    timestamp: f64,
 };
 
 pub const FrameLoaded = struct {
     req_id: u32,
     frame_id: u32,
     loader_id: u32,
-    timestamp: u64,
+    timestamp: f64,
 };
 
 pub const RequestStart = struct {
@@ -620,8 +620,8 @@ test "Notification" {
 }
 
 const TestClient = struct {
-    frame_navigate: u64 = 0,
-    frame_navigated: u64 = 0,
+    frame_navigate: f64 = 0,
+    frame_navigated: f64 = 0,
 
     fn frameNavigate(ptr: *anyopaque, data: *const Notification.FrameNavigate) !void {
         const self: *TestClient = @ptrCast(@alignCast(ptr));

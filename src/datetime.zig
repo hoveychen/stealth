@@ -530,6 +530,14 @@ pub fn timestamp(comptime clock: std.Io.Clock) u64 {
     return @intCast(clock.now(lp.io).toSeconds());
 }
 
+/// Seconds, with the fraction kept. CDP's `MonotonicTime` and `TimeSinceEpoch`
+/// are both this shape -- Chrome reports them to the microsecond -- and reading
+/// them as whole seconds puts every event it timestamps on a one-second grid.
+pub fn fractionalTimestamp(comptime clock: std.Io.Clock) f64 {
+    const us: f64 = @floatFromInt(clock.now(lp.io).toMicroseconds());
+    return us / @as(f64, @floatFromInt(std.time.us_per_s));
+}
+
 pub fn milliTimestamp(comptime clock: std.Io.Clock) u64 {
     return @intCast(clock.now(lp.io).toMilliseconds());
 }

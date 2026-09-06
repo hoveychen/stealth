@@ -378,7 +378,7 @@ pub fn httpRequestFail(bc: *CDP.BrowserContext, msg: *const Notification.Request
     // We're missing a bunch of fields, but, for now, this seems like enough
     try bc.cdp.sendEvent("Network.loadingFailed", .{
         .requestId = &id.toRequestId(msg.transfer),
-        .timestamp = lp.datetime.timestamp(.boot),
+        .timestamp = lp.datetime.fractionalTimestamp(.boot),
         // Seems to be what chrome answers with. I assume it depends on the type of error?
         .type = "Ping",
         .errorText = msg.err,
@@ -419,8 +419,8 @@ pub fn httpRequestStart(arena: Allocator, bc: *CDP.BrowserContext, msg: *const N
             null,
         .redirectHasExtraInfo = false, // TODO change after adding Network.requestWillBeSentExtraInfo
         .hasUserGesture = false,
-        .timestamp = lp.datetime.timestamp(.boot),
-        .wallTime = lp.datetime.timestamp(.real),
+        .timestamp = lp.datetime.fractionalTimestamp(.boot),
+        .wallTime = lp.datetime.fractionalTimestamp(.real),
     }, .{ .session_id = session_id });
 }
 
@@ -437,7 +437,7 @@ pub fn httpResponseHeaderDone(arena: Allocator, bc: *CDP.BrowserContext, msg: *c
         .frameId = &id.toFrameId(req.document_frame_id orelse req.frame_id),
         .requestId = &id.toRequestId(transfer),
         .loaderId = &id.toLoaderId(req.loader_id),
-        .timestamp = lp.datetime.timestamp(.boot),
+        .timestamp = lp.datetime.fractionalTimestamp(.boot),
         .type = req.resource_type.string(),
         .response = ResponseWriter.init(arena, msg.transfer),
         .hasExtraInfo = false, // TODO change after adding Network.responseReceivedExtraInfo
@@ -450,7 +450,7 @@ pub fn httpRequestDone(bc: *CDP.BrowserContext, msg: *const Notification.Request
     const session_id = bc.session_id orelse return;
     try bc.cdp.sendEvent("Network.loadingFinished", .{
         .requestId = &id.toRequestId(msg.transfer),
-        .timestamp = lp.datetime.timestamp(.boot),
+        .timestamp = lp.datetime.fractionalTimestamp(.boot),
         // The whole response as it sat on the wire, head included -- not the
         // Content-Length header, which a streamed response never sends.
         .encodedDataLength = msg.transfer.encodedDataLength(),
@@ -1456,6 +1456,62 @@ test "cdp.Network: redirect hop precedes Fetch pause and carries redirectRespons
     try testing.expectEqual(null, callback_context.err);
     try testing.expect(callback_context.done);
     try testing.expectEqualSlices(u8, "localhost:9582", callback_context.body[0..callback_context.body_len]);
+}
+
+// CDP's `Network.MonotonicTime` is seconds WITH a fraction: Chrome reports it
+// to the microsecond (33708.673735, read off a live capture in
+// scratch/b122/x-ch-1.json). This engine reported whole seconds, so every
+// network event in a CDP trace landed on a one-second grid -- two requests a
+// hundred milliseconds apart carried the same timestamp, and no timing could be
+// read off a capture at all.
+//
+// The assertion is on the JSON type rather than on a value: an integer token is
+// what the whole-second version always produced, and a fractional one is what a
+// microsecond clock produces except in the once-in-a-million case where the
+// division lands exactly on a second.
+test "cdp.Network: event timestamps carry sub-second resolution" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const cdp = ctx.cdp();
+    _ = try cdp.createBrowserContext();
+    var bc = &cdp.browser_context.?;
+    bc.id = "BID-TS";
+    bc.session_id = "SID-TS";
+    bc.target_id = "TID-TS-0000000".*;
+
+    try ctx.processMessage(.{ .id = 1, .method = "Network.enable" });
+    try ctx.expectSentResult(null, .{ .id = 1 });
+
+    const page = try bc.session.createPage();
+    try page.navigate("http://127.0.0.1:9582/src/browser/tests/cdp/worker_network.html", .{});
+    try testing.waitForPage(bc);
+
+    // `received` is only filled as the harness reads; expectSentEvent is what
+    // pumps it. Wait for the navigation's own request event first, then look at
+    // everything that arrived with it.
+    try ctx.expectSentEvent("Network.requestWillBeSent", .{ .type = "Document" }, .{ .session_id = "SID-TS" });
+
+    var seen: usize = 0;
+    for (ctx.received.items) |msg| {
+        const obj = if (msg == .object) msg.object else continue;
+        const method = obj.get("method") orelse continue;
+        if (method != .string) continue;
+        if (std.mem.startsWith(u8, method.string, "Network.") == false) continue;
+        const params = obj.get("params") orelse continue;
+        if (params != .object) continue;
+        const ts = params.object.get("timestamp") orelse continue;
+        seen += 1;
+        try testing.expectEqual(std.json.Value.float, std.meta.activeTag(ts));
+        // `wallTime` is CDP's TimeSinceEpoch, and it is fractional seconds for
+        // the same reason -- measured on Chrome 151: 1788676588.225089.
+        if (params.object.get("wallTime")) |wall| {
+            try testing.expectEqual(std.json.Value.float, std.meta.activeTag(wall));
+        }
+    }
+    // A navigation always emits some; if it did not, the assertion above never
+    // ran and the test would be green for the wrong reason.
+    try testing.expect(seen > 0);
 }
 
 test "cdp.Network: worker requests emit network events" {
