@@ -559,3 +559,55 @@
     });
   }
 </script>
+
+<script id=fetch_request_mode_on_the_wire type=module>
+  {
+    // `RequestInit.mode` has to reach the wire, not just the Response. Chrome
+    // reports the request's mode verbatim in Sec-Fetch-Mode -- four values, of
+    // which three are reachable through fetch() -- and this engine used to send
+    // `cors` for every one of them because Fetch.zig never passed the member
+    // down to the transport (measured, the 24-case table in
+    // tools/fingerprint/scratch/b118/fm-chrome.json).
+    //
+    // Same-origin on purpose: a same-origin no-cors response is `basic` and
+    // readable in both engines (measured on example.com), so the echo can be
+    // read back through the very mode under test.
+    const state = await testing.async();
+    const url = 'http://127.0.0.1:9582/echo_headers';
+    const got = {};
+    for (const mode of ['default', 'cors', 'no-cors', 'same-origin']) {
+      for (const method of ['GET', 'POST']) {
+        const init = { method };
+        if (mode !== 'default') init.mode = mode;
+        if (method === 'POST') {
+          init.body = 'x';
+          init.headers = { 'Content-Type': 'text/plain' };
+        }
+        const text = await (await fetch(url, init)).text();
+        const seen = {};
+        for (const line of text.trim().split('\n')) {
+          const sep = line.indexOf(': ');
+          seen[line.slice(0, sep).toLowerCase()] = line.slice(sep + 2);
+        }
+        got[`${mode}/${method}`] =
+          `${seen['sec-fetch-mode']}${seen['origin'] === undefined ? '' : '+origin'}`;
+      }
+    }
+    state.resolve();
+
+    await state.done(() => {
+      // Compared as one string so a red light names the cell that is wrong
+      // rather than only saying `expected true got false`. Origin is in here
+      // because it follows the mode too, and in a way that is easy to get
+      // backwards: a same-origin GET names nobody whatever its mode, but ANY
+      // non-GET names its origin -- including a no-cors one.
+      const want = [
+        'default/GET=cors', 'default/POST=cors+origin',
+        'cors/GET=cors', 'cors/POST=cors+origin',
+        'no-cors/GET=no-cors', 'no-cors/POST=no-cors+origin',
+        'same-origin/GET=same-origin', 'same-origin/POST=same-origin+origin',
+      ].join(' ');
+      testing.expectEqual(want, Object.keys(got).map((k) => `${k}=${got[k]}`).join(' '));
+    });
+  }
+</script>

@@ -142,6 +142,16 @@ pub fn init(input: Input, options: ?InitOpts, exec: *const Execution) !js.Promis
         .@"same-origin" => if (exec.isSameOrigin(request._url)) &session.cookie_jar else null,
     };
 
+    // `same-origin` mode pointing somewhere else is a network error before any
+    // request: Chrome puts nothing on the wire for it, where every other mode
+    // reaches the server (measured, the eight `same-origin/*` rows of
+    // tools/fingerprint/scratch/b118/fm-chrome.json -- four of them never
+    // arrive, and the other four are same-origin and do).
+    if (request._mode == .@"same-origin" and !exec.isSameOrigin(request._url)) {
+        resolver.rejectError("fetch same-origin mode", .{ .type_error = "Failed to fetch" });
+        return resolver.promise();
+    }
+
     const transfer = exec.newRequest(.{
         .ctx = fetch,
         .url = request._url,
@@ -150,6 +160,16 @@ pub fn init(input: Input, options: ?InitOpts, exec: *const Execution) !js.Promis
         .loader_id = exec.loaderId(),
         .body = if (request.hasBody()) try request.bodyBytes() else null,
         .resource_type = .fetch,
+        // The mode the page asked for, carried through to Sec-Fetch-Mode and to
+        // whether an Origin is named. Left null for the two members fetch()
+        // cannot legitimately be given, so those keep the destination's default
+        // rather than a value nothing was measured sending.
+        .mode = switch (request._mode) {
+            .cors => .cors,
+            .@"no-cors" => .no_cors,
+            .@"same-origin" => .same_origin,
+            .navigate => null,
+        },
         .cookie_jar = cookie_jar,
         .cookie_origin = exec.url.*,
         .redirect = switch (request._redirect) {

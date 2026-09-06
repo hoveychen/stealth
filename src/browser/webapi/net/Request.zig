@@ -100,12 +100,17 @@ pub const InitOpts = struct {
     targetAddressSpace: ?[]const u8 = null,
 };
 
+// The RequestMode IDL enum, which is not the same set as the request modes that
+// exist: `websocket` is an internal mode with no IDL member, so asking for it
+// fails the way any nonsense string does, while `navigate` IS a member and is
+// refused a step later, by its own message. Measured on Chrome 151
+// (tools/fingerprint/scratch/b118/expr-fetch-mode-throw.js), where the two
+// throw different TypeErrors.
 pub const Mode = enum {
     @"same-origin",
     @"no-cors",
     cors,
     navigate,
-    websocket,
     pub const js_enum_from_string = true;
 };
 
@@ -214,6 +219,17 @@ fn initWithContext(input: Input, opts_: ?InitOpts, exec: *const Execution, prefi
     // out-of-range one is refused the same way Chrome refuses it.
     _ = try enumMember(Priority, "priority", "FetchPriority", opts.priority, exec, prefix);
 
+    // `navigate` is a RequestMode member, so it survives the enum conversion,
+    // and is then refused on its own: a Request is not how a navigation is
+    // made. Chrome's wording, measured.
+    const mode = try enumMember(Mode, "mode", "RequestMode", opts.mode, exec, prefix) orelse switch (input) {
+        .url => Mode.cors,
+        .request => |r| r._mode,
+    };
+    if (opts.mode != null and mode == .navigate) {
+        return fail(exec, prefix, "Cannot construct a Request with a RequestMode of navigate", .{});
+    }
+
     const method = if (opts.method) |m|
         try parseMethod(m, exec)
     else switch (input) {
@@ -290,10 +306,7 @@ fn initWithContext(input: Input, opts_: ?InitOpts, exec: *const Execution, prefi
         ._body = body,
         ._body_stream = body_stream,
         ._signal = signal,
-        ._mode = try enumMember(Mode, "mode", "RequestMode", opts.mode, exec, prefix) orelse switch (input) {
-            .url => .cors,
-            .request => |r| r._mode,
-        },
+        ._mode = mode,
         ._referrer = if (opts.referrer) |r| try arena.dupe(u8, r) else switch (input) {
             .url => REFERRER_CLIENT,
             .request => |r| r._referrer,

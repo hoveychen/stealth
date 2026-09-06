@@ -29,7 +29,16 @@
 // The raw-socket server is header-echo.mjs's, for its reason: node:http reorders
 // headers, and order is part of what these captures are for.
 //
+// `--scenario fetch-mode` reuses the same two-origin rig for a different
+// question, the way accept-ch-echo.mjs grew `--scenario frame`: what do
+// `Sec-Fetch-Mode` and `Origin` follow? The storage-access page already showed
+// that `fetch(u, {mode:'no-cors'})` reads `cors` here and `no-cors` in Chrome,
+// which also grows an `Origin` Chrome does not send -- but that page varies mode
+// and cross-siteness together and never varies the method at all, so it cannot
+// say which of the three each field follows. This one crosses all three.
+//
 // usage: node tools/fingerprint/storage-access-echo.mjs <chrome|lightpanda> [--headed-ua]
+//          [--scenario storage-access|fetch-mode]
 //          [--port n] [--http-port n] [--xsite-port n] [--out p]
 // env: LP_BIN, CHROME
 import { spawn } from 'node:child_process';
@@ -64,8 +73,70 @@ const LIGHTPANDA = process.env.LP_BIN ?? path.join(REPO, 'zig-out/bin/lightpanda
 const CHROME = process.env.CHROME
     ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
+const SCENARIO = arg('--scenario', 'storage-access');
+if (SCENARIO !== 'storage-access' && SCENARIO !== 'fetch-mode') {
+    console.error(`unknown --scenario ${SCENARIO}`);
+    process.exit(2);
+}
+
 const TOP = `http://localhost:${TOP_PORT}`;
 const XSITE = `http://127.0.0.1:${XSITE_PORT}`;
+// A third origin for the fetch-mode scenario only: same host as TOP, another
+// port. Cross-ORIGIN but SAME-site, which is the one axis TOP/XSITE cannot
+// separate -- and the two candidate rules for Origin (cross-origin, as the
+// Fetch spec writes it, or cross-site, as Sec-Fetch-Site reports it) disagree
+// exactly here.
+const XORIGIN_PORT = Number(arg('--xorigin-port', String(TOP_PORT + 2)));
+const XORIGIN = `http://localhost:${XORIGIN_PORT}`;
+
+// Three axes, crossed, one fetch each. The label is the path, so the request log
+// reads as the case name.
+//
+//   mode    the RequestInit member, plus `default` for not passing one at all
+//   site    same-origin (TOP) or cross-site (XSITE)
+//   method  GET, and a POST whose Content-Type is CORS-safelisted -- Origin is
+//           specified to follow the method as well as the mode, and a page that
+//           only ever GETs cannot see that half
+//
+// `mode:'same-origin'` is in here because this engine's Request.Mode has only
+// navigate/no-cors/cors: if Chrome reports a fourth value there is nowhere to
+// put it today. The cross-site cell of that row is a network error by
+// construction -- what matters is whether the request reaches the wire at all.
+const MODES = ['default', 'cors', 'no-cors', 'same-origin'];
+const METHODS = ['GET', 'POST'];
+const FETCH_MODE_CASES = [];
+for (const mode of MODES) {
+    for (const [site, base] of [['same', TOP], ['xorigin', XORIGIN], ['cross', XSITE]]) {
+        for (const method of METHODS) {
+            FETCH_MODE_CASES.push({
+                path: `/m/${mode}-${site}-${method.toLowerCase()}`,
+                url: `${base}/m/${mode}-${site}-${method.toLowerCase()}`,
+                mode, site, method,
+            });
+        }
+    }
+}
+
+const FETCH_MODE_PAGE = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>fetch-mode</title></head>
+<body>fetch-mode
+<script>
+var CASES = ${JSON.stringify(FETCH_MODE_CASES)};
+CASES.forEach(function (c) {
+    var init = { method: c.method };
+    if (c.mode !== 'default') init.mode = c.mode;
+    // A CORS-safelisted content type, so the POST is a simple request and no
+    // preflight comes first to confuse the log.
+    if (c.method === 'POST') {
+        init.body = 'x';
+        init.headers = { 'Content-Type': 'text/plain' };
+    }
+    try {
+        fetch(c.url, init).catch(function () { });
+    } catch (e) { /* mode:'same-origin' cross-site throws for some engines */ }
+});
+</script>
+</body></html>`;
 
 const TOP_PAGE = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>top</title></head>
@@ -110,7 +181,9 @@ fetch('${TOP}/sub/back-to-top-from-' + ${JSON.stringify(label)},
 const hits = [];
 
 function pageFor(who, target) {
-    if (who === 'top' && target.startsWith('/top')) return TOP_PAGE;
+    if (who === 'top' && target.startsWith('/top')) {
+        return SCENARIO === 'fetch-mode' ? FETCH_MODE_PAGE : TOP_PAGE;
+    }
     if (who === 'top' && target.startsWith('/samesiteframe')) return framePage('same-origin-frame');
     if (who === 'xsite' && target.startsWith('/frame')) return framePage('cross-site-frame');
     return null;
@@ -165,6 +238,10 @@ const servers = [
     await listen('top', TOP_PORT, '127.0.0.1'),
     await listen('top', TOP_PORT, '::1').catch(() => null),
     await listen('xsite', XSITE_PORT, '127.0.0.1'),
+    ...(SCENARIO === 'fetch-mode' ? [
+        await listen('xorig', XORIGIN_PORT, '127.0.0.1'),
+        await listen('xorig', XORIGIN_PORT, '::1').catch(() => null),
+    ] : []),
 ].filter(Boolean);
 
 async function headedUserAgent() {
@@ -189,7 +266,7 @@ async function headedUserAgent() {
     }
 }
 
-const state = { engine, headedUa, userAgentOverride: null, top: TOP, xsite: XSITE, hits };
+const state = { engine, headedUa, scenario: SCENARIO, userAgentOverride: null, top: TOP, xsite: XSITE, hits };
 if (headedUa) {
     if (engine !== 'chrome') { console.error('--headed-ua is a chrome arm'); process.exit(2); }
     state.userAgentOverride = await headedUserAgent();
@@ -224,9 +301,13 @@ try {
 
     // A cross-site page visited top-level, for the one axis the embed cannot
     // reach: is the header about being cross-site, or about being a subframe?
-    hits.push({ mark: 'XSITE visited top-level' });
-    await cdp.send('Page.navigate', { url: `${XSITE}/frame` }, sessionId);
-    await sleep(2500);
+    // Only the storage-access page has that question; the fetch-mode one is
+    // done once its fetches have gone out.
+    if (SCENARIO === 'storage-access') {
+        hits.push({ mark: 'XSITE visited top-level' });
+        await cdp.send('Page.navigate', { url: `${XSITE}/frame` }, sessionId);
+        await sleep(2500);
+    }
 } catch (err) {
     state.error = String(err.message ?? err);
 } finally {
@@ -238,15 +319,35 @@ try {
 
 const get = (h, name) => (h.find(([k]) => k.toLowerCase() === name) ?? [])[1];
 
-console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''} ===`);
+console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''} ${SCENARIO} ===`);
 console.log(`    TOP=${TOP}  XSITE=${XSITE}`);
-for (const h of hits) {
-    if (h.mark) { console.log(`--- ${h.mark}`); continue; }
-    const sa = get(h.headers, 'sec-fetch-storage-access');
-    console.log(`  [${h.who.padEnd(5)}] ${h.method.padEnd(4)} ${h.target.padEnd(28)}`
-        + ` site=${String(get(h.headers, 'sec-fetch-site')).padEnd(11)}`
-        + ` dest=${String(get(h.headers, 'sec-fetch-dest')).padEnd(9)}`
-        + ` storage-access=${sa === undefined ? '(absent)' : sa}`);
+if (SCENARIO === 'fetch-mode') {
+    // By case rather than by arrival, so a case that never reached the wire is
+    // a visible row rather than a missing one.
+    const byPath = new Map();
+    for (const h of hits) {
+        if (h.mark || !h.target.startsWith('/m/')) continue;
+        byPath.set(h.target, h);
+    }
+    for (const c of FETCH_MODE_CASES) {
+        const h = byPath.get(c.path);
+        const origin = h && get(h.headers, 'origin');
+        console.log(`  ${`${c.mode}/${c.site}/${c.method}`.padEnd(28)}`
+            + (h
+                ? ` mode=${String(get(h.headers, 'sec-fetch-mode')).padEnd(12)}`
+                    + ` site=${String(get(h.headers, 'sec-fetch-site')).padEnd(12)}`
+                    + ` origin=${origin === undefined ? '(absent)' : origin}`
+                : ' (never reached the wire)'));
+    }
+} else {
+    for (const h of hits) {
+        if (h.mark) { console.log(`--- ${h.mark}`); continue; }
+        const sa = get(h.headers, 'sec-fetch-storage-access');
+        console.log(`  [${h.who.padEnd(5)}] ${h.method.padEnd(4)} ${h.target.padEnd(28)}`
+            + ` site=${String(get(h.headers, 'sec-fetch-site')).padEnd(11)}`
+            + ` dest=${String(get(h.headers, 'sec-fetch-dest')).padEnd(9)}`
+            + ` storage-access=${sa === undefined ? '(absent)' : sa}`);
+    }
 }
 if (state.error) console.log(`ERROR ${state.error}`);
 
