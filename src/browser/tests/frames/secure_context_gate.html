@@ -139,7 +139,11 @@ insecure origin this suite can reach without a second listener.
       // the storage buckets and all 40 of WebGPU -- and 24 unconditional ones:
       // MSE, the two font interfaces and the two sandboxed-filesystem
       // operations.
-      testing.expectEqual(231, w.count);
+      //
+      // 232 with `Worker`, which a dedicated worker gained so it can start
+      // another one (worker/secure_context.html). Not [SecureContext], so it
+      // lands on this side of the gate too.
+      testing.expectEqual(232, w.count);
     });
   }
 </script>

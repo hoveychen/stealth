@@ -73,7 +73,7 @@ pub fn init(worker: *Worker, url: [:0]const u8) !*DedicatedWorkerGlobalScope {
         worker._type == .module,
         worker._frame_id,
         worker._loader_id,
-        worker._frame,
+        worker._owner_frame,
     );
 }
 

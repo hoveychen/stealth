@@ -886,7 +886,7 @@ test "Env: Worker context " {
     const frame = try testing.createFrame();
     defer testing.test_session.closeAllPages();
 
-    const worker = try @import("../webapi/Worker.zig").init("http://localhost:9582/src/browser/tests/testing.js", null, frame);
+    const worker = try @import("../webapi/Worker.zig").init("http://localhost:9582/src/browser/tests/testing.js", null, &frame.js.execution);
 
     var ls: js.Local.Scope = undefined;
     worker._worker_scope._proto.js.localScope(&ls);
