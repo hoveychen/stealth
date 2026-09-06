@@ -564,6 +564,17 @@ for (const b of state.blobs) {
         + `${b.gapAt !== undefined ? ` GAP@${b.gapAt}` : ''} type=${JSON.stringify(b.type)}`);
 }
 for (const p of state.posts) console.log(`  POST ${String(p.postLen).padStart(7)} ${p.verdict ?? '?'}  ${p.url.slice(-40)}`);
+// The verdict this run got, on the same criterion cf-token.mjs uses: the ticket
+// is handed out to arms that are then refused the page, so `served` reads the
+// page itself. Without it a captured plaintext says nothing about which side of
+// the decision it sits on -- every capture before this line was of a run whose
+// verdict nobody recorded, so the plaintext of an HONOURED payload had never
+// been looked at.
+//
+// It is also the instrument's own honesty check, which the header above asks
+// for: run the oracle arm with the wrappers in and see whether it still clears.
+state.served = /bypassed/i.test(String(state.final?.text ?? ''));
+console.log(`served=${state.served}`);
 console.log(`FINAL ${JSON.stringify(state.final)}`);
 if (state.error) {
     // A run that threw is not a reading. Exiting non-zero is the point: a
