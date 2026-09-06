@@ -187,6 +187,12 @@ const CORE = `(function () {
     try {
       owner[key] = disguise(function () {
         try { record(label, arguments[argIndex]); } catch (e) { /* keep going */ }
+        if (label === 'xhr.send') {
+          try {
+            var b = arguments[0];
+            surfaceCensus(typeof b === 'string' ? b.length : (b && b.byteLength) || 0);
+          } catch (e) { /* keep going */ }
+        }
         // A bare call to a *global* function (btoa, fetch) passes this ===
         // undefined, and forwarding that to the original raises "Illegal
         // invocation" -- which in a worker means the telemetry POST never goes
@@ -204,6 +210,48 @@ const CORE = `(function () {
   try { wrapMethod(globalThis.TextEncoder && globalThis.TextEncoder.prototype, 'encode', 'TextEncoder.encode', 0); } catch (e) {}
   try { wrapMethod(globalThis.JSON, 'stringify', 'JSON.stringify', 0); } catch (e) {}
   try { wrapMethod(globalThis, 'btoa', 'btoa', 0); } catch (e) {}
+
+  // r3's length is not a function of the encoder inputs: the sum of the 15
+  // TextEncoder.encode lengths is a constant per arm (124941 on Chrome, 124920
+  // here -- 21 bytes apart), while r3 itself swings 3KB run to run and sits
+  // ~2.3KB lower on this engine. Each of those encodes is paired with a
+  // subtle.digest of the same length, so the big buffers are HASHED, not sent;
+  // whatever fills r3's 88KB comes from somewhere the funnels above cannot see.
+  //
+  // The two surfaces Cloudflare is known to walk are the realm's own globals
+  // and the resource-timing entry names (README: cf judges the total characters
+  // of the entry names). Both are countable without copying any of them, and
+  // counting is the point: a recorder that emitted the text would put it back
+  // into the realm and change the very payload being measured -- measured, the
+  // r2 hooks did exactly that and inverted the sign of the difference. So this
+  // emits numbers only, once per realm, at the moment a body big enough to be
+  // r3 goes out.
+  var censusDone = false;
+  function surfaceCensus(bodyLen) {
+    if (censusDone || !bodyLen || bodyLen < 20000) return;
+    censusDone = true;
+    var out = { bodyLen: bodyLen };
+    try {
+      var es = performance.getEntries();
+      out.entries = es.length;
+      var nb = 0, tb = 0;
+      for (var i = 0; i < es.length; i++) {
+        nb += String(es[i].name || '').length;
+        tb += String(es[i].entryType || '').length;
+      }
+      out.entryNameBytes = nb;
+      out.entryTypeBytes = tb;
+    } catch (e) { out.entriesErr = String(e && e.message).slice(0, 60); }
+    try {
+      var names = Object.getOwnPropertyNames(globalThis);
+      out.globals = names.length;
+      var gb = 0;
+      for (var j = 0; j < names.length; j++) gb += names[j].length;
+      out.globalNameBytes = gb;
+    } catch (e) { out.globalsErr = String(e && e.message).slice(0, 60); }
+    emit({ k: 'surface', a: out,
+           url: String((globalThis.location || {}).href || '?').slice(0, 120) });
+  }
 
   // What the body ends up being, whichever transport carries it -- the anchor
   // that says which of the records above is the one that became the POST.
