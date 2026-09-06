@@ -26105,3 +26105,58 @@ real gap" was, on this station, a restatement of the h3/h2 difference, and that
 one has been causally closed since a Chrome with QUIC disabled cleared 6 of 6.
 The engine fix is worth keeping on its own terms — we answered an empty array for
 every response, not just Cloudflare's — but it cannot fire here.
+
+## The payload is a constant and the verdict is not (B121, 2026-09-06)
+
+`fo-plaintext.mjs` has been able to read the guard's payload before it is
+encrypted for a long time, and it never recorded whether the run it read was
+honoured. Every capture it produced was of a run whose outcome nobody knew, and
+the comparison those captures fed was our refused run against Chrome's refused
+run -- chosen deliberately, to hold the challenge variant still. The plaintext
+of a payload Cloudflare **accepted** had not been looked at.
+
+One line fixes that (`served`, on cf-token.mjs's criterion: the final document
+is the page, not the ticket). Two things fell out of it immediately.
+
+**The wrappers are honest.** A hooked Chrome still gets served -- 32 of 34 runs
+across two sittings, against 29 of 30 for the unhooked historical sample. That
+is the check this file's header has always asked for, and it now runs on every
+capture instead of being an argument.
+
+**The collected payload does not decide the verdict.** Eight Chrome runs share
+one payload signature -- the ten large `TextEncoder.encode` inputs are
+byte-identical across all of them, only the call order moves -- and two of those
+eight were refused the page. Same machine, same binary, same exit IP, same
+report, opposite outcomes. Extending that to 44 runs with the whole exchange
+recorded (timestamps, statuses, response headers, encoded sizes), the one
+refused run sits inside the served distribution on every measured axis; the
+first thing that distinguishes it is r3's own reply, `cf-chl-gen` where a
+served run gets `cf-chl-out`. Whatever costs Chrome those few percent leaves no
+trace on the client side.
+
+Two readings that did not survive the larger sample, both of them mine:
+
+  - "Our round 1 reply is 4KB bigger than Chrome's." It is not. The reply has
+    two size families (~30.4K, then ~34.2K from run 8 onward): Cloudflare
+    changed challenge variant mid-sitting. Compare within a family.
+  - "Refused samples are cheap now." From 6 of 8 they looked it; 26 consecutive
+    served runs later, the rate is ~6%, the same order as the unhooked one.
+
+What our arm does have is a residual, stable and quantified, and only visible
+once the variant families are separated:
+
+| arm | n | r3 request bytes |
+|---|---|---|
+| chrome, served | 48 | 88300..91415 (median 89719) |
+| chrome, refused | 1 | 88855 |
+| ours, refused | 5 | **87234..88780 (median 87404)** |
+
+The ranges barely touch. Our decisive POST is systematically ~2.3KB shorter --
+while the plaintext we can read is nearly byte-identical to an honoured one (the
+whole difference is four raster buffers' contents and four short values'
+lengths, some tens of bytes). So either material reaches r3 without passing
+through `TextEncoder.encode`, or the ciphertext expands differently; the
+captures here cannot tell those apart, which is what the next plan is for.
+
+Read against `cf-remaining-448`, which measured the same shortfall at 448 bytes
+in August: it is the same phenomenon, larger.
