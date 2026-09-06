@@ -57,7 +57,7 @@
 // question, not a wire one.
 //
 // usage: node tools/fingerprint/storage-access-echo.mjs <chrome|lightpanda> [--headed-ua]
-//          [--scenario storage-access|fetch-mode|fetch-site]
+//          [--scenario storage-access|fetch-mode|fetch-site|blob-origin]
 //          [--port n] [--http-port n] [--xsite-port n] [--out p]
 // env: LP_BIN, CHROME
 import { spawn } from 'node:child_process';
@@ -94,7 +94,8 @@ const CHROME = process.env.CHROME
     ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const SCENARIO = arg('--scenario', 'storage-access');
-if (SCENARIO !== 'storage-access' && SCENARIO !== 'fetch-mode' && SCENARIO !== 'fetch-site') {
+const SCENARIOS = ['storage-access', 'fetch-mode', 'fetch-site', 'blob-origin'];
+if (!SCENARIOS.includes(SCENARIO)) {
     console.error(`unknown --scenario ${SCENARIO}`);
     process.exit(2);
 }
@@ -116,7 +117,13 @@ const OTHER_SCHEME = TOP_SCHEME === 'https' ? 'http' : 'https';
 
 const TOP = SCENARIO === 'fetch-site'
     ? `${TOP_SCHEME}://${SITE_HOST}:${TOP_PORT}`
-    : `http://localhost:${TOP_PORT}`;
+    // 127.0.0.1 rather than `localhost` for blob-origin, because that scenario
+    // reads which headers Chrome attaches and Chrome attaches none of them to a
+    // URL that is not potentially trustworthy. Both loopback forms qualify;
+    // the literal is the one this rig can bind on one family only.
+    : SCENARIO === 'blob-origin'
+        ? `http://127.0.0.1:${TOP_PORT}`
+        : `http://localhost:${TOP_PORT}`;
 const XSITE = SCENARIO === 'fetch-site'
     ? `${TOP_SCHEME}://127.0.0.1:${XSITE_PORT}`
     : `http://127.0.0.1:${XSITE_PORT}`;
@@ -154,6 +161,67 @@ CASES.forEach(function (c) {
     try { fetch(c.url, { mode: 'no-cors' }).catch(function () { }); } catch (e) { }
 });
 </script>
+</body></html>`;
+
+
+// Where a request's client sits, crossed against how that client was made.
+// The live cf-scrapingcourse capture has exactly one request Chrome sends with
+// no `sec-ch-ua*` at all, no `Referer`, and a `cache-control: max-age=0` no
+// other request carries -- and it is the one whose document is a
+// `blob:https://challenges.cloudflare.com/<uuid>`. Three candidate rules fit
+// that one row (it is a blob-URL client; it is a worker; the fetch passed
+// options), and one row cannot separate them, so this page runs all of them.
+const BLOB_CASES = [
+    'top-plain',            // the control: an ordinary fetch from the top document
+    'top-reload',           // ... with each RequestInit `cache` value, which is
+    'top-no-cache',         //     the third candidate for the cache-control the
+    'top-no-store',         //     live capture carried
+    'top-force-cache',
+    'top-no-referrer',      // ... with referrerPolicy:'no-referrer'
+    'blob-iframe',          // a document loaded from a blob: URL
+    'blob-worker',          // a dedicated worker whose script is a blob: URL
+    'url-worker',           // ... and the same worker from an http: URL
+];
+
+// The worker body, served both ways: from a blob: URL the page mints, and from
+// this path, so that "is a worker" and "was made from a blob" are two axes
+// rather than one.
+const workerBody = (label) => `fetch(TOP_URL + '/b/${label}').then(function (r) { return r.text(); });`
+    .replace('TOP_URL', JSON.stringify(TOP));
+
+const BLOB_PAGE = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>blob-origin</title></head>
+<body>blob-origin
+<script>
+var TOP = ${JSON.stringify(TOP)};
+function go(label, init) {
+    try { fetch(TOP + '/b/' + label, init).catch(function () { }); } catch (e) { }
+}
+go('top-plain');
+go('top-reload', { cache: 'reload' });
+go('top-no-cache', { cache: 'no-cache' });
+go('top-no-store', { cache: 'no-store' });
+go('top-force-cache', { cache: 'force-cache' });
+go('top-no-referrer', { referrerPolicy: 'no-referrer' });
+
+// A document whose URL is a blob:. Its fetch is same-origin with TOP, because a
+// blob URL keeps the origin it was minted from.
+try {
+    var frameHtml = '<!DOCTYPE html><html><body><scr' + 'ipt>'
+        + 'fetch(' + JSON.stringify(TOP + '/b/blob-iframe') + ').catch(function(){});'
+        + '</scr' + 'ipt></body></html>';
+    var f = document.createElement('iframe');
+    f.src = URL.createObjectURL(new Blob([frameHtml], { type: 'text/html' }));
+    document.body.appendChild(f);
+} catch (e) { }
+
+try {
+    var src = URL.createObjectURL(new Blob([${JSON.stringify(workerBody('blob-worker'))}],
+        { type: 'text/javascript' }));
+    new Worker(src);
+} catch (e) { }
+try { new Worker(TOP + '/w/url-worker.js'); } catch (e) { }
+<\/script>
 </body></html>`;
 
 // Three axes, crossed, one fetch each. The label is the path, so the request log
@@ -251,9 +319,11 @@ function pageFor(who, target) {
     if (who === 'top' && target.startsWith('/top')) {
         if (SCENARIO === 'fetch-mode') return FETCH_MODE_PAGE;
         if (SCENARIO === 'fetch-site') return FETCH_SITE_PAGE;
+        if (SCENARIO === 'blob-origin') return BLOB_PAGE;
         return TOP_PAGE;
     }
     if (who === 'top' && target.startsWith('/samesiteframe')) return framePage('same-origin-frame');
+    if (who === 'top' && target.startsWith('/w/')) return null;
     if (who === 'xsite' && target.startsWith('/frame')) return framePage('cross-site-frame');
     return null;
 }
@@ -273,9 +343,14 @@ function serve(who, sock, head) {
     });
 
     const html = pageFor(who, target);
-    const body = Buffer.from(html ?? 'ok');
+    // A worker script has to arrive as JavaScript or the browser refuses it.
+    const script = target.startsWith('/w/') ? workerBody('url-worker') : null;
+    const body = Buffer.from(html ?? script ?? 'ok');
+    const type = html ? 'text/html; charset=utf-8'
+        : script ? 'text/javascript; charset=utf-8'
+            : 'text/plain';
     sock.write(`HTTP/1.1 200 OK\r\n`
-        + `Content-Type: ${html ? 'text/html; charset=utf-8' : 'text/plain'}\r\n`
+        + `Content-Type: ${type}\r\n`
         + `Content-Length: ${body.length}\r\n`
         + `Connection: keep-alive\r\n\r\n`);
     sock.write(body);
@@ -438,7 +513,25 @@ const get = (h, name) => (h.find(([k]) => k.toLowerCase() === name) ?? [])[1];
 
 console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''} ${SCENARIO} ===`);
 console.log(`    TOP=${TOP}  XSITE=${XSITE}`);
-if (SCENARIO === 'fetch-site') {
+if (SCENARIO === 'blob-origin') {
+    const seen = new Map();
+    for (const h of hits) {
+        if (h.mark || !h.target.startsWith('/b/')) continue;
+        seen.set(h.target.slice('/b/'.length), h);
+    }
+    for (const label of BLOB_CASES) {
+        const h = seen.get(label);
+        if (!h) { console.log(`  ${label.padEnd(16)} (never reached the wire)`); continue; }
+        const g = (n) => get(h.headers, n);
+        const hints = h.headers.map(([k]) => k.toLowerCase()).filter((k) => k.startsWith('sec-ch-'));
+        console.log(`  ${label.padEnd(16)}`
+            + ` site=${String(g('sec-fetch-site')).padEnd(11)}`
+            + ` dest=${String(g('sec-fetch-dest')).padEnd(7)}`
+            + ` hints=${String(hints.length).padEnd(3)}`
+            + ` cache-control=${(g('cache-control') ?? '(absent)').padEnd(11)}`
+            + ` referer=${g('referer') ?? '(absent)'}`);
+    }
+} else if (SCENARIO === 'fetch-site') {
     const byPath = new Map();
     for (const h of hits) {
         if (h.mark || !h.target.startsWith('/s/')) continue;
