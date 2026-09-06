@@ -132,6 +132,20 @@ self.onmessage = async () => {
     // without their prototype chain, so matching it is more than the mechanical
     // conversion the rest of this file's families got. Both are a measured
     // shortfall against Chrome's worker, not a match.
+    //
+    // Adding `Worker` to the dedicated-worker list was tried, and the name on
+    // its own is WORSE than the shortfall: with it exposed, a worker that calls
+    // `new Worker(...)` hangs this engine -- the driving Runtime.evaluate never
+    // returns -- where Chrome nests happily (measured on the same page: the
+    // inner worker echoes, `typeof Worker` is "function"). An absent name is a
+    // clean ReferenceError; a present one that wedges the engine is a louder
+    // tell and a worse bug. So this stays out until the spawn path can reach a
+    // worker realm's frame.
+    //
+    // While measuring that: Chrome does NOT carry `Worker` in a SHARED worker,
+    // despite the IDL's [Exposed=(Window,DedicatedWorker,SharedWorker)] --
+    // `typeof Worker` is "undefined" there. If it is ever added, it belongs in
+    // dedicated_worker_only_apis, not worker_common_apis.
     frame_bound: ['CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
 
     // The sandboxed filesystem. Chrome's worker carries the two async
