@@ -26142,21 +26142,40 @@ Two readings that did not survive the larger sample, both of them mine:
   - "Refused samples are cheap now." From 6 of 8 they looked it; 26 consecutive
     served runs later, the rate is ~6%, the same order as the unhooked one.
 
-What our arm does have is a residual, stable and quantified, and only visible
-once the variant families are separated:
+What our arm does have is a residual, and the honest size of it took a second
+sample to establish. On five runs it looked like ~2.3KB with the ranges barely
+touching. On eleven it is half that, with the ranges overlapping:
 
 | arm | n | r3 request bytes |
 |---|---|---|
-| chrome, served | 48 | 88300..91415 (median 89719) |
-| chrome, refused | 1 | 88855 |
-| ours, refused | 5 | **87234..88780 (median 87404)** |
+| chrome | 57 | 88268..91415 (median 89666) |
+| ours | 11 | 87234..90220 (median **88546**) |
 
-The ranges barely touch. Our decisive POST is systematically ~2.3KB shorter --
-while the plaintext we can read is nearly byte-identical to an honoured one (the
-whole difference is four raster buffers' contents and four short values'
-lengths, some tens of bytes). So either material reaches r3 without passing
-through `TextEncoder.encode`, or the ciphertext expands differently; the
-captures here cannot tell those apart, which is what the next plan is for.
+A 1.1KB median gap, 526 of 627 pairs with Chrome larger (z≈3.5, so the shift is
+real), and one of our runs above Chrome's median. Against a within-Chrome
+spread of 3.1KB, this is a small effect on a noisy quantity -- not the
+nearly-disjoint distributions the first five runs suggested. Anyone quoting the
+2.3KB figure is quoting a sampling artefact.
 
-Read against `cf-remaining-448`, which measured the same shortfall at 448 bytes
-in August: it is the same phenomenon, larger.
+Three measurements say what the gap is NOT:
+
+  - **Not the encoder inputs.** The sum of the fifteen `TextEncoder.encode`
+    lengths is a constant per arm -- 124941 on Chrome, 124920 here, 21 bytes
+    apart -- while r3 swings 3KB run to run. And every one of those encodes is
+    paired with a `subtle.digest` of the same length, so those buffers are
+    hashed, not shipped: they put about 480 bytes into r3, not 88KB.
+  - **Not the realm or entry text.** A numbers-only census taken at the instant
+    r3 goes out (`surfaceCensus`, emitted once per realm, counts only) puts the
+    worker realm's own globals at 1274 names / 18485 name-bytes on Chrome and
+    1238 / 17897 here, and the resource-timing entry names at ~1474 bytes
+    against ~1454. Both known-collected surfaces together account for ~0.6KB.
+  - **Not measurable with the heavier hooks at all.** `--r2` leaves 617KB
+    strings in the realm and pushed our r3 to 90295, *above* Chrome's run in the
+    same sitting -- the instrument inverted the sign of the difference. Only the
+    numbers-only census is safe here.
+
+The one new number worth keeping: **the worker realm is 36 global names short**
+(1238 against 1274). The window realm was measured at 921 of 923 long ago, so
+this is a much larger hole in a realm the collector is known to walk, and it is
+independent of r3's length.
+
