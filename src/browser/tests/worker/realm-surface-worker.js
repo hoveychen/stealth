@@ -126,27 +126,19 @@ self.onmessage = async () => {
       'PushManager', 'Lock', 'LockManager', 'MediaCapabilities',
       'UserActivation', 'WGSLLanguageFeatures',
     ].filter((n) => typeof self[n] !== 'function').join(','),
-    // The two that stay out, and for two different reasons. `Worker` is
-    // genuinely frame-scoped -- spawning one goes through the frame's loader and
-    // worker registry. `CSSSkewX` is not, but Chrome exposes it and CSSSkewY
-    // without their prototype chain, so matching it is more than the mechanical
-    // conversion the rest of this file's families got. Both are a measured
-    // shortfall against Chrome's worker, not a match.
+    // `CSSSkewX` stays out: Chrome exposes it and CSSSkewY without their
+    // prototype chain, so matching it is more than the mechanical conversion
+    // the rest of this file's families got. It is a measured shortfall against
+    // Chrome's worker, not a match.
     //
-    // Adding `Worker` to the dedicated-worker list was tried, and the name on
-    // its own is WORSE than the shortfall: with it exposed, a worker that calls
-    // `new Worker(...)` hangs this engine -- the driving Runtime.evaluate never
-    // returns -- where Chrome nests happily (measured on the same page: the
-    // inner worker echoes, `typeof Worker` is "function"). An absent name is a
-    // clean ReferenceError; a present one that wedges the engine is a louder
-    // tell and a worse bug. So this stays out until the spawn path can reach a
-    // worker realm's frame.
-    //
-    // While measuring that: Chrome does NOT carry `Worker` in a SHARED worker,
-    // despite the IDL's [Exposed=(Window,DedicatedWorker,SharedWorker)] --
-    // `typeof Worker` is "undefined" there. If it is ever added, it belongs in
-    // dedicated_worker_only_apis, not worker_common_apis.
-    frame_bound: ['CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
+    // `Worker` used to be here too, described as genuinely frame-scoped because
+    // spawning goes through the frame's loader and worker registry. It is not
+    // frame-scoped after all: everything that path wanted -- the base URL, the
+    // arenas, the factory, the event manager, the scheduler, the HTTP owner --
+    // is on *Execution, which Env builds per context out of that context's own
+    // global, and the registry now lives on whichever global asked. So a worker
+    // can start a worker here, the way Chrome's does (worker/nested.html).
+    frame_bound: ['CSSSkewX'].filter((n) => n in self).join(','),
 
     // The sandboxed filesystem. Chrome's worker carries the two async
     // operations as own enumerable functions of the global and names none of

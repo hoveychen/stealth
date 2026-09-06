@@ -112,6 +112,21 @@ pub fn newRequest(self: *const Execution, req: HttpClient.Request) !*HttpClient.
     };
 }
 
+// The asking realm's own list of dedicated workers it started, walked at that
+// realm's teardown. A document has one and so does a worker -- a dedicated
+// worker can start another one.
+pub fn trackWorker(self: *const Execution, worker: *@import("../webapi/Worker.zig")) !void {
+    return switch (self.js.global) {
+        inline else => |g| g.trackWorker(worker),
+    };
+}
+
+pub fn removeWorker(self: *const Execution, worker: *@import("../webapi/Worker.zig")) void {
+    return switch (self.js.global) {
+        inline else => |g| g.removeWorker(worker),
+    };
+}
+
 pub fn getBroadcastChannels(self: *const Execution) *std.DoublyLinkedList {
     return switch (self.js.global) {
         inline else => |g| &g._broadcast_channels,

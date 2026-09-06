@@ -48,7 +48,27 @@ _frame_id: u32,
 _loader_id: u32,
 
 _proto: *EventTarget,
-_frame: *Frame,
+// The realm that created this worker, not its Frame. A dedicated worker can
+// create another one, and a worker realm has no Frame to hand out: asking for
+// one there is `unreachable` in Caller.getGlobalArg, and handing over the
+// OWNER's Frame instead aborts on the live Cloudflare station (see the comment
+// there). Everything this file wanted a Frame for -- the base URL, the arenas,
+// the factory, the event manager, the scheduler, the HTTP owner -- is either on
+// the Execution or on this union, and each answers with the asking realm's own
+// state.
+_global: js.Context.GlobalScope,
+
+// The DOCUMENT's frame, kept only to build this worker's own global scope,
+// which inherits the document's origin, storage partition, secure-context flag
+// and referrer policy. A first-level worker already stores exactly this; a
+// nested one inherits the same document, so the child scope is built from the
+// same state either way.
+//
+// This is NOT the thing Caller.getGlobalArg refuses to do. What aborts on the
+// live station is handing a Frame to JS-facing code RUNNING in a worker realm,
+// which then reaches the page thread's factory and arenas from worker code.
+// Everything on that path here goes through `exec()` instead.
+_owner_frame: *Frame,
 _arena: *lp.Arena,
 _worker_scope: *DedicatedWorkerGlobalScope,
 
@@ -73,17 +93,30 @@ const WorkerOptions = struct {
     name: []const u8 = "",
 };
 
-pub fn init(url: []const u8, options: ?WorkerOptions, frame: *Frame) !*Worker {
-    const session = frame._session;
+// The Execution of the realm that created this worker. It lives on that
+// realm's Context, so it is as long-lived as the realm and safe to reach for
+// from a callback that runs long after the constructor returned.
+fn exec(self: *const Worker) *js.Execution {
+    return &self._global.getJs().execution;
+}
+
+pub fn init(url: []const u8, options: ?WorkerOptions, exec_: *js.Execution) !*Worker {
+    const session = exec_.session;
 
     const arena = try session.getArena(.small, "Worker");
     errdefer arena.release();
 
-    const resolved_url = try URL.resolve(arena.allocator(), frame.base(), url, .{ .encoding = frame.charset });
-    const self = try frame._page.factory.eventTargetWithAllocator(arena.allocator(), Worker{
+    // The asking realm's base, so a nested worker resolves its script against
+    // the outer WORKER's URL rather than the document's.
+    const resolved_url = try URL.resolve(arena.allocator(), exec_.base(), url, .{ .encoding = exec_.charset.* });
+    const self = try exec_.page.factory.eventTargetWithAllocator(arena.allocator(), Worker{
         ._arena = arena,
         ._proto = undefined,
-        ._frame = frame,
+        ._global = exec_.js.global,
+        ._owner_frame = switch (exec_.js.global) {
+            .frame => |f| f,
+            .worker => |w| w._frame,
+        },
         ._url = resolved_url,
         ._type = if (options) |o| o.type else .classic,
         ._name = if (options) |o| try arena.allocator().dupe(u8, o.name) else "",
@@ -95,7 +128,7 @@ pub fn init(url: []const u8, options: ?WorkerOptions, frame: *Frame) !*Worker {
     errdefer dedicated_worker.deinit();
 
     self._worker_scope = dedicated_worker;
-    try frame.trackWorker(self);
+    try exec_.trackWorker(self);
 
     // `--disable-workers` (or `LP.configureLoading { worker: false }`):
     // skip the script fetch and eval. The Worker object is still
@@ -111,7 +144,7 @@ pub fn init(url: []const u8, options: ?WorkerOptions, frame: *Frame) !*Worker {
     self._script_arena = try session.getArena(.large, "Worker.script");
     errdefer self.releaseScriptArena();
 
-    const transfer = frame.newRequest(.{
+    const transfer = exec_.newRequest(.{
         .ctx = self,
         .method = .GET,
         .url = resolved_url,
@@ -128,7 +161,7 @@ pub fn init(url: []const u8, options: ?WorkerOptions, frame: *Frame) !*Worker {
         .shutdown_callback = httpShutdownCallback,
     }) catch |err| {
         log.err(.browser, "Worker request", .{ .url = resolved_url, .err = err });
-        frame.removeWorker(self);
+        exec_.removeWorker(self);
         return err;
     };
 
@@ -141,13 +174,13 @@ pub fn init(url: []const u8, options: ?WorkerOptions, frame: *Frame) !*Worker {
     // Chrome puts the creating document's URL on the script fetch itself
     // (measured, scratch/b120/blob-chrome.json). Frame.newRequest is the
     // two-phase helper and does not add it, so ask for it here.
-    frame.headersForRequest(transfer) catch |err| {
+    exec_.headersForRequest(transfer) catch |err| {
         log.err(.browser, "Worker request headers", .{ .url = resolved_url, .err = err });
     };
 
     transfer.submit() catch |err| {
         log.err(.browser, "Worker request", .{ .url = resolved_url, .err = err });
-        frame.removeWorker(self);
+        exec_.removeWorker(self);
         return err;
     };
     return self;
@@ -326,11 +359,11 @@ fn fireErrorEvent(self: *Worker, message: []const u8, error_value: ?js.Value.Glo
 }
 
 fn _fireErrorEvent(self: *Worker, message: []const u8, error_value: ?js.Value.Global) !void {
-    const frame = self._frame;
+    const e = self.exec();
     const target = self.asEventTarget();
 
     // Check if there are any listeners
-    if (!frame._event_manager.hasDirectListeners(target, "error", null)) {
+    if (!e.hasDirectListeners(target, "error", null)) {
         if (error_value) |ev| ev.release();
         return;
     }
@@ -341,9 +374,9 @@ fn _fireErrorEvent(self: *Worker, message: []const u8, error_value: ?js.Value.Gl
         .filename = self._url,
         .bubbles = false,
         .cancelable = true,
-    }, frame._page);
+    }, e.page);
 
-    try frame._event_manager.dispatchDirect(target, error_event.asEvent(), null, .{
+    try e.dispatch(target, error_event.asEvent(), null, .{
         .context = "Worker.onerror",
     });
 }
@@ -364,10 +397,10 @@ pub fn postMessage(self: *Worker, data: js.Value) !void {
 
 // Called internally by DedicatedWorkerGlobalScope when it wants to post a message to us
 pub fn receiveMessage(self: *Worker, data: js.Value) !void {
-    const frame = self._frame;
+    const ctx = self._global.getJs();
     const cloned_data = blk: {
         var ls: js.Local.Scope = undefined;
-        frame.js.localScope(&ls);
+        ctx.localScope(&ls);
         defer ls.deinit();
 
         // clones from where it currently is (the Worker context) to our Page's context
@@ -375,7 +408,7 @@ pub fn receiveMessage(self: *Worker, data: js.Value) !void {
         break :blk cloned.persist();
     };
 
-    const message_arena = try frame.getArena(.tiny, "Worker.receiveMessage");
+    const message_arena = try ctx.page.getArena(.tiny, "Worker.receiveMessage");
     errdefer message_arena.release();
 
     const callback = try message_arena.create(ReceiveMessageCallback);
@@ -385,7 +418,7 @@ pub fn receiveMessage(self: *Worker, data: js.Value) !void {
         .arena = message_arena,
     };
 
-    try frame.js.scheduler.add(callback, ReceiveMessageCallback.run, 0, .{
+    try ctx.scheduler.add(callback, ReceiveMessageCallback.run, 0, .{
         .name = "Worker.receiveMessage",
         .finalizer = ReceiveMessageCallback.cancelled,
     });
@@ -426,25 +459,25 @@ const ReceiveMessageCallback = struct {
         defer self.deinit();
 
         const worker = self.worker;
-        const frame = worker._frame;
+        const e = worker.exec();
         const target = worker.asEventTarget();
 
         // If data is null, structured clone failed - fire messageerror
         const data = self.data catch |err| {
-            if (!frame._event_manager.hasDirectListeners(target, "messageerror", null)) {
+            if (!e.hasDirectListeners(target, "messageerror", null)) {
                 return null;
             }
             const event = (try MessageEvent.initTrusted(comptime .wrap("messageerror"), .{
                 .data = .{ .string = @errorName(err) },
                 .bubbles = false,
                 .cancelable = false,
-            }, frame._page)).asEvent();
-            try frame._event_manager.dispatchDirect(target, event, null, .{ .context = "Worker.messageerror" });
+            }, e.page)).asEvent();
+            try e.dispatch(target, event, null, .{ .context = "Worker.messageerror" });
             return null;
         };
 
         // Check if there are any listeners before creating the event
-        if (!frame._event_manager.hasDirectListeners(target, "message", null)) {
+        if (!e.hasDirectListeners(target, "message", null)) {
             data.release();
             return null;
         }
@@ -453,9 +486,9 @@ const ReceiveMessageCallback = struct {
             .data = .{ .value = data },
             .bubbles = false,
             .cancelable = false,
-        }, frame._page)).asEvent();
+        }, e.page)).asEvent();
 
-        try frame._event_manager.dispatchDirect(target, event, null, .{ .context = "Worker.receiveMessage" });
+        try e.dispatch(target, event, null, .{ .context = "Worker.receiveMessage" });
 
         return null;
     }

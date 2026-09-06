@@ -50,6 +50,7 @@ const scheduler = @import("scheduler.zig");
 const EventTarget = @import("EventTarget.zig");
 const Performance = @import("Performance.zig");
 const trusted_types = @import("trusted_types.zig");
+const Worker = @import("Worker.zig");
 const WorkerLocation = @import("WorkerLocation.zig");
 const ErrorEvent = @import("event/ErrorEvent.zig");
 const Fetch = @import("net/Fetch.zig");
@@ -108,6 +109,11 @@ _script_manager: ScriptManagerBase,
 // List of open BroadcastChannels, used to route  HTTP attribution. Mirrors Frame's fiage between same-named
 // channels in this worker's origin
 _broadcast_channels: std.DoublyLinkedList = .{},
+
+// The dedicated workers this worker started. A worker can start another one, so
+// the list Frame keeps for the document has to exist here too -- it is what
+// tears the children down when this realm dies.
+_workers: std.ArrayList(*Worker) = .empty,
 
 // List of MessagePorts living in this worker's context.
 _message_ports: std.DoublyLinkedList = .{},
@@ -266,8 +272,28 @@ pub fn deinit(self: *WorkerGlobalScope) void {
 
     page.revokeBlobUrlsFor(self._frame_id);
     browser.env.destroyContext(self.js);
+
+    // After the context is destroyed, the same order Frame.deinit uses: a
+    // finalizer can still reach into a child *Worker, so it has to outlive the
+    // context that might touch it.
+    for (self._workers.items) |worker| {
+        worker.deinit();
+    }
     self._call_arena.release();
     self._local_arena.release();
+}
+
+pub fn trackWorker(self: *WorkerGlobalScope, worker: *Worker) !void {
+    try self._workers.append(self.arena, worker);
+}
+
+pub fn removeWorker(self: *WorkerGlobalScope, worker: *Worker) void {
+    for (self._workers.items, 0..) |w, i| {
+        if (w == worker) {
+            _ = self._workers.swapRemove(i);
+            break;
+        }
+    }
 }
 
 pub fn base(self: *const WorkerGlobalScope) [:0]const u8 {

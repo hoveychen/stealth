@@ -2028,6 +2028,11 @@ const worker_common_apis = [_]type{
 // `Object.getOwnPropertyNames(self)` in that realm could read off us and not
 // off a browser.
 const dedicated_worker_only_apis = [_]type{
+    // A dedicated worker can start another one. Chrome does NOT carry `Worker`
+    // in a SHARED worker despite the IDL's [Exposed=(Window,DedicatedWorker,
+    // SharedWorker)] -- `typeof Worker` is "undefined" there (measured on
+    // Chrome 151) -- so this is dedicated-only.
+    @import("../webapi/Worker.zig"),
     // Chrome's dedicated worker scope carries IdleDetector (measured,
     // probe-win30).
     @import("../webapi/IdleDetector.zig"),

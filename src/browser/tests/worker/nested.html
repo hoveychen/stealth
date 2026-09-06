@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<body></body>
+<script src="../testing.js"></script>
+
+<!--
+A dedicated worker can start another dedicated worker. Chrome carries `Worker`
+in that realm (measured: 339 own global names to this engine's 322, and `Worker`
+was one of the six missing), and the inner worker echoes back.
+
+Cloudflare's collector runs in a worker, so this is a surface it can reach.
+-->
+
+<script id="nested_worker" type=module>
+  {
+    const state = await testing.async();
+    const worker = new Worker('./nested-worker.js');
+    worker.onmessage = (e) => state.resolve(e.data);
+    worker.onerror = (e) => state.resolve({ err: 'outer: ' + (e.message || e) });
+    setTimeout(() => worker.postMessage(0), 100);
+
+    await state.done((data) => {
+      // Compared as strings so a red light names what it saw.
+      testing.expectEqual('no error', data.err ? data.err : 'no error');
+      testing.expectEqual('function', data.typeof_Worker);
+      testing.expectEqual('ping', data.nested);
+    });
+  }
+</script>
