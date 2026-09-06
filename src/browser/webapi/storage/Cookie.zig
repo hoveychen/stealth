@@ -715,6 +715,11 @@ fn areSameSite(origin_url_: ?[:0]const u8, target_host: []const u8) !bool {
 /// The registrable domain (eTLD+1) of a host. Public because Origin's
 /// isSameSite needs exactly this walk (see webapi/Origin.zig).
 pub fn findSecondLevelDomain(host: []const u8) []const u8 {
+    // An IP literal has no registrable domain -- its site is the address. Walk
+    // one for an eTLD+1 and every dotted quad collapses to its last two labels,
+    // which would make 127.0.0.1 and 10.0.0.1 share a "0.1" and read as one
+    // site.
+    if (isIpHost(host)) return host;
     var i = std.mem.lastIndexOfScalar(u8, host, '.') orelse return host;
     while (true) {
         i = std.mem.lastIndexOfScalar(u8, host[0..i], '.') orelse return host;

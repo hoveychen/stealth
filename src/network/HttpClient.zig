@@ -464,35 +464,33 @@ fn isHostAdblocked(self: *const Client, url: [:0]const u8) bool {
 const FetchSite = enum { same_origin, same_site, cross_site };
 
 // Compares an initiator origin against a request URL the way Sec-Fetch-Site
-// does. `same-site` means the registrable domain matches but scheme/host/port
-// don't — approximated here by "the initiator host is a suffix of the request
-// host or vice versa", which is right for the common `a.example.com` ->
-// `example.com` case without shipping a public-suffix list.
+// does: `same-origin` for an identical scheme/host/port tuple, `same-site` when
+// the scheme and the registrable domain match but the tuple does not.
+//
+// The registrable-domain half used to be approximated by "one host is a suffix
+// of the other", which is wrong on both of the shapes a real page actually has.
+// Measured against Chrome (tools/fingerprint/scratch/b119, `--scenario
+// fetch-site`): another PORT of one host is same-site, and so are two SIBLING
+// subdomains -- neither of which is a suffix of the other, and the port the old
+// comparison never even stripped. The same capture also settles the scheme:
+// https -> http on one host is `cross-site`, so this is the schemeful notion of
+// same site, exactly what sameSiteForStorage already computes.
 fn fetchSite(initiator: []const u8, url: []const u8) FetchSite {
     const a = originOf(initiator);
     const b = originOf(url);
     if (std.mem.eql(u8, a.scheme, b.scheme) and std.mem.eql(u8, a.host, b.host)) {
         return .same_origin;
     }
-    const shorter, const longer = if (a.host.len < b.host.len) .{ a.host, b.host } else .{ b.host, a.host };
-    if (shorter.len > 0 and std.mem.endsWith(u8, longer, shorter)) {
-        // Require a dot boundary so "example.com" doesn't match "notexample.com".
-        if (shorter.len == longer.len or longer[longer.len - shorter.len - 1] == '.') {
-            return .same_site;
-        }
-    }
-    return .cross_site;
+    return if (sameSiteForStorage(initiator, url)) .same_site else .cross_site;
 }
 
-// Whether two URLs are same-site the way a *storage partition key* is: scheme
-// plus registrable domain, port ignored.
+// Whether two URLs are same-site: scheme plus registrable domain, port ignored.
+// That is both what a *storage partition key* compares and, measured, what
+// Sec-Fetch-Site reports -- so fetchSite defers to this too.
 //
-// Not fetchSite's suffix approximation, which answers `cross-site` for two
-// ports of one host and for two subdomains of one registrable domain. That is
-// tolerable in a Sec-Fetch-Site value, which is wrong in the same direction
-// Chrome's would be only on the shapes nobody measured; it is not tolerable
-// here, where a false `cross-site` puts a whole header on requests Chrome sends
-// bare. The real eTLD+1 walk already exists for cookies -- reuse it.
+// The real eTLD+1 walk already exists for cookies; reuse it rather than
+// approximating with a suffix comparison, which gets two sibling subdomains
+// wrong in the direction that matters.
 pub fn sameSiteForStorage(a: []const u8, b: []const u8) bool {
     if (!std.mem.eql(u8, URL.getProtocol(a), URL.getProtocol(b))) {
         return false;
@@ -4620,15 +4618,29 @@ const AdBlocker = @import("adblock/AdBlocker.zig");
 // exercises are ever set, by initTestClient or by the test itself.
 var test_network: Network = undefined;
 
+// Every row here was read off Chrome on the wire, from a page at
+// https://www.127-0-0-1.nip.io:9600 fetching each shape of not-same-origin --
+// tools/fingerprint/scratch/b119/fs-chrome-{https,http}.json, the
+// `--scenario fetch-site` capture.
 test "HttpClient: fetchSite classifies initiator against request URL" {
     try testing.expectEqual(FetchSite.same_origin, fetchSite("https://example.com/a", "https://example.com/b"));
-    // Scheme is part of the origin, so http -> https is not same-origin. It is
-    // same-site, because the registrable domain is unchanged.
-    try testing.expectEqual(FetchSite.same_site, fetchSite("http://example.com/a", "https://example.com/b"));
+    // A port is not part of a site: another port of one host is same-site.
+    try testing.expectEqual(FetchSite.same_site, fetchSite("https://example.com:9600/a", "https://example.com:9602/b"));
+    // Neither is a subdomain -- and two SIBLING subdomains are same-site too,
+    // which no suffix comparison can see.
     try testing.expectEqual(FetchSite.same_site, fetchSite("https://cdn.example.com/a", "https://example.com/b"));
+    try testing.expectEqual(FetchSite.same_site, fetchSite("https://www.example.com/a", "https://cdn.example.com/b"));
+    // The scheme is: Chrome's same-site is the schemeful one.
+    try testing.expectEqual(FetchSite.cross_site, fetchSite("http://example.com/a", "https://example.com/b"));
     try testing.expectEqual(FetchSite.cross_site, fetchSite("https://example.com/a", "https://other.org/b"));
     // A suffix match without a dot boundary is a different site.
     try testing.expectEqual(FetchSite.cross_site, fetchSite("https://example.com/a", "https://notexample.com/b"));
+    // An IP literal has no registrable domain; its site is the address itself.
+    // Walking one for an eTLD+1 would leave two unrelated addresses sharing a
+    // "0.1", so the two loopback ports below must not drag 10.0.0.1 with them.
+    try testing.expectEqual(FetchSite.same_site, fetchSite("http://127.0.0.1:9600/a", "http://127.0.0.1:9601/b"));
+    try testing.expectEqual(FetchSite.cross_site, fetchSite("http://127.0.0.1:9600/a", "http://10.0.0.1:9601/b"));
+    try testing.expectEqual(FetchSite.cross_site, fetchSite("http://[::1]:9600/a", "http://127.0.0.1:9601/b"));
 }
 
 test "HttpClient: sameSiteForStorage compares scheme and registrable domain" {
