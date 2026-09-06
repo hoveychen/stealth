@@ -37,13 +37,33 @@
 // and cross-siteness together and never varies the method at all, so it cannot
 // say which of the three each field follows. This one crosses all three.
 //
+// `--scenario fetch-site` asks the third question the same rig can reach: what
+// does `Sec-Fetch-Site` call each *kind* of not-same-origin? The fetch-mode
+// capture already showed one cell of it -- two ports of one host, which Chrome
+// calls `same-site` and this engine calls `cross-site` -- but two ports is only
+// one of the three ways a URL can be same-site, and the other two (two
+// subdomains of one registrable domain, and two schemes of one host) are the
+// ones a real page actually hits. `localhost` cannot express a subdomain, so
+// this scenario moves the top page onto `*.127-0-0-1.nip.io`, a wildcard DNS
+// name that resolves every label to 127.0.0.1. Whether `nip.io` is a public
+// suffix does not matter here: `www.127-0-0-1.nip.io` and `cdn.127-0-0-1.nip.io`
+// share `127-0-0-1.nip.io`, which is one label above `nip.io` either way, so
+// they are same-site under both readings.
+//
+// The https row needs a TLS listener, so this scenario generates a throwaway
+// self-signed cert and runs Chrome with `--ignore-certificate-errors`. This
+// engine has no such flag, so its https row is expected to be a cert failure
+// rather than a header reading -- that half of the axis is a unit-test
+// question, not a wire one.
+//
 // usage: node tools/fingerprint/storage-access-echo.mjs <chrome|lightpanda> [--headed-ua]
-//          [--scenario storage-access|fetch-mode]
+//          [--scenario storage-access|fetch-mode|fetch-site]
 //          [--port n] [--http-port n] [--xsite-port n] [--out p]
 // env: LP_BIN, CHROME
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import net from 'node:net';
+import tls from 'node:tls';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,20 +94,67 @@ const CHROME = process.env.CHROME
     ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const SCENARIO = arg('--scenario', 'storage-access');
-if (SCENARIO !== 'storage-access' && SCENARIO !== 'fetch-mode') {
+if (SCENARIO !== 'storage-access' && SCENARIO !== 'fetch-mode' && SCENARIO !== 'fetch-site') {
     console.error(`unknown --scenario ${SCENARIO}`);
     process.exit(2);
 }
 
-const TOP = `http://localhost:${TOP_PORT}`;
-const XSITE = `http://127.0.0.1:${XSITE_PORT}`;
+// The fetch-site scenario needs a host with subdomains, which `localhost` has
+// none of; everything under *.nip.io resolves to 127.0.0.1.
+const SITE_HOST = 'www.127-0-0-1.nip.io';
+const SITE_SIBLING = 'cdn.127-0-0-1.nip.io';
+const SITE_PARENT = '127-0-0-1.nip.io';
+const TLS_PORT = Number(arg('--tls-port', String(TOP_PORT + 3)));
+// Chrome attaches Sec-Fetch-* only when the *request* URL's origin is
+// potentially trustworthy, and a DNS name that happens to resolve to loopback
+// is not one -- measured: over plain http every nip.io row came back with no
+// Sec-Fetch-Site at all while the https and 127.0.0.1 rows carried one. So the
+// site axis is measured over https by default, and `--top-scheme http` is kept
+// for the scheme row, where the target is https and does carry the header.
+const TOP_SCHEME = SCENARIO === 'fetch-site' ? arg('--top-scheme', 'https') : 'http';
+const OTHER_SCHEME = TOP_SCHEME === 'https' ? 'http' : 'https';
+
+const TOP = SCENARIO === 'fetch-site'
+    ? `${TOP_SCHEME}://${SITE_HOST}:${TOP_PORT}`
+    : `http://localhost:${TOP_PORT}`;
+const XSITE = SCENARIO === 'fetch-site'
+    ? `${TOP_SCHEME}://127.0.0.1:${XSITE_PORT}`
+    : `http://127.0.0.1:${XSITE_PORT}`;
 // A third origin for the fetch-mode scenario only: same host as TOP, another
 // port. Cross-ORIGIN but SAME-site, which is the one axis TOP/XSITE cannot
 // separate -- and the two candidate rules for Origin (cross-origin, as the
 // Fetch spec writes it, or cross-site, as Sec-Fetch-Site reports it) disagree
 // exactly here.
 const XORIGIN_PORT = Number(arg('--xorigin-port', String(TOP_PORT + 2)));
-const XORIGIN = `http://localhost:${XORIGIN_PORT}`;
+const XORIGIN = SCENARIO === 'fetch-site'
+    ? `${TOP_SCHEME}://${SITE_HOST}:${XORIGIN_PORT}`
+    : `http://localhost:${XORIGIN_PORT}`;
+
+// One row per way of not being same-origin. Every one of these but the last is
+// same-site with TOP by the spec's definition (schemefully same site =
+// registrable domain plus scheme); `same` and `xsite` are the two controls that
+// pin the ends of the scale.
+const FETCH_SITE_CASES = [
+    { label: 'same-origin', url: `${TOP}/s/same-origin` },
+    { label: 'other-port', url: `${XORIGIN}/s/other-port` },
+    { label: 'sibling-subdomain', url: `${TOP_SCHEME}://${SITE_SIBLING}:${TOP_PORT}/s/sibling-subdomain` },
+    { label: 'parent-domain', url: `${TOP_SCHEME}://${SITE_PARENT}:${TOP_PORT}/s/parent-domain` },
+    { label: 'other-scheme', url: `${OTHER_SCHEME}://${SITE_HOST}:${TLS_PORT}/s/other-scheme` },
+    { label: 'cross-site', url: `${XSITE}/s/cross-site` },
+];
+
+const FETCH_SITE_PAGE = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>fetch-site</title></head>
+<body>fetch-site
+<script>
+var CASES = ${JSON.stringify(FETCH_SITE_CASES)};
+CASES.forEach(function (c) {
+    // no-cors, because nothing here answers with CORS headers and the request
+    // that goes out is the whole point.
+    try { fetch(c.url, { mode: 'no-cors' }).catch(function () { }); } catch (e) { }
+});
+</script>
+</body></html>`;
 
 // Three axes, crossed, one fetch each. The label is the path, so the request log
 // reads as the case name.
@@ -182,7 +249,9 @@ const hits = [];
 
 function pageFor(who, target) {
     if (who === 'top' && target.startsWith('/top')) {
-        return SCENARIO === 'fetch-mode' ? FETCH_MODE_PAGE : TOP_PAGE;
+        if (SCENARIO === 'fetch-mode') return FETCH_MODE_PAGE;
+        if (SCENARIO === 'fetch-site') return FETCH_SITE_PAGE;
+        return TOP_PAGE;
     }
     if (who === 'top' && target.startsWith('/samesiteframe')) return framePage('same-origin-frame');
     if (who === 'xsite' && target.startsWith('/frame')) return framePage('cross-site-frame');
@@ -214,34 +283,75 @@ function serve(who, sock, head) {
 
 /// One listener. TOP needs two of them -- one per loopback family -- because
 /// `localhost` resolves to both and the browser picks.
-function listen(who, port, host) {
-    const server = net.createServer((sock) => {
-        let buf = Buffer.alloc(0);
-        sock.on('data', (chunk) => {
-            buf = Buffer.concat([buf, chunk]);
-            let end;
-            while ((end = buf.indexOf('\r\n\r\n')) !== -1) {
-                const head = buf.subarray(0, end).toString('latin1');
-                buf = buf.subarray(end + 4);
-                serve(who, sock, head);
-            }
-        });
-        sock.on('error', () => sock.destroy());
+function wire(who, sock) {
+    let buf = Buffer.alloc(0);
+    sock.on('data', (chunk) => {
+        buf = Buffer.concat([buf, chunk]);
+        let end;
+        while ((end = buf.indexOf('\r\n\r\n')) !== -1) {
+            const head = buf.subarray(0, end).toString('latin1');
+            buf = buf.subarray(end + 4);
+            serve(who, sock, head);
+        }
     });
+    sock.on('error', () => sock.destroy());
+}
+
+function listen(who, port, host) {
+    const server = net.createServer((sock) => wire(who, sock));
     return new Promise((resolve, reject) => {
         server.once('error', reject);
         server.listen(port, host, () => resolve(server));
     });
 }
 
+/// The https half of the scheme axis. A throwaway self-signed cert is enough:
+/// the browser arm runs with --ignore-certificate-errors, and what is being
+/// read is the request header, not the handshake.
+let certPromise = null;
+function selfSignedCert() {
+    certPromise ??= (async () => {
+        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-tls-'));
+        await new Promise((resolve, reject) => {
+            const p = spawn('openssl', [
+                'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+                '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem'),
+                '-subj', `/CN=${SITE_HOST}`,
+                '-addext', `subjectAltName=DNS:${SITE_HOST},DNS:${SITE_SIBLING},`
+                    + `DNS:${SITE_PARENT},IP:127.0.0.1`,
+            ], { stdio: 'ignore' });
+            p.on('error', reject);
+            p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`openssl exited ${code}`))));
+        });
+        return {
+            key: await fs.readFile(path.join(dir, 'k.pem')),
+            cert: await fs.readFile(path.join(dir, 'c.pem')),
+        };
+    })();
+    return certPromise;
+}
+
+async function listenTls(who, port, host) {
+    const server = tls.createServer(await selfSignedCert(), (sock) => wire(who, sock));
+    return new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(port, host, () => resolve(server));
+    });
+}
+
+// The site axis runs over https (see TOP_SCHEME), so its listeners are TLS ones
+// -- all but the odd-scheme port, which is by construction the other kind.
+const main = TOP_SCHEME === 'https' ? listenTls : listen;
+const other = OTHER_SCHEME === 'https' ? listenTls : listen;
 const servers = [
-    await listen('top', TOP_PORT, '127.0.0.1'),
-    await listen('top', TOP_PORT, '::1').catch(() => null),
-    await listen('xsite', XSITE_PORT, '127.0.0.1'),
-    ...(SCENARIO === 'fetch-mode' ? [
-        await listen('xorig', XORIGIN_PORT, '127.0.0.1'),
-        await listen('xorig', XORIGIN_PORT, '::1').catch(() => null),
+    await main('top', TOP_PORT, '127.0.0.1'),
+    await main('top', TOP_PORT, '::1').catch(() => null),
+    await main('xsite', XSITE_PORT, '127.0.0.1'),
+    ...(SCENARIO === 'fetch-mode' || SCENARIO === 'fetch-site' ? [
+        await main('xorig', XORIGIN_PORT, '127.0.0.1'),
+        await main('xorig', XORIGIN_PORT, '::1').catch(() => null),
     ] : []),
+    ...(SCENARIO === 'fetch-site' ? [await other('other', TLS_PORT, '127.0.0.1')] : []),
 ].filter(Boolean);
 
 async function headedUserAgent() {
@@ -266,7 +376,11 @@ async function headedUserAgent() {
     }
 }
 
-const state = { engine, headedUa, scenario: SCENARIO, userAgentOverride: null, top: TOP, xsite: XSITE, hits };
+const state = {
+    engine, headedUa, scenario: SCENARIO, userAgentOverride: null,
+    top: TOP, xsite: XSITE, topScheme: TOP_SCHEME, hits,
+    ...(SCENARIO === 'fetch-site' ? { cases: FETCH_SITE_CASES } : {}),
+};
 if (headedUa) {
     if (engine !== 'chrome') { console.error('--headed-ua is a chrome arm'); process.exit(2); }
     state.userAgentOverride = await headedUserAgent();
@@ -279,6 +393,9 @@ const proc = engine === 'chrome'
         `--user-data-dir=${profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-ch-'))}`,
         '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), '--headless=new',
         ...(state.userAgentOverride ? [`--user-agent=${state.userAgentOverride}`] : []),
+        // Only the scheme axis needs it, and only because the https listener is
+        // self-signed; keep it off every other run.
+        ...(SCENARIO === 'fetch-site' ? ['--ignore-certificate-errors'] : []),
     ], { stdio: ['ignore', 'pipe', 'pipe'] })
     : spawn(LIGHTPANDA, ['serve', '--host', '127.0.0.1', '--port', String(CDP_PORT)],
         { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -321,7 +438,23 @@ const get = (h, name) => (h.find(([k]) => k.toLowerCase() === name) ?? [])[1];
 
 console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''} ${SCENARIO} ===`);
 console.log(`    TOP=${TOP}  XSITE=${XSITE}`);
-if (SCENARIO === 'fetch-mode') {
+if (SCENARIO === 'fetch-site') {
+    const byPath = new Map();
+    for (const h of hits) {
+        if (h.mark || !h.target.startsWith('/s/')) continue;
+        byPath.set(h.target, h);
+    }
+    for (const c of FETCH_SITE_CASES) {
+        const h = byPath.get(new URL(c.url).pathname);
+        const origin = h && get(h.headers, 'origin');
+        console.log(`  ${c.label.padEnd(20)}`
+            + (h
+                ? ` site=${String(get(h.headers, 'sec-fetch-site')).padEnd(12)}`
+                    + ` host=${String(get(h.headers, 'host')).padEnd(28)}`
+                    + ` origin=${origin === undefined ? '(absent)' : origin}`
+                : ' (never reached the wire)'));
+    }
+} else if (SCENARIO === 'fetch-mode') {
     // By case rather than by arrival, so a case that never reached the wire is
     // a visible row rather than a missing one.
     const byPath = new Map();
