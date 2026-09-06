@@ -81,6 +81,18 @@ pub fn compute(arena: Allocator, policy: Policy, referrer_url: [:0]const u8, tar
         return null;
     }
 
+    // "Strip url for use as a referrer" fails for anything that is not http(s),
+    // and a request whose referrer is failure carries no Referer. getOrigin is
+    // not that test: it finds the `http://...` inside `blob:http://...` and
+    // hands back a tuple origin, which then got pasted in front of a pathname
+    // that was itself a whole URL -- the malformed
+    // `http://hosthttp://host/<uuid>` a blob: iframe was sending.
+    if (!std.mem.startsWith(u8, referrer_url, "http://") and
+        !std.mem.startsWith(u8, referrer_url, "https://"))
+    {
+        return null;
+    }
+
     const referrer_origin = (try URL.getOrigin(arena, referrer_url)) orelse {
         // blob:, data: ... don't set get a referrer
         return null;
@@ -130,6 +142,37 @@ fn staticStringMapEqlAsciiIgnoreCase(a: []const u8, b: []const u8) bool {
 }
 
 const testing = @import("../testing.zig");
+
+// A referrer source is stripped for use as a referrer, and that strip fails for
+// anything that is not http(s): a document loaded from a blob: URL sends no
+// Referer at all, measured on Chrome 151 for both a blob: iframe and a blob:
+// worker (tools/fingerprint/scratch/b120/blob-chrome.json).
+test "referrer: only an http(s) source is a referrer" {
+    var pool = @import("../ArenaPool.zig").init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    try testing.expectEqual(null, try compute(
+        arena.allocator(),
+        .default,
+        "blob:http://example.com/2b0ef9e-e82b",
+        "http://example.com/x",
+    ));
+    try testing.expectEqual(null, try compute(
+        arena.allocator(),
+        .default,
+        "data:text/html,<p>",
+        "http://example.com/x",
+    ));
+    try testing.expectString("http://example.com/top", (try compute(
+        arena.allocator(),
+        .default,
+        "http://example.com/top",
+        "http://example.com/x",
+    )).?);
+}
+
 test "referrer: parse" {
     try testing.expectEqual(Policy.no_referrer, parse("no-referrer"));
     try testing.expectEqual(Policy.unsafe_url, parse("Unsafe-URL"));

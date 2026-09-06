@@ -141,7 +141,7 @@ fn describe(transfer: *Transfer) !?Plan {
         // font preload -- but it is always a simple GET with no author headers,
         // and a simple request never preflights.
         .fetch, .xhr => {},
-        .document, .stylesheet, .script, .image, .eventsource, .font => return null,
+        .document, .stylesheet, .script, .worker, .image, .eventsource, .font => return null,
     }
 
     // Same-origin first, and without allocating: this runs on every fetch()

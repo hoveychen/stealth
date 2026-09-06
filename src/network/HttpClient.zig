@@ -1964,6 +1964,10 @@ pub const Request = struct {
         document,
         xhr,
         script,
+        // A dedicated worker's script. Chrome fetches it with
+        // `Sec-Fetch-Dest: worker` rather than `script`, and carries no client
+        // hints on it (measured, scratch/b120/blob-chrome.json).
+        worker,
         fetch,
         stylesheet,
         image,
@@ -1983,6 +1987,9 @@ pub const Request = struct {
                 .document => "Document",
                 .xhr => "XHR",
                 .script => "Script",
+                // CDP has no worker resource type; Chrome reports the script
+                // fetch as a Script there too.
+                .worker => "Script",
                 .fetch => "Fetch",
                 .stylesheet => "Stylesheet",
                 .image => "Image",
@@ -2007,6 +2014,11 @@ pub const Request = struct {
     // 'same-origin'})`, and only same-origin: Chrome does not put such a
     // request on the wire at all when it points elsewhere.
     pub const Mode = enum { navigate, no_cors, cors, same_origin };
+
+    // The RequestInit `cache` member, which Chrome turns into a Cache-Control
+    // (and sometimes a Pragma) on the wire. Only fetch() can set one; every
+    // other load is `default`.
+    pub const CacheMode = enum { default, no_store, reload, no_cache, force_cache, only_if_cached };
 
     // Where this request sits in the storage partition tree, which is what
     // Sec-Fetch-Storage-Access reports. Filled by the frame that asks for the
@@ -2049,6 +2061,10 @@ pub const Request = struct {
     cookie_jar: ?*CookieJar,
     cookie_origin: [:0]const u8,
     resource_type: ResourceType,
+    cache: CacheMode = .default,
+    // Issued from inside a worker rather than from a document. Only the client
+    // hints read it: a worker's requests carry none.
+    from_worker: bool = false,
     // Only meaningful when resource_type == .document.
     nav: ?Navigation = null,
     partition: ?Partition = null,
@@ -2145,6 +2161,9 @@ pub const Request = struct {
         return switch (self.resource_type) {
             .document => .navigate,
             .stylesheet, .script, .image, .font => if (self.cors) .cors else .no_cors,
+            // A classic dedicated worker's script is fetched in same-origin
+            // mode (measured; it is also what the spec asks for).
+            .worker => .same_origin,
             .fetch, .xhr, .eventsource => .cors,
         };
     }
@@ -3506,8 +3525,33 @@ pub const Transfer = struct {
     // measured, and different enough that they could not share a table -- are
     // exactly what the model reproduces from the name set alone. That is the
     // regression test in blink_header_order.zig.
+    // A worker's script fetch has a fixed order of its own, and it is neither of
+    // the other two: no client hints at all, and User-Agent BEHIND Referer
+    // rather than inside a renderer map block. Measured on Chrome 151 over h1,
+    // the `/w/url-worker.js` request of scratch/b120/blob-chrome.json. Cookie
+    // and priority are not in that capture (no cookie was set, and h1 carries
+    // no priority), so they are left to the trailing pass, which puts them
+    // behind everything named here -- where every other table has them anyway.
+    const chrome_worker_script_order = [_][]const u8{
+        "Accept",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Referer",
+        "User-Agent",
+        "Accept-Encoding",
+        "Accept-Language",
+    };
+
     const chrome_subresource_before_map = [_][]const u8{
         "Content-Length",
+        // Both ahead of the map block: on the `top-reload` row of
+        // scratch/b120/blob-chrome.json they arrive right behind Connection,
+        // in front of sec-ch-ua-platform. Their order relative to
+        // Content-Length is not measured -- no captured request carried a body
+        // and a cache mode at once.
+        "Pragma",
+        "Cache-Control",
     };
 
     const chrome_subresource_after_map = [_][]const u8{
@@ -3618,23 +3662,32 @@ pub const Transfer = struct {
     // gap -- Chrome sends it on HTTP/1.1, curl sends nothing, and we cannot add
     // it from here because the same list is reused for an HTTP/2 attempt, where
     // a connection header is a protocol error.
+    // Which fixed table this request's fields come out in, or null for the
+    // subresource shape, which has no table at all -- see
+    // chrome_subresource_before_map.
+    fn orderTable(self: *const Transfer) ?[]const []const u8 {
+        if (self.req.preflight) return &chrome_preflight_order;
+        if (self.req.resource_type == .document) {
+            return if (self._critical_hints_restarted)
+                &chrome_restarted_navigation_order
+            else
+                &chrome_navigation_order;
+        }
+        if (self.req.resource_type == .worker) return &chrome_worker_script_order;
+        return null;
+    }
+
     fn emitHeaders(self: *Transfer, conn: *http.Connection, arena: Allocator) !void {
         // Bitset of what an ordered pass already emitted, so the trailing pass
         // can skip them without a second name comparison per header.
         var emitted = [_]bool{false} ** 64;
 
-        // A subresource has no fixed table: see chrome_subresource_before_map.
-        if (!self.req.preflight and self.req.resource_type != .document) {
+        if (self.orderTable()) |order| {
+            try self.emitNamed(conn, arena, order, &emitted);
+        } else {
             try self.emitNamed(conn, arena, &chrome_subresource_before_map, &emitted);
             try self.emitMapBlock(conn, arena, &emitted);
             try self.emitNamed(conn, arena, &chrome_subresource_after_map, &emitted);
-        } else {
-            try self.emitNamed(conn, arena, if (self.req.preflight)
-                &chrome_preflight_order
-            else if (self._critical_hints_restarted)
-                &chrome_restarted_navigation_order
-            else
-                &chrome_navigation_order, &emitted);
         }
 
         const tracked = @min(self.req_headers.items.len, emitted.len);
@@ -3732,12 +3785,20 @@ pub const Transfer = struct {
         // has no sec-ch-ua* field, the POST behind it has three.
         const preflight = self.req.preflight;
 
+        // Nor does anything to do with a worker: neither the fetch of the
+        // worker's own script nor a request the worker then makes carries a
+        // single sec-ch-ua* field, where the page that made the worker carries
+        // three (measured, the `url-worker` / `blob-worker` rows and the
+        // `/w/url-worker.js` fetch of scratch/b120/blob-chrome.json).
+        const worker = self.req.from_worker or self.req.resource_type == .worker;
+        const hintless = preflight or worker;
+
         for (self.client.baselineHeaders()) |hdr| {
-            if (preflight and std.ascii.startsWithIgnoreCase(hdr.name, "sec-ch-ua")) continue;
+            if (hintless and std.ascii.startsWithIgnoreCase(hdr.name, "sec-ch-ua")) continue;
             try self.addHeader(hdr.name, hdr.value, .{ .source = hdr.source });
         }
 
-        if (!preflight) {
+        if (!hintless) {
             try self.seedClientHints();
         }
 
@@ -3747,8 +3808,30 @@ pub const Transfer = struct {
             try self.setHeader(hdr.name, hdr.value, .{ .source = .cli });
         }
 
+        try self.seedCacheControl();
         try self.seedFetchMetadata();
         try self.seedContentLength();
+    }
+
+    // The RequestInit `cache` member, as Chrome spells it on the wire.
+    // Measured across the five values a same-origin GET can carry
+    // (tools/fingerprint/scratch/b120/blob-chrome.json): `no-cache` asks to
+    // revalidate and says so with a zero lifetime, `reload` and `no-store` skip
+    // the cache outright and add the HTTP/1.0 field beside it, and the other
+    // three put nothing on the request at all.
+    //
+    // `only-if-cached` was not measured -- it is only legal in same-origin mode
+    // and never reaches a server when the cache answers -- so it is grouped
+    // with the silent ones rather than guessed into a field.
+    fn seedCacheControl(self: *Transfer) !void {
+        switch (self.req.cache) {
+            .default, .force_cache, .only_if_cached => {},
+            .no_cache => try self.setHeader("Cache-Control", "max-age=0", .{ .source = .cdp }),
+            .reload, .no_store => {
+                try self.setHeader("Pragma", "no-cache", .{ .source = .cdp });
+                try self.setHeader("Cache-Control", "no-cache", .{ .source = .cdp });
+            },
+        }
     }
 
     // The high-entropy hints this request's origin asked for via Accept-CH,
@@ -3841,7 +3924,7 @@ pub const Transfer = struct {
             .image => H.Accept.image,
             .eventsource => H.Accept.event_stream,
             // A font asks for `*/*`, the same as a script (measured).
-            .script, .fetch, .xhr, .font => H.Accept.any,
+            .script, .worker, .fetch, .xhr, .font => H.Accept.any,
         }, .{});
 
         // Chrome labels a subframe navigation "iframe" and a top-level one
@@ -3851,6 +3934,9 @@ pub const Transfer = struct {
             .stylesheet => "style",
             .image => "image",
             .script => "script",
+            // A worker's own script is not a `script` destination; Chrome
+            // spells it `worker` (measured, scratch/b120/blob-chrome.json).
+            .worker => "worker",
             .font => "font",
             // fetch(), XHR and EventSource all report an empty destination.
             .fetch, .xhr, .eventsource => "empty",
@@ -3925,7 +4011,10 @@ pub const Transfer = struct {
             .stylesheet => "u=0",
             // A font is urgent and not incremental -- there is nothing to show
             // until all of it is there (measured over h2).
-            .script, .font => "u=1",
+            // A worker script is grouped with `script` rather than measured:
+            // the capture that named its destination was HTTP/1.1, where the
+            // field is not sent at all.
+            .script, .worker, .font => "u=1",
             // EventSource was not in the capture, grouped with fetch and XHR
             // the way every other per-destination switch here groups it.
             .image, .fetch, .xhr, .eventsource => "u=1, i",
@@ -4034,7 +4123,7 @@ pub const Transfer = struct {
         const cors_mode = req.requestMode() == .cors;
         const element_cors = cors_mode and switch (req.resource_type) {
             .stylesheet, .script, .image, .font => true,
-            .document, .fetch, .xhr, .eventsource => false,
+            .document, .worker, .fetch, .xhr, .eventsource => false,
         };
         const safe_method = req.method == .GET or req.method == .HEAD;
         if (!element_cors) {
@@ -4052,7 +4141,7 @@ pub const Transfer = struct {
                 // `mode` was dropped on the way down), so returning early was
                 // right for as long as it never ran.
                 .fetch, .xhr, .eventsource => if (!cors_mode and safe_method) return null,
-                .document, .stylesheet, .script, .image, .font => return null,
+                .document, .stylesheet, .script, .worker, .image, .font => return null,
             }
         }
 
@@ -4779,6 +4868,95 @@ test "HttpClient: seedFetchMetadata reports a third-party storage partition" {
     }
 }
 
+// What each RequestInit `cache` value puts on the wire, measured on Chrome 151
+// across the five values a same-origin GET can carry --
+// tools/fingerprint/scratch/b120/blob-chrome.json, the `top-*` rows.
+test "HttpClient: cache mode writes the Cache-Control Chrome writes" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+
+    const cases = [_]struct { Request.CacheMode, []const u8, []const u8 }{
+        .{ .default, "", "" },
+        .{ .force_cache, "", "" },
+        .{ .only_if_cached, "", "" },
+        // `no-cache` revalidates, and says so with a zero freshness lifetime.
+        .{ .no_cache, "", "max-age=0" },
+        // `reload` and `no-store` both mean "do not use the cache at all", and
+        // Chrome spells that with the HTTP/1.0 field alongside.
+        .{ .reload, "no-cache", "no-cache" },
+        .{ .no_store, "no-cache", "no-cache" },
+    };
+
+    for (cases) |case| {
+        const arena = try pool.acquire(.small, "test");
+        defer arena.release();
+
+        var transfer = testTransfer(arena);
+        transfer.req.resource_type = .fetch;
+        transfer.req.cache = case.@"0";
+        try transfer.seedCacheControl();
+
+        try testing.expectString(case.@"1", seededValue(&transfer, "Pragma"));
+        try testing.expectString(case.@"2", seededValue(&transfer, "Cache-Control"));
+    }
+}
+
+// A dedicated worker's script fetch, measured on the same capture: Chrome calls
+// its destination `worker` where this engine called it `script`, and asks for it
+// in `same-origin` mode.
+// The worker script fetch does not take the subresource shape: Chrome emits it
+// from a fixed order with User-Agent behind Referer, not from a renderer map
+// block (measured, the `/w/url-worker.js` request of
+// tools/fingerprint/scratch/b120/blob-chrome.json).
+test "HttpClient: a worker script fetch has its own header order" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var transfer = testTransfer(arena);
+
+    // An empty slice rather than `.?` so a missing table reads as a length
+    // mismatch on the assertion, not an unwrap panic before it.
+    const none: []const []const u8 = &.{};
+
+    transfer.req.resource_type = .worker;
+    try testing.expectEqualSlices(
+        []const u8,
+        &Transfer.chrome_worker_script_order,
+        transfer.orderTable() orelse none,
+    );
+
+    // The shapes either side of it are untouched: a plain subresource still has
+    // no table, and a navigation still has the navigation one.
+    transfer.req.resource_type = .fetch;
+    try testing.expectEqual(null, transfer.orderTable());
+    transfer.req.resource_type = .document;
+    try testing.expectEqualSlices(
+        []const u8,
+        &Transfer.chrome_navigation_order,
+        transfer.orderTable() orelse none,
+    );
+}
+
+test "HttpClient: seedFetchMetadata names a worker script fetch" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var transfer = testTransfer(arena);
+    transfer.req.url = "http://example.com/w.js";
+    transfer.req.resource_type = .worker;
+    transfer.req.cookie_origin = "http://example.com/top";
+    try transfer.seedFetchMetadata();
+
+    try testing.expectString("worker", seededValue(&transfer, "Sec-Fetch-Dest"));
+    try testing.expectString("same-origin", seededValue(&transfer, "Sec-Fetch-Mode"));
+    try testing.expectString("same-origin", seededValue(&transfer, "Sec-Fetch-Site"));
+    try testing.expectString("*/*", seededValue(&transfer, "Accept"));
+}
+
 test "HttpClient: seedFetchMetadata sends Chrome's set for a top-level navigation" {
     var pool = ArenaPool.init(testing.allocator, .{});
     defer pool.deinit();
@@ -4873,7 +5051,12 @@ test "HttpClient: seedFetchMetadata labels a cross-origin image" {
 // carry -- a table entry nothing set simply doesn't match at emission time.
 fn subresourceWire(present: []const []const u8, absent: []const []const u8, buf: [][]const u8) []const []const u8 {
     var n: usize = 0;
-    for (Transfer.chrome_subresource_before_map) |name| {
+    // Both tables are orders, not sets: a name nothing set is simply skipped on
+    // the wire, which is what `absent` says here.
+    before: for (Transfer.chrome_subresource_before_map) |name| {
+        for (absent) |skip| {
+            if (std.mem.eql(u8, name, skip)) continue :before;
+        }
         buf[n] = name;
         n += 1;
     }
@@ -4906,7 +5089,9 @@ test "HttpClient: a POST's three extra headers sit where Chrome puts them" {
     var buf: [32][]const u8 = undefined;
     // Both captures are same-origin POSTs from a top-level document, so their
     // cookies are first-party and Sec-Fetch-Storage-Access is not on either.
-    const no_storage_access: []const []const u8 = &.{"Sec-Fetch-Storage-Access"};
+    // Neither POST is in a third-party partition, and neither asked for a cache
+    // mode, so three of the ordered names are not on either request.
+    const no_storage_access: []const []const u8 = &.{ "Sec-Fetch-Storage-Access", "Pragma", "Cache-Control" };
 
     // Unhinted, measured: the same-origin `POST /sub/xhr-*` of
     // tools/fingerprint/results/xhr-post-nohints-chrome.json -- the same probe

@@ -24,6 +24,7 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const JS = @import("../js/js.zig");
+const referrer = @import("../referrer.zig");
 const URL = @import("../URL.zig");
 const Page = @import("../Page.zig");
 const Frame = @import("../Frame.zig");
@@ -323,10 +324,22 @@ pub fn getEventHandler(
     return self._event_manager.getHandler(target, handler);
 }
 
-// Workers don't have their own Referer; per spec, dedicated worker requests
-// use the parent document's URL. Delegate to the owning frame.
+// A worker's requests take their Referer from the worker's OWN script URL, not
+// from the owning document -- measured on Chrome 151, where a worker loaded
+// from `/w/url-worker.js` fetches with `Referer: .../w/url-worker.js` while the
+// page that made it sits at `/top` (tools/fingerprint/scratch/b120). A worker
+// whose script is a blob: URL therefore sends no Referer at all, which is what
+// the cf-scrapingcourse challenge's own worker does; referrer.compute is where
+// that falls out.
+//
+// The referrer POLICY is still the owning frame's: a worker inherits its
+// creator's policy container.
 pub fn headersForRequest(self: *WorkerGlobalScope, transfer: *HttpClient.Transfer) !void {
-    return self._frame.headersForRequest(transfer);
+    const arena = transfer.arena.allocator();
+    if (try referrer.compute(arena, self._frame.referrer_policy, self.url, transfer.req.url)) |ref| {
+        try transfer.setHeader("Referer", ref, .{});
+        transfer.req.referrer_policy = self._frame.referrer_policy;
+    }
 }
 
 pub fn isSameOrigin(self: *const WorkerGlobalScope, url: [:0]const u8) bool {
@@ -336,6 +349,7 @@ pub fn isSameOrigin(self: *const WorkerGlobalScope, url: [:0]const u8) bool {
 
 pub fn makeRequest(self: *WorkerGlobalScope, req: HttpClient.Request) !void {
     var r = req;
+    r.from_worker = true;
     r.partition = self._frame.storagePartition();
     const transfer = try self._session.browser.http_client.newRequest(r, &self._http_owner);
     {
@@ -348,6 +362,7 @@ pub fn makeRequest(self: *WorkerGlobalScope, req: HttpClient.Request) !void {
 // Two-phase variant; see HttpClient.newRequest for the ownership contract.
 pub fn newRequest(self: *WorkerGlobalScope, req: HttpClient.Request) !*HttpClient.Transfer {
     var r = req;
+    r.from_worker = true;
     r.document_frame_id = self._frame._frame_id;
     // Same delegation as headersForRequest above, and for the same reason: the
     // partition a worker's requests sit in is the owning document's.
@@ -553,6 +568,7 @@ fn importScript(self: *WorkerGlobalScope, arena: Allocator, url: [:0]const u8) !
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = self.url,
         .resource_type = .script,
+        .from_worker = true,
         .partition = self._frame.storagePartition(),
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown, // syncRequest installs its own

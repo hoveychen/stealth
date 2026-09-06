@@ -117,7 +117,7 @@ pub fn init(url: []const u8, options: ?WorkerOptions, frame: *Frame) !*Worker {
         .url = resolved_url,
         .frame_id = self._frame_id,
         .loader_id = self._loader_id,
-        .resource_type = .script,
+        .resource_type = .worker,
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = resolved_url,
         .notification = session.notification,
@@ -137,6 +137,13 @@ pub fn init(url: []const u8, options: ?WorkerOptions, frame: *Frame) !*Worker {
     // transfer before it deinits this worker, and deinit must not abort a
     // freed transfer.
     self._http_transfer = transfer;
+
+    // Chrome puts the creating document's URL on the script fetch itself
+    // (measured, scratch/b120/blob-chrome.json). Frame.newRequest is the
+    // two-phase helper and does not add it, so ask for it here.
+    frame.headersForRequest(transfer) catch |err| {
+        log.err(.browser, "Worker request headers", .{ .url = resolved_url, .err = err });
+    };
 
     transfer.submit() catch |err| {
         log.err(.browser, "Worker request", .{ .url = resolved_url, .err = err });
