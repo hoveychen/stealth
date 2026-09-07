@@ -204,6 +204,13 @@ _image_cache: std.StringHashMapUnmanaged(*ImageCacheEntry) = .empty,
 /// an inline child's -- and not every one of those routes carries a depth, so
 /// this counts them all. See Element.MAX_LAYOUT_REENTRY.
 _layout_depth: u16 = 0,
+
+/// Flex lines solved for the document as it stands. See Element.FlexLineLookup.
+_flex_lines: Element.FlexLineLookup = .empty,
+
+/// The `Page.dom_version` `_flex_lines` was filled under; every entry is stale
+/// at once when that moves, the same rule StyleManager's cascade caches use.
+_flex_lines_dom_version: usize = 0,
 _element_namespace_uris: Element.NamespaceUriLookup = .empty,
 _element_prefixes: Element.PrefixLookup = .empty,
 _svg_animated_enumerations: AnimatedEnumeration.Lookup = .empty,

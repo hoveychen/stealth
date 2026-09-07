@@ -18,7 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: detector-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--window-size 1920,1080]');
+    console.error('usage: detector-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--window-size 1920,1080] [--only creep] [--settle 3000] [--port 9224]');
     process.exit(2);
 }
 const outArg = process.argv.indexOf('--out');
@@ -47,7 +47,30 @@ if (!/^\d+,\d+$/.test(windowSize)) {
 // fills its voice list too late for CreepJS to see it). --headed makes the
 // reference column a real window.
 const headed = process.argv.includes('--headed');
-const PORT = engine === 'chrome' ? 9334 : 9224;
+// One detector hanging costs every detector after it in the list: the engine
+// under test is a single process serving the whole loop, so a stall in
+// Runtime.enable or Runtime.evaluate leaves the rest of the pages reading as
+// timeouts that have nothing to do with the pages themselves (see
+// watchdog-stall-cascades-into-fake-failures). Three switches, all borrowed
+// from antibot-sweep.mjs, are what it takes to read one page on its own:
+// --only picks it, --settle says how long to leave it alone (the stalls are
+// settle-dependent), and --port keeps the run off a port a peer session's
+// engine already answers on.
+const onlyArg = process.argv.indexOf('--only');
+const only = onlyArg !== -1 ? process.argv[onlyArg + 1] : null;
+const settleArg = process.argv.indexOf('--settle');
+const settleOverride = settleArg !== -1 ? Number(process.argv[settleArg + 1]) : null;
+if (settleOverride !== null && !Number.isFinite(settleOverride)) {
+    console.error(`--settle wants milliseconds, got ${process.argv[settleArg + 1]}`);
+    process.exit(2);
+}
+const detectors = DETECTORS.filter((d) => !only || d.name.includes(only));
+if (detectors.length === 0) {
+    console.error(`--only ${only} matched no detector`);
+    process.exit(2);
+}
+const portArg = process.argv.indexOf('--port');
+const PORT = portArg !== -1 ? Number(process.argv[portArg + 1]) : (engine === 'chrome' ? 9334 : 9224);
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 // CDP_ENDPOINT drives a Chrome this script did not start -- in practice the
@@ -66,6 +89,15 @@ if (ENDPOINT && engine !== 'chrome') {
 }
 
 let proc, profile;
+
+// Spawning is a function rather than a straight line because one detector can
+// cost the engine: a 30-second tick in lightpanda ends with
+// `cdp closing connection reason="pending terminate"` (Watchdog.zig ->
+// requestTerminate -> CDP.tick), and after that every detector still on the
+// list reads as a timeout of its own. Measured on the twelve-page suite:
+// `deviceinfo` wedged and the SIX pages after it all came back as 30s
+// timeouts. So the loop restarts the engine instead of carrying a dead socket.
+async function launch() {
 if (ENDPOINT) {
     // Nothing to spawn; the viewport is still pinned below, per site.
 } else if (engine === 'chrome') {
@@ -91,6 +123,19 @@ if (ENDPOINT) {
         ...(proxy ? ['--http-proxy', proxy] : []),
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 }
+proc?.stdout.on('data', keep);
+proc?.stderr.on('data', keep);
+}
+
+async function teardown() {
+    proc?.kill('SIGKILL');
+    proc = undefined;
+    if (profile) await fs.rm(profile, { recursive: true, force: true }).catch(() => { });
+    profile = undefined;
+    // A killed browser leaves its port in TIME_WAIT for a moment; the version
+    // poll in session() covers that, but give the pid a beat to actually go.
+    await sleep(500);
+}
 
 // Drain both streams. lightpanda writes ~550KB of INFO-level log over a sweep
 // this long; an unread pipe fills at 64KB and the engine's next write blocks
@@ -103,12 +148,12 @@ const keep = (d) => {
     engineLog.push(String(d));
     if (engineLog.length > 4000) engineLog.splice(0, 2000);
 };
-proc?.stdout.on('data', keep);
-proc?.stderr.on('data', keep);
+const snapshot = { headed: ENDPOINT ? 'remote' : headed, engine, endpoint: ENDPOINT, windowSize, only, settleOverride, version: null, sites: [] };
 
-const snapshot = { headed: ENDPOINT ? 'remote' : headed, engine, endpoint: ENDPOINT, windowSize, version: null, sites: [] };
-
-try {
+// An engine, a page on it, and the viewport pinned. Called once, and again
+// after a detector takes the engine down with it.
+async function session() {
+    await launch();
     for (let i = 0; i < 120; i++) {
         try {
             snapshot.version = await (await fetch(`${ENDPOINT ?? `http://127.0.0.1:${PORT}`}/json/version`)).json();
@@ -147,13 +192,34 @@ try {
     await cdp.send('Emulation.setDeviceMetricsOverride', {
         width: w, height: h, deviceScaleFactor: engine === 'chrome' ? PERSONA_DEVICE_SCALE_FACTOR : 1, mobile: false,
     }, sessionId);
+    return { cdp, sessionId };
+}
 
-    for (const { name, url, settleMs } of DETECTORS) {
+/// Is this engine still there? `Target.getTargets` touches no page, and the
+/// answer needs a deadline of its own: Cdp.send waits 30 seconds, which is
+/// longer than the stall it is being asked about. A closed socket throws on the
+/// way out, which is the fast no.
+async function answersPing(live) {
+    if (!live) return false;
+    try {
+        return await Promise.race([
+            live.cdp.send('Target.getTargets').then(() => true),
+            sleep(5000).then(() => false),
+        ]);
+    } catch {
+        return false;
+    }
+}
+
+try {
+    let live = await session();
+
+    for (const { name, url, settleMs } of detectors) {
         const site = { name, url };
         const started = Date.now();
         try {
-            await goto(cdp, sessionId, url, { settleMs });
-            Object.assign(site, await evaluate(cdp, sessionId, extractReach));
+            await goto(live.cdp, live.sessionId, url, { settleMs: settleOverride ?? settleMs });
+            Object.assign(site, await evaluate(live.cdp, live.sessionId, extractReach));
             site.verdictWords = (site.text.match(VERDICT_WORDS) || []).length;
             site.snippet = site.text.replace(/\s+/g, ' ').slice(0, 220);
             delete site.text;
@@ -163,15 +229,27 @@ try {
             site.error = String((e && e.message) || e).slice(0, 160);
         }
         site.ms = Date.now() - started;
+        // The engine may not have survived this page. Restart it rather than
+        // carry a dead socket through the rest of the list, and mark the row:
+        // a suite that restarted mid-run is not the same reading as one that
+        // did not.
+        if (site.error && !(await answersPing(live))) {
+            site.engineRestarted = true;
+            live?.cdp.close();
+            live = null;
+            await teardown();
+            live = await session();
+        }
         snapshot.sites.push(site);
         console.log(
             `${String(site.ms).padStart(6)}ms ${name.padEnd(17)} ` +
             (site.error
                 ? `ERR ${site.error}`
-                : `nodes=${String(site.nodes).padStart(5)} text=${String(site.textLength).padStart(6)} verdictWords=${site.verdictWords} w=${site.innerWidth}${site.navigated ? '' : ' NAVIGATION-DID-NOT-HAPPEN'}`),
+                : `nodes=${String(site.nodes).padStart(5)} text=${String(site.textLength).padStart(6)} verdictWords=${site.verdictWords} w=${site.innerWidth}${site.navigated ? '' : ' NAVIGATION-DID-NOT-HAPPEN'}`) +
+            (site.engineRestarted ? ' ENGINE-RESTARTED' : ''),
         );
     }
-    cdp.close();
+    live?.cdp.close();
 } finally {
     proc?.kill('SIGKILL');
     snapshot.engineLog = engineLog.join('').split('\n').filter(Boolean).slice(-40);

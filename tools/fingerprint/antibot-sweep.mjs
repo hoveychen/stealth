@@ -451,6 +451,22 @@ const onEvent = (msg) => {
 // stopped at the door from being watched on the way in is the interstitial's own
 // title and DOM, or a document that never stops being a 4xx -- so the marks are
 // reported either way (`jsDetect`) and only those two decide the verdict.
+/// Is this engine still there? `Target.getTargets` touches no page, and the
+/// answer has to come back on a deadline of its own: Cdp.send waits 30 seconds,
+/// which is longer than the stall it is being asked about. A closed socket
+/// throws on the way out, which is the fast no.
+async function answersPing(live) {
+    if (!live) return false;
+    try {
+        return await Promise.race([
+            live.cdp.send('Target.getTargets').then(() => true),
+            sleep(5000).then(() => false),
+        ]);
+    } catch {
+        return false;
+    }
+}
+
 function verdict(station, r, documents) {
     const first = documents[0]?.status ?? null;
     const last = documents[documents.length - 1]?.status ?? null;
@@ -666,6 +682,23 @@ try {
                 live = null;
                 await teardown();
             }
+        }
+        // One station's stall must not cost the stations after it. A 30-second
+        // tick in this engine ends the whole CDP connection --
+        // `watchdog stall` -> `env.requestTerminate()` -> CDP.tick sends
+        // CLOSE_GOING_AWAY (`reason="pending terminate"`) -- so the socket is
+        // gone and every station after the culprit reads as a timeout of its
+        // own. That is the "one crash and its tail" shape in the archived
+        // sweeps, and it is why five of twenty-nine stations could not be
+        // measured at all. Rebuild the session when a row errored and the
+        // engine has stopped answering, and mark the row: a sweep that
+        // restarted mid-run is not the same reading as one that did not.
+        if (!fresh && row.error && !(await answersPing(live))) {
+            row.engineRestarted = true;
+            live?.cdp.close();
+            live = null;
+            await teardown();
+            live = await session();
         }
         // Only the child's own death lands here -- see the `killed` guard on
         // the exit handler.
