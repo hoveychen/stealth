@@ -20,3 +20,7 @@ src/snapshot.bin
 /.worktrees/
 /tools/fingerprint/scratch/
 TASKS.md
+# Agent scratch: probes, dumps and one-off rigs. Never version-controlled --
+# a single ReleaseFast binary parked here for an A/B is 100MB, and four of them
+# reached a commit before this line existed.
+/scratch/
