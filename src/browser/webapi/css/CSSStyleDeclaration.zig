@@ -3719,7 +3719,13 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
     if (!isFlexItem(element, frame)) return null;
 
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    const container = parent.dimensionsAt(frame, true, depth + 1, true).width;
+    // The container's width and, below, the line's totals are the same answer
+    // for every item on this line, so they are solved once per container for
+    // the length of one top-level measurement (Element.FlexLineLookup). The
+    // cache hangs off the frame the measurement is being made in -- the one
+    // whose `_layout_depth` bounds and scopes it -- not off the element's owner.
+    const line = flexLine(frame, parent, depth);
+    const container = line.container_width;
     const outside = edges.padding_x + edges.border_x;
 
     if (isColumnFlex(style_manager, parent)) {
@@ -3740,9 +3746,54 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
         return flooredAtMinContent(element, frame, own_basis orelse return null);
     }
 
-    var total_grow: f64 = 0;
+    const totals = line.totals orelse blk: {
+        const solved = flexLineTotals(parent, container, frame, depth);
+        // Looked up again rather than written through a pointer held across the
+        // walk: `flexLineTotals` measures boxes, which re-enters this function
+        // for nested containers, which can rehash the map.
+        if (frame._flex_lines.getPtr(parent)) |entry| entry.totals = solved;
+        break :blk solved;
+    };
+
+    // The item's own flex base. The walk above computes one of these for every
+    // item on the line, this one included, but it does not keep them: an item
+    // needs only its own, and a line of n items would otherwise need a map of n
+    // to save one measurement each.
+    const own_base = own_basis orelse element.dimensionsAt(frame, true, depth + 1, false).width;
+
+    const free = container - totals.taken;
+    if (totals.total_grow > 0 and free > 0) {
+        return flooredAtMinContent(element, frame, own_base + free * own_grow / totals.total_grow);
+    }
+    return flooredAtMinContent(element, frame, own_basis orelse return null);
+}
+
+/// The container's content width, and the line's totals once someone has needed
+/// them, for one container at one depth. Solved on first ask and held for the
+/// rest of the measurement in flight; see Element.FlexLineLookup for why that
+/// scope needs no invalidation.
+///
+/// Returned by value, so nothing holds a pointer into a map that the nested
+/// measurements below can rehash. A failed insert is not an error either: the
+/// answer is just computed again next time, which is what this did for every
+/// item before the cache existed.
+fn flexLine(frame: *Frame, parent: *Element, depth: u8) Element.FlexLine {
+    if (frame._flex_lines.get(parent)) |cached| return cached;
+
+    const width = parent.dimensionsAt(frame, true, depth + 1, true).width;
+    const line: Element.FlexLine = .{ .container_width = width };
+    // Put after the measurement, not before: `dimensionsAt` re-enters here for
+    // nested containers and would invalidate a `getOrPut` taken across it.
+    frame._flex_lines.put(frame.arena, parent, line) catch {};
+    return line;
+}
+
+/// What the whole line has already taken out of the container, and the sum of
+/// its grow factors. Identical for every item on the line, which is the only
+/// reason it can be cached at all.
+fn flexLineTotals(parent: *Element, container: f64, frame: *Frame, depth: u8) Element.FlexLine.Totals {
     var taken: f64 = 0;
-    var own_base: f64 = 0;
+    var total_grow: f64 = 0;
 
     // Every item on this line has the same containing block -- the flex
     // container, which `container` is already the content width of -- so the
@@ -3752,11 +3803,8 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
     var child = parent.firstElementChild();
     while (child) |sibling| : (child = sibling.nextElementSibling()) {
         if (!isFlexItem(sibling, frame)) continue;
-        const sibling_edges = if (sibling == element) edges else boxEdges(sibling, frame);
-        const base = if (sibling == element)
-            own_basis orelse sibling.dimensionsAt(frame, true, depth + 1, false).width
-        else
-            flexBaseSize(sibling, container, frame, depth, sibling_edges);
+        const sibling_edges = boxEdges(sibling, frame);
+        const base = flexBaseSize(sibling, container, frame, depth, sibling_edges);
         // What the line gives out is BORDER boxes: an item's padding, border
         // and margin all come off the free space before anything is shared.
         // Measured -- `flex: 1; padding: 0 25px` in a 400px row is 350px of
@@ -3765,14 +3813,8 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
         taken += base + sibling_edges.padding_x + sibling_edges.border_x +
             Element.horizontalMargin(sibling, frame, &line_width, depth);
         total_grow += flexFactor(sibling, "flex-grow", frame);
-        if (sibling == element) own_base = base;
     }
-
-    const free = container - taken;
-    if (total_grow > 0 and free > 0) {
-        return flooredAtMinContent(element, frame, own_base + free * own_grow / total_grow);
-    }
-    return flooredAtMinContent(element, frame, own_basis orelse return null);
+    return .{ .taken = taken, .total_grow = total_grow };
 }
 
 /// A flex item's automatic minimum size: it is never laid out narrower than its

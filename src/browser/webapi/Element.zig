@@ -115,6 +115,64 @@ pub const ScrollPosition = struct {
 };
 pub const ScrollPositionLookup = std.AutoHashMapUnmanaged(*Element, ScrollPosition);
 
+/// One flex container's line, solved once instead of once per item on it.
+///
+/// `CSSStyleDeclaration.flexItemWidth` answers "what share of the line is this
+/// item's", and the answer needs two things no single item owns: the
+/// container's content width, and the sum over EVERY item on the line of its
+/// flex base and its own edges. It computed both from scratch for each item, so
+/// a line of n items measured n boxes n times -- and a flex item's measurement
+/// re-enters flexItemWidth one level down, which multiplies that down the tree.
+///
+/// Measured with `scratch/hpr/flex-cost.mjs` (identical trees, 3281 nodes, one
+/// getBoundingClientRect, only `display`/`flex-grow` differ): a block tree
+/// answered in 112ms, the same tree as non-growing flex items in 516ms, and as
+/// growing ones in 1677ms. On www.kohls.com the same shape spends the whole
+/// 30-second watchdog budget inside 27 nested `dimensionsIn` frames alternating
+/// with `flexItemWidth` -- and a stall closes the CDP connection outright
+/// (Watchdog.zig -> requestTerminate -> CDP.tick), which is what took the rest
+/// of an antibot sweep with it.
+///
+/// Keyed on the container alone, and that is the whole point. The measurement
+/// recursion here is the container and its items asking each other: an item
+/// needs the container's content width, and measuring the container measures
+/// its items, each of which asks for the container's width again one level
+/// down. Nothing but `depth` reaching MAX_CONTAINING_BLOCK_DEPTH ends that, so
+/// a key carrying the depth misses on every single one of those rounds -- the
+/// first shape of this cache did, and cost 20% for the bookkeeping.
+///
+/// Without the depth in the key, the second round finds the first round's
+/// answer. Once a container's width is known, asking again at any depth is the
+/// same question about the same document.
+pub const FlexLine = struct {
+    /// The container's content width. Every item on the line resolves its
+    /// percentages against this one, so it is asked for even by the items that
+    /// take no share.
+    container_width: f64,
+    /// The line's totals, filled the first time a GROWING item asks for them.
+    /// An item that does not grow never needs them, and the walk that produces
+    /// them is the expensive half.
+    totals: ?Totals = null,
+
+    pub const Totals = struct {
+        taken: f64,
+        total_grow: f64,
+    };
+};
+
+/// Dropped when `Page.dom_version` moves, the rule StyleManager's four cascade
+/// caches use.
+///
+/// It was scoped to one top-level measurement first -- a scope that needs no
+/// invalidation rule at all, since a measurement is synchronous native work
+/// with no script in it. That version was instrumented and **never hit once**:
+/// inside a single top-level measurement each container is asked for exactly
+/// once (`hits=0 misses=8 measured=37`, `scratch/hpr/flex-cost.mjs` with the
+/// counters in). The waste is not inside a read, it is the same read repeated:
+/// one `getBoundingClientRect` on a 1094-node flex tree enters this function at
+/// top level about five thousand times.
+pub const FlexLineLookup = std.AutoHashMapUnmanaged(*Element, FlexLine);
+
 pub const Namespace = enum(u8) {
     html,
     svg,
@@ -3846,6 +3904,17 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
     // every measurement in flight whatever route it came in by.
     if (frame._layout_depth >= MAX_LAYOUT_REENTRY) {
         return .{ .width = 0, .height = 0 };
+    }
+    // A new top-level measurement: whatever flex lines the last one solved are
+    // answers about a document that has had script run against it since.
+    // `clearRetainingCapacity` because a page that reads a hundred boxes must
+    // not allocate a hundred maps.
+    if (frame._layout_depth == 0) {
+        const dom_version = frame._page.dom_version;
+        if (dom_version != frame._flex_lines_dom_version) {
+            frame._flex_lines.clearRetainingCapacity();
+            frame._flex_lines_dom_version = dom_version;
+        }
     }
     frame._layout_depth += 1;
     defer frame._layout_depth -= 1;
