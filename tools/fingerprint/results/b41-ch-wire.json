@@ -1,0 +1,2705 @@
+{
+  "engine": "chrome",
+  "headed": true,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-25T05:48:53.511Z",
+  "egress": {
+    "fl": "1231f39",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787636933.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Chrome/151.0.7922.172",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.21",
+    "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:10340/devtools/browser/ccee5b4c-2146-42f6-9c80-885372e1c8ca"
+  },
+  "stations": [
+    {
+      "name": "ak-macys",
+      "vendor": "akamai",
+      "url": "https://www.macys.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=243d8345-f682-4dc3-8ef8-f38bef12bd39&u_scsid=4392b4ad-e573-445e-bbf6-e5877042b7ec&u_sclid=42cdad47-b607-4e46-9bbc-14d6e6d5a520",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://servedby.flashtalking.com/container/12518;131342;14478;iframe/?ns=https%3A%2F%2Fwww.macys.com%2F&ft_referrer=https%3A%2F%2Fwww.macys.com%2F&cachebuster=156309.30382508857",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://84bc4b9ccfacbb9b74494bc21d6147a1.safeframe.googlesyndication.com/safeframe/1-0-45/html/container.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://84bc4b9ccfacbb9b74494bc21d6147a1.safeframe.googlesyndication.com/safeframe/1-0-45/html/container.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://cdn.pbbl.co/i/pp.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://gum.criteo.com/syncframe?topUrl=www.macys.com&origin=onetag",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CO7ZnMWKu5YDFTdbnQYdlXUHCQ;src=3856256;type=global;cat=landing;rcb=4;npa=0;auiddc=1107683930.1787636937;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.172%7CChromium%3B151.0.7922.172;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;user_data_mode=c;_tu=IAAB;gtm=45fe68l1v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938466~115938468~118897920~118897930~119367802~119367810~120385423;epver=2;em=tv.1~co0.US;dc_random=1787636937_IS6Wh64jNp_XS--lwDQQNKFQ7o4svcy7nA;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F?",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://3856256.fls.doubleclick.net/activityi;dc_pre=CIzjnMWKu5YDFcSeAwgdizY0Jg;src=3856256;type=global;cat=landing;rcb=4;ord=1787636936280;npa=0;auiddc=1107683930.1787636937;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.172%7CChromium%3B151.0.7922.172;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68l1v9168096634za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938466~115938468~118897920~118897930~119367802~119367810~120385423;epver=2;dc_random=1787636937_baE1WrPtp_0A59uZTk5GiQ7Wva-HJaY7sA;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F?",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://10289658.fls.doubleclick.net/activityi;dc_pre=CLTan8WKu5YDFbfL8gcdpL8k_w;src=10289658;type=globmmn;cat=mmn_g0;rcb=7;ord=1787636936280;npa=0;auiddc=1107683930.1787636937;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.172%7CChromium%3B151.0.7922.172;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IAAB;gtm=45fe68l1v9190905602za200zb9215740020zd9215740020xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938466~115938468~118897920~118897930~119367802~119367810~120213116~120385423;epver=2;dc_random=1787636937_36XL2B5YKam_bHDabLUNw4IY1I2wVDqtgg;_dc_test=1;~oref=https%3A%2F%2Fwww.macys.com%2F?",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.google.com/recaptcha/api2/aframe",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "id": "6B81EDE400BB184370C0701F16FC8B2F",
+          "method": "GET",
+          "url": "https://www.macys.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "id": "6B81EDE400BB184370C0701F16FC8B2F",
+          "status": 200,
+          "url": "https://www.macys.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "id": "25090.2",
+          "method": "GET",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/NpLibtL3aL/ewMNYQ/HW1FK/DI_Pz0W?v=a5bab686-ebe2-c953-0ce9-8def24fd17cb&t=983642857",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.3",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.4",
+          "method": "GET",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "6B81EDE400BB184370C0701F16FC8B2F",
+          "len": 5343
+        },
+        {
+          "ev": "res",
+          "id": "25090.2",
+          "status": 200,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/NpLibtL3aL/ewMNYQ/HW1FK/DI_Pz0W?v=a5bab686-ebe2-c953-0ce9-8def24fd17cb&t=983642857",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.2",
+          "len": 183192
+        },
+        {
+          "ev": "res",
+          "id": "25090.3",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.3",
+          "len": 67793
+        },
+        {
+          "ev": "res",
+          "id": "25090.4",
+          "status": 200,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.4",
+          "len": 185527
+        },
+        {
+          "ev": "req",
+          "id": "25090.9",
+          "method": "POST",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "XHR",
+          "postLen": 1918,
+          "post": "{\"sensor_data\":\"3;0;1;2048;3487540;CI7d5zW5pKA9lDq48jqTEEjboqIR0ly1nKPpQi5N1tU=;650,0,0,0,2,0;\\\"1-\\\"rs^\\\"r/F!\\\"*\\\"5-.Y.~~H\\\".X2\\\"=`K\\\"_\\\"Ny zy4uFW/I&XEB@JOF[|2tE:l59H2`.:=}D\\\"ys|\\\"PA\\\",\\\"h#FF!\\\"&V:\\\"F3(Ub\\\"`\\\"1k=0}Yu7mG RwA4C2eo~T*\\\"B\\\"PX2\\\" K\\\"PCx\\\"1[_\\\"G\\\"bHVI%|EgVC{9f|CVXhkzLQ5rq!e<HiBJTxD:!Smmnm"
+        },
+        {
+          "ev": "req",
+          "id": "25090.10",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65319_1825202430.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.11",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65257_1825232097.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.12",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/64885_1825202523.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.13",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65226_747628217.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.14",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/64854_747627194.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "25090.14",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/64854_747627194.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.14",
+          "len": 5261
+        },
+        {
+          "ev": "req",
+          "id": "549F379152D89AEF68B4F4DE22E97560",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/9c1bdc2a-c3c1-405a-b9e1-e1d7f2bc15ad",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "25090.13",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65226_747628217.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.13",
+          "len": 33717
+        },
+        {
+          "ev": "res",
+          "id": "25090.12",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/64885_1825202523.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.12",
+          "len": 2103
+        },
+        {
+          "ev": "res",
+          "id": "25090.10",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65319_1825202430.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.10",
+          "len": 18868
+        },
+        {
+          "ev": "res",
+          "id": "25090.11",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65257_1825232097.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.11",
+          "len": 6694
+        },
+        {
+          "ev": "req",
+          "id": "25090.17",
+          "method": "GET",
+          "url": "https://www.macys.com/favicon.ico",
+          "type": "Other"
+        },
+        {
+          "ev": "res",
+          "id": "25090.17",
+          "status": 200,
+          "url": "https://www.macys.com/favicon.ico",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.17",
+          "len": 6256
+        },
+        {
+          "ev": "req",
+          "id": "738AFA7A77F886722E752BBC267E80D0",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/2c334bcf-6af9-41ff-a590-4ad4d041bc6b",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "25090.9",
+          "status": 201,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "25090.9",
+          "len": 1215
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED"
+        },
+        {
+          "ev": "req",
+          "id": "1438BAAC36A3E12D21C0F4769595BA35",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/a301a59f-e199-4d73-81ea-63875d7a0c65",
+          "type": "Script"
+        },
+        {
+          "ev": "fail",
+          "text": "net::ERR_ABORTED"
+        },
+        {
+          "ev": "req",
+          "id": "2AF791B12CB74E54DCFB35B9FC361334",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/302839df-7051-40cc-a110-5adca8810729",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.185",
+          "method": "POST",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "XHR",
+          "postLen": 5205,
+          "post": "{\"sensor_data\":\"3;0;1;0;3487540;CI7d5zW5pKA9lDq48jqTEEjboqIR0ly1nKPpQi5N1tU=;2,652,0,0,0,59;\\\"KkA[UGmI:C>Au1smj.&+h%,It%U;j>tn*xw<?TBP~2%\\\"n~6\\\"~J/\\\"]\\\"/vF8c`\\\"l\\\">Vm=\\\"wmyBn\\\"BlH\\\"O\\\"\\\"u\\\"FLm\\\"V\\\"*:~ OyVIuB~)3cpIoNzXs;\\\"=\\\"3N^\\\"-\\\"{xwEu\\\"eFE\\\"2^y\\\"!\\\"xE~U\\\"K\\\"d3!e\\\"2\\\"G_==4\\\"{%C\\\"%4x\\\"IKs\\\"q*{\\\"g$]"
+        },
+        {
+          "ev": "req",
+          "id": "25090.186",
+          "method": "POST",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/NpLibtL3aL/ewMNYQ/HW1FK/DI_Pz0W?t=983642857",
+          "type": "XHR",
+          "postLen": 4652,
+          "post": "{\"body\":\"\\\"QD)n)\\\"I\\\"+gfgs^0rl)R`B?=#RYb =z\\\"xWrB~\\\"r\\\"~R1--MkBX5Z09\\\"b\\\" d2<`\\\"u\\\"gvb\\\"%\\\"eg9xU\\\"b\\\"F&C/\\\"z\\\"H[x`B\\\"a\\\"bO}\\\"X\\\"xeV,I\\\"C\\\"Cs:T>[aYVmdb#v6I_+x\\\"^\\\"$()-I\\\"@\\\"\\\"}\\\"$^R1i\\\"!\\\"c;nJ8\\\"k5e\\\"zp.z%\\\"t~co3?|\\\\\\\"gD)cS\\\\\\\"r\\\\\\\"-H7YxMFjw4,0{\\\\\\\"d*OB;Q`L%f\\\"vaq?!\\\"f\\\"B\\\"){`kaqVOnzWBe50o%qY(yM@E?gV"
+        },
+        {
+          "ev": "res",
+          "id": "25090.186",
+          "status": 200,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/NpLibtL3aL/ewMNYQ/HW1FK/DI_Pz0W?t=983642857",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "25090.186",
+          "len": 1853
+        },
+        {
+          "ev": "req",
+          "id": "529BE5513D87CD5C138AAC142FC602BA",
+          "method": "GET",
+          "url": "https://www.macys.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "id": "25090.185",
+          "status": 201,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "25090.185",
+          "len": 1225
+        },
+        {
+          "ev": "res",
+          "id": "529BE5513D87CD5C138AAC142FC602BA",
+          "status": 200,
+          "url": "https://www.macys.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "id": "25090.190",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/style-BdpnN46G.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "req",
+          "id": "25090.191",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/common/assets/fonts/macys-sans/MacysSans.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "req",
+          "id": "25090.192",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/common/assets/fonts/macys-sans/MacysSansMd.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "req",
+          "id": "25090.193",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/common/assets/fonts/macys-sans/MacysSansBd.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "req",
+          "id": "25090.194",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/1.294.2/_nuxt/css/entry.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "req",
+          "id": "25090.195",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/1.294.2/_nuxt/js/entry.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.196",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/entry-DzXLWThN.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.197",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/HtmlSnippet-CtIA1aXU.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.198",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/getAttributes-BVCPMSSb.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.199",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/GoogleAdPlaceholderMedia-CnlV_8A0.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.200",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/PopUp-DGsW8Z3b.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.201",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ModalOverlay-CGFaNK7g.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.202",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/focusTrap--vjHFNoq.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.203",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Ctas-D3UcK5UF.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.204",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/DropdownComponent-CKEemTle.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.205",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Spacer-DU4XSOir.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.206",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/TabbedProductPool-CRYy4top.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.207",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ProductCarousel-do7mSVEZ.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.208",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Slideshow-eUu8pofZ.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.209",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/index-D_HqMFwp.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.210",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/__vite-browser-external-Drlxxo3w.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.211",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/useLeftAlignedCarouselProvider-C8PHR-ty.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.212",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Spinner-kIsoCrwt.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.213",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ProsProductPool-raDFyySR.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.214",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/useFullWidthZoneBackgroundDataProvider-D_8Phtgj.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.215",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SponsoredItemsMedia-kCAT08kc.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.216",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/builds/meta/8b36375f-869b-4deb-b9fc-93e291267403.json",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.217",
+          "method": "GET",
+          "url": "https://tags.tiqcdn.com/utag/macys/main/prod/utag.sync.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.219",
+          "method": "GET",
+          "url": "https://www.macys.com/akam/13/6d2c4b87",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.220",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/images/mcom/logo.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.221",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/images/mcom/starIcon.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.222",
+          "method": "GET",
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_8-19_A_slideshow/C2602308_101_D_DT.webp",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.223",
+          "method": "GET",
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_8-11_A_slideshow/C2605138_101_B_DT.webp",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.224",
+          "method": "GET",
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_4-14_A_carousel/flickity2.pkgd.min.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.252",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SingleImageTextAdWrapper-gm8Kx4Zf.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.253",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SingleImageTextAd-CqybLd1H.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.254",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/TextAd-kf9fwpFj.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.255",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ImageMap-B48TZm9F.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.256",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/cleanHtml-BMNGZoH5.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.257",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/getImage-D8B2yZeH.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.258",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/VisualFilter-hCGt25MU.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.259",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/CategoryIcons-D3IlPhxJ.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.260",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/VisualNavigation-Dbbtfsh_.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.261",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/BrandCategoryCarousel-DdTjFouJ.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.262",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/HeroSubAd-Br6sgzPN.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.263",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SubAd-yzg7k2h4.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.264",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Carousel-CYjb8dE5.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.265",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ProductPool-CzKZWP1o.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.266",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ShortTextAd-DQnscjvF.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.267",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SubAdPool-JyvQ13P0.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.268",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Header-BsoEldJp.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.269",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Placeholder-BaxeQz5Y.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.270",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SalesBanner-s6iNHku7.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.271",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/BrandShop-EQx3Yd-1.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.272",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/BrandShowcaseMedia-TukwwBjE.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.273",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/FeatureGrid-DJv-So9F.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.274",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/EditorialCarousel-CmTXb0Fr.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.275",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/BrowseMediaAd-DCUVi2il.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.276",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Essentials-B6Q9RSm3.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.277",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/PromoSlideshow-CYOtPG_P.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.278",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/BrandIndex-CV3LvpTq.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.279",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/MessageInset-CLIuTNrp.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.280",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/LargeCarousel-DFewJG8-.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.281",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/PersonalizationPlaceholder-BybMwzsO.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.282",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/UserStatus-CFMuo6T9.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.283",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/TagCloud-DRMcJkbz.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.284",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/index-BSAVbLu4.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.285",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/polyfill-BpNQY6k_.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.286",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/index-DXVlgEp2.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.287",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/scrollyfills.modern-CcNcp9JI.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.288",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/LoyaltyCard-VPjZwSO4.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.289",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ProgressBar-C9WNZES-.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.290",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/LoyaltyCard-DCV3EcMn.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.291",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/initRoktSDKPlus-MvPwkePi.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.292",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/loadRoktPlacement-FmDg9v8s.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.293",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/useDevLinks-CLnALdtI.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.294",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Error404-DyQNXekf.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.295",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Error404-ugWru1oL.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.296",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Error500-B8co-epb.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.297",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Error500-DzMh3ELF.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.298",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/index-BFfF906b.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.299",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/error-404-DJLR4pkH.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.300",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/composables-CfjkVYqL.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.301",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/error-500-BH_qKRw6.js",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "id": "25090.303",
+          "method": "GET",
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_2-17_E_newatmacys_carousel/redstar.webp",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.304",
+          "method": "GET",
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_2-17_E_newatmacys_carousel/whitetext.webp",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.306",
+          "method": "GET",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "529BE5513D87CD5C138AAC142FC602BA",
+          "len": 242804
+        },
+        {
+          "ev": "res",
+          "id": "25090.220",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/images/mcom/logo.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.220",
+          "len": 1558
+        },
+        {
+          "ev": "res",
+          "id": "25090.190",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/style-BdpnN46G.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "res",
+          "id": "25090.194",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/1.294.2/_nuxt/css/entry.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "done",
+          "id": "25090.190",
+          "len": 59079
+        },
+        {
+          "ev": "done",
+          "id": "25090.194",
+          "len": 23595
+        },
+        {
+          "ev": "req",
+          "id": "25090.308",
+          "method": "GET",
+          "url": "https://s.go-mpulse.net/boomerang/WVZ92-598Q4-C592Z-HWSHG-PBBKW",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.310",
+          "method": "GET",
+          "url": "https://tags.tiqcdn.com/utag/macys/main/prod/utag.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "25090.221",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/images/mcom/starIcon.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.221",
+          "len": 1102
+        },
+        {
+          "ev": "res",
+          "id": "25090.217",
+          "status": 200,
+          "url": "https://tags.tiqcdn.com/utag/macys/main/prod/utag.sync.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.217",
+          "len": 4531
+        },
+        {
+          "ev": "req",
+          "id": "25090.349",
+          "method": "GET",
+          "url": "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.350",
+          "method": "GET",
+          "url": "https://cdn1.adoberesources.net/alloy/2.27.0/alloy.min.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "25090.193",
+          "status": 200,
+          "url": "https://assets.macysassets.com/common/assets/fonts/macys-sans/MacysSansBd.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "done",
+          "id": "25090.193",
+          "len": 22264
+        },
+        {
+          "ev": "res",
+          "id": "25090.222",
+          "status": 200,
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_8-19_A_slideshow/C2602308_101_D_DT.webp",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.192",
+          "status": 200,
+          "url": "https://assets.macysassets.com/common/assets/fonts/macys-sans/MacysSansMd.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "done",
+          "id": "25090.192",
+          "len": 22199
+        },
+        {
+          "ev": "res",
+          "id": "25090.203",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Ctas-D3UcK5UF.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.203",
+          "len": 1402
+        },
+        {
+          "ev": "res",
+          "id": "25090.202",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/focusTrap--vjHFNoq.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.202",
+          "len": 1000
+        },
+        {
+          "ev": "res",
+          "id": "25090.191",
+          "status": 200,
+          "url": "https://assets.macysassets.com/common/assets/fonts/macys-sans/MacysSans.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "done",
+          "id": "25090.191",
+          "len": 20976
+        },
+        {
+          "ev": "res",
+          "id": "25090.201",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ModalOverlay-CGFaNK7g.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.201",
+          "len": 2121
+        },
+        {
+          "ev": "req",
+          "id": "25090.378",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGQ9Im0xMCA4IDQgNC00IDQiLz48L3N2Zz4=",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.378",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGQ9Im0xMCA4IDQgNC00IDQiLz48L3N2Zz4=",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.378",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.379",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iIzAwMCIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMTEgOGE4LjYgOC42IDAgMCAxLTEuNS0uOEM4LjYgNi42IDggNS44IDggNWExIDEgMCAwIDEgMS4zLTFjLjUuMiAxLjYgMSAxLjYgNFptMCAySDZ2NGg1em0wIDZINnY0aDV6bTIgNHYtNGg0Ljl2NGgtNVptNC45LTZoLTV2LTRoNXptLTEuNC02aDIuNGExIDEgMCAwIDEgMSAxdjEyYTEgMSAwIDAgMS0xIDFINWExIDEgMCAwIDEtMS0xVjlhMSAxIDAgMCAxIDEtMWgyLjRBNC4yIDQuMiAwIDAgMSA2IDVhMyAzIDAgMCAxIDMuNy0yLjljLjkuMiAxLjcuOCAyLjIgMS43LjYtMSAxLjQtMS41IDIuMy0xLjdBMyAzIDAgMCAxIDE4IDVjMCAxLjItLjcgMi4yLTEuNCAzWm0tMy42IDBhOSA5IDAgMCAwIDEuNS0uOGMuOS0uNyAxLjUtMS40IDEuNS0yLjJhMSAxIDAgMCAwLTEuMy0xYy0uNS4yLTEuNiAxLTEuNyA0bS0xLjYgMCIgY2xpcC1ydWxlPSJldmVub2RkIi8+PC9zdmc+",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.379",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iIzAwMCIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMTEgOGE4LjYgOC42IDAgMCAxLTEuNS0uOEM4LjYgNi42IDggNS44IDggNWExIDEgMCAwIDEgMS4zLTFjLjUuMiAxLjYgMSAxLjYgNFptMCAySDZ2NGg1em0wIDZINnY0aDV6bTIgNHYtNGg0Ljl2NGgtNVptNC45LTZoLTV2LTRoNXptLTEuNC02aDIuNGExIDEgMCAwIDEgMSAxdjEyYTEgMSAwIDAgMS0xIDFINWExIDEgMCAwIDEtMS0xVjlhMSAxIDAgMCAxIDEtMWgyLjRBNC4yIDQuMiAwIDAgMSA2IDVhMyAzIDAgMCAxIDMuNy0yLjljLjkuMiAxLjcuOCAyLjIgMS43LjYtMSAxLjQtMS41IDIuMy0xLjdBMyAzIDAgMCAxIDE4IDVjMCAxLjItLjcgMi4yLTEuNCAzWm0tMy42IDBhOSA5IDAgMCAwIDEuNS0uOGMuOS0uNyAxLjUtMS40IDEuNS0yLjJhMSAxIDAgMCAwLTEuMy0xYy0uNS4yLTEuNiAxLTEuNyA0bS0xLjYgMCIgY2xpcC1ydWxlPSJldmVub2RkIi8+PC9zdmc+",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.379",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.380",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyOCIgaGVpZ2h0PSIyOCIgZmlsbD0ibm9uZSIgdmlld0JveD0iMCAwIDI4IDI4Ij48cGF0aCBzdHJva2U9IiMwMDAiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMiIgZD0iTTIyLjQgOEg1LjZ2MTYuOGgxNi44eiIvPjxwYXRoIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjIiIGQ9Ik0xNy42IDEwLjRWNi4wOFMxNy4zNyAzLjIgMTQgMy4ycy0zLjYgMi44OC0zLjYgMi44OHY0LjMyIi8+PHBhdGggZmlsbD0iI2UwMWEyYiIgZD0iTTEyLjk2IDE0LjlIOS40N2wyLjgyIDIuMTYtMS4wNyAzLjQ3IDIuOC0yLjE1IDIuODIgMi4xNi0xLjA3LTMuNDkgMi44MS0yLjE1SDE1LjFsLTEuMDctMy40N3oiLz48L3N2Zz4=",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.380",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyOCIgaGVpZ2h0PSIyOCIgZmlsbD0ibm9uZSIgdmlld0JveD0iMCAwIDI4IDI4Ij48cGF0aCBzdHJva2U9IiMwMDAiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMiIgZD0iTTIyLjQgOEg1LjZ2MTYuOGgxNi44eiIvPjxwYXRoIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjIiIGQ9Ik0xNy42IDEwLjRWNi4wOFMxNy4zNyAzLjIgMTQgMy4ycy0zLjYgMi44OC0zLjYgMi44OHY0LjMyIi8+PHBhdGggZmlsbD0iI2UwMWEyYiIgZD0iTTEyLjk2IDE0LjlIOS40N2wyLjgyIDIuMTYtMS4wNyAzLjQ3IDIuOC0yLjE1IDIuODIgMi4xNi0xLjA3LTMuNDkgMi44MS0yLjE1SDE1LjFsLTEuMDctMy40N3oiLz48L3N2Zz4=",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.380",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.381",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGQ9Im0xNiAxMC00IDQtNC00Ii8+PC9zdmc+",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.381",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGQ9Im0xNiAxMC00IDQtNC00Ii8+PC9zdmc+",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.381",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.382",
+          "method": "GET",
+          "url": "https://secure-netstorage.macys.com/social/images/snippet/2024/images/button-play.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.383",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEzLjggMjF2LTguMmgyLjdsLjQtMy4yaC0zdi0yYzAtMSAuMi0xLjYgMS41LTEuNkgxN1YzLjFhMTggMTggMCAwIDAtMi40LS4xYy0yLjMgMC00IDEuNS00IDQuMnYyLjRIOHYzLjJoMi43VjIxeiIvPjwvc3ZnPg==",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.383",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEzLjggMjF2LTguMmgyLjdsLjQtMy4yaC0zdi0yYzAtMSAuMi0xLjYgMS41LTEuNkgxN1YzLjFhMTggMTggMCAwIDAtMi40LS4xYy0yLjMgMC00IDEuNS00IDQuMnYyLjRIOHYzLjJoMi43VjIxeiIvPjwvc3ZnPg==",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.383",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.384",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTguMyAyMWE2LjYgNi42IDAgMCAxLTIuMi0uNSA0LjQgNC40IDAgMCAxLTEuNi0xIDQuNCA0LjQgMCAwIDEtMS0xLjYgNi41IDYuNSAwIDAgMS0uNC0yLjJMMyAxMlY4LjNBNi42IDYuNiAwIDAgMSAzLjYgNmMuMi0uNi42LTEuMSAxLTEuNi41LS40IDEtLjggMS42LTFBNi41IDYuNSAwIDAgMSA4LjMgM2g3LjRhNi42IDYuNiAwIDAgMSAyLjIuNWMuNi4yIDEuMS42IDEuNiAxIC40LjUuOCAxIDEgMS42YTYuNSA2LjUgMCAwIDEgLjQgMi4yTDIxIDEydjMuN2E2LjUgNi41IDAgMCAxLS41IDIuMiA0LjQgNC40IDAgMCAxLTEgMS42IDUuNCA1LjQgMCAwIDEtMy44IDEuNCA2MCA2MCAwIDAgMS03LjQgMFptMC0xNmE0LjYgNC42IDAgMCAwLTEuNS4zTDYgNmwtLjYgMWE0LjYgNC42IDAgMCAwLS4yIDEuNVY5YTg1IDg1IDAgMCAwIC4yIDguMmwuNi45IDEgLjZhNC43IDQuNyAwIDAgMCAxLjUuMmwzLjYuMWgzLjZhNC42IDQuNiAwIDAgMCAxLjYtLjMgMi40IDIuNCAwIDAgMCAuOS0uNmwuNi0xIC4yLTEuNVY4LjRhNC42IDQuNiAwIDAgMC0uMi0xLjZBMi40IDIuNCAwIDAgMCAxOCA2YTIuNSAyLjUgMCAwIDAtMS0uNiA0LjYgNC42IDAgMCAwLTEuNS0uMkgxNWE4MyA4MyAwIDAgMC02LjYgMFpNOCAxMmE0IDQgMCAxIDEgOCAwIDQgNCAwIDAgMS04IDBtMiAwYTIgMiAwIDEgMCA0IDAgMiAyIDAgMCAwLTQgMG01LjUtNC41YTEgMSAwIDEgMSAyIDAgMSAxIDAgMCAxLTIgMCIvPjwvc3ZnPg==",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.384",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTguMyAyMWE2LjYgNi42IDAgMCAxLTIuMi0uNSA0LjQgNC40IDAgMCAxLTEuNi0xIDQuNCA0LjQgMCAwIDEtMS0xLjYgNi41IDYuNSAwIDAgMS0uNC0yLjJMMyAxMlY4LjNBNi42IDYuNiAwIDAgMSAzLjYgNmMuMi0uNi42LTEuMSAxLTEuNi41LS40IDEtLjggMS42LTFBNi41IDYuNSAwIDAgMSA4LjMgM2g3LjRhNi42IDYuNiAwIDAgMSAyLjIuNWMuNi4yIDEuMS42IDEuNiAxIC40LjUuOCAxIDEgMS42YTYuNSA2LjUgMCAwIDEgLjQgMi4yTDIxIDEydjMuN2E2LjUgNi41IDAgMCAxLS41IDIuMiA0LjQgNC40IDAgMCAxLTEgMS42IDUuNCA1LjQgMCAwIDEtMy44IDEuNCA2MCA2MCAwIDAgMS03LjQgMFptMC0xNmE0LjYgNC42IDAgMCAwLTEuNS4zTDYgNmwtLjYgMWE0LjYgNC42IDAgMCAwLS4yIDEuNVY5YTg1IDg1IDAgMCAwIC4yIDguMmwuNi45IDEgLjZhNC43IDQuNyAwIDAgMCAxLjUuMmwzLjYuMWgzLjZhNC42IDQuNiAwIDAgMCAxLjYtLjMgMi40IDIuNCAwIDAgMCAuOS0uNmwuNi0xIC4yLTEuNVY4LjRhNC42IDQuNiAwIDAgMC0uMi0xLjZBMi40IDIuNCAwIDAgMCAxOCA2YTIuNSAyLjUgMCAwIDAtMS0uNiA0LjYgNC42IDAgMCAwLTEuNS0uMkgxNWE4MyA4MyAwIDAgMC02LjYgMFpNOCAxMmE0IDQgMCAxIDEgOCAwIDQgNCAwIDAgMS04IDBtMiAwYTIgMiAwIDEgMCA0IDAgMiAyIDAgMCAwLTQgMG01LjUtNC41YTEgMSAwIDEgMSAyIDAgMSAxIDAgMCAxLTIgMCIvPjwvc3ZnPg==",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.384",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.385",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEzLjcgMTAuOCAyMC40IDNoLTEuNkwxMyA5LjggOC40IDNIM2w3IDEwLjItNyA4LjJoMS42bDYuMS03LjEgNSA3SDIxek01LjIgNC4yaDIuNGwxMS4yIDE2aC0yLjRMNS4yIDQuM1oiLz48L3N2Zz4=",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.385",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEzLjcgMTAuOCAyMC40IDNoLTEuNkwxMyA5LjggOC40IDNIM2w3IDEwLjItNyA4LjJoMS42bDYuMS03LjEgNSA3SDIxek01LjIgNC4yaDIuNGwxMS4yIDE2aC0yLjRMNS4yIDQuM1oiLz48L3N2Zz4=",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.385",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.386",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0ibTEwLjkgMTQuOC0uMi42LS42IDIuMWE5LjQgOS40IDAgMCAxLTEuNSAzbC0uMy40LS4yLjF2LS4yTDcuOCAxOWExMi44IDEyLjggMCAwIDEgLjUtMy43bDEtMy45YS42LjYgMCAwIDAgMC0uMyAzLjggMy44IDAgMCAxIDAtM0ExLjggMS44IDAgMCAxIDExIDdhMS4zIDEuMyAwIDAgMSAxLjQgMS4yIDQuNCA0LjQgMCAwIDEtLjIgMS44bC0uNiAyLjFhMS43IDEuNyAwIDAgMCAyLjEgMi4xIDIuOCAyLjggMCAwIDAgMS42LTEuMiA2LjUgNi41IDAgMCAwIDEtMi45IDYuNSA2LjUgMCAwIDAgMC0yLjEgMy42IDMuNiAwIDAgMC0yLjctMyA1LjMgNS4zIDAgMCAwLTQuMy41QTQuNyA0LjcgMCAwIDAgNyA5LjFhMy42IDMuNiAwIDAgMCAuMyAyLjFsLjQuNmEuNi42IDAgMCAxIC4xLjVsLS4yLjhhLjQuNCAwIDAgMS0uNS4zIDMgMyAwIDAgMS0xLjctMS44QTUuOSA1LjkgMCAwIDEgNi4yIDZhNi44IDYuOCAwIDAgMSA0LjctMi45IDcuNyA3LjcgMCAwIDEgNC4yLjRBNS45IDUuOSAwIDAgMSAxOSA3LjlhNyA3IDAgMCAxIDAgMi40IDcuNyA3LjcgMCAwIDEtMS4zIDMuNUE1IDUgMCAwIDEgMTQgMTZhMy40IDMuNCAwIDAgMS0yLjktLjggMiAyIDAgMCAxLS4yLS4ybC0uMi0uMiIvPjwvc3ZnPg==",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.386",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0ibTEwLjkgMTQuOC0uMi42LS42IDIuMWE5LjQgOS40IDAgMCAxLTEuNSAzbC0uMy40LS4yLjF2LS4yTDcuOCAxOWExMi44IDEyLjggMCAwIDEgLjUtMy43bDEtMy45YS42LjYgMCAwIDAgMC0uMyAzLjggMy44IDAgMCAxIDAtM0ExLjggMS44IDAgMCAxIDExIDdhMS4zIDEuMyAwIDAgMSAxLjQgMS4yIDQuNCA0LjQgMCAwIDEtLjIgMS44bC0uNiAyLjFhMS43IDEuNyAwIDAgMCAyLjEgMi4xIDIuOCAyLjggMCAwIDAgMS42LTEuMiA2LjUgNi41IDAgMCAwIDEtMi45IDYuNSA2LjUgMCAwIDAgMC0yLjEgMy42IDMuNiAwIDAgMC0yLjctMyA1LjMgNS4zIDAgMCAwLTQuMy41QTQuNyA0LjcgMCAwIDAgNyA5LjFhMy42IDMuNiAwIDAgMCAuMyAyLjFsLjQuNmEuNi42IDAgMCAxIC4xLjVsLS4yLjhhLjQuNCAwIDAgMS0uNS4zIDMgMyAwIDAgMS0xLjctMS44QTUuOSA1LjkgMCAwIDEgNi4yIDZhNi44IDYuOCAwIDAgMSA0LjctMi45IDcuNyA3LjcgMCAwIDEgNC4yLjRBNS45IDUuOSAwIDAgMSAxOSA3LjlhNyA3IDAgMCAxIDAgMi40IDcuNyA3LjcgMCAwIDEtMS4zIDMuNUE1IDUgMCAwIDEgMTQgMTZhMy40IDMuNCAwIDAgMS0yLjktLjggMiAyIDAgMCAxLS4yLS4ybC0uMi0uMiIvPjwvc3ZnPg==",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.386",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.387",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTguOSA1aDcuNWMxLjIgMCAyLjQgMCAzLjYuMy41IDAgMSAuMiAxLjUuNWEyLjYgMi42IDAgMCAxIDEgMS42Yy4zLjcuNCAxLjUuNCAyLjN2MmEzMCAzMCAwIDAgMSAwIDMuNiAxMC4zIDEwLjMgMCAwIDEtLjMgMiAyLjYgMi42IDAgMCAxLTIuMSAybC0yLjIuMkgxNmwtMy4yLjFoLTVsLTMuMi0uMkE0LjMgNC4zIDAgMCAxIDMgMTlhMi43IDIuNyAwIDAgMS0xLjYtMiAxNCAxNCAwIDAgMS0uMy0yLjJsLS4xLTJhMzAgMzAgMCAwIDEgLjItMy42IDEwLjMgMTAuMyAwIDAgMSAuMy0yIDIuNiAyLjYgMCAwIDEgMi0yTDUuNyA1SDlabS45IDQuMnY2LjJsNS43LTMuMXoiLz48L3N2Zz4=",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.387",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTguOSA1aDcuNWMxLjIgMCAyLjQgMCAzLjYuMy41IDAgMSAuMiAxLjUuNWEyLjYgMi42IDAgMCAxIDEgMS42Yy4zLjcuNCAxLjUuNCAyLjN2MmEzMCAzMCAwIDAgMSAwIDMuNiAxMC4zIDEwLjMgMCAwIDEtLjMgMiAyLjYgMi42IDAgMCAxLTIuMSAybC0yLjIuMkgxNmwtMy4yLjFoLTVsLTMuMi0uMkE0LjMgNC4zIDAgMCAxIDMgMTlhMi43IDIuNyAwIDAgMS0xLjYtMiAxNCAxNCAwIDAgMS0uMy0yLjJsLS4xLTJhMzAgMzAgMCAwIDEgLjItMy42IDEwLjMgMTAuMyAwIDAgMSAuMy0yIDIuNiAyLjYgMCAwIDEgMi0yTDUuNyA1SDlabS45IDQuMnY2LjJsNS43LTMuMXoiLz48L3N2Zz4=",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.387",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.366",
+          "method": "GET",
+          "url": "https://secure-netstorage.macys.com/social/images/snippet/fonts/ttramillas/TTRamillas-Medium.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "req",
+          "id": "25090.376",
+          "method": "GET",
+          "url": "https://storage.googleapis.com/digital-media-fonts/tt-ramillas/TTRamillasRegular.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "req",
+          "id": "25090.359",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/common/assets/fonts/macys-sans/MacysSansXBd.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "req",
+          "id": "25090.318",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/images/mcom/toys.svg?qlt=85,0&resMode=sharp2&op_usm=1.75,0.3,2,0&fmt=webp&wid=240",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.303",
+          "status": 200,
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_2-17_E_newatmacys_carousel/redstar.webp",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.303",
+          "len": 25178
+        },
+        {
+          "ev": "res",
+          "id": "25090.223",
+          "status": 200,
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_8-11_A_slideshow/C2605138_101_B_DT.webp",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.222",
+          "len": 41932
+        },
+        {
+          "ev": "res",
+          "id": "25090.200",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/PopUp-DGsW8Z3b.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.200",
+          "len": 1770
+        },
+        {
+          "ev": "res",
+          "id": "25090.195",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/1.294.2/_nuxt/js/entry.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.195",
+          "len": 163440
+        },
+        {
+          "ev": "res",
+          "id": "25090.199",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/GoogleAdPlaceholderMedia-CnlV_8A0.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.199",
+          "len": 972
+        },
+        {
+          "ev": "res",
+          "id": "25090.198",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/getAttributes-BVCPMSSb.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.198",
+          "len": 750
+        },
+        {
+          "ev": "res",
+          "id": "25090.197",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/HtmlSnippet-CtIA1aXU.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.197",
+          "len": 1389
+        },
+        {
+          "ev": "res",
+          "id": "25090.196",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/entry-DzXLWThN.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.196",
+          "len": 125573
+        },
+        {
+          "ev": "res",
+          "id": "25090.210",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/__vite-browser-external-Drlxxo3w.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.210",
+          "len": 700
+        },
+        {
+          "ev": "res",
+          "id": "25090.208",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Slideshow-eUu8pofZ.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.208",
+          "len": 4594
+        },
+        {
+          "ev": "res",
+          "id": "25090.211",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/useLeftAlignedCarouselProvider-C8PHR-ty.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.211",
+          "len": 24085
+        },
+        {
+          "ev": "res",
+          "id": "25090.209",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/index-D_HqMFwp.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.209",
+          "len": 29463
+        },
+        {
+          "ev": "res",
+          "id": "25090.219",
+          "status": 200,
+          "url": "https://www.macys.com/akam/13/6d2c4b87",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.219",
+          "len": 9838
+        },
+        {
+          "ev": "res",
+          "id": "25090.206",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/TabbedProductPool-CRYy4top.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.206",
+          "len": 4898
+        },
+        {
+          "ev": "res",
+          "id": "25090.205",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Spacer-DU4XSOir.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.205",
+          "len": 1022
+        },
+        {
+          "ev": "res",
+          "id": "25090.215",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SponsoredItemsMedia-kCAT08kc.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.215",
+          "len": 3287
+        },
+        {
+          "ev": "res",
+          "id": "25090.214",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/useFullWidthZoneBackgroundDataProvider-D_8Phtgj.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.214",
+          "len": 857
+        },
+        {
+          "ev": "res",
+          "id": "25090.204",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/DropdownComponent-CKEemTle.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.204",
+          "len": 4451
+        },
+        {
+          "ev": "res",
+          "id": "25090.213",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ProsProductPool-raDFyySR.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.213",
+          "len": 1440
+        },
+        {
+          "ev": "res",
+          "id": "25090.212",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Spinner-kIsoCrwt.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.212",
+          "len": 817
+        },
+        {
+          "ev": "res",
+          "id": "25090.216",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/builds/meta/8b36375f-869b-4deb-b9fc-93e291267403.json",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.216",
+          "len": 641
+        },
+        {
+          "ev": "res",
+          "id": "25090.252",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SingleImageTextAdWrapper-gm8Kx4Zf.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.252",
+          "len": 928
+        },
+        {
+          "ev": "res",
+          "id": "25090.253",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SingleImageTextAd-CqybLd1H.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.253",
+          "len": 1266
+        },
+        {
+          "ev": "res",
+          "id": "25090.254",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/TextAd-kf9fwpFj.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.254",
+          "len": 2218
+        },
+        {
+          "ev": "res",
+          "id": "25090.255",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ImageMap-B48TZm9F.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.255",
+          "len": 10804
+        },
+        {
+          "ev": "res",
+          "id": "25090.256",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/cleanHtml-BMNGZoH5.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.256",
+          "len": 1459
+        },
+        {
+          "ev": "res",
+          "id": "25090.207",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ProductCarousel-do7mSVEZ.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.207",
+          "len": 70063
+        },
+        {
+          "ev": "res",
+          "id": "25090.257",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/getImage-D8B2yZeH.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.257",
+          "len": 657
+        },
+        {
+          "ev": "res",
+          "id": "25090.258",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/VisualFilter-hCGt25MU.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.258",
+          "len": 2128
+        },
+        {
+          "ev": "res",
+          "id": "25090.259",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/CategoryIcons-D3IlPhxJ.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.259",
+          "len": 2078
+        },
+        {
+          "ev": "res",
+          "id": "25090.260",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/VisualNavigation-Dbbtfsh_.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.260",
+          "len": 977
+        },
+        {
+          "ev": "res",
+          "id": "25090.306",
+          "status": 200,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.306",
+          "len": 185598
+        },
+        {
+          "ev": "req",
+          "id": "25090.389",
+          "method": "POST",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "XHR",
+          "postLen": 1942,
+          "post": "{\"sensor_data\":\"3;0;1;0;3487540;CI7d5zW5pKA9lDq48jqTEEjboqIR0ly1nKPpQi5N1tU=;8,0,0,0,0,0;\\\"1-\\\"rs^\\\"r/F!\\\"*\\\"5-.Y.~~H\\\".X2\\\"=`K\\\"_\\\"Ny zy4uFW/I&XEB@JOF[|2tE:l59H2`.:=}D\\\"ys|\\\"PA\\\",\\\"h#FF!\\\"&V:\\\"F3(Ub\\\"`\\\"1ZZw}Yu7mG Ry?4C,_o~U#\\\"B\\\"PX2\\\" K\\\"PCx\\\"1[_\\\"G\\\"bHVI%|EgVC{9f|CVXhkzLQ5rq!e<HiBJTxD:!Smmnm%B\\\"m"
+        },
+        {
+          "ev": "done",
+          "id": "25090.223",
+          "len": 78971
+        },
+        {
+          "ev": "res",
+          "id": "25090.304",
+          "status": 200,
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_2-17_E_newatmacys_carousel/whitetext.webp",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.382",
+          "status": 200,
+          "url": "https://secure-netstorage.macys.com/social/images/snippet/2024/images/button-play.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.382",
+          "len": 990
+        },
+        {
+          "ev": "res",
+          "id": "25090.318",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/images/mcom/toys.svg?qlt=85,0&resMode=sharp2&op_usm=1.75,0.3,2,0&fmt=webp&wid=240",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.318",
+          "len": 5986
+        },
+        {
+          "ev": "res",
+          "id": "25090.359",
+          "status": 200,
+          "url": "https://assets.macysassets.com/common/assets/fonts/macys-sans/MacysSansXBd.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "done",
+          "id": "25090.359",
+          "len": 20776
+        },
+        {
+          "ev": "res",
+          "id": "25090.261",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/BrandCategoryCarousel-DdTjFouJ.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.261",
+          "len": 2036
+        },
+        {
+          "ev": "res",
+          "id": "25090.262",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/HeroSubAd-Br6sgzPN.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.262",
+          "len": 1233
+        },
+        {
+          "ev": "res",
+          "id": "25090.263",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SubAd-yzg7k2h4.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.263",
+          "len": 2089
+        },
+        {
+          "ev": "res",
+          "id": "25090.264",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Carousel-CYjb8dE5.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.264",
+          "len": 2178
+        },
+        {
+          "ev": "res",
+          "id": "25090.265",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ProductPool-CzKZWP1o.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.265",
+          "len": 1744
+        },
+        {
+          "ev": "res",
+          "id": "25090.308",
+          "status": 200,
+          "url": "https://s.go-mpulse.net/boomerang/WVZ92-598Q4-C592Z-HWSHG-PBBKW",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.308",
+          "len": 60895
+        },
+        {
+          "ev": "res",
+          "id": "25090.266",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ShortTextAd-DQnscjvF.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.266",
+          "len": 1335
+        },
+        {
+          "ev": "res",
+          "id": "25090.267",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SubAdPool-JyvQ13P0.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.267",
+          "len": 1556
+        },
+        {
+          "ev": "res",
+          "id": "25090.268",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Header-BsoEldJp.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.268",
+          "len": 1613
+        },
+        {
+          "ev": "res",
+          "id": "25090.269",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Placeholder-BaxeQz5Y.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.269",
+          "len": 1418
+        },
+        {
+          "ev": "res",
+          "id": "25090.270",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/SalesBanner-s6iNHku7.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.270",
+          "len": 1266
+        },
+        {
+          "ev": "res",
+          "id": "25090.271",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/BrandShop-EQx3Yd-1.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.271",
+          "len": 1321
+        },
+        {
+          "ev": "res",
+          "id": "25090.272",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/BrandShowcaseMedia-TukwwBjE.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.272",
+          "len": 3500
+        },
+        {
+          "ev": "res",
+          "id": "25090.273",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/FeatureGrid-DJv-So9F.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.273",
+          "len": 1330
+        },
+        {
+          "ev": "res",
+          "id": "25090.274",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/EditorialCarousel-CmTXb0Fr.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.274",
+          "len": 2366
+        },
+        {
+          "ev": "res",
+          "id": "25090.275",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/BrowseMediaAd-DCUVi2il.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.275",
+          "len": 1662
+        },
+        {
+          "ev": "res",
+          "id": "25090.276",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Essentials-B6Q9RSm3.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.276",
+          "len": 1667
+        },
+        {
+          "ev": "res",
+          "id": "25090.278",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/BrandIndex-CV3LvpTq.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.278",
+          "len": 2603
+        },
+        {
+          "ev": "res",
+          "id": "25090.279",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/MessageInset-CLIuTNrp.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.279",
+          "len": 1540
+        },
+        {
+          "ev": "res",
+          "id": "25090.280",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/LargeCarousel-DFewJG8-.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.280",
+          "len": 3529
+        },
+        {
+          "ev": "res",
+          "id": "25090.281",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/PersonalizationPlaceholder-BybMwzsO.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.281",
+          "len": 1949
+        },
+        {
+          "ev": "res",
+          "id": "25090.282",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/UserStatus-CFMuo6T9.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.282",
+          "len": 800
+        },
+        {
+          "ev": "res",
+          "id": "25090.283",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/TagCloud-DRMcJkbz.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.283",
+          "len": 817
+        },
+        {
+          "ev": "res",
+          "id": "25090.284",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/index-BSAVbLu4.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.284",
+          "len": 918
+        },
+        {
+          "ev": "res",
+          "id": "25090.285",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/polyfill-BpNQY6k_.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.285",
+          "len": 748
+        },
+        {
+          "ev": "res",
+          "id": "25090.286",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/index-DXVlgEp2.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.286",
+          "len": 2083
+        },
+        {
+          "ev": "res",
+          "id": "25090.287",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/scrollyfills.modern-CcNcp9JI.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.287",
+          "len": 1103
+        },
+        {
+          "ev": "res",
+          "id": "25090.288",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/LoyaltyCard-VPjZwSO4.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.288",
+          "len": 7086
+        },
+        {
+          "ev": "res",
+          "id": "25090.289",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/ProgressBar-C9WNZES-.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.289",
+          "len": 1540
+        },
+        {
+          "ev": "res",
+          "id": "25090.290",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/LoyaltyCard-DCV3EcMn.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.290",
+          "len": 4394
+        },
+        {
+          "ev": "res",
+          "id": "25090.291",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/initRoktSDKPlus-MvPwkePi.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.291",
+          "len": 2403
+        },
+        {
+          "ev": "res",
+          "id": "25090.292",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/loadRoktPlacement-FmDg9v8s.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.292",
+          "len": 763
+        },
+        {
+          "ev": "res",
+          "id": "25090.293",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/useDevLinks-CLnALdtI.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.293",
+          "len": 846
+        },
+        {
+          "ev": "res",
+          "id": "25090.294",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Error404-DyQNXekf.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.294",
+          "len": 1338
+        },
+        {
+          "ev": "res",
+          "id": "25090.296",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Error500-B8co-epb.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.296",
+          "len": 989
+        },
+        {
+          "ev": "res",
+          "id": "25090.297",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Error500-DzMh3ELF.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.297",
+          "len": 1495
+        },
+        {
+          "ev": "res",
+          "id": "25090.299",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/error-404-DJLR4pkH.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.299",
+          "len": 4324
+        },
+        {
+          "ev": "res",
+          "id": "25090.301",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/error-500-BH_qKRw6.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.301",
+          "len": 2135
+        },
+        {
+          "ev": "res",
+          "id": "25090.277",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/PromoSlideshow-CYOtPG_P.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.277",
+          "len": 4732
+        },
+        {
+          "ev": "res",
+          "id": "25090.300",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/composables-CfjkVYqL.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.300",
+          "len": 801
+        },
+        {
+          "ev": "res",
+          "id": "25090.295",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/Error404-ugWru1oL.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.295",
+          "len": 1077
+        },
+        {
+          "ev": "res",
+          "id": "25090.298",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/index-BFfF906b.js",
+          "type": "Other"
+        },
+        {
+          "ev": "done",
+          "id": "25090.298",
+          "len": 5317
+        },
+        {
+          "ev": "res",
+          "id": "25090.224",
+          "status": 200,
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_4-14_A_carousel/flickity2.pkgd.min.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.224",
+          "len": 13765
+        },
+        {
+          "ev": "res",
+          "id": "25090.310",
+          "status": 200,
+          "url": "https://tags.tiqcdn.com/utag/macys/main/prod/utag.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.310",
+          "len": 105929
+        },
+        {
+          "ev": "req",
+          "id": "25090.391",
+          "method": "GET",
+          "url": "https://dok.js-cdn.dynatrace.com/jstag/17fd4b29df0/bf56263bee/b8e3ef7f50d4880_complete.js?utv=ut4.49.202510221330",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.304",
+          "len": 87083
+        },
+        {
+          "ev": "req",
+          "id": "25090.392",
+          "method": "GET",
+          "url": "https://www.macys.com/xapi/navigate/v1/header-footer/switches",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "25090.393",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/1.294.2/_nuxt/js/AskAITooltip.common.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.394",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/1.294.2/_nuxt/css/AskAITooltip.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "req",
+          "id": "25090.396",
+          "method": "GET",
+          "url": "data:image/png;base64,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",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.396",
+          "status": 200,
+          "url": "data:image/png;base64,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",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.396",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.397",
+          "method": "GET",
+          "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACGFjVEwAAAABAAAAAcMq2TYAAAANSURBVAiZY2BgYPgPAAEEAQB9ssjfAAAAGmZjVEwAAAAAAAAAAQAAAAEAAAAAAAAAAAD6A+gBAbNU+2sAAAARZmRBVAAAAAEImWNgYGBgAAAABQAB6MzFdgAAAABJRU5ErkJggg==",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.397",
+          "status": 200,
+          "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACGFjVEwAAAABAAAAAcMq2TYAAAANSURBVAiZY2BgYPgPAAEEAQB9ssjfAAAAGmZjVEwAAAAAAAAAAQAAAAEAAAAAAAAAAAD6A+gBAbNU+2sAAAARZmRBVAAAAAEImWNgYGBgAAAABQAB6MzFdgAAAABJRU5ErkJggg==",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.397",
+          "len": 0
+        },
+        {
+          "ev": "res",
+          "id": "25090.394",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/1.294.2/_nuxt/css/AskAITooltip.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "done",
+          "id": "25090.394",
+          "len": 1336
+        },
+        {
+          "ev": "res",
+          "id": "25090.366",
+          "status": 200,
+          "url": "https://secure-netstorage.macys.com/social/images/snippet/fonts/ttramillas/TTRamillas-Medium.woff2",
+          "type": "Font"
+        },
+        {
+          "ev": "done",
+          "id": "25090.366",
+          "len": 54834
+        },
+        {
+          "ev": "res",
+          "id": "25090.350",
+          "status": 200,
+          "url": "https://cdn1.adoberesources.net/alloy/2.27.0/alloy.min.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.350",
+          "len": 43403
+        },
+        {
+          "ev": "res",
+          "id": "25090.349",
+          "status": 200,
+          "url": "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.349",
+          "len": 9363
+        },
+        {
+          "ev": "res",
+          "id": "25090.393",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/navigation-wgl/static/public/1.294.2/_nuxt/js/AskAITooltip.common.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.393",
+          "len": 1421
+        },
+        {
+          "ev": "req",
+          "id": "25090.398",
+          "method": "GET",
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_8-17_B_sub_wardrobe/C2605149_103_DT.webp",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.399",
+          "method": "GET",
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/chevron.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.400",
+          "method": "GET",
+          "url": "https://cdn.cookielaw.org/consent/01ccd164-62fb-406d-a827-692c34dd9eda/01ccd164-62fb-406d-a827-692c34dd9eda.json",
+          "type": "XHR"
+        },
+        {
+          "ev": "res",
+          "id": "25090.392",
+          "status": 200,
+          "url": "https://www.macys.com/xapi/navigate/v1/header-footer/switches",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "25090.401",
+          "method": "GET",
+          "url": "https://slimages.macysassets.com/is/content/MacysInc/C2605174_102_B_DT",
+          "type": "Media"
+        },
+        {
+          "ev": "req",
+          "id": "25090.402",
+          "method": "GET",
+          "url": "https://slimages.macysassets.com/is/content/MacysInc/C2605151_101_5_DT",
+          "type": "Media"
+        },
+        {
+          "ev": "done",
+          "id": "25090.392",
+          "len": 4715
+        },
+        {
+          "ev": "req",
+          "id": "25090.403",
+          "method": "GET",
+          "url": "https://slimages.macysassets.com/is/image/MacysInc/C2605151_101_5_DT?fmt=webp",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.404",
+          "method": "GET",
+          "url": "https://www.macys.com/xapi/preferences/v1/stores/preferred?latitude=37.4439&longitude=-122.1504&noOfStores=1&radius=M100&_deviceType=DESKTOP&_source=CSL",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "25090.405",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMy4xIDMuMWEuOC44IDAgMCAxIDEuMSAwTDggN2wzLjgtMy44YS44LjggMCAxIDEgMSAxLjFMOS4yIDhsMy44IDMuOGEuOC44IDAgMCAxLTEuMSAxTDggOS4yIDQuMiAxM2EuOC44IDAgMSAxLTEtMS4xTDYuOCA4IDMuMSA0LjJhLjguOCAwIDAgMSAwLTFaIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiLz48L3N2Zz4=",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.405",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iI2ZmZiIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMy4xIDMuMWEuOC44IDAgMCAxIDEuMSAwTDggN2wzLjgtMy44YS44LjggMCAxIDEgMSAxLjFMOS4yIDhsMy44IDMuOGEuOC44IDAgMCAxLTEuMSAxTDggOS4yIDQuMiAxM2EuOC44IDAgMSAxLTEtMS4xTDYuOCA4IDMuMSA0LjJhLjguOCAwIDAgMSAwLTFaIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiLz48L3N2Zz4=",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.405",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.406",
+          "method": "GET",
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iIzAwMCIgZD0ibTE2LjYgMTIuMi4xLjEuNS40IDEuMSAxLjVjLjkgMS40IDEuNyAzLjYgMS43IDYuOCAwIC41LS41IDEtMSAxSDVhMSAxIDAgMCAxLTEtMWMwLTMuMi44LTUuNCAxLjYtNi44bDEuMi0xLjVhNS41IDUuNSAwIDAgMSAuNi0uNSAxIDEgMCAxIDEgMS4xIDEuNmwtLjMuM2E2IDYgMCAwIDAtLjkgMS4yYy0uNSAxLTEuMSAyLjQtMS4zIDQuN2gxMmMtLjItMi4yLS44LTMuOC0xLjQtNC43YTYgNiAwIDAgMC0uOS0xLjJsLS4yLS4yYTEgMSAwIDAgMS0uNC0xLjQgMSAxIDAgMCAxIDEuNC0uMyIvPjxwYXRoIGZpbGw9IiMwMDAiIGQ9Ik04LjUgMTAuNUE1IDUgMCAwIDAgMTIgMTJhNSA1IDAgMCAwIDQuOS00IDUgNSAwIDAgMC0zLTUuNiA1IDUgMCAwIDAtMy40LS4yIDUgNSAwIDAgMC0yLjcgMiA1IDUgMCAwIDAgLjcgNi4zTTExIDQuMWEzIDMgMCAwIDEgMiAuMSAzIDMgMCAwIDEgMiAzLjRBMyAzIDAgMCAxIDEwIDlhMyAzIDAgMCAxLTEtMS43YzAtLjcuMS0xLjQuNS0yczEtMSAxLjYtMS4yWiIvPjwvc3ZnPg==",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "25090.406",
+          "status": 200,
+          "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iIzAwMCIgZD0ibTE2LjYgMTIuMi4xLjEuNS40IDEuMSAxLjVjLjkgMS40IDEuNyAzLjYgMS43IDYuOCAwIC41LS41IDEtMSAxSDVhMSAxIDAgMCAxLTEtMWMwLTMuMi44LTUuNCAxLjYtNi44bDEuMi0xLjVhNS41IDUuNSAwIDAgMSAuNi0uNSAxIDEgMCAxIDEgMS4xIDEuNmwtLjMuM2E2IDYgMCAwIDAtLjkgMS4yYy0uNSAxLTEuMSAyLjQtMS4zIDQuN2gxMmMtLjItMi4yLS44LTMuOC0xLjQtNC43YTYgNiAwIDAgMC0uOS0xLjJsLS4yLS4yYTEgMSAwIDAgMS0uNC0xLjQgMSAxIDAgMCAxIDEuNC0uMyIvPjxwYXRoIGZpbGw9IiMwMDAiIGQ9Ik04LjUgMTAuNUE1IDUgMCAwIDAgMTIgMTJhNSA1IDAgMCAwIDQuOS00IDUgNSAwIDAgMC0zLTUuNiA1IDUgMCAwIDAtMy40LS4yIDUgNSAwIDAgMC0yLjcgMiA1IDUgMCAwIDAgLjcgNi4zTTExIDQuMWEzIDMgMCAwIDEgMiAuMSAzIDMgMCAwIDEgMiAzLjRBMyAzIDAgMCAxIDEwIDlhMyAzIDAgMCAxLTEtMS43YzAtLjcuMS0xLjQuNS0yczEtMSAxLjYtMS4yWiIvPjwvc3ZnPg==",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.406",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "25090.407",
+          "method": "GET",
+          "url": "https://www.gstatic.com/cloud/ai/commerce_ai_ui/1.0.0/static.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.408",
+          "method": "POST",
+          "url": "https://adobedc.demdex.net/ee/v1/interact?configId=e7115c4a-9ff7-473e-902b-57d2b1fbeca1&requestId=6de8f562-af1e-4ed2-874a-099b2fe6c183",
+          "type": "Fetch",
+          "postLen": 1818,
+          "post": "{\"events\":[{\"xdm\":{\"eventType\":\"decisioning.propositionFetch\",\"web\":{\"webPageDetails\":{\"URL\":\"https://www.macys.com/\"}},\"device\":{\"screenHeight\":982,\"screenWidth\":1512,\"screenOrientation\":\"landscape\"},\"environment\":{\"type\":\"browser\",\"browserDetails\":{\"viewportWidth\":1920,\"viewportHeight\":1080,\"userA"
+        },
+        {
+          "ev": "res",
+          "id": "25090.398",
+          "status": 200,
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/snippet_8-17_B_sub_wardrobe/C2605149_103_DT.webp",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "id": "25090.409",
+          "method": "GET",
+          "url": "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "25090.410",
+          "method": "GET",
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/index-BFfF906b.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "25090.399",
+          "status": 200,
+          "url": "https://secure-netstorage.macys.com/social/images/homepage-takeover/2024/images/chevron.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "25090.399",
+          "len": 1063
+        },
+        {
+          "ev": "res",
+          "id": "25090.410",
+          "status": 200,
+          "url": "https://assets.macysassets.com/nuxt-app/homepage/static/public/_nuxt/index-BFfF906b.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "25090.410",
+          "len": 0
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Macy's - Shop Fashion Clothing & Accessories - Official Site - Macys.com",
+      "landedOn": "https://www.macys.com/",
+      "nodes": 8026,
+      "textLength": 5253,
+      "snippet": "Skip to main content TODAY'S DEALS Up to 70% off clearance Last day! Up to 70% off jewelry sale Ends Today! 15% off beauty Up to 50% off Back to School See All Ask Macy's Sign In See more of what you ",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 27536
+    }
+  ],
+  "fresh": true,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:10340/devtools/browser/ccee5b4c-2146-42f6-9c80-885372e1c8ca",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[25077:130778:0824/224854.106629:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[25077:130778:0824/224854.106865:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[25077:130850:0824/224856.526206:ERROR:base/process/process_mac.cc:53] task_policy_set TASK_CATEGORY_POLICY: (os/kern) invalid argument (4)",
+    "[25077:130850:0824/224856.526248:ERROR:base/process/process_mac.cc:98] task_policy_set TASK_SUPPRESSION_POLICY: (os/kern) invalid argument (4)",
+    "[25077:130833:0824/224856.809083:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT",
+    "[25077:130833:0824/224856.809129:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "Created TensorFlow Lite XNNPACK delegate for CPU."
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}

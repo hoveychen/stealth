@@ -1,0 +1,2485 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-25T05:45:28.654Z",
+  "egress": {
+    "fl": "1231f69",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787636728.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1214+80d5e7050",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:10330/"
+  },
+  "stations": [
+    {
+      "name": "ak-macys",
+      "vendor": "akamai",
+      "url": "https://www.macys.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.macys.com/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "id": "LID-0000000001",
+          "method": "GET",
+          "url": "https://www.macys.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "id": "LID-0000000001",
+          "status": 200,
+          "url": "https://www.macys.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "done",
+          "id": "LID-0000000001",
+          "len": 6580
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000002",
+          "method": "GET",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/NpLibtL3aL/ewMNYQ/HW1FK/DI_Pz0W?v=2b7a338a-c25b-a423-0358-862bacc217cb&t=962158482",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000003",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000004",
+          "method": "GET",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000002",
+          "status": 200,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/NpLibtL3aL/ewMNYQ/HW1FK/DI_Pz0W?v=2b7a338a-c25b-a423-0358-862bacc217cb&t=962158482",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000002",
+          "len": 183578
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000005",
+          "method": "GET",
+          "url": "https://www.akamai.com/site/ko/images/logo/akamai-logo1.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000004",
+          "status": 200,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000004",
+          "len": 185883
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000006",
+          "method": "POST",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "XHR",
+          "postLen": 1915,
+          "post": "{\"sensor_data\":\"3;0;1;2048;4539191;CI7d5zW5pKA9lDq48jqTEEjboqIR0ly1nKPpQi5N1tU=;20,0,0,0,1,0;\\\"H`\\\"Qb|\\\")wui\\\"5\\\":~1?dzP \\\"V/4\\\"z_=\\\"g\\\"T}hm8Ad:j)DgQwo&^i{c#c|P/FhZUQ>`E=_p\\\"9>c\\\"Ef\\\"V\\\"`3@+!\\\"bSg\\\"LmiPG\\\"|\\\":mbIs6ic$yoAwxe)G J4kT\\\"Y\\\"jer\\\"?3\\\">Lp\\\"Wu.\\\"1\\\"-l(h2:CWk.]BIZM?@ Tw]XCZ4N_5@3]xXsVthF>=M/H"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000003",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000003",
+          "len": 68025
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000009",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65319_1825202430.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000010",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65257_1825232097.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000011",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/64885_1825202523.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000012",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65226_747628217.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000009",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65319_1825202430.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000009",
+          "len": 19130
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000010",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65257_1825232097.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000010",
+          "len": 6966
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000012",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65226_747628217.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000012",
+          "len": 33978
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000011",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/64885_1825202523.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000011",
+          "len": 2375
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000013",
+          "method": "GET",
+          "url": "https://www.macys.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000005",
+          "status": 200,
+          "url": "https://www.akamai.com/site/ko/images/logo/akamai-logo1.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000005",
+          "len": 2859
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000006",
+          "status": 201,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000006",
+          "len": 1614
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000013",
+          "status": 200,
+          "url": "https://www.macys.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000013",
+          "len": 6571
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000017",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/7bc9f420-9c7f-4fbf-84ad-bcb2054ae2f6",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000017",
+          "status": 200,
+          "url": "blob:https://www.macys.com/7bc9f420-9c7f-4fbf-84ad-bcb2054ae2f6",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000017",
+          "len": 9042
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000020",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/d1210643-6e22-4c01-afa0-f7d86356cd6e",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000021",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/f5016868-a8a8-481a-b0e4-eb71959c40bb",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000021",
+          "status": 200,
+          "url": "blob:https://www.macys.com/f5016868-a8a8-481a-b0e4-eb71959c40bb",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000021",
+          "len": 6643
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000020",
+          "status": 200,
+          "url": "blob:https://www.macys.com/d1210643-6e22-4c01-afa0-f7d86356cd6e",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000020",
+          "len": 9042
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000022",
+          "method": "HEAD",
+          "url": "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/images/icons/app_icon-dark_bg-color-locked-12.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000023",
+          "method": "HEAD",
+          "url": "chrome-extension://flliilndjeohchalpbbcdekjklbdgfkk/html/blocked.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000024",
+          "method": "HEAD",
+          "url": "chrome-extension://caljgklbbfbcjjanaijlacgncafpegll/html/dashboard.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000025",
+          "method": "HEAD",
+          "url": "chrome-extension://nlipoenfbbikpbjkfpfillcgkoblgpmj/annotate-react.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000026",
+          "method": "HEAD",
+          "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000027",
+          "method": "HEAD",
+          "url": "chrome-extension://nngceckbapebfimnlniiiahkandclblb/content/fido2-page-script.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000028",
+          "method": "HEAD",
+          "url": "chrome-extension://pcblbflgdkdfdjpjifeppkljdnaekohj/assets/boost_writing_modal_icons.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000029",
+          "method": "HEAD",
+          "url": "chrome-extension://jgjaeacdkonaoafenlfkkkmbaopkbilf/content.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000030",
+          "method": "HEAD",
+          "url": "chrome-extension://pmjeegjhjdlccodhacdgbgfagbpmccpe/assets/images/$-selected.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000031",
+          "method": "HEAD",
+          "url": "chrome-extension://bhlhnicpbhignbdhedgjhgdocnmhomnp/images/checkmark-icon.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000032",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/29327f64-85b2-4a0f-8314-6604ee3054aa",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000032",
+          "status": 200,
+          "url": "blob:https://www.macys.com/29327f64-85b2-4a0f-8314-6604ee3054aa",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000032",
+          "len": 16619
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000033",
+          "method": "HEAD",
+          "url": "chrome-extension://gplcmncpklkdjiccbknjjkoidpgkcakd/assets/icons/cl-logo.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000034",
+          "method": "HEAD",
+          "url": "chrome-extension://mbnbehikldjhnfehhnaidhjhoofhpehk/advanced-typography.32e069a7.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000035",
+          "method": "HEAD",
+          "url": "chrome-extension://cofdbpoegempjloogbagkncekinflcnj/build/content.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000036",
+          "method": "HEAD",
+          "url": "chrome-extension://oncaapliomaamlbopdmhmdompfemljhm/content/index.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000037",
+          "method": "HEAD",
+          "url": "chrome-extension://fjgncogppolhfdpijihbpfmeohpaadpc/settings.json",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000038",
+          "method": "HEAD",
+          "url": "chrome-extension://kkjfobdnekhdpmgomkpeibhlnmcjgian/icon/icon128.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000039",
+          "method": "HEAD",
+          "url": "chrome-extension://dnebklifojaaecmheejjopgjdljebpeo/content-scripts/asana.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000040",
+          "method": "HEAD",
+          "url": "chrome-extension://pioclpoplcdbaefihamjohnefbikjilc/BookmarkStyles.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000041",
+          "method": "HEAD",
+          "url": "chrome-extension://kjacjjdnoddnpbbcjilcajfhhbdhkpgk/images/about/en/1.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000042",
+          "method": "HEAD",
+          "url": "chrome-extension://blillmbchncajnhkjfdnincfndboieik/css/shareHighlight.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000043",
+          "method": "HEAD",
+          "url": "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/images/icons/app_icon-dark_bg-color-locked-12.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000044",
+          "method": "HEAD",
+          "url": "chrome-extension://flliilndjeohchalpbbcdekjklbdgfkk/html/blocked.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000045",
+          "method": "HEAD",
+          "url": "chrome-extension://caljgklbbfbcjjanaijlacgncafpegll/html/dashboard.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000046",
+          "method": "HEAD",
+          "url": "chrome-extension://nlipoenfbbikpbjkfpfillcgkoblgpmj/annotate-react.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000047",
+          "method": "HEAD",
+          "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000048",
+          "method": "HEAD",
+          "url": "chrome-extension://nngceckbapebfimnlniiiahkandclblb/content/fido2-page-script.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000049",
+          "method": "HEAD",
+          "url": "chrome-extension://pcblbflgdkdfdjpjifeppkljdnaekohj/assets/boost_writing_modal_icons.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000050",
+          "method": "HEAD",
+          "url": "chrome-extension://jgjaeacdkonaoafenlfkkkmbaopkbilf/content.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000051",
+          "method": "HEAD",
+          "url": "chrome-extension://pmjeegjhjdlccodhacdgbgfagbpmccpe/assets/images/$-selected.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000052",
+          "method": "HEAD",
+          "url": "chrome-extension://bhlhnicpbhignbdhedgjhgdocnmhomnp/images/checkmark-icon.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000053",
+          "method": "HEAD",
+          "url": "chrome-extension://mgijmajocgfcbeboacabfgobmjgjcoja/content.min.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000054",
+          "method": "HEAD",
+          "url": "chrome-extension://lpcaedmchfhocbbapmcbpinfpgnhiddi/i18n/symbols_af.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000055",
+          "method": "HEAD",
+          "url": "chrome-extension://lpcaedmchfhocbbapmcbpinfpgnhiddi/i18n/symbols_af.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000056",
+          "method": "HEAD",
+          "url": "chrome-extension://aapbdbdomjkkjkaonfhkkikfgjllcleb/popup_css_compiled.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000057",
+          "method": "HEAD",
+          "url": "chrome-extension://kbfnbcaeplbcioakkpcpgfkobkghlhen/src/css/AAA-initAssistant.styles.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000058",
+          "method": "HEAD",
+          "url": "chrome-extension://ffdaeeijbbijklfcpahbghahojgfgebo/imgs/crop.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000059",
+          "method": "HEAD",
+          "url": "chrome-extension://bmnlcjabgnpnenekpadlanbbkooimhnj/checkoutPaypal/honeySPBContent.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000060",
+          "method": "HEAD",
+          "url": "chrome-extension://hehijbfgiekmjfkfjpbkbammjbdenadd/js/extapi_wp.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000061",
+          "method": "HEAD",
+          "url": "chrome-extension://eifflpmocdbdmepbjaopkkhbfmdgijcc/css/codemirror.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000062",
+          "method": "HEAD",
+          "url": "chrome-extension://ecnphlgnajanjnkcmbpancdjoidceilk/images/tick.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000063",
+          "method": "HEAD",
+          "url": "chrome-extension://gplcmncpklkdjiccbknjjkoidpgkcakd/assets/icons/cl-logo.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000064",
+          "method": "HEAD",
+          "url": "chrome-extension://mbnbehikldjhnfehhnaidhjhoofhpehk/advanced-typography.32e069a7.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000065",
+          "method": "HEAD",
+          "url": "chrome-extension://cofdbpoegempjloogbagkncekinflcnj/build/content.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000066",
+          "method": "HEAD",
+          "url": "chrome-extension://oncaapliomaamlbopdmhmdompfemljhm/content/index.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000067",
+          "method": "HEAD",
+          "url": "chrome-extension://fjgncogppolhfdpijihbpfmeohpaadpc/settings.json",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000068",
+          "method": "HEAD",
+          "url": "chrome-extension://kkjfobdnekhdpmgomkpeibhlnmcjgian/icon/icon128.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000069",
+          "method": "HEAD",
+          "url": "chrome-extension://dnebklifojaaecmheejjopgjdljebpeo/content-scripts/asana.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000070",
+          "method": "HEAD",
+          "url": "chrome-extension://pioclpoplcdbaefihamjohnefbikjilc/BookmarkStyles.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000071",
+          "method": "HEAD",
+          "url": "chrome-extension://kjacjjdnoddnpbbcjilcajfhhbdhkpgk/images/about/en/1.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000072",
+          "method": "HEAD",
+          "url": "chrome-extension://blillmbchncajnhkjfdnincfndboieik/css/shareHighlight.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000073",
+          "method": "HEAD",
+          "url": "chrome-extension://oldceeleldhonbafppcapldpdifcinji/assets/images/16/black/add_on_icon_16_ai.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000074",
+          "method": "HEAD",
+          "url": "chrome-extension://hdokiejnpimakedhajhdlcegeplioahd/webclient-infield.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000075",
+          "method": "HEAD",
+          "url": "chrome-extension://amciopbgphikbcmaffbmmibnbpiokfic/images/19-active.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000076",
+          "method": "HEAD",
+          "url": "chrome-extension://liecbddmkiiihnedobmlmillhodjkdmb/html/audioVisualizer.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000077",
+          "method": "HEAD",
+          "url": "chrome-extension://flmcglmalcnabfaalkomeaohklknbbhg/icon-calendar-empty-@2x.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000078",
+          "method": "HEAD",
+          "url": "chrome-extension://ajphlblkfpppdpkgokiejbjfohfohhmk/flags/am-ET.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000079",
+          "method": "HEAD",
+          "url": "chrome-extension://phidhnmbkbkbkbknhldmpmnacgicphkf/static/css/fonts.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000080",
+          "method": "HEAD",
+          "url": "chrome-extension://kohfgcgbkjodfcfkcackpagifgbcmimk/assets/bootstrap-material-design-icons/css/material-icons.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000081",
+          "method": "HEAD",
+          "url": "chrome-extension://bkhaagjahfmjljalopjnoealnfndnagc/icons/icon1024.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000082",
+          "method": "HEAD",
+          "url": "chrome-extension://gojbdfnpnhogfdgjbigejoaolejmgdhk/clipper.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000083",
+          "method": "HEAD",
+          "url": "chrome-extension://mgijmajocgfcbeboacabfgobmjgjcoja/content.min.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000084",
+          "method": "HEAD",
+          "url": "chrome-extension://lpcaedmchfhocbbapmcbpinfpgnhiddi/i18n/symbols_af.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000085",
+          "method": "HEAD",
+          "url": "chrome-extension://lpcaedmchfhocbbapmcbpinfpgnhiddi/i18n/symbols_af.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000086",
+          "method": "HEAD",
+          "url": "chrome-extension://aapbdbdomjkkjkaonfhkkikfgjllcleb/popup_css_compiled.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000087",
+          "method": "HEAD",
+          "url": "chrome-extension://kbfnbcaeplbcioakkpcpgfkobkghlhen/src/css/AAA-initAssistant.styles.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000088",
+          "method": "HEAD",
+          "url": "chrome-extension://ffdaeeijbbijklfcpahbghahojgfgebo/imgs/crop.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000089",
+          "method": "HEAD",
+          "url": "chrome-extension://bmnlcjabgnpnenekpadlanbbkooimhnj/checkoutPaypal/honeySPBContent.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000090",
+          "method": "HEAD",
+          "url": "chrome-extension://hehijbfgiekmjfkfjpbkbammjbdenadd/js/extapi_wp.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000091",
+          "method": "HEAD",
+          "url": "chrome-extension://eifflpmocdbdmepbjaopkkhbfmdgijcc/css/codemirror.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000092",
+          "method": "HEAD",
+          "url": "chrome-extension://ecnphlgnajanjnkcmbpancdjoidceilk/images/tick.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000093",
+          "method": "HEAD",
+          "url": "chrome-extension://chhjbpecpncaggjpdakmflnfcopglcmi/css/content.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000094",
+          "method": "HEAD",
+          "url": "chrome-extension://fmkadmapgofadopljbjfkapdkoienihi/build/52.chunk.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000095",
+          "method": "HEAD",
+          "url": "chrome-extension://kbbdabhdfibnancpjfhlkhafgdilcnji/assets/audio-tab-off.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000096",
+          "method": "HEAD",
+          "url": "chrome-extension://okfkdaglfjjjfefdcppliegebpoegaii/assets/_commonjsHelpers-de833af9.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000097",
+          "method": "HEAD",
+          "url": "chrome-extension://akdgnmcogleenhbclghghlkkdndkjdjc/static/icons/sa-b-12.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000098",
+          "method": "HEAD",
+          "url": "chrome-extension://gmechnknnhcmhlciielglhgodjlcbien/pages/communication.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000099",
+          "method": "HEAD",
+          "url": "chrome-extension://difoiogjjojoaoomphldepapgpbgkhkb/assets/5160-lg-GXT5B7JB.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000100",
+          "method": "HEAD",
+          "url": "chrome-extension://hoklmmgfnpapgjgcpechhaamimifchmp/frame_ant/frame_ant.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000101",
+          "method": "HEAD",
+          "url": "chrome-extension://laankejkbhbdhmipfmgcngdelahlfoji/assets/black-white-mode-CozDyjbp.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000102",
+          "method": "HEAD",
+          "url": "chrome-extension://clngdbkpkpeebahjckkjfobafhncgmne/install-usercss.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000103",
+          "method": "HEAD",
+          "url": "chrome-extension://oldceeleldhonbafppcapldpdifcinji/assets/images/16/black/add_on_icon_16_ai.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000104",
+          "method": "HEAD",
+          "url": "chrome-extension://hdokiejnpimakedhajhdlcegeplioahd/webclient-infield.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000105",
+          "method": "HEAD",
+          "url": "chrome-extension://amciopbgphikbcmaffbmmibnbpiokfic/images/19-active.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000106",
+          "method": "HEAD",
+          "url": "chrome-extension://liecbddmkiiihnedobmlmillhodjkdmb/html/audioVisualizer.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000107",
+          "method": "HEAD",
+          "url": "chrome-extension://flmcglmalcnabfaalkomeaohklknbbhg/icon-calendar-empty-@2x.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000108",
+          "method": "HEAD",
+          "url": "chrome-extension://ajphlblkfpppdpkgokiejbjfohfohhmk/flags/am-ET.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000109",
+          "method": "HEAD",
+          "url": "chrome-extension://phidhnmbkbkbkbknhldmpmnacgicphkf/static/css/fonts.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000110",
+          "method": "HEAD",
+          "url": "chrome-extension://kohfgcgbkjodfcfkcackpagifgbcmimk/assets/bootstrap-material-design-icons/css/material-icons.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000111",
+          "method": "HEAD",
+          "url": "chrome-extension://bkhaagjahfmjljalopjnoealnfndnagc/icons/icon1024.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000112",
+          "method": "HEAD",
+          "url": "chrome-extension://gojbdfnpnhogfdgjbigejoaolejmgdhk/clipper.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000113",
+          "method": "HEAD",
+          "url": "chrome-extension://fggkaccpbmombhnjkjokndojfgagejfb/googlemeet.inline.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000114",
+          "method": "HEAD",
+          "url": "chrome-extension://hlofigcdgjlnalbkeeinfcjceabpamci/html/suspended.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000115",
+          "method": "HEAD",
+          "url": "chrome-extension://noogafoofpebimajpfpamcfhoaifemoa/suspended.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000116",
+          "method": "HEAD",
+          "url": "chrome-extension://jldhpllghnbhlbpcmnajkpdmadaolakh/browserApi.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000117",
+          "method": "HEAD",
+          "url": "chrome-extension://nffaoalbilbmmfgbnbgppjihopabppdk/inject.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000118",
+          "method": "HEAD",
+          "url": "chrome-extension://dbepggeogbaibhgnhhndojpepiihcmeb/content_scripts/vimium.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000119",
+          "method": "HEAD",
+          "url": "chrome-extension://gppongmhjkpfnbhagpmjfkannfbllamg/js/dom.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000120",
+          "method": "HEAD",
+          "url": "chrome-extension://iceonohalfbfcldenclcjafcpboiplfo/wf.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000121",
+          "method": "HEAD",
+          "url": "chrome-extension://ngghlnfmdgnpegcmbpgehkbhkhkbkjpj/popup.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000122",
+          "method": "HEAD",
+          "url": "chrome-extension://gmagdfpiahgilkjlfgpedjjfpomdlkan/book-ticket.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000123",
+          "method": "HEAD",
+          "url": "chrome-extension://chhjbpecpncaggjpdakmflnfcopglcmi/css/content.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000124",
+          "method": "HEAD",
+          "url": "chrome-extension://fmkadmapgofadopljbjfkapdkoienihi/build/52.chunk.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000125",
+          "method": "HEAD",
+          "url": "chrome-extension://kbbdabhdfibnancpjfhlkhafgdilcnji/assets/audio-tab-off.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000126",
+          "method": "HEAD",
+          "url": "chrome-extension://okfkdaglfjjjfefdcppliegebpoegaii/assets/_commonjsHelpers-de833af9.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000127",
+          "method": "HEAD",
+          "url": "chrome-extension://akdgnmcogleenhbclghghlkkdndkjdjc/static/icons/sa-b-12.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000128",
+          "method": "HEAD",
+          "url": "chrome-extension://gmechnknnhcmhlciielglhgodjlcbien/pages/communication.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000129",
+          "method": "HEAD",
+          "url": "chrome-extension://difoiogjjojoaoomphldepapgpbgkhkb/assets/5160-lg-GXT5B7JB.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000130",
+          "method": "HEAD",
+          "url": "chrome-extension://hoklmmgfnpapgjgcpechhaamimifchmp/frame_ant/frame_ant.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000131",
+          "method": "HEAD",
+          "url": "chrome-extension://laankejkbhbdhmipfmgcngdelahlfoji/assets/black-white-mode-CozDyjbp.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000132",
+          "method": "HEAD",
+          "url": "chrome-extension://clngdbkpkpeebahjckkjfobafhncgmne/install-usercss.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000133",
+          "method": "HEAD",
+          "url": "chrome-extension://fcoeoabgfenejglbffodgkkbkcdhcgfn/assets/agent-visual-indicator.js-Ct7LqXhp.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000134",
+          "method": "HEAD",
+          "url": "chrome-extension://ghbmnnjooekpmoecnnnilnnbdlolhkhi/page_embed_script.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000135",
+          "method": "HEAD",
+          "url": "chrome-extension://fggkaccpbmombhnjkjokndojfgagejfb/googlemeet.inline.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000136",
+          "method": "HEAD",
+          "url": "chrome-extension://hlofigcdgjlnalbkeeinfcjceabpamci/html/suspended.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000137",
+          "method": "HEAD",
+          "url": "chrome-extension://noogafoofpebimajpfpamcfhoaifemoa/suspended.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000138",
+          "method": "HEAD",
+          "url": "chrome-extension://jldhpllghnbhlbpcmnajkpdmadaolakh/browserApi.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000139",
+          "method": "HEAD",
+          "url": "chrome-extension://nffaoalbilbmmfgbnbgppjihopabppdk/inject.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000140",
+          "method": "HEAD",
+          "url": "chrome-extension://dbepggeogbaibhgnhhndojpepiihcmeb/content_scripts/vimium.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000141",
+          "method": "HEAD",
+          "url": "chrome-extension://gppongmhjkpfnbhagpmjfkannfbllamg/js/dom.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000142",
+          "method": "HEAD",
+          "url": "chrome-extension://iceonohalfbfcldenclcjafcpboiplfo/wf.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000143",
+          "method": "HEAD",
+          "url": "chrome-extension://ngghlnfmdgnpegcmbpgehkbhkhkbkjpj/popup.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000144",
+          "method": "HEAD",
+          "url": "chrome-extension://gmagdfpiahgilkjlfgpedjjfpomdlkan/book-ticket.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000145",
+          "method": "POST",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "XHR",
+          "postLen": 5182,
+          "post": "{\"sensor_data\":\"3;0;1;0;4539191;CI7d5zW5pKA9lDq48jqTEEjboqIR0ly1nKPpQi5N1tU=;5,38,0,0,2,505;\\\"c@2;Df~^$r&b!Wxamq]&:]-rJ(6xi0iv)~GTcG!@@DK\\\"Pxh\\\"iaD\\\"d\\\"]zQZph\\\"~\\\" -F:\\\"r29kT\\\"73`\\\"P\\\"\\\"o\\\"F+J\\\"%\\\"0t^c5zsT~|MX*=du#!jGr#\\\"#\\\"T*q\\\"V\\\"5Q3QW\\\"$.u\\\";Up\\\"<\\\"o)( \\\"z\\\"pN~U\\\"z\\\"PByGz\\\"5m@\\\"-Ba\\\"uEl\\\";DK\\\"b7="
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000146",
+          "method": "HEAD",
+          "url": "chrome-extension://fcoeoabgfenejglbffodgkkbkcdhcgfn/assets/agent-visual-indicator.js-Ct7LqXhp.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000147",
+          "method": "HEAD",
+          "url": "chrome-extension://ghbmnnjooekpmoecnnnilnnbdlolhkhi/page_embed_script.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000148",
+          "method": "POST",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/NpLibtL3aL/ewMNYQ/HW1FK/DI_Pz0W?t=962158482",
+          "type": "XHR",
+          "postLen": 4627,
+          "post": "{\"body\":\"\\\"G~FU4\\\"Y\\\"ccW8)&>6R7l\\\"y\\\"fcjkV\\\"h\\\"#kS&$\\\"?\\\"aT48g\\\"F\\\"_YW5u$@x@7%64C\\\"G\\\"pNBdn\\\"?\\\"5Wh3Dsf=DS)m-)~bRBVZat)xpV4FmX4?MwhLoEX~.\\\"jNQgPBCBQ[v4\\\")=;}<\\\"K\\\"FFu\\\"j\\\">aNTn\\\"T\\\"ASJ@9_[F_qwx[oQsoa{(Wv$70zPXrvDw>Tb}MD*UcU0Cg4Gp#G`{=cOx?-i<aWOvL@~>p5Qv3<\\\";6NtN\\\"K\\\"~R\\\"m\\\"f36Oq\\\"|\\\"p\\\"[\\\"rGwXq\\\"K\\\""
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000148",
+          "status": 200,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/NpLibtL3aL/ewMNYQ/HW1FK/DI_Pz0W?t=962158482",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000148",
+          "len": 1196
+        },
+        {
+          "ev": "fail",
+          "text": "Shutdown"
+        },
+        {
+          "ev": "req",
+          "id": "LID-0000000011",
+          "method": "GET",
+          "url": "https://www.macys.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "id": "LID-0000000011",
+          "status": 200,
+          "url": "https://www.macys.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "done",
+          "id": "LID-0000000011",
+          "len": 5297
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000150",
+          "method": "GET",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/NpLibtL3aL/ewMNYQ/HW1FK/DI_Pz0W?v=2b7a338a-c25b-a423-0358-862bacc217cb&t=962158482",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000151",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000152",
+          "method": "GET",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000150",
+          "status": 200,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/NpLibtL3aL/ewMNYQ/HW1FK/DI_Pz0W?v=2b7a338a-c25b-a423-0358-862bacc217cb&t=962158482",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000150",
+          "len": 183578
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000153",
+          "method": "GET",
+          "url": "https://www.akamai.com/site/ko/images/logo/akamai-logo1.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000152",
+          "status": 200,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000152",
+          "len": 185956
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000154",
+          "method": "POST",
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "XHR",
+          "postLen": 1907,
+          "post": "{\"sensor_data\":\"3;0;1;0;4539191;CI7d5zW5pKA9lDq48jqTEEjboqIR0ly1nKPpQi5N1tU=;9,0,0,0,1,0;\\\"H`\\\"Qb|\\\")wui\\\"5\\\":~1?dzP \\\"V/4\\\"z_=\\\"g\\\"T}hm8Ad:j)DgQwo&^i{c#c|P/FhZUQ>`E=_p\\\"9>c\\\"Ef\\\"V\\\"`3@+!\\\"bSg\\\"LmiPG\\\"|\\\";7bbs6ic&yoAtze)C%J5rR\\\"Y\\\"jer\\\"?3\\\">Lp\\\"Wu.\\\"1\\\"-l(h2:CWk.]BIZM?@ Tw]XCZ4N_5@3]xXsVthF>=M/Hx\\\"3"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000151",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000151",
+          "len": 68025
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000157",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65319_1825202430.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000158",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65257_1825232097.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000159",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/64885_1825202523.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000160",
+          "method": "GET",
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65226_747628217.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000153",
+          "status": 200,
+          "url": "https://www.akamai.com/site/ko/images/logo/akamai-logo1.svg",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000153",
+          "len": 2745
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000158",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65257_1825232097.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000158",
+          "len": 6966
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000157",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65319_1825202430.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000157",
+          "len": 19130
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000159",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/64885_1825202523.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000159",
+          "len": 2375
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000160",
+          "status": 200,
+          "url": "https://www.macys.com/public/0c64cce874459df8f7c3620ab7064b920c001680793d/e/65226_747628217.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000160",
+          "len": 33978
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000161",
+          "method": "GET",
+          "url": "https://www.macys.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000154",
+          "status": 201,
+          "url": "https://www.macys.com/Go-5MzJhz/VA8H/xn4vA/OELibtL3aLuJVpfu/TXUGYQ/ZSdqL/1JULAoC",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000154",
+          "len": 1612
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000161",
+          "status": 200,
+          "url": "https://www.macys.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000161",
+          "len": 6575
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000165",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/429aa0bb-ac49-4192-8ed0-c7a847966a7c",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000165",
+          "status": 200,
+          "url": "blob:https://www.macys.com/429aa0bb-ac49-4192-8ed0-c7a847966a7c",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000165",
+          "len": 9042
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000168",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/18b05184-f169-4f61-b208-56919bc893fa",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000169",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/f9440a5c-20fb-4317-a9ff-8d0b35f638b8",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000169",
+          "status": 200,
+          "url": "blob:https://www.macys.com/f9440a5c-20fb-4317-a9ff-8d0b35f638b8",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000169",
+          "len": 6643
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000168",
+          "status": 200,
+          "url": "blob:https://www.macys.com/18b05184-f169-4f61-b208-56919bc893fa",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000168",
+          "len": 9042
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000170",
+          "method": "HEAD",
+          "url": "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/images/icons/app_icon-dark_bg-color-locked-12.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000171",
+          "method": "HEAD",
+          "url": "chrome-extension://flliilndjeohchalpbbcdekjklbdgfkk/html/blocked.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000172",
+          "method": "HEAD",
+          "url": "chrome-extension://caljgklbbfbcjjanaijlacgncafpegll/html/dashboard.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000173",
+          "method": "HEAD",
+          "url": "chrome-extension://nlipoenfbbikpbjkfpfillcgkoblgpmj/annotate-react.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000174",
+          "method": "HEAD",
+          "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000175",
+          "method": "HEAD",
+          "url": "chrome-extension://nngceckbapebfimnlniiiahkandclblb/content/fido2-page-script.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000176",
+          "method": "HEAD",
+          "url": "chrome-extension://pcblbflgdkdfdjpjifeppkljdnaekohj/assets/boost_writing_modal_icons.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000177",
+          "method": "HEAD",
+          "url": "chrome-extension://jgjaeacdkonaoafenlfkkkmbaopkbilf/content.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000178",
+          "method": "HEAD",
+          "url": "chrome-extension://pmjeegjhjdlccodhacdgbgfagbpmccpe/assets/images/$-selected.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000179",
+          "method": "HEAD",
+          "url": "chrome-extension://bhlhnicpbhignbdhedgjhgdocnmhomnp/images/checkmark-icon.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000180",
+          "method": "GET",
+          "url": "blob:https://www.macys.com/0ed1e46d-4fed-4d8c-9fdd-34c565493f05",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000180",
+          "status": 200,
+          "url": "blob:https://www.macys.com/0ed1e46d-4fed-4d8c-9fdd-34c565493f05",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000180",
+          "len": 16619
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000181",
+          "method": "HEAD",
+          "url": "chrome-extension://gplcmncpklkdjiccbknjjkoidpgkcakd/assets/icons/cl-logo.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000182",
+          "method": "HEAD",
+          "url": "chrome-extension://mbnbehikldjhnfehhnaidhjhoofhpehk/advanced-typography.32e069a7.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000183",
+          "method": "HEAD",
+          "url": "chrome-extension://cofdbpoegempjloogbagkncekinflcnj/build/content.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000184",
+          "method": "HEAD",
+          "url": "chrome-extension://oncaapliomaamlbopdmhmdompfemljhm/content/index.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000185",
+          "method": "HEAD",
+          "url": "chrome-extension://fjgncogppolhfdpijihbpfmeohpaadpc/settings.json",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000186",
+          "method": "HEAD",
+          "url": "chrome-extension://kkjfobdnekhdpmgomkpeibhlnmcjgian/icon/icon128.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000187",
+          "method": "HEAD",
+          "url": "chrome-extension://dnebklifojaaecmheejjopgjdljebpeo/content-scripts/asana.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000188",
+          "method": "HEAD",
+          "url": "chrome-extension://pioclpoplcdbaefihamjohnefbikjilc/BookmarkStyles.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000189",
+          "method": "HEAD",
+          "url": "chrome-extension://kjacjjdnoddnpbbcjilcajfhhbdhkpgk/images/about/en/1.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000190",
+          "method": "HEAD",
+          "url": "chrome-extension://blillmbchncajnhkjfdnincfndboieik/css/shareHighlight.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000191",
+          "method": "HEAD",
+          "url": "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/images/icons/app_icon-dark_bg-color-locked-12.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000192",
+          "method": "HEAD",
+          "url": "chrome-extension://flliilndjeohchalpbbcdekjklbdgfkk/html/blocked.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000193",
+          "method": "HEAD",
+          "url": "chrome-extension://caljgklbbfbcjjanaijlacgncafpegll/html/dashboard.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000194",
+          "method": "HEAD",
+          "url": "chrome-extension://nlipoenfbbikpbjkfpfillcgkoblgpmj/annotate-react.html",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000195",
+          "method": "HEAD",
+          "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000196",
+          "method": "HEAD",
+          "url": "chrome-extension://nngceckbapebfimnlniiiahkandclblb/content/fido2-page-script.js",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000197",
+          "method": "HEAD",
+          "url": "chrome-extension://pcblbflgdkdfdjpjifeppkljdnaekohj/assets/boost_writing_modal_icons.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000198",
+          "method": "HEAD",
+          "url": "chrome-extension://jgjaeacdkonaoafenlfkkkmbaopkbilf/content.css",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000199",
+          "method": "HEAD",
+          "url": "chrome-extension://pmjeegjhjdlccodhacdgbgfagbpmccpe/assets/images/$-selected.png",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000200",
+          "method": "HEAD",
+          "url": "chrome-extension://bhlhnicpbhignbdhedgjhgdocnmhomnp/images/checkmark-icon.svg",
+          "type": "Fetch"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        }
+      ],
+      "verdict": "empty-document",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "",
+      "landedOn": "https://www.macys.com/",
+      "nodes": 32,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26569
+    }
+  ],
+  "fresh": true,
+  "engineLog": [
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.683s]",
+    "      source = fetch",
+    "      url = chrome-extension://fcoeoabgfenejglbffodgkkbkcdhcgfn/assets/agent-visual-indicator.js-Ct7LqXhp.js",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.683s]",
+    "      source = fetch",
+    "      url = chrome-extension://ghbmnnjooekpmoecnnnilnnbdlolhkhi/page_embed_script.js",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.684s]",
+    "      source = fetch",
+    "      url = chrome-extension://fggkaccpbmombhnjkjokndojfgagejfb/googlemeet.inline.js",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.684s]",
+    "      source = fetch",
+    "      url = chrome-extension://hlofigcdgjlnalbkeeinfcjceabpamci/html/suspended.html",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.684s]",
+    "      source = fetch",
+    "      url = chrome-extension://noogafoofpebimajpfpamcfhoaifemoa/suspended.html",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.685s]",
+    "      source = fetch",
+    "      url = chrome-extension://jldhpllghnbhlbpcmnajkpdmadaolakh/browserApi.js",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.685s]",
+    "      source = fetch",
+    "      url = chrome-extension://nffaoalbilbmmfgbnbgppjihopabppdk/inject.js",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.685s]",
+    "      source = fetch",
+    "      url = chrome-extension://dbepggeogbaibhgnhhndojpepiihcmeb/content_scripts/vimium.css",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.685s]",
+    "      source = fetch",
+    "      url = chrome-extension://gppongmhjkpfnbhagpmjfkannfbllamg/js/dom.js",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.685s]",
+    "      source = fetch",
+    "      url = chrome-extension://iceonohalfbfcldenclcjafcpboiplfo/wf.css",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.685s]",
+    "      source = fetch",
+    "      url = chrome-extension://ngghlnfmdgnpegcmbpgehkbhkhkbkjpj/popup.html",
+    "      status = 0",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+25.685s]",
+    "      source = fetch",
+    "      url = chrome-extension://gmagdfpiahgilkjlfgpedjjfpomdlkan/book-ticket.html",
+    "      status = 0",
+    "      err = UnsupportedProtocol"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

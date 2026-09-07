@@ -1,0 +1,464 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T11:13:31.228Z",
+  "egress": {
+    "fl": "464f192",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787742811.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1380+478f467e7",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9271/"
+  },
+  "stations": [
+    {
+      "name": "dd-datadome",
+      "vendor": "datadome",
+      "url": "https://datadome.co/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://datadome.co/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMASZcU1xVoHOwAbNOzfA%3D%3D&hash=14D062F60A4BDE8CE8647DFC720349&cid=TiuvZk9mUskcEth6KH69RiAKN6H8Z3spbL81UmY_RTBN2Bn40J3XIZN1ODpzLC6OVfI9Fhj6yarxS4z0glxvr7TZ7L~Ay6iORWLkKiX7Mg7YWtD3jNKi4TUz~a8GHyiW&t=fe&referer=https%3A%2F%2Fdatadome.co%2F&s=44330&e=30329ab2f6a467b58ebc7dafa1ac1e0bec232ab591ab369ce8a60fde72d114022070ee3eacd4d3b3df34fc7fe96e5352&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "datadome.co",
+      "landedOn": "https://datadome.co/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25080
+    },
+    {
+      "name": "dd-g2",
+      "vendor": "datadome",
+      "url": "https://www.g2.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.g2.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAaB-mVJlIXZUAbNOzfA%3D%3D&hash=229542D5C186C7F5A5BB092FBDD92B&cid=cmJjm5YEnYlsQLdZ~SKNGVN0H~UMtHTtqL5RsjA2e~2DfvsjRZVAGMGwrT9weKQIq~ciWUGRoK_Lb6FfNRc8eeeUtp~btoMjc6Y95DlhVWdGVXROTK5EejzJTS8BnnM4&t=fe&referer=https%3A%2F%2Fwww.g2.com%2F&s=48621&e=cd942fa10d7f5ff0d893fcd5a1cca4cd66b8617cf0e8cd3326e9754fcc41197f943324a4e483c6366ad595e2aab809ac&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "g2.com",
+      "landedOn": "https://www.g2.com/",
+      "nodes": 11,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25080
+    },
+    {
+      "name": "dd-leboncoin",
+      "vendor": "datadome",
+      "url": "https://www.leboncoin.fr/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.leboncoin.fr/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAEzSGbJk19icAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=2kfRoeUOu3_h4L58FzmU5vhNTh5iGuW3nubbc9Ep2GeloNjTBMdof9~zMO4H_dKa9NRh9EYk9XACaTJHd7B9a8ysPXVaH5Qudpp_G_mjHceg2bH3nh8YGIcOBKOqjWnt&t=fe&referer=https%3A%2F%2Fwww.leboncoin.fr%2F&s=2089&e=146ecd1f49ee7a337ef2eabc2d60113bed7ec038f9c3323bf9ebe2f68054fc8903790be97f08374833cfc3537fe50cfe&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "leboncoin.fr",
+      "landedOn": "https://www.leboncoin.fr/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25232
+    },
+    {
+      "name": "dd-hermes",
+      "vendor": "datadome",
+      "url": "https://www.hermes.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hermes.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAtc0tex7v9BYAbNOzfA%3D%3D&hash=2211F522B61E269B869FA6EAFFB5E1&cid=1w3MXBWwD1w_dmCx8LTsffu6KVLRsPyweyx2nG8Gga9woAWJ9L4OVwreYqlLLpB2DuFs2WHXhCtYUFMYn_OR2vyBIS__YKQp49ZSpqI_OiiCtOI3I41VMgavt5qPhp8J&t=fe&referer=https%3A%2F%2Fwww.hermes.com%2F&s=13461&e=268b6e04eb59a178135f68678a8aa12d83303ee97b33234e35757e42a4a45fab2664dbca0730558375f94475dcbf8ba3&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "hermes.com",
+      "landedOn": "https://www.hermes.com/",
+      "nodes": 10,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25242
+    },
+    {
+      "name": "dd-etsy",
+      "vendor": "datadome",
+      "url": "https://www.etsy.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.etsy.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://14895689.fls.doubleclick.net/activityi;dc_pre=CI2G96qVvpYDFeZEnQYdblQ6Gg;src=14895689;type=etsyf;cat=etsy-00;rcb=15;ord=237926335888;npa=0;auiddc=2060045582.1787742914;u3=https%3A%2F%2Fwww.etsy.com%2F;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=KFA;gtm=45fe68o1v9196083440z86935543za20gzb6935543zd6935543xea;gcs=G111;gcd=13t3t3t3t5l1;dma=0;dc_fmt=2;tag_exp=115616986~115938465~115938468~118897920~118897930~119367802~119367810~119793972~120213116~120385422;epver=2;dc_random=1787742914_IYWgpDJmFegPXRZCjj-4IlEawCXqcm60EQ;_dc_test=1;~oref=https%3A%2F%2Fwww.etsy.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://9910951.fls.doubleclick.net/activityi;dc_pre=CIXK96qVvpYDFS9UnQYdMEsYlA;src=9910951;type=remarkt;cat=unive0;rcb=7;ord=5309426971578;npa=0;auiddc=2060045582.1787742914;u2=%2F;u3=undefined;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=KFA;gtm=45fe68o1v9190758491z86935543za20gzb6935543zd6935543xea;gcs=G111;gcd=13t3t3t3t5l1;dma=0;dc_fmt=2;tag_exp=115616986~115938465~115938468~118897920~118897930~119367802~119367810~120385422;epver=2;dc_random=1787742914_FwxFfbACCSNw4X4zuZnkmyV_X0PvZUvBOA;_dc_test=1;~oref=https%3A%2F%2Fwww.etsy.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cei?advertiser_id=rvnx9fp&cookie_sync=1&upv=3.0.0&upid=3bige4d&ref=https%3a%2f%2fwww.etsy.com&redirect=1",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://secure-gl.imrworldwide.com/cgi-bin/m?ci=tradedesk&cg=5aac09cb-19a9-4d9d-a1dd-5430a5eaf3ed",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://d.agkn.com/pixel/10751/?che=1787742916177&ip=108.211.179.124",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://load77.exelator.com/pixel.gif",
+          "status": 204,
+          "mime": ""
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 204,
+      "jsDetect": false,
+      "title": "Etsy - Shop for handmade, vintage, custom, and unique gifts for everyone",
+      "landedOn": "https://www.etsy.com/",
+      "nodes": 1785,
+      "textLength": 6846,
+      "snippet": "Etsy Categories Search for items or shops Skip to Content Sign in Gifts Etsy Staff Picks Home Favorites Fashion Finds Vintage Wedding Guide Gift Cards Fresh fall fashion from creative sellers Shop the",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25447
+    },
+    {
+      "name": "dd-seloger",
+      "vendor": "datadome",
+      "url": "https://www.seloger.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.seloger.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAk8-TB1pt5OoAbNOzfA%3D%3D&hash=8C7191D8AA1BF5FBB1B84DC7268196&cid=maJMFlbYZusf30oevqgPB~bEEdmWKEmppGRDs~bj1PwBG~gw2fLqvge~WE~IFqUdWD_W8Fy2UH0kTqkxUIc_lDLVFN4VkdK9Pli8dciCCiibNQHS~1FVmpqsKhUrFIQO&t=fe&referer=https%3A%2F%2Fwww.seloger.com%2F&s=55733&e=9fc0383ed1682ef31be2d868fbabd4ac398c5c2a6618dbd7e394e9b3304b6bd2f0e9603c0b9de75abeb4d074228afd9e&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "seloger.com",
+      "landedOn": "https://www.seloger.com/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25116
+    },
+    {
+      "name": "dd-saks",
+      "vendor": "datadome",
+      "url": "https://www.saksfifthavenue.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.saksfifthavenue.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMARGR-yDmFNlMAbNOzfA%3D%3D&hash=52544002C090C19595D1C53AF37241&cid=kxKgkNivI8~1fi9u6ZZ0hsn9UmsHbCnsBUggTyJXJc_tx4Rv8GNa3_D2tI9hQ_0GYt8TG4S0JfbL5FPYlVap~QCMnEoMOMZZD3lOSqbz3OoiI0i_46O6NCjqo0poNJcB&t=fe&referer=https%3A%2F%2Fwww.saksfifthavenue.com%2F&s=46570&e=7b594525940e9309c7fa6794ad13df8ee993637ffd96c4df4fcc118669eea4f2e13f69c1efdbd145c90303ead38f0979&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "saksfifthavenue.com",
+      "landedOn": "https://www.saksfifthavenue.com/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25126
+    },
+    {
+      "name": "dd-allopneus",
+      "vendor": "datadome",
+      "url": "https://www.allopneus.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.allopneus.com/",
+          "status": 403,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-blocked",
+      "first": 403,
+      "last": 403,
+      "jsDetect": false,
+      "title": "Attention Required! | Cloudflare",
+      "landedOn": "https://www.allopneus.com/",
+      "nodes": 45,
+      "textLength": 691,
+      "snippet": "Sorry, you have been blocked You are unable to access allopneus.com Why have I been blocked? This website is using a security service to protect itself from online attacks. The action you just perform",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": true,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": true,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25087
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787742811419 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9271",
+    "$time=1787742813046 $scope=frame $level=warn $msg=\"cookie parse failed\" raw=\"__cf_bm=ykKS..zyMLGYxcSxXJxFgIwFgPeGEnivGu2_BAJqr_k-1787742812.3072522-1.0.1.1-kdRRcZTTcFhs7B0OTLGMyHlcEajXqXS2Phlb7tnau1y.S_2v8t25r.GA2U_sh_Njq1W8A1n1V8t4zGad2oe.b8fIJv2F67zCQgclDQOHMdZ1MvXpQmR6sVlcbG7ZQHtu; HttpOnly; SameSite=None; Secure; Path=/; Domain=kinsta.cloud; Expires=Wed, 26 Aug 2026 11:43:32 GMT\" err=InvalidDomain",
+    "$time=1787742913402 $scope=js $level=warn $msg=\"console.warn\" param.0=%cairgap.js%c Report-only mode enabled param.1=font-size:larger;font-weight:bold;border-radius:0.25em;padding:0.08em 0.25em;;color:amber;background-color:#6e3e00 param.2=",
+    "$time=1787742913875 $scope=js $level=warn $msg=\"console.warn\" param.0=[GSI_LOGGER]: Your client application uses one of the Google One Tap prompt UI status methods that may stop functioning when FedCM becomes mandatory. Refer to the migration guide to update your code accordingly and opt-in to FedCM to test your changes. Learn more: https://developers.google.com/identity/gsi/web/guides/fedcm-migration?s=dc#display_moment and https://developers.google.com/identity/gsi/web/guides/fedcm-migration?s=dc#skipped_moment",
+    "$time=1787742913876 $scope=js $level=warn $msg=\"console.error\" param.0=[GSI_LOGGER]: FedCM get() rejects with Error: X",
+    "$time=1787742914262 $scope=event $level=warn $msg=\"inline handler\" err=JsException caught.exception=\"undefined is not iterable (cannot read property Symbol(Symbol.iterator))\" caught.stack=\"TypeError: undefined is not iterable (cannot read property Symbol(Symbol.iterator))\\n    at N (https://s.pinimg.com/ct/lib/main.e47a302d.js:1:71750)\\n    at r.onload (https://s.pinimg.com/ct/lib/main.e47a302d.js:1:80528)\" caught.line=1 caught.caught=true",
+    "$time=1787742914263 $scope=event $level=warn $msg=\"inline handler\" err=JsException caught.exception=\"undefined is not iterable (cannot read property Symbol(Symbol.iterator))\" caught.stack=\"TypeError: undefined is not iterable (cannot read property Symbol(Symbol.iterator))\\n    at N (https://s.pinimg.com/ct/lib/main.e47a302d.js:1:71750)\\n    at r.onload (https://s.pinimg.com/ct/lib/main.e47a302d.js:1:80528)\" caught.line=1 caught.caught=true",
+    "$time=1787742916797 $scope=http $level=error $msg=\"process_messages\" err=TooManyRedirects req=GET https://cm.g.doubleclick.net/pixel?google_nid=aplv"
+  ],
+  "summary": {
+    "stations": 8,
+    "pass": 1
+  }
+}

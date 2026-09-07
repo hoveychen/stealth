@@ -1,0 +1,100 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T14:47:33.804Z",
+  "egress": {
+    "fl": "1232f52",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787755653.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1405+4c6bba162",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:13738/"
+  },
+  "stations": [
+    {
+      "name": "dd-saks",
+      "vendor": "datadome",
+      "url": "https://www.saksfifthavenue.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.saksfifthavenue.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/interstitial/?initialCid=AHrlqAAAAAMAg05BY7jer-AAbNOzfA%3D%3D&hash=52544002C090C19595D1C53AF37241&cid=QLD40BvQUIAEeRdT~4ka7ai3Ykvda24HnQxvQXVtnGe02d0U3W7vci_XxHyv5nDnwewdyYanscRvujsJpjYlybkQfhtb8ZW8Mh0MAbdSSbHksq4tw9E3rU8RIkKy3IJs&referer=https%3A%2F%2Fwww.saksfifthavenue.com%2F&s=46570&e=68d2c67cfaffcedcaa04bfd21a8a65eeffb8956856cc9fde8fe732a0390124ed5c5c0f1ce2e683e2a4dfcc575761841e&b=1421558&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAg05BY7jer-AAbNOzfA==&cid=76uDpGaTrDghsMRsiHs2KUZpKlsYZPKOGoeI22vgkD29x7mNGTVIltlIcVqmmy5hZ0p~UN0anUZwwh0fPqK9TWmJgaYsUmqfyWSFQj~9N1tBXeirQT_~X2EX5QgyjLHh&referer=https%3A%2F%2Fwww.saksfifthavenue.com%2F&hash=52544002C090C19595D1C53AF37241&t=bv&s=46570&e=fc1b1a8d072237cac28c37a28bc00dc9123f7489e41f0a4334faec49597096b2b93e1f2ed61459c7b94d5294a40562bb&ir=503004%2C72&dm=dc_ir&b=1421558",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "saksfifthavenue.com",
+      "landedOn": "https://www.saksfifthavenue.com/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25109
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787755653981 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:13738",
+    "$time=1787755654557 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: Cannot read properties of null (reading 'classList')\""
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

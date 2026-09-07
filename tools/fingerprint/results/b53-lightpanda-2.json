@@ -1,0 +1,551 @@
+{
+ "engine": "lightpanda",
+ "headed": false,
+ "endpoint": null,
+ "proxy": null,
+ "windowSize": "1920,1080",
+ "chromeArgs": [],
+ "userAgentOverride": null,
+ "startedAt": "2026-08-26T14:31:43.437Z",
+ "egress": {
+  "fl": "1231f126",
+  "h": "www.cloudflare.com",
+  "ip": "108.211.179.124",
+  "ts": "1787754703.000",
+  "visit_scheme": "https",
+  "uag": "node",
+  "colo": "SJC",
+  "sliver": "none",
+  "http": "http/2",
+  "loc": "US",
+  "tls": "TLSv1.3",
+  "sni": "plaintext",
+  "warp": "off",
+  "gateway": "off",
+  "rbi": "off",
+  "kex": "X25519MLKEM768"
+ },
+ "version": {
+  "Browser": "Lightpanda/1.0",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+  "Lightpanda-Version": "1.0.0-dev.1405+4c6bba162",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:13683/"
+ },
+ "stations": [
+  {
+   "name": "cf-scrapingcourse",
+   "vendor": "cloudflare",
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/fvewj/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "cf-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": true,
+   "title": "Just a moment...",
+   "landedOn": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "nodes": 47,
+   "textLength": 270,
+   "snippet": "www.scrapingcourse.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray",
+   "marks": {
+    "chlOpt": true,
+    "platformScript": true,
+    "challengeDom": false,
+    "justAMoment": true,
+    "blocked": false,
+    "turnstileWidget": true,
+    "rayId": "a3138ab3384b7af1",
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25155
+  },
+  {
+   "name": "cf-nopecha",
+   "vendor": "cloudflare",
+   "url": "https://nopecha.com/demo/cloudflare",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://nopecha.com/demo/cloudflare",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/z0lbc/0x4AAAAAAAAjq6WYeRDKmebM/light/fbE/new/normal?lang=auto",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "cf-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": true,
+   "title": "Just a moment...",
+   "landedOn": "https://nopecha.com/demo/cloudflare",
+   "nodes": 47,
+   "textLength": 259,
+   "snippet": "nopecha.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a3138b",
+   "marks": {
+    "chlOpt": true,
+    "platformScript": true,
+    "challengeDom": false,
+    "justAMoment": true,
+    "blocked": false,
+    "turnstileWidget": true,
+    "rayId": "a3138b561abceb28",
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25095
+  },
+  {
+   "name": "cf-zeroclover",
+   "vendor": "cloudflare",
+   "url": "https://turnstile.zeroclover.io/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://turnstile.zeroclover.io/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/ygvxd/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "cf-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": true,
+   "title": "Just a moment...",
+   "landedOn": "https://turnstile.zeroclover.io/",
+   "nodes": 47,
+   "textLength": 271,
+   "snippet": "turnstile.zeroclover.io Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ra",
+   "marks": {
+    "chlOpt": true,
+    "platformScript": true,
+    "challengeDom": false,
+    "justAMoment": true,
+    "blocked": false,
+    "turnstileWidget": true,
+    "rayId": "a3138bf90bd0eb32",
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25111
+  },
+  {
+   "name": "dd-allopneus",
+   "vendor": "datadome",
+   "url": "https://www.allopneus.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.allopneus.com/",
+     "status": 403,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "cf-blocked",
+   "first": 403,
+   "last": 403,
+   "jsDetect": false,
+   "title": "Attention Required! | Cloudflare",
+   "landedOn": "https://www.allopneus.com/",
+   "nodes": 45,
+   "textLength": 691,
+   "snippet": "Sorry, you have been blocked You are unable to access allopneus.com Why have I been blocked? This website is using a security service to protect itself from online attacks. The action you just perform",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": true,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": true,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25082
+  },
+  {
+   "name": "dd-g2",
+   "vendor": "datadome",
+   "url": "https://www.g2.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.g2.com/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAYQbdHioA3CAAbNOzfA%3D%3D&hash=229542D5C186C7F5A5BB092FBDD92B&cid=JE5Ff1HLgGNL_MWJqyzJAqtts6rWh8KzhrDwqs8W6jUDpiMjNJGcPUtqUwEZvUuIEqy42KSOZrYKgHaMMRDVRjK12hTcw~S2mwIoZf40_stGBy0MxvbLkN0Pc7qfXlzn&t=fe&referer=https%3A%2F%2Fwww.g2.com%2F&s=48621&e=7e6537e8baddfdfe74a48c0f96f34bafb1df1c3a39c24bbd65ed448daa8de5318d8542b6f5da65af62ee4d82776e7b8f&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "datadome-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "g2.com",
+   "landedOn": "https://www.g2.com/",
+   "nodes": 11,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": true,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25105
+  },
+  {
+   "name": "dd-saks",
+   "vendor": "datadome",
+   "url": "https://www.saksfifthavenue.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.saksfifthavenue.com/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMATFNXkrnEtogAbNOzfA%3D%3D&hash=52544002C090C19595D1C53AF37241&cid=5Unb7P55pv9dZu45Ji4o6PlCqapAqt9F3pQrFx72GG8HeFNtmLu~5gQOBWEm6PhGHt6UJY_kG2iogXDFBZyAj9Lo4YY7Wa3w4_6RXzLQ1lt6e5_8q5pPGG~5VXFEAVuT&t=fe&referer=https%3A%2F%2Fwww.saksfifthavenue.com%2F&s=46570&e=8ad9c71b681ec16fa8c53a517b3a1685f87c015f50d38078fc3c5dde9c90bcb86917f4c69bcd3b1377981601e810b207&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "datadome-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "saksfifthavenue.com",
+   "landedOn": "https://www.saksfifthavenue.com/",
+   "nodes": 9,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": true,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25079
+  },
+  {
+   "name": "dd-datadome",
+   "vendor": "datadome",
+   "url": "https://datadome.co/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://datadome.co/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAVa-LCZA1ZHAAbNOzfA%3D%3D&hash=14D062F60A4BDE8CE8647DFC720349&cid=feOBQeG82S~ZcRHx8Ja59UtWI_iaY34TOFLHckBqtNU8UhrOpEWiqMWX4e9IemfHXhYhLDoyt~UqIMXeoWgBjvJNs8lKluEdCGjrK0c9d5YOZe2N29NQELk2HaV2bG7a&t=fe&referer=https%3A%2F%2Fdatadome.co%2F&s=44330&e=115ded38b1cee1b1cd6cd8adf41445758c22bd75651114ae8daee88d1537cc05f173524fdc6c205bd1420e7ba49a8d04&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "datadome-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "datadome.co",
+   "landedOn": "https://datadome.co/",
+   "nodes": 9,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": true,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25273
+  },
+  {
+   "name": "dd-hermes",
+   "vendor": "datadome",
+   "url": "https://www.hermes.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.hermes.com/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAQrRJdcLye4oAbNOzfA%3D%3D&hash=2211F522B61E269B869FA6EAFFB5E1&cid=1nq7YKk2MZK9HeucgnxSGGkDTnh013M_no3K_GITer6IRQS6n0AkRo_r5wNYkVGHbQ8EWm8qSfwgXLE5b3ZmPjNJsxg~5o5LdQU8_f1Fd~GMsqDnp6yi4e7rqSIQHvzE&t=fe&referer=https%3A%2F%2Fwww.hermes.com%2F&s=13461&e=062158f0319fe637c536ff2c09bc587c9996f35ecf8b048e186ebdd7c4b03a6bfeef7e588ee07211b313674f42b6da06&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "datadome-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "hermes.com",
+   "landedOn": "https://www.hermes.com/",
+   "nodes": 10,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": true,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25238
+  },
+  {
+   "name": "x-hyatt",
+   "vendor": "unattributed",
+   "url": "https://www.hyatt.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.hyatt.com/",
+     "status": 429,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "refused-429",
+   "first": 429,
+   "last": 429,
+   "jsDetect": false,
+   "title": "",
+   "landedOn": "https://www.hyatt.com/",
+   "nodes": 6,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": true,
+    "script": true
+   },
+   "ms": 25305
+  },
+  {
+   "name": "ks-canadagoose",
+   "vendor": "kasada",
+   "url": "https://www.canadagoose.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.canadagoose.com/",
+     "status": 429,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://www.canadagoose.com/us/en/home-page",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://www.canadagoose.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/fp?x-kpsdk-v=j-1.2.726",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://googletags.canadagoose.com/ns.html?id=GTM-K9SGVB",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://googletags.canadagoose.com/ns.html?id=GTM-TT95XKNB",
+     "status": 400,
+     "mime": ""
+    },
+    {
+     "url": "https://canadagoose.my.site.com/ESWMIWNAEN1749637797148/assets/htdocs/sitecontext.min.html?parent_domain=https%3A%2F%2Fwww.canadagoose.com",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "pass",
+   "first": 429,
+   "last": 200,
+   "jsDetect": false,
+   "title": "Luxury Performance Outerwear & Clothing | Canada Goose",
+   "landedOn": "https://www.canadagoose.com/us/en/home-page",
+   "nodes": 1404,
+   "textLength": 507,
+   "snippet": "Enable accessibility Skip to Content Find a Store SHOP SNOW GOOSE STORIES ICONS Search WORN-IN CONFIDENCE Women's Fall/Winter Arrivals Women's Terra Jacket Women's Lume Lightweight Jacket Women's Terr",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": true,
+    "script": true
+   },
+   "ms": 25185
+  }
+ ],
+ "fresh": false,
+ "engineLog": [
+  "$time=1787754703611 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:13683",
+  "$time=1787754703945 $scope=browser $level=error $msg=\"worker fetch error\" url=blob:https://www.scrapingcourse.com/cd451b2c-d8f8-4a13-9fbe-3c535ed1032d err=Abort",
+  "$time=1787754704195 $scope=browser $level=error $msg=\"worker fetch error\" url=blob:https://challenges.cloudflare.com/b02d8c04-1279-4d24-93f4-5a53517d151a err=Abort",
+  "$time=1787754704745 $scope=js $level=warn $msg=\"console.error\" param.0=%c%d param.1=font-size:0;color:transparent param.2=whrg0: PInT0",
+  "$time=1787754704745 $scope=js $level=warn $msg=\"console.error\" param.0=%c%d param.1=font-size:0;color:transparent param.2=whrg0: PInT0",
+  "$time=1787754704746 $scope=js $level=warn $msg=\"console.warn\" param.0=%c%d param.1=font-size:0;color:transparent param.2=whrg0: PInT0",
+  "$time=1787754704746 $scope=js $level=warn $msg=\"console.warn\" param.0=%c%d param.1=font-size:0;color:transparent param.2=whrg0: PInT0"
+ ],
+ "summary": {
+  "passed": 1,
+  "total": 10
+ }
+}

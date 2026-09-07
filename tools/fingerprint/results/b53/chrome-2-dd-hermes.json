@@ -1,0 +1,102 @@
+{
+  "engine": "chrome",
+  "headed": true,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T14:39:17.249Z",
+  "egress": {
+    "fl": "1231f11",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787755157.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Chrome/151.0.7922.174",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.23",
+    "WebKit-Version": "537.36 (@39c51c70dd5feca6b6aba5bb7997b595011c553d)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:13604/devtools/browser/df9d1aa1-4d51-4e67-a2b9-21a89de02483"
+  },
+  "stations": [
+    {
+      "name": "dd-hermes",
+      "vendor": "datadome",
+      "url": "https://www.hermes.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hermes.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAJ55XmIpsnaYAbNOzfA%3D%3D&hash=2211F522B61E269B869FA6EAFFB5E1&cid=u2XCvjhGugW0NvNgCs8k1Kx1XzDe2vF3vke5Z_oKOwwDdFkCAvUjLKq0zshJDSb52Q7mY5K89kgz6Hq5yaSvNx0ZV07h8RTgBhVmm~ZKRh3xElz6och6eKAsCXfGQRvL&t=fe&referer=https%3A%2F%2Fwww.hermes.com%2F&s=13461&e=7d53fa52be5699bcfa608af7d67237ed79d8b6628dad114d4e6ea1078709d6939d16ef27d7b113123f9d22a584b23027&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "hermes.com",
+      "landedOn": "https://www.hermes.com/",
+      "nodes": 10,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26810
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:13604/devtools/browser/df9d1aa1-4d51-4e67-a2b9-21a89de02483",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[64408:1393121:0826/073917.696651:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[64408:1393121:0826/073917.696912:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[64408:1393157:0826/073920.477841:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[64408:1393157:0826/073920.477891:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[64408:1393157:0826/073920.478507:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "Created TensorFlow Lite XNNPACK delegate for CPU."
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

@@ -124,7 +124,7 @@ pub const ScrollPositionLookup = std.AutoHashMapUnmanaged(*Element, ScrollPositi
 /// a line of n items measured n boxes n times -- and a flex item's measurement
 /// re-enters flexItemWidth one level down, which multiplies that down the tree.
 ///
-/// Measured with `scratch/hpr/flex-cost.mjs` (identical trees, 3281 nodes, one
+/// Measured with `tools/fingerprint/flex-cost.mjs` (identical trees, 3281 nodes, one
 /// getBoundingClientRect, only `display`/`flex-grow` differ): a block tree
 /// answered in 112ms, the same tree as non-growing flex items in 516ms, and as
 /// growing ones in 1677ms. On www.kohls.com the same shape spends the whole
@@ -167,7 +167,7 @@ pub const FlexLine = struct {
 /// invalidation rule at all, since a measurement is synchronous native work
 /// with no script in it. That version was instrumented and **never hit once**:
 /// inside a single top-level measurement each container is asked for exactly
-/// once (`hits=0 misses=8 measured=37`, `scratch/hpr/flex-cost.mjs` with the
+/// once (`hits=0 misses=8 measured=37`, `tools/fingerprint/flex-cost.mjs` with the
 /// counters in). The waste is not inside a read, it is the same read repeated:
 /// one `getBoundingClientRect` on a 1094-node flex tree enters this function at
 /// top level about five thousand times.

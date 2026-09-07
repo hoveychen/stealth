@@ -1,0 +1,660 @@
+{
+ "engine": "chrome",
+ "headed": true,
+ "endpoint": null,
+ "proxy": null,
+ "windowSize": "1920,1080",
+ "chromeArgs": [],
+ "userAgentOverride": null,
+ "startedAt": "2026-08-26T14:40:46.071Z",
+ "egress": {
+  "fl": "465f109",
+  "h": "www.cloudflare.com",
+  "ip": "108.211.179.124",
+  "ts": "1787755246.000",
+  "visit_scheme": "https",
+  "uag": "node",
+  "colo": "SJC",
+  "sliver": "005-tier1",
+  "http": "http/2",
+  "loc": "US",
+  "tls": "TLSv1.3",
+  "sni": "plaintext",
+  "warp": "off",
+  "gateway": "off",
+  "rbi": "off",
+  "kex": "X25519MLKEM768"
+ },
+ "version": {
+  "Browser": "Chrome/151.0.7922.174",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+  "V8-Version": "15.1.206.23",
+  "WebKit-Version": "537.36 (@39c51c70dd5feca6b6aba5bb7997b595011c553d)",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:13623/devtools/browser/7c6459e1-037c-4b5b-b378-ec15072c06d3"
+ },
+ "stations": [
+  {
+   "name": "cf-scrapingcourse",
+   "vendor": "cloudflare",
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/j6i8t/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "pass",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "Cloudflare Challenge - ScrapingCourse.com",
+   "landedOn": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "nodes": 34,
+   "textLength": 78,
+   "snippet": "Scraping Course Cloudflare Challenge You bypassed the Cloudflare challenge! :D",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": true,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26150
+  },
+  {
+   "name": "cf-nopecha",
+   "vendor": "cloudflare",
+   "url": "https://nopecha.com/demo/cloudflare",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://nopecha.com/demo/cloudflare",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/cvb2e/0x4AAAAAAAAjq6WYeRDKmebM/light/fbE/new/normal?lang=auto",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "cf-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": true,
+   "title": "Just a moment...",
+   "landedOn": "https://nopecha.com/demo/cloudflare",
+   "nodes": 47,
+   "textLength": 259,
+   "snippet": "nopecha.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a31398",
+   "marks": {
+    "chlOpt": true,
+    "platformScript": true,
+    "challengeDom": false,
+    "justAMoment": true,
+    "blocked": false,
+    "turnstileWidget": true,
+    "rayId": "a313989e1836909c",
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26080
+  },
+  {
+   "name": "cf-zeroclover",
+   "vendor": "cloudflare",
+   "url": "https://turnstile.zeroclover.io/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://turnstile.zeroclover.io/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/leu8h/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://turnstile.zeroclover.io/",
+     "status": 502,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "cf-blocked",
+   "first": 403,
+   "last": 502,
+   "jsDetect": false,
+   "title": "zeroclover.io | 502: Bad gateway",
+   "landedOn": "https://turnstile.zeroclover.io/",
+   "nodes": 66,
+   "textLength": 392,
+   "snippet": "Bad gateway Error code 502 Visit cloudflare.com for more information. 2026-08-26 14:41:43 UTC You Browser Working San Jose Cloudflare Working turnstile.zeroclover.io Host Error What happened? The web ",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": true,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25345
+  },
+  {
+   "name": "dd-allopneus",
+   "vendor": "datadome",
+   "url": "https://www.allopneus.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.allopneus.com/",
+     "status": 403,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "cf-blocked",
+   "first": 403,
+   "last": 403,
+   "jsDetect": false,
+   "title": "Attention Required! | Cloudflare",
+   "landedOn": "https://www.allopneus.com/",
+   "nodes": 45,
+   "textLength": 690,
+   "snippet": "Sorry, you have been blocked You are unable to access allopneus.com Why have I been blocked? This website is using a security service to protect itself from online attacks. The action you just perform",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": true,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": true,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25281
+  },
+  {
+   "name": "dd-g2",
+   "vendor": "datadome",
+   "url": "https://www.g2.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.g2.com/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMARugoBsS9rQUAbNOzfA%3D%3D&hash=229542D5C186C7F5A5BB092FBDD92B&cid=553olTlsd_PkzrFxCIjGOr2hbyMpNg63gzSXCir57HUIxfm1K7nCYi5W4AJs1ez6jVLXRCmJ2takIJmVQz2n9~mASJO6eTnsEXEh3sN51LKGJJEn~SloQ28_wo5q6HuA&t=fe&referer=https%3A%2F%2Fwww.g2.com%2F&s=48621&e=31ce91b7e6b6e0f4d858c46e3b0169b6d69a34e222f1b9d125371dad2796098bcbeec4b26f1a503a236baf1df2b2497c&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "datadome-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "g2.com",
+   "landedOn": "https://www.g2.com/",
+   "nodes": 11,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": true,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26322
+  },
+  {
+   "name": "dd-saks",
+   "vendor": "datadome",
+   "url": "https://www.saksfifthavenue.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.saksfifthavenue.com/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/interstitial/?initialCid=AHrlqAAAAAMA6HRbd1YG9iwAbNOzfA%3D%3D&hash=52544002C090C19595D1C53AF37241&cid=LBYJU16uSD1zzY40c0cmugiqQ6tLarvBvKmHtB3rZNdas1a6xz532_Ss7nW_XZZwZ~_41p9dtKiE5UTKgQIGSUTIGWXanjR0eQDWNy3VmA5SGSjZb0liIStToTuXy4C5&referer=https%3A%2F%2Fwww.saksfifthavenue.com%2F&s=46570&e=62d4cddcd6abeefa641cc0d744b2cbde394a8d21cd3ac42c21536593f41b51dc8741c33606e9a75b24d64689498a39fc&b=1421558&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://www.saksfifthavenue.com/",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://saks.my.site.com/ESWAgentforceDeployment1726508790043/assets/htdocs/filepreview.min.html?parent_domain=https%3A%2F%2Fwww.saksfifthavenue.com",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://saks.my.site.com/ESWAgentforceDeployment1726508790043/?lwc.mode=prod",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://widgets.stores.saksfifthavenue.com/cookies/manager?sf_locale=undefined",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://hudsonbaycompany.demdex.net/dest5.html?d_nsid=0",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://gum.criteo.com/syncframe?topUrl=www.saksfifthavenue.com&origin=onetag",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://8270149.fls.doubleclick.net/activityi;dc_pre=CL60p-bDvpYDFX_oKAUdWNEHfw;src=8270149;type=landi0;cat=saks-0;rcb=0;ord=2999148012468716;num=2609958202713;npa=0;auiddc=964868975.1787755387;u10=guest;u11=home%20page;u12=saks.com%3Ahome%20page%3Awomen;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.174%7CChromium%3B151.0.7922.174;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IJA;gtm=45fe68o1v9135075918za200zb873406640zd873406640xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938466~115938469~118897920~118897930~119367802~119367810~120213116~120385422;epver=2;match_id=2999148012468716;dc_random=1787755386_BtgU5HYHVhDXKUipbCNpQTdn7eUEjcACjg;_dc_test=1;~oref=https%3A%2F%2Fwww.saksfifthavenue.com%2F?",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "pass",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "Saks Fifth Avenue | Designer Clothing, Shoes, Handbags & More",
+   "landedOn": "https://www.saksfifthavenue.com/",
+   "nodes": 4810,
+   "textLength": 6769,
+   "snippet": "Skip to main content Skip to footer content Previous Earn Rewards With a Saks Credit Card | Get Pre‑Qualified Extra 25% Off Designer Sale | Up to 70% Off Select Styles | SHOP NOW FREE SHIPPING on $150",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26516
+  },
+  {
+   "name": "dd-datadome",
+   "vendor": "datadome",
+   "url": "https://datadome.co/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://datadome.co/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAzTouigmWmxAAbNOzfA%3D%3D&hash=14D062F60A4BDE8CE8647DFC720349&cid=8_ekAXduehxcxF1syyH4r9tka9q4531~bXXG9Zfz8_2STRlMnHt0THfmv8g9VAiOwJLYJJNcACLD3rvvJ2kb_4yABeTbC1mmIGX~_XkOkiOdhMBkfhUs3q57FMc8m9oh&t=fe&referer=https%3A%2F%2Fdatadome.co%2F&s=44330&e=584e7e23240d24b31994a0b99c9b0fccbac796e0b8101fde27e84b5128a8ffb108614378f35269e6b9d88c3c0589b237&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "datadome-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "datadome.co",
+   "landedOn": "https://datadome.co/",
+   "nodes": 9,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": true,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26288
+  },
+  {
+   "name": "dd-hermes",
+   "vendor": "datadome",
+   "url": "https://www.hermes.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.hermes.com/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMA0rBqDrVmLccAbNOzfA%3D%3D&hash=2211F522B61E269B869FA6EAFFB5E1&cid=JOu93xDQmyK78oKdWZbwpu27MxPWvlgC9QkL9Fs0966sQ88S6PKhgLvSIApuoOD0VN7Dq_b6VPhraK9Y3XSKKs3hmAx0j8Lwjmzk2p2HVlHtgZdcCoY0jE_YoHuziRbt&t=fe&referer=https%3A%2F%2Fwww.hermes.com%2F&s=13461&e=82afe6718e55a063345ecd16cd8374d10c44dbaaec5ef6494b043db503a0354f86b020b7948865ce5e1345091c2d6929&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "datadome-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "hermes.com",
+   "landedOn": "https://www.hermes.com/",
+   "nodes": 10,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": true,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26828
+  },
+  {
+   "name": "x-hyatt",
+   "vendor": "unattributed",
+   "url": "https://www.hyatt.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.hyatt.com/",
+     "status": 429,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://www.hyatt.com/loyalty/en-US",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "pass",
+   "first": 429,
+   "last": 200,
+   "jsDetect": false,
+   "title": "Hotel Reservations | Book Hotel Rooms Online - Hyatt Hotels and Resorts",
+   "landedOn": "https://www.hyatt.com/loyalty/en-US",
+   "nodes": 879,
+   "textLength": 3934,
+   "snippet": "SKIP MAIN NAVIGATION Sign In or Join Explore Offers Meetings & Events Loyalty Program Our Credit Cards Hotel Reservations | Book Hotel Rooms Online - Hyatt Hotels & Resorts Try \"Cancun hotels under $1",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26550
+  },
+  {
+   "name": "ks-canadagoose",
+   "vendor": "kasada",
+   "url": "https://www.canadagoose.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.canadagoose.com/",
+     "status": 429,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://www.canadagoose.com/us/en/home-page",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://googletags.canadagoose.com/ns.html?id=GTM-K9SGVB",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://googletags.canadagoose.com/ns.html?id=GTM-TT95XKNB",
+     "status": 400,
+     "mime": "text/plain"
+    },
+    {
+     "url": "https://www.canadagoose.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/fp?x-kpsdk-v=j-1.2.726",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://canadagoose.my.site.com/ESWMIWNAEN1749637797148/assets/htdocs/sitecontext.min.html?parent_domain=https%3A%2F%2Fwww.canadagoose.com",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://scripts.agilone.com/v3.0.9/a1_webtag.html?version=3.0.9&namespace=$A1",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "pass",
+   "first": 429,
+   "last": 200,
+   "jsDetect": false,
+   "title": "Luxury Performance Outerwear & Clothing | Canada Goose",
+   "landedOn": "https://www.canadagoose.com/us/en/home-page",
+   "nodes": 1863,
+   "textLength": 1791,
+   "snippet": "Enable accessibility Skip to Content Find a Store Decode an Ancient Oasis in the Outback. Discover Our Latest Local Expedition SHOP SNOW GOOSE STORIES ICONS Search WORN-IN CONFIDENCE Women's Fall/Wint",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": true,
+    "script": true
+   },
+   "ms": 27027
+  }
+ ],
+ "fresh": false,
+ "engineLog": [
+  "[65046:1402167:0826/074046.800025:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+  "[65046:1402167:0826/074046.803199:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074046.803210:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074046.803213:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074046.803687:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074046.803693:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074046.803695:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074047.694083:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+  "[65046:1402167:0826/074047.694093:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+  "[65046:1402167:0826/074047.694096:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+  "[65046:1402167:0826/074047.694600:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074047.694607:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074047.694610:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074047.694615:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074047.694618:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[65046:1402167:0826/074047.694621:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[65041:1402105:0826/074049.244686:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+  "[65041:1402105:0826/074049.255562:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+  "[65041:1402105:0826/074049.257905:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+  "Created TensorFlow Lite XNNPACK delegate for CPU.",
+  "[65134:1403145:0826/074105.280034:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake-all --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+  "[65134:1403145:0826/074105.280393:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 25929, parent pid: 65041",
+  "[65134:1403145:0826/074105.281621:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 101351460864B (94.391GiB) / 994662584320B (926.352GiB)",
+  "[65134:1403145:0826/074105.281632:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 101351460864B (94.391GiB) / 994662584320B (926.352GiB)",
+  "[65134:1403145:0826/074105.281674:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+  "[65136:1403149:0826/074105.286893:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+  "[65136:1403149:0826/074105.287254:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 25929, parent pid: 1",
+  "[65136:1403149:0826/074105.288457:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 101351460864B (94.391GiB) / 994662584320B (926.352GiB)",
+  "[65136:1403149:0826/074105.288466:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 101351460864B (94.391GiB) / 994662584320B (926.352GiB)",
+  "[65136:1403149:0826/074105.288513:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+  "[65134:1403145:0826/074105.288778:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+  "[65134:1403145:0826/074105.289210:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+  "[65134:1403145:0826/074105.289266:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+  "[65134:1403145:0826/074105.289324:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+  "[65134:1403145:0826/074105.289334:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+  "[65134:1403145:0826/074105.289371:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+  "[65134:1403145:0826/074105.289378:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+  "[65134:1403145:0826/074105.289388:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+  "[65134:1403157:0826/074105.289561:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+  "[65134:1403157:0826/074105.289622:VERBOSE1:chrome/updater/app/app_wakeall.cc:64] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` process invalid: Undefined error: 0 (0)",
+  "[65134:1403157:0826/074105.289631:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+  "[65138:1403162:0826/074105.294150:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+  "[65138:1403162:0826/074105.294445:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 25929, parent pid: 65134",
+  "[65138:1403162:0826/074105.295463:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 101351460864B (94.391GiB) / 994662584320B (926.352GiB)",
+  "[65138:1403162:0826/074105.295472:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 101351460864B (94.391GiB) / 994662584320B (926.352GiB)",
+  "[65138:1403162:0826/074105.295507:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+  "[65140:1403166:0826/074105.300209:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+  "[65140:1403166:0826/074105.300493:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 25929, parent pid: 1",
+  "[65140:1403166:0826/074105.301459:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 101351460864B (94.391GiB) / 994662584320B (926.352GiB)",
+  "[65140:1403166:0826/074105.301468:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 101351460864B (94.391GiB) / 994662584320B (926.352GiB)",
+  "[65140:1403166:0826/074105.301512:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+  "[65138:1403162:0826/074105.301766:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+  "[65138:1403162:0826/074105.302163:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+  "[65138:1403162:0826/074105.302215:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+  "[65138:1403162:0826/074105.302266:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+  "[65138:1403162:0826/074105.302277:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+  "[65138:1403162:0826/074105.302310:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+  "[65138:1403162:0826/074105.302317:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+  "[65138:1403162:0826/074105.302327:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+  "[65138:1403162:0826/074105.302422:VERBOSE1:chrome/updater/ipc/update_service_internal_proxy_mojo.cc:61] Run"
+ ],
+ "summary": {
+  "passed": 4,
+  "total": 10
+ }
+}

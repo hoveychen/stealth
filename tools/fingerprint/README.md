@@ -26179,3 +26179,100 @@ The one new number worth keeping: **the worker realm is 36 global names short**
 this is a much larger hole in a realm the collector is known to walk, and it is
 independent of r3's length.
 
+
+## A wedged engine hangs up, it does not answer late (2026-09-07)
+
+`timeout: Runtime.enable` at 55s on ak-kohls read like a slow answer for
+months. It is not one. The full engine log over one of those navigations holds
+exactly **one** `watchdog stall stalled_ms=30339`, then 195
+`ExecutionTerminated` inside the same millisecond, and then this:
+
+```
++34330ms cdp closing connection reason="pending terminate"
+```
+
+`Watchdog.zig` hands a 30-second tick to `env.requestTerminate()`, and
+`CDP.tick` answers a pending terminate by sending `CLOSE_GOING_AWAY` and
+returning false. So **one page over the watchdog budget ends the whole CDP
+connection**, and every station or detector still on the list comes back as a
+timeout that has nothing to do with it. That is the entire "one crash and its
+tail" shape in the archived sweeps: 5 of 29 stations and 7 of 12 detectors could
+not be measured, and none of those rows were about their own pages.
+
+Both sweeps now ping the engine (`Target.getTargets`, on a 5s deadline of its
+own -- `Cdp.send`'s 30s is longer than the stall being asked about) whenever a
+row errored, rebuild the session when it does not answer, and mark the row
+`engineRestarted` / print `ENGINE-RESTARTED`. A run that restarted mid-sweep is
+not the same reading as one that did not. **28/29 stations and 10/12 detectors**
+now come back with full readings, and the tail is gone.
+
+Two rigs came out of it, both offline and both durable:
+
+* `wedge-probe.mjs` -- navigate, then ping once a second and attach macOS
+  `sample` the first time a ping misses. `--read` fires the reading the detector
+  sweep makes (`extractReach`) after a settle, `--runtime-enable` adds the one
+  domain the sweep enables and this probe did not, `--quiet` drops the engine's
+  log, and `--log-file` is the only way to get the full log on disk (one station
+  run can produce 70MB and `results/` is tracked).
+* `flex-cost.mjs` -- k children per level, `depth` levels, one
+  `getBoundingClientRect`, three arms over an identical tree: `flex`,
+  `flex-nogrow` (`flex-grow: 0`, which returns from `flexItemWidth` before its
+  sibling walk) and `block`.
+
+### What the 30 seconds was: flex, and a 9.5x that still does not open kohls
+
+The sample of a wedged engine is `Document.elementFromPoint ->
+boundingClientRectValuesAt -> contentHeight -> dimensionsIn`, with **27 nested
+`dimensionsIn` frames** alternating with `flexItemWidth` and `containingWidth`.
+`flexItemWidth`'s own self time is ~0: the cost is what it asks for. It
+recomputed the container's content width and the sum over every item on the line
+for each item, and measuring a container measures its items, each of which asks
+for the container again one level down -- nothing but
+`MAX_CONTAINING_BLOCK_DEPTH` ended that.
+
+`Frame._flex_lines` now solves a line once per container, dropped when
+`Page.dom_version` moves. Two other scopes were tried and measured first, and
+both are recorded in the code because they look right:
+
+* keyed on `(container, depth)` -- misses on every round of the very
+  alternation it is meant to cut, since the depth is what differs between them.
+  20% slower for the bookkeeping.
+* scoped to one top-level measurement, which needs no invalidation rule at all
+  -- instrumented at `hits=0 misses=8 measured=37`. Inside one measurement each
+  container is asked exactly once. The waste is the same measurement repeated:
+  about **five thousand** top-level `dimensionsIn` entries for one
+  `getBoundingClientRect` on a 1094-node flex tree.
+
+Clean A/B, a dedicated baseline worktree at the same commit, arms alternated
+twice, 3281 nodes, one rect read:
+
+| arm | flex | flex-nogrow | block (control) |
+|---|---|---|---|
+| baseline | 1710 / 1694ms | 549 / 505ms | 102 / 103ms |
+| fixed | 175 / 183ms | 145 / 153ms | 101 / 95ms |
+| | **9.5x** | **3.5x** | 1.03x |
+
+Flex goes from 16.7x block to 1.8x, every width and height byte-identical.
+
+**It does not open ak-kohls.** Alternated three pairs on clean builds, baseline
+stalls 3/3 and fixed 2/3 -- n=3, so "no visible improvement", not "fixed". The
+readings came back because of the harness restart, not the layout win.
+
+⚠️ Both of those A/Bs had to be redone: the first set was taken with the
+temporary hit/miss counters still in `zig-out/bin`. The source had them removed
+and `make test` builds its own binary, so nothing pointed at it. That instrument
+logs a line per top-level measurement, ~5000 per read, and it is what a "busy
+thread at 100% in `writev`" sample was actually showing. **Rebuild before
+measuring, and check the engine log for your own instrument's output.**
+
+### The last two detectors are a SIGSEGV, not slowness
+
+With `Runtime.enable` on, `iphey` and `deviceinfo` crash the engine. 4/4 across
+both arms, so it predates the flex work, and `deviceinfo`'s read even returns
+`nodes=266` first. The sweep reports it as `timeout: Runtime.evaluate` because
+by then the process is gone. One command:
+
+```
+node tools/fingerprint/wedge-probe.mjs https://iphey.com/ \
+     --seconds 40 --read --settle 8000 --runtime-enable
+```

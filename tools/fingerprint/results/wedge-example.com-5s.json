@@ -1,0 +1,40 @@
+{
+  "url": "https://example.com/",
+  "bin": "/Users/hoveychen/workspace/stealth/zig-out/bin/lightpanda",
+  "seconds": 5,
+  "pingTimeout": 5000,
+  "rows": [
+    {
+      "note": "version 1.0.0-dev.2088+094619209"
+    },
+    {
+      "note": "navigate returned at +93ms"
+    },
+    {
+      "at": 93,
+      "ms": 5,
+      "ok": true
+    },
+    {
+      "at": 1100,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 2101,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 3102,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "at": 4104,
+      "ms": 0,
+      "ok": true
+    }
+  ],
+  "sampled": null
+}

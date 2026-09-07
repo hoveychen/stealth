@@ -1,0 +1,94 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T14:33:27.716Z",
+  "egress": {
+    "fl": "466f171",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787754807.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1405+4c6bba162",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:13695/"
+  },
+  "stations": [
+    {
+      "name": "dd-g2",
+      "vendor": "datadome",
+      "url": "https://www.g2.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.g2.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAYQbdHioA3CAAbNOzfA%3D%3D&hash=229542D5C186C7F5A5BB092FBDD92B&cid=JE5Ff1HLgGNL_MWJqyzJAqtts6rWh8KzhrDwqs8W6jUDpiMjNJGcPUtqUwEZvUuIEqy42KSOZrYKgHaMMRDVRjK12hTcw~S2mwIoZf40_stGBy0MxvbLkN0Pc7qfXlzn&t=fe&referer=https%3A%2F%2Fwww.g2.com%2F&s=48621&e=7e6537e8baddfdfe74a48c0f96f34bafb1df1c3a39c24bbd65ed448daa8de5318d8542b6f5da65af62ee4d82776e7b8f&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "g2.com",
+      "landedOn": "https://www.g2.com/",
+      "nodes": 11,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25105
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "$time=1787754807898 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:13695"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

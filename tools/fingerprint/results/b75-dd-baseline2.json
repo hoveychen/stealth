@@ -1,0 +1,471 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T02:57:36.721Z",
+  "egress": {
+    "fl": "1232f14",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787713056.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.1292+2c2013400",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9437/"
+  },
+  "stations": [
+    {
+      "name": "dd-datadome",
+      "vendor": "datadome",
+      "url": "https://datadome.co/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://datadome.co/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://api.vector.co/pixel/phoenix/sync-container?duid=0cda9d36aca2--01m0y00z3w3dagymr1tbeeq2zc&ds=did-006l&euns=1&s=&version=v3.17.0&cd=.datadome.co&pv=c9cdcece-7656-4f32-bf4a-20f6aa9e942e",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "DataDome | Bot Management & Agent Trust Platform",
+      "landedOn": "https://datadome.co/",
+      "nodes": 2044,
+      "textLength": 6039,
+      "snippet": "DataDome named a Leader in The Forrester Wave™: Bot and Agent Trust Management Software, Q2 2026 Get the report Skip to main content Skip to navigation Skip to footer Trust every Trust every Trust eve",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 27133
+    },
+    {
+      "name": "dd-g2",
+      "vendor": "datadome",
+      "url": "https://www.g2.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.g2.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAWypDBsMh-yoAbNOzfA%3D%3D&hash=229542D5C186C7F5A5BB092FBDD92B&cid=ZR4Gu5rAiTEEXJyhp_nXJEVYaEOj94PTPbpOJBffICLE~kkDOvdmXJvUjdg3C0473vOQ6k8f~e_EjAkoQQrn1Vg7B9OsNNQkJYP7XWa1qWMBzHsUFkKx6N2kS4EZH89i&t=fe&referer=https%3A%2F%2Fwww.g2.com%2F&s=48621&e=6314b7facbf2ba7c4980d9f392516649c74e16dad351d521c83420814f540117cf670f3d0d9a2b0176371446e1e494e5&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "g2.com",
+      "landedOn": "https://www.g2.com/",
+      "nodes": 11,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25955
+    },
+    {
+      "name": "dd-leboncoin",
+      "vendor": "datadome",
+      "url": "https://www.leboncoin.fr/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.leboncoin.fr/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://auth.leboncoin.fr/api/authorizer/v2/authorize?client_id=lbc-front-web&redirect_uri=https%3A%2F%2Fwww.leboncoin.fr%2Foauth2callback&response_type=code&state=735a3063-2398-414f-964b-1594e87c2947&prompt=none&force_redirect=true&scope=*+offline",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAbpPpGsty1tsAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=YRkLsHyeo37Tb2ZWozD1S0c_ZAT3PAyesDaMY~Iklw5rfpYy1NtHUiKJPnBEhfhoMJHt01XZh3rochZ079c~KET0vaBVIpA_vZ_N3gy5uy8I6bUdNPt2gmMId_Ia1Llm&t=bv&referer=https%3A%2F%2Fauth.leboncoin.fr%2Fapi%2Fauthorizer%2Fv2%2Fauthorize%3Fclient_id%3Dlbc-front-web%26redirect_uri%3Dhttps%253A%252F%252Fwww.leboncoin.fr%252Foauth2callback%26response_type%3Dcode%26state%3D735a3063-2398-414f-964b-1594e87c2947%26prompt%3Dnone%26force_redirect%3Dtrue%26scope%3D*%2Boffline&s=18203&e=94c52f1b385af1f999171b3433fedd1a3a89d48900df7d600bfee6cf4aaab5f97dc46b27825c606c1c4a7476e9997fa7&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://auth.leboncoin.fr/api/authorizer/v2/authorize?client_id=lbc-front-web&redirect_uri=https%3A%2F%2Fwww.leboncoin.fr%2Foauth2callback&response_type=code&state=0e13c52e-0c1b-49e1-8296-e49cf753ecd9&prompt=none&force_redirect=true&scope=*+offline",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAbpPpGsty1tsAbNOzfA==&cid=W_gS5IWnQ04vYP6L3PMkZeYlCKOs2cLJIjuKu8GF17fEbKOdXlnXvKKZo5qQDUpFNS~8opxALm6UPH2MwQz6KDV9mh7cp5C6yVw5vS1SlOAIQdC92Qw94Zn0YoFCTeKc&referer=https%3A%2F%2Fapi.leboncoin.fr%2Fapi%2Fdelivery-configurator-api%2Fv1%2Fconfigs&hash=05B30BD9055986BD2EE8F5A199D973&t=fe&s=285&e=4e3af0f33e089ce10ab756d6d78525e0ac94a87e006dc024cc856aaae4169ac26017935da59c379b2b1a377a3a31930e&b=32395&dm=jd",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAbpPpGsty1tsAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=tl9Iq00HxMlZDMXmSerOlvH_PLhojixKrzx47eJy3TUW8klcJPRdCM94TW3Q97AfhpF1IRhz6_kQN__DAhFvWme1xr0oyvMOqnbvtH_3iM72ZSb25Q4iPPz~v6dIoI0P&t=fe&referer=https%3A%2F%2Fauth.leboncoin.fr%2Fapi%2Fauthorizer%2Fv2%2Fauthorize%3Fclient_id%3Dlbc-front-web%26redirect_uri%3Dhttps%253A%252F%252Fwww.leboncoin.fr%252Foauth2callback%26response_type%3Dcode%26state%3D0e13c52e-0c1b-49e1-8296-e49cf753ecd9%26prompt%3Dnone%26force_redirect%3Dtrue%26scope%3D*%2Boffline&s=18203&e=8d60bc24e9b4e756ea536b313c22a3a7c9fc008ab9a18be27b3ddb2f14d1f398401541fac16ea9ce5116a43f89052eda&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "leboncoin, site de petites annonces gratuites",
+      "landedOn": "https://www.leboncoin.fr/",
+      "nodes": 1488,
+      "textLength": 5826,
+      "snippet": "aller au contenu aller au pied de page Renforcer les contrastes Déposer une annonce Mes recherches Favoris Messages Se connecter Immobilier Véhicules Matériel pro Emploi Mode Maison & Jardin Famille É",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26140
+    },
+    {
+      "name": "dd-hermes",
+      "vendor": "datadome",
+      "url": "https://www.hermes.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hermes.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMApKbTE_uqCKkAbNOzfA%3D%3D&hash=2211F522B61E269B869FA6EAFFB5E1&cid=eTgPaA~t128eHFlyVRrExna2XLMsHlTE1RkYnd~k4frktndGoU~oM57tOA2ZLHKYbddy6HphKghF7sXxQbdVkMTYRwnEiKmOQ299ydjQJc0g_W~mFNcR0NBPhTvyQqIH&t=fe&referer=https%3A%2F%2Fwww.hermes.com%2F&s=13461&e=551fa1b4b2470a869752eced73ef4a4ba5060c4b0ab89d729155a64b86e90dcda5dd9f774295c634f6d44fe75712d9c0&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "hermes.com",
+      "landedOn": "https://www.hermes.com/",
+      "nodes": 10,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26098
+    },
+    {
+      "name": "dd-etsy",
+      "vendor": "datadome",
+      "url": "https://www.etsy.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.etsy.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAVpVWJi0Z8GAAbNOzfA%3D%3D&hash=D013AA612AB2224D03B2318D0F5B19&cid=VLA5KGe53xdGngmoxnXzAd_yBHFGy7qKLNATMoGCmND77PS~~WE~_fCsQooA5LIGSBrLEczE6OFGgUz4CT7q9V16Qr5H8Rf8EBFkKkv8RQiJgEXBdABgLnGw3L03RBpu&t=fe&referer=https%3A%2F%2Fwww.etsy.com%2F&s=45225&e=c3feeff8a7cefa0dab6d2d2cb06ec32531e6acf599429d3433b2cc4532c6366fa82a37d57ef2769cc4e539dea7edafd8&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "etsy.com",
+      "landedOn": "https://www.etsy.com/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25899
+    },
+    {
+      "name": "dd-seloger",
+      "vendor": "datadome",
+      "url": "https://www.seloger.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.seloger.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAjnJ644hkFhoAbNOzfA%3D%3D&hash=8C7191D8AA1BF5FBB1B84DC7268196&cid=NXAjjf8pAuXhh580aaRtPZkB8kGgb8DEAcZPXHg7XmCx2dZPDMzoW4Pi541ENLj4maT48Dj6mzP5wCCXh_D_FbK_xTyyYG3N2n4jxKMrU7CMYRGLUAmPFhsrDccWoee6&t=fe&referer=https%3A%2F%2Fwww.seloger.com%2F&s=55733&e=a9e0890c302565b772a7ff0349f05e13b3f909ca51ff80571bb1e7fe8b189c2c0d331a4cf1c55f4b0dc09080f328bbbd&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "seloger.com",
+      "landedOn": "https://www.seloger.com/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25968
+    },
+    {
+      "name": "dd-saks",
+      "vendor": "datadome",
+      "url": "https://www.saksfifthavenue.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.saksfifthavenue.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAoeFTdqzo1yQAbNOzfA%3D%3D&hash=52544002C090C19595D1C53AF37241&cid=pQk7uit36ve7MgzcrU2EFvXKHV6zf1DGStlbKux31IfawQ9G3yTuHDvUHSU3Vj30xiQO_y1xBsDuUy~53RArE_QlMGiy_AEhhI8NF51nBgf40Dt4yYY~06Zd_3kpj5Ha&t=fe&referer=https%3A%2F%2Fwww.saksfifthavenue.com%2F&s=46570&e=3a438eaa69595c1dc506bc8b69aac90f7d007dae7e6408d8e3ebdb8119e15b574d21895ea052bbe7e84897cefc087a89&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "saksfifthavenue.com",
+      "landedOn": "https://www.saksfifthavenue.com/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26012
+    },
+    {
+      "name": "dd-allopneus",
+      "vendor": "datadome",
+      "url": "https://www.allopneus.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.allopneus.com/",
+          "status": 403,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-blocked",
+      "first": 403,
+      "last": 403,
+      "jsDetect": false,
+      "title": "Attention Required! | Cloudflare",
+      "landedOn": "https://www.allopneus.com/",
+      "nodes": 45,
+      "textLength": 691,
+      "snippet": "Sorry, you have been blocked You are unable to access allopneus.com Why have I been blocked? This website is using a security service to protect itself from online attacks. The action you just perform",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": true,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": true,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 25909
+    }
+  ],
+  "fresh": true,
+  "engineLog": [
+    "$time=1787713057029 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9437",
+    "$time=1787713058385 $scope=frame $level=warn $msg=\"cookie parse failed\" raw=\"__cf_bm=A9hZnDRC6MTYvMalAYgB3MeEqYuCX9AG5ac7VzaWcLs-1787713057.5031238-1.0.1.1-vzIGPlddQGDNy_bTxo5pemamkhv6B8uS967m6UEfXAyWfWkuoxrItziM05u2IS8og22CoE2j5hYw.WHthJznmOek3LS6YG4z729H_y2lMmhf.mHdWYZd0fU.LPbU26ww; HttpOnly; SameSite=None; Secure; Path=/; Domain=kinsta.cloud; Expires=Wed, 26 Aug 2026 03:27:38 GMT\" err=InvalidDomain",
+    "$time=1787713059407 $scope=js $level=warn $msg=\"RAF\" name=window.requestAnimationFrame err=TryCatchRethrow",
+    "$time=1787713059408 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught TypeError: Cannot read properties of undefined (reading 'cloneNode')\" filename= line_number=0 column_number=0",
+    "$time=1787713059627 $scope=js $level=warn $msg=\"eval script\" url=https://cdn.cookielaw.org/scripttemplates/202601.1.0/otBannerSdk.js caught.exception=\"Cannot read properties of undefined (reading 'TenantFeatures')\" caught.stack=\"TypeError: Cannot read properties of undefined (reading 'TenantFeatures')\\n    at https://cdn.cookielaw.org/scripttemplates/202601.1.0/otBannerSdk.js:7:525921\\n    at https://cdn.cookielaw.org/scripttemplates/202601.1.0/otBannerSdk.js:7:535477\" caught.line=7 caught.caught=true",
+    "$time=1787713059627 $scope=js $level=warn $msg=\"window.reportError\" message=\"Uncaught TypeError: Cannot read properties of undefined (reading 'TenantFeatures')\" filename= line_number=0 column_number=0",
+    "$time=1787713060181 $scope=frame $level=warn $msg=\"cookie parse failed\" raw= err=Empty",
+    "$time=1787713060181 $scope=frame $level=warn $msg=\"cookie parse failed\" raw= err=Empty",
+    "$time=1787713060741 $scope=http $level=error $msg=\"delivery callback\" err=Abort req=GET https://a.usbrowserspeed.com/cs?pid=b910e4cfe0d26c8f65884d90d71e4eb6628b4c8f3747dbae6c22ea24efcb8d5e&puid=758f7df8-2ae5-4d85-b361-115e72137dc7|d0050f55-3f6c-4dcf-a02f-e74e4e12570e",
+    "$time=1787713060741 $scope=http $level=warn $msg=\"script fetch error\" err=Abort req=https://a.usbrowserspeed.com/cs?pid=b910e4cfe0d26c8f65884d90d71e4eb6628b4c8f3747dbae6c22ea24efcb8d5e&puid=758f7df8-2ae5-4d85-b361-115e72137dc7|d0050f55-3f6c-4dcf-a02f-e74e4e12570e extra=frame status=204",
+    "$time=1787713060847 $scope=frame $level=warn $msg=\"cookie parse failed\" raw=\"lidid=db26d42e-a1b3-4724-83b7-f0cdc1c654b2; Max-Age=63072000; Expires=Fri, 25 Aug 2028 02:57:40 GMT; Path=/; Domain=liadm.com\" err=InvalidDomain",
+    "$time=1787713061280 $scope=frame $level=warn $msg=\"cookie parse failed\" raw=\"lidid=f2f644f4-d034-4b73-a62b-75cb5fa2282b; Domain=.liadm.com; Path=/; Max-Age=63072000; Secure; SameSite=None\" err=InvalidDomain",
+    "$time=1787713061920 $scope=frame $level=warn $msg=\"cookie parse failed\" raw=\"lidid=b847eb80-99db-4f0a-a697-b2df08fd326b; Max-Age=63072000; Expires=Fri, 25 Aug 2028 02:57:41 GMT; Path=/; Domain=liadm.com\" err=InvalidDomain",
+    "$time=1787713084105 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9437",
+    "$time=1787713110059 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9437",
+    "$time=1787713136199 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9437",
+    "$time=1787713162302 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9437",
+    "$time=1787713188197 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9437",
+    "$time=1787713214167 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9437",
+    "$time=1787713240177 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9437"
+  ],
+  "summary": {
+    "stations": 8,
+    "pass": 2
+  }
+}

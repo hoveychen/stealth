@@ -1,0 +1,626 @@
+{
+ "engine": "chrome",
+ "headed": true,
+ "endpoint": null,
+ "proxy": null,
+ "windowSize": "1920,1080",
+ "chromeArgs": [],
+ "userAgentOverride": null,
+ "startedAt": "2026-08-26T14:36:07.756Z",
+ "egress": {
+  "fl": "4f907",
+  "h": "www.cloudflare.com",
+  "ip": "108.211.179.124",
+  "ts": "1787754967.000",
+  "visit_scheme": "https",
+  "uag": "node",
+  "colo": "SJC",
+  "sliver": "none",
+  "http": "http/2",
+  "loc": "US",
+  "tls": "TLSv1.3",
+  "sni": "plaintext",
+  "warp": "off",
+  "gateway": "off",
+  "rbi": "off",
+  "kex": "X25519MLKEM768"
+ },
+ "version": {
+  "Browser": "Chrome/151.0.7922.174",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+  "V8-Version": "15.1.206.23",
+  "WebKit-Version": "537.36 (@39c51c70dd5feca6b6aba5bb7997b595011c553d)",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:13583/devtools/browser/02a2d070-6ffc-4baa-a7fb-86d892fe1bc8"
+ },
+ "stations": [
+  {
+   "name": "cf-scrapingcourse",
+   "vendor": "cloudflare",
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/707a9/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "pass",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "Cloudflare Challenge - ScrapingCourse.com",
+   "landedOn": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "nodes": 34,
+   "textLength": 78,
+   "snippet": "Scraping Course Cloudflare Challenge You bypassed the Cloudflare challenge! :D",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": true,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26191
+  },
+  {
+   "name": "cf-nopecha",
+   "vendor": "cloudflare",
+   "url": "https://nopecha.com/demo/cloudflare",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://nopecha.com/demo/cloudflare",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/7bjrh/0x4AAAAAAAAjq6WYeRDKmebM/light/fbE/new/normal?lang=auto",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "cf-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": true,
+   "title": "Just a moment...",
+   "landedOn": "https://nopecha.com/demo/cloudflare",
+   "nodes": 47,
+   "textLength": 259,
+   "snippet": "nopecha.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a31391",
+   "marks": {
+    "chlOpt": true,
+    "platformScript": true,
+    "challengeDom": false,
+    "justAMoment": true,
+    "blocked": false,
+    "turnstileWidget": true,
+    "rayId": "a31391d35aa122a2",
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26186
+  },
+  {
+   "name": "cf-zeroclover",
+   "vendor": "cloudflare",
+   "url": "https://turnstile.zeroclover.io/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://turnstile.zeroclover.io/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/w7ldo/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://turnstile.zeroclover.io/",
+     "status": 502,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "cf-blocked",
+   "first": 403,
+   "last": 502,
+   "jsDetect": false,
+   "title": "zeroclover.io | 502: Bad gateway",
+   "landedOn": "https://turnstile.zeroclover.io/",
+   "nodes": 66,
+   "textLength": 392,
+   "snippet": "Bad gateway Error code 502 Visit cloudflare.com for more information. 2026-08-26 14:37:05 UTC You Browser Working San Jose Cloudflare Working turnstile.zeroclover.io Host Error What happened? The web ",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": true,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25313
+  },
+  {
+   "name": "dd-allopneus",
+   "vendor": "datadome",
+   "url": "https://www.allopneus.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.allopneus.com/",
+     "status": 403,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "cf-blocked",
+   "first": 403,
+   "last": 403,
+   "jsDetect": false,
+   "title": "Attention Required! | Cloudflare",
+   "landedOn": "https://www.allopneus.com/",
+   "nodes": 45,
+   "textLength": 690,
+   "snippet": "Sorry, you have been blocked You are unable to access allopneus.com Why have I been blocked? This website is using a security service to protect itself from online attacks. The action you just perform",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": true,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": true,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25295
+  },
+  {
+   "name": "dd-g2",
+   "vendor": "datadome",
+   "url": "https://www.g2.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.g2.com/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAN9mlRpLdOlEAbNOzfA%3D%3D&hash=229542D5C186C7F5A5BB092FBDD92B&cid=Xv6Oq5700qXwcS2CV1KTakoMPG_Tn00MeL9cDYpQU8WOTdUVlioy4T3iiyIDg4oMpMS9m7cY1fQNWJqbP8QgbrtxdSrIyElWzTikgTQ1rlgbVAxKuJ~ixXyKu1fNfhk6&t=fe&referer=https%3A%2F%2Fwww.g2.com%2F&s=48621&e=fe786c98007661aa31f6d710235a9f338e06e9720485c4f4f1df7348632b8c7dde3518c6e2a151cff9c9978c2e09a317&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "datadome-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "g2.com",
+   "landedOn": "https://www.g2.com/",
+   "nodes": 11,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": true,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26479
+  },
+  {
+   "name": "dd-saks",
+   "vendor": "datadome",
+   "url": "https://www.saksfifthavenue.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.saksfifthavenue.com/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/interstitial/?initialCid=AHrlqAAAAAMAqFCDqmQhJz0AbNOzfA%3D%3D&hash=52544002C090C19595D1C53AF37241&cid=Ykti2kWAJmjnGM9qzvJUXjrim0Z_EF4jZ2vbbhAo3EA2dm8XAu5ys1gN~rc3YZ~fdpD8MB_0WfWN9zcMVN8ov8oyWfKqR2rMJnXKP1MTIgriECC5gqdOsVQR3VkSzKAM&referer=https%3A%2F%2Fwww.saksfifthavenue.com%2F&s=46570&e=b953cc78469fe4a96e0db359ad8c8b7ad058c6cc0ba8fe46639c54d419df1e4c3766cde273a301e501c514b1878e1029&b=1421558&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://www.saksfifthavenue.com/",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://saks.my.site.com/ESWAgentforceDeployment1726508790043/assets/htdocs/filepreview.min.html?parent_domain=https%3A%2F%2Fwww.saksfifthavenue.com",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://saks.my.site.com/ESWAgentforceDeployment1726508790043/?lwc.mode=prod",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://widgets.stores.saksfifthavenue.com/cookies/manager?sf_locale=undefined",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://gum.criteo.com/syncframe?topUrl=www.saksfifthavenue.com&origin=onetag",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://hudsonbaycompany.demdex.net/dest5.html?d_nsid=0",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://8270149.fls.doubleclick.net/activityi;dc_pre=CMWp7OHCvpYDFWXmKAUdv7YmxQ;src=8270149;type=landi0;cat=saks-0;rcb=2;ord=6731998736717182;num=4873039487356;npa=0;auiddc=998047347.1787755109;u10=guest;u11=home%20page;u12=saks.com%3Ahome%20page%3Awomen;gdid=dYmQxMT;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.174%7CChromium%3B151.0.7922.174;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=IJA;gtm=45fe68o1h1v9135075918za200zb873406640zd873406640xec;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115938465~115938468~118897920~118897930~119259606~119367802~119367810~120213116~120385423~120476659;epver=2;match_id=6731998736717182;dc_random=1787755109_ZR-wl-UntkCIqCCo569IR-U0lxVJzPEirA;_dc_test=1;~oref=https%3A%2F%2Fwww.saksfifthavenue.com%2F?",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "pass",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "Saks Fifth Avenue | Designer Clothing, Shoes, Handbags & More",
+   "landedOn": "https://www.saksfifthavenue.com/",
+   "nodes": 4810,
+   "textLength": 6769,
+   "snippet": "Skip to main content Skip to footer content Previous Earn Rewards With a Saks Credit Card | Get Pre‑Qualified Extra 25% Off Designer Sale | Up to 70% Off Select Styles | SHOP NOW FREE SHIPPING on $150",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 25537
+  },
+  {
+   "name": "dd-datadome",
+   "vendor": "datadome",
+   "url": "https://datadome.co/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://datadome.co/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAXuv7a24NsKoAbNOzfA%3D%3D&hash=14D062F60A4BDE8CE8647DFC720349&cid=J37~nyAySgCyVgWijiabFJ7CymOTYaJVAlke4u3bT1Tr2RI0V0I46YkOMpSqnbltmStW_yDWYfk7Lce2lIK2KfHLje6DfqPWq_4NmWzjzUDoEGfqYZCV07KHcMFTOasc&t=fe&referer=https%3A%2F%2Fdatadome.co%2F&s=44330&e=8ecb42b5993fcf312f0825299cb5c82b17009417e26a070d19b4c82cf21f26e7b6a4e91c3fc47addf39fc5a9240e881d&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "datadome-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "datadome.co",
+   "landedOn": "https://datadome.co/",
+   "nodes": 9,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": true,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26227
+  },
+  {
+   "name": "dd-hermes",
+   "vendor": "datadome",
+   "url": "https://www.hermes.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.hermes.com/",
+     "status": 403,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAJ55XmIpsnaYAbNOzfA%3D%3D&hash=2211F522B61E269B869FA6EAFFB5E1&cid=u2XCvjhGugW0NvNgCs8k1Kx1XzDe2vF3vke5Z_oKOwwDdFkCAvUjLKq0zshJDSb52Q7mY5K89kgz6Hq5yaSvNx0ZV07h8RTgBhVmm~ZKRh3xElz6och6eKAsCXfGQRvL&t=fe&referer=https%3A%2F%2Fwww.hermes.com%2F&s=13461&e=7d53fa52be5699bcfa608af7d67237ed79d8b6628dad114d4e6ea1078709d6939d16ef27d7b113123f9d22a584b23027&dm=cd",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "datadome-challenge",
+   "first": 403,
+   "last": 200,
+   "jsDetect": false,
+   "title": "hermes.com",
+   "landedOn": "https://www.hermes.com/",
+   "nodes": 10,
+   "textLength": 0,
+   "snippet": "",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": true,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26810
+  },
+  {
+   "name": "x-hyatt",
+   "vendor": "unattributed",
+   "url": "https://www.hyatt.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.hyatt.com/",
+     "status": 429,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://www.hyatt.com/loyalty/en-US",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "pass",
+   "first": 429,
+   "last": 200,
+   "jsDetect": false,
+   "title": "Hotel Reservations | Book Hotel Rooms Online - Hyatt Hotels and Resorts",
+   "landedOn": "https://www.hyatt.com/loyalty/en-US",
+   "nodes": 879,
+   "textLength": 3902,
+   "snippet": "SKIP MAIN NAVIGATION Sign In or Join Explore Offers Meetings & Events Loyalty Program Our Credit Cards Hotel Reservations | Book Hotel Rooms Online - Hyatt Hotels & Resorts Try \"Historic hotels in Spa",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": false,
+    "script": false
+   },
+   "ms": 26698
+  },
+  {
+   "name": "ks-canadagoose",
+   "vendor": "kasada",
+   "url": "https://www.canadagoose.com/",
+   "guards": "challenge",
+   "settleMs": 25000,
+   "documents": [
+    {
+     "url": "https://www.canadagoose.com/",
+     "status": 429,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://www.canadagoose.com/us/en/home-page",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://googletags.canadagoose.com/ns.html?id=GTM-K9SGVB",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://googletags.canadagoose.com/ns.html?id=GTM-TT95XKNB",
+     "status": 400,
+     "mime": "text/plain"
+    },
+    {
+     "url": "https://www.canadagoose.com/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/fp?x-kpsdk-v=j-1.2.726",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://canadagoose.my.site.com/ESWMIWNAEN1749637797148/assets/htdocs/sitecontext.min.html?parent_domain=https%3A%2F%2Fwww.canadagoose.com",
+     "status": 200,
+     "mime": "text/html"
+    },
+    {
+     "url": "https://scripts.agilone.com/v3.0.9/a1_webtag.html?version=3.0.9&namespace=$A1",
+     "status": 200,
+     "mime": "text/html"
+    }
+   ],
+   "verdict": "pass",
+   "first": 429,
+   "last": 200,
+   "jsDetect": false,
+   "title": "Luxury Performance Outerwear & Clothing | Canada Goose",
+   "landedOn": "https://www.canadagoose.com/us/en/home-page",
+   "nodes": 1863,
+   "textLength": 1791,
+   "snippet": "Enable accessibility Skip to Content Find a Store Decode an Ancient Oasis in the Outback. Discover Our Latest Local Expedition SHOP SNOW GOOSE STORIES ICONS Search WORN-IN CONFIDENCE Women's Fall/Wint",
+   "marks": {
+    "chlOpt": false,
+    "platformScript": false,
+    "challengeDom": false,
+    "justAMoment": false,
+    "blocked": false,
+    "turnstileWidget": false,
+    "rayId": null,
+    "captchaDelivery": false,
+    "blockText": false,
+    "pressAndHold": false,
+    "deniedTitle": false,
+    "refId": false,
+    "captchaDom": false,
+    "appId": false,
+    "accessDenied": false,
+    "reference": false,
+    "sdk": true,
+    "script": true
+   },
+   "ms": 26969
+  }
+ ],
+ "fresh": false,
+ "engineLog": [
+  "DevTools listening on ws://127.0.0.1:13583/devtools/browser/02a2d070-6ffc-4baa-a7fb-86d892fe1bc8",
+  "Trying to load the allocator multiple times. This is *not* supported.",
+  "[63637:1382328:0826/073608.238296:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+  "[63637:1382328:0826/073608.238586:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+  "[63644:1382443:0826/073608.571574:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+  "[63644:1382443:0826/073608.571722:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+  "[63644:1382443:0826/073608.571725:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+  "[63644:1382443:0826/073608.576121:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073608.576128:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073608.576131:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073608.576792:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073608.576800:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073608.576802:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073609.489812:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+  "[63644:1382443:0826/073609.489824:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+  "[63644:1382443:0826/073609.489827:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+  "[63644:1382443:0826/073609.490225:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073609.490233:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073609.490236:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073609.490241:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073609.490243:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[63644:1382443:0826/073609.490246:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+  "[63637:1382379:0826/073610.978450:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+  "[63637:1382379:0826/073610.981835:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+  "[63637:1382379:0826/073610.994212:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+  "Created TensorFlow Lite XNNPACK delegate for CPU."
+ ],
+ "summary": {
+  "passed": 4,
+  "total": 10
+ }
+}

@@ -1,0 +1,103 @@
+{
+  "engine": "chrome",
+  "headed": true,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-26T14:44:24.345Z",
+  "egress": {
+    "fl": "1232f76",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787755464.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Chrome/151.0.7922.174",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.23",
+    "WebKit-Version": "537.36 (@39c51c70dd5feca6b6aba5bb7997b595011c553d)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:13647/devtools/browser/72c35198-a382-4a85-8ccd-5ec2994f629d"
+  },
+  "stations": [
+    {
+      "name": "x-hyatt",
+      "vendor": "unattributed",
+      "url": "https://www.hyatt.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hyatt.com/",
+          "status": 429,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.hyatt.com/loyalty/en-US",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 429,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Hotel Reservations | Book Hotel Rooms Online - Hyatt Hotels and Resorts",
+      "landedOn": "https://www.hyatt.com/loyalty/en-US",
+      "nodes": 879,
+      "textLength": 3934,
+      "snippet": "SKIP MAIN NAVIGATION Sign In or Join Explore Offers Meetings & Events Loyalty Program Our Credit Cards Hotel Reservations | Book Hotel Rooms Online - Hyatt Hotels & Resorts Try \"Cancun hotels under $1",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false,
+        "sdk": false,
+        "script": false
+      },
+      "ms": 26550
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:13647/devtools/browser/72c35198-a382-4a85-8ccd-5ec2994f629d",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[66896:1418299:0826/074424.779159:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[66896:1418299:0826/074424.779404:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[66896:1418326:0826/074427.599751:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT",
+    "[66896:1418326:0826/074427.618257:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[66896:1418326:0826/074427.639677:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "Created TensorFlow Lite XNNPACK delegate for CPU.",
+    "[66896:1418326:0826/074448.430670:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}
