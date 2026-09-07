@@ -18,7 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: detector-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--window-size 1920,1080]');
+    console.error('usage: detector-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--window-size 1920,1080] [--only creep] [--settle 3000] [--port 9224]');
     process.exit(2);
 }
 const outArg = process.argv.indexOf('--out');
@@ -47,7 +47,30 @@ if (!/^\d+,\d+$/.test(windowSize)) {
 // fills its voice list too late for CreepJS to see it). --headed makes the
 // reference column a real window.
 const headed = process.argv.includes('--headed');
-const PORT = engine === 'chrome' ? 9334 : 9224;
+// One detector hanging costs every detector after it in the list: the engine
+// under test is a single process serving the whole loop, so a stall in
+// Runtime.enable or Runtime.evaluate leaves the rest of the pages reading as
+// timeouts that have nothing to do with the pages themselves (see
+// watchdog-stall-cascades-into-fake-failures). Three switches, all borrowed
+// from antibot-sweep.mjs, are what it takes to read one page on its own:
+// --only picks it, --settle says how long to leave it alone (the stalls are
+// settle-dependent), and --port keeps the run off a port a peer session's
+// engine already answers on.
+const onlyArg = process.argv.indexOf('--only');
+const only = onlyArg !== -1 ? process.argv[onlyArg + 1] : null;
+const settleArg = process.argv.indexOf('--settle');
+const settleOverride = settleArg !== -1 ? Number(process.argv[settleArg + 1]) : null;
+if (settleOverride !== null && !Number.isFinite(settleOverride)) {
+    console.error(`--settle wants milliseconds, got ${process.argv[settleArg + 1]}`);
+    process.exit(2);
+}
+const detectors = DETECTORS.filter((d) => !only || d.name.includes(only));
+if (detectors.length === 0) {
+    console.error(`--only ${only} matched no detector`);
+    process.exit(2);
+}
+const portArg = process.argv.indexOf('--port');
+const PORT = portArg !== -1 ? Number(process.argv[portArg + 1]) : (engine === 'chrome' ? 9334 : 9224);
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 // CDP_ENDPOINT drives a Chrome this script did not start -- in practice the
@@ -106,7 +129,7 @@ const keep = (d) => {
 proc?.stdout.on('data', keep);
 proc?.stderr.on('data', keep);
 
-const snapshot = { headed: ENDPOINT ? 'remote' : headed, engine, endpoint: ENDPOINT, windowSize, version: null, sites: [] };
+const snapshot = { headed: ENDPOINT ? 'remote' : headed, engine, endpoint: ENDPOINT, windowSize, only, settleOverride, version: null, sites: [] };
 
 try {
     for (let i = 0; i < 120; i++) {
@@ -148,11 +171,11 @@ try {
         width: w, height: h, deviceScaleFactor: engine === 'chrome' ? PERSONA_DEVICE_SCALE_FACTOR : 1, mobile: false,
     }, sessionId);
 
-    for (const { name, url, settleMs } of DETECTORS) {
+    for (const { name, url, settleMs } of detectors) {
         const site = { name, url };
         const started = Date.now();
         try {
-            await goto(cdp, sessionId, url, { settleMs });
+            await goto(cdp, sessionId, url, { settleMs: settleOverride ?? settleMs });
             Object.assign(site, await evaluate(cdp, sessionId, extractReach));
             site.verdictWords = (site.text.match(VERDICT_WORDS) || []).length;
             site.snippet = site.text.replace(/\s+/g, ' ').slice(0, 220);
