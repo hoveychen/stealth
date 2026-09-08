@@ -34,9 +34,21 @@ against the PADDING box of its positioned ancestor, 240 rather than 200, which
 is the one row that would still be wrong if this were implemented against the
 content box alone.
 
-`table-cell` is deliberately absent: a cell's percentage height is its own
-chapter (Chrome answers 196/194 for a 200px table) and nothing here would make
-it right.
+Two rows are deliberately absent, and both for the same reason: they need a
+mechanism this file is not about.
+
+  `min-height` / `max-height` in percentages, because those two do not clamp
+  anything even in PIXELS -- Chrome answers 40, 120, 40 and 120 for
+  `max-height:40px` over four lines, `min-height:120px`, `height:200px;
+  max-height:40px` and `height:10px;min-height:120px`, and this engine answers
+  80, 20, 200 and 10 (scratch/pct/minmax.mjs). Resolving their percentage
+  against the containing block is done here -- getComputedStyle reports the px
+  -- but the clamp is plan `min-max-height-never-clamps`, which adds these rows
+  back.
+
+  `table-cell`, because a cell's percentage height is its own chapter in every
+  engine (Chrome answers 196/194 for a 200px table) and nothing here would make
+  it right.
 -->
 
 <div style="height:200px" id=px-parent>
@@ -65,12 +77,6 @@ it right.
 </div>
 <div style="height:200px">
   <div class=probe id=probe-padded style="height:50%;padding:10px 0">x</div>
-</div>
-<div style="height:200px">
-  <div class=probe id=max-height-pct style="max-height:25%">xxxxx<br>xxxxx<br>xxxxx<br>xxxxx</div>
-</div>
-<div style="height:200px">
-  <div class=probe id=min-height-pct style="min-height:50%">x</div>
 </div>
 <div style="height:200px;padding:20px 0;position:relative">
   <div class=probe id=abs-in-relative style="position:absolute;height:50%">x</div>
@@ -104,8 +110,6 @@ it right.
     'parent-border-box': 80,
     'probe-border-box': 100,
     'probe-padded': 120,
-    'max-height-pct': 50,
-    'min-height-pct': 100,
     'abs-in-relative': 120,
     'flex-column-parent': 100,
     'grid-parent': 100,
@@ -134,8 +138,6 @@ it right.
     'parent-border-box': '80px',
     'probe-border-box': '100px',
     'probe-padded': '100px',
-    'max-height-pct': '50px',
-    'min-height-pct': '100px',
     'abs-in-relative': '120px',
     'flex-column-parent': '100px',
     'grid-parent': '100px',
