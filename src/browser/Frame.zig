@@ -274,6 +274,12 @@ _stylesheet_bodies: std.StringHashMapUnmanaged([]const u8) = .empty,
 // reason: a face belongs to the navigation whose stylesheet declared it.
 _webfonts: std.StringHashMapUnmanaged(font_metrics.Family) = .empty,
 
+// How many `@font-face` files are still on the wire. `document.fonts.ready`
+// and `.status` are answered from this: before webfonts were read at all both
+// were constants, and a page that awaited `ready` and then measured would have
+// been told the fonts had landed before they had.
+_webfonts_pending: usize = 0,
+
 _queued_events_1: std.ArrayList(QueuedEvent) = .empty,
 _queued_events_2: std.ArrayList(QueuedEvent) = .empty,
 _queued_events: *std.ArrayList(QueuedEvent) = undefined,
@@ -3673,6 +3679,11 @@ const ImageRequest = struct {
     // out of the font registry.
     font_family: ?[]const u8 = null,
 
+    // Whether this transfer is one of `Frame._webfonts_pending`. Kept as a
+    // flag rather than re-derived from `font_family`, so the decrement happens
+    // exactly once however the transfer ends.
+    counted_pending: bool = false,
+
     fn headerCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.HeaderResult {
         const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
 
@@ -3763,6 +3774,10 @@ const ImageRequest = struct {
                 };
             }
         }
+        // After the body was read, so `ready` never resolves before the
+        // metrics are registered; and unconditionally, because a 404 font
+        // stops being on the wire just as much as a good one.
+        self.fontSettled();
         const became_a_picture = self.arrived();
         const size = if (became_a_picture) self.intrinsicSize() else null;
         if (size) |s| {
@@ -3845,8 +3860,35 @@ const ImageRequest = struct {
     fn errorCallback(ctx: *anyopaque, err: anyerror) void {
         const self: *ImageRequest = @ptrCast(@alignCast(ctx));
         log.debug(.http, "image fetch failed", .{ .err = err });
+        self.fontSettled();
         self.settle(false, null);
         self.report(.@"error");
+    }
+
+    // A font that failed still stops being pending: `document.fonts.ready`
+    // resolves either way, because what it promises is that nothing is still
+    // on the wire -- not that everything arrived.
+    fn fontSettled(self: *ImageRequest) void {
+        if (!self.counted_pending) return;
+        self.counted_pending = false;
+        const frame = self.frame;
+        frame._webfonts_pending -= 1;
+        if (frame._webfonts_pending != 0) return;
+        // Scheduled, not called: resolving a promise needs a JS scope and
+        // these callbacks run inside the HTTP pump, where there is none. Same
+        // reason `queueElementEvent` schedules rather than dispatching -- done
+        // inline, `exec.js.local` is null and the promise silently never
+        // settles, which reads exactly like `ready` being broken.
+        frame.js.scheduler.add(frame, struct {
+            fn settleFonts(ctx: *anyopaque) !?u32 {
+                const f: *Frame = @ptrCast(@alignCast(ctx));
+                const fonts = f.document.getFonts(&f.js.execution) catch return null;
+                fonts.settle(&f.js.execution);
+                return null;
+            }
+        }.settleFonts, 0, .{ .name = "frame.settleFonts" }) catch |err| {
+            log.warn(.browser, "webfont ready", .{ .err = err });
+        };
     }
 
     // Queued, not dispatched: these callbacks run inside the HTTP pump, where
@@ -4147,12 +4189,23 @@ fn requestSubresource(self: *Frame, resolved: [:0]const u8, element: ?*Element.H
     request.done_callback = ImageRequest.doneCallback;
     request.error_callback = ImageRequest.errorCallback;
 
+    if (opts.resource_type == .font and opts.font_family != null) {
+        pending.counted_pending = true;
+        self._webfonts_pending += 1;
+    }
+
     self.makeRequest(request) catch |err| {
         // The request never went out, so no callback of ours will ever run --
         // including the one that closes the cache slot, which has to go now or
         // the next load for this URL would wait on a transfer that does not
         // exist.
         log.warn(.http, "image fetch", .{ .err = err, .url = resolved });
+        // No callback of ours will run, so the pending count has to come back
+        // here or `document.fonts.ready` would never resolve.
+        if (pending.counted_pending) {
+            pending.counted_pending = false;
+            self._webfonts_pending -= 1;
+        }
         _ = self._image_cache.remove(cache_key);
         if (element) |el| {
             self.queueElementEvent(el, .@"error") catch {};

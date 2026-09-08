@@ -76,3 +76,36 @@
   testing.expectEqual('arial@20=167', 'arial@20=' + el.offsetWidth);
 }
 </script>
+
+<style>
+  /* Held back 250ms, so the transfer is still in flight at the `load` event --
+     which is what lets the block below tell a `ready` that waits from one that
+     resolves straight away. */
+  @font-face { font-family: SlowProbe; src: url(/synth-font.ttf?delay=250) format('truetype') }
+  #slow { font-family: SlowProbe; font-size: 20px }
+</style>
+<span id=slow>mmmmmmmmmm</span>
+
+<script id="fonts_ready_waits_for_the_file" type=module>
+{
+  const state = await testing.async();
+  // At `load` the delayed font is still on the wire, so `status` has to say so
+  // and `ready` has to be a promise that has not settled. Both were constants
+  // before webfonts were read at all -- "loaded" and an already-resolved
+  // promise -- which would have handed a page the fallback measurement while
+  // telling it the fonts had arrived.
+  const at_load = () => {
+    const status = document.fonts.status;
+    document.fonts.ready.then(() => state.resolve(
+      'status-at-load=' + status +
+      ' status-after=' + document.fonts.status +
+      ' width-after-ready=' + document.getElementById('slow').offsetWidth,
+    ));
+  };
+  if (document.readyState === 'complete') at_load();
+  else window.addEventListener('load', at_load);
+  await state.done((seen) => {
+    testing.expectEqual('status-at-load=loading status-after=loaded width-after-ready=100', seen);
+  });
+}
+</script>

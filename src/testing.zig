@@ -1925,6 +1925,16 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
     // character exactly half the font size: 20px text is 10px per character.
     // Built by font_file.synthesize, the same function its unit tests use.
     if (std.mem.startsWith(u8, path, "/synth-font.ttf")) {
+        // `?delay=<ms>` holds the response back, which is the only way to put a
+        // font transfer reliably in flight at the `load` event -- and that is
+        // what makes the `document.fonts.ready` assertion discriminating rather
+        // than a race it happens to win.
+        if (std.mem.indexOf(u8, path, "delay=")) |at| {
+            const rest = path[at + 6 ..];
+            const end = std.mem.indexOfNone(u8, rest, "0123456789") orelse rest.len;
+            const ms = std.fmt.parseInt(u64, rest[0..end], 10) catch 0;
+            if (ms > 0 and ms <= 2000) lp.io.sleep(.fromMilliseconds(@intCast(ms)), .awake) catch {};
+        }
         var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer arena.deinit();
         const font = font_file.synthesize(arena.allocator(), 1000, 500, 800, 200) catch

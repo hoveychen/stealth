@@ -36,12 +36,19 @@
 //!     and they only feed canvas `actualBoundingBox*` -- not the width this
 //!     defect was found through. Scaled off the fallback glyph by the advance
 //!     ratio, so the ink at least stays proportional to the glyph.
-//!   * `max_char_width`. Arial declares 90.5 where the measured advances top
-//!     out at 101.51 and `hhea.advanceWidthMax` is 200, so Chrome's rule for it
-//!     was not derived; the widest ASCII advance is used instead. It feeds only
-//!     form-control intrinsic widths (Element.zig), so a webfont-styled
-//!     `<input>` stays approximate. `avg_char_width` IS exact: Arial's declared
-//!     50.0 is the advance of `x` to the digit, which is how Blink picks it.
+//!   * `max_char_width`. Chrome's exact rule for it was not derived, but it is
+//!     not a free choice either. Across the ten families that have both a
+//!     measured table here and a file on the host,
+//!     `halfPixel(OS/2.usWinAscent / unitsPerEm * 100)` is exact for three
+//!     (Arial, Georgia, Impact) and off by 0.40 on average, 2.00 at worst --
+//!     against a mean of 10.59 and a worst of 23.99 for the widest ASCII
+//!     advance, and 8.08 for `head.yMax`. `hhea.advanceWidthMax` is 2 to 5
+//!     times too big and the glyph-box width 70 too big. So the ascent-derived
+//!     estimator is used, and it stays an estimator: this field feeds only
+//!     form-control intrinsic widths (Element.zig), which is why a
+//!     webfont-styled `<input>` is approximate rather than wrong.
+//!     `avg_char_width` IS exact: Arial's declared 50.0 is the advance of `x`
+//!     to the digit, which is how Blink picks it.
 //!
 //! Nothing here rasterises. `glyf`/`loca` are never looked at, which is why
 //! WOFF2 costs so little: its only expensive part is the glyph-outline reverse
@@ -392,7 +399,6 @@ fn build(allocator: Allocator, t: Tables, fallback: font_metrics.Family) !font_m
     const per_unit = font_metrics.basis / @as(f64, @floatFromInt(upem));
 
     const glyphs = try allocator.alloc(font_metrics.Glyph, glyph_count);
-    var max_advance: f64 = 0;
     var x_advance: ?f64 = null;
     var any = false;
     for (glyphs, 0..) |*g, i| {
@@ -412,7 +418,6 @@ fn build(allocator: Allocator, t: Tables, fallback: font_metrics.Family) !font_m
         }
         any = true;
         const advance = @as(f64, @floatFromInt(units.?)) * per_unit;
-        if (advance > max_advance) max_advance = advance;
         if (cp == 'x') x_advance = advance;
         // Ink bearings are the fallback's, scaled by the advance ratio -- see
         // the header comment. They feed canvas actualBoundingBox* only.
@@ -469,7 +474,8 @@ fn build(allocator: Allocator, t: Tables, fallback: font_metrics.Family) !font_m
         // declared 50.0 is exactly its `x`. No `x` in the face leaves the
         // fallback's number.
         .avg_char_width = x_advance orelse fallback.avg_char_width,
-        .max_char_width = if (max_advance > 0) max_advance else fallback.max_char_width,
+        // See the header: the closest estimator measured, not Chrome's rule.
+        .max_char_width = @round(@as(f64, @floatFromInt(win_ascent)) * per_unit * 2) / 2,
         // A face carrying its own coverage seeds no last-resort run.
         .seeds_last_resort = &.{},
         .after_fallback = &.{},
@@ -557,9 +563,10 @@ test "font_file: a synthesized sfnt gives linear advances" {
 
     try std.testing.expectEqual(@as(f64, 50.0), built.glyphs['A' - first].advance);
     try std.testing.expectEqual(@as(f64, 50.0), built.glyphs['m' - first].advance);
-    // avgCharWidth is the `x` advance, and maxCharWidth the widest one.
+    // avgCharWidth is the `x` advance. maxCharWidth is the ascent-derived
+    // estimator, so 800/1000 of the 100px basis rather than any advance.
     try std.testing.expectEqual(@as(f64, 50.0), built.avg_char_width);
-    try std.testing.expectEqual(@as(f64, 50.0), built.max_char_width);
+    try std.testing.expectEqual(@as(f64, 80.0), built.max_char_width);
     // U+00AD is zero however wide the font draws it.
     try std.testing.expectEqual(@as(f64, 0), built.glyphs[0x00ad - first].advance);
 }
