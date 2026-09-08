@@ -57,6 +57,12 @@ _faces: std.ArrayList(*FontFace) = .empty,
 /// once during the style-resource pass.
 _sheet_version: ?usize = null,
 
+/// Resolved when the last `@font-face` file in flight has arrived. Created on
+/// the first read of `ready` while a fetch is outstanding, and null the rest of
+/// the time -- a page that asks after everything has landed gets an
+/// already-resolved promise, which is what it would get in Chrome too.
+_ready: ?js.PromiseResolver.Global = null,
+
 pub fn init(exec: *const Execution) !*FontFaceSet {
     const arena = try exec.getArena(.tiny, "FontFaceSet");
     errdefer arena.release();
@@ -173,14 +179,62 @@ fn findDeclared(self: *const FontFaceSet, family: []const u8) ?*FontFace {
     return null;
 }
 
-pub fn getStatus(_: *const FontFaceSet) []const u8 {
-    return "loaded";
+/// `loading` while a declared face's file is still on the wire, `loaded` once
+/// they have all landed.
+///
+/// This used to be the constant "loaded", on the grounds that a headless
+/// browser does not load fonts. It does now -- font_file.zig reads the metrics
+/// out of the bytes -- so a page polling `status` while its webfont is in
+/// flight would have been told the opposite of what `ready` was about to do.
+pub fn getStatus(_: *const FontFaceSet, exec: *const Execution) []const u8 {
+    return if (pending(exec) > 0) "loading" else "loaded";
 }
 
-// FontFaceSet.ready - returns an already-resolved Promise.
-// In a headless browser there is no font loading, so fonts are always ready.
-pub fn getReady(_: *FontFaceSet, exec: *const Execution) !js.Promise {
-    return exec.js.local.?.resolvePromise({});
+/// A promise for "every declared face has arrived".
+///
+/// Already resolved when nothing is in flight, which is the common case and
+/// what the old constant was right about. While a fetch is outstanding the
+/// resolver is persisted and settled by `settle` below, called from the frame
+/// when the last font transfer finishes -- so `await document.fonts.ready`
+/// followed by a measurement now sees the webfont's advances rather than the
+/// fallback's.
+pub fn getReady(self: *FontFaceSet, exec: *const Execution) !js.Promise {
+    const local = exec.js.local.?;
+    if (self._ready) |resolver| {
+        return local.toLocal(resolver).promise();
+    }
+    if (pending(exec) == 0) {
+        return local.resolvePromise({});
+    }
+    const resolver = local.createPromiseResolver();
+    self._ready = try resolver.persist();
+    return resolver.promise();
+}
+
+/// Called by the frame when the last `@font-face` transfer settles.
+///
+/// Opens its own local scope rather than reading `exec.js.local`: this runs
+/// from a scheduler task, and there `exec.js.local` is null even though the
+/// context has been entered. Resolving through the null one fails silently,
+/// which reads exactly like `ready` never having been wired up (measured --
+/// `has_ready = true`, `has_local = false`). `webapi/scheduler.zig` settles
+/// its own promises the same way.
+pub fn settle(self: *FontFaceSet, exec: *Execution) void {
+    const resolver = self._ready orelse return;
+    self._ready = null;
+    var ls: js.Local.Scope = undefined;
+    exec.js.localScope(&ls);
+    defer ls.deinit();
+    ls.local.toLocal(resolver).resolve("FontFaceSet.ready", {});
+}
+
+/// How many declared faces are still on the wire. A worker has no document and
+/// so no faces, which is why this is not simply a field on the set.
+fn pending(exec: *const Execution) usize {
+    return switch (exec.js.global) {
+        .frame => |frame| frame._webfonts_pending,
+        .worker => 0,
+    };
 }
 
 /// Whether the text could be rendered with the font this shorthand names.
