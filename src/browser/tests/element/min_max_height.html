@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`min-height` and `max-height` did nothing at all, and not only in
+percentages: `max-height: 40px` over four 20px lines measured 80, and
+`min-height: 120px` on one line measured 20. Chrome answers 40 and 120. So the
+clamp was missing outright rather than resolving against the wrong box.
+
+Found the same way as percentage_height.html -- iphey scores this engine 70
+"Unreliable" against Chrome's 100 and names the axes it reads, and reading
+those axes is what turned up the height machinery (tools/fingerprint/README.md,
+the detector-verdict section). This file is the second half of it: the
+percentage of these two properties already resolved after that plan, but
+nothing clamped to the number.
+
+Every expectation is Chrome 151 at dpr 2 read by scratch/mm/rules.mjs, which
+runs the identical markup on both arms. `.probe` pins the line box at 20px so
+the unclamped rows are exactly 20 or 80 on any machine.
+
+Four things the table pins that a naive `@min`/`@max` pair would get wrong:
+
+  * `min-height` outranks `max-height` when they disagree -- 120 and not 40,
+    because the minimum is applied last.
+  * the bound names the same box `box-sizing` names, so `max-height:40px` with
+    `padding:10px 0` is a 40px BORDER box under `border-box` (20 of content)
+    and a 60px one under `content-box` (40 of content).
+  * a clamped height is what the element's own children take a percentage OF:
+    a child of `height:400px; max-height:200px` is 100, not 200, so the clamp
+    has to land before the containing block height is handed down.
+  * but a bound on its own does NOT make an auto height definite: a child of
+    `min-height:200px` alone resolves nothing and stays at its content height,
+    20. That is the row that would break if the clamp were mistaken for a
+    declaration.
+-->
+
+<div class=probe id=max-px-over-content style="max-height:40px">x<br>x<br>x<br>x</div>
+<div class=probe id=min-px-over-content style="min-height:120px">x</div>
+<div class=probe id=max-px-under-height style="height:200px;max-height:40px">x</div>
+<div class=probe id=min-px-over-height style="height:10px;min-height:120px">x</div>
+<div class=probe id=min-beats-max style="max-height:40px;min-height:120px">x</div>
+<div class=probe id=max-px-not-reached style="height:50px;max-height:400px">x</div>
+<div class=probe id=min-px-not-reached style="height:200px;min-height:40px">x</div>
+<div class=probe id=max-none style="height:50px;max-height:none">x</div>
+<div class=probe id=min-zero style="height:50px;min-height:0">x</div>
+<div style="height:200px">
+  <div class=probe id=max-pct style="max-height:25%">x<br>x<br>x<br>x</div>
+</div>
+<div style="height:200px">
+  <div class=probe id=min-pct style="min-height:50%">x</div>
+</div>
+<div>
+  <div class=probe id=max-pct-indefinite style="max-height:25%">x<br>x<br>x<br>x</div>
+</div>
+<div class=probe id=max-border-box style="max-height:40px;padding:10px 0;box-sizing:border-box">x<br>x<br>x</div>
+<div class=probe id=max-content-box style="max-height:40px;padding:10px 0">x<br>x<br>x</div>
+<div class=probe id=min-border-box style="min-height:120px;padding:10px 0;box-sizing:border-box">x</div>
+<div class=probe id=min-content-box style="min-height:120px;padding:10px 0">x</div>
+<div style="height:400px;max-height:200px">
+  <div class=probe id=child-pct-of-clamped style="height:50%">x</div>
+</div>
+<div style="min-height:200px">
+  <div class=probe id=child-pct-of-min-only style="height:50%">x</div>
+</div>
+
+<style>
+  body { margin: 0 }
+  .probe { line-height: 20px; font-size: 16px }
+</style>
+
+<script id="border_box">
+{
+  // offsetHeight is the border box, which is what the clamp decides.
+  const want = {
+    'max-px-over-content': 40,
+    'min-px-over-content': 120,
+    'max-px-under-height': 40,
+    'min-px-over-height': 120,
+    'min-beats-max': 120,
+    'max-px-not-reached': 50,
+    'min-px-not-reached': 200,
+    'max-none': 50,
+    'min-zero': 50,
+    'max-pct': 50,
+    'min-pct': 100,
+    'max-pct-indefinite': 80,
+    'max-border-box': 40,
+    'max-content-box': 60,
+    'min-border-box': 120,
+    'min-content-box': 140,
+    'child-pct-of-clamped': 100,
+    'child-pct-of-min-only': 20,
+  };
+  for (const [id, px] of Object.entries(want)) {
+    const el = document.getElementById(id);
+    testing.expectEqual(`${id} offsetHeight ${px}`, `${id} offsetHeight ${el.offsetHeight}`);
+  }
+}
+</script>
+
+<script id="content_box">
+{
+  // The computed value is the content height under `content-box` and the
+  // border box under `border-box`, which is where the two padded pairs part
+  // company: `max-content-box` is 40 of content inside a 60 border box, and
+  // `max-border-box` reports the 40 it was given.
+  const want = {
+    'max-px-over-content': '40px',
+    'min-px-over-content': '120px',
+    'max-px-under-height': '40px',
+    'min-px-over-height': '120px',
+    'min-beats-max': '120px',
+    'max-pct': '50px',
+    'min-pct': '100px',
+    'max-pct-indefinite': '80px',
+    'max-border-box': '40px',
+    'max-content-box': '40px',
+    'min-border-box': '120px',
+    'min-content-box': '120px',
+    'child-pct-of-clamped': '100px',
+    'child-pct-of-min-only': '20px',
+  };
+  for (const [id, text] of Object.entries(want)) {
+    const el = document.getElementById(id);
+    testing.expectEqual(`${id} computed ${text}`, `${id} computed ${getComputedStyle(el).height}`);
+  }
+}
+</script>

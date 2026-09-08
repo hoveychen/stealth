@@ -4273,6 +4273,19 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         }
     }
 
+    // `min-height` and `max-height` are applied to whatever decided the height
+    // -- the declaration above, the content, or an intrinsic size -- which is
+    // why the clamp is here and not beside the declaration. Neither bound did
+    // anything at all before: `max-height:40px` over four 20px lines measured
+    // 80 against Chrome's 40.
+    if (height) |sized| {
+        height = CSSStyleDeclaration.clampHeight(self, frame, sized, .{
+            .border_box = border_box,
+            .padding_y = dims.padding_y,
+            .border_y = dims.border_y,
+        });
+    }
+
     // The box is a used length, so it lands on the layout grid. Nothing sized
     // it means it has no size: 0, which is what Chrome reports for every empty
     // box whose intrinsic size is not spelled out above.
@@ -4402,7 +4415,18 @@ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_ca
         return dims.height + dims.padding_y;
     }
 
-    return @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0, null).total) + dims.padding_y;
+    // The content fallback takes the children's extent afresh, so a box whose
+    // height the clamp in dimensionsAt already cut would grow straight back
+    // out here: `max-height:40px` over four 20px lines reported 40 from the
+    // box and 80 from this `@max`. The bounds have to be applied to whatever
+    // this branch lands on, which is why they are applied twice rather than
+    // once at the source.
+    const content = @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0, null).total);
+    return CSSStyleDeclaration.clampHeight(self, frame, content, .{
+        .border_box = CSSStyleDeclaration.usesBorderBox(self, frame),
+        .padding_y = dims.padding_y,
+        .border_y = dims.border_y,
+    }) + dims.padding_y;
 }
 
 pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {

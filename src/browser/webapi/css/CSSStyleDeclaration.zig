@@ -730,6 +730,16 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     return resolvedDimension(element, if (on_width) .width else .height, frame);
                 }
 
+                // A `min-height` or `max-height` can move the used height away
+                // from the declaration, and `height` reports the USED value:
+                // `height:200px; max-height:40px` computes `40px` in Chrome.
+                // So a bound sends the answer to the box too, the same way
+                // `box-sizing` does above -- otherwise the shortcut below
+                // hands back the 200 the cascade holds.
+                if (on_height and !isInlineBox(element, frame) and declaresHeightBound(style_manager, element)) {
+                    return resolvedDimension(element, .height, frame);
+                }
+
                 // `width` and `height` report a USED value, so whatever the
                 // cascade says lands on the layout grid: a declared `133.2px`
                 // computes `133.188px` in Chrome, measured. The cascade still
@@ -1881,9 +1891,70 @@ fn definiteContentHeight(block: *Element, frame: *Frame) ?f64 {
     // the content a child takes its share of is what is left inside it: 80 for
     // `height:200px; padding:20px 0; box-sizing:border-box`, against 100 for
     // the same box under `content-box`.
-    if (!usesBorderBox(block, frame)) return @max(0, declared);
-    const edges = boxEdges(block, frame);
-    return @max(0, declared - edges.padding_y - edges.border_y);
+    const border_box = usesBorderBox(block, frame);
+    const edges = if (border_box) boxEdges(block, frame) else BoxEdges{};
+    const content = @max(0, declared - edges.padding_y - edges.border_y);
+    // A clamped height is what the children take their share OF: a child of
+    // `height:400px; max-height:200px` is 100 in Chrome and not 200, so the
+    // bounds are applied before the number is handed down.
+    return clampHeight(block, frame, content, .{
+        .border_box = border_box,
+        .padding_y = edges.padding_y,
+        .border_y = edges.border_y,
+    });
+}
+
+/// What `min-height` and `max-height` leave of a height, in CONTENT terms.
+///
+/// The order is the used-value rule's and the reason it is not a plain
+/// `@max(min, @min(max, h))`: the maximum is applied first and the minimum
+/// second, so a `min-height` that disagrees with a `max-height` WINS.
+/// Measured, `max-height:40px; min-height:120px` is 120 in Chrome.
+///
+/// A bound names the same box `box-sizing` names, which is why the caller
+/// hands over its edges: `max-height:40px` with `padding:10px 0` is a 40px
+/// border box under `border-box` (20 of content) and a 60px one under
+/// `content-box` (40 of content).
+///
+/// Applying a bound does NOT make an auto height definite -- that is
+/// `definiteContentHeight`'s question, and it asks only about `height`. A child
+/// of `min-height:200px` alone resolves no percentage and stays at its content
+/// height, measured 20 on both arms.
+pub const HeightBox = struct {
+    border_box: bool,
+    padding_y: f64,
+    border_y: f64,
+};
+
+/// Whether the page declares either height bound on this element, which is the
+/// cheap question the computed-value path asks before deciding the declaration
+/// is not the answer. A keyword bound (`max-height: none`) counts as declared
+/// here and is then a no-op in `clampHeight`, which costs one measurement on a
+/// page that writes it and keeps this from having to parse the value twice.
+fn declaresHeightBound(style_manager: *StyleManager, element: *Element) bool {
+    return cascadedRawDeclaration(style_manager, element, "max-height") != null or
+        cascadedRawDeclaration(style_manager, element, "min-height") != null;
+}
+
+pub fn clampHeight(element: *Element, frame: *Frame, content: f64, box: HeightBox) f64 {
+    var used = content;
+    if (boundInContentTerms(element, frame, "max-height", box)) |max| {
+        used = @min(used, max);
+    }
+    if (boundInContentTerms(element, frame, "min-height", box)) |min| {
+        used = @max(used, min);
+    }
+    return used;
+}
+
+/// One bound, as a content height. Null when the page declares none, or
+/// declares one this engine cannot resolve -- `max-height: none` and a
+/// percentage against an indefinite containing block both land there, and both
+/// have to leave the box alone.
+fn boundInContentTerms(element: *Element, frame: *Frame, comptime name: []const u8, box: HeightBox) ?f64 {
+    const declared = cascadedComputedLength(element, name, frame) orelse return null;
+    if (!box.border_box) return @max(0, declared);
+    return @max(0, declared - box.padding_y - box.border_y);
 }
 
 /// The nearest ancestor that establishes a containing block for an absolutely
