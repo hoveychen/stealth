@@ -96,11 +96,71 @@ pub fn getReady(_: *FontFaceSet, exec: *const Execution) !js.Promise {
     return exec.js.local.?.resolvePromise({});
 }
 
-// check(font, text?) - always true; headless has no real fonts to check.
-pub fn check(_: *const FontFaceSet, font: []const u8) bool {
-    _ = font;
+/// Whether the text could be rendered with the font this shorthand names.
+///
+/// The answer follows the SET, not the name. Measured on Chrome 151 with
+/// three `@font-face` rules in the page (scratch/ff/fontfaceset.mjs):
+///
+///   a family NOTHING declares          true    (`NoSuchFontXYZ`, `Courier New`)
+///   a declared face that has loaded    true
+///   a declared face still `unloaded`   FALSE
+///
+/// That last row is the one this used to get wrong by answering true for
+/// everything -- and the first row is the half it got right, which is why the
+/// constant looked correct for so long.
+///
+/// Only the family matters here. The size, style and weight in the shorthand
+/// are parsed off and dropped: matching a face's weight against the
+/// shorthand's is a further question, and nothing measured yet turns on it.
+pub fn check(self: *const FontFaceSet, font: []const u8) bool {
+    var it = familyList(font);
+    while (it.next()) |family| {
+        for (self._faces.items) |face| {
+            if (!std.ascii.eqlIgnoreCase(face.getFamily(), family)) continue;
+            // A face this document declares decides the answer, and an
+            // unloaded one decides it `false`.
+            if (std.mem.eql(u8, face.getStatus(), "loaded")) break;
+            return false;
+        }
+    }
     return true;
 }
+
+/// The families a `font` shorthand names, in order, unquoted and untrimmed of
+/// nothing else. Everything up to and including the last size-ish token is
+/// dropped: `16px "Courier New", monospace` yields `Courier New` then
+/// `monospace`.
+fn familyList(font: []const u8) FamilyIterator {
+    // The family list starts after the size, and the size is the last token
+    // that begins with a digit or a `.` -- `bold italic 16px/1.5 Arial` ends
+    // its non-family part at `16px/1.5`.
+    var rest = std.mem.trim(u8, font, &std.ascii.whitespace);
+    var tokens = std.mem.tokenizeAny(u8, rest, " \t\n\r");
+    var after: usize = 0;
+    while (tokens.next()) |token| {
+        const c = token[0];
+        if (std.ascii.isDigit(c) or c == '.') {
+            after = (@intFromPtr(token.ptr) - @intFromPtr(rest.ptr)) + token.len;
+        }
+    }
+    if (after != 0 and after <= rest.len) rest = rest[after..];
+    return .{ .rest = rest };
+}
+
+const FamilyIterator = struct {
+    rest: []const u8,
+
+    fn next(self: *FamilyIterator) ?[]const u8 {
+        while (self.rest.len != 0) {
+            const end = std.mem.indexOfScalar(u8, self.rest, ',') orelse self.rest.len;
+            const raw = self.rest[0..end];
+            self.rest = if (end == self.rest.len) "" else self.rest[end + 1 ..];
+            const family = std.mem.trim(u8, std.mem.trim(u8, raw, &std.ascii.whitespace), "\"'");
+            if (family.len != 0) return family;
+        }
+        return null;
+    }
+};
 
 // load(font, text?) - resolves immediately with an empty array.
 pub fn load(self: *FontFaceSet, font: []const u8, exec: *const Execution) !js.Promise {

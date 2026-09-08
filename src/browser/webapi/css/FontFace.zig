@@ -172,6 +172,15 @@ pub fn acquireRef(self: *FontFace) void {
     self._rc.acquire();
 }
 
+/// A face the document DECLARED with an `@font-face` rule, rather than one a
+/// script handed to `add()`. `used` is whether anything on the page asks for
+/// the family, which is the same predicate that decides whether the file is
+/// fetched at all -- Chrome leaves an unused face `unloaded` even when its url
+/// is good, and requests nothing for it (tests/css/font_face_set.html).
+pub fn markDeclared(self: *FontFace, used: bool) void {
+    self._status = if (used) .loaded else .unloaded;
+}
+
 pub fn getFamily(self: *const FontFace) []const u8 {
     return self._family;
 }
