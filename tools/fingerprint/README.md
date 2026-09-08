@@ -26555,12 +26555,17 @@ for (;;) if (regs[pc_reg].length === 0) {
       regs[pc_reg] = pc + 1,                              // pc++
       op = key ^ ((code[pc] - 28) & 255),                  // decrypt the opcode
       k  = key + op,
-      key = ((k * k * 53140 + k * 9940) % 51159) & 255,    // advance the key
+      key = (k * k * 53140 + k * 9940 + 51159) & 255,      // advance the key
       op
     ) {
-      case 9:   H09.run(this); break;
-      case 127: H7F.run(this); break;
-      ...                                                   // 46 cases
+      case 9:   H09.call(this);      break;
+      case 127: H7F.call(this);      break;
+      ...
+      case 26:  E.call(this, 97);    break;                 // a family, with
+      case 132: E.call(this, 66);    break;                 // an immediate
+      ...
+      case 0:   U.call(this, 53);    break;
+      ...
     }
   }
 }
@@ -26572,15 +26577,36 @@ above is not written with operators: the program builds a table of them first
 `647` and friends are ids into a string decoder, so `ops[name(op.aH)](x, y)` is
 `y ^ x`. Resolving that table is what makes the loop readable.
 
-Two numbers worth writing down:
+### Putting the strings back, and two corrections to the paragraph above
 
-* **46 opcodes**, not the ~200 the stack depth suggested. The dispatch body is
-  2586 bytes and holds 46 `case N: <handler>.<method>(this)` pairs, each with
-  its own handler object.
-* **every handler's method is the same id** (`594`), which is why the deep
-  stacks all read `[as run]`.
+Every property access in the program reads `DEC(TABLE.key)`, where `TABLE` is a
+local literal of numeric ids (`op = {a: 647, Q: 927, ...}`) and `DEC` is an
+alias of the one decoder, `d(id) = arr[id - 499]` -- a plain index, no
+encryption. The obfuscation is that `arr` has been rotated by the usual
+`push(shift())` shuffler until a checksum over eight of its own entries matches
+a constant.
 
-So a disassembler needs no execution: given the saved `code` array and the
-initial key, the opcode stream decodes from the recurrence above, and naming
-the 46 handlers is a matter of reading 46 short function bodies. That is the
-next step, and it is the one thing the page layer cannot answer.
+**Find that rotation structurally rather than by replaying the arithmetic.** Of
+the 1886 entries only 75 begin with a digit, and exactly ONE rotation puts all
+eight checksum ids on one of those -- 289 here. That is the answer whatever the
+constant is, and it avoids mis-transcribing a coefficient out of a
+`-parseInt(x)/1 + parseInt(y)/2 + ...` chain. It checks out semantically at
+once: id 594 is `"call"`, 1153 `"length"`, 1258 `"pop"`, 1992 `"splice"`.
+
+With 233 id tables and 281 decoder aliases resolved, 4668 accesses rewrite and
+91 are left. And the readable program corrects both numbers claimed above:
+
+* **The key advance is `+ 51159`, not `% 51159`.** The program writes no
+  operators at all -- `ops["daxlm"] = (a, b) => a + b` -- and reading that
+  table wrong gives a disassembler that decodes the first byte correctly and
+  every byte after it wrong.
+* **69 opcodes, not 46.** 46 have a dedicated handler
+  (`H.call(this)`), and the other 23 go through two families that take an
+  immediate: 17 as `E.call(this, N)` and 6 as `U.call(this, N)`. Counting only
+  the first shape is what gave 46.
+
+So a disassembler still needs no execution: with the saved `code` array and the
+initial key the stream decodes from the corrected recurrence. What is left is
+naming the 48 handler bodies (46 + `E` + `U`), each 850-1800 bytes of
+deobfuscated code that declares its own id table and its own operator table
+before doing its work. That is the one thing the page layer cannot answer.
