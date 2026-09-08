@@ -314,3 +314,60 @@ referenced) plus a JS-added FontFace:
   });
 }
 </script>
+
+<!--
+A stylesheet that arrives AFTER the document has loaded has to reach the set
+too, because that is the shape a font-enumeration probe uses: iphey declares
+312 faces, 310 of them `local(...)`, and injects those 310 between DCL and
+load. This engine filled the set once during the style-resource pass, so it
+saw the two the markup shipped and read `document.fonts.size` 2 against
+Chrome's 312.
+
+Chrome, measured with scratch/tr/inject-after-load.mjs, reflects the change
+SYNCHRONOUSLY -- the read right after the DOM call already sees it -- and
+appends in source order:
+
+  at load                size 1   StaticFont/loaded
+  after a <style> insert size 3   StaticFont/loaded|InjectedA/unloaded|InjectedB/unloaded
+  after insertRule       size 4   ...|InsertedC/unloaded
+
+Both ways in are here on purpose: appending a `<style>` element and
+`CSSStyleSheet.insertRule`, which reach the engine through different paths.
+-->
+
+<script id="a_sheet_added_after_load_reaches_the_set" type=module>
+{
+  const state = await testing.async();
+  whenReady(() => {
+    const shot = () => document.fonts.size + ':' +
+      Array.from(document.fonts).map((f) => f.family + '/' + f.status).join('|');
+    const before = shot();
+
+    const style = document.createElement('style');
+    style.textContent =
+      '@font-face{font-family:InjectedA;src:local("Courier New")}' +
+      '@font-face{font-family:InjectedB;src:url(/nowhere-b.ttf) format("truetype");font-weight:700}';
+    document.head.appendChild(style);
+    const afterInsert = shot();
+
+    const style2 = document.createElement('style');
+    document.head.appendChild(style2);
+    style2.sheet.insertRule('@font-face{font-family:InsertedC;src:local("Menlo")}', 0);
+    const afterRule = shot();
+
+    style.remove();
+    style2.remove();
+    state.resolve([before, afterInsert, afterRule].join(' -> '));
+  });
+  await state.done((seen) => {
+    // The two faces the markup above declares are already in the set, so the
+    // counts are theirs plus the injected ones.
+    testing.expectEqual(
+      '2:AlphaFont/loaded|BetaFont/unloaded' +
+      ' -> 4:AlphaFont/loaded|BetaFont/unloaded|InjectedA/unloaded|InjectedB/unloaded' +
+      ' -> 5:AlphaFont/loaded|BetaFont/unloaded|InjectedA/unloaded|InjectedB/unloaded|InsertedC/unloaded',
+      seen,
+    );
+  });
+}
+</script>
