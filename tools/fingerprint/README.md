@@ -26444,3 +26444,43 @@ arm on one machine are byte-stable, so nothing is session-salted.
 earlier is not a gap and nothing should be built on it. And **`Dom Tags
 Snapshot` now matches** where it differed before the height work, which is the
 one iphey axis those two fixes did move.
+
+#### And the axis behind it: a font-family LIST picks the wrong entry
+
+The string heap names the SVG axis outright -- `'Hello, SVG World!'` sits
+beside `svg` and `getComputedStyle` -- and rebuilding it reproduces iphey's two
+numbers to the digit: `getComputedTextLength()` is **129.8125** here against
+Chrome's **124.40625**.
+
+It is not the SVG path. The same string, at 16px, asked four ways on a page
+that has Roboto:
+
+| asked | ours | chrome |
+|---|---|---|
+| `16px Roboto, sans-serif` — html span | **129.53** (= sans-serif) | 124.40 (= Roboto) |
+| `16px Roboto` alone — html span | 124.20 | 124.40 |
+| `16px Roboto, sans-serif` — svg text | **129.81** | 124.40 |
+| `16px Roboto` alone — svg text | 125.75 | 124.40 |
+| `16px Roboto, sans-serif` — canvas | **129.53** | 124.40 |
+| `16px Roboto` alone — canvas | 124.48 | 124.40 |
+| `16px sans-serif` / `Helvetica` / `Arial` | 129.53 / 129.53 / 129.52 | identical |
+
+The generic families agree to the digit, so no metrics table is missing.
+**Written as a list, `Roboto, sans-serif` takes the sans-serif; written alone,
+Roboto is used.** The first-available-family step picks the wrong entry, and
+that shape -- `font-family: Something, sans-serif` -- is on essentially every
+real page, so text metrics are a few percent wrong nearly everywhere. Plan
+`font-family-list-picks-the-generic`.
+
+Secondary, from the same table: asked for `Roboto` alone the three paths answer
+**124.203, 125.757 and 124.484** where Chrome answers 124.40625, 124.40625 and
+124.4016 -- the three text paths disagree with each other, which is the
+`text-width-has-three-paths` shape again.
+
+The other number is smaller: `Storage` is
+`navigator.storage.estimate().quota`, a round **10 GiB constant** here against
+Chrome's 5368709120, which Chrome derives from free disk (it reported 4 and
+then 5 GiB on this machine within the hour). Matching it exactly is not a
+target; deriving it from real free space is. And one new tell in passing:
+`document.fonts.size` is **0** here against Chrome's **312** -- `check()`
+answers true while the FontFace set is empty.
