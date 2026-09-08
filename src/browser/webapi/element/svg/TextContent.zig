@@ -109,7 +109,7 @@ fn fontFamily(self: *TextContent, frame: *Frame) font_metrics.Family {
     while (names.next()) |raw| {
         // Quotes stay on: `findEntry` needs them to tell the keyword
         // `monospace` from the family name `'monospace'`, which matches nothing.
-        if (font_metrics.findEntry(raw)) |family| {
+        if (font_metrics.findEntry(raw, frame.loadedFonts())) |family| {
             return family;
         }
     }

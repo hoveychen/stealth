@@ -299,10 +299,20 @@ const Scan = struct {
     }
 
     fn fetch(self: *Scan, href: []const u8, resource_type: ResourceType) Allocator.Error!void {
-        try self.fetchFrom(self.base, href, resource_type);
+        try self.fetchFrom(self.base, href, resource_type, null);
     }
 
-    fn fetchFrom(self: *Scan, base: [:0]const u8, href: []const u8, resource_type: ResourceType) Allocator.Error!void {
+    /// `font_family` is the `@font-face` family these bytes are for. It is the
+    /// only thing that makes a font body worth keeping -- the metrics have to
+    /// be filed under the name a `font-family` list will ask for -- so it is
+    /// carried here rather than recovered from the url later.
+    fn fetchFrom(
+        self: *Scan,
+        base: [:0]const u8,
+        href: []const u8,
+        resource_type: ResourceType,
+        font_family: ?[]const u8,
+    ) Allocator.Error!void {
         if (self.faces_only) return;
         if (href.len == 0) return;
         const resolved = URL.resolve(self.arena(), base, href, .{ .encoding = self.frame.charset }) catch |err| {
@@ -311,7 +321,7 @@ const Scan = struct {
         };
         const gop = try self.seen.getOrPut(self.arena(), resolved);
         if (gop.found_existing) return;
-        self.frame.requestStyleResource(resolved, resource_type);
+        self.frame.requestStyleResource(resolved, resource_type, font_family);
     }
 };
 
@@ -407,7 +417,7 @@ fn scan(frame: *Frame) !void {
         // something asks for is fetched at all.
         const used = s.used_families.contains(face.family);
         if (used and face.url.len != 0) {
-            try s.fetchFrom(face.base, face.url, .font);
+            try s.fetchFrom(face.base, face.url, .font, face.family);
         }
         const set = fonts orelse continue;
         const entry = FontFace.init(face.declared, face.url, .{

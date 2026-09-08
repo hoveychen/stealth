@@ -44,6 +44,7 @@ const App = @import("App.zig");
 const js = @import("browser/js/js.zig");
 const Config = @import("Config.zig");
 const Frame = @import("browser/Frame.zig");
+const font_file = @import("browser/font_file.zig");
 const Browser = @import("browser/Browser.zig");
 const Session = @import("browser/Session.zig");
 const Notification = @import("Notification.zig");
@@ -1918,6 +1919,21 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
     // of it is decoded (frame/markup_resources.zig, frame/style_resources.zig)
     // so a fixture per path would be a fixture for bytes nobody reads. The
     // `unreachable` below still catches a typo'd document or script path.
+    // One route that answers with a real font, so the metrics read out of a
+    // downloaded face can be tested without a binary fixture in the tree.
+    // 1000 units per em and every glyph 500 units wide, which makes each
+    // character exactly half the font size: 20px text is 10px per character.
+    // Built by font_file.synthesize, the same function its unit tests use.
+    if (std.mem.startsWith(u8, path, "/synth-font.ttf")) {
+        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer arena.deinit();
+        const font = font_file.synthesize(arena.allocator(), 1000, 500, 800, 200) catch
+            return req.respond("", .{});
+        return req.respond(font, .{
+            .extra_headers = &.{.{ .name = "Content-Type", .value = "font/ttf" }},
+        });
+    }
+
     {
         const without_query = path[0 .. std.mem.indexOfScalar(u8, path, '?') orelse path.len];
         for ([_][]const u8{ ".mp3", ".mp4", ".webm", ".ogg", ".wav", ".vtt", ".swf", ".woff2", ".woff", ".ttf", ".otf" }) |ext| {

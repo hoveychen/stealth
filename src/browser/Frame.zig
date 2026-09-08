@@ -51,6 +51,8 @@ const Image = @import("webapi/element/html/Image.zig");
 // Geometry parsers, shared with ImageDecoder: an `<img>` and a decoder read the
 // same headers, and `readSize` is the entry point that stops at the two numbers.
 const images = @import("webapi/webcodecs/images.zig");
+const font_file = @import("font_file.zig");
+const font_metrics = @import("font_metrics.zig");
 const Window = @import("webapi/Window.zig");
 const History = @import("webapi/History.zig");
 const Location = @import("webapi/Location.zig");
@@ -259,6 +261,18 @@ _file_lists: std.ArrayList(*FileList) = .empty,
 // without honouring `Cache-Control`: the entries die with the navigation, so
 // the staleness window is one page load.
 _stylesheet_bodies: std.StringHashMapUnmanaged([]const u8) = .empty,
+
+// The metrics a downloaded `@font-face` file supplied, keyed by lowercased
+// family name. Empty until a face something actually asks for has arrived.
+//
+// Before this the bytes were fetched and dropped, so text in a webfont
+// measured as whatever the fallback charged -- `font-family: ProbeFont,
+// sans-serif` read 129.53 here against Chrome's 163.23. See font_file.zig for
+// which of the numbers come out of the file exactly and which are approximated.
+//
+// Arena-owned and per-document like the sheet bodies above, and for the same
+// reason: a face belongs to the navigation whose stylesheet declared it.
+_webfonts: std.StringHashMapUnmanaged(font_metrics.Family) = .empty,
 
 _queued_events_1: std.ArrayList(QueuedEvent) = .empty,
 _queued_events_2: std.ArrayList(QueuedEvent) = .empty,
@@ -3234,6 +3248,11 @@ pub fn queueHashChange(self: *Frame, old_url: []const u8, new_url: []const u8) !
 // splitting by route anyway).
 const MAX_STYLESHEET_BYTES: usize = 2 * 1024 * 1024;
 
+// Hard cap on one `@font-face` body. A webfont subset is tens of kilobytes and
+// a full CJK face a few megabytes; past this the metrics are not worth the
+// allocation, and the face is left on the fallback.
+const MAX_FONT_BYTES: usize = 8 * 1024 * 1024;
+
 // Synchronously fetch and parse an external `<link rel=stylesheet>`.
 // href is passed in as an optimization since the [currently] only callsite has
 // it, so why look it up again?
@@ -3647,6 +3666,12 @@ const ImageRequest = struct {
     keep_body: bool = false,
     body: std.ArrayListUnmanaged(u8) = .empty,
     body_overflowed: bool = false,
+    body_cap: usize = MAX_STYLESHEET_BYTES,
+
+    // Set for an `@font-face` body: the family the parsed metrics get filed
+    // under. Null for everything else, which is what keeps a stylesheet body
+    // out of the font registry.
+    font_family: ?[]const u8 = null,
 
     fn headerCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.HeaderResult {
         const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
@@ -3684,7 +3709,7 @@ const ImageRequest = struct {
         self.bytes += data.len;
         self.encoded_bytes = transfer.encodedBodySize();
         if (self.keep_body and !self.body_overflowed) {
-            if (self.body.items.len + data.len > MAX_STYLESHEET_BYTES) {
+            if (self.body.items.len + data.len > self.body_cap) {
                 // Past the bound the bytes are not worth keeping, and the
                 // `<link>` that wanted them will fetch and reject them itself.
                 self.body.clearRetainingCapacity();
@@ -3730,9 +3755,13 @@ const ImageRequest = struct {
             // reason: one sheet named twice is one request. The key is
             // `self.url`, which `preloadResource` took from the frame arena
             // precisely so it outlives this transfer.
-            self.frame._stylesheet_bodies.put(self.frame.arena, self.url, self.body.items) catch |err| {
-                log.warn(.http, "stylesheet cache", .{ .err = err, .url = self.url });
-            };
+            if (self.font_family) |family| {
+                self.frame.registerWebfont(family, self.body.items);
+            } else {
+                self.frame._stylesheet_bodies.put(self.frame.arena, self.url, self.body.items) catch |err| {
+                    log.warn(.http, "stylesheet cache", .{ .err = err, .url = self.url });
+                };
+            }
         }
         const became_a_picture = self.arrived();
         const size = if (became_a_picture) self.intrinsicSize() else null;
@@ -3893,9 +3922,53 @@ pub fn preloadResource(self: *Frame, link: *Element.Html, href: []const u8, opts
 // resource, and nothing here decodes the bytes, so the request itself is the
 // whole of it. The resource entry says "css", which is what Chrome files these
 // under (initiatorType, measured by resource-timing-initiators.mjs).
-pub fn requestStyleResource(self: *Frame, resolved: [:0]const u8, resource_type: HttpClient.Request.ResourceType) void {
+/// The families this document's `@font-face` files supplied, for whoever is
+/// resolving a `font-family` list. Null while none has arrived, so the built-in
+/// tables answer exactly as they did before.
+pub fn loadedFonts(self: *Frame) ?font_metrics.Loaded {
+    if (self._webfonts.count() == 0) return null;
+    return .{ .ctx = self, .lookup = lookupWebfont };
+}
+
+fn lookupWebfont(ctx: *const anyopaque, name: []const u8) ?font_metrics.Family {
+    const self: *const Frame = @ptrCast(@alignCast(ctx));
+    // The map is keyed lowercased because CSS family matching is ASCII
+    // case-insensitive. A name longer than any real family cannot be in it.
+    var buf: [128]u8 = undefined;
+    if (name.len == 0 or name.len > buf.len) return null;
+    const key = std.ascii.lowerString(buf[0..name.len], name);
+    return self._webfonts.get(key);
+}
+
+/// Parse a downloaded `@font-face` body and register it under `family`.
+///
+/// The fallback the file's gaps are filled from is the one this family list
+/// would otherwise have resolved to, which for a face declared alone is the
+/// standard fallback -- the same face the text was silently measuring as
+/// before.
+fn registerWebfont(self: *Frame, family: []const u8, body: []const u8) void {
+    if (family.len == 0 or body.len == 0) return;
+    const built = font_file.family(self.arena, body, font_metrics.fallback) orelse {
+        log.debug(.browser, "webfont unreadable", .{ .family = family, .bytes = body.len });
+        return;
+    };
+    const key = std.ascii.allocLowerString(self.arena, family) catch return;
+    self._webfonts.put(self.arena, key, built) catch |err| {
+        log.warn(.browser, "webfont register", .{ .err = err, .family = family });
+        return;
+    };
+    log.debug(.browser, "webfont loaded", .{ .family = family, .bytes = body.len });
+}
+
+pub fn requestStyleResource(
+    self: *Frame,
+    resolved: [:0]const u8,
+    resource_type: HttpClient.Request.ResourceType,
+    font_family: ?[]const u8,
+) void {
     self.requestSubresource(resolved, null, .{
         .resource_type = resource_type,
+        .font_family = font_family,
         .initiator = "css",
         // A font is fetched in CORS mode whatever the page says -- that is the
         // font-loading spec's rule, not an opt-in, and it is why a font
@@ -3968,6 +4041,12 @@ pub const SubresourceOpts = struct {
     // that are not a picture; a preload fires `load` for whatever came back,
     // because it is warming a cache rather than displaying anything.
     sniff: bool = true,
+
+    // The `@font-face` family these bytes are for, which is the only thing
+    // that makes a font body worth keeping: the metrics have to be filed under
+    // the name a `font-family` list will ask for. Frame-arena'd by the caller
+    // so it outlives the transfer.
+    font_family: ?[]const u8 = null,
 };
 
 // The size a picture declared, written onto the element before its `load`
@@ -4054,7 +4133,13 @@ fn requestSubresource(self: *Frame, resolved: [:0]const u8, element: ?*Element.H
         .fetch_start = self.performance().now(),
         .cache = entry,
         .cache_key = cache_key,
-        .keep_body = opts.resource_type == .stylesheet,
+        // A font body is kept for the same reason a stylesheet's is: something
+        // downstream has to read it. Bounded by MAX_FONT_BYTES rather than the
+        // sheet cap, because a webfont is a different size of thing.
+        .keep_body = opts.resource_type == .stylesheet or
+            (opts.resource_type == .font and opts.font_family != null),
+        .body_cap = if (opts.resource_type == .font) MAX_FONT_BYTES else MAX_STYLESHEET_BYTES,
+        .font_family = opts.font_family,
     };
     request.ctx = pending;
     request.header_callback = ImageRequest.headerCallback;
@@ -5679,6 +5764,11 @@ test "WebApi: Frame" {
 test "WebApi: css style subresources" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("css/style_subresources.html", .{});
+}
+
+test "WebApi: webfont metrics" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/webfont_metrics.html", .{});
 }
 
 test "WebApi: markup subresources" {

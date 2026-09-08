@@ -1885,7 +1885,7 @@ const default_font_size = 16.0;
 fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, size: f64 } {
     const style_manager = &self.ownerFrame(frame)._style_manager;
     const family = if (style_manager.computedFontFamily(self)) |declared|
-        font_metrics.findInList(declared)
+        font_metrics.findInList(declared, style_manager.frame.loadedFonts())
     else
         null;
     // The weight and the style pick which of the family's four tables the

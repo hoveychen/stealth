@@ -59252,17 +59252,35 @@ fn isGenericKeyword(name: []const u8) bool {
 /// quotes, whitespace and all. This is the entry point every caller wants:
 /// whether the name was quoted is part of what it means, and stripping the
 /// quotes before asking throws that away.
-pub fn findEntry(raw: []const u8) ?Family {
+pub fn findEntry(raw: []const u8, loaded: ?Loaded) ?Family {
     const name = std.mem.trim(u8, raw, &std.ascii.whitespace);
     if (name.len < 2 or (name[0] != '"' and name[0] != '\'') or name[name.len - 1] != name[0]) {
-        return find(name);
+        return Loaded.get(loaded, name) orelse find(name);
     }
     const unquoted = name[1 .. name.len - 1];
     if (isGenericKeyword(unquoted)) {
         return null;
     }
-    return find(unquoted);
+    return Loaded.get(loaded, unquoted) orelse find(unquoted);
 }
+
+/// The families a document's own `@font-face` files supplied, which shadow a
+/// built-in table of the same name the way CSS says an `@font-face` shadows an
+/// installed font.
+///
+/// A closure rather than a map, because this file is generated data with no
+/// business knowing what a Frame is -- and because a realm with no document at
+/// all (an `OffscreenCanvas` in a worker) legitimately has none, which is what
+/// the null case means rather than a compromise.
+pub const Loaded = struct {
+    ctx: *const anyopaque,
+    lookup: *const fn (ctx: *const anyopaque, name: []const u8) ?Family,
+
+    fn get(self: ?Loaded, name: []const u8) ?Family {
+        const l = self orelse return null;
+        return l.lookup(l.ctx, name);
+    }
+};
 
 /// Maps a CSS family name to one of the measured families, ASCII
 /// case-insensitively. Null when we have no table for it, which the caller
@@ -59493,10 +59511,10 @@ pub fn find(name: []const u8) ?Family {
 /// monospace` and compares the result against `monospace` alone: skipping the
 /// names we have no table for is what makes a font we do have measure
 /// differently, and a font we do not measure identically to its base.
-pub fn findInList(list: []const u8) Family {
+pub fn findInList(list: []const u8, loaded: ?Loaded) Family {
     var it = std.mem.splitScalar(u8, list, ',');
     while (it.next()) |raw| {
-        if (findEntry(raw)) |family| {
+        if (findEntry(raw, loaded)) |family| {
             return family;
         }
     }
