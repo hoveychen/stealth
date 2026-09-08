@@ -26525,3 +26525,62 @@ The lesson for the next reading: a family difference is not a family-selection
 bug until a LOCAL family has been checked in the same shapes. The generic
 families agreeing to the digit was already the hint -- selection was never
 broken.
+
+## Reading Cloudflare's guard VM: the fetch/decode is four lines (2026-09-08)
+
+The four short values in the widget realm's payload are computed inside the
+guard's own interpreter -- every page-layer explanation for them was causally
+negated (timing, frames, pixels, literals, instrument perturbation, every
+number-producing API in the realm, the performance timeline), and this engine
+answers all four differently from Chrome, `0` against `16` on the third. So the
+interpreter is the remaining channel, and this is what it looks like.
+
+Dump one delivery first and do everything against that copy:
+`scratch/b95/dump-normal.mjs` takes the body off the wire, and the
+`new/normal` document is a 251KB page holding one 232KB inline script. **The
+identifiers change on every delivery** -- the same helper was `cA.cT`, `cU.cY`
+and `bv.bC` across three -- so an offset is only meaningful against a saved
+document.
+
+The program is switch-flattened: about thirty
+`switch (seq[i++]) { case '0': ...; continue; }` state machines, one per
+original function. That is the obfuscator, not the VM. The VM is one of them,
+and its head gives the whole fetch/decode:
+
+```js
+for (;;) if (regs[pc_reg].length === 0) {
+  for (; regs.length > 0 ;) {
+    if (pc = regs[pc_reg], pc !== pc) return regs[ret];   // a NaN pc halts
+    switch (
+      regs[pc_reg] = pc + 1,                              // pc++
+      op = key ^ ((code[pc] - 28) & 255),                  // decrypt the opcode
+      k  = key + op,
+      key = ((k * k * 53140 + k * 9940) % 51159) & 255,    // advance the key
+      op
+    ) {
+      case 9:   H09.run(this); break;
+      case 127: H7F.run(this); break;
+      ...                                                   // 46 cases
+    }
+  }
+}
+```
+
+`code` is `this.m` and the rolling `key` starts at `this.i`. The arithmetic
+above is not written with operators: the program builds a table of them first
+(`ops[name(647)] = (a, b) => a ^ b`, and `+`, `*`, `&`, `===`, `!==`), and
+`647` and friends are ids into a string decoder, so `ops[name(op.aH)](x, y)` is
+`y ^ x`. Resolving that table is what makes the loop readable.
+
+Two numbers worth writing down:
+
+* **46 opcodes**, not the ~200 the stack depth suggested. The dispatch body is
+  2586 bytes and holds 46 `case N: <handler>.<method>(this)` pairs, each with
+  its own handler object.
+* **every handler's method is the same id** (`594`), which is why the deep
+  stacks all read `[as run]`.
+
+So a disassembler needs no execution: given the saved `code` array and the
+initial key, the opcode stream decodes from the recurrence above, and naming
+the 46 handlers is a matter of reading 46 short function bodies. That is the
+next step, and it is the one thing the page layer cannot answer.
