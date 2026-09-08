@@ -34,6 +34,8 @@ _family: []const u8,
 // The `src` the face was built from, kept so load() can answer for it.
 _source: []const u8,
 _status: Status = .unloaded,
+// Set by markDeclared: this face is a stylesheet's, not a script's.
+_declared: bool = false,
 
 // The eight font descriptors, all `attribute CSSOMString` and all read-write.
 // They were data properties with the class-wide default baked in, which made
@@ -178,7 +180,15 @@ pub fn acquireRef(self: *FontFace) void {
 /// fetched at all -- Chrome leaves an unused face `unloaded` even when its url
 /// is good, and requests nothing for it (tests/css/font_face_set.html).
 pub fn markDeclared(self: *FontFace, used: bool) void {
+    self._declared = true;
     self._status = if (used) .loaded else .unloaded;
+}
+
+/// Whether this face came from an `@font-face` rule rather than from
+/// `document.fonts.add()`. The set reconciles the declared half against the
+/// stylesheets on every read and must not touch the other half.
+pub fn isDeclared(self: *const FontFace) bool {
+    return self._declared;
 }
 
 pub fn getFamily(self: *const FontFace) []const u8 {

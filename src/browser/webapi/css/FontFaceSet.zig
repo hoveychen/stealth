@@ -29,6 +29,7 @@ const EventManagerBase = @import("../../EventManagerBase.zig");
 const EventTarget = @import("../EventTarget.zig");
 
 const FontFace = @import("FontFace.zig");
+const style_resources = @import("../../frame/style_resources.zig");
 
 const FontFaceSet = @This();
 
@@ -47,6 +48,14 @@ _arena: *lp.Arena,
 // "loaded" and `check` stays true -- but the set has to remember what it was
 // handed, because a page walks it back out: `for (const f of document.fonts)`.
 _faces: std.ArrayList(*FontFace) = .empty,
+
+/// The `StyleManager.sheet_version` the declared half of `_faces` was derived
+/// under, or null when it has never been derived. A page can inject
+/// `@font-face` rules at any time -- 310 of iphey's 312 arrive between DCL and
+/// load, as a font enumeration probe -- and Chrome's set reflects them
+/// synchronously, so the derivation is redone lazily on every read rather than
+/// once during the style-resource pass.
+_sheet_version: ?usize = null,
 
 pub fn init(exec: *const Execution) !*FontFaceSet {
     const arena = try exec.getArena(.tiny, "FontFaceSet");
@@ -82,8 +91,86 @@ pub fn asEventTarget(self: *FontFaceSet) *EventTarget {
 
 // Readonly, and answered from a getter because the kind is what a bot check
 // reads (see src/browser/tests/descriptor_kind.html).
-pub fn getSize(self: *const FontFaceSet) u32 {
+pub fn getSize(self: *FontFaceSet, exec: *const Execution) u32 {
+    self.syncDeclared(exec);
     return @intCast(self._faces.items.len);
+}
+
+/// Bring the declared half of the set back in line with the stylesheets, if
+/// they have moved since the last look. The script-added half is never touched.
+///
+/// Ordering follows Chrome: the declared faces in source order, and whatever
+/// `add()` was handed after them.
+///
+/// Failure is silent and leaves the previous contents in place. A read of
+/// `document.fonts.size` is not a place to raise, and the alternative -- an
+/// empty set on one bad allocation -- is worse than a stale one.
+fn syncDeclared(self: *FontFaceSet, exec: *const Execution) void {
+    const frame = switch (exec.js.global) {
+        .frame => |frame| frame,
+        // A worker has no stylesheets, so there is nothing to derive and the
+        // script-added faces are the whole set.
+        .worker => return,
+    };
+
+    const version = frame._style_manager.sheet_version;
+    if (self._sheet_version) |seen| {
+        if (seen == version) return;
+    }
+
+    const arena = self._arena.allocator();
+    const declared = style_resources.declaredFaces(frame, arena) catch return;
+
+    var rebuilt: std.ArrayList(*FontFace) = .empty;
+    rebuilt.ensureTotalCapacity(arena, declared.len + self._faces.items.len) catch return;
+
+    for (declared) |face| {
+        // Reuse the existing object when the same family is still declared, so
+        // a face that has already loaded keeps saying so and a page holding a
+        // reference to it keeps holding the same one.
+        if (self.findDeclared(face.family)) |existing| {
+            rebuilt.appendAssumeCapacity(existing);
+            continue;
+        }
+        const entry = FontFace.init(face.family, "", .{
+            .weight = face.weight,
+            .style = face.style,
+        }, exec) catch continue;
+        // A face that arrives after the style-resource pass was never fetched,
+        // which is what Chrome reports for one too: every face iphey injects
+        // reads `unloaded` there.
+        entry.markDeclared(false);
+        // Appending bypasses `add()`, which is where the reference is normally
+        // taken. Without this the set holds a face at zero and the runner
+        // catches the double release on teardown.
+        entry.acquireRef();
+        rebuilt.appendAssumeCapacity(entry);
+    }
+
+    // The script's faces keep their own order, after the declared ones.
+    for (self._faces.items) |face| {
+        if (face.isDeclared()) continue;
+        rebuilt.appendAssumeCapacity(face);
+    }
+
+    // A declared face whose rule is gone loses its reference here.
+    for (self._faces.items) |face| {
+        if (!face.isDeclared()) continue;
+        for (rebuilt.items) |kept| {
+            if (kept == face) break;
+        } else face.releaseRef(frame._page);
+    }
+
+    self._faces = rebuilt;
+    self._sheet_version = version;
+}
+
+fn findDeclared(self: *const FontFaceSet, family: []const u8) ?*FontFace {
+    for (self._faces.items) |face| {
+        if (!face.isDeclared()) continue;
+        if (std.mem.eql(u8, face.getFamily(), family)) return face;
+    }
+    return null;
 }
 
 pub fn getStatus(_: *const FontFaceSet) []const u8 {
@@ -112,7 +199,8 @@ pub fn getReady(_: *FontFaceSet, exec: *const Execution) !js.Promise {
 /// Only the family matters here. The size, style and weight in the shorthand
 /// are parsed off and dropped: matching a face's weight against the
 /// shorthand's is a further question, and nothing measured yet turns on it.
-pub fn check(self: *const FontFaceSet, font: []const u8) bool {
+pub fn check(self: *FontFaceSet, font: []const u8, exec: *const Execution) bool {
+    self.syncDeclared(exec);
     var it = familyList(font);
     while (it.next()) |family| {
         for (self._faces.items) |face| {
@@ -243,16 +331,19 @@ fn indexOf(self: *const FontFaceSet, face: *FontFace) ?usize {
 }
 
 pub fn values(self: *FontFaceSet, exec: *const Execution) !*ValueIterator {
+    self.syncDeclared(exec);
     return .init(.{ .set = self }, exec);
 }
 
 pub fn entries(self: *FontFaceSet, exec: *const Execution) !*EntryIterator {
+    self.syncDeclared(exec);
     return .init(.{ .set = self }, exec);
 }
 
 // A set's callback is handed the value twice and the set third, same as
 // Set.prototype.forEach.
-pub fn forEach(self: *FontFaceSet, cb_: js.Function, js_this_: ?js.Object) !void {
+pub fn forEach(self: *FontFaceSet, cb_: js.Function, js_this_: ?js.Object, exec: *const Execution) !void {
+    self.syncDeclared(exec);
     const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
     for (self._faces.items) |face| {
         var caught: js.TryCatch.Caught = .{};
