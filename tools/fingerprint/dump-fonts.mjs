@@ -68,6 +68,16 @@ const EXTRA_NAMES = [
     'cursive',
     'fantasy',
     'system-ui',
+    // The CSS Fonts 4 generics this list was missing. Measured against headed
+    // Chrome 151 on one page (probes/expr-generic-family-math.js): `math` is a
+    // distinct face -- 962.203125 for a pangram at 100px against the fallback's
+    // 923.1015625, ch 49.5 against 50, ex 47.2969 against 44.8672 -- while
+    // `fangsong` and `emoji` resolve to the fallback to the digit on all three.
+    // The filter below drops the two that resolve to the fallback, so listing
+    // them here records the question and its answer rather than asserting one.
+    'math',
+    'fangsong',
+    'emoji',
     'ui-serif',
     'ui-sans-serif',
     'ui-monospace',
@@ -264,14 +274,19 @@ const measure = (family, quoted) => `(() => {
   // <input> as \`size * avgCharWidth + (maxCharWidth - avgCharWidth)\`, so two
   // inputs of different \`size\` at the same font size solve for both: the slope
   // over \`size\` is avgCharWidth and the remainder is maxCharWidth. Read off
-  // the offset box less the UA's constant 8px of padding and border, because
-  // the computed width follows the page's own box-sizing.
+  // Read off the COMPUTED width, not the offset box. \`offsetWidth\` is a
+  // rounded integer, so \`offsetWidth - 8\` loses the half pixel a text control
+  // is genuinely wide: Chrome answers 540.5px of computed width for
+  // \`size=10\` at 100px Arial and 549 of offsetWidth, and 549 - 8 = 541 solves
+  // for a maxCharWidth of 91 where the true one is 90.5. That half pixel is
+  // visible in form_control_font_box.html, so a regeneration off the offset box
+  // silently moves 79 of 181 families by +0.5 -- measured.
   const charBox = (n) => {
     const el = document.createElement('input');
     el.setAttribute('size', String(n));
     el.style.cssText = 'font-size:100px;font-family:${quoted}';
     document.body.appendChild(el);
-    const w = el.offsetWidth - 8;
+    const w = parseFloat(getComputedStyle(el).width) - 8;
     el.remove();
     return w;
   };
@@ -284,7 +299,7 @@ const measure = (family, quoted) => `(() => {
 // A CSS family name needs quoting unless it is a keyword. Quoting a keyword
 // turns it into a family name Chrome will not resolve, which would silently
 // answer "absent" for every generic.
-const KEYWORDS = new Set([...GENERICS, 'cursive', 'fantasy', 'system-ui', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded', '-apple-system']);
+const KEYWORDS = new Set([...GENERICS, 'cursive', 'fantasy', 'system-ui', 'math', 'fangsong', 'emoji', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded', '-apple-system']);
 const quote = (family) => (KEYWORDS.has(family) ? family : `\\"${family}\\"`);
 
 const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-fonts-'));
@@ -559,22 +574,31 @@ parts.push(`// Copyright (C) 2023-2026  Lightpanda (Selecy SAS)
 // is. That makes this file the engine's font list, and its size the number a
 // detector reports.
 //
-// Two facts from the measurement make one table enough per family:
+// One fact from the measurement makes one table enough per family PER FACE:
+// advances are exactly linear in font size ('m' is 8.330078125 at 10px and
+// 83.30078125 at 100px), so a 100px table scales.
 //
-//   * advances are exactly linear in font size ('m' is 8.330078125 at 10px
-//     and 83.30078125 at 100px), so a 100px table scales;
+// Two things it is not enough for, both measured the same way and both kept in
+// files of their own so that adding them did not put the font list in a diff:
+//
 //   * a string's width is the plain sum of its glyphs' advances, except
 //     across a kerning pair. 'mmmmmmmmmmlli', 'Hello, world!' and
 //     'Cwm fjordbank glyphs vext quiz' all sum exactly; 'AV' and 'To' do
-//     not, and we do not model kerning, so those come out a little wide.
+//     not. Those pairs are in \`font_kerning.zig\`.
+//   * the tables here are the REGULAR face. Bold is not a scale of it and
+//     italic is not a slant of it: 'M' at 16px serif is 14.2265625 regular and
+//     15.1015625 bold while 'x' is 64 either way, so the difference is per
+//     glyph. \`font_variants.zig\` holds bold, italic and bold-italic, and it
+//     adds no NAMES -- which is what keeps this file's own claim below true.
 //
 // fontBoundingBox is the exception: CoreText quantises it per size (16px
 // sans-serif reports an ascent of 14 where scaling 100px's 92 would say 15),
-// so it is stored as a swept table for 1..${SWEPT_SIZES}px and extrapolated above that.
+// so it is stored as a swept table for 1..120px and extrapolated above that.
 //
 // U+0020..U+00FF is tabulated. Anything above that falls back to the family's
 // mean ASCII advance, which is a guess and marked as one at the call site.
 //
+
 // Latin-1 is here because the Turnstile widget measures it: it hands
 // measureText the UTF-8 bytes of an emoji read back as Latin-1, so U+00F0
 // U+009F U+0098 U+0080 rather than U+1F600. Which is also why the C1 controls
@@ -664,11 +688,24 @@ pub const Family = struct {
     /// 8.898 — and it is why three of the ten strings the Turnstile widget
     /// measures come out wider than the sum of their code points.
     /// The two font constants an \`<input>\`'s box is built from, at the 100px
-    /// basis: OS/2's \`xAvgCharWidth\` and hhea's \`advanceWidthMax\`. Chrome sizes
-    /// a text control as \`size * avgCharWidth + (maxCharWidth - avgCharWidth)\`,
-    /// so neither is derivable from \`glyphs\` -- Arial's mean ASCII advance is
-    /// 52.695 and the widest ASCII glyph 101.514, against the 50 and 91 Chrome
-    /// builds the box from.
+    /// basis. Chrome sizes a text control as
+    /// \`size * avgCharWidth + (maxCharWidth - avgCharWidth)\`, so both are
+    /// solved here off two inputs of different \`size\` -- and off their
+    /// COMPUTED width, because \`offsetWidth\` is a rounded integer and loses
+    /// the half pixel: Chrome answers 540.5px of computed width for Arial at
+    /// \`size=10\` and 100px, so \`offsetWidth - 8\` reads 541 and solves for a
+    /// maxCharWidth of 91 where the true one is 90.5.
+    ///
+    /// Neither is derivable from \`glyphs\`: Arial's mean ASCII advance is
+    /// 52.695 and its widest ASCII glyph 101.514, against the 50 and 90.5
+    /// Chrome builds the box from. Nor are they the font tables an earlier
+    /// version of this comment named -- Arial's \`OS/2.xAvgCharWidth\` is 44.141
+    /// at this basis and its \`hhea.advanceWidthMax\` 200. \`avgCharWidth\` IS
+    /// exactly the advance of \`x\` (50.0 to the digit, which is how Blink picks
+    /// it); \`maxCharWidth\` is closest to
+    /// \`halfPixel(OS/2.usWinAscent / unitsPerEm * 100)\`, exact for three of ten
+    /// families measured and off by 0.40 on average -- see font_file.zig, which
+    /// has to estimate it for a downloaded face.
     avg_char_width: f64,
     max_char_width: f64,
     seeds_last_resort: []const u21,
@@ -744,10 +781,62 @@ for (const [name, t] of names) {
     );
 }
 
+// The resolver below is HAND-WRITTEN and lives here rather than in the
+// generated file, because a hand edit to a generated file is reverted the next
+// time anyone regenerates it. Two features were sitting in font_metrics.zig
+// and not here -- the quoted-generic rule (a quoted `'monospace'` is an
+// ordinary family name, not the keyword) and the webfont lookup a Frame
+// supplies -- so a regeneration would have silently dropped both. Anything
+// added to the resolver has to be added here.
 parts.push(`
 /// Chrome falls back to the standard font for a family it cannot resolve:
 /// '100px NoSuchFamily12345' measures exactly like '100px serif'.
 pub const fallback = serif;
+
+const quotable_keywords = [_][]const u8{ "serif", "sans-serif", "monospace", "cursive", "fantasy" };
+
+fn isGenericKeyword(name: []const u8) bool {
+    for (quotable_keywords) |keyword| {
+        if (std.ascii.eqlIgnoreCase(keyword, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Resolves one entry of a CSS family list, given exactly as it was written --
+/// quotes, whitespace and all. This is the entry point every caller wants:
+/// whether the name was quoted is part of what it means, and stripping the
+/// quotes before asking throws that away.
+pub fn findEntry(raw: []const u8, loaded: ?Loaded) ?Family {
+    const name = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (name.len < 2 or (name[0] != '"' and name[0] != '\\'') or name[name.len - 1] != name[0]) {
+        return Loaded.get(loaded, name) orelse find(name);
+    }
+    const unquoted = name[1 .. name.len - 1];
+    if (isGenericKeyword(unquoted)) {
+        return null;
+    }
+    return Loaded.get(loaded, unquoted) orelse find(unquoted);
+}
+
+/// The families a document's own \`@font-face\` files supplied, which shadow a
+/// built-in table of the same name the way CSS says an \`@font-face\` shadows an
+/// installed font.
+///
+/// A closure rather than a map, because this file is generated data with no
+/// business knowing what a Frame is -- and because a realm with no document at
+/// all (an \`OffscreenCanvas\` in a worker) legitimately has none, which is what
+/// the null case means rather than a compromise.
+pub const Loaded = struct {
+    ctx: *const anyopaque,
+    lookup: *const fn (ctx: *const anyopaque, name: []const u8) ?Family,
+
+    fn get(self: ?Loaded, name: []const u8) ?Family {
+        const l = self orelse return null;
+        return l.lookup(l.ctx, name);
+    }
+};
 
 /// Maps a CSS family name to one of the measured families, ASCII
 /// case-insensitively. Null when we have no table for it, which the caller
@@ -780,15 +869,10 @@ parts.push(`    };
 /// monospace\` and compares the result against \`monospace\` alone: skipping the
 /// names we have no table for is what makes a font we do have measure
 /// differently, and a font we do not measure identically to its base.
-pub fn findInList(list: []const u8) Family {
+pub fn findInList(list: []const u8, loaded: ?Loaded) Family {
     var it = std.mem.splitScalar(u8, list, ',');
     while (it.next()) |raw| {
-        const name = std.mem.trim(u8, raw, &std.ascii.whitespace);
-        const unquoted = if (name.len >= 2 and (name[0] == '"' or name[0] == '\\'') and name[name.len - 1] == name[0])
-            name[1 .. name.len - 1]
-        else
-            name;
-        if (find(unquoted)) |family| {
+        if (findEntry(raw, loaded)) |family| {
             return family;
         }
     }

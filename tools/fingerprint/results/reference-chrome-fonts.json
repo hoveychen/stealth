@@ -26,6 +26,10 @@
    "resolved": "100px system-ui"
   },
   {
+   "family": "math",
+   "resolved": "100px math"
+  },
+  {
    "family": "Courier",
    "resolved": "100px Courier"
   },
@@ -554,10 +558,6 @@
    "resolved": "100px STHeiti"
   },
   {
-   "family": "STIX Two Math",
-   "resolved": "100px \"STIX Two Math\""
-  },
-  {
    "family": "STIX Two Text",
    "resolved": "100px \"STIX Two Text\""
   },
@@ -792,6 +792,10 @@
    "PingFang HK"
   ],
   [
+   "STIX Two Math",
+   "math"
+  ],
+  [
    "Songti TC",
    "Songti SC"
   ],
@@ -821,6 +825,8 @@
   ]
  ],
  "unresolved": [
+  "fangsong",
+  "emoji",
   "ui-serif",
   "ui-sans-serif",
   "ui-monospace",
