@@ -26388,3 +26388,99 @@ A retraction from the same run: sannysoft's `navigator.cookieEnabled` row reads
 `document.write(navigator.cookieEnabled); true`, which looks like script source
 leaking into the DOM. The Chrome arm prints it identically — that is how
 sannysoft renders the row.
+
+### What iphey's 30 points are NOT (2026-09-07)
+
+Two real height defects were fixed without iphey's score moving off 70
+"Unreliable", so the next step was the mechanism rather than more axes. Four
+things are ruled out, each with a rig under `scratch/ip/`:
+
+* **The tile.** iphey marks exactly one tile `--error` and the other four say
+  "Everything is fine": **Browser**. Hardware, Software, Location and IP are
+  all clean, so the whole 30 is one section (`browser-tile.mjs`).
+* **The transport.** `ja3n`, `ja4` and the HTTP/2 `akamai_hash` are identical
+  across the arms; only the unsorted `ja3` differs, and Chrome shuffles its own
+  extension order per connection (`tls.mjs`).
+* **The names it reads.** The collector is string-array obfuscated and holds no
+  verdict text, but its string heap is readable: **3781 identifier-shaped
+  strings**, including the 23 automation markers it hunts (`$cdc_asdjflasutopfhvcZLmcfl_`,
+  `__webdriver_evaluate`, `callPhantom`, `__playwright__binding__`, …) and every
+  navigator property it reads. Asked BY NAME on both arms, **112 of 120 answers
+  are identical**; the 8 that differ are all the display persona, which the
+  reference arm is deliberately not aligned on -- and Chrome scores 100 with a
+  400x300 screen, so it is not that (`name-probe.mjs`).
+* **The natives.** 29 integrity and behaviour checks, **all identical**:
+  `Function.prototype.toString` on four natives, the TypeError and RangeError
+  shapes, `Error.captureStackTrace` and `stackTraceLimit`, `window.chrome`'s
+  key set, plugins and mimeTypes, `Notification.permission`, the navigator and
+  screen prototype chains, `AudioContext.sampleRate`, the WebGL
+  vendor/renderer pair, `document.fonts.check`, Intl's `resolvedOptions` and
+  `supportedValuesOf('timeZone').length` (`integrity.mjs`).
+
+The verdict is the server's. The one URL in the heap is `wss://api.iphey.com`,
+and a `WebSocket.prototype.send` hook shows the shape: a 43-byte nonce down,
+**96223 bytes up from us against Chrome's 100414**, and a ~2.4KB reply. Both
+directions are ciphertext, so the payload is not readable -- but the sizes are
+within 4%, so the collection is not deficient (`ws-capture.mjs`).
+
+What is left is the surfaces it hashes, and those are comparable: two runs per
+arm on one machine are byte-stable, so nothing is session-salted.
+
+| axis | ours | chrome | |
+|---|---|---|---|
+| Dom Tags Snapshot | 636e3392160dc55e | 636e3392160dc55e | **match** |
+| Client Rects | ec0366583a4b3b40 | 9d8fd6fcd4169946 | |
+| Audio | d0067cad9a63e081 | 0af6c2a43ada3e10 | |
+| WebGL | dd45b6fecdb52bd1 | aeacd125866a39cd | |
+| Canvas | 75553175f3d2185e | 2a38a5cfb442adc3 | |
+| SVG Computed Style | 129.8125 | 124.4063 | a number, not a hash |
+| Storage | 10 | 4 | a number, not a hash |
+| Stack Overflow Counter | 3959 / 8492 | 3971 / 15085 | **noise, both arms** |
+| MX Score | 70 | 100 | |
+
+⚠️ Two corrections to this repo's own earlier notes come out of that table.
+**`Stack Overflow Counter` is noise** -- it moved 3959 to 8492 on our arm and
+3971 to 15085 on Chrome's between two runs, so the "11541 against 3970" read
+earlier is not a gap and nothing should be built on it. And **`Dom Tags
+Snapshot` now matches** where it differed before the height work, which is the
+one iphey axis those two fixes did move.
+
+#### And the axis behind it: a font-family LIST picks the wrong entry
+
+The string heap names the SVG axis outright -- `'Hello, SVG World!'` sits
+beside `svg` and `getComputedStyle` -- and rebuilding it reproduces iphey's two
+numbers to the digit: `getComputedTextLength()` is **129.8125** here against
+Chrome's **124.40625**.
+
+It is not the SVG path. The same string, at 16px, asked four ways on a page
+that has Roboto:
+
+| asked | ours | chrome |
+|---|---|---|
+| `16px Roboto, sans-serif` — html span | **129.53** (= sans-serif) | 124.40 (= Roboto) |
+| `16px Roboto` alone — html span | 124.20 | 124.40 |
+| `16px Roboto, sans-serif` — svg text | **129.81** | 124.40 |
+| `16px Roboto` alone — svg text | 125.75 | 124.40 |
+| `16px Roboto, sans-serif` — canvas | **129.53** | 124.40 |
+| `16px Roboto` alone — canvas | 124.48 | 124.40 |
+| `16px sans-serif` / `Helvetica` / `Arial` | 129.53 / 129.53 / 129.52 | identical |
+
+The generic families agree to the digit, so no metrics table is missing.
+**Written as a list, `Roboto, sans-serif` takes the sans-serif; written alone,
+Roboto is used.** The first-available-family step picks the wrong entry, and
+that shape -- `font-family: Something, sans-serif` -- is on essentially every
+real page, so text metrics are a few percent wrong nearly everywhere. Plan
+`font-family-list-picks-the-generic`.
+
+Secondary, from the same table: asked for `Roboto` alone the three paths answer
+**124.203, 125.757 and 124.484** where Chrome answers 124.40625, 124.40625 and
+124.4016 -- the three text paths disagree with each other, which is the
+`text-width-has-three-paths` shape again.
+
+The other number is smaller: `Storage` is
+`navigator.storage.estimate().quota`, a round **10 GiB constant** here against
+Chrome's 5368709120, which Chrome derives from free disk (it reported 4 and
+then 5 GiB on this machine within the hour). Matching it exactly is not a
+target; deriving it from real free space is. And one new tell in passing:
+`document.fonts.size` is **0** here against Chrome's **312** -- `check()`
+answers true while the FontFace set is empty.
