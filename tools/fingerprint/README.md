@@ -26865,3 +26865,135 @@ That is worth having: it is the first time Cloudflare's name list has been
 readable at all, and it closes "the guard reads a name we get wrong" as an
 explanation for the four short values — with `Summarizer` the single exception
 worth a cheap follow-up.
+
+#### Closing the name channel with the whole list
+
+Recursive descent reaches 51.8% of the main program, so the 336 names above are
+half the story. The name-bearing opcodes can be found without control flow
+though: scan every (pc, key) pair, decode, and keep a hit only when the *next*
+instruction also decodes (`disasm.mjs <code> --names`). That yields **978
+candidates**, of which the obvious brute-force noise is easy to drop — a real
+inline name occurs at a handful of sites, not 494 of them, and
+`FFFFFFFFFFFFFFFF` and `vvvvvvvvvvvvvvvv` are not property names. 516 new
+plausible names survive, roughly tripling the list.
+
+The new half reaches surfaces the first census never touched:
+`getShaderPrecisionFormat`'s `rangeMin`/`rangeMax`/`precision`;
+`getContextAttributes` with `desynchronized`, `alpha`, `colorSpace`,
+`drawingBufferColorSpace`, `unpackColorSpace`, `toneMapping`; the WebGL shader
+lifecycle (`createShader`/`shaderSource`/`compileShader`/`attachShader`/
+`deleteShader`/`deleteProgram`/`createBuffer`/`deleteBuffer`);
+`OffscreenCanvas.transferToImageBitmap`; WebRTC `sdp`, `sdpFmtpLine`,
+`iceGatheringState`, `candidate`; `BatteryManager.chargingTime`/
+`dischargingTime`; `NetworkInformation.effectiveType` and `navigator.onLine`;
+`StorageManager.estimate`/`getDirectory`; `AudioBuffer.getChannelData`; WebGPU
+`powerPreference`/`device`; `PerformanceEntry.entryType`/`startTime`/`duration`;
+`contentWindow`/`contentDocument`; `SVGTextContentElement.getComputedTextLength`;
+`isSecureContext`; `trustedTypes`; and the `Math` constants
+`LN2`/`LOG2E`/`LOG10E`/`SQRT2`/`SQRT1_2`.
+
+Censused the same way: **515 names, zero absent in us, zero present in us
+only.** 127 identical, 292 absent in both (the surviving brute-force noise,
+which is itself a useful check), 63 differing only in iteration order, and 33
+whose owner sets differ — every one of those 33 through the same twelve
+interfaces we do not implement (`HTMLFencedFrameElement`, `Summarizer`,
+`CloseWatcher`, `Observable`, `Subscriber`, `WebSocketStream`, `WebSocketError`,
+`DigitalCredential`, `IdentityCredentialError`, `PermissionsPolicy`,
+`PressureRecord`, `DocumentPictureInPictureEvent`), plus `VisibilityStateEntry`
+and `TaskAttributionTiming` on `entryType`.
+
+So the channel is closed on the complete list, not on half of it: of roughly
+780 names the guard reads, the only thing we do not have is `Summarizer` and the
+unimplemented-interface family that `prototype-completeness-lever-spent`
+already settled.
+
+### There is no client-side verdict to read, and brute force cannot find the payload writer
+
+Two bounding results, both negative, both worth not rediscovering.
+
+**The verdict is server-side.** The obvious next move after getting a
+disassembler was to read the branch where the guard decides to issue a ticket.
+That branch does not exist. The main 462KB program contains no `"complete"`
+string, no `.send(` and no `"POST"` — the POST is done by the outer JavaScript
+(`ac.open("POST", a); ac.send(IR(Q))`). The ticket-delivery program *is* the
+POST response, and the decisive detail is that **the token inside it is an
+inline constant**: `r15 = "1.lsYF…"` followed by `r16["token"] = r15`, then
+`postMessage` to `window.parent`. The server writes the token into the response
+body; the client does not compute it. The only branch on the client is "is the
+response plain JS or bytecode". That lines up with `cf-ticket-is-not-a-pass`
+(the `cf-chl-out` token is issued and then not honoured) and
+`cf-r2-extra-bytes-are-server-issued` — three views of one structure, which is
+that Cloudflare keeps both the decision and the token on its own side.
+
+So the only client-readable half of the decision is its *input*: what op 18
+writes into register `224^i`.
+
+**And op 18 cannot be found by brute force.** The trick that completed the name
+list does not transfer. A name-bearing opcode is verifiable because a valid
+identifier string is a strong constraint; op 18 is five bytes with no string in
+it. Scanning every (pc, key) yields 2073 "emit sites" spread almost perfectly
+evenly across all nine encodings — 219 u8, 267 i64, 299 u32, 231 varlen-bytes,
+146 u32b, 203 f64le, 228 u16le, 215 u16len-bytes, 265 bool — which is the
+signature of noise, not of a program, and matches the ~4400 false positives the
+arithmetic predicts. The registers are high and random (`r171`, `r252`,
+`r207`), and the hits are periodic: `emit i64 r36` recurs at 50475, 50842,
+51209, 51576, … exactly **367 bytes apart**, so the scan is finding one
+alignment inside a repeating data block over and over.
+
+The reliably decoded 51.8% contains **zero** valid op-18 instructions. The
+payload writer lives in the unreached half, and getting there needs real
+control-flow coverage — whose remaining holes are exactly the regions whose only
+entry points lie in other holes.
+
+### The worker's eval gate matches, and the `Failed to fetch` is Cloudflare's own dead host
+
+Two more negatives on the client-side surface, both from reading the bytecode.
+
+**The worker eval gate.** At pc 462141-462575 the guard builds a Blob worker
+whose source is
+
+```js
+var _p=null;
+if(self.trustedTypes) try {
+  _p = self.trustedTypes.createPolicy('<per-delivery name>', {createScript:function(s){return s;}})
+} catch(e) { self.postMessage({type:'tt-policy-error', msg:e.message}) }
+onmessage = function(e){
+  e.isTrusted && ''===e.origin && null===e.source && eval(_p ? _p.createScript(e.data) : e.data)
+}
+```
+
+That is a promising shape: three MessageEvent invariants gating an `eval`, so
+one wrong value silently disables everything the worker contributes, and no
+name or value census could see it — every name is present, only the gate is
+wrong. `expr-cf-worker-eval-gate.js` runs the guard's source verbatim (does the
+eval run?) alongside an instrumented copy (why?). Both arms:
+`hasTT: "object"`, `policyOk: true`, `policyErr: null`, `isTrusted: true`,
+`origin: ""`, `source: null`, `lastEventId: ""`, `gate: true`, **`evalRan: true`**.
+Identical. No setTimeout in the probe — timers do not fire inside an awaited
+`Runtime.evaluate` on this engine, so `fetch` is the pump.
+
+**And a `TypeError: Failed to fetch` that looked like a real asymmetry is not
+one.** `exception-frames.mjs` on cf-scrapingcourse shows this engine throwing
+`Failed to fetch` from inside the guard VM (the frames land in the dispatch
+loop, and incidentally confirm the disassembly independently: `case 0:
+h[uV^this.i] = new Q; case 1: … new Q(uR[0]) …` is op 194 exactly as decoded,
+with `this.h[this.j]`, `this.h[this.m][this.h[this.l]++]` and `^ this.i` the
+register layout derived above) while Chrome reports zero exceptions.
+
+`failed-requests.mjs` names the request: **`brunhild.challenges.cloudflare.com`**,
+which has **AAAA records and no A record**. This machine has working IPv6
+egress (`curl -6` to cloudflare.com returns 200), so "we resolve IPv4 only" was
+a clean hypothesis with an obvious fix. **The control kills it: Chrome fails the
+same request twice with `net::ERR_NAME_NOT_RESOLVED`.** Neither engine reaches
+that host; it is Cloudflare's, not ours. The "0 exceptions vs 1" gap is a
+tooling asymmetry — a rejected promise is not a throw, and the two engines
+surface it through different channels — not a behavioural difference.
+
+Our three failures are that host plus two `Abort`s on the blob worker scripts,
+which are the guard's own `terminate()`. Chrome's are that host twice plus an
+unrelated `docs.google.com` extension beacon.
+
+One row from those runs is worth not over-reading: Chrome saw 38 requests to
+our 18. Request fidelity is the lever `wire-census-closed-but-cf-unmoved`
+already spent — four plans took the census from 11 to 27 matching requests and
+`served=` stayed 0/6 — so this is noted, not chased.
