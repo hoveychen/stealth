@@ -201,3 +201,116 @@
     testing.expectEqual(true, true);
 }
 </script>
+
+<!--
+The `@font-face` rules in a document's own stylesheets were never in
+`document.fonts`, while `check()` answered true for every name including the
+faces those rules declare. So the engine knew a rule existed for one question
+and not for the other, and `document.fonts.size` read 0 against Chrome's 312
+on iphey.com -- one expression apart.
+
+Chrome 151, measured with scratch/ff/fontfaceset.mjs on a page with three
+`@font-face` rules (one used by an element, one whose url 404s, one never
+referenced) plus a JS-added FontFace:
+
+  size 3 from the start, iteration order is source order, and each face
+  reports family/weight/style/status/unicodeRange/display -- so a rule with
+  `font-weight:700; font-style:italic` reads `700` and `italic`.
+
+  `status` is `unloaded` until the face is actually USED: the one an element
+  asks for goes `loaded`, and the other two stay `unloaded` -- including the
+  one whose url is perfectly good. Chrome requests neither of those two files,
+  which is what "used" means here.
+
+  `check()` follows the set, not the name: `false` for a declared face that is
+  still unloaded, `true` once it has loaded, and `true` for a family NOTHING
+  declares (`NoSuchFontXYZ`, `Courier New`) because the fallback renders it.
+  That last row is why "answer true for everything" looked right for so long.
+-->
+<script>
+  // The `load` event and not DOMContentLoaded: this engine resolves style
+  // resources just AFTER the DCL dispatch (Frame.zig, "the document is
+  // complete, so a rule can be told whether it matches anything"), so a DCL
+  // listener runs before the faces are registered and reads an empty set.
+  // Both orders are covered, because these blocks are modules and the load
+  // event may already be behind them.
+  function whenReady(fn) {
+    if (document.readyState === 'complete') fn();
+    else window.addEventListener('load', fn);
+  }
+</script>
+<style>
+  @font-face { font-family: AlphaFont; src: url(/src/browser/tests/css/nonexistent-alpha.ttf) format('truetype') }
+  @font-face { font-family: BetaFont; src: url(/src/browser/tests/css/nonexistent-beta.ttf) format('truetype'); font-weight: 700; font-style: italic }
+  #alpha-user { font-family: AlphaFont }
+</style>
+<div id=alpha-user>x</div>
+
+<script id="font_face_rules_are_in_the_set" type=module>
+{
+  // Read once the document has loaded, because that is where this engine
+  // resolves style resources: whether a rule matches anything is what decides
+  // both the fetch and the face's status, and neither is answerable mid-parse.
+  // Chrome has the set filled from the first script -- a fidelity gap this
+  // file deliberately does not paper over, since a page that reads
+  // document.fonts during parsing sees 0 here and 3 there.
+  const state = await testing.async();
+  // A module runs deferred, so DOMContentLoaded may already be behind us --
+  // `whenReady` covers both orders rather than waiting for an event that has
+  // fired.
+  whenReady(() => state.resolve(
+    Array.from(document.fonts).map((f) => [f.family, f.weight, f.style].join('/')).join('|') +
+    ' size=' + document.fonts.size,
+  ));
+  await state.done((seen) => {
+    testing.expectEqual('AlphaFont/normal/normal|BetaFont/700/italic size=2', seen);
+  });
+}
+</script>
+
+<script id="check_answers_from_the_set" type=module>
+{
+  // A family nothing declares is renderable with the fallback, so `true`. A
+  // family a rule declares but nothing loaded is `false` -- the row that
+  // "always true" got wrong.
+  const state = await testing.async();
+  // A module runs deferred, so DOMContentLoaded may already be behind us --
+  // `whenReady` covers both orders rather than waiting for an event that has
+  // fired.
+  whenReady(() => state.resolve([
+    'absent=' + document.fonts.check('16px NoSuchFontXYZ'),
+    'local=' + document.fonts.check('16px "Courier New"'),
+    'declared-unloaded=' + document.fonts.check('16px BetaFont'),
+    // A list does not rescue it. Both of these are `false` in Chrome, measured
+    // -- the declared face is what would be used, and it has not loaded, so a
+    // generic behind it changes nothing.
+    'list-generic-after=' + document.fonts.check('16px BetaFont, sans-serif'),
+    'list-absent-before=' + document.fonts.check('16px NoSuchFontXYZ, BetaFont'),
+  ].join(' ')));
+  await state.done((seen) => {
+    testing.expectEqual(
+      'absent=true local=true declared-unloaded=false list-generic-after=false list-absent-before=false',
+      seen,
+    );
+  });
+}
+</script>
+
+<script id="added_faces_still_work" type=module>
+{
+  // The JS path was already right and has to stay that way: adding a face
+  // grows the set, deleting it shrinks it back, and the CSS-declared faces are
+  // untouched by either.
+  const state = await testing.async();
+  whenReady(() => {
+    const ff = new FontFace('AddedFont', 'url(/nowhere.ttf)');
+    document.fonts.add(ff);
+    const grown = document.fonts.size + ' ' + ff.family + '/' + ff.status;
+    document.fonts.delete(ff);
+    state.resolve(grown + ' then ' + document.fonts.size);
+  });
+  await state.done((seen) => {
+    testing.expectEqual('3 AddedFont/unloaded then 2', seen);
+  });
+}
+</script>

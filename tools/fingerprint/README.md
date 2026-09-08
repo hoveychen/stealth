@@ -26484,3 +26484,44 @@ then 5 GiB on this machine within the hour). Matching it exactly is not a
 target; deriving it from real free space is. And one new tell in passing:
 `document.fonts.size` is **0** here against Chrome's **312** -- `check()`
 answers true while the FontFace set is empty.
+
+##### Retraction: it is the webfont, not the family list
+
+The paragraph above is wrong and this is what replaced it. "The
+first-available-family step picks the wrong entry" was inferred from Roboto
+alone, and two controls falsify it:
+
+* **A local family is picked correctly in every syntactic form.** With
+  `Courier New` -- which this engine has metrics for -- the width is 163.2265625
+  for `font-family: Courier New, sans-serif`, for the quoted spelling, for
+  `Courier New` alone, for the `font:` shorthand, and even for
+  `NoSuchFontXYZ, Courier New, sans-serif`. `findInList` walks the list and
+  takes the first hit, which is right (`scratch/ff/list-vs-shorthand.mjs`).
+* **An `@font-face` font is fetched and then never used.** Serving a real font
+  file as `ProbeFont` from a local server (`scratch/ff/webfont.mjs`):
+
+  | | ours | chrome |
+  |---|---|---|
+  | server saw the font request | **yes** | yes |
+  | `document.fonts.size` | **0** | 1 |
+  | `document.fonts` entries | **none** | `ProbeFont:loaded` |
+  | `document.fonts.check('16px ProbeFont')` | true | true |
+  | `font-family: ProbeFont, sans-serif` | **129.53** (= sans-serif) | **163.23** (= the webfont) |
+  | `sans-serif` | 129.53 | 129.53 |
+  | `"Courier New"` | 163.23 | 163.23 |
+
+So Roboto measured as sans-serif because Roboto is iphey's WEBFONT and this
+engine does not measure with one -- and `Roboto` alone measured as neither
+because an unknown family lands on `fallback`, whose table happens to sit near
+Roboto's. Two separate defects, both one expression from Chrome:
+
+* text on any page with a webfont is measured with the fallback family, which
+  is most real pages;
+* `document.fonts` is EMPTY (`size` 0 against Chrome's 312 on iphey, 1 against
+  1 here) while `check()` answers true for the same name -- so the engine knows
+  the `@font-face` rule exists for one question and not for the other.
+
+The lesson for the next reading: a family difference is not a family-selection
+bug until a LOCAL family has been checked in the same shapes. The generic
+families agreeing to the digit was already the hint -- selection was never
+broken.

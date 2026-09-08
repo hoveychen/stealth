@@ -36,6 +36,7 @@ const CSSRule = @import("../webapi/css/CSSRule.zig");
 const CSSRuleList = @import("../webapi/css/CSSRuleList.zig");
 const CSSStyleRule = @import("../webapi/css/CSSStyleRule.zig");
 const CSSStyleDeclaration = @import("../webapi/css/CSSStyleDeclaration.zig");
+const FontFace = @import("../webapi/css/FontFace.zig");
 const MediaQuery = @import("../css/MediaQuery.zig");
 const rules = @import("../webapi/css/rules.zig");
 
@@ -155,7 +156,12 @@ const Scan = struct {
     used_families: std.StringHashMapUnmanaged(void) = .empty,
 
     const Face = struct {
-        family: []const u8, // lowercased
+        family: []const u8, // lowercased, for the used_families lookup
+        // The family as the rule spells it, because `document.fonts` reports
+        // that and not the folded form: Chrome answers `AlphaFont`.
+        declared: []const u8,
+        weight: []const u8,
+        style: []const u8,
         base: [:0]const u8,
         url: []const u8,
     };
@@ -262,10 +268,21 @@ const Scan = struct {
         // Chrome asks for one file per face, not one per `format()` in the
         // list: the first source it can use wins and the rest are never
         // requested.
+        //
+        // A face with no `url()` at all is still a face. iphey declares 312
+        // `@font-face` rules of which 310 are `local(...)` only -- a font
+        // enumeration probe -- and Chrome lists all 312 in `document.fonts`.
+        // Registering only the two with a url read 2 against its 312, which is
+        // the same count-shaped tell one layer down.
         var it: UrlIterator = .{ .rest = src };
-        const url = it.next() orelse return;
+        const url = it.next() orelse "";
         try self.faces.append(self.arena(), .{
             .family = try std.ascii.allocLowerString(self.arena(), family),
+            .declared = try self.arena().dupe(u8, family),
+            // A descriptor the rule leaves out is the FontFace default, which
+            // is what Chrome reports: `normal` for both.
+            .weight = try self.arena().dupe(u8, descriptor(style, "font-weight", self.frame)),
+            .style = try self.arena().dupe(u8, descriptor(style, "font-style", self.frame)),
             .base = self.base,
             .url = url,
         });
@@ -321,9 +338,46 @@ fn scan(frame: *Frame) !void {
         while (it.next()) |d| try s.declaration(d.name, d.value);
     }
 
+    // Two things come out of the same walk, and they have to agree: what to
+    // fetch, and what `document.fonts` reports. The set held nothing at all
+    // before this -- `size` read 0 against Chrome's 312 on iphey.com -- while
+    // `check()` answered true for every name, so the engine knew a rule
+    // existed for one question and not for the other.
+    //
+    // `used` is the same predicate both answers turn on. Chrome requests only
+    // the faces something asks for, and leaves the others `unloaded` even when
+    // their url is perfectly good, so "used" is exactly what decides the
+    // status too (tests/css/font_face_set.html).
+    const fonts = frame.document.getFonts(&frame.js.execution) catch null;
     for (s.faces.items) |face| {
-        if (s.used_families.contains(face.family)) {
+        // Only a face with a url has anything to fetch, and only a face
+        // something asks for is fetched at all.
+        const used = s.used_families.contains(face.family);
+        if (used and face.url.len != 0) {
             try s.fetchFrom(face.base, face.url, .font);
         }
+        const set = fonts orelse continue;
+        const entry = FontFace.init(face.declared, face.url, .{
+            .weight = face.weight,
+            .style = face.style,
+        }, &frame.js.execution) catch continue;
+        // `loaded` means the face is in use, which is what Chrome reports: it
+        // leaves an unused face `unloaded` whether its source is a url it
+        // never fetched or a `local()` name -- iphey's 310 local probes are all
+        // `unloaded` there.
+        entry.markDeclared(used and face.url.len != 0);
+        // The set takes the only reference: a face built here is never handed
+        // to JS, so there is no wrapper holding one, and releasing after the
+        // add drops it to zero and frees a face the set still lists (the
+        // runner catches that as a `release overflow`).
+        _ = set.add(entry) catch {};
     }
+}
+
+/// One `@font-face` descriptor, or the FontFace default when the rule leaves
+/// it out. The defaults are `normal` for both of the two read here, which is
+/// what Chrome reports for a rule that declares neither.
+fn descriptor(style: *CSSStyleDeclaration, name: []const u8, frame: *Frame) []const u8 {
+    const value = std.mem.trim(u8, style.getPropertyValue(name, frame), &std.ascii.whitespace);
+    return if (value.len == 0) "normal" else value;
 }
