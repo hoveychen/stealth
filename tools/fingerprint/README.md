@@ -26318,3 +26318,73 @@ logs afterwards.
 `alive`. It killed each engine 300ms after the evaluate returned, and the panic
 handler had written its text but the process had not exited yet, so `exited` was
 still null. Give a crash 3 seconds, and read the log rather than the exit code.
+
+## The detectors say what they think, and name the axis (2026-09-07)
+
+`detector-sweep.mjs` answers "did the page finish". Its `verdictWords` column
+is only how many judgement-shaped WORDS appear in the page text, which threw
+away what these twelve pages are for: they publish a conclusion AND the axes
+they read to reach it. `detector-verdicts.mjs` reads that, and
+`verdict-diff.mjs` compares two snapshots by axis name.
+
+The first pair (us pinned at `2100+e2861a1fe`, chrome `--headed-ua`) is the
+first graded reading this repo has of itself:
+
+| | us | chrome |
+|---|---|---|
+| iphey MX Score | **70** | **100** |
+| iphey verdict | **Unreliable** | Trustworthy |
+| iphey `browser` axis | **Detected an inconsistent browser fingerprint** | axis absent |
+
+**212 readings identical, about 25 different.** What matters is that only the
+first group below is a defect of ours; the other two groups are the trap.
+
+### A defect the channel found on its first run: percentage heights never resolve
+
+browserleaks reads `div.clientHeight` and got **0** from us against **1080**
+from Chrome, and reported our viewport as `1920×0`. Isolated on a synthetic
+page, the rule is clean:
+
+| shape | us | chrome |
+|---|---|---|
+| `height:50%` in a **px-height** parent (200px) | **19** | **100** |
+| `height:100%` in a px-height parent (300px) | **19** | **300** |
+| `height:50%` in a percentage-height parent | 19 | 19 (both right: indefinite) |
+| `height:50vh` | 540 | 540 |
+| `height:200px` | 200 | 200 |
+
+`vh` resolves, `px` resolves, **`%` never does** — so this is not a rounding
+question, it is a branch that was never written. Plan
+`percentage-height-never-resolves`.
+
+Three more, all iphey's own numbers rather than hashes: `Stack Overflow
+Counter` 11541 against 3970, `SVG Computed Style` 129.8125 against 124.4063,
+`Storage` 10 against 4. Plan `iphey-numeric-axis-gaps`. And sannysoft catches
+`navigator.sendBeacon()` with no arguments returning undefined where Chrome
+throws.
+
+### The rows that are NOT defects, and why
+
+Worth as much as the findings, because each of these looks exactly like one:
+
+* **Five hash families differ** — Canvas, Audio, WebGL, Dom Tags Snapshot,
+  Client Rects. A hash summarising a surface cannot say which part moved, and
+  these families are already causally closed (see the image-pixel and
+  glyph-outline sections).
+* **The display persona axes** — `Resolution 1920x1200` against `400x300`,
+  `colorDepth 30` against `24`, `availTop 33` against `0`, `outerHeight`.
+  This axis is deliberately not aligned; `assertPersonaParity` reports screen
+  values and refuses to assert them for exactly this reason.
+* **Every client hint is EMPTY on the Chrome arm** — platform, brands,
+  architecture, bitness, uaFullVersion, fullVersionList, formFactors.
+  `--headed-ua` blanks the high-entropy hints. Ours are populated; the
+  difference runs the other way.
+* **rebrowser's `useragent` test** — 🟢 for us, 🟡 for Chrome. We are the
+  better arm on that row.
+* **creepjs says "Headless" for BOTH arms.** It does not separate this engine
+  from a headless Chrome, so it is not a tell of ours.
+
+A retraction from the same run: sannysoft's `navigator.cookieEnabled` row reads
+`document.write(navigator.cookieEnabled); true`, which looks like script source
+leaking into the DOM. The Chrome arm prints it identically — that is how
+sannysoft renders the row.
