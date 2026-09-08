@@ -26610,3 +26610,258 @@ initial key the stream decodes from the corrected recurrence. What is left is
 naming the 48 handler bodies (46 + `E` + `U`), each 850-1800 bytes of
 deobfuscated code that declares its own id table and its own operator table
 before doing its work. That is the one thing the page layer cannot answer.
+
+### Naming all 48 handlers: it is an ordinary register machine (2026-09-08)
+
+All 48 bodies come out mechanically, and the machine underneath is
+unremarkable — which is the useful part, because an unremarkable machine
+disassembles without being run. The full table is in
+`scratch/cfvm/opcode-semantics.md`; what matters here is the shape.
+
+The VM object holds *register indices*, not values: `h` is the register array,
+`i` an **index mask** xor'd into every decoded register number, and `j`/`l`/`m`/`o`
+are the indices of the registers holding the key, `pc`, the code array and the
+closure-cell table. Four register numbers are reserved (all still `^ i`):
+`59` the stack, `103` the saved-frame-length stack, `124` the return slot, and
+`224` the **payload byte array**.
+
+**Every operand decodes the same way, and its slot constant names its kind.**
+`val = key ^ ((code[pc++] - 28) & 255) ^ K`, then `^ i` for register operands.
+`K` is baked into the slot and is stable across handlers that share an
+instruction shape: op 159 (`regs[a][regs[b]] = regs[c]`) and op 252 (the same
+with an immediate) both use `118` for the object slot, `28` for the key slot,
+`231` for the value slot, and `119` marks an immediate. So operand *kinds* fall
+out of the source without any tracing. The key is read once per instruction
+(`regs[j]`), which is why the whole stream is statically decodable; branches
+rekey with one extra byte (`^ 172`), so the key is a function of the path taken,
+and `pc = NaN` halts.
+
+Arithmetic is two handlers, selected by a dispatch-time immediate: `E` covers 18
+binary operators (`- * / % + ^ | & << >> >>> == === > >= || && instanceof`) and
+`U` covers 5 unary ones (`typeof - + ! ~`). **That is 18 + 5, not the 17 + 6
+written above** — the total 23 was right, the split was not.
+
+**The constant pool is one opcode.** Op 215 sub-tags its own first operand:
+`83` immediate byte, `16` varint, `25` a hand-decoded IEEE754 double, `18`
+inline string, `144` byte array, `12` `RegExp(source, flags)`, plus
+`undefined`/`null`/`NaN`/`Infinity`/`true`/`false` and a try-frame quadruple.
+There is no separate string table: `Y` is built at load time as the identity
+`String.fromCharCode` map, so inline strings are just xor-decoded byte runs.
+
+Four opcodes carry a property or method **name** inline that way — `239`
+(`regs[d] = regs[o][<name>]`), `58` (write), `254` and `233` (method call). With
+the code array and the entry key, the complete list of names the guard touches
+is recoverable statically, which is the channel the page layer could never give.
+
+And op 18 is the **payload serializer**: it pushes into register `224^i` with a
+sub-op per encoding — u8, u16le, u32, 8-byte BigInt, u32, **float64 little-endian
+via `DataView.setFloat64`**, bool, u16-length-prefixed bytes, varint-length
+bytes. That is what writes the fifteen segments of widget-realm plaintext.
+
+#### One earlier negative has a hole in it
+
+`cf-four-short-values-are-computed` rules out "the four short values are
+literals" on the strength of a b94 search of the widget document and every
+inline and same-origin script. That search was over **source text**. Constants
+in this VM live in the bytecode as xor-encoded bytes — a double is op 215
+sub-op 25 — so no text search could have seen them. The negative is sound for
+JS-level literals and says nothing about the VM's constant pool. Decoding
+op 215 sub-op 25 out of a saved delivery is the way to actually test it, and
+value 3 (Chrome `0`, us `16`) is an integer sub-op of op 18, not a float one.
+
+#### A trap in the extraction, worth writing down
+
+`f` and `F` are two different handlers (opcodes 203 and 252), as are `p`/`P`,
+`e`/`E`, `j`/`J`, `l`/`L`, `Id`/`ID`, `Ii`/`II`, `Iq`/`IQ` and `Iz`/`IZ` — nine
+pairs. macOS is case-insensitive, so writing `handlers/<fn>.js` silently
+produced 39 files for 48 handlers, and the nine survivors were whichever of each
+pair was written last. The count printed `written: 48` throughout. Anything that
+derives one file per obfuscated identifier needs a case marker in the filename.
+
+### The disassembler runs, and the ticket program reads end to end (2026-09-08)
+
+With the opcode table above, a recursive-descent disassembler needs ~250 lines
+and no execution at all (`scratch/cfvm/disasm.mjs`). Three things had to be
+found first, and none of them is in the inline script's own text:
+
+**Where the bytecode actually lives.** `runProgram(blob)` is
+`new Ib(blob).run(0, 173, [])`, so **entry pc is 0 and entry key is 173**, and
+`Ib`'s constructor pins the register layout as fixed constants xor'd with the
+random `i`: `m = 49^i` (code), `j = 62^i` (key), `l = 138^i` (pc), `o = 95^i`
+(closure cells), `h[59^i]` stack, `h[103^i]` frame-length stack,
+`h[111^i] = globalThis`, `h[224^i]` payload. Because every index carries the
+same `i`, it cancels: the disassembler reports `key ^ raw ^ K` and never needs
+to know `i`.
+
+**The programs arrive over the wire, not in the script.** The inline literal is
+a 5208-byte helper (it builds the hidden sandboxed iframe). The real programs
+are the bodies of the `/cdn-cgi/challenge-platform/.../fo/...` responses,
+decoded by `d2`: `b = 32` xor'd with every char of
+`_cf_chl_opt.TfPFa9 + "_0"`, then per byte
+`((c & 255) - b - (i % 65535) + 65535) % 255`, and the result is base64 for
+`atob`. `dump-normal.mjs` was already saving these bodies — the GET response
+decodes to **462,915 bytes** of bytecode and the POST response to 3,858.
+
+**And the POST-response program reads completely** — 98 instructions, 100%
+covered, no desyncs. It is the ticket-delivery program: it `postMessage`s
+`{source:'cloudflare-challenge', widgetId, event:'complete', token:'1.lsYF…',
+scs:'scs.1.…', aC:'xj2I…', chlId:'a37cab989dc5ebe2'}` to `window.parent`, sets
+`window.uUOrc2 = true`, calls `window.MxFzg4.aLvDD8()` and `.zUrlU7()`, and
+schedules a second `postMessage` with `event:'tokenExpired'` after
+`_cf_chl_opt.hpDaw8` ms. Reading a guard program's decision path off disk, with
+the guard never run, is new.
+
+#### Two transcription errors worth naming, because both looked like data
+
+A wrong operand order does not announce itself: the stream keeps decoding,
+because 69 of 256 byte values are opcodes, so a desynced run still passes the
+"is this an opcode" check about a quarter of the time. Coverage was stuck at
+17% and the giveaway was a branch target of `@15467578` in a 462KB program.
+
+* **op 127 reads its condition register FIRST**, then the 24-bit target, then
+  the rekey byte. Reading the target first gives plausible-looking garbage.
+* **op 167 has no flag byte and never falls through.** It is a two-way branch:
+  `regs[a] === regs[b] ? jmp A : jmp B`, with both targets and both rekeys
+  always present — 10 bytes, always. It shares its shape with op 189, which
+  *does* have a flag byte and a fall-through, and copying 189's decoder onto
+  167 is what capped coverage.
+
+Fixing those two took the main program from 680 to 2,125 instructions, and a
+hole-filling pass — brute-force all 256 keys at each unvisited offset, keep
+whatever sustains 12 self-consistent instructions — took it to **13,532
+instructions, 51.8% of the bytes**. The remaining holes are regions whose only
+entry points live in other holes.
+
+#### What the readable half already shows
+
+The obfuscator pads the instruction stream with **dead code**: lines like
+`r152 = r26 === r26`, `r117 = ! r169` and `r172 = r94 + r60`, always on
+high-numbered registers, interleave regularly between coherent instructions
+without ever breaking sync. Anything that counts instructions or opcodes in
+this VM has to discount them.
+
+And there is a **JS-engine behaviour battery** around pc 78480-80100 that pushes
+each result into an array (`r6` is `"push"`): `10000000000000000` vs
+`10000000000000002`, `1.1`, `5e-7` through `parseInt(x, 10)`,
+`"banana".toLowerCase()`, `String([])` and `String({})` giving
+`"[object Object]"`, `0.1 + 0.2 === 0.3`, `NaN`, `Infinity`, and unary
+`+`/`-`/`!` on a spread of registers. Every one of those is a two-arm
+comparable, and unlike the collection surfaces already exhausted, these are
+answers only the *engine* can give.
+
+**No float64 payload write is in the readable half yet.** The one op-18 the
+sweep found (`sub230`, pc 54124) sits inside a hole-seeded region that also
+produced desyncs, and 230 is not one of the nine encodings — it is a false
+positive, not an emit. The four short values are still unlocated; what changed
+is that they are now a search over a decoded instruction stream rather than a
+guess about the page.
+
+#### Retraction: the engine-behaviour battery is not where our 16 comes from
+
+The battery reads like the answer. Value 3 of the four short values is Chrome
+`0` against our `16`, and pc 76400-84400 is a suite of engine-conformance
+probes whose results all get pushed into one array and stored under the key
+`OjmeV1` — a couple of dozen pass/fail answers, Chrome scoring zero failures
+and us scoring sixteen, matching in both magnitude and shape. And unlike every
+collection surface already exhausted, these are answers only the engine can
+give, so a mismatch would have been an engine defect with a fix.
+
+**It is not it. 64 probes, both arms, byte for byte identical** — see
+`tools/fingerprint/probes/expr-cf-quirk-battery.js`, transcribed from the
+disassembly and run through `run-expr.mjs` on a real page in both arms. That
+covers what is readable of the region, and the region is 97.5% covered with no
+remaining hole larger than 34 bytes, so this is not a case of having read only
+the easy part.
+
+For the record, because these took real work to recover and are worth having
+written down, the battery asks: the "wat" corpus (`Array(16).join('wat'-1) +
+' Batman!'`, `'b'+'a'+ +'a'+'a'`, `'foo'+ +'bar'`); `parseInt` at seven radices
+on `"Infinity"` (19 and up parse it, because `I`/`n`/`f`/`i`/`t`/`y` are digits
+there), plus `parseInt(null, 24)`, `parseInt('f*v', 16)`, `parseInt('06')`,
+`parseInt(0.0000005)`; `String(5e-7)` and `String(5e25)`;
+`10000000000000000 + 1 === 10000000000000002`; `0.1 + 0.2 === 0.3`;
+`Math.max()` and `Math.min()` with no arguments; `13.14 % 3.14`; a ladder of
+array-to-primitive coercions (`[[[[[[]]]]]] == ''`, `[null] == 0`,
+`[undefined] == 0`, `[''] == ''`, and the same after setting an inner
+`.length`); `typeof document.all`; `Object.prototype.toString.call(undefined)`;
+`eval('typeof module')`, `typeof global` and **`typeof pyimport`** (Node and
+Pyodide detection); `eval('(function(){return this}.call(1)) !== (…)')`;
+`eval('0, {i:1, toString(){return this.i++}}')` read three times;
+`'plugins' in Object.getPrototypeOf(navigator)`; and on the DOM side
+`input`/`textarea` `.maxLength`, `.dirName`, `option.defaultSelected` and
+`.label`, `div.translate`/`.draggable`/`.spellcheck`, `scrollIntoView`,
+comment-node `innerHTML`/`innerText` round-tripping through `-->--<!--`,
+a real stylesheet (`.YYXc3 { display: flex; }`) checked via
+`getComputedStyle`, `attachShadow({mode:'open'})` with
+`getRootNode({composed: []})`, `DOMParser` on `<p>x</div><p>y</p>` and on
+`<div data-foo="&#34;"></div>`, `addEventListener` with an **array** as the
+options argument and `new Event('x', {bubbles: []})`, the five
+`XMLHttpRequest` readyState constants, a `<select>` built through `innerHTML`
+read back via `options[0].selected`/`selectedIndex`/`value`,
+`new MouseEvent('mousedown', {buttons: 1})` on an `input type=range`, and
+`structuredClone` of `Object(BigInt(611))` and of `/gule/`.
+
+Note also that **none of `OjmeV1`, `YYXc3`, `EnIF0`, `ZgaQ3`, `EBlFw4` or
+`luagobrr` appears anywhere in the JavaScript source** — they exist only inside
+the bytecode. Every past sweep that looked for guard behaviour by grepping the
+delivered script was blind to this whole layer by construction.
+
+### The name channel exists on Cloudflare after all, and we answer 249 of 250
+
+`cf-computes-names-no-table` recorded that naming what the guard checks works on
+Kasada and not on Cloudflare: 8244 strings in the delivered script, not one a
+fingerprinting API, because Cloudflare's names are computed character by
+character. That is true **of the script**. It is not true of the bytecode: op
+239, 58, 254 and 233 carry the name as an inline byte run, and the readable
+51.8% of the main program already yields **336 distinct names**, 250 of them
+web-platform names and 86 the guard's own private fields (`OjmeV1`, `TfPFa9`,
+`EnOnL8`, …).
+
+None of `OjmeV1`, `YYXc3`, `EnIF0`, `ZgaQ3`, `EBlFw4` or `luagobrr` appears
+anywhere in the delivered JavaScript. Every earlier attempt to find guard
+behaviour by grepping the script was blind to this layer by construction, which
+is why the Cloudflare name census had always come back empty.
+
+`tools/fingerprint/probes/expr-cf-guard-name-census.js` asks, for each of the
+250, where the name lives — `globalThis`, the prototype of any global
+constructor, or one of ~35 concrete instances — and what its `typeof` is. Both
+arms, real page. The result:
+
+| | count |
+|---|---|
+| identical | 147 |
+| absent in both | 11 |
+| owner set identical, iteration order differs | 52 |
+| owner set genuinely differs | 39 |
+| **absent in us, present in Chrome** | **1** |
+| present in us only | 0 |
+
+**The one genuine absence is `Summarizer`** — a global function in Chrome 151,
+and the guard reads it along with `availability`, so it is probing Chrome's
+built-in AI surface.
+
+And all 39 owner-set differences reduce to the same thing: interfaces we do not
+implement at all — `HTMLFencedFrameElement`, `Summarizer`, `Translator`,
+`LanguageModel`, `LanguageDetector`, `CreateMonitor`, `CloseWatcher`,
+`Observable`, `Subscriber`, `PressureObserver`, `PressureRecord`,
+`FileSystemObserver`, `SharedStorage` and its five modifier interfaces,
+`WebSocketStream`, `WebSocketError`, `DigitalCredential`,
+`IdentityCredentialError`, `IdentityProvider`, `BarcodeDetector`,
+`DocumentPictureInPicture` and its event, `Fence`, `FencedFrameConfig`,
+`OpaqueRange`, `NodeRange`, `RestrictionTarget`, `PermissionsPolicy`,
+`FetchLaterResult`. A generic name like `toString` shows up as a difference
+only because it is inherited onto 34 prototypes we do not have. That is the
+prototype-completeness lever, and `prototype-completeness-lever-spent` already
+settled it: the window realm is at 921/923 and 156 added members opened no
+station.
+
+The one asymmetry in the other direction: **we have `NodeFilter.prototype` and
+Chrome does not**, so `toString`/`toLocaleString` are reachable there on us
+only. One expression separates the engines, though nothing suggests this guard
+reads it.
+
+**So the name channel works as a channel, and its answer is that we match.**
+That is worth having: it is the first time Cloudflare's name list has been
+readable at all, and it closes "the guard reads a name we get wrong" as an
+explanation for the four short values — with `Summarizer` the single exception
+worth a cheap follow-up.
