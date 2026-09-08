@@ -235,3 +235,50 @@ what is left refused is the `ex` and the `calc()`.
   testing.expectEqual('15px', probe('padding-top:calc(10px + 5px)', 'paddingTop'));
 }
 </script>
+
+<script id=math_is_its_own_generic_family>
+{
+  // `math` is a CSS Fonts 4 generic keyword and, on the reference host, its own
+  // face -- STIX Two Math. Measured against headed Chrome 151 on one page
+  // (tools/fingerprint/probes/expr-generic-family-math.js): a pangram at 100px
+  // is 962.203125 against the fallback's 923.1015625, `ch` is 49.5 against 50
+  // and `ex` 47.2969 against 44.8672. All three differ, which is what says it
+  // is a face and not an alias, and it used to resolve to the fallback here.
+  //
+  // The other six generics in that list are NOT faces on this host: fangsong,
+  // emoji and the four ui-* keywords each measure exactly like a family nothing
+  // supplies, to the digit. So they are asserted to fall through, which is the
+  // half that keeps a future table addition honest.
+  const probe = (family) => {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-9999px';
+    document.body.appendChild(host);
+    const span = document.createElement('span');
+    span.style.cssText = 'font-size:100px;white-space:pre';
+    span.style.fontFamily = family;
+    span.textContent = 'Hamburgefonstiv 0123';
+    host.appendChild(span);
+    const width = span.getBoundingClientRect().width;
+    const box = document.createElement('div');
+    box.style.cssText = 'font-size:100px;width:1ch;height:1ex';
+    box.style.fontFamily = family;
+    host.appendChild(box);
+    const cs = getComputedStyle(box);
+    const out = width + ' ch=' + cs.width + ' ex=' + cs.height;
+    host.remove();
+    return out;
+  };
+
+  testing.expectEqual('math 962.203125 ch=49.5px ex=47.2969px', 'math ' + probe('math'));
+
+  // Every one of these is the fallback, and the control below is what makes
+  // that a claim rather than a coincidence of numbers.
+  const fallback = probe('NoSuchFamilyAtAll');
+  for (const name of ['fangsong', 'emoji', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded']) {
+    testing.expectEqual(name + ' ' + fallback, name + ' ' + probe(name));
+  }
+  // And `math` is not the fallback, which is the row that fails if the table
+  // addition is ever lost.
+  testing.expectEqual('math-differs true', 'math-differs ' + (probe('math') !== fallback));
+}
+</script>
