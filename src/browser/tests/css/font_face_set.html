@@ -201,3 +201,70 @@
     testing.expectEqual(true, true);
 }
 </script>
+
+<!--
+The `@font-face` rules in a document's own stylesheets were never in
+`document.fonts`, while `check()` answered true for every name including the
+faces those rules declare. So the engine knew a rule existed for one question
+and not for the other, and `document.fonts.size` read 0 against Chrome's 312
+on iphey.com -- one expression apart.
+
+Chrome 151, measured with scratch/ff/fontfaceset.mjs on a page with three
+`@font-face` rules (one used by an element, one whose url 404s, one never
+referenced) plus a JS-added FontFace:
+
+  size 3 from the start, iteration order is source order, and each face
+  reports family/weight/style/status/unicodeRange/display -- so a rule with
+  `font-weight:700; font-style:italic` reads `700` and `italic`.
+
+  `status` is `unloaded` until the face is actually USED: the one an element
+  asks for goes `loaded`, and the other two stay `unloaded` -- including the
+  one whose url is perfectly good. Chrome requests neither of those two files,
+  which is what "used" means here.
+
+  `check()` follows the set, not the name: `false` for a declared face that is
+  still unloaded, `true` once it has loaded, and `true` for a family NOTHING
+  declares (`NoSuchFontXYZ`, `Courier New`) because the fallback renders it.
+  That last row is why "answer true for everything" looked right for so long.
+-->
+<style>
+  @font-face { font-family: AlphaFont; src: url(/src/browser/tests/css/nonexistent-alpha.ttf) format('truetype') }
+  @font-face { font-family: BetaFont; src: url(/src/browser/tests/css/nonexistent-beta.ttf) format('truetype'); font-weight: 700; font-style: italic }
+  #alpha-user { font-family: AlphaFont }
+</style>
+<div id=alpha-user>x</div>
+
+<script id="font_face_rules_are_in_the_set">
+{
+  // Both rules are in the set, in source order, whatever became of their
+  // files: the set is what the document DECLARES.
+  const faces = Array.from(document.fonts).map((f) => [f.family, f.weight, f.style].join('/'));
+  testing.expectEqual('AlphaFont/normal/normal|BetaFont/700/italic', faces.join('|'));
+  testing.expectEqual(2, document.fonts.size);
+}
+</script>
+
+<script id="check_answers_from_the_set">
+{
+  // A family nothing declares is renderable with the fallback, so `true`. A
+  // family a rule declares but nothing loaded is `false` -- the row that
+  // "always true" got wrong.
+  testing.expectEqual('absent=true', 'absent=' + document.fonts.check('16px NoSuchFontXYZ'));
+  testing.expectEqual('local=true', 'local=' + document.fonts.check('16px "Courier New"'));
+  testing.expectEqual('declared-unloaded=false', 'declared-unloaded=' + document.fonts.check('16px BetaFont'));
+}
+</script>
+
+<script id="added_faces_still_work">
+{
+  // The JS path was already right and has to stay that way: adding a face
+  // grows the set, deleting it shrinks it back, and the CSS-declared faces are
+  // untouched by either.
+  const ff = new FontFace('AddedFont', 'url(/nowhere.ttf)');
+  document.fonts.add(ff);
+  testing.expectEqual(3, document.fonts.size);
+  testing.expectEqual('AddedFont/unloaded', ff.family + '/' + ff.status);
+  document.fonts.delete(ff);
+  testing.expectEqual(2, document.fonts.size);
+}
+</script>
