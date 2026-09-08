@@ -26276,3 +26276,45 @@ by then the process is gone. One command:
 node tools/fingerprint/wedge-probe.mjs https://iphey.com/ \
      --seconds 40 --read --settle 8000 --runtime-enable
 ```
+
+**Found and fixed the same day.** It is a worker's `console.log`, and the whole
+repro is three lines:
+
+```js
+const b = new Blob(['console.log({a:1});'], {type: 'text/javascript'});
+new Worker(URL.createObjectURL(b));   // with Runtime.enable on
+```
+
+`Inspector.zig:318` unwrapped a null with `.?`:
+`v8_inspector__Session__wrapObject` returns an empty handle for a value from a
+context the inspector was never told about, and `contextCreated` is called for
+frames only (`cdp/domains/page.zig`, `cdp/domains/target.zig`) -- so every
+dedicated worker's realm is unknown to it. The path is
+`Console.log -> dispatchConsoleMessage -> Notification.dispatch -> CDP
+onRuntimeConsoleMessage -> runtime.consoleMessage -> getRemoteObject ->
+wrapObject`.
+
+**The trigger is the realm, not the value.** Two rounds of twelve candidates,
+each on its own engine (`scratch/segv/find-trigger.mjs`): a circular object, a
+circular array, a 200-deep nest, a throwing Proxy, a revoked Proxy, `window`, a
+DOM node, a 2MB string, a Symbol, an Error and a throwing getter all logged
+fine, so the `<circular>` lines in the log before the crash were a coincidence.
+Of the realm candidates -- main realm, same-origin iframe, an iframe logging
+itself, a removed iframe's function, a cross-realm object, **a worker**, a
+worker terminated first, a timer, a microtask, a fetch callback, 500 logs,
+after `document.open` -- only the worker crashed.
+
+`wrapObject` now returns `error.ObjectNotWrappable` and `consoleMessage` drops
+the message, which is also what a client sees from Chrome: a dedicated worker is
+its own target, and a page session without auto-attach is shown nothing of its
+console. Covered by `cdp.runtime: a worker's console.log does not take the
+engine with it`, which asserts both the silence and that the page realm still
+logs afterwards.
+
+**The detector suite is 12/12 for the first time**: `deviceinfo` 73s crash ->
+14.1s with 266 nodes, `iphey` 77s crash -> 17.7s with 495 nodes.
+
+⚠️ Harness note: the first run of the candidate rig printed the one crasher as
+`alive`. It killed each engine 300ms after the evaluate returned, and the panic
+handler had written its text but the process had not exited yet, so `exited` was
+still null. Give a crash 3 seconds, and read the log rather than the exit code.
