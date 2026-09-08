@@ -102,6 +102,14 @@ next_doc_order: u32 = 1,
 // When true, rules need to be rebuilt
 dirty: bool = false,
 
+/// Bumped by every sheet mutation, and never cleared. `dirty` cannot serve
+/// this: it is cleared by the next rebuild, so a reader that only wants to know
+/// "has anything changed since I last looked" has nothing to compare against.
+/// `document.fonts` is that reader -- the `@font-face` rules a page injects
+/// after load have to reach the set, and Chrome reflects them synchronously
+/// (webapi/css/FontFaceSet.zig).
+sheet_version: usize = 0,
+
 // Every longhand name any rule in the document declares, rebuilt with the
 // rules. A cascade lookup for a name that is not in here cannot have a winner,
 // and answering that in one hash probe is what makes the lookup affordable on
@@ -1041,11 +1049,13 @@ const TopLevelParts = struct {
 
 pub fn sheetRemoved(self: *StyleManager) void {
     self.dirty = true;
+    self.sheet_version += 1;
     Frame.observers.scheduleResizeDelivery(self.frame);
 }
 
 pub fn sheetModified(self: *StyleManager) void {
     self.dirty = true;
+    self.sheet_version += 1;
     Frame.observers.scheduleResizeDelivery(self.frame);
 }
 

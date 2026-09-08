@@ -155,6 +155,10 @@ const Scan = struct {
     // Case-insensitive, so the keys are lowercased on the way in.
     used_families: std.StringHashMapUnmanaged(void) = .empty,
 
+    // Collect `@font-face` and nothing else: no selector matching, no
+    // requests. What `declaredFaces` runs for.
+    faces_only: bool = false,
+
     const Face = struct {
         family: []const u8, // lowercased, for the used_families lookup
         // The family as the rule spells it, because `document.fonts` reports
@@ -202,6 +206,12 @@ const Scan = struct {
     }
 
     fn styleRule(self: *Scan, style_rule: *CSSStyleRule) Allocator.Error!void {
+        // In faces-only mode nothing here is wanted: a style rule names
+        // resources and families, and the only thing being collected is the
+        // `@font-face` list. Skipping it also skips a selector match per rule,
+        // which is what makes the lazy `document.fonts` sync cheap enough to
+        // run on a property read.
+        if (self.faces_only) return;
         const selector = style_rule.getSelectorText();
         if (selector.len == 0) return;
         const style = style_rule.getStyle(self.frame) catch return;
@@ -293,6 +303,7 @@ const Scan = struct {
     }
 
     fn fetchFrom(self: *Scan, base: [:0]const u8, href: []const u8, resource_type: ResourceType) Allocator.Error!void {
+        if (self.faces_only) return;
         if (href.len == 0) return;
         const resolved = URL.resolve(self.arena(), base, href, .{ .encoding = self.frame.charset }) catch |err| {
             log.warn(.http, "style resource resolve", .{ .err = err, .href = href });
@@ -303,6 +314,48 @@ const Scan = struct {
         self.frame.requestStyleResource(resolved, resource_type);
     }
 };
+
+/// Every `@font-face` the frame's stylesheets declare right now, in source
+/// order, with no requests made and no selector matched.
+///
+/// `document.fonts` reads through here rather than keeping its own walk,
+/// because the walk is the part with the corners in it: a face can sit inside
+/// `@media`, `@supports`, `@container` or `@layer`, and the rule list has to be
+/// followed into each of them (see `Scan.rule`).
+pub const DeclaredFace = struct {
+    /// As the rule spells it, which is what `document.fonts` reports.
+    family: []const u8,
+    weight: []const u8,
+    style: []const u8,
+    /// Whether the face has a `url()` source at all. A `local(...)`-only face
+    /// is still a face -- iphey declares 310 of them as a font enumeration
+    /// probe -- but there is nothing to fetch for it, so it can never be
+    /// `loaded` in this engine.
+    has_url: bool,
+};
+
+pub fn declaredFaces(frame: *Frame, allocator: Allocator) ![]const DeclaredFace {
+    var s: Scan = .{ .frame = frame, .base = frame.base(), .faces_only = true };
+    const sheets = try frame.document.cascadeStyleSheets(frame);
+    var i: usize = 0;
+    while (sheets.item(i)) |sheet| : (i += 1) {
+        if (sheet._proto._disabled) continue;
+        const list = sheet.getCssRules(frame) catch continue;
+        s.ruleList(list, 0) catch continue;
+    }
+
+    var out: std.ArrayList(DeclaredFace) = .empty;
+    try out.ensureTotalCapacity(allocator, s.faces.items.len);
+    for (s.faces.items) |face| {
+        out.appendAssumeCapacity(.{
+            .family = face.declared,
+            .weight = face.weight,
+            .style = face.style,
+            .has_url = face.url.len != 0,
+        });
+    }
+    return out.items;
+}
 
 /// Fetch what the frame's stylesheets name. Called once the document exists,
 /// because whether a rule matches anything decides whether Chrome asks.
