@@ -268,8 +268,14 @@ const Scan = struct {
         // Chrome asks for one file per face, not one per `format()` in the
         // list: the first source it can use wins and the rest are never
         // requested.
+        //
+        // A face with no `url()` at all is still a face. iphey declares 312
+        // `@font-face` rules of which 310 are `local(...)` only -- a font
+        // enumeration probe -- and Chrome lists all 312 in `document.fonts`.
+        // Registering only the two with a url read 2 against its 312, which is
+        // the same count-shaped tell one layer down.
         var it: UrlIterator = .{ .rest = src };
-        const url = it.next() orelse return;
+        const url = it.next() orelse "";
         try self.faces.append(self.arena(), .{
             .family = try std.ascii.allocLowerString(self.arena(), family),
             .declared = try self.arena().dupe(u8, family),
@@ -344,8 +350,10 @@ fn scan(frame: *Frame) !void {
     // status too (tests/css/font_face_set.html).
     const fonts = frame.document.getFonts(&frame.js.execution) catch null;
     for (s.faces.items) |face| {
+        // Only a face with a url has anything to fetch, and only a face
+        // something asks for is fetched at all.
         const used = s.used_families.contains(face.family);
-        if (used) {
+        if (used and face.url.len != 0) {
             try s.fetchFrom(face.base, face.url, .font);
         }
         const set = fonts orelse continue;
@@ -353,7 +361,11 @@ fn scan(frame: *Frame) !void {
             .weight = face.weight,
             .style = face.style,
         }, &frame.js.execution) catch continue;
-        entry.markDeclared(used);
+        // `loaded` means the face is in use, which is what Chrome reports: it
+        // leaves an unused face `unloaded` whether its source is a url it
+        // never fetched or a `local()` name -- iphey's 310 local probes are all
+        // `unloaded` there.
+        entry.markDeclared(used and face.url.len != 0);
         // The set takes the only reference: a face built here is never handed
         // to JS, so there is no wrapper holding one, and releasing after the
         // add drops it to zero and frees a face the set still lists (the
