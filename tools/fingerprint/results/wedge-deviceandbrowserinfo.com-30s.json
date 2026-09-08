@@ -1,0 +1,169 @@
+{
+  "url": "https://deviceandbrowserinfo.com/are_you_a_bot",
+  "bin": "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/zig-out/bin/lightpanda",
+  "seconds": 30,
+  "pingTimeout": 5000,
+  "rows": [
+    {
+      "note": "version 1.0.0-dev.2097+efbd87ee4"
+    },
+    {
+      "note": "navigate returned at +857ms"
+    },
+    {
+      "note": "Runtime.enable sent"
+    },
+    {
+      "at": 2017,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "at": 3020,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 4023,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 5023,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "at": 6025,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "at": 7026,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 8028,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 9030,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "note": "read started at +10018ms"
+    },
+    {
+      "note": "read returned nodes=266 text=5855"
+    },
+    {
+      "at": 10034,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 11036,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "at": 12040,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 13043,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 14045,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 15046,
+      "ms": 4,
+      "ok": true
+    },
+    {
+      "at": 16052,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 17054,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "at": 18057,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 19059,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 20060,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "at": 21062,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 22064,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 23065,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "at": 24068,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 25069,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "at": 26072,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 27074,
+      "ms": 1,
+      "ok": true
+    },
+    {
+      "at": 28076,
+      "ms": 0,
+      "ok": true
+    },
+    {
+      "at": 29077,
+      "ms": 0,
+      "ok": true
+    }
+  ],
+  "sampled": null,
+  "engineLogLines": 1,
+  "engineLogVerdictLines": [],
+  "engineLogTail": [
+    "$time=1788826097463 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9330"
+  ]
+}

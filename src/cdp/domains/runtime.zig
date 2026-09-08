@@ -146,11 +146,34 @@ pub fn consoleMessage(arena: Allocator, bc: *CDP.BrowserContext, event: *const N
 
     var args: std.ArrayList(RemoteObject) = .empty;
     for (event.values) |value| {
-        const remote_object = try bc.inspector_session.getRemoteObject(
+        // A realm the inspector was never told about cannot describe its own
+        // values, and the only realms it is told about are frames'
+        // (`contextCreated` in page.zig and target.zig). A dedicated worker's
+        // console call lands here with a context V8 does not know, and this
+        // used to unwrap the resulting null and take the engine down --
+        // `iphey` and `deviceinfo` are two pages whose workers log, and the
+        // sweep reported both as `timeout: Runtime.evaluate` because the
+        // process was gone by then.
+        //
+        // Dropping the message is the same thing a client sees from Chrome: a
+        // dedicated worker is its own target, and a page session without
+        // auto-attach is shown nothing of its console.
+        const remote_object = bc.inspector_session.getRemoteObject(
             &ls.local,
             "",
             value,
-        );
+        ) catch |err| switch (err) {
+            // Exhaustive today, deliberately without an `else`: a new failure
+            // mode out of getRemoteObject should stop compiling here rather
+            // than be silently folded into "drop the message".
+            error.ObjectNotWrappable => {
+                lp.log.debug(.cdp, "console message dropped", .{
+                    .reason = "argument belongs to a realm the inspector does not know",
+                    .context_id = context_id,
+                });
+                return;
+            },
+        };
         defer remote_object.deinit();
 
         const @"type" = try remote_object.getType(arena);
@@ -352,4 +375,52 @@ test "cdp.runtime: consoleAPICalled describes a promise argument" {
     , null);
 
     try ctx.expectSentEvent("Runtime.consoleAPICalled", .{ .type = "log" }, .{});
+}
+
+// A dedicated worker's console.log crashed the engine. Its realm is never
+// registered with the inspector -- `contextCreated` is called for frames only
+// (page.zig, target.zig) -- so `Session::wrapObject` hands back an empty
+// handle for a value from it, and Inspector.wrapObject unwrapped that with
+// `.?`. Reproduced from a page whose whole content is
+// `new Worker(URL.createObjectURL(new Blob(['console.log({a:1})'])))` with
+// Runtime enabled: 4/4, and it predates the flex work (it crashes on either
+// side of it). It cost the two detectors `iphey` and `deviceinfo`, which the
+// sweep reported as `timeout: Runtime.evaluate` because by then the process
+// was gone.
+//
+// Dropping the message is also what Chrome does with these sessions: a
+// dedicated worker is its own target, and without auto-attach a page session
+// sees nothing of its console at all. So this asserts silence, not a translated
+// event -- and above all that the engine is still answering afterwards.
+test "cdp.runtime: a worker's console.log does not take the engine with it" {
+    testing.silenceLog(&.{.js});
+
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const bc = try ctx.loadBrowserContext(.{ .id = "BID-WC", .target_id = "TID-WC-0000000".* });
+    bc.session_id = "SID-WC";
+    try ctx.processMessage(.{ .id = 1, .method = "Runtime.enable" });
+
+    const page = try bc.session.createPage();
+    try page.navigate("http://127.0.0.1:9582/src/browser/tests/cdp/worker_console.html", .{});
+    try testing.waitForPage(bc);
+
+    // Nothing from the worker's realm, and nothing crashed on the way here.
+    var i: usize = 0;
+    var console_events: usize = 0;
+    while (try ctx.getSentMessage(i)) |msg| : (i += 1) {
+        const method = msg.object.get("method") orelse continue;
+        if (std.mem.eql(u8, method.string, "Runtime.consoleAPICalled")) console_events += 1;
+    }
+    try testing.expectEqual(0, console_events);
+
+    // And the page realm still logs, so the drop above is about the worker's
+    // realm rather than console reporting having been switched off.
+    const root = bc.mainFrame() orelse unreachable;
+    var ls: js.Local.Scope = undefined;
+    root.js.localScope(&ls);
+    defer ls.deinit();
+    _ = try ls.local.exec("console.log('from the page')", null);
+    try ctx.expectSentEvent("Runtime.consoleAPICalled", .{ .type = "log" }, .{ .session_id = "SID-WC" });
 }

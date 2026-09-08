@@ -299,6 +299,13 @@ pub const Session = struct {
         );
     }
 
+    /// `error.ObjectNotWrappable` rather than `.?`: V8 hands back an empty
+    /// handle for a value the inspector cannot describe, and the one way in is
+    /// a context the inspector was never told about. `contextCreated` is called
+    /// for frames only (cdp/domains/page.zig, cdp/domains/target.zig), so any
+    /// realm that is not a frame's -- a dedicated worker's, today -- fails
+    /// here. Unwrapping that null crashed the whole engine from a page whose
+    /// entire content was a worker calling `console.log`.
     fn wrapObject(
         self: Session,
         isolate: *v8.Isolate,
@@ -315,7 +322,7 @@ pub const Session = struct {
             grpname.ptr,
             grpname.len,
             generatepreview,
-        ).?;
+        ) orelse return error.ObjectNotWrappable;
         return .{ .handle = remote_object };
     }
 

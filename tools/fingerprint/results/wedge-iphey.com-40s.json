@@ -1,0 +1,88 @@
+{
+  "url": "https://iphey.com/",
+  "bin": "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/zig-out/bin/lightpanda",
+  "seconds": 40,
+  "pingTimeout": 5000,
+  "rows": [
+    {
+      "note": "version 1.0.0-dev.2097+efbd87ee4"
+    },
+    {
+      "note": "navigate returned at +192ms"
+    },
+    {
+      "note": "Runtime.enable sent"
+    },
+    {
+      "at": 17149,
+      "ms": 13,
+      "ok": true
+    },
+    {
+      "at": 18163,
+      "ms": 2530,
+      "ok": true
+    },
+    {
+      "note": "read started at +25150ms"
+    },
+    {
+      "at": 21695,
+      "ms": 5002,
+      "ok": false
+    },
+    {
+      "at": 27699,
+      "ms": 5001,
+      "ok": false
+    },
+    {
+      "note": "engine exited SIGABRT"
+    }
+  ],
+  "sampled": null,
+  "engineLogLines": 2930,
+  "engineLogVerdictLines": [],
+  "engineLogTail": [
+    "    try self._event_manager.dispatchDirect(",
+    "                                          ^",
+    "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/src/browser/webapi/DedicatedWorkerGlobalScope.zig:234:25: 0x1084ac8d3 in run (lightpanda)",
+    "        try wsg.dispatch(target, event, null, .{});",
+    "                        ^",
+    "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/src/browser/js/Scheduler.zig:129:43: 0x104ac6053 in run (lightpanda)",
+    "        const repeat_in_ms = task.callback(task.ctx) catch |err| {",
+    "                                          ^",
+    "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/src/browser/js/Env.zig:616:45: 0x104ac64e3 in runMacrotasks (lightpanda)",
+    "            .worker => try ctx.scheduler.run(),",
+    "                                            ^",
+    "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/src/browser/Browser.zig:251:31: 0x104ac664f in runMacrotasks (lightpanda)",
+    "    try self.env.runMacrotasks();",
+    "                              ^",
+    "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/src/browser/Runner.zig:223:34: 0x1056fcb33 in _tick__anon_1632012 (lightpanda)",
+    "        try browser.runMacrotasks();",
+    "                                 ^",
+    "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/src/browser/Runner.zig:150:39: 0x1056fd54f in _wait__anon_1632005 (lightpanda)",
+    "        const tick_result = self._tick(is_cdp, 200, conditions) catch |err| {",
+    "                                      ^",
+    "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/src/browser/Runner.zig:75:23: 0x1056fda47 in waitForFrameCDP (lightpanda)",
+    "    _ = try self._wait(true, timeout_ms, &conditions);",
+    "                      ^",
+    "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/src/cdp/CDP.zig:291:34: 0x1056fdbd7 in pageWait (lightpanda)",
+    "    return runner.waitForFrameCDP(page.frame_id, ms, .done);",
+    "                                 ^",
+    "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/src/cdp/CDP.zig:268:18: 0x1056fdccb in tick (lightpanda)",
+    "    self.pageWait(wait_ms) catch |wait_err| switch (wait_err) {",
+    "                 ^",
+    "/Users/hoveychen/workspace/stealth/.worktrees/runtime-enable-segv-iphey/src/Server.zig:288:30: 0x1056fea73 in handleConnection (lightpanda)",
+    "        const next = cdp.tick() catch |err| {",
+    "                             ^",
+    "/opt/homebrew/Cellar/zig/0.16.0_1/lib/zig/std/Thread.zig:422:13: 0x1056f9093 in callFn__anon_1631063 (lightpanda)",
+    "            @call(.auto, f, args);",
+    "            ^",
+    "/opt/homebrew/Cellar/zig/0.16.0_1/lib/zig/std/Thread.zig:752:30: 0x1056f8f9b in entryFn (lightpanda)",
+    "                return callFn(f, args_ptr.*);",
+    "                             ^",
+    "???:?:?: 0x187b63c57 in __pthread_cond_wait (/usr/lib/system/libsystem_pthread.dylib)",
+    "???:?:?: 0x187b5ec1b in _pthread_cond_broadcast (/usr/lib/system/libsystem_pthread.dylib)"
+  ]
+}
