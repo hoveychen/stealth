@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<!-- Text in a downloaded `@font-face` is measured with that font's advances.
+
+     Before font_file.zig the bytes were fetched and dropped, so a webfont
+     measured as whatever the fallback charged -- `font-family: ProbeFont,
+     sans-serif` read 129.53 against Chrome's 163.23, which is one expression
+     apart from admitting the font never loaded.
+
+     `/synth-font.ttf` (src/testing.zig) answers with a real sfnt: 1000 units
+     per em, every glyph 500 units wide. So every character is exactly half the
+     font size, whatever the character is -- a shape no fallback family has,
+     which is what makes the assertions below discriminating rather than just
+     "some number changed".
+-->
+<script>
+  // The `load` event alone will not do: this engine resolves style resources
+  // just after the DCL dispatch, and the body still has to arrive after that.
+  // So wait for the measurement itself, which is the thing under test.
+  function whenMeasured(el, fn) {
+    let tries = 0;
+    (function attempt() {
+      if (el.offsetWidth === 100 || tries++ > 300) return fn();
+      setTimeout(attempt, 10);
+    })();
+  }
+</script>
+
+<style>
+  @font-face { font-family: SynthProbe; src: url(/synth-font.ttf) format('truetype') }
+  #ten { font-family: SynthProbe; font-size: 20px }
+  #ten-fallback { font-family: NoSuchFamilyAtAll; font-size: 20px }
+  #five { font-family: SynthProbe; font-size: 32px }
+</style>
+
+<!-- Spans, not divs: a block-level box fills its containing block, so its
+     offsetWidth says nothing about the text. -->
+<span id=ten>mmmmmmmmmm</span>
+<span id=ten-fallback>mmmmmmmmmm</span>
+<span id=five>iiiii</span>
+
+<script id="webfont_advances_come_from_the_file" type=module>
+{
+  const state = await testing.async();
+  whenMeasured(document.getElementById('ten'), () => state.resolve([
+    // Ten characters at 20px, each half the em: 100px exactly.
+    'ten@20=' + document.getElementById('ten').offsetWidth,
+    // `i` is narrow in every real family and half an em in this one, so a
+    // per-glyph fallback table could not produce this by accident.
+    'five-i@32=' + document.getElementById('five').offsetWidth,
+    // The same ten characters in a family nothing supplies still measure as
+    // the fallback, which is what says the webfont did the work above rather
+    // than measurement changing in general.
+    'fallback-differs=' + (document.getElementById('ten-fallback').offsetWidth !== 100),
+  ].join(' ')));
+  await state.done((seen) => {
+    testing.expectEqual('ten@20=100 five-i@32=80 fallback-differs=true', seen);
+  });
+}
+</script>
+
+<script id="webfont_name_still_resolves_a_built_in_family">
+{
+  // Introducing the registry must not stop a built-in family name resolving.
+  // A sheet added here is past the style-resource pass, so no bytes are
+  // fetched for it: what is asserted is the resolution order, and the answer
+  // has to be the measured Arial table -- ten `m` is 10 x 83.30078125 x 20/100 = 166.6, which rounds to 167 --
+  // and not the standard fallback.
+  const style = document.createElement('style');
+  style.textContent = '#shadowed { font-family: Arial; font-size: 20px }';
+  document.head.appendChild(style);
+  const el = document.createElement('span');
+  el.id = 'shadowed';
+  el.textContent = 'mmmmmmmmmm';
+  document.body.appendChild(el);
+  testing.expectEqual('arial@20=167', 'arial@20=' + el.offsetWidth);
+}
+</script>

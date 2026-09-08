@@ -103,7 +103,14 @@ pub fn getFont(self: *const OffscreenCanvasRenderingContext2D) []const u8 {
 /// An unparseable value leaves the previous font in place, which is what
 /// Chrome does — it does not fall back to the default.
 pub fn setFont(self: *OffscreenCanvasRenderingContext2D, value: []const u8, exec: *Execution) void {
-    self._font = Font.parse(exec.arena, value) orelse self._font;
+    // A worker's OffscreenCanvas has no document, so no `@font-face` file can
+    // have supplied a family for it -- `null` there is the right answer, not a
+    // gap.
+    const loaded = switch (exec.js.global) {
+        .frame => |frame| frame.loadedFonts(),
+        .worker => null,
+    };
+    self._font = Font.parse(exec.arena, value, loaded) orelse self._font;
 }
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/measureText
