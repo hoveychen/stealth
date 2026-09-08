@@ -26997,3 +26997,72 @@ One row from those runs is worth not over-reading: Chrome saw 38 requests to
 our 18. Request fidelity is the lever `wire-census-closed-but-cf-unmoved`
 already spent — four plans took the census from 11 to 27 matching requests and
 `served=` stayed 0/6 — so this is noted, not chased.
+
+## Webfonts do not participate in measurement, and the fix is cheaper than it looks (2026-09-08)
+
+`family-difference-needs-a-local-font-control` established the defect: an
+`@font-face` file is fetched and then ignored, so `font-family: ProbeFont,
+sans-serif` measures 129.53 here against Chrome's 163.23 — we are silently on
+the fallback. `style_resources.zig` says so in its own header: *"Nothing decodes
+and nothing applies: the bytes are thrown away … because there is no raster
+pipeline and no font engine to hand them to."*
+
+The question this plan asked was whether parsing a downloaded font is worth it,
+and the honest way to answer it is not to guess at fidelity but to check the
+derivation against a family we already have Chrome ground truth for. **Arial is
+that control**: `font_metrics.zig` carries a measured table for it, and
+`/System/Library/Fonts/Supplemental/Arial.ttf` is the same face.
+
+### What comes out of the font file exactly
+
+**Advances: 190 of 191 codepoints exact, delta zero.** Computing
+`hmtx.advanceWidth / head.unitsPerEm × 100` through the `cmap` and comparing
+against `glyphs_arial[].advance` over U+0020–U+00FF gives 190 exact matches, 33
+codepoints Arial has no glyph for, and **one** mismatch: U+00AD, where the table
+says 0 and the font says 33.30. That is Chrome's soft-hyphen layout rule, not a
+font metric. So Chrome's advance is exactly `advanceWidth / unitsPerEm × size` —
+no hinting, no per-size quantisation. The 120-size sweep in that file is not
+there for advances.
+
+**Canvas ascent and descent: 117 of 120 sizes exact**, as
+`round(OS/2.usWinAscent / unitsPerEm × size)` and the same for `usWinDescent`.
+The three misses are sizes 1, 2 and 3, where the table holds the *unrounded*
+value (`0.9052734375` is exactly `1854/2048 × 1`) — so the rule is the same one
+with a below-4px branch that does not round.
+
+`avg_char_width` and `max_char_width` fall out of the advances, and
+`seeds_last_resort` / `after_fallback` are correctly empty for a face that
+carries its own coverage.
+
+### What does not come out of the font file
+
+`layout_ascents` / `layout_descents` — the pair layout stands text on, which the
+source comment already says is measured off an SVG `<text>` and *"neither is
+derivable from the canvas pair"*. Confirmed: the best candidate rule,
+`halfPixel((usWinAscent + lineGap/2) / upem × size)` and the same for descent,
+scores **59 of 117**. Summing to the line box first does no better (76/120).
+Four other variants score 3–17. So this half needs the fallback family's
+layout-to-canvas ratio applied, and that has to be stated as an approximation
+rather than pretended away. `svg_ascents` / `svg_descents` are the same problem.
+
+Per-glyph ink bearings (`left`, `right`, per-glyph `ascent`/`descent`) need
+`glyf` or `CFF` outlines. In WOFF2 `glyf` is stored *transformed*, so this is the
+expensive tier — and it only feeds canvas `actualBoundingBox*`, not the width
+the defect was found through.
+
+### The cost, and why WOFF2 is not the blocker it sounds like
+
+| piece | lines | note |
+|---|---|---|
+| sfnt directory + `head`/`hhea`/`OS/2`/`hmtx`/`cmap` (formats 4 and 12) | ~350 | |
+| WOFF2 container | ~250 | **Brotli is already linked** (`src/sys/libbrotli.zig`, used for TLS certificate compression). `glyf`/`loca` are transformed but we never need outlines, so the reverse transform is skipped entirely; only `hmtx` transform 1 has to be handled, and it just omits the lsb array. |
+| WOFF container | ~80 | per-table zlib, and `std.compress.flate` is already used by `canvas/png.zig` |
+| retain the bytes + a per-frame face registry keyed by family | ~120 | they are explicitly discarded today |
+| `findInList` consults the registry; two call sites update | ~60 | `Element.zig:1888`, `CSSStyleDeclaration.zig:1749`. A bound-function signature change needs a clean cache rebuild — see `bound-signature-change-needs-clean-cache`, whose symptom is unrelated tests going deterministically red |
+
+Roughly 850 lines, with the fidelity of the part the defect is measured through
+proven exact against a Chrome-measured control rather than assumed.
+
+**So: worth doing, scoped to advances plus canvas ascent/descent.** Ink bearings
+and the layout/SVG sweeps are a separate, much larger piece and should not be
+smuggled into this one.
