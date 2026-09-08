@@ -1781,6 +1781,13 @@ pub fn lengthFactor(style_manager: *StyleManager, element: *Element, property_na
             // was a closed loop, because the span's own ink is the div's box.
             const parent = element.containingBlock(frame) orelse break :blk .unresolvable;
             break :blk .{ .pixels = parent.getElementDimensions(frame).width / 100.0 };
+        } else if (percentageOfContainingBlockHeight(property_name)) blk: {
+            const frame = element.ownerFrame(style_manager.frame);
+            // Same rule as the width branch above: no box, no share of one.
+            if (!element.checkVisibilityCached(null, frame)) break :blk .verbatim;
+            const containing = containingHeightForPercentage(element, frame) orelse
+                break :blk .unresolvable;
+            break :blk .{ .pixels = containing / 100.0 };
         } else .unresolvable,
         .vw => .{ .pixels = width / 100.0 },
         .vh => .{ .pixels = height / 100.0 },
@@ -1803,6 +1810,100 @@ pub fn lengthFactor(style_manager: *StyleManager, element: *Element, property_na
 /// padding:10%` in the 1904px line at 190.391px per side, top and bottom
 /// included, so its clientHeight is 399 and not 18, and expr-margin-pct.js puts
 /// `margin-top:10%` of a 400px line at 40px.
+/// The properties whose percentage is a share of the containing block's HEIGHT.
+///
+/// Unlike the width list, this one is only the three sizes: a percentage
+/// padding or margin takes its share of the WIDTH on both axes, which is why
+/// they are in the other list and not this one.
+///
+/// `min-height` and `max-height` resolve here so a computed style reports the
+/// px Chrome reports, but nothing clamps to them yet -- not even in pixels
+/// (`max-height:40px` over four lines is 40 in Chrome and 80 here). That is
+/// plan `min-max-height-never-clamps`, and it is why
+/// tests/element/percentage_height.html leaves those two rows out.
+fn percentageOfContainingBlockHeight(property_name: []const u8) bool {
+    const NAMES = [_][]const u8{
+        "height",     "block-size",
+        "min-height", "min-block-size",
+        "max-height", "max-block-size",
+    };
+    for (NAMES) |name| {
+        if (std.mem.eql(u8, property_name, name)) return true;
+    }
+    return false;
+}
+
+/// The height a percentage on `element` is a share of, or null when there is
+/// none -- which sends the declaration back to `auto`, and is what Chrome does.
+///
+/// A percentage height is NOT like a percentage width. A block-level box fills
+/// its containing block's width whatever that box declares, so the width is
+/// always there to take a share of; a height is `auto` unless something makes
+/// it definite, and a share of `auto` is not a number. Chrome resolves one
+/// only when the containing block's height is definite, and answers the
+/// element's own content height when it is not: measured, `height:50%` is 100
+/// inside `height:200px` and 20 -- one pinned line box -- inside a parent that
+/// declares nothing (scratch/pct/rules.mjs, both arms, nineteen shapes).
+///
+/// The walk is up the tree and reads declarations only, never a measurement:
+/// asking an ancestor for its measured height would answer with the content
+/// height of an auto box, which is the indefinite case this has to tell apart.
+fn containingHeightForPercentage(element: *Element, frame: *Frame) ?f64 {
+    const viewport: f64 = @floatFromInt(element.ownerFrame(frame)._page.getViewport().height);
+
+    // An absolutely positioned box takes its share of its positioned
+    // ancestor's PADDING box rather than its content box. Measured: 120 for
+    // `height:50%` inside `height:200px; padding:20px 0; position:relative`,
+    // which is half of 240 and not half of 200. Without this the row is the
+    // one thing a content-box-only implementation still gets wrong.
+    if (flowKind(element, frame) == .positioned) {
+        const anchor = positionedAncestor(element, frame) orelse return viewport;
+        const content = definiteContentHeight(anchor, frame) orelse return null;
+        return content + boxEdges(anchor, frame).padding_y;
+    }
+
+    // The root element's containing block is the initial one, which is the
+    // viewport and always definite.
+    const block = element.containingBlock(frame) orelse return viewport;
+    return definiteContentHeight(block, frame);
+}
+
+/// A block's own content height when it is DEFINITE: declared as a length, or
+/// declared as a percentage whose own chain reaches the viewport. `auto` is
+/// indefinite and answers null.
+///
+/// Terminates because `containingBlock` strictly ascends: the recursion through
+/// `cascadedComputedLength` -> the percentage branch -> here can only walk
+/// towards the root, and the root answers from the viewport without recursing.
+fn definiteContentHeight(block: *Element, frame: *Frame) ?f64 {
+    const declared = cascadedComputedLength(block, "height", frame) orelse return null;
+    // `box-sizing: border-box` means the declaration named the border box, so
+    // the content a child takes its share of is what is left inside it: 80 for
+    // `height:200px; padding:20px 0; box-sizing:border-box`, against 100 for
+    // the same box under `content-box`.
+    if (!usesBorderBox(block, frame)) return @max(0, declared);
+    const edges = boxEdges(block, frame);
+    return @max(0, declared - edges.padding_y - edges.border_y);
+}
+
+/// The nearest ancestor that establishes a containing block for an absolutely
+/// positioned descendant: one whose `position` is anything but `static`.
+///
+/// Read through `cascadedKeyword` rather than `getPropertyValue`, the same way
+/// `flowKind` reads the property: a computed-style read here would start a
+/// fresh measurement, and this sits under the length machinery the measurement
+/// itself calls.
+fn positionedAncestor(element: *Element, frame: *Frame) ?*Element {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    var ancestor = element.parentElement();
+    while (ancestor) |current| : (ancestor = current.parentElement()) {
+        const position = cascadedKeyword(style_manager, current, "position") orelse continue;
+        if (std.ascii.eqlIgnoreCase(position, "static")) continue;
+        return current;
+    }
+    return null;
+}
+
 fn percentageOfContainingBlockWidth(property_name: []const u8) bool {
     const NAMES = [_][]const u8{
         "width",                "inline-size",

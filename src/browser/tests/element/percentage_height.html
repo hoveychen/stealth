@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A percentage height never resolved. `height: 50%` inside a 200px-tall parent
+measured as the probe's own content height, and so did every other shape in
+this file -- while `height: 50vh` and `height: 200px` were both right, so the
+branch was missing rather than wrong.
+
+browserleaks reads this as `div.clientHeight` and got 0 from this engine
+against 1080 from Chrome, and reported the viewport as `1920x0` in the same
+row. iphey, on the same run, scored this engine 70 "Unreliable" against
+Chrome's 100 "Trustworthy" (tools/fingerprint/README.md, the detector-verdict
+section).
+
+Every expectation below is Chrome 151 at dpr 2, read by
+scratch/pct/rules.mjs, which runs the identical markup on both arms. The
+probe's line box is pinned with `line-height: 20px` so the rows that resolve
+to `auto` are exactly 20 on any machine rather than whatever the default font
+gives -- a cold font cache moved that number by 1.5px while this was being
+written.
+
+The rule the table encodes: a percentage resolves against the containing
+block's height only when that height is DEFINITE. A pixel height is definite;
+a percentage chain rooted at the viewport is definite; an auto height is not,
+and neither is a percentage whose own chain is unrooted -- those two send the
+percentage back to `auto`, which is why they read 20 in BOTH columns.
+
+What the percentage is taken OF is the containing block's CONTENT box, so a
+`padding` on the parent does not shrink it under `content-box` and does under
+`border-box`. An absolutely positioned child is the exception: it resolves
+against the PADDING box of its positioned ancestor, 240 rather than 200, which
+is the one row that would still be wrong if this were implemented against the
+content box alone.
+
+Two rows are deliberately absent, and both for the same reason: they need a
+mechanism this file is not about.
+
+  `min-height` / `max-height` in percentages, because those two do not clamp
+  anything even in PIXELS -- Chrome answers 40, 120, 40 and 120 for
+  `max-height:40px` over four lines, `min-height:120px`, `height:200px;
+  max-height:40px` and `height:10px;min-height:120px`, and this engine answers
+  80, 20, 200 and 10 (scratch/pct/minmax.mjs). Resolving their percentage
+  against the containing block is done here -- getComputedStyle reports the px
+  -- but the clamp is plan `min-max-height-never-clamps`, which adds these rows
+  back.
+
+  `table-cell`, because a cell's percentage height is its own chapter in every
+  engine (Chrome answers 196/194 for a 200px table) and nothing here would make
+  it right.
+-->
+
+<div style="height:200px" id=px-parent>
+  <div class=probe id=px-parent-50 style="height:50%">x</div>
+</div>
+<div style="height:300px">
+  <div class=probe id=px-parent-100 style="height:100%">x</div>
+</div>
+<div style="height:0">
+  <div class=probe id=px-parent-0 style="height:50%">x</div>
+</div>
+<div>
+  <div class=probe id=auto-parent style="height:50%">x</div>
+</div>
+<div style="height:50%">
+  <div class=probe id=pct-parent-no-root style="height:50%">x</div>
+</div>
+<div style="height:200px;padding:20px 0">
+  <div class=probe id=parent-padded style="height:50%">x</div>
+</div>
+<div style="height:200px;padding:20px 0;box-sizing:border-box">
+  <div class=probe id=parent-border-box style="height:50%">x</div>
+</div>
+<div style="height:200px">
+  <div class=probe id=probe-border-box style="height:50%;padding:10px 0;box-sizing:border-box">x</div>
+</div>
+<div style="height:200px">
+  <div class=probe id=probe-padded style="height:50%;padding:10px 0">x</div>
+</div>
+<div style="height:200px;padding:20px 0;position:relative">
+  <div class=probe id=abs-in-relative style="position:absolute;height:50%">x</div>
+</div>
+<div style="height:200px;display:flex;flex-direction:column">
+  <div class=probe id=flex-column-parent style="height:50%">x</div>
+</div>
+<div style="height:200px;display:grid">
+  <div class=probe id=grid-parent style="height:50%">x</div>
+</div>
+<div class=probe id=vh style="height:50vh">x</div>
+<div class=probe id=px style="height:200px">x</div>
+
+<style>
+  body { margin: 0 }
+  .probe { line-height: 20px; font-size: 16px }
+</style>
+
+<script id="offset_height">
+{
+  // offsetHeight is the border box, which is what the percentage decides.
+  // Asserted as one string per row so a red light names the row and both
+  // numbers instead of saying "expected true got false".
+  const want = {
+    'px-parent-50': 100,
+    'px-parent-100': 300,
+    'px-parent-0': 0,
+    'auto-parent': 20,
+    'pct-parent-no-root': 20,
+    'parent-padded': 100,
+    'parent-border-box': 80,
+    'probe-border-box': 100,
+    'probe-padded': 120,
+    'abs-in-relative': 120,
+    'flex-column-parent': 100,
+    'grid-parent': 100,
+    'vh': 540,
+    'px': 200,
+  };
+  for (const [id, px] of Object.entries(want)) {
+    const el = document.getElementById(id);
+    testing.expectEqual(`${id} offsetHeight ${px}`, `${id} offsetHeight ${el.offsetHeight}`);
+  }
+}
+</script>
+
+<script id="computed_height">
+{
+  // The computed value is the CONTENT height, so it parts company with
+  // offsetHeight exactly where the probe has padding under `content-box`:
+  // `probe-padded` is 100 of content inside a 120 border box.
+  const want = {
+    'px-parent-50': '100px',
+    'px-parent-100': '300px',
+    'px-parent-0': '0px',
+    'auto-parent': '20px',
+    'pct-parent-no-root': '20px',
+    'parent-padded': '100px',
+    'parent-border-box': '80px',
+    'probe-border-box': '100px',
+    'probe-padded': '100px',
+    'abs-in-relative': '120px',
+    'flex-column-parent': '100px',
+    'grid-parent': '100px',
+    'vh': '540px',
+    'px': '200px',
+  };
+  for (const [id, text] of Object.entries(want)) {
+    const el = document.getElementById(id);
+    testing.expectEqual(`${id} computed ${text}`, `${id} computed ${getComputedStyle(el).height}`);
+  }
+}
+</script>
+
+<script id="rooted_chain">
+{
+  // The shape browserleaks actually reads: html and body are given a height,
+  // so the chain from the viewport down is definite at every link and a
+  // percentage on a body child resolves. Built here rather than in the markup
+  // above because it needs a rule on `html`, which would change every other
+  // row in the file.
+  const style = document.createElement('style');
+  style.textContent = 'html, body { height: 100%; margin: 0 }';
+  document.head.appendChild(style);
+  const el = document.createElement('div');
+  el.style.cssText = 'height:100%;line-height:20px';
+  document.body.appendChild(el);
+
+  testing.expectEqual('rooted 100% is the viewport 1080', `rooted 100% is the viewport ${el.offsetHeight}`);
+  el.style.height = '50%';
+  testing.expectEqual('rooted 50% is half the viewport 540', `rooted 50% is half the viewport ${el.offsetHeight}`);
+
+  el.remove();
+  style.remove();
+}
+</script>
