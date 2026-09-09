@@ -136,12 +136,13 @@ const CORE = `(function () {
 
   // describe() stringifies too, so it has to run inside the guard rather than
   // as an argument evaluated ahead of it.
-  function record(label, value, extra) {
+  function record(label, value, extra, stack) {
     if (inside || n++ > ${MAX_RECORDS}) return;
     inside = true;
     try {
       var rec = { k: label, a: describe(value) };
       if (extra) rec.url = extra;
+      if (stack) rec.stack = stack;
       log(MARK + JSON.stringify(rec));
     } catch (e) { /* unserialisable */ }
     inside = false;
@@ -179,14 +180,33 @@ const CORE = `(function () {
     } catch (e) { return { t: 'unreadable', n: -1 }; }
   }
 
-  function wrapMethod(owner, key, label, argIndex) {
+  // The last parameter asks for a call stack alongside the value. It is off by
+  // default because the cheap funnels (stringify, btoa) fire thousands of
+  // times, and on for the encodes: knowing that one of the fifteen is 9216
+  // bytes says nothing about which surface produced it, and the stack is the
+  // only thing in the realm that still knows.
+  // (No backticks in here -- this whole block is inside a template literal.)
+  function wrapMethod(owner, key, label, argIndex, stacks) {
     if (!owner) return;
     var original;
     try { original = owner[key]; } catch (e) { return; }
     if (typeof original !== 'function') return;
     try {
       owner[key] = disguise(function () {
-        try { record(label, arguments[argIndex]); } catch (e) { /* keep going */ }
+        var st;
+        if (stacks) {
+          // V8 caps a stack at 10 frames, and the guard reaches these funnels
+          // from inside its own bytecode interpreter -- so the default cuts the
+          // chain off in the middle of the VM's re-entrant pq/run/pd cycle and
+          // never reaches the frame that names the surface. Raise it for the
+          // duration of the capture only and put it back, so a program that
+          // reads the property afterwards is told what it would have been told.
+          var lim;
+          try { lim = Error.stackTraceLimit; Error.stackTraceLimit = 200; } catch (e) { /* frozen */ }
+          try { st = String(new Error().stack || '').slice(0, 60000); } catch (e) { /* no stack */ }
+          try { Error.stackTraceLimit = lim; } catch (e) { /* frozen */ }
+        }
+        try { record(label, arguments[argIndex], undefined, st); } catch (e) { /* keep going */ }
         if (label === 'xhr.send') {
           try {
             var b = arguments[0];
@@ -206,8 +226,8 @@ const CORE = `(function () {
   // digest; everything else here is a funnel it may pass through on the way.
   try { wrapMethod(globalThis.crypto && globalThis.crypto.subtle, 'encrypt', 'subtle.encrypt', 2); } catch (e) {}
   try { wrapMethod(globalThis.crypto && globalThis.crypto.subtle, 'sign', 'subtle.sign', 2); } catch (e) {}
-  try { wrapMethod(globalThis.crypto && globalThis.crypto.subtle, 'digest', 'subtle.digest', 1); } catch (e) {}
-  try { wrapMethod(globalThis.TextEncoder && globalThis.TextEncoder.prototype, 'encode', 'TextEncoder.encode', 0); } catch (e) {}
+  try { wrapMethod(globalThis.crypto && globalThis.crypto.subtle, 'digest', 'subtle.digest', 1, true); } catch (e) {}
+  try { wrapMethod(globalThis.TextEncoder && globalThis.TextEncoder.prototype, 'encode', 'TextEncoder.encode', 0, true); } catch (e) {}
   try { wrapMethod(globalThis.JSON, 'stringify', 'JSON.stringify', 0); } catch (e) {}
   try { wrapMethod(globalThis, 'btoa', 'btoa', 0); } catch (e) {}
 
@@ -226,6 +246,95 @@ const CORE = `(function () {
   // r2 hooks did exactly that and inverted the sign of the difference. So this
   // emits numbers only, once per realm, at the moment a body big enough to be
   // r3 goes out.
+  // --- provenance: who PRODUCES what the encodes carry ---------------------
+  //
+  // The stacks say the guard reaches every encode from inside its own
+  // interpreter, so the frames name its own minified functions and never an
+  // API. Matching a buffer to a surface therefore needs the other end: hook
+  // the plausible producers and record what each one HANDED BACK. Lengths line
+  // the two ends up without any chain matching at all -- 9216 is 48x48x4, and
+  // a getImageData that returns exactly that is the owner of that encode.
+  //
+  // Lengths and dimensions only, never bytes. A recorder that copied pixels
+  // into a string would put them back into the realm and change the payload
+  // being measured; the r2 hooks did exactly that once and inverted the sign
+  // of the difference.
+  function wrapProducer(owner, key, label, describeOut) {
+    if (!owner) return;
+    var original;
+    try { original = owner[key]; } catch (e) { return; }
+    if (typeof original !== 'function') return;
+    try {
+      owner[key] = disguise(function () {
+        var out = original.apply(this === undefined ? globalThis : this, arguments);
+        var lim, st;
+        try { lim = Error.stackTraceLimit; Error.stackTraceLimit = 200; } catch (e) { /* frozen */ }
+        try { st = String(new Error().stack || '').slice(0, 60000); } catch (e) { /* no stack */ }
+        try { Error.stackTraceLimit = lim; } catch (e) { /* frozen */ }
+        var meta;
+        try { meta = describeOut(out, arguments, this) || {}; } catch (e) { meta = { err: 1 }; }
+        emit({ k: 'produce', a: { t: label, n: meta.n === undefined ? -1 : meta.n },
+               meta: meta, stack: st });
+        return out;
+      }, original);
+    } catch (e) { /* non-writable */ }
+  }
+
+  var imageData = function (o) {
+    return { n: o && o.data ? o.data.length : -1, w: o && o.width, h: o && o.height };
+  };
+  // Both context flavours: a document realm has the first, a worker the second,
+  // and the payload is assembled in a worker.
+  try { wrapProducer(globalThis.CanvasRenderingContext2D && globalThis.CanvasRenderingContext2D.prototype,
+                     'getImageData', 'getImageData', imageData); } catch (e) {}
+  try { wrapProducer(globalThis.OffscreenCanvasRenderingContext2D && globalThis.OffscreenCanvasRenderingContext2D.prototype,
+                     'getImageData', 'offscreen.getImageData', imageData); } catch (e) {}
+  try { wrapProducer(globalThis.CanvasRenderingContext2D && globalThis.CanvasRenderingContext2D.prototype,
+                     'measureText', 'measureText',
+                     function (o, a) { return { n: -1, text: String(a[0]).length, width: o && o.width }; }); } catch (e) {}
+  try { wrapProducer(globalThis.HTMLCanvasElement && globalThis.HTMLCanvasElement.prototype,
+                     'toDataURL', 'toDataURL', function (o) { return { n: o ? o.length : -1 }; }); } catch (e) {}
+  // readPixels writes into the caller's buffer rather than returning one, so
+  // the interesting value is the argument.
+  var readPixels = function (o, a) {
+    var b = a[6];
+    return { n: b ? (b.byteLength !== undefined ? b.byteLength : b.length) : -1, w: a[2], h: a[3] };
+  };
+  try { wrapProducer(globalThis.WebGLRenderingContext && globalThis.WebGLRenderingContext.prototype,
+                     'readPixels', 'gl.readPixels', readPixels); } catch (e) {}
+  try { wrapProducer(globalThis.WebGL2RenderingContext && globalThis.WebGL2RenderingContext.prototype,
+                     'readPixels', 'gl2.readPixels', readPixels); } catch (e) {}
+  try { wrapProducer(globalThis.AudioBuffer && globalThis.AudioBuffer.prototype,
+                     'getChannelData', 'getChannelData',
+                     function (o) { return { n: o ? o.byteLength : -1, len: o ? o.length : -1 }; }); } catch (e) {}
+
+  // One of the fifteen -- 4096 bytes of repeating 00 00 00 ff, so 32x32 opaque
+  // black -- comes from none of the producers above. Rather than guess at more
+  // readback APIs, ask the cheaper question: which surfaces does the guard
+  // create at all? A 32x32 canvas names the buffer even if the read that
+  // emptied it is never caught.
+  try {
+    wrapProducer(globalThis.OffscreenCanvas && globalThis.OffscreenCanvas.prototype, 'getContext',
+                 'offscreen.getContext',
+                 function (o, a, self) { return { n: -1, type: String(a[0]),
+                                                  w: self && self.width, h: self && self.height }; });
+  } catch (e) {}
+  try {
+    wrapProducer(globalThis.HTMLCanvasElement && globalThis.HTMLCanvasElement.prototype, 'getContext',
+                 'canvas.getContext',
+                 function (o, a, self) { return { n: -1, type: String(a[0]),
+                                                  w: self && self.width, h: self && self.height }; });
+  } catch (e) {}
+  try {
+    wrapProducer(globalThis, 'createImageBitmap', 'createImageBitmap',
+                 function (o, a) { return { n: -1, src: a[0] && a[0].constructor && a[0].constructor.name }; });
+  } catch (e) {}
+  try {
+    wrapProducer(globalThis.OffscreenCanvas && globalThis.OffscreenCanvas.prototype, 'transferToImageBitmap',
+                 'transferToImageBitmap',
+                 function (o, a, self) { return { n: -1, w: self && self.width, h: self && self.height }; });
+  } catch (e) {}
+
   var censusDone = false;
   function surfaceCensus(bodyLen) {
     if (censusDone || !bodyLen || bodyLen < 20000) return;
@@ -652,6 +761,40 @@ for (const b of state.blobs) {
         + `${b.gapAt !== undefined ? ` GAP@${b.gapAt}` : ''} type=${JSON.stringify(b.type)}`);
 }
 for (const p of state.posts) console.log(`  POST ${String(p.postLen).padStart(7)} ${p.verdict ?? '?'}  ${p.url.slice(-40)}`);
+
+// Provenance. Knowing that one of the fifteen encodes carries 9216 bytes does
+// not say which surface produced it, and the residual against an honoured
+// payload is exactly four of these buffers -- so each one needs an owner. The
+// frame printed is the first one that is not this instrument: the wrapper
+// itself is always frame 0, and the guard's own program is the next one down.
+const provenance = state.records.filter((r) => r.k === 'TextEncoder.encode' || r.k === 'subtle.digest'
+    || r.k === 'produce');
+if (provenance.length) {
+    console.log(`  --- ${provenance.length} encode/digest calls, in call order ---`);
+    // A frame reduced to the part that identifies it: the function name and the
+    // column, since the whole guard is one minified line and the column is what
+    // separates one call site from another.
+    const brief = (f) => {
+        const m = /^at (.*?) \(.*?:1:(\d+)\)$/.exec(f) ?? /^at (.*?) \(<anonymous>:(\d+):\d+\)$/.exec(f);
+        return m ? `${m[1]}@${m[2]}` : f.replace(/^at /, '').slice(0, 40);
+    };
+    provenance.forEach((r, i) => {
+        const frames = String(r.stack ?? '').split('\n').map((s) => s.trim())
+            .filter((s) => s.startsWith('at '));
+        // Frame 0 is the wrapper installed above -- `disguise` gives it the
+        // original's name, so it has to be dropped by position, not by name.
+        const guard = frames.slice(1);
+        // The top frame is the call site; the bottom is whatever kicked the
+        // whole chain off. The middle is the interpreter cycling, which is why
+        // only the ends are printed here and the full chain goes to the JSON.
+        const kind = r.k === 'produce' ? String(r.a?.t ?? 'produce')
+            : (r.k === 'subtle.digest' ? 'digest' : 'encode');
+        console.log(`  ${String(i).padStart(2)} ${kind.padEnd(22)}`
+            + ` n=${String(r.a?.n ?? -1).padStart(6)} frames=${String(guard.length).padStart(3)}`
+            + (r.meta ? `  ${JSON.stringify(r.meta)}` : '')
+            + `  site=${brief(guard[0] ?? '')}  bottom=${brief(guard[guard.length - 1] ?? '')}`);
+    });
+}
 const t0 = state.exchange[0]?.t ?? 0;
 for (const e of state.exchange) {
     const ms = (x) => (x === undefined ? '    -' : String(Math.round((x - t0) * 1000)).padStart(5));

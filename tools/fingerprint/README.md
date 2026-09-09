@@ -27066,3 +27066,96 @@ proven exact against a Chrome-measured control rather than assumed.
 **So: worth doing, scoped to advances plus canvas ascent/descent.** Ink bearings
 and the layout/SVG sweeps are a separate, much larger piece and should not be
 smuggled into this one.
+
+## Every one of the guard's fifteen encodes now has an owner (B128, 2026-09-08)
+
+`fo-plaintext.mjs` has been reading the guard's payload before it is encrypted
+for a long time, and B121 narrowed the residual against an *honoured* Chrome
+payload to four raster buffers and four short values. What it could not say was
+which surface produced any of them. A capture knew a buffer was 9216 bytes and
+nothing else, which is why every attempt to explain the four short values had to
+proceed by guessing at page-level sources — and why all six guesses came back
+negative.
+
+Two instruments close that.
+
+**Stacks on the funnels.** The guard reaches `TextEncoder.encode` and
+`crypto.subtle.digest` from inside its own bytecode interpreter, so a stack
+names its own minified functions rather than an API: one dispatcher frame
+between every pair, and `[as run]` at a different column for each nested
+program. Identifiers and columns change with every delivery, so **chains compare
+across arms by shape, never by name.** Two details were needed to make them
+usable at all: V8 caps a stack at ten frames, which cuts the chain off
+mid-interpreter, and the wrapper frame has to be dropped by position because
+`disguise` gives the wrapper the original's name.
+
+**Lengths on the producers.** Since the frames name nothing semantic, hook the
+other end — the plausible readback APIs — and record what each one handed back.
+Lengths line the two ends up with no chain matching at all. Dimensions and
+lengths only, never bytes: a recorder that copied pixels into a string would put
+them back into the realm and change the payload being measured, which is what
+the round-2 hooks once did.
+
+Both are honest on the criterion this file has always used: four served Chrome
+runs with the full set installed.
+
+| encode | owner |
+|---|---|
+| 31128 | the CSS property-name census (a JSON object of property names) |
+| 22972 | the page's own CSS source |
+| 15361 ×2 | the per-property `0\|0\|0\|…` vectors |
+| 9216 | offscreen 2D `getImageData`, 48×48 |
+| 8624 ×3 | offscreen 2D `getImageData`, 49×44, via `transferToImageBitmap` |
+| 4096 | **WebGPU** |
+| 1024 | 16×16 — `gl.readPixels` and a 16×16 `getImageData` both fire, so this one is still ambiguous |
+| 69 | a small string, on the census producer's chain |
+| 17 / 16 / 1 / 18 | the four short values, on the census producer's own chain |
+
+All fifteen inputs are **strings**: the pixels are stringified before they are
+encoded, which is why the 9216 buffer contains code units above 255.
+
+### The four short values are not a clock
+
+They share their whole chain with the two census buffers. They are not a timer,
+a frame counter or a random source, which is what `cf-four-short-values-are-
+computed` had narrowed them to by elimination and could not name. They come off
+the CSS census producer.
+
+### The 4096 buffer is the WebGPU collector
+
+This is the one where our bytes are a shape a real browser cannot produce:
+Chrome's 4096 is `00 00 00 ff` repeating (1024 opaque-black pixels, so 32×32
+RGBA) and ours is `00 00 00 00` — alpha zero, meaning the surface was never
+painted.
+
+None of the seven readback APIs produced it, so the cheaper question was which
+surfaces the guard creates at all. It asks for a `webgpu` context on a 300×150
+canvas, and the collectors are awaited in one `Promise.all`, so each async frame
+carries its index. On a served Chrome run **exactly three records sit at index 0
+— the `webgpu` `getContext`, the 4096 `encode`, and its 4416-byte `digest`, and
+nothing else.** That is a unique match within the run.
+
+On our arm **there is no index 0 at all.** The `webgpu` `getContext` bottoms out
+at the plain dispatcher instead: it resolves without becoming an awaited task,
+and the 32×32 it reports was never drawn to. (The collector indices themselves
+are not comparable across arms — our 49×44 collector is index 9 where Chrome's
+is 3 — so the argument is the within-run uniqueness, not `0 == 0`.)
+
+**Our WebGPU surface is not missing, and saying so would be wrong.**
+`navigator.gpu`, `GPU`, `GPUAdapter` are all present; `getContext('webgpu')`
+returns a `GPUCanvasContext`; `requestAdapter()` resolves to an adapter
+reporting vendor `apple`, `requestDevice()` to a `GPUDevice` with a `GPUQueue`,
+`createTexture` and `createBuffer`; `getPreferredCanvasFormat()` answers
+`bgra8unorm`. The objects exist and the pixels do not — the same shape as
+`images-are-never-decoded`, one surface further along.
+
+### What this does and does not license
+
+It licenses naming the residuals, which is what the plan asked for. It does
+**not** license calling any of them a door. `cf-does-not-score-image-pixels` and
+`cf-four-short-values-not-weighed` both record causal experiments that came back
+negative, and `cf-verdict-not-in-payload` established on 44 Chrome runs that the
+collected payload does not decide the verdict at all — a byte-identical payload
+was honoured six times and refused twice. These buffers are worth fixing on
+fidelity grounds, and an impossible shape is worth fixing whether or not this
+station weighs it, but the expected effect on `served=` is zero.
