@@ -58,7 +58,7 @@
 //   node tools/fingerprint/fo-plaintext.mjs <lightpanda|chrome>
 //        [--headed-ua] [--url u] [--settle ms] [--out path] [--port n]
 //        [--min n] [--max-records n] [--inject-worker]
-//        [--r2] [--r2-min n] [--r2-budget n] [--webgpu]
+//        [--r2] [--r2-min n] [--r2-budget n] [--webgpu] [--draws]
 // env: LP_BIN, CHROME
 //
 // The launch/arm/collect machinery lives in fo-harness.mjs; what is here is the
@@ -111,6 +111,8 @@ const injectWorker = has('--inject-worker');
 const r2 = has('--r2');
 // The WebGPU walk (B128 put the 4096-byte buffer on that collector).
 const webgpu = has('--webgpu');
+// The 2D gradient/paint calls behind the 48x48 readback (B130).
+const draws = has('--draws');
 const R2_MIN = Number(arg('--r2-min', '2000'));
 const R2_BUDGET = Number(arg('--r2-budget', '40'));
 // The recorder. Runs before the document's own code in every realm it is
@@ -433,6 +435,77 @@ const CORE = `(function () {
     try { wrapProducer(globalThis.GPUBuffer && globalThis.GPUBuffer.prototype, 'getMappedRange',
                        'getMappedRange',
                        function (o) { return { n: o ? o.byteLength : -1 }; }); } catch (e) {}
+  })();
+
+  // The 2D drawing calls behind the 48x48 readback. B128's provenance table put
+  // the 9216-byte buffer on an offscreen getImageData, and the pixel diff says
+  // both arms draw the same thing and disagree on how it is interpolated: an
+  // alpha ramp with the same shape that climbs faster here. So the search is
+  // narrowed to the gradients and what is painted with them, not every drawing
+  // call there is.
+  //
+  // Arguments only -- a recorder that read pixels back would be a second
+  // getImageData on the surface being measured.
+  if (${draws ? 'true' : 'false'}) (function () {
+    var protos = [];
+    if (globalThis.CanvasRenderingContext2D) protos.push(['2d', globalThis.CanvasRenderingContext2D.prototype]);
+    if (globalThis.OffscreenCanvasRenderingContext2D) protos.push(['off', globalThis.OffscreenCanvasRenderingContext2D.prototype]);
+
+    function args(a, n) {
+      var out = [];
+      for (var i = 0; i < n && i < a.length; i++) {
+        var v = a[i];
+        out.push(typeof v === 'object' && v !== null
+          ? (v.constructor && v.constructor.name) || 'object'
+          : v);
+      }
+      return out;
+    }
+    // A gradient object is the thing whose stops decide the ramp, so each one
+    // gets an id and its stops are recorded against it.
+    var gradSeq = 0;
+    for (var p = 0; p < protos.length; p++) {
+      (function (tag, proto) {
+        ['createLinearGradient', 'createRadialGradient', 'createConicGradient'].forEach(function (key) {
+          wrapProducer(proto, key, tag + '.' + key, function (out, a) {
+            if (out && !out.__foId) {
+              try { Object.defineProperty(out, '__foId', { value: ++gradSeq }); } catch (e) {}
+            }
+            return { n: -1, id: out && out.__foId, a: args(a, 6) };
+          });
+        });
+        wrapProducer(proto, 'createPattern', tag + '.createPattern',
+                     function (o, a) { return { n: -1, rep: a[1] }; });
+        // What is painted, and with what.
+        ['fillRect', 'strokeRect', 'clearRect'].forEach(function (key) {
+          wrapProducer(proto, key, tag + '.' + key, function (o, a, self) {
+            var s = self && self.fillStyle;
+            return { n: -1, a: args(a, 4),
+                     fill: typeof s === 'string' ? s : (s && s.__foId ? 'gradient#' + s.__foId : 'object'),
+                     alpha: self && self.globalAlpha, op: self && self.globalCompositeOperation,
+                     filter: self && self.filter };
+          });
+        });
+        ['fill', 'stroke'].forEach(function (key) {
+          wrapProducer(proto, key, tag + '.' + key, function (o, a, self) {
+            var s = self && self.fillStyle;
+            return { n: -1, fill: typeof s === 'string' ? s : (s && s.__foId ? 'gradient#' + s.__foId : 'object'),
+                     alpha: self && self.globalAlpha, op: self && self.globalCompositeOperation };
+          });
+        });
+        wrapProducer(proto, 'drawImage', tag + '.drawImage',
+                     function (o, a) { return { n: -1, a: args(a, 9) }; });
+        wrapProducer(proto, 'putImageData', tag + '.putImageData',
+                     function (o, a) { return { n: -1, a: args(a, 3) }; });
+      })(protos[p][0], protos[p][1]);
+    }
+    // addColorStop lives on the gradient, and the stop list IS the ramp.
+    try {
+      wrapProducer(globalThis.CanvasGradient && globalThis.CanvasGradient.prototype, 'addColorStop',
+                   'addColorStop',
+                   function (o, a, self) { return { n: -1, id: self && self.__foId,
+                                                    offset: a[0], color: String(a[1]) }; });
+    } catch (e) {}
   })();
 
   var censusDone = false;
@@ -771,7 +844,7 @@ const RECORDER = `${WORKER_HOOK}\n${CORE}`;
 const state = {
     engine, url: URL_, headedUa, settleMs: SETTLE, min: MIN,
     userAgentOverride: null,
-    injectWorker, r2, r2Min: r2 ? R2_MIN : null, webgpu,
+    injectWorker, r2, r2Min: r2 ? R2_MIN : null, webgpu, draws,
     posts: [],       // the fo/ POSTs on the wire, to key the records against
     // Every challenge-platform request, with the two things `posts` cannot
     // answer: WHEN it happened and what came back. The collected payload is a
@@ -847,7 +920,7 @@ await runTrace({
 });
 
 // --- report ---------------------------------------------------------------
-console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''}${injectWorker ? ' --inject-worker' : ''}${r2 ? ` --r2 --r2-min ${R2_MIN}` : ''}${webgpu ? ' --webgpu' : ''} ===`);
+console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''}${injectWorker ? ' --inject-worker' : ''}${r2 ? ` --r2 --r2-min ${R2_MIN}` : ''}${webgpu ? ' --webgpu' : ''}${draws ? ' --draws' : ''} ===`);
 console.log(`realms armed: ${state.realms.filter((r) => r.installed).length}/${state.realms.length}`);
 const tally = new Map();
 for (const r of state.records) tally.set(r.k, (tally.get(r.k) ?? 0) + 1);
