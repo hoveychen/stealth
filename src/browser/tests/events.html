@@ -1156,7 +1156,8 @@
     // realm and in a worker's alike (measured on Chrome 151). This is the most
     // walked prototype in either realm, and this engine used to emit
     // dispatchEvent first because that is the order it was declared in.
-    testing.expectEqual('addEventListener,dispatchEvent,removeEventListener,constructor',
+    // `when` is appended after removeEventListener, not sorted in.
+    testing.expectEqual('addEventListener,dispatchEvent,removeEventListener,when,constructor',
       Object.getOwnPropertyNames(EventTarget.prototype).join(','));
   }
 </script>

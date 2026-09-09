@@ -113,9 +113,14 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // in a SHARED worker despite the IDL's [Exposed=(Window,DedicatedWorker,
       // SharedWorker)] -- `typeof Worker` is "undefined" there -- so the entry
       // is dedicated-only.
+      //
+      // 322 with `Observable` and `Subscriber`. Both are Exposed=* -- Chrome
+      // carries them in the window realm and in both worker realms -- and
+      // neither is [SecureContext], so this count moves by exactly two and the
+      // insecure-owner count in frames/secure_context_gate.html moves with it.
       testing.expectEqual(13, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(320, data.count);
+      testing.expectEqual(322, data.count);
     });
   }
 </script>
