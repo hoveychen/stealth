@@ -395,7 +395,7 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
         var ls: js.Local.Scope = undefined;
         context.localScope(&ls);
         defer ls.deinit();
-        ls.local.eval(wasm_streaming_bootstrap, "wasm-streaming") catch |err| {
+        bindWasmStreaming(context, ls.local) catch |err| {
             log.err(.js, "wasm streaming bootstrap", .{ .err = err });
         };
 
@@ -956,13 +956,18 @@ test "Env: Frame context" {
 // `length` and `name`, and throw on `new`; a plain script function fails all
 // three, and Kasada's decoded guard greps for precisely that family
 // (`\[native code\]`, `patchedFuncStringErrMsg`, `^[a-z]+\s*\(\)\s*\{...\}`).
-// Binding a shorthand method fixes all three: V8 gives a method no `prototype`,
-// so `new` throws, and a bound function reports native code. The residual is
-// that a bound function prints *anonymously* -- `function () { [native code] }`
-// where Chrome names the function -- and only a real embedder binding closes
-// that. Measured not to be the x-hyatt door either way: handing Chrome the old
+// Binding a shorthand method got all three *nearly* right, and printed
+// *anonymously* -- `function () { [native code] }` where Chrome names the
+// function, a shape no built-in has. That last one needs a real embedder
+// binding, which is what `bindWasmStreaming` below now does: the bootstrap
+// hands back the implementations and each is wrapped in a
+// `newNamedCallback`, so `toString` reports
+// `function compileStreaming() { [native code] }`.
+//
+// Measured not to be the x-hyatt door either way: handing Chrome the old
 // script-defined shape cost it nothing, 2/2, and did not move the payload by a
-// byte (README, "the two functions written in javascript").
+// byte (README, "the two functions written in javascript"). This is a fidelity
+// fix, not a gate.
 //
 // This has to run per context rather than once at snapshot time: V8 materialises
 // the WebAssembly namespace when a context is deserialised, so it does not exist
@@ -970,6 +975,62 @@ test "Env: Frame context" {
 // deviation follows from defining the two names afterwards: Chrome lists them
 // between RuntimeError and Suspending, while appending puts them last. The set
 // is what detectors compare, not the position within the namespace object.
+/// Puts `compileStreaming` and `instantiateStreaming` on the `WebAssembly`
+/// namespace as functions a script cannot tell from V8's own.
+///
+/// The bootstrap script hands back the two implementations rather than defining
+/// them, and each is wrapped in a `newNamedCallback` that forwards to it. That
+/// wrapper is what closes the last of the three tells: a FunctionTemplate-backed
+/// function reports `function compileStreaming() { [native code] }`, owns
+/// nothing but `length` and `name`, and throws on `new`. Binding a shorthand
+/// method -- what this used to do -- gets the last two right and prints
+/// *anonymously*, which is a shape no built-in has.
+fn bindWasmStreaming(context: *Context, local: js.Local) !void {
+    const returned = try local.exec(wasm_streaming_bootstrap, "wasm-streaming");
+    if (!returned.isArray()) {
+        return error.WasmStreamingBootstrap;
+    }
+    const impls = returned.toArray();
+
+    const wasm = try context.globalObject(&local).get("WebAssembly");
+    if (!wasm.isObject()) {
+        return error.WasmStreamingBootstrap;
+    }
+    const namespace = wasm.toObject();
+
+    inline for (.{ "compileStreaming", "instantiateStreaming" }, 0..) |name, i| {
+        const impl = try impls.get(i);
+        if (!impl.isFunction()) {
+            return error.WasmStreamingBootstrap;
+        }
+        const impl_fn = js.Function{ .local = impl.local, .handle = @ptrCast(impl.handle) };
+        context.wasm_streaming[i] = try impl_fn.persist();
+
+        // Arity 1 on both: Chrome reports 1 for instantiateStreaming too, since
+        // its `importObject` is optional (measured).
+        const fn_ = try local.newNamedCallback(name, 1, callStreaming(i), context);
+        // Writable, enumerable, configurable -- a plain data property, which is
+        // what the rest of the namespace's members are.
+        _ = try namespace.set(name, fn_, .{});
+    }
+}
+
+/// The trampoline for one of the two. Everything the spec text needs -- the
+/// Response check, the MIME check, awaiting a promised Response -- lives in the
+/// implementation this forwards to; the only job here is to be a native
+/// function while doing it.
+fn callStreaming(comptime i: usize) fn (*Context, []js.Value) anyerror!js.Value {
+    return struct {
+        fn call(context: *Context, args: []js.Value) !js.Value {
+            const local = context.local.?;
+            const impl = local.toLocal(context.wasm_streaming[i] orelse {
+                return error.WasmStreamingBootstrap;
+            });
+            return impl.call(js.Value, args);
+        }
+    }.call;
+}
+
 const wasm_streaming_bootstrap =
     \\(() => {
     \\  const wasm = globalThis.WebAssembly;
@@ -986,26 +1047,9 @@ const wasm_streaming_bootstrap =
     \\    }
     \\    return response.arrayBuffer();
     \\  }
-    \\  const define = (name, impl) => {
-    \\    const fn = impl.bind(undefined);
-    \\    for (const [key, value] of [['name', name], ['length', 1]]) {
-    \\      Object.defineProperty(fn, key, {
-    \\        value, writable: false, enumerable: false, configurable: true,
-    \\      });
-    \\    }
-    \\    Object.defineProperty(wasm, name, {
-    \\      value: fn, writable: true, enumerable: true, configurable: true,
-    \\    });
-    \\  };
-    \\  define('compileStreaming', {
-    \\    compileStreaming(source) {
-    \\      return bytesOf(source, 'compileStreaming').then((bytes) => compile.call(wasm, bytes));
-    \\    },
-    \\  }.compileStreaming);
-    \\  define('instantiateStreaming', {
-    \\    instantiateStreaming(source, imports = undefined) {
-    \\      return bytesOf(source, 'instantiateStreaming').then((bytes) => instantiate.call(wasm, bytes, imports));
-    \\    },
-    \\  }.instantiateStreaming);
+    \\  return [
+    \\    (source) => bytesOf(source, 'compileStreaming').then((bytes) => compile.call(wasm, bytes)),
+    \\    (source, imports) => bytesOf(source, 'instantiateStreaming').then((bytes) => instantiate.call(wasm, bytes, imports)),
+    \\  ];
     \\})()
 ;
