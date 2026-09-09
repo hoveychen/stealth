@@ -181,8 +181,30 @@ pub const GPUBuffer = struct {
     // Chrome refuses a second range overlapping any of them and names both
     // intervals in the message; unmap() clears the list.
     _ranges: std.ArrayList(Range) = .empty,
+    /// The bytes a copy has written into this buffer, allocated on first write
+    /// rather than at creation: a page may ask for a buffer far larger than
+    /// anything it then copies into, and a handle nobody writes to still reads
+    /// back as zeros either way.
+    _bytes: ?[]u8 = null,
 
     const Range = struct { start: u64, end: u64 };
+
+    /// A buffer big enough to matter is a buffer big enough to be a denial of
+    /// service, and the widget's is 4096. Past this the copy is skipped and the
+    /// readback stays zeros, which is exactly the behaviour of every build
+    /// before the copy existed.
+    const max_backing_bytes = 64 * 1024 * 1024;
+
+    /// The writable bytes of this buffer, allocating them the first time
+    /// something copies in. Null when the buffer is too large to back.
+    fn backing(self: *GPUBuffer, exec: *const Execution) !?[]u8 {
+        if (self._bytes) |b| return b;
+        if (self._size == 0 or self._size > max_backing_bytes) return null;
+        const b = try exec.arena.alloc(u8, @intCast(self._size));
+        @memset(b, 0);
+        self._bytes = b;
+        return b;
+    }
 
     const label_accessors = labelAccessors(GPUBuffer);
 
@@ -246,9 +268,42 @@ pub const GPUBuffer = struct {
         }
         try self._ranges.append(exec.arena, .{ .start = offset, .end = end });
 
+        // Whatever a copy wrote, or zeros when nothing did -- which is what
+        // Chrome answers for an untouched buffer too.
+        if (self._bytes) |b| {
+            return .{ .values = b[@intCast(offset)..@intCast(end)] };
+        }
         const bytes = try exec.call_arena.alloc(u8, @intCast(size));
         @memset(bytes, 0);
         return .{ .values = bytes };
+    }
+
+    /// Fill `rows` rows of `row_bytes` bytes each, `stride` apart, starting at
+    /// `offset`, by repeating `pixel`. This is `copyTextureToBuffer` for a
+    /// texture whose only known content is a clear colour: WebGPU requires the
+    /// stride (`bytesPerRow`) to be a multiple of 256, so the bytes between the
+    /// end of a row and the next row's start are padding and stay zero -- which
+    /// is what a served Chrome capture shows them to be.
+    pub fn fillRows(
+        self: *GPUBuffer,
+        exec: *const Execution,
+        offset: u64,
+        rows: u32,
+        row_bytes: u32,
+        stride: u32,
+        pixel: [4]u8,
+    ) !void {
+        const bytes = (try self.backing(exec)) orelse return;
+        var row: u32 = 0;
+        while (row < rows) : (row += 1) {
+            const start = offset + @as(u64, row) * stride;
+            const stop = start + row_bytes;
+            if (stop > bytes.len) return;
+            var i = start;
+            while (i + 4 <= stop) : (i += 4) {
+                @memcpy(bytes[@intCast(i)..@intCast(i + 4)], &pixel);
+            }
+        }
     }
 
     /// A `GPUSize64` argument, or null when it was left out. Anything that is
@@ -327,8 +382,38 @@ pub const GPUTexture = struct {
     _format: []const u8,
     _usage: u32,
     _texture_binding_view_dimension: ?[]const u8 = null,
+    /// The colour a render pass last cleared this texture to, as the bytes a
+    /// readback would see. There is no rasteriser behind any of this, so a
+    /// render pass contributes exactly one thing that is reproducible: its
+    /// `loadOp: "clear"` value, which on the Cloudflare widget's 16x16 target
+    /// accounts for 224 of the 256 pixels Chrome reads back. The 32 remaining
+    /// ones are a `draw(3)` triangle whose colour comes out of a WGSL fragment
+    /// shader, and those are not reproducible here.
+    _clear: ?[4]u8 = null,
 
     const label_accessors = labelAccessors(GPUTexture);
+
+    /// The clear colour as the bytes this texture's format stores. WebGPU takes
+    /// the components as unclamped doubles; a readback sees them as the 8-bit
+    /// unorm values, and the two byte orders that matter here differ only in
+    /// whether red or blue comes first.
+    pub fn clearBytes(self: *const GPUTexture, rgba: [4]f64) [4]u8 {
+        const q = struct {
+            fn to8(v: f64) u8 {
+                if (!(v > 0)) return 0;
+                if (v >= 1) return 255;
+                return @intFromFloat(@round(v * 255));
+            }
+        };
+        const r = q.to8(rgba[0]);
+        const g = q.to8(rgba[1]);
+        const b = q.to8(rgba[2]);
+        const a = q.to8(rgba[3]);
+        if (std.mem.startsWith(u8, self._format, "bgra")) {
+            return .{ b, g, r, a };
+        }
+        return .{ r, g, b, a };
+    }
 
     pub fn getWidth(self: *const GPUTexture) u32 {
         return self._width;
@@ -369,11 +454,12 @@ pub const GPUTexture = struct {
         return self._texture_binding_view_dimension;
     }
 
-    pub fn createView(_: *GPUTexture, descriptor_: ?js.Value, exec: *const Execution) !*GPUTextureView {
+    pub fn createView(self: *GPUTexture, descriptor_: ?js.Value, exec: *const Execution) !*GPUTextureView {
         const Reader = dictionary.MethodReader("GPUTexture", "createView", "GPUTextureViewDescriptor");
         const descriptor = try Reader.read(descriptor_, exec);
         return exec._factory.create(GPUTextureView{
             ._label = try descriptor.string("label", "", exec.arena),
+            ._texture = self,
         });
     }
 
@@ -617,7 +703,30 @@ pub fn importExternalTexture(args: []js.Value, exec: *const Execution) !*GPUExte
 }
 
 // The five handles whose whole prototype is `label`. They differ only in brand.
-pub const GPUTextureView = LabelOnly("GPUTextureView");
+/// `label` is the whole of this interface's shape, as `LabelOnly` gives every
+/// other handle -- but a view is also the only way a render pass names the
+/// texture it draws into, so it has to carry that link. The JsApi below is
+/// `LabelOnly`'s verbatim, so the prototype a page reads is unchanged.
+pub const GPUTextureView = struct {
+    _label: []const u8 = "",
+    _texture: ?*GPUTexture = null,
+
+    const label_accessors = labelAccessors(GPUTextureView);
+
+    pub fn shapeOnly(_: *GPUTextureView) void {}
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(GPUTextureView);
+
+        pub const Meta = struct {
+            pub const name = "GPUTextureView";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const label = bridge.accessor(label_accessors.get, label_accessors.set, .{});
+    };
+};
 pub const GPUSampler = LabelOnly("GPUSampler");
 pub const GPUExternalTexture = LabelOnly("GPUExternalTexture");
 pub const GPUBindGroup = LabelOnly("GPUBindGroup");

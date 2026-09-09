@@ -636,3 +636,90 @@
   offCtx.configure({ device: dev, format: 'bgra8unorm' });
   testing.expectEqual([16, 8], [offCtx.getCurrentTexture().width, offCtx.getCurrentTexture().height]);
 </script>
+
+<script id=copy_texture_to_buffer_hands_back_the_clear_colour>
+  // The Cloudflare widget's own readback, step for step (measured off a served
+  // Chrome 151 capture, tools/fingerprint/scratch/b129): a 16x16 rgba8unorm
+  // render attachment, a pass that clears to opaque black and draws one
+  // triangle, and a 4096-byte MAP_READ buffer filled at bytesPerRow 256.
+  //
+  // Before this, copyTextureToBuffer was a stub and the readback was 4096
+  // zeros -- alpha 0 over the whole surface, which no real browser produces
+  // because a render pass has at minimum cleared. What is reproduced here is
+  // the clear colour; the triangle needs a rasteriser and is not.
+  (async () => {
+    const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+    const texture = dev.createTexture({
+      size: { width: 16, height: 16 },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+    });
+    const buffer = dev.createBuffer({ size: 4096, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+
+    const encoder = dev.createCommandEncoder();
+    encoder.beginRenderPass({
+      colorAttachments: [{
+        view: texture.createView(),
+        loadOp: 'clear',
+        storeOp: 'store',
+        clearValue: { r: 0, g: 0, b: 0, a: 1 },
+      }],
+    });
+    encoder.copyTextureToBuffer({ texture }, { buffer, bytesPerRow: 256 }, { width: 16, height: 16 });
+    dev.queue.submit([encoder.finish()]);
+
+    await buffer.mapAsync(GPUMapMode.READ);
+    const bytes = new Uint8Array(buffer.getMappedRange());
+    testing.expectEqual(4096, bytes.length);
+
+    // 16 rows of 256: the first 64 bytes are the 16 pixels, the rest padding.
+    const quad = (row, px) => Array.from(bytes.slice(row * 256 + px * 4, row * 256 + px * 4 + 4));
+    testing.expectEqual([0, 0, 0, 255], quad(0, 0));
+    testing.expectEqual([0, 0, 0, 255], quad(15, 15));
+    testing.expectEqual([0, 0, 0, 0], quad(0, 16));   // first padding byte group
+    testing.expectEqual([0, 0, 0, 0], quad(15, 63));  // last padding byte group
+
+    // The counts a served Chrome capture is compared against: every pixel
+    // opaque, and the padding untouched.
+    let opaque = 0, padding_nonzero = 0;
+    for (let row = 0; row < 16; row++) {
+      for (let i = 0; i < 64; i += 4) if (bytes[row * 256 + i + 3] === 255) opaque++;
+      for (let i = 64; i < 256; i++) if (bytes[row * 256 + i] !== 0) padding_nonzero++;
+    }
+    testing.expectEqual('opaque 256 padding_nonzero 0', 'opaque ' + opaque + ' padding_nonzero ' + padding_nonzero);
+
+    // bgra8unorm swaps the two ends, and a clear with no value is transparent
+    // black -- which is the shape the whole buffer used to have.
+    const bgra = dev.createTexture({
+      size: [16, 16], format: 'bgra8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+    });
+    const buf2 = dev.createBuffer({ size: 4096, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const enc2 = dev.createCommandEncoder();
+    enc2.beginRenderPass({
+      colorAttachments: [{ view: bgra.createView(), loadOp: 'clear', storeOp: 'store',
+                           clearValue: [1, 0.5, 0, 1] }],
+    });
+    enc2.copyTextureToBuffer({ texture: bgra }, { buffer: buf2, bytesPerRow: 256 }, [16, 16]);
+    dev.queue.submit([enc2.finish()]);
+    await buf2.mapAsync(GPUMapMode.READ);
+    const b2 = new Uint8Array(buf2.getMappedRange());
+    // r=1 g=0.5 b=0 stored blue-first, and 0.5 rounds to 128.
+    testing.expectEqual([0, 128, 255, 255], Array.from(b2.slice(0, 4)));
+
+    // A texture no pass ever cleared still reads back as zeros.
+    const untouched = dev.createTexture({
+      size: [16, 16], format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+    });
+    const buf3 = dev.createBuffer({ size: 4096, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    const enc3 = dev.createCommandEncoder();
+    enc3.copyTextureToBuffer({ texture: untouched }, { buffer: buf3, bytesPerRow: 256 }, [16, 16]);
+    dev.queue.submit([enc3.finish()]);
+    await buf3.mapAsync(GPUMapMode.READ);
+    testing.expectEqual([0, 0, 0, 0], Array.from(new Uint8Array(buf3.getMappedRange()).slice(0, 4)));
+
+    // Chrome answers undefined from the recording call.
+    testing.expectEqual(undefined, enc3.copyTextureToBuffer({ texture: untouched }, { buffer: buf3, bytesPerRow: 256 }, [16, 16]));
+  })();
+</script>
