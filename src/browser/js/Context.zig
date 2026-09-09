@@ -262,6 +262,14 @@ object_proto_value_of: ?js.Value.Global = null,
 // CountQueuingStrategy (measured on Chrome 150, win26-chrome.json).
 queuing_strategy_size: [2]?js.Function.Global = .{ null, null },
 
+// The two `WebAssembly` streaming functions' implementations, in the order
+// `wasm_streaming_bootstrap` returns them: compileStreaming, then
+// instantiateStreaming. The functions a script sees are native ones created by
+// `newNamedCallback`, and they trampoline to these -- which is the only way to
+// get Chrome's `function compileStreaming() { [native code] }` out of
+// `toString`. A bound function reports native code but prints anonymously.
+wasm_streaming: [2]?js.Function.Global = .{ null, null },
+
 // Rejected promises V8 has told us about but nobody has heard of yet. The spec
 // keeps this list and drains it at the end of the microtask checkpoint, which
 // is why `Promise.reject(x)` followed one statement later by `.catch()` fires

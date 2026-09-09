@@ -39,6 +39,13 @@
       let threw = 'no-throw';
       try { new fn(); } catch (e) { threw = e.constructor.name; }
       testing.expectEqual(name + ' new:TypeError', name + ' new:' + threw);
+
+      // The whole source text, not just that it contains `[native code]`.
+      // A *bound* function reports native code but prints anonymously --
+      // `function () { [native code] }` -- where Chrome names the function.
+      // That was the residual left when these two were bound shorthand
+      // methods, and it is the last of the three tells in this family.
+      testing.expectEqual('function ' + name + '() { [native code] }', src);
     }
   }
 </script>
