@@ -27220,3 +27220,24 @@ So the reproducible part is the clear value, which is 224 of the 256 pixels. The
 32 remaining pixels are a rasterised triangle whose colour comes out of a WGSL
 fragment shader, and there is no rasteriser behind our WebGPU objects to produce
 them.
+
+#### The recheck on the live station
+
+Same instrument, ReleaseFast, against the real widget:
+
+| arm | `served` | the 4096 buffer's 256 pixels | padding |
+|---|---|---|---|
+| Chrome | true | 224 × `00 00 00 ff`, 32 × `d7 8a 74 ff` | all zero |
+| ours, before | false | **256 × `00 00 00 00`** | all zero |
+| ours, after | false | **256 × `00 00 00 ff`** | all zero |
+
+So the impossible part is gone — the surface reads back as a cleared render
+attachment, which is what it is — and we now agree with Chrome on 224 of the 256
+pixels. The 32 that remain are its `draw(3)` triangle, and we report flat clear
+colour where Chrome reports the shader's.
+
+**`served=` did not move, which is what this section predicted.** One run is not
+a measurement of a rate, and it does not need to be: the point of writing the
+prediction down first was that a fidelity fix on this family has no expected
+effect on the verdict, and the two causal experiments behind that are already on
+record. Nothing here revises them.
