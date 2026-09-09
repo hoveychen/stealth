@@ -136,12 +136,13 @@ const CORE = `(function () {
 
   // describe() stringifies too, so it has to run inside the guard rather than
   // as an argument evaluated ahead of it.
-  function record(label, value, extra) {
+  function record(label, value, extra, stack) {
     if (inside || n++ > ${MAX_RECORDS}) return;
     inside = true;
     try {
       var rec = { k: label, a: describe(value) };
       if (extra) rec.url = extra;
+      if (stack) rec.stack = stack;
       log(MARK + JSON.stringify(rec));
     } catch (e) { /* unserialisable */ }
     inside = false;
@@ -179,14 +180,33 @@ const CORE = `(function () {
     } catch (e) { return { t: 'unreadable', n: -1 }; }
   }
 
-  function wrapMethod(owner, key, label, argIndex) {
+  // The last parameter asks for a call stack alongside the value. It is off by
+  // default because the cheap funnels (stringify, btoa) fire thousands of
+  // times, and on for the encodes: knowing that one of the fifteen is 9216
+  // bytes says nothing about which surface produced it, and the stack is the
+  // only thing in the realm that still knows.
+  // (No backticks in here -- this whole block is inside a template literal.)
+  function wrapMethod(owner, key, label, argIndex, stacks) {
     if (!owner) return;
     var original;
     try { original = owner[key]; } catch (e) { return; }
     if (typeof original !== 'function') return;
     try {
       owner[key] = disguise(function () {
-        try { record(label, arguments[argIndex]); } catch (e) { /* keep going */ }
+        var st;
+        if (stacks) {
+          // V8 caps a stack at 10 frames, and the guard reaches these funnels
+          // from inside its own bytecode interpreter -- so the default cuts the
+          // chain off in the middle of the VM's re-entrant pq/run/pd cycle and
+          // never reaches the frame that names the surface. Raise it for the
+          // duration of the capture only and put it back, so a program that
+          // reads the property afterwards is told what it would have been told.
+          var lim;
+          try { lim = Error.stackTraceLimit; Error.stackTraceLimit = 200; } catch (e) { /* frozen */ }
+          try { st = String(new Error().stack || '').slice(0, 60000); } catch (e) { /* no stack */ }
+          try { Error.stackTraceLimit = lim; } catch (e) { /* frozen */ }
+        }
+        try { record(label, arguments[argIndex], undefined, st); } catch (e) { /* keep going */ }
         if (label === 'xhr.send') {
           try {
             var b = arguments[0];
@@ -206,8 +226,8 @@ const CORE = `(function () {
   // digest; everything else here is a funnel it may pass through on the way.
   try { wrapMethod(globalThis.crypto && globalThis.crypto.subtle, 'encrypt', 'subtle.encrypt', 2); } catch (e) {}
   try { wrapMethod(globalThis.crypto && globalThis.crypto.subtle, 'sign', 'subtle.sign', 2); } catch (e) {}
-  try { wrapMethod(globalThis.crypto && globalThis.crypto.subtle, 'digest', 'subtle.digest', 1); } catch (e) {}
-  try { wrapMethod(globalThis.TextEncoder && globalThis.TextEncoder.prototype, 'encode', 'TextEncoder.encode', 0); } catch (e) {}
+  try { wrapMethod(globalThis.crypto && globalThis.crypto.subtle, 'digest', 'subtle.digest', 1, true); } catch (e) {}
+  try { wrapMethod(globalThis.TextEncoder && globalThis.TextEncoder.prototype, 'encode', 'TextEncoder.encode', 0, true); } catch (e) {}
   try { wrapMethod(globalThis.JSON, 'stringify', 'JSON.stringify', 0); } catch (e) {}
   try { wrapMethod(globalThis, 'btoa', 'btoa', 0); } catch (e) {}
 
@@ -652,6 +672,36 @@ for (const b of state.blobs) {
         + `${b.gapAt !== undefined ? ` GAP@${b.gapAt}` : ''} type=${JSON.stringify(b.type)}`);
 }
 for (const p of state.posts) console.log(`  POST ${String(p.postLen).padStart(7)} ${p.verdict ?? '?'}  ${p.url.slice(-40)}`);
+
+// Provenance. Knowing that one of the fifteen encodes carries 9216 bytes does
+// not say which surface produced it, and the residual against an honoured
+// payload is exactly four of these buffers -- so each one needs an owner. The
+// frame printed is the first one that is not this instrument: the wrapper
+// itself is always frame 0, and the guard's own program is the next one down.
+const provenance = state.records.filter((r) => r.k === 'TextEncoder.encode' || r.k === 'subtle.digest');
+if (provenance.length) {
+    console.log(`  --- ${provenance.length} encode/digest calls, in call order ---`);
+    // A frame reduced to the part that identifies it: the function name and the
+    // column, since the whole guard is one minified line and the column is what
+    // separates one call site from another.
+    const brief = (f) => {
+        const m = /^at (.*?) \(.*?:1:(\d+)\)$/.exec(f) ?? /^at (.*?) \(<anonymous>:(\d+):\d+\)$/.exec(f);
+        return m ? `${m[1]}@${m[2]}` : f.replace(/^at /, '').slice(0, 40);
+    };
+    provenance.forEach((r, i) => {
+        const frames = String(r.stack ?? '').split('\n').map((s) => s.trim())
+            .filter((s) => s.startsWith('at '));
+        // Frame 0 is the wrapper installed above -- `disguise` gives it the
+        // original's name, so it has to be dropped by position, not by name.
+        const guard = frames.slice(1);
+        // The top frame is the call site; the bottom is whatever kicked the
+        // whole chain off. The middle is the interpreter cycling, which is why
+        // only the ends are printed here and the full chain goes to the JSON.
+        console.log(`  ${String(i).padStart(2)} ${r.k === 'subtle.digest' ? 'digest' : 'encode'}`
+            + ` n=${String(r.a?.n ?? -1).padStart(6)} frames=${String(guard.length).padStart(3)}`
+            + `  site=${brief(guard[0] ?? '')}  bottom=${brief(guard[guard.length - 1] ?? '')}`);
+    });
+}
 const t0 = state.exchange[0]?.t ?? 0;
 for (const e of state.exchange) {
     const ms = (x) => (x === undefined ? '    -' : String(Math.round((x - t0) * 1000)).padStart(5));
