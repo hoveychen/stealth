@@ -726,9 +726,73 @@ fn opacity(global_alpha: f64) f64 {
     return @round(std.math.clamp(global_alpha, 0, 1) * 255) / 255;
 }
 
+/// A rectangle's edges kept as they were given, clipped to the canvas but not
+/// snapped, plus the whole-pixel span that can touch it. An axis-aligned
+/// rectangle's coverage is separable -- the overlap of a pixel square with it
+/// is the x overlap times the y overlap -- so this is all an exact
+/// antialiased fill needs.
+const Span = struct {
+    left: f64,
+    right: f64,
+    top: f64,
+    bottom: f64,
+    x0: u32,
+    y0: u32,
+    x1: u32,
+    y1: u32,
+
+    fn clip(x: f64, y: f64, w: f64, h: f64, width: u32, height: u32) ?Span {
+        if (!std.math.isFinite(x) or !std.math.isFinite(y) or
+            !std.math.isFinite(w) or !std.math.isFinite(h))
+        {
+            return null;
+        }
+
+        const fw: f64 = @floatFromInt(width);
+        const fh: f64 = @floatFromInt(height);
+        // Negative extents are normalised, matching the spec.
+        const left = std.math.clamp(@min(x, x + w), 0, fw);
+        const right = std.math.clamp(@max(x, x + w), 0, fw);
+        const top = std.math.clamp(@min(y, y + h), 0, fh);
+        const bottom = std.math.clamp(@max(y, y + h), 0, fh);
+        if (left >= right or top >= bottom) {
+            return null;
+        }
+
+        return .{
+            .left = left,
+            .right = right,
+            .top = top,
+            .bottom = bottom,
+            .x0 = @intFromFloat(@floor(left)),
+            .y0 = @intFromFloat(@floor(top)),
+            .x1 = @intFromFloat(@min(@ceil(right), fw)),
+            .y1 = @intFromFloat(@min(@ceil(bottom), fh)),
+        };
+    }
+
+    /// How much of the pixel at `i` the interval `[lo, hi)` covers, in [0, 1].
+    fn cover(lo: f64, hi: f64, i: u32) f64 {
+        const a: f64 = @floatFromInt(i);
+        return std.math.clamp(@min(hi, a + 1) - @max(lo, a), 0, 1);
+    }
+};
+
 /// Composites `source` over the rectangle, `global_alpha` scaling its opacity.
+///
+/// Fractional edges are antialiased by area, which is what Chrome does and what
+/// this used to round away. Measured (probes/expr-aa-coverage-curve.js): with a
+/// rectangle's right edge at `24 + f/16`, Chrome's coverage of column 24 walks
+/// `round(255 * f/16)` exactly -- 0, 16, 32 ... 239 -- while snapping the edge
+/// answered 0 for the first half of the sweep and 255 for the second. An
+/// axis-aligned rectangle's coverage is separable, so the exact area is the x
+/// overlap times the y overlap and needs no sampling.
+///
+/// The general path rasteriser below is a separate matter and deliberately
+/// untouched: there Chrome is the *coarser* of the two (quarter steps against
+/// our sixteenths), and it is the shared path for text and every shape.
 pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64, source: Source, global_alpha: f64, op: Composite) void {
-    const bounds = Bounds.clip(x, y, w, h, canvas_width, canvas_height) orelse return;
+    const span = Span.clip(x, y, w, h, canvas_width, canvas_height) orelse return;
     if (!self.ensure(canvas_width, canvas_height)) return;
 
     const global = source.opacityOf(global_alpha);
@@ -736,12 +800,16 @@ pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y
         return;
     }
 
-    var row = bounds.y0;
-    while (row < bounds.y1) : (row += 1) {
-        var col = bounds.x0;
-        while (col < bounds.x1) : (col += 1) {
+    var row = span.y0;
+    while (row < span.y1) : (row += 1) {
+        const cover_y = Span.cover(span.top, span.bottom, row);
+        if (cover_y <= 0) continue;
+        var col = span.x0;
+        while (col < span.x1) : (col += 1) {
+            const cover = cover_y * Span.cover(span.left, span.right, col);
+            if (cover <= 0) continue;
             const paint = source.at(@as(f64, @floatFromInt(col)) + 0.5, @as(f64, @floatFromInt(row)) + 0.5);
-            const alpha = global * paint.a;
+            const alpha = global * paint.a * cover;
             if (alpha <= 0) continue;
             const at = row * canvas_width + col;
             self.store(at, blended(self.load(at), paint, alpha, op, source.dither(col, row)));

@@ -2118,3 +2118,57 @@
   testing.expectEqual('display-p3', painted().createImageData(1, 1, { colorSpace: 'display-p3' }).colorSpace);
 }
 </script>
+
+<script id=fractional_rect_edges_are_antialiased>
+{
+  // A rectangle's fractional edge covers part of a pixel, and that part is its
+  // alpha. Measured on headed Chrome 151 with
+  // tools/fingerprint/probes/expr-aa-coverage-curve.js: land a fill's right
+  // edge at 24 + f/16 for f = 0..15 and column 24 walks round(255 * f/16)
+  // exactly. This engine used to @round the edge to a whole pixel, answering 0
+  // for the first half of that sweep and 255 for the second -- eight pixels
+  // wrong out of sixteen, on the common case of a fractional-coordinate rect.
+  const sweep = [];
+  for (let f = 0; f < 16; f++) {
+    const ctx = new OffscreenCanvas(48, 48).getContext('2d');
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(8, 8, 16 + f / 16, 16);
+    sweep.push(ctx.getImageData(24, 12, 1, 1).data[3]);
+  }
+  testing.expectEqual('0,16,32,48,64,80,96,112,128,143,159,175,191,207,223,239', sweep.join(','));
+
+  // Both axes, and the interior stays fully opaque: a 0.5-inset rect on all
+  // four sides is a half-covered border and a solid middle.
+  const ctx = new OffscreenCanvas(8, 8).getContext('2d');
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(1.5, 1.5, 5, 5);
+  const a = (x, y) => ctx.getImageData(x, y, 1, 1).data[3];
+  testing.expectEqual('corner 64 edge 128 inside 255',
+    'corner ' + a(1, 1) + ' edge ' + a(3, 1) + ' inside ' + a(3, 3));
+  // Outside the rect on both sides of the covered band.
+  testing.expectEqual('0,0', a(0, 3) + ',' + a(7, 3));
+
+  // A rect narrower than one pixel is a partial cover, not nothing and not a
+  // whole pixel -- the case @round collapsed to either extreme.
+  const thin = new OffscreenCanvas(4, 4).getContext('2d');
+  thin.fillStyle = '#000000';
+  thin.fillRect(1.25, 0, 0.5, 4);
+  testing.expectEqual(128, thin.getImageData(1, 1, 1, 1).data[3]);
+
+  // Whole-pixel rectangles must not have moved: the old path answered these
+  // correctly and every other canvas expectation depends on them.
+  const whole = new OffscreenCanvas(4, 4).getContext('2d');
+  whole.fillStyle = '#000000';
+  whole.fillRect(1, 1, 2, 2);
+  const row = Array.from(whole.getImageData(0, 1, 4, 1).data).filter((_, i) => i % 4 === 3);
+  testing.expectEqual('0,255,255,0', row.join(','));
+
+  // strokeRect is four fills, so it inherits the same coverage.
+  const st = new OffscreenCanvas(8, 8).getContext('2d');
+  st.strokeStyle = '#000000';
+  st.lineWidth = 1;
+  st.strokeRect(2, 2, 4, 4);
+  // A width-1 stroke centred on x=2 spans 1.5..2.5, so two half-covered columns.
+  testing.expectEqual('128,128', st.getImageData(1, 4, 1, 1).data[3] + ',' + st.getImageData(2, 4, 1, 1).data[3]);
+}
+</script>
