@@ -311,14 +311,144 @@ pub const GPUCommandEncoder = struct {
         const array = attachments.toArray();
         for (0..array.len()) |i| {
             const attachment = try Attachment.read(try array.get(@intCast(i)), exec);
-            _ = try attachment.requiredEnum("loadOp", "GPULoadOp", &.{ "load", "clear" }, exec);
+            const load_op = try attachment.requiredEnum("loadOp", "GPULoadOp", &.{ "load", "clear" }, exec);
             _ = try attachment.requiredEnum("storeOp", "GPUStoreOp", &.{ "store", "discard" }, exec);
-            _ = try attachment.interfaceMember("view", resources.GPUTextureView, "GPUTextureView", exec);
+            const view = try attachment.interfaceMember("view", resources.GPUTextureView, "GPUTextureView", exec);
+
+            // A clear is the one part of a render pass reproducible without a
+            // rasteriser, so it is the one part recorded: the attachment's
+            // texture remembers the colour, and a later copyTextureToBuffer
+            // hands those bytes back. A `load` contributes nothing and leaves
+            // whatever was there.
+            if (std.mem.eql(u8, load_op, "clear")) {
+                if (view._texture) |texture| {
+                    texture._clear = texture.clearBytes(try clearValue(attachment, exec));
+                }
+            }
         }
 
         return exec._factory.create(GPURenderPassEncoder{
             ._label = try descriptor.string("label", "", exec.arena),
         });
+    }
+
+    /// The one recording call that is not shape-only. Everything else an
+    /// encoder records has no state to change, but this one is the step the
+    /// Cloudflare widget reads its WebGPU surface back through, and answering
+    /// it with nothing left the buffer transparent -- a shape a real browser
+    /// cannot produce, because a render pass has always at least cleared.
+    ///
+    /// What is reproduced is the clear colour, repeated over each row's pixel
+    /// bytes. WebGPU makes `bytesPerRow` a multiple of 256, so on the widget's
+    /// 16x16 target each row is 64 bytes of pixels and 192 of padding; the
+    /// padding stays zero, which is what a served Chrome capture shows. The
+    /// pixels an actual `draw` would have put there are not reproduced -- see
+    /// the README section for B129.
+    ///
+    /// Chrome answers undefined, and so does this.
+    pub fn copyTextureToBuffer(
+        _: *GPUCommandEncoder,
+        args: []js.Value,
+        exec: *const Execution,
+    ) !void {
+        if (args.len < 3) {
+            return dictionary.throwTypeError(
+                "Failed to execute 'copyTextureToBuffer' on 'GPUCommandEncoder': 3 arguments required.",
+                exec,
+            );
+        }
+        const Source = dictionary.Reader("GPUCommandEncoder", "GPUTexelCopyTextureInfo");
+        const Dest = dictionary.Reader("GPUCommandEncoder", "GPUTexelCopyBufferInfo");
+
+        const source = Source.readRequired(args[0], exec) catch return;
+        const dest = Dest.readRequired(args[1], exec) catch return;
+
+        const texture = (source.interfaceMember(
+            "texture",
+            resources.GPUTexture,
+            "GPUTexture",
+            exec,
+        ) catch return);
+        const buffer = (dest.interfaceMember(
+            "buffer",
+            resources.GPUBuffer,
+            "GPUBuffer",
+            exec,
+        ) catch return);
+
+        // Nothing is known about the texture's contents unless a render pass
+        // cleared it, and a copy out of an unknown texture leaves the zeros.
+        const pixel = texture._clear orelse return;
+
+        const stride = dest.unsignedLong("bytesPerRow", 0) catch return;
+        const offset = dest.double("offset", 0, exec) catch 0;
+        const size = extent(args[2], exec) catch return;
+
+        const width = if (size[0] > 0) size[0] else texture._width;
+        const height = if (size[1] > 0) size[1] else texture._height;
+        // Only the 8-bit-per-channel formats have a four-byte pixel, and those
+        // are the ones a readback of this kind uses.
+        const row_bytes = width * 4;
+        try buffer.fillRows(
+            exec,
+            @intFromFloat(@max(0, offset)),
+            height,
+            row_bytes,
+            if (stride > 0) stride else row_bytes,
+            pixel,
+        );
+    }
+
+    /// A `GPUExtent3D`: a sequence of up to three integers, or a dict with
+    /// width/height/depthOrArrayLayers. Zero means "not given" to the caller.
+    fn extent(value: js.Value, exec: *const Execution) ![2]u32 {
+        if (value.isArray()) {
+            const array = value.toArray();
+            var out: [2]u32 = .{ 0, 0 };
+            var i: usize = 0;
+            while (i < 2 and i < array.len()) : (i += 1) {
+                const member = array.get(@intCast(i)) catch return out;
+                const n = member.toF64() catch 0;
+                out[i] = if (n > 0) @intFromFloat(n) else 0;
+            }
+            return out;
+        }
+        const Size = dictionary.Reader("GPUCommandEncoder", "GPUExtent3DDict");
+        const size = try Size.readRequired(value, exec);
+        return .{
+            size.unsignedLong("width", 0) catch 0,
+            size.unsignedLong("height", 0) catch 0,
+        };
+    }
+
+    /// A `GPUColor`, which WebGPU takes either as a four-element sequence or as
+    /// a dict with r/g/b/a. Absent is transparent black, the spec's default for
+    /// a clear that names no value -- and the reason an unpainted readback is
+    /// all zeros rather than opaque black.
+    fn clearValue(attachment: anytype, exec: *const Execution) ![4]f64 {
+        const transparent: [4]f64 = .{ 0, 0, 0, 0 };
+        const value = (try attachment.present("clearValue")) orelse return transparent;
+        if (value.isUndefined() or value.isNull()) {
+            return transparent;
+        }
+        if (value.isArray()) {
+            const array = value.toArray();
+            var out = transparent;
+            var i: usize = 0;
+            while (i < 4 and i < array.len()) : (i += 1) {
+                const member = array.get(@intCast(i)) catch return transparent;
+                out[i] = member.toF64() catch 0;
+            }
+            return out;
+        }
+        const Color = dictionary.Reader("GPURenderPassColorAttachment", "GPUColorDict");
+        const color = Color.readRequired(value, exec) catch return transparent;
+        return .{
+            try color.double("r", 0, exec),
+            try color.double("g", 0, exec),
+            try color.double("b", 0, exec),
+            try color.double("a", 0, exec),
+        };
     }
 
     pub fn finish(_: *GPUCommandEncoder, descriptor_: ?js.Value, exec: *const Execution) !*GPUCommandBuffer {
@@ -350,7 +480,7 @@ pub const GPUCommandEncoder = struct {
         pub const beginComputePass = bridge.function(E.beginComputePass, .{ .arity = 0 });
         pub const beginRenderPass = bridge.function(E.beginRenderPass, .{ .arity = 1 });
         pub const copyBufferToTexture = bridge.function(stub.Arity("copyBufferToTexture", 3).call, .{ .arity = 3 });
-        pub const copyTextureToBuffer = bridge.function(stub.Arity("copyTextureToBuffer", 3).call, .{ .arity = 3 });
+        pub const copyTextureToBuffer = bridge.function(E.copyTextureToBuffer, .{ .arity = 3 });
         pub const copyTextureToTexture = bridge.function(stub.Arity("copyTextureToTexture", 3).call, .{ .arity = 3 });
         pub const finish = bridge.function(E.finish, .{ .arity = 0 });
         pub const insertDebugMarker = bridge.function(stub.Arity("insertDebugMarker", 1).call, .{ .arity = 1 });
