@@ -1,0 +1,79 @@
+{
+ "Observable": {
+  "ctorArity": 1,
+  "ctorName": "Observable",
+  "ctorOwn": "length,name,prototype,from",
+  "protoOwnInOrder": "catch,drop,every,filter,finally,find,first,flatMap,forEach,inspect,last,map,reduce,some,subscribe,switchMap,take,takeUntil,toArray,constructor",
+  "members": [
+   "catch:function/1/ecw",
+   "drop:function/1/ecw",
+   "every:function/1/ecw",
+   "filter:function/1/ecw",
+   "finally:function/1/ecw",
+   "find:function/1/ecw",
+   "first:function/0/ecw",
+   "flatMap:function/1/ecw",
+   "forEach:function/1/ecw",
+   "inspect:function/0/ecw",
+   "last:function/0/ecw",
+   "map:function/1/ecw",
+   "reduce:function/1/ecw",
+   "some:function/1/ecw",
+   "subscribe:function/0/ecw",
+   "switchMap:function/1/ecw",
+   "take:function/1/ecw",
+   "takeUntil:function/1/ecw",
+   "toArray:function/0/ecw",
+   "constructor:function/1/-cw"
+  ],
+  "toStringTag": "Observable",
+  "protoOf": "Object.prototype"
+ },
+ "Subscriber": {
+  "ctorArity": 0,
+  "ctorName": "Subscriber",
+  "ctorOwn": "length,name,prototype",
+  "protoOwnInOrder": "active,signal,addTeardown,complete,error,next,constructor",
+  "members": [
+   "active:accessor/0/ecg",
+   "signal:accessor/0/ecg",
+   "addTeardown:function/1/ecw",
+   "complete:function/0/ecw",
+   "error:function/1/ecw",
+   "next:function/1/ecw",
+   "constructor:function/0/-cw"
+  ],
+  "toStringTag": "Subscriber",
+  "protoOf": "Object.prototype"
+ },
+ "eventTargetWhen": "function/1",
+ "trace": "init active=true | signal=AbortSignal | next 1 | next 2 | teardown active=false | complete | after complete active=false",
+ "whenTrace": "when returns Observable | got x | after abort, still 1",
+ "constructibility": {
+  "newSubscriber": "TypeError: Failed to construct 'Subscriber': Illegal constructor",
+  "newObservableNoArg": "TypeError: Failed to construct 'Observable': 1 argument required, but only 0 present."
+ },
+ "from": "array=Observable | promise=Observable | iterable=Observable | observable=Observable | number=throw:Failed to execute 'from' on 'Observable': Cannot convert value to an Observable. Input value must be an Observable, async iterable, iterable, or Promise.",
+ "opKinds": {
+  "map": "Observable",
+  "filter": "Observable",
+  "take": "Observable",
+  "drop": "Observable",
+  "flatMap": "Observable",
+  "switchMap": "Observable",
+  "takeUntil": "Observable",
+  "catch": "Observable",
+  "finally": "Observable",
+  "inspect": "Observable",
+  "every": "Promise",
+  "find": "Promise",
+  "some": "Promise",
+  "first": "Promise",
+  "last": "Promise",
+  "reduce": "Promise",
+  "forEach": "Promise",
+  "toArray": "Promise"
+ },
+ "subscribeBareFunction": "fn 1",
+ "_note": "Ground truth for plan observable-event-target-when P1, headed Chrome 151. Probes: tools/fingerprint/probes/expr-observable-shape.js"
+}

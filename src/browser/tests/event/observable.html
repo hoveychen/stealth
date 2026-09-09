@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`Observable` and `Subscriber`, the two interfaces the window realm was short.
+
+Every expectation here is a reading off headed Chrome 151, saved in
+tools/fingerprint/results/reference-chrome-observable.json by
+tools/fingerprint/probes/expr-observable-shape.js. Asserted as one string per
+row so a red light names the row and both sides rather than saying
+"expected true got false".
+-->
+
+<script id=observable_shape_matches_chrome>
+{
+  // Prototype order is part of the fingerprint: `getOwnPropertyNames` reports
+  // declaration order and a page can read it. Chrome's is alphabetical with
+  // `constructor` last.
+  testing.expectEqual(
+    'catch,drop,every,filter,finally,find,first,flatMap,forEach,inspect,last,map,reduce,some,subscribe,switchMap,take,takeUntil,toArray,constructor',
+    Object.getOwnPropertyNames(Observable.prototype).join(','),
+  );
+  testing.expectEqual('length,name,prototype,from', Object.getOwnPropertyNames(Observable).join(','));
+  testing.expectEqual('Observable ctor arity 1', 'Observable ctor arity ' + Observable.length);
+  testing.expectEqual('Observable', Observable.prototype[Symbol.toStringTag]);
+  testing.expectEqual('proto is Object.prototype: true',
+    'proto is Object.prototype: ' + (Object.getPrototypeOf(Observable.prototype) === Object.prototype));
+
+  // Kind, arity and descriptor flags per member. `subscribe` and the five
+  // no-argument operators are arity 0 in Chrome; everything else is 1.
+  const shape = (proto) => Object.getOwnPropertyNames(proto).map((k) => {
+    const d = Object.getOwnPropertyDescriptor(proto, k);
+    const flags = (d.enumerable ? 'e' : '-') + (d.configurable ? 'c' : '-') +
+      (d.writable === undefined ? (d.get ? 'g' : '') + (d.set ? 's' : '') : (d.writable ? 'w' : '-'));
+    const fn = d.value ?? d.get;
+    return `${k}:${d.get ? 'accessor' : typeof d.value}/${typeof fn === 'function' ? fn.length : null}/${flags}`;
+  }).join(' ');
+
+  testing.expectEqual(
+    'catch:function/1/ecw drop:function/1/ecw every:function/1/ecw filter:function/1/ecw ' +
+    'finally:function/1/ecw find:function/1/ecw first:function/0/ecw flatMap:function/1/ecw ' +
+    'forEach:function/1/ecw inspect:function/0/ecw last:function/0/ecw map:function/1/ecw ' +
+    'reduce:function/1/ecw some:function/1/ecw subscribe:function/0/ecw switchMap:function/1/ecw ' +
+    'take:function/1/ecw takeUntil:function/1/ecw toArray:function/0/ecw constructor:function/1/-cw',
+    shape(Observable.prototype),
+  );
+
+  testing.expectEqual(
+    'active,signal,addTeardown,complete,error,next,constructor',
+    Object.getOwnPropertyNames(Subscriber.prototype).join(','),
+  );
+  testing.expectEqual(
+    'active:accessor/0/ecg signal:accessor/0/ecg addTeardown:function/1/ecw ' +
+    'complete:function/0/ecw error:function/1/ecw next:function/1/ecw constructor:function/0/-cw',
+    shape(Subscriber.prototype),
+  );
+  testing.expectEqual('Subscriber', Subscriber.prototype[Symbol.toStringTag]);
+  testing.expectEqual('length,name,prototype', Object.getOwnPropertyNames(Subscriber).join(','));
+}
+</script>
+
+<script id=observable_constructors_refuse_the_way_chrome_does>
+{
+  // Both messages are Chrome's, to the character. An error message is a
+  // fingerprint surface of its own.
+  const caught = (fn) => { try { fn(); return 'no throw'; } catch (e) { return e.constructor.name + ': ' + e.message; } };
+  testing.expectEqual(
+    "TypeError: Failed to construct 'Subscriber': Illegal constructor",
+    caught(() => new Subscriber()),
+  );
+  testing.expectEqual(
+    "TypeError: Failed to construct 'Observable': 1 argument required, but only 0 present.",
+    caught(() => new Observable()),
+  );
+  testing.expectEqual(
+    "TypeError: Failed to execute 'from' on 'Observable': Cannot convert value to an Observable. " +
+    'Input value must be an Observable, async iterable, iterable, or Promise.',
+    caught(() => Observable.from(5)),
+  );
+}
+</script>
+
+<script id=subscriber_runs_teardown_before_complete>
+{
+  // The order is the part an implementation gets wrong, and it is measured:
+  // `next 1 | next 2 | teardown active=false | complete`. `active` is already
+  // false inside the teardown, and a `next` after `complete` is dropped.
+  const log = [];
+  const o = new Observable((subscriber) => {
+    log.push('init active=' + subscriber.active);
+    log.push('signal=' + subscriber.signal.constructor.name);
+    subscriber.addTeardown(() => log.push('teardown active=' + subscriber.active));
+    subscriber.next(1);
+    subscriber.next(2);
+    subscriber.complete();
+    log.push('after complete active=' + subscriber.active);
+    subscriber.next(3);
+  });
+  o.subscribe({
+    next: (v) => log.push('next ' + v),
+    error: (e) => log.push('error ' + e),
+    complete: () => log.push('complete'),
+  });
+  testing.expectEqual(
+    'init active=true | signal=AbortSignal | next 1 | next 2 | teardown active=false | complete | after complete active=false',
+    log.join(' | '),
+  );
+}
+</script>
+
+<script id=observable_operators_return_the_right_kinds>
+{
+  // Ten operators answer an Observable and eight a Promise -- measured, and the
+  // split is not guessable from the names.
+  const o = new Observable((s) => { s.next(1); s.complete(); });
+  const kind = (v) => (v && typeof v.then === 'function') ? 'Promise' : (v?.constructor?.name ?? typeof v);
+  const id = (x) => x;
+  const rows = [
+    'map=' + kind(o.map(id)), 'filter=' + kind(o.filter(id)), 'take=' + kind(o.take(1)),
+    'drop=' + kind(o.drop(1)), 'flatMap=' + kind(o.flatMap(id)), 'switchMap=' + kind(o.switchMap(id)),
+    'takeUntil=' + kind(o.takeUntil(new Observable(() => {}))), 'catch=' + kind(o.catch(id)),
+    'finally=' + kind(o.finally(id)), 'inspect=' + kind(o.inspect(id)),
+    'every=' + kind(o.every(id)), 'find=' + kind(o.find(id)), 'some=' + kind(o.some(id)),
+    'first=' + kind(o.first()), 'last=' + kind(o.last()), 'reduce=' + kind(o.reduce(id)),
+    'forEach=' + kind(o.forEach(id)), 'toArray=' + kind(o.toArray()),
+  ].join(' ');
+  testing.expectEqual(
+    'map=Observable filter=Observable take=Observable drop=Observable flatMap=Observable ' +
+    'switchMap=Observable takeUntil=Observable catch=Observable finally=Observable inspect=Observable ' +
+    'every=Promise find=Promise some=Promise first=Promise last=Promise reduce=Promise ' +
+    'forEach=Promise toArray=Promise',
+    rows,
+  );
+
+  // `from` takes an Observable, an array, an iterable and a Promise. A number
+  // is the refusal asserted above.
+  const from = (v) => { try { return Observable.from(v).constructor.name; } catch (e) { return 'throw'; } };
+  testing.expectEqual(
+    'array=Observable promise=Observable iterable=Observable observable=Observable',
+    'array=' + from([1, 2]) + ' promise=' + from(Promise.resolve(1)) +
+    ' iterable=' + from(new Set([1])) + ' observable=' + from(new Observable(() => {})),
+  );
+}
+</script>
+
+<script id=observable_operators_carry_values_through>
+{
+  // A bare function is accepted as the observer, which is the form the operator
+  // chain below reads with.
+  const src = () => new Observable((s) => { s.next(1); s.next(2); s.next(3); s.complete(); });
+  const collect = (obs) => { const got = []; obs.subscribe((v) => got.push(v)); return got.join(','); };
+
+  testing.expectEqual('map 2,4,6', 'map ' + collect(src().map((v) => v * 2)));
+  testing.expectEqual('filter 2', 'filter ' + collect(src().filter((v) => v === 2)));
+  testing.expectEqual('take 1,2', 'take ' + collect(src().take(2)));
+  testing.expectEqual('drop 3', 'drop ' + collect(src().drop(2)));
+  // `inspect` sees every value and forwards it unchanged.
+  const seen = [];
+  testing.expectEqual('inspect 1,2,3', 'inspect ' + collect(src().inspect((v) => seen.push(v))));
+  testing.expectEqual('inspect saw 1,2,3', 'inspect saw ' + seen.join(','));
+  // A chain, because each operator subscribes the one above it.
+  testing.expectEqual('chain 4,6', 'chain ' + collect(src().filter((v) => v > 1).map((v) => v * 2)));
+  // `from(array)` is a source in its own right.
+  testing.expectEqual('from 7,8', 'from ' + collect(Observable.from([7, 8])));
+}
+</script>
+
+<script id=event_target_when_returns_an_observable>
+{
+  // `when` is arity 1 and hands back an Observable of that event type. The
+  // subscription's signal is what removes the listener, so an abort stops
+  // delivery -- measured on Chrome: `when returns Observable | got x |
+  // after abort, still 1`.
+  testing.expectEqual('function/1',
+    typeof EventTarget.prototype.when + '/' + EventTarget.prototype.when.length);
+
+  // `when` sits *after* removeEventListener on Chrome's prototype, not sorted
+  // in alphabetically -- the Observable spec appends it to the interface. The
+  // order is readable from the page, so the position is part of the tell.
+  testing.expectEqual(
+    'addEventListener,dispatchEvent,removeEventListener,when,constructor',
+    Object.getOwnPropertyNames(EventTarget.prototype).join(','),
+  );
+
+  const log = [];
+  const t = new EventTarget();
+  const obs = t.when('x');
+  log.push('when returns ' + obs.constructor.name);
+  const controller = new AbortController();
+  obs.subscribe((e) => log.push('got ' + e.type), { signal: controller.signal });
+  t.dispatchEvent(new Event('x'));
+  controller.abort();
+  t.dispatchEvent(new Event('x'));
+  log.push('after abort, still ' + log.filter((l) => l.startsWith('got')).length);
+  testing.expectEqual('when returns Observable | got x | after abort, still 1', log.join(' | '));
+
+  // Two subscriptions to one `when` are two listeners, and aborting one leaves
+  // the other -- the row that fails if the signal is wired to the Observable
+  // rather than to the subscription.
+  const t2 = new EventTarget();
+  const shared = t2.when('y');
+  const a = [], b = [];
+  const ca = new AbortController();
+  shared.subscribe((e) => a.push(e.type), { signal: ca.signal });
+  shared.subscribe((e) => b.push(e.type));
+  t2.dispatchEvent(new Event('y'));
+  ca.abort();
+  t2.dispatchEvent(new Event('y'));
+  testing.expectEqual('a=1 b=2', 'a=' + a.length + ' b=' + b.length);
+}
+</script>

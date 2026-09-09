@@ -19,6 +19,7 @@
 const std = @import("std");
 const lp = @import("lightpanda");
 const js = @import("../js/js.zig");
+const Observable = @import("observable.zig").Observable;
 
 const Page = @import("../Page.zig");
 const reflect = @import("../reflect.zig");
@@ -371,6 +372,14 @@ pub const EventListenerCallback = union(enum) {
     function: js.Function,
     object: js.Object,
 };
+/// `EventTarget.when(type)` -- an Observable of that event type. The
+/// subscription's signal is what removes the listener, so
+/// `subscribe(observer, {signal})` followed by `abort()` stops delivery
+/// (measured on Chrome 151; see webapi/observable.zig).
+pub fn when(self: *EventTarget, typ: []const u8, exec: *const js.Execution) !*Observable {
+    return Observable.forEvents(self, typ, exec);
+}
+
 pub fn addEventListener(self: *EventTarget, typ: []const u8, callback_: js.Nullable(EventListenerCallback), opts_: ?AddEventListenerOptions, exec: *js.Execution) !void {
     // Convert the options before the null-callback early return: per spec,
     // the dictionary conversion throws even when the callback is null.
@@ -644,13 +653,15 @@ pub const JsApi = struct {
     };
 
     // Chrome's own-property order, in both the window realm and a worker's:
-    // addEventListener, dispatchEvent, removeEventListener. This is IDL order,
-    // not the declaration order the file used to carry, and it is on the most
-    // walked prototype in the realm.
+    // addEventListener, dispatchEvent, removeEventListener, when. This is IDL
+    // order, not the declaration order the file used to carry, and it is on the
+    // most walked prototype in the realm. `when` comes last because the
+    // Observable spec appends it to the interface rather than sorting it in.
     pub const constructor = bridge.constructor(EventTarget.init, .{});
     pub const addEventListener = bridge.function(EventTarget.addEventListener, .{});
     pub const dispatchEvent = bridge.function(EventTarget.dispatchEvent, .{});
     pub const removeEventListener = bridge.function(EventTarget.removeEventListener, .{});
+    pub const when = bridge.function(EventTarget.when, .{});
 };
 
 const testing = @import("../../testing.zig");

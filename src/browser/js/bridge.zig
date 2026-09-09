@@ -1334,6 +1334,7 @@ pub const SubType = enum {
 pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/AbortController.zig"),
     @import("../webapi/AbortSignal.zig"),
+    @import("../webapi/observable.zig"),
     @import("../webapi/CData.zig"),
     @import("../webapi/cdata/Comment.zig"),
     @import("../webapi/cdata/Text.zig"),
@@ -1846,6 +1847,9 @@ const worker_common_apis = [_]type{
     @import("../webapi/encoding/TextDecoderStream.zig"),
     @import("../webapi/AbortSignal.zig"),
     @import("../webapi/AbortController.zig"),
+    // Observable and Subscriber are Exposed=* -- both worker realms carry them
+    // too, which is what the plan's acceptance reads.
+    @import("../webapi/observable.zig"),
     @import("../webapi/URL.zig"),
     @import("../webapi/URLPattern.zig"),
     @import("../webapi/canvas/OffscreenCanvas.zig"),

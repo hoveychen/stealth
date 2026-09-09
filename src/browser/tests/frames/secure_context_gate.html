@@ -49,7 +49,7 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(true, secure.secure);
       testing.expectEqual(17, secure.gated.length);
       testing.expectEqual(6, secure.ungated.length);
-      testing.expectEqual(1201, secure.count);
+      testing.expectEqual(1203, secure.count);
 
       // 0.0.0.0 is not, so every [SecureContext] name is gone -- and the ones
       // that are not gated stay.
@@ -57,7 +57,7 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual('', insecure.gated.join(' '));
       testing.expectEqual(6, insecure.ungated.length);
 
-      // The gate now removes 235 names off a surface of 1201. Both totals move
+      // The gate now removes 235 names off a surface of 1203. Both totals move
       // together whenever the surface changes and none of the names involved is
       // [SecureContext] -- 1167 before the three EventTarget methods and Css /
       // setImmediate / clearImmediate came off, 1172 once the eleven unmodelled
@@ -68,11 +68,13 @@ insecure origin this suite can reach without a second listener.
       // surface HTML elements, 1208 with the seven leftovers -- six interfaces
       // and the window.viewport accessor -- back to 1203 once the five
       // interface objects Chrome names nowhere stopped being named, and 1201
-      // once the WebMCP pair went behind `--webmcp`. The two
+      // once the WebMCP pair went behind `--webmcp`, and 1203 with Observable
+      // and Subscriber -- both Exposed=* and neither [SecureContext], so both
+      // totals move by two. The two
       // totals parted company by one at the Event subclasses: Chrome gates
       // ClipboardChangeEvent and not the other eight (measured, probe-
       // secure-context), so that step added nine names here and eight there.
-      testing.expectEqual(966, insecure.count);
+      testing.expectEqual(968, insecure.count);
     });
   }
 </script>
@@ -103,7 +105,7 @@ insecure origin this suite can reach without a second listener.
       // Trustworthy URL, untrustworthy ancestor.
       testing.expectEqual(false, grandchild.secure);
       testing.expectEqual('', grandchild.gated.join(' '));
-      testing.expectEqual(966, grandchild.count);
+      testing.expectEqual(968, grandchild.count);
     });
   }
 </script>
@@ -142,8 +144,9 @@ insecure origin this suite can reach without a second listener.
       //
       // 232 with `Worker`, which a dedicated worker gained so it can start
       // another one (worker/secure_context.html). Not [SecureContext], so it
-      // lands on this side of the gate too.
-      testing.expectEqual(232, w.count);
+      // lands on this side of the gate too. 234 with Observable and Subscriber,
+      // for the same reason.
+      testing.expectEqual(234, w.count);
     });
   }
 </script>
