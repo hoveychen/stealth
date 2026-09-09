@@ -58,7 +58,7 @@
 //   node tools/fingerprint/fo-plaintext.mjs <lightpanda|chrome>
 //        [--headed-ua] [--url u] [--settle ms] [--out path] [--port n]
 //        [--min n] [--max-records n] [--inject-worker]
-//        [--r2] [--r2-min n] [--r2-budget n]
+//        [--r2] [--r2-min n] [--r2-budget n] [--webgpu]
 // env: LP_BIN, CHROME
 //
 // The launch/arm/collect machinery lives in fo-harness.mjs; what is here is the
@@ -109,6 +109,8 @@ const injectWorker = has('--inject-worker');
 // the station. The same hooks with the wire off left r2 at 4898, so the hooks
 // are free and only the traffic was not.
 const r2 = has('--r2');
+// The WebGPU walk (B128 put the 4096-byte buffer on that collector).
+const webgpu = has('--webgpu');
 const R2_MIN = Number(arg('--r2-min', '2000'));
 const R2_BUDGET = Number(arg('--r2-budget', '40'));
 // The recorder. Runs before the document's own code in every realm it is
@@ -334,6 +336,104 @@ const CORE = `(function () {
                  'transferToImageBitmap',
                  function (o, a, self) { return { n: -1, w: self && self.width, h: self && self.height }; });
   } catch (e) {}
+
+  // The WebGPU walk. B128 put the 4096-byte buffer on the webgpu collector --
+  // three records at index 0 of the collectors' Promise.all and nothing else --
+  // but naming the collector does not say how it gets from a 300x150 canvas to
+  // 32x32 pixels, and our arm has all the objects and none of the pixels. So
+  // follow the whole chain: adapter, device, texture, encoder, buffer, and the
+  // mapped range the bytes are finally read out of.
+  //
+  // Behind a flag because it is a dozen more wrappers on a path the default
+  // capture does not need, and every wrapper is a chance to change what the
+  // page decides.
+  if (${webgpu ? 'true' : 'false'}) (function () {
+    var g = globalThis.navigator && globalThis.navigator.gpu;
+    // requestAdapter/requestDevice answer promises, so what is worth recording
+    // is what they RESOLVED to, not the promise.
+    function wrapAsync(owner, key, label, describeOut) {
+      if (!owner) return;
+      var original;
+      try { original = owner[key]; } catch (e) { return; }
+      if (typeof original !== 'function') return;
+      try {
+        owner[key] = disguise(function () {
+          var args = arguments;
+          var self = this;
+          var out = original.apply(this === undefined ? globalThis : this, arguments);
+          if (out && typeof out.then === 'function') {
+            out.then(function (v) {
+              var meta;
+              try { meta = describeOut(v, args, self) || {}; } catch (e) { meta = { err: 1 }; }
+              emit({ k: 'produce', a: { t: label, n: meta.n === undefined ? -1 : meta.n }, meta: meta });
+            }, function (e) {
+              emit({ k: 'produce', a: { t: label, n: -1 },
+                     meta: { rejected: String(e && e.message).slice(0, 80) } });
+            });
+          }
+          return out;
+        }, original);
+      } catch (e) { /* non-writable */ }
+    }
+    // GPUExtent3D is either a dict with width/height or a plain array, and the
+    // first reading here recorded neither because it only tried the dict.
+    var extent = function (s) {
+      if (!s) return {};
+      if (typeof s.length === 'number') return { w: s[0], h: s[1], d: s[2] };
+      return { w: s.width, h: s.height, d: s.depthOrArrayLayers };
+    };
+    var dims = function (o, a) {
+      var e = extent(a[0] && a[0].size);
+      return { n: -1, w: e.w, h: e.h, d: e.d, fmt: a[0] && a[0].format,
+               usage: a[0] && a[0].usage };
+    };
+    // One of the five requestAdapter calls answers null on Chrome, so the
+    // options matter as much as the result: a probe that expects null is a
+    // reading in its own right, and an arm that hands back an adapter there
+    // has answered a question Chrome answered the other way.
+    try { wrapAsync(g, 'requestAdapter', 'gpu.requestAdapter',
+                    function (v, a) { return { n: -1, got: String(v),
+                                               vendor: v && v.info && v.info.vendor,
+                                               opts: a[0] ? JSON.stringify(a[0]) : null }; }); } catch (e) {}
+    try { wrapAsync(globalThis.GPUAdapter && globalThis.GPUAdapter.prototype, 'requestDevice', 'adapter.requestDevice',
+                    function (v) { return { n: -1, got: String(v) }; }); } catch (e) {}
+    try { wrapProducer(globalThis.GPUDevice && globalThis.GPUDevice.prototype, 'createTexture',
+                       'device.createTexture', dims); } catch (e) {}
+    try { wrapProducer(globalThis.GPUDevice && globalThis.GPUDevice.prototype, 'createBuffer',
+                       'device.createBuffer',
+                       function (o, a) { return { n: a[0] && a[0].size, usage: a[0] && a[0].usage }; }); } catch (e) {}
+    try { wrapProducer(globalThis.GPUDevice && globalThis.GPUDevice.prototype, 'createRenderPipeline',
+                       'device.createRenderPipeline', function () { return { n: -1 }; }); } catch (e) {}
+    try { wrapProducer(globalThis.GPUQueue && globalThis.GPUQueue.prototype, 'submit',
+                       'queue.submit', function (o, a) { return { n: a[0] ? a[0].length : -1 }; }); } catch (e) {}
+    // The render pass is where the pixels come from, and its loadOp/clearValue
+    // is the part reproducible without a rasteriser: 224 of Chrome's 256 pixels
+    // are one flat colour, and only 32 are actually drawn.
+    try { wrapProducer(globalThis.GPUCommandEncoder && globalThis.GPUCommandEncoder.prototype,
+                       'beginRenderPass', 'beginRenderPass',
+                       function (o, a) {
+                         var ca = (a[0] && a[0].colorAttachments) || [];
+                         return { n: ca.length, ops: ca.map(function (c) {
+                           return { load: c && c.loadOp, store: c && c.storeOp,
+                                    clear: c && c.clearValue ? JSON.stringify(c.clearValue) : null };
+                         }) };
+                       }); } catch (e) {}
+    try { wrapProducer(globalThis.GPURenderPassEncoder && globalThis.GPURenderPassEncoder.prototype,
+                       'draw', 'pass.draw',
+                       function (o, a) { return { n: a[0], inst: a[1] }; }); } catch (e) {}
+    try { wrapProducer(globalThis.GPUCommandEncoder && globalThis.GPUCommandEncoder.prototype,
+                       'copyTextureToBuffer', 'copyTextureToBuffer',
+                       function (o, a) { var e = extent(a[2]);
+                                         return { n: -1, w: e.w, h: e.h,
+                                                  bpr: a[1] && a[1].bytesPerRow,
+                                                  rpi: a[1] && a[1].rowsPerImage }; }); } catch (e) {}
+    try { wrapAsync(globalThis.GPUBuffer && globalThis.GPUBuffer.prototype, 'mapAsync', 'buffer.mapAsync',
+                    function (v, a, self) { return { n: self && self.size, mode: a[0] }; }); } catch (e) {}
+    // The last step: the bytes leave WebGPU through here.
+    try { wrapProducer(globalThis.GPUBuffer && globalThis.GPUBuffer.prototype, 'getMappedRange',
+                       'getMappedRange',
+                       function (o) { return { n: o ? o.byteLength : -1 }; }); } catch (e) {}
+  })();
 
   var censusDone = false;
   function surfaceCensus(bodyLen) {
@@ -671,7 +771,7 @@ const RECORDER = `${WORKER_HOOK}\n${CORE}`;
 const state = {
     engine, url: URL_, headedUa, settleMs: SETTLE, min: MIN,
     userAgentOverride: null,
-    injectWorker, r2, r2Min: r2 ? R2_MIN : null,
+    injectWorker, r2, r2Min: r2 ? R2_MIN : null, webgpu,
     posts: [],       // the fo/ POSTs on the wire, to key the records against
     // Every challenge-platform request, with the two things `posts` cannot
     // answer: WHEN it happened and what came back. The collected payload is a
@@ -747,7 +847,7 @@ await runTrace({
 });
 
 // --- report ---------------------------------------------------------------
-console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''}${injectWorker ? ' --inject-worker' : ''}${r2 ? ` --r2 --r2-min ${R2_MIN}` : ''} ===`);
+console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''}${injectWorker ? ' --inject-worker' : ''}${r2 ? ` --r2 --r2-min ${R2_MIN}` : ''}${webgpu ? ' --webgpu' : ''} ===`);
 console.log(`realms armed: ${state.realms.filter((r) => r.installed).length}/${state.realms.length}`);
 const tally = new Map();
 for (const r of state.records) tally.set(r.k, (tally.get(r.k) ?? 0) + 1);

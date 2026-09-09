@@ -27159,3 +27159,64 @@ collected payload does not decide the verdict at all — a byte-identical payloa
 was honoured six times and refused twice. These buffers are worth fixing on
 fidelity grounds, and an impossible shape is worth fixing whether or not this
 station weighs it, but the expected effect on `served=` is zero.
+
+### The WebGPU chain, both arms, step for step (B129)
+
+The B128 section above named the collector. This walks it, and it corrects two
+things B128 said.
+
+Chrome's collector, in order — `--webgpu` on `fo-plaintext.mjs` records each
+step and what it returned:
+
+| step | Chrome |
+|---|---|
+| `navigator.gpu.requestAdapter()` ×4 | a `GPUAdapter`, vendor `apple`; the options are `null`, `{powerPreference:'high-performance'}`, `{powerPreference:'low-power'}` |
+| `requestAdapter({forceFallbackAdapter:true})` | **`null`** — a probe that expects a refusal |
+| `adapter.requestDevice()` | a `GPUDevice` |
+| `canvas.getContext('webgpu')` | on a 300×150 canvas |
+| `device.createTexture` | **16×16, `rgba8unorm`, usage 17** (RENDER_ATTACHMENT\|COPY_SRC) |
+| `device.createRenderPipeline` | — |
+| `device.createBuffer` | **4096 bytes, usage 9** (MAP_READ\|COPY_DST) |
+| `encoder.beginRenderPass` | one colour attachment, `loadOp:'clear'`, `storeOp:'store'`, **`clearValue {r:0,g:0,b:0,a:1}`** |
+| `pass.draw(3)` | **one triangle** |
+| `encoder.copyTextureToBuffer` | 16×16, **`bytesPerRow: 256`** |
+| `queue.submit` / `buffer.mapAsync(MAP_READ)` / `getMappedRange()` | 4096 bytes out |
+
+16×16 RGBA is 64 bytes per row, and WebGPU requires `bytesPerRow` to be a
+multiple of 256, so the 4096 bytes are **16 rows of 64 pixel-bytes plus 192
+bytes of padding**. Measured on a served capture, the padding is all zero, the
+pixel region is **224 pixels of `00 00 00 ff`** — the clear value — and **32
+pixels of `d7 8a 74 ff`**, which is the triangle. That colour is the same one
+the 1024-byte canvas buffer is filled with.
+
+**Our arm runs every one of those steps, with the same arguments.** Same 16×16
+`rgba8unorm` usage 17, same 4096-byte usage-9 buffer, same `bytesPerRow: 256`,
+same submit/mapAsync/getMappedRange — and it answers `null` to the
+`forceFallbackAdapter` probe just as Chrome does. What comes back is 1024 quads
+of `00 00 00 00`.
+
+The mechanism is one line: **`GPUCommandEncoder.copyTextureToBuffer` is a stub**
+(`src/browser/webapi/webgpu/pipeline.zig`, `stub.Arity("copyTextureToBuffer", 3)`).
+Nothing is ever written into the mapped buffer, so it reads back as the zeros it
+was allocated with.
+
+#### Two corrections to B128
+
+- **"Our WebGPU collector never becomes an awaited task" was the wrong reading.**
+  It was inferred from our records bottoming at the plain dispatcher where
+  Chrome's bottom inside the collectors' `Promise.all`. Walking the chain shows
+  every call happening on both arms in the same order; the stack-depth
+  difference is a difference in async plumbing, not the defect. The defect is
+  only the bytes.
+- **"Alpha zero, the same shape as `images-are-never-decoded`" overstated it.**
+  Our canvas readbacks are *painted*: our 1024-byte buffer is byte-identical to
+  Chrome's, and our two 8624 buffers carry the same dominant colour with 1598
+  opaque pixels against Chrome's 1562. This is specific to the WebGPU readback,
+  not a general absence of pixels. (Our 48×48 9216 buffer does differ
+  substantially from Chrome's — 1108 distinct quads against 1410 — but that is a
+  painted surface that disagrees, a possible shape, and a separate question.)
+
+So the reproducible part is the clear value, which is 224 of the 256 pixels. The
+32 remaining pixels are a rasterised triangle whose colour comes out of a WGSL
+fragment shader, and there is no rasteriser behind our WebGPU objects to produce
+them.
