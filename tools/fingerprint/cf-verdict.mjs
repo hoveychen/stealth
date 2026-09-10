@@ -67,6 +67,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
+import { headedUserAgent } from './fo-harness.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -89,8 +90,25 @@ const headless = process.argv.includes('--headless');
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const LP = process.env.LP_BIN || path.join(repo, 'zig-out/bin/lightpanda');
 
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-    '(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
+// Ask the browser for its user agent instead of writing the version down.
+//
+// This was a hardcoded `Chrome/151.0.0.0` and Chrome moved to 152, at which
+// point Cloudflare started refusing the mismatch: on 2026-09-10 this tool read
+// `served=false` 3/3 on BOTH arms -- the control included -- on a station that
+// `antibot-sweep chrome --headed-ua` passed in the same minute. A criterion tool
+// that silently reads false on a passing station invalidates every knob measured
+// through it, and nothing in the code had changed: the reference arm moved on
+// its own. `antibot-sweep` never had the bug because its `--headed-ua` reads
+// `/json/version` at run time, which is what this now does too.
+//
+// Lazily, because only the Chrome arm sends it and probing costs a browser
+// launch. The probe throws rather than falling back to a constant -- a silent
+// fallback is how this failed in the first place.
+let UA = null;
+async function chromeUserAgent() {
+    if (UA === null) UA = await headedUserAgent(basePort + 900);
+    return UA;
+}
 
 const isChallenge = (url) =>
     url.includes('/cdn-cgi/challenge-platform/') || url.includes('challenges.cloudflare.com');
@@ -115,9 +133,10 @@ function pick(headers) {
 
 async function once(port) {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-verdict-'));
+    const ua = engine === 'chrome' ? await chromeUserAgent() : null;
     const proc = engine === 'chrome'
         ? spawn(CHROME, [`--remote-debugging-port=${port}`, `--user-data-dir=${tmp}`,
-            '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), `--user-agent=${UA}`,
+            '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), `--user-agent=${ua}`,
             ...(headless ? ['--headless=new'] : [])],
         { stdio: ['ignore', 'pipe', 'pipe'] })
         : spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(port)],

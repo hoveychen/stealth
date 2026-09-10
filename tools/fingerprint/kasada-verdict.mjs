@@ -30,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
+import { headedUserAgent } from './fo-harness.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -58,14 +59,30 @@ const LP = process.env.LP_BIN || path.join(repo, 'zig-out/bin/lightpanda');
 // The same user agent on both arms, so the only thing that varies is the
 // engine. Chrome headless announces itself otherwise, and that is a tell of its
 // own rather than the one being measured.
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-    '(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
+// Ask the browser for its user agent instead of writing the version down.
+//
+// This was a hardcoded `Chrome/151.0.0.0`. Chrome moved to 152 and the guards
+// began refusing the mismatch: on 2026-09-10 `cf-verdict.mjs` -- same constant,
+// same use -- read `served=false` on BOTH arms including its control, on a
+// station `antibot-sweep chrome --headed-ua` passed in the same minute. Nothing
+// in the code had changed; the reference arm moved on its own. A criterion tool
+// that silently reads false on a passing station invalidates every knob measured
+// through it.
+//
+// Lazily, because only the Chrome arm sends it and probing costs a browser
+// launch. The probe throws rather than falling back to a constant -- a silent
+// fallback is how this failed in the first place.
+let UA = null;
+async function chromeUserAgent() {
+    if (UA === null) UA = await headedUserAgent(basePort + 900);
+    return UA;
+}
 
 async function once(port) {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'kasada-verdict-'));
     const proc = engine === 'chrome'
         ? spawn(CHROME, [`--remote-debugging-port=${port}`, `--user-data-dir=${tmp}`,
-            '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), `--user-agent=${UA}`,
+            '--no-first-run', '--no-default-browser-check', ...personaScaleFlags(), `--user-agent=${await chromeUserAgent()}`,
             ...(headless ? ['--headless=new'] : [])],
         { stdio: ['ignore', 'pipe', 'pipe'] })
         : spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(port)],

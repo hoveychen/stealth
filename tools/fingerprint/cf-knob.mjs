@@ -35,6 +35,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Cdp, personaScaleFlags, sleep, assertPersonaParity, pinPersonaMedia } from './cdp.mjs';
+import { headedUserAgent } from './fo-harness.mjs';
 import { CF_KNOBS } from './cf-knobs.mjs';
 import { parsePropReads, contextsOf } from './prop-read-log.mjs';
 
@@ -126,8 +127,24 @@ const propArgs = process.argv.includes('--prop-args');
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const LP = process.env.LP_BIN || path.join(repo, 'zig-out/bin/lightpanda');
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-    '(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
+// Ask the browser for its user agent instead of writing the version down.
+//
+// This was a hardcoded `Chrome/151.0.0.0`. Chrome moved to 152 and the guards
+// began refusing the mismatch: on 2026-09-10 `cf-verdict.mjs` -- same constant,
+// same use -- read `served=false` on BOTH arms including its control, on a
+// station `antibot-sweep chrome --headed-ua` passed in the same minute. Nothing
+// in the code had changed; the reference arm moved on its own. A criterion tool
+// that silently reads false on a passing station invalidates every knob measured
+// through it.
+//
+// Lazily, because only the Chrome arm sends it and probing costs a browser
+// launch. The probe throws rather than falling back to a constant -- a silent
+// fallback is how this failed in the first place.
+let UA = null;
+async function chromeUserAgent() {
+    if (UA === null) UA = await headedUserAgent(basePort + 900);
+    return UA;
+}
 
 const isChallenge = (url) =>
     url.includes('/cdn-cgi/challenge-platform/') || url.includes('challenges.cloudflare.com');
@@ -138,7 +155,7 @@ async function once(port) {
         ? spawn(CHROME, [`--remote-debugging-port=${port}`, `--user-data-dir=${tmp}`,
             '--no-first-run', '--no-default-browser-check',
             ...personaScaleFlags(),
-            ...(realUa ? [] : [`--user-agent=${UA}`]),
+            ...(realUa ? [] : [`--user-agent=${await chromeUserAgent()}`]),
             ...(headless ? ['--headless=new'] : [])],
         { stdio: ['ignore', 'pipe', 'pipe'] })
         : spawn(LP, ['serve', '--host', '127.0.0.1', '--port', String(port),
