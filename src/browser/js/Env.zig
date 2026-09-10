@@ -107,6 +107,14 @@ terminate_mutex: std.Io.Mutex = .init,
 // Set from network thread, saying termination should happen. Read from worker
 // thread making sure terminate hasn't been canceled.
 terminate_requested: std.atomic.Value(bool) = .init(false),
+// Whether the pending terminate is the recoverable kind. A stalled page is not
+// a dead browser: the watchdog fires when ONE page has held the thread too
+// long, and until now that took the same path as the heap limit, so CDP.tick
+// closed the whole connection. On a 29-station sweep a single stall therefore
+// read as six failures -- the stalled station plus every one after it, which
+// only ever saw a dead socket. Fatal always wins over a page stall, so every
+// fatal path clears this.
+terminate_recoverable: std.atomic.Value(bool) = .init(false),
 
 pub const InitOpts = struct {
     with_inspector: bool = false,
@@ -716,6 +724,7 @@ pub fn terminatePending(self: *const Env) bool {
 pub fn terminate(self: *Env) void {
     self.terminate_mutex.lockUncancelable(lp.io);
     defer self.terminate_mutex.unlock(lp.io);
+    self.terminate_recoverable.store(false, .release);
     self.terminate_requested.store(true, .release);
     v8.v8__Isolate__TerminateExecution(self.isolate.handle);
 }
@@ -761,8 +770,26 @@ fn nearHeapLimit(data: ?*anyopaque, current_limit: usize, initial_limit: usize) 
 
 // Called from the network thread, caused v8 to eventually call terminateInterrupt
 pub fn requestTerminate(self: *Env) void {
+    // Fatal: clear the recoverable mark first so a page stall that is already
+    // pending cannot make this one look survivable.
+    self.terminate_recoverable.store(false, .release);
     self.terminate_requested.store(true, .release);
     v8.v8__Isolate__RequestInterrupt(self.isolate.handle, terminateInterrupt, self);
+}
+
+/// The watchdog's terminate: cut this page's JavaScript short, but the browser
+/// and its CDP connection stay usable. Same mechanism as `requestTerminate`,
+/// marked so the CDP loop clears it and keeps serving instead of hanging up.
+pub fn requestTerminatePage(self: *Env) void {
+    self.terminate_recoverable.store(true, .release);
+    self.terminate_requested.store(true, .release);
+    v8.v8__Isolate__RequestInterrupt(self.isolate.handle, terminateInterrupt, self);
+}
+
+/// True when the pending terminate came from the watchdog rather than from a
+/// fatal condition. Only meaningful while `terminatePending()` is true.
+pub fn terminateRecoverable(self: *const Env) bool {
+    return self.terminate_recoverable.load(.acquire);
 }
 
 // Runs on the worker thread
@@ -781,6 +808,7 @@ pub fn cancelTerminate(self: *Env) void {
     self.terminate_mutex.lockUncancelable(lp.io);
     defer self.terminate_mutex.unlock(lp.io);
     self.terminate_requested.store(false, .release);
+    self.terminate_recoverable.store(false, .release);
     v8.v8__Isolate__CancelTerminateExecution(self.isolate.handle);
 }
 
@@ -882,6 +910,46 @@ const PrivateSymbols = struct {
 };
 
 const testing = @import("../../testing.zig");
+
+// The watchdog's terminate has to be distinguishable from a fatal one, because
+// CDP.tick hangs up on the fatal kind and keeps serving on this one. Getting
+// the precedence backwards would be the expensive direction: a heap-limit
+// terminate treated as recoverable means the CDP loop clears it and lets the
+// isolate keep going into the OOM it was trying to avoid.
+test "Env: a page terminate is recoverable, a fatal one is not" {
+    const frame = try testing.createFrame();
+    defer testing.test_session.closeAllPages();
+    const env = frame.js.env;
+
+    try testing.expectEqual(false, env.terminatePending());
+    try testing.expectEqual(false, env.terminateRecoverable());
+
+    env.requestTerminatePage();
+    try testing.expectEqual(true, env.terminatePending());
+    try testing.expectEqual(true, env.terminateRecoverable());
+
+    env.cancelTerminate();
+    try testing.expectEqual(false, env.terminatePending());
+    try testing.expectEqual(false, env.terminateRecoverable());
+
+    // Fatal wins, whichever order the two arrive in.
+    env.requestTerminatePage();
+    env.requestTerminate();
+    try testing.expectEqual(true, env.terminatePending());
+    try testing.expectEqual(false, env.terminateRecoverable());
+    env.cancelTerminate();
+
+    env.requestTerminate();
+    env.requestTerminatePage();
+    try testing.expectEqual(true, env.terminatePending());
+    // A page stall arriving after a fatal one does mark itself recoverable --
+    // there is no history to consult. What matters is that the fatal path
+    // never inherits a stale recoverable mark, which the case above pins.
+    try testing.expectEqual(true, env.terminateRecoverable());
+    env.cancelTerminate();
+    try testing.expectEqual(false, env.terminatePending());
+}
+
 test "Env: Worker context " {
     const frame = try testing.createFrame();
     defer testing.test_session.closeAllPages();

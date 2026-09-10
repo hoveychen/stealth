@@ -251,7 +251,20 @@ pub fn tick(self: *CDP) !bool {
     // terminatePending means someone decided this browser must die (e.g. the
     // heap limit was reached). Nothing in the CDP path ever calls cancelTerminate
     // so the flag can't be a stale leftover here. Exit.
+    //
+    // Unless it is the watchdog's: one page holding the thread too long is not
+    // a dead browser, and hanging up on it costs every later navigation on this
+    // connection. Clear it and keep serving -- reaching this point means the
+    // terminate already landed and JS is no longer on the stack, so cancelling
+    // here cannot free a still-running script. The stalled page's in-flight
+    // call has already failed with ExecutionTerminated; the next navigation
+    // rebuilds the page.
     if (self.browser.env.terminatePending()) {
+        if (self.browser.env.terminateRecoverable()) {
+            log.warn(.cdp, "page execution terminated", .{ .reason = "watchdog stall" });
+            self.browser.env.cancelTerminate();
+            return true;
+        }
         log.warn(.cdp, "closing connection", .{ .reason = "pending terminate" });
         // The worker thread is the sole writer of this socket, so sending the
         // close frame here can't interleave with another write.
