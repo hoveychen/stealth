@@ -133,7 +133,7 @@ fn run(self: *Watchdog) void {
             if (entry.fired == false) {
                 entry.fired = true;
                 log.err(.app, "watchdog stall", .{ .stalled_ms = stalled_ms });
-                entry.env.requestTerminate();
+                entry.env.requestTerminatePage();
             }
         }
     }
