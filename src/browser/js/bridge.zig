@@ -1667,7 +1667,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/FileReader.zig"),
     @import("../webapi/DataTransfer.zig"),
     @import("../webapi/Screen.zig"),
-    @import("../webapi/scheduler.zig"),
+    @import("../webapi/Scheduler.zig"),
     @import("../webapi/VisualViewport.zig"),
     @import("../webapi/Viewport.zig"),
     @import("../webapi/BarProp.zig"),
@@ -1959,7 +1959,7 @@ const worker_common_apis = [_]type{
     @import("../webapi/canvas/ImageBitmapRenderingContext.zig"),
     // The prioritised-task scheduler. `self.scheduler` was already here; the
     // interface objects behind it were not.
-    @import("../webapi/scheduler.zig"),
+    @import("../webapi/Scheduler.zig"),
     @import("../webapi/storage/cache_storage.zig"),
     @import("../webapi/NetworkInformation.zig"),
     // Resource and server timing are the two Performance entry types a worker

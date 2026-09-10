@@ -116,7 +116,7 @@ pub const Type = union(enum) {
     animation_event: *@import("event/css_events.zig").AnimationEvent,
     media_query_list_event: *@import("event/css_events.zig").MediaQueryListEvent,
     font_face_set_load_event: *@import("event/css_events.zig").FontFaceSetLoadEvent,
-    task_priority_change_event: *@import("scheduler.zig").TaskPriorityChangeEvent,
+    task_priority_change_event: *@import("Scheduler.zig").TaskPriorityChangeEvent,
     sensor_error_event: *@import("sensor.zig").SensorErrorEvent,
     media_key_message_event: *@import("media/eme.zig").MediaKeyMessageEvent,
     media_encrypted_event: *@import("media/eme.zig").MediaEncryptedEvent,
@@ -292,7 +292,7 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .cookie_change_event => |e| return if (T == @import("event/CookieChangeEvent.zig")) e else null,
         .idb_version_change_event => |e| return if (T == @import("storage/idb/IDBVersionChangeEvent.zig")) e else null,
         .toggle_event => |e| return if (T == @import("event/ToggleEvent.zig")) e else null,
-        .task_priority_change_event => |e| return if (T == @import("scheduler.zig").TaskPriorityChangeEvent) e else null,
+        .task_priority_change_event => |e| return if (T == @import("Scheduler.zig").TaskPriorityChangeEvent) e else null,
         .ui_event => |e| {
             if (T == @import("event/UIEvent.zig")) {
                 return e;

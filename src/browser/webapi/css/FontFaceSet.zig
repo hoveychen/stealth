@@ -242,7 +242,7 @@ pub fn getReady(self: *FontFaceSet, exec: *const Execution) !js.Promise {
 /// from a scheduler task, and there `exec.js.local` is null even though the
 /// context has been entered. Resolving through the null one fails silently,
 /// which reads exactly like `ready` never having been wired up (measured --
-/// `has_ready = true`, `has_local = false`). `webapi/scheduler.zig` settles
+/// `has_ready = true`, `has_local = false`). `webapi/Scheduler.zig` settles
 /// its own promises the same way.
 pub fn settle(self: *FontFaceSet, exec: *Execution) void {
     const resolver = self._ready orelse return;
