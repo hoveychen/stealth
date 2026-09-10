@@ -17,6 +17,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { headedUserAgent } from './fo-harness.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -31,8 +32,12 @@ if (engine !== 'chrome' && engine !== 'lightpanda' || !target) {
 }
 const port = Number(arg('--port', '9681'));
 const settle = Number(arg('--settle', '30000'));
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-    '(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
+// Ask the browser for its user agent instead of writing the version down. This
+// was a hardcoded `Chrome/151.0.0.0`; Chrome moved to 152 and the guards began
+// refusing the mismatch (see cf-verdict.mjs for the full account -- it read
+// `served=false` on both arms, control included, on a station that was passing).
+// Only the Chrome arm sends it, so the probe is skipped entirely otherwise.
+const UA = engine === 'chrome' ? await headedUserAgent(port + 900) : null;
 
 let proc, tmp;
 if (engine === 'chrome') {

@@ -16,13 +16,19 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Cdp, sleep, personaScaleFlags } from './cdp.mjs';
+import { headedUserAgent } from './fo-harness.mjs';
 
 const engine = process.argv[2];
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i < 0 ? d : process.argv[i + 1]; };
 const PORT = Number(arg('--port', '9760'));
 const SETTLE = Number(arg('--settle', '30000'));
 const URL_ = arg('--url', 'https://www.scrapingcourse.com/antibot-challenge');
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
+// Ask the browser for its user agent instead of writing the version down. This
+// was a hardcoded `Chrome/151.0.0.0`; Chrome moved to 152 and the guards began
+// refusing the mismatch (see cf-verdict.mjs for the full account -- it read
+// `served=false` on both arms, control included, on a station that was passing).
+// Only the Chrome arm sends it, so the probe is skipped entirely otherwise.
+const UA = engine === 'chrome' ? await headedUserAgent(PORT + 900) : null;
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const LP = process.env.LP_BIN || '/Users/hoveychen/workspace/stealth/zig-out/bin/lightpanda';
 
