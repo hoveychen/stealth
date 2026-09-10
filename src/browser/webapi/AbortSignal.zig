@@ -84,7 +84,7 @@ _source_signals: std.ArrayList(*AbortSignal) = .empty,
 
 pub const Type = union(enum) {
     generic: void,
-    task_signal: *@import("scheduler.zig").TaskSignal,
+    task_signal: *@import("Scheduler.zig").TaskSignal,
 };
 
 pub fn init(exec: *const Execution) !*AbortSignal {

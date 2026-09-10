@@ -43,10 +43,11 @@ const Console = @import("Console.zig");
 const WorkerNavigator = @import("WorkerNavigator.zig");
 const Timers = @import("Timers.zig");
 // This fork keeps Scheduler, TaskSignal, TaskController and
-// TaskPriorityChangeEvent in one module; `Scheduler.zig` and `scheduler.zig`
-// are the same file on a case-insensitive filesystem, and importing it under
-// two spellings makes two distinct types, only one of which is registered.
-const scheduler = @import("scheduler.zig");
+// TaskPriorityChangeEvent in one module, so the alias is lower-case even
+// though the file is not: the path stays `Scheduler.zig` to keep the shared
+// history with upstream, which a case-only rename hides on a
+// case-insensitive filesystem.
+const scheduler = @import("Scheduler.zig");
 const EventTarget = @import("EventTarget.zig");
 const Performance = @import("Performance.zig");
 const trusted_types = @import("trusted_types.zig");
