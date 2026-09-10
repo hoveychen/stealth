@@ -137,6 +137,20 @@ pub fn configure(ssl_ctx: *crypto.SSL_CTX) Error!void {
     _ = crypto.SSL_CTX_clear_options(ssl_ctx, crypto.SSL_OP_NO_TICKET);
 
     crypto.SSL_CTX_set_grease_enabled(ssl_ctx, 1);
+    // signature_algorithms has its own GREASE switch, and it is off by default,
+    // so this was the one GREASE position where our hello differed from
+    // Chrome's: measured over eight of Chrome's hellos it always carries one
+    // fake code point at the FRONT of the list and picks a different one per
+    // connection (caca, eaea, 0a0a, 9a9a, fafa, fafa, dada, 7a7a), while ours
+    // carried none. Every other position already matched -- cipher list,
+    // extension list and supported_groups all come from the switch above.
+    //
+    // It cannot be done by putting a GREASE value in SIGNATURE_ALGORITHMS
+    // below: `SSL_CTX_set_verify_algorithm_prefs` runs every entry through
+    // `get_signature_algorithm` and rejects the whole list on the first one it
+    // cannot name. BoringSSL adds the fake one when it writes the extension,
+    // which is why it needs a flag rather than a list entry.
+    crypto.SSL_CTX_set_grease_sigalgs_enabled(ssl_ctx, 1);
     crypto.SSL_CTX_set_permute_extensions(ssl_ctx, 1);
 
     // application_settings (17613) and encrypted_client_hello (65037) have no

@@ -281,6 +281,10 @@ pub extern fn SSL_CTX_set_cipher_list(ctx: *SSL_CTX, str: [*:0]const u8) c_int;
 pub extern fn SSL_CTX_set1_curves_list(ctx: *SSL_CTX, curves: [*:0]const u8) c_int;
 pub extern fn SSL_CTX_set_verify_algorithm_prefs(ctx: *SSL_CTX, prefs: [*]const u16, num_prefs: usize) c_int;
 pub extern fn SSL_CTX_set_grease_enabled(ctx: *SSL_CTX, enabled: c_int) void;
+// Separate from the switch above, and off by default. BoringSSL only greases
+// signature_algorithms when this one is on; `SSL_CTX_set_grease_enabled` covers
+// the cipher list, the extension list and supported_groups but not this.
+pub extern fn SSL_CTX_set_grease_sigalgs_enabled(ctx: *SSL_CTX, enabled: c_int) void;
 pub extern fn SSL_CTX_set_permute_extensions(ctx: *SSL_CTX, enabled: c_int) void;
 pub extern fn SSL_CTX_enable_ocsp_stapling(ctx: *SSL_CTX) void;
 pub extern fn SSL_CTX_enable_signed_cert_timestamps(ctx: *SSL_CTX) void;
