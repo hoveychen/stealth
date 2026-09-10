@@ -134,7 +134,7 @@ fn syncDeclared(self: *FontFaceSet, exec: *const Execution) void {
         // Reuse the existing object when the same family is still declared, so
         // a face that has already loaded keeps saying so and a page holding a
         // reference to it keeps holding the same one.
-        if (self.findDeclared(face.family)) |existing| {
+        if (self.findDeclared(face.family, face.weight, face.style, rebuilt.items)) |existing| {
             rebuilt.appendAssumeCapacity(existing);
             continue;
         }
@@ -171,10 +171,35 @@ fn syncDeclared(self: *FontFaceSet, exec: *const Execution) void {
     self._sheet_version = version;
 }
 
-fn findDeclared(self: *const FontFaceSet, family: []const u8) ?*FontFace {
+/// The existing object for one declared rule, or null to build a new one.
+///
+/// A rule is identified by its family AND the two descriptors the scan carries,
+/// because one family routinely ships several rules -- a 400 and a 700 are the
+/// ordinary way to serve a font -- and Chrome keeps one FontFace per rule.
+/// Matching on the family alone handed the same object back for every rule in
+/// the family, so a rebuild appended it once per rule while owning a single
+/// reference to it, and teardown then released it once per slot: `release
+/// overflow` on an already-freed FontFace (tests/css/font_face_family_dupes.html).
+///
+/// `taken` is what this rebuild has already claimed. Two rules may be identical
+/// in all three fields, and an existing object may only be reused once even
+/// then -- which is the half that keeps the count right rather than the
+/// descriptors.
+fn findDeclared(
+    self: *const FontFaceSet,
+    family: []const u8,
+    weight: []const u8,
+    style: []const u8,
+    taken: []const *FontFace,
+) ?*FontFace {
     for (self._faces.items) |face| {
         if (!face.isDeclared()) continue;
-        if (std.mem.eql(u8, face.getFamily(), family)) return face;
+        if (!std.mem.eql(u8, face.getFamily(), family)) continue;
+        if (!std.mem.eql(u8, face.getWeight(), weight)) continue;
+        if (!std.mem.eql(u8, face.getStyle(), style)) continue;
+        for (taken) |claimed| {
+            if (claimed == face) break;
+        } else return face;
     }
     return null;
 }
@@ -472,4 +497,5 @@ fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) t
 
 test "WebApi: FontFaceSet" {
     try testing.htmlRunner("css/font_face_set.html", .{});
+    try testing.htmlRunner("css/font_face_family_dupes.html", .{});
 }

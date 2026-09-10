@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+Two `@font-face` rules for the SAME family, differing only in weight, is the
+ordinary way a page ships a font -- and it is what made the engine crash.
+
+`FontFaceSet.syncDeclared` rebuilds the declared half whenever the stylesheet
+version moves, and it reuses an existing object by looking it up with
+`findDeclared(face.family)` -- by family NAME. With two declared faces sharing
+a family, both lookups return the SAME object, so the rebuilt list holds that
+one face twice while owning a single reference to it. Teardown then releases it
+once per slot:
+
+  reason: release overflow
+  type:   *browser.webapi.css.FontFace
+  canary: 0   refs: 0
+  Frame.zig:762 deinit -> Page.zig:241 deinit -> Runner.zig:148 _wait
+
+Measured against a live sweep: one engine walking 24 stations on one page hit
+this after ~15 of them, having first slowed from a 1ms CDP round trip to over
+five seconds. Chrome keeps one FontFace per rule, so the two entries are
+distinct objects reporting 400 and 700.
+-->
+<script>
+  // The `load` event and not DOMContentLoaded: this engine resolves style
+  // resources just after the DCL dispatch, so a DCL listener reads an empty
+  // set. Both orders are covered because these blocks are modules.
+  function whenReady(fn) {
+    if (document.readyState === 'complete') fn();
+    else window.addEventListener('load', fn);
+  }
+  // The rebuilt list is what the crash walks, and the rebuild only runs when
+  // the sheet version has moved -- so every reading below takes a snapshot,
+  // moves the version, and takes another.
+  function shot() {
+    const faces = Array.from(document.fonts).filter((f) => f.family === 'DupFont');
+    return faces.map((f) => f.weight).join(',') +
+      ' distinct=' + (faces.length < 2 ? 'n/a' : String(faces[0] !== faces[1]));
+  }
+</script>
+<style>
+  @font-face { font-family: DupFont; src: url(/src/browser/tests/css/nonexistent-400.ttf) format('truetype'); font-weight: 400 }
+  @font-face { font-family: DupFont; src: url(/src/browser/tests/css/nonexistent-700.ttf) format('truetype'); font-weight: 700 }
+</style>
+<div id=anchor>x</div>
+
+<script id="same_family_twice_stays_two_objects" type=module>
+{
+  const state = await testing.async();
+  whenReady(() => {
+    const before = shot();
+    // Moving the sheet version is what triggers the rebuild; the injected rule
+    // declares an unrelated family so it cannot itself change the DupFont rows.
+    const style = document.createElement('style');
+    style.textContent = '@font-face{font-family:OtherFont;src:local("Menlo")}';
+    document.head.appendChild(style);
+    const after = shot();
+    style.remove();
+    state.resolve(before + ' -> ' + after);
+  });
+  await state.done((seen) => {
+    // Both readings: two entries, weights 400 and 700, two distinct objects.
+    testing.expectEqual(
+      '400,700 distinct=true -> 400,700 distinct=true',
+      seen,
+    );
+  });
+}
+</script>
+
+<script id="rebuilding_many_times_keeps_the_set_stable" type=module>
+{
+  // The crash needs the rebuild to run repeatedly, which is what a long-lived
+  // page does as stylesheets arrive. Ten rounds here stands in for that.
+  const state = await testing.async();
+  whenReady(() => {
+    const seen = [];
+    for (let i = 0; i < 10; i++) {
+      const style = document.createElement('style');
+      style.textContent = `@font-face{font-family:Churn${i};src:local("Menlo")}`;
+      document.head.appendChild(style);
+      seen.push(Array.from(document.fonts).filter((f) => f.family === 'DupFont').length);
+      style.remove();
+    }
+    state.resolve(seen.join(','));
+  });
+  await state.done((seen) => {
+    // Two DupFont entries every round -- not growing, not collapsing to one.
+    testing.expectEqual('2,2,2,2,2,2,2,2,2,2', seen);
+  });
+}
+</script>
