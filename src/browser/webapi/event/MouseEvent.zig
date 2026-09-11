@@ -83,6 +83,12 @@ _shift_key: bool,
 /// The `modifier*` six and `region` are read and discarded: no page-visible
 /// attribute is built from them here, and what is observable is the read.
 pub const MouseEventOptions = struct {
+    // Two IDL levels in one Zig struct: EventModifierInit's members first, then
+    // MouseEventInit's own, each group alphabetical -- which is the order Web
+    // IDL reads them in. The marker tells `assertDictionaryFieldOrder` that,
+    // since a single flat lexicographic check cannot see the grouping.
+    js_grouped_dictionary: void = {},
+
     // EventModifierInit.
     altKey: bool = false,
     ctrlKey: bool = false,
@@ -184,12 +190,30 @@ pub fn getButtons(self: *const MouseEvent) u16 {
     return self._buttons;
 }
 
+// Chrome exposes fractional coordinates on PointerEvent only: MouseEvent and
+// its other subclasses floor them to integers for web compatibility, even
+// though CSSOM-View types the getters as double.
+// https://drafts.csswg.org/cssom-view/#extensions-to-the-mouseevent-interface
+fn compatCoordinate(self: *const MouseEvent, value: f64) f64 {
+    return switch (self._type) {
+        .pointer_event => {
+            const ty = self._proto._proto._type_string;
+            if (ty.eql(comptime .wrap("click")) or ty.eql(comptime .wrap("auxclick")) or ty.eql(comptime .wrap("contextmenu"))) {
+                // these "click-like" event types also floor
+                return @floor(value);
+            }
+            return value;
+        },
+        else => @floor(value),
+    };
+}
+
 pub fn getClientX(self: *const MouseEvent) f64 {
-    return self._client_x;
+    return self.compatCoordinate(self._client_x);
 }
 
 pub fn getClientY(self: *const MouseEvent) f64 {
-    return self._client_y;
+    return self.compatCoordinate(self._client_y);
 }
 
 pub fn getCtrlKey(self: *const MouseEvent) bool {
@@ -202,12 +226,12 @@ pub fn getMetaKey(self: *const MouseEvent) bool {
 
 pub fn getPageX(self: *const MouseEvent) f64 {
     // this should be clientX + window.scrollX
-    return self._client_x;
+    return self.compatCoordinate(self._client_x);
 }
 
 pub fn getPageY(self: *const MouseEvent) f64 {
     // this should be clientY + window.scrollY
-    return self._client_y;
+    return self.compatCoordinate(self._client_y);
 }
 
 pub fn getRelatedTarget(self: *const MouseEvent) ?*EventTarget {
@@ -242,11 +266,11 @@ pub fn getToElement(self: *MouseEvent) ?*EventTarget {
 }
 
 pub fn getScreenX(self: *const MouseEvent) f64 {
-    return self._screen_x;
+    return self.compatCoordinate(self._screen_x);
 }
 
 pub fn getScreenY(self: *const MouseEvent) f64 {
-    return self._screen_y;
+    return self.compatCoordinate(self._screen_y);
 }
 
 pub fn getShiftKey(self: *const MouseEvent) bool {
@@ -266,11 +290,11 @@ pub fn getOffsetY(_: *const MouseEvent) f64 {
 
 // Deprecated: tracks the same value as offsetX/clientX in the absence of layout.
 pub fn getLayerX(self: *const MouseEvent) f64 {
-    return self._client_x;
+    return self.compatCoordinate(self._client_x);
 }
 
 pub fn getLayerY(self: *const MouseEvent) f64 {
-    return self._client_y;
+    return self.compatCoordinate(self._client_y);
 }
 
 pub fn getModifierState(self: *const MouseEvent, key: []const u8) bool {

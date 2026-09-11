@@ -486,10 +486,12 @@
     headers.set('Accept-Language', 'fr');
     headers.append('X-Multi', 'a');
     headers.append('X-Multi', 'b');
+    // Cookie and anything sec-* are forbidden request headers: the Request
+    // guard drops them, so our own Sec-Ch-Ua survives.
     headers.append('Cookie', 'a=1');
     headers.append('Cookie', 'b=2');
-    headers.set('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64)');
     headers.set('Sec-Ch-Ua', '"Chromium";v="140"');
+    headers.set('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64)');
     const response = await fetch('http://127.0.0.1:9582/echo_headers', { headers });
     const text = await response.text();
     state.resolve();
@@ -502,13 +504,54 @@
       }
       testing.expectEqual('fr', got['accept-language']);
       testing.expectEqual('a, b', got['x-multi']);
-      testing.expectEqual('a=1; b=2', got['cookie']);
-      // A Sec-* name is a forbidden header name: the author's value never
+      // Cookie is a forbidden request header name: the author's value never
+      // reaches the wire, and only the jar's own cookies do.
+      testing.expectEqual(undefined, got['cookie']);
+      // A Sec-* name is forbidden the same way: the author's value never
       // reaches the wire, and the engine's own client hint goes out instead.
       // (User-Agent is deliberately not asserted here: it left the forbidden
-      // list in 2016 and a page may legitimately set it.)
+      // list in 2016 and a page may legitimately set it. What this fork sends
+      // is a Chrome user-agent, which is the whole point of the fork, so
+      // upstream's "includes Lightpanda" assertions do not apply.)
       testing.expectEqual(false, got['sec-ch-ua'] === '"Chromium";v="140"');
       testing.expectEqual(true, got['sec-ch-ua'].includes('Google Chrome'));
+    });
+  }
+</script>
+
+<script id=fetch_redirect_authorization type=module>
+  {
+    // Authorization must not follow a cross-origin redirect; a custom header
+    // is not stripped by the redirect itself (that is CORS's job, and it does
+    // it by refusing the request outright -- see the second half).
+    const state = await testing.async();
+
+    // Authorization alone: once the hop strips it, nothing non-safelisted is
+    // left, so the re-sent request needs no preflight and the echo shows what
+    // actually went out.
+    const auth = { Authorization: 'Bearer secret' };
+    const same = await (await fetch('/redirect_same_echo_headers', { headers: auth })).text();
+    const cross = await (await fetch('/redirect_cross_echo_headers', { headers: auth })).text();
+
+    // A non-safelisted header that survives into the new origin turns the
+    // re-sent request into one that needs a preflight, and `/echo_headers`
+    // answers an OPTIONS with no Access-Control-Allow-*. Chrome fails this too
+    // -- upstream does not, because its CORS gate is opt-in.
+    let hopped = 'no-error';
+    try {
+      await fetch('/redirect_cross_echo_headers', { headers: { 'X-Hop': 'keep' } });
+    } catch (e) {
+      hopped = e.name;
+    }
+
+    state.resolve();
+
+    await state.done(() => {
+      const s = same.toLowerCase();
+      const c = cross.toLowerCase();
+      testing.expectEqual(true, s.includes('authorization: bearer secret'));
+      testing.expectEqual(false, c.includes('authorization'));
+      testing.expectEqual('TypeError', hopped);
     });
   }
 </script>
@@ -608,6 +651,21 @@
         'same-origin/GET=same-origin', 'same-origin/POST=same-origin+origin',
       ].join(' ');
       testing.expectEqual(want, Object.keys(got).map((k) => `${k}=${got[k]}`).join(' '));
+    });
+  }
+</script>
+
+<script id=fetch_forbidden_response_header type=module>
+  {
+    const state = await testing.async();
+    const response = await fetch('http://127.0.0.1:9582/set_cookie');
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual('yes', response.headers.get('x-visible'));
+      testing.expectEqual(null, response.headers.get('set-cookie'));
+      testing.expectEqual(0, response.headers.getSetCookie().length);
+      testing.expectEqual(false, [...response.headers.keys()].includes('set-cookie'));
     });
   }
 </script>

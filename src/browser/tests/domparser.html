@@ -1069,3 +1069,15 @@
   testing.expectEqual('svg', svg.documentElement.localName);
 }
 </script>
+
+<script id=invalidType>
+{
+  let err = null;
+  try {
+    new DOMParser().parseFromString('', 'text/foo');
+  } catch (e) {
+    err = e;
+  }
+  testing.expectEqual(true, err instanceof TypeError);
+}
+</script>

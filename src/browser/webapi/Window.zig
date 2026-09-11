@@ -905,17 +905,7 @@ pub fn reportError(self: *Window, err: js.Value, frame: *Frame) !void {
 }
 
 pub fn matchMedia(_: *const Window, query: []const u8, frame: *Frame) !*MediaQueryList {
-    // `media` is the canonical form of the query, not the text handed in — see
-    // the serialisation section of css/MediaQuery.zig. Both are kept, because
-    // the canonical form rounds every number in it to six significant figures:
-    // `matches` reading it back answered `(min-resolution: 2.00000011920929dppx)`
-    // against 2.00000, which is one rung of the ladder Kasada bisects
-    // devicePixelRatio with (measured, probes/expr-b96-resolution-boundary.js).
-    return frame._factory.eventTarget(MediaQueryList{
-        ._proto = undefined,
-        ._media = try MediaQuery.serialize(frame.arena, query),
-        ._query = try frame.arena.dupe(u8, query),
-    });
+    return MediaQueryList.init(query, frame);
 }
 
 /// A *new* declaration on every call, which is what Chrome does. Measured on
@@ -969,7 +959,10 @@ pub fn open(self: *Window, url_: ?[]const u8, target_: ?[]const u8, features_: ?
         std.ascii.eqlIgnoreCase(target, "_parent") or
         std.ascii.eqlIgnoreCase(target, "_top"))
     {
-        const nav_target = frame.resolveTargetFrame(target) orelse frame;
+        const nav_target = switch (frame.resolveTargetFrame(target)) {
+            .frame => |f| f,
+            .blank => unreachable,
+        };
         const nav_url = if (raw_url.len == 0) "about:blank" else raw_url;
         try frame.scheduleNavigation(nav_url, .{
             .reason = .script,
@@ -1086,7 +1079,9 @@ pub fn find(_: *Window, _: ?[]const u8) bool {
 // treats as advisory: a page opened by script may resize itself, an ordinary
 // tab silently ignores moveTo/resizeTo.
 pub fn print(_: *Window) void {}
-pub fn stop(_: *Window) void {}
+pub fn stop(self: *Window) void {
+    self._frame.stopLoading();
+}
 pub fn moveBy(_: *Window, _: f64, _: f64) void {}
 pub fn moveTo(_: *Window, _: f64, _: f64) void {}
 pub fn resizeBy(_: *Window, _: f64, _: f64) void {}
@@ -2409,6 +2404,7 @@ pub const CrossOriginWindow = struct {
 
 const testing = @import("../../testing.zig");
 test "WebApi: Window" {
+    testing.expectLog(&.{.http}); // stop aborts
     try testing.htmlRunner("window", .{});
 }
 

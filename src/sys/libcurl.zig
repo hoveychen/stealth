@@ -199,6 +199,7 @@ pub const CurlOption = enum(c.CURLoption) {
     timeout_ms = c.CURLOPT_TIMEOUT_MS,
     connect_timeout_ms = c.CURLOPT_CONNECTTIMEOUT_MS,
     follow_location = c.CURLOPT_FOLLOWLOCATION,
+    http_version = c.CURLOPT_HTTP_VERSION,
     proxy = c.CURLOPT_PROXY,
     ssl_verify_host = c.CURLOPT_SSL_VERIFYHOST,
     ssl_verify_peer = c.CURLOPT_SSL_VERIFYPEER,
@@ -231,8 +232,18 @@ pub const CurlOption = enum(c.CURLoption) {
     ssl_ctx_data = c.CURLOPT_SSL_CTX_DATA,
 };
 
+pub const CurlHttpVersion = enum(c_long) {
+    none = c.CURL_HTTP_VERSION_NONE, // libcurl's own defaults, picks the best
+    v1_0 = c.CURL_HTTP_VERSION_1_0,
+    v1_1 = c.CURL_HTTP_VERSION_1_1,
+    v2 = c.CURL_HTTP_VERSION_2_0,
+    v3 = c.CURL_HTTP_VERSION_3,
+    _,
+};
+
 pub const CurlMOption = enum(c.CURLMoption) {
     max_host_connections = c.CURLMOPT_MAX_HOST_CONNECTIONS,
+    max_connects = c.CURLMOPT_MAXCONNECTS,
 };
 
 pub const CurlInfo = enum(c.CURLINFO) {
@@ -243,6 +254,13 @@ pub const CurlInfo = enum(c.CURLINFO) {
     connect_code = c.CURLINFO_HTTP_CONNECTCODE,
     http_version = c.CURLINFO_HTTP_VERSION,
     total_time_t = c.CURLINFO_TOTAL_TIME_T,
+    queue_time_t = c.CURLINFO_QUEUE_TIME_T,
+    namelookup_time_t = c.CURLINFO_NAMELOOKUP_TIME_T,
+    connect_time_t = c.CURLINFO_CONNECT_TIME_T,
+    appconnect_time_t = c.CURLINFO_APPCONNECT_TIME_T,
+    pretransfer_time_t = c.CURLINFO_PRETRANSFER_TIME_T,
+    starttransfer_time_t = c.CURLINFO_STARTTRANSFER_TIME_T,
+    size_download_t = c.CURLINFO_SIZE_DOWNLOAD_T,
     num_connects = c.CURLINFO_NUM_CONNECTS,
     conn_id = c.CURLINFO_CONN_ID,
     // Bytes of body read off the socket. Counted *before* curl undoes the
@@ -250,7 +268,6 @@ pub const CurlInfo = enum(c.CURLINFO) {
     // Timing reports -- verified against a brotli response with no
     // Content-Length: `curl --compressed -w %{size_download}` answered 26 616
     // for a body that landed as 84 236 bytes.
-    size_download_t = c.CURLINFO_SIZE_DOWNLOAD_T,
     // Bytes of response head read off the socket: the status line, every
     // header, and the blank line that ends them. This is what CDP calls the
     // `encodedDataLength` of a response at the moment its headers are in.
@@ -261,11 +278,6 @@ pub const CurlInfo = enum(c.CURLINFO) {
     // The connection walk, each measured from the start of the transfer.
     // Together they are eight of Resource Timing's nine milestones; the ninth,
     // firstInterimResponseStart, would need a 1xx this engine never reads.
-    namelookup_time_t = c.CURLINFO_NAMELOOKUP_TIME_T,
-    connect_time_t = c.CURLINFO_CONNECT_TIME_T,
-    appconnect_time_t = c.CURLINFO_APPCONNECT_TIME_T,
-    pretransfer_time_t = c.CURLINFO_PRETRANSFER_TIME_T,
-    starttransfer_time_t = c.CURLINFO_STARTTRANSFER_TIME_T,
 };
 
 pub const Error = error{
@@ -656,6 +668,8 @@ pub fn curl_easy_setopt(easy: *Curl, comptime option: CurlOption, value: anytype
 
         .ssl_ctx_data => @as(?*crypto.X509_STORE, value),
 
+        .http_version => @as(c_long, @intFromEnum(@as(CurlHttpVersion, value))),
+
         .debug_function => @as(CurlDebugFunction, value),
         .opensocket_function => @as(CurlOpenSocketFunction, value),
         .header_function => @as(CurlHeaderFunction, value),
@@ -701,13 +715,14 @@ pub fn curl_easy_getinfo(easy: *Curl, comptime info: CurlInfo, out: anytype) Err
             break :blk c.curl_easy_getinfo(easy, inf, p);
         },
         .total_time_t,
-        .conn_id,
-        .size_download_t,
+        .queue_time_t,
         .namelookup_time_t,
         .connect_time_t,
         .appconnect_time_t,
         .pretransfer_time_t,
         .starttransfer_time_t,
+        .size_download_t,
+        .conn_id,
         => blk: {
             const p: *c.curl_off_t = out;
             break :blk c.curl_easy_getinfo(easy, inf, p);
@@ -776,7 +791,7 @@ pub fn curl_multi_cleanup(multi: *CurlM) ErrorMulti!void {
 pub fn curl_multi_setopt(multi: *CurlM, comptime option: CurlMOption, value: anytype) ErrorMulti!void {
     const opt: c.CURLMoption = @intFromEnum(option);
     const code = switch (option) {
-        .max_host_connections => blk: {
+        .max_host_connections, .max_connects => blk: {
             const n: c_long = switch (@typeInfo(@TypeOf(value))) {
                 .comptime_int, .int => @intCast(value),
                 else => @compileError("expected integer for " ++ @tagName(option) ++ ", got " ++ @typeName(@TypeOf(value))),

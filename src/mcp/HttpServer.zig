@@ -29,11 +29,13 @@
 
 const std = @import("std");
 const lp = @import("lightpanda");
+const builtin = @import("builtin");
 
 const App = @import("../App.zig");
 const sys_net = @import("../sys/net.zig");
 
 const Server = @import("Server.zig");
+const Transport = @import("Transport.zig");
 const router = @import("router.zig");
 
 const log = lp.log;
@@ -126,7 +128,12 @@ app: *App,
 
 queue: Queue = .{},
 
-// Registration happens in onAccept — the same (network) thread deinit runs
+// Blocking listener owned by run(); -1 until bound. stop() unblocks the
+// accept from another thread.
+listener: posix.socket_t = -1,
+shutting_down: std.atomic.Value(bool) = .init(false),
+
+// Registration happens in onAccept — the same (accept) thread deinit runs
 // on — so a connection is always counted and its socket registered before
 // deinit can observe either.
 active_conns: std.atomic.Value(u32) = .init(0),
@@ -180,30 +187,60 @@ pub fn deinit(self: *HttpServer) void {
     self.allocator.destroy(self);
 }
 
-/// Accept MCP-over-HTTP connections until the network loop is stopped
-/// (e.g. by the signal handler). Reuses the shared accept infrastructure;
-/// blocks the calling thread in `Network.run`.
+/// Accept MCP-over-HTTP connections until stop() (e.g. from the signal
+/// handler). Blocks the calling thread; each accepted connection is served
+/// by its own thread doing blocking IO.
 pub fn run(self: *HttpServer, address: sys_net.IpAddress) !void {
-    var bound = address;
-    try self.app.network.bind(&bound, self, onAccept);
-    log.note(.mcp, "mcp http server running", .{ .address = bound });
-    self.app.network.run();
+    const listener = try sys_net.socket(sys_net.family(&address), posix.SOCK.STREAM | posix.SOCK.CLOEXEC, posix.IPPROTO.TCP);
+    errdefer _ = std.c.close(listener);
+
+    try posix.setsockopt(listener, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
+    if (@hasDecl(posix.TCP, "NODELAY")) {
+        try posix.setsockopt(listener, posix.IPPROTO.TCP, posix.TCP.NODELAY, &std.mem.toBytes(@as(c_int, 1)));
+    }
+
+    const sa = sys_net.sockaddrFromAddress(&address);
+    try sys_net.bind(listener, sa.ptr(), sa.len);
+    try sys_net.listen(listener, self.app.config.maxPendingConnections());
+
+    // --port 0 asks the OS for an ephemeral port; log the one we actually got.
+    var bound: posix.sockaddr.storage = undefined;
+    var bound_len: posix.socklen_t = @sizeOf(posix.sockaddr.storage);
+    try sys_net.getsockname(listener, @ptrCast(&bound), &bound_len);
+    log.note(.mcp, "mcp http server running", .{ .address = sys_net.addressFromSockaddr(@ptrCast(&bound)) });
+
+    self.listener = listener;
+    // On non-Linux stop() closes the listener itself to unblock accept.
+    defer if (builtin.os.tag == .linux) {
+        _ = std.c.close(listener);
+    };
+
+    while (!self.shutting_down.load(.acquire)) {
+        const socket = sys_net.accept(listener, null, null, 0) catch |err| {
+            if (self.shutting_down.load(.acquire)) {
+                return;
+            }
+            switch (err) {
+                error.ConnectionAborted => log.warn(.mcp, "accept connection aborted", .{}),
+                else => log.err(.mcp, "accept error", .{ .err = err }),
+            }
+            continue;
+        };
+        self.onAccept(socket);
+    }
 }
 
-/// Network hands us a nonblocking accepted socket; each connection is served
-/// by its own thread doing blocking IO, so we clear O_NONBLOCK first.
-fn onAccept(ctx: *anyopaque, socket: posix.socket_t) void {
-    const self: *HttpServer = @ptrCast(@alignCast(ctx));
+/// Make run() return. Linux wakes a blocked accept() on shutdown(); BSD/macOS
+/// only on close(), in which case run() must not close it again.
+pub fn stop(self: *HttpServer) void {
+    self.shutting_down.store(true, .release);
+    switch (builtin.os.tag) {
+        .linux => sys_net.shutdown(self.listener, .recv) catch {},
+        else => _ = std.c.close(self.listener),
+    }
+}
 
-    const flags = sys_net.fcntl(socket, posix.F.GETFL, 0) catch {
-        _ = std.c.close(socket);
-        return;
-    };
-    _ = sys_net.fcntl(socket, posix.F.SETFL, flags & ~@as(u32, @bitCast(posix.O{ .NONBLOCK = true }))) catch {
-        _ = std.c.close(socket);
-        return;
-    };
-
+fn onAccept(self: *HttpServer, socket: posix.socket_t) void {
     {
         self.conn_mutex.lockUncancelable(lp.io);
         defer self.conn_mutex.unlock(lp.io);
@@ -246,7 +283,7 @@ fn worker(self: *HttpServer) void {
     };
     defer server.deinit();
 
-    server.enableIsolateParking();
+    server.multi_session = true;
 
     self.worker_ok = true;
     self.worker_ready.set(lp.io);
@@ -343,7 +380,11 @@ fn handleConn(self: *HttpServer, socket: posix.socket_t) void {
         _ = arena.reset(.retain_capacity);
         out.clearRetainingCapacity();
         self.serve(&out.writer, arena.allocator(), &request) catch return;
-        if (!request.head.keep_alive) return;
+        if (out.writer.buffer.len > Transport.large_response) {
+            out.deinit();
+            out = .init(self.allocator);
+        }
+        if (!request.head.keep_alive or http_server.reader.state == .closing) return;
     }
 }
 
@@ -359,9 +400,17 @@ fn serve(self: *HttpServer, out: *std.Io.Writer, arena: std.mem.Allocator, reque
         return request.respond("", .{ .status = .expectation_failed, .keep_alive = false });
     }
 
-    // Read the session header and keep_alive before the body reader
-    // invalidates the head's string memory.
-    const session_id = try sessionHeader(arena, request);
+    if (method == .POST and !isJsonContentType(request.head.content_type)) {
+        return request.respond("", .{ .status = .unsupported_media_type, .keep_alive = false });
+    }
+
+    // Read the headers and keep_alive before the body reader invalidates
+    // the head's string memory.
+    const session_id = checkHeaders(arena, request) catch |err| switch (err) {
+        error.ForbiddenOrigin => return request.respond("Origin not allowed\n", .{ .status = .forbidden, .keep_alive = false }),
+        error.ForbiddenHost => return request.respond("Host not allowed, connect to the MCP endpoint by IP address or localhost\n", .{ .status = .forbidden, .keep_alive = false }),
+        else => return err,
+    };
     const keep_alive = request.head.keep_alive;
 
     var body_buf: [8 * 1024]u8 = undefined;
@@ -395,15 +444,60 @@ fn serve(self: *HttpServer, out: *std.Io.Writer, arena: std.mem.Allocator, reque
     });
 }
 
-/// Duplicate the `Mcp-Session-Id` request header into `arena`, or null.
-fn sessionHeader(arena: std.mem.Allocator, request: *std.http.Server.Request) !?[]const u8 {
+/// One pass over the request headers: duplicate `Mcp-Session-Id` into
+/// `arena` (or null) and enforce the same browser-vector policy as the CDP
+/// handshake (see `cdp.Connection.upgrade`).
+fn checkHeaders(arena: std.mem.Allocator, request: *std.http.Server.Request) !?[]const u8 {
+    var session_id: ?[]const u8 = null;
     var it = request.iterateHeaders();
     while (it.next()) |header| {
-        if (std.ascii.eqlIgnoreCase(header.name, "mcp-session-id")) {
-            return try arena.dupe(u8, header.value);
+        const key = header.name;
+        const value = header.value;
+        if (std.ascii.eqlIgnoreCase(key, "mcp-session-id")) {
+            session_id = try arena.dupe(u8, value);
+        } else if (std.ascii.eqlIgnoreCase(key, "origin")) {
+            log.warn(.mcp, "rejected request origin", .{
+                .origin = value[0..@min(value.len, 64)],
+            });
+            return error.ForbiddenOrigin;
+        } else if (std.ascii.eqlIgnoreCase(key, "host")) {
+            const is_allowed = blk: {
+                // allow literal localhost
+                if (std.mem.startsWith(u8, value, "localhost:")) {
+                    break :blk true;
+                }
+
+                _ = std.Io.net.IpAddress.parseLiteral(value) catch break :blk false;
+                break :blk true;
+            };
+
+            if (!is_allowed) {
+                log.warn(.mcp, "rejected request host", .{
+                    .host = value[0..@min(value.len, 64)],
+                    .hint = "connect to the MCP endpoint by IP address or localhost",
+                });
+                return error.ForbiddenHost;
+            }
         }
     }
-    return null;
+    return session_id;
+}
+
+/// `application/json`, case-insensitive, ignoring parameters (`; charset=`).
+fn isJsonContentType(content_type: ?[]const u8) bool {
+    const ct = content_type orelse return false;
+    const end = std.mem.indexOfScalar(u8, ct, ';') orelse ct.len;
+    const media_type = std.mem.trim(u8, ct[0..end], " \t");
+    return std.ascii.eqlIgnoreCase(media_type, "application/json");
+}
+
+test "HttpServer - content type must be application/json" {
+    try std.testing.expect(isJsonContentType("application/json"));
+    try std.testing.expect(isJsonContentType("Application/JSON; charset=utf-8"));
+    try std.testing.expect(isJsonContentType("application/json ;charset=utf-8"));
+    try std.testing.expect(!isJsonContentType("text/plain"));
+    try std.testing.expect(!isJsonContentType("application/x-www-form-urlencoded"));
+    try std.testing.expect(!isJsonContentType(null));
 }
 
 test "HttpServer - initialize is detected for session minting" {

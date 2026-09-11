@@ -36,8 +36,9 @@ _type: ?lp.String = null,
 _sdp: lp.String = .empty,
 
 pub const Init = struct {
-    type: ?lp.String.Global = null,
+    // Alphabetical: a dictionary's members are read in that order.
     sdp: ?lp.String.Global = null,
+    type: ?lp.String.Global = null,
 };
 
 // `init` is optional so the reported arity is 0, matching Chrome's

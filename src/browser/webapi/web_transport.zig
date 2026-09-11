@@ -86,12 +86,13 @@ pub const WebTransport = struct {
     /// transport does, but Chrome accepts the dictionary, so it is read and
     /// discarded rather than rejected.
     const Options = struct {
+        // Alphabetical: a dictionary's members are read in that order.
         allowPooling: ?bool = null,
-        requireUnreliable: ?bool = null,
-        congestionControl: ?[]const u8 = null,
-        anticipatedConcurrentIncomingUnidirectionalStreams: ?u32 = null,
         anticipatedConcurrentIncomingBidirectionalStreams: ?u32 = null,
+        anticipatedConcurrentIncomingUnidirectionalStreams: ?u32 = null,
+        congestionControl: ?[]const u8 = null,
         protocols: ?[]const []const u8 = null,
+        requireUnreliable: ?bool = null,
     };
 
     /// CloseInfo.

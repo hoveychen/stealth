@@ -83,6 +83,16 @@
 }
 </script>
 
+<script id=OffscreenCanvas#convertToBlob_zero_size_rejects>
+{
+  const canvas = new OffscreenCanvas(0, 64);
+  canvas.convertToBlob().then(
+    () => testing.expectEqual('rejected', 'resolved'),
+    (err) => testing.expectEqual('IndexSizeError', err.name),
+  );
+}
+</script>
+
 <script id=HTMLCanvasElement#transferControlToOffscreen>
 {
   const htmlCanvas = document.createElement("canvas");
@@ -2039,4 +2049,20 @@
     oc.oncontextlost = null;
     testing.expectEqual(null, oc.oncontextlost);
   }
+</script>
+
+<script id=OffscreenCanvasRenderingContext2D#measureText>
+{
+  const ctx = new OffscreenCanvas(10, 10).getContext("2d");
+  ctx.font = "16px sans-serif";
+  // The same advance the on-screen context answers: an offscreen context
+  // measures against the same font tables, and a fingerprint that compared
+  // the two would see one number, not a stand-in.
+  const onscreen = document.createElement("canvas").getContext("2d");
+  onscreen.font = "16px sans-serif";
+  testing.expectEqual(onscreen.measureText("hello").width, ctx.measureText("hello").width);
+  ctx.setLineDash([1, 2]);
+  testing.expectEqual("1,2", ctx.getLineDash().join());
+  testing.expectEqual(true, ctx.createLinearGradient(0, 0, 1, 1) instanceof CanvasGradient);
+}
 </script>

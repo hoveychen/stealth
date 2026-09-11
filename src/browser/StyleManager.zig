@@ -167,12 +167,18 @@ fixed_cascade_cache: FixedCascadeCache = .empty,
 /// selector matching it drives at 50.8%.
 rule_hiding_cache: RuleHidingCache = .empty,
 
-/// The `Page.dom_version` the cache's contents were computed under. Any DOM
+/// The `Page.style_version` the cache's contents were computed under. Any DOM
 /// mutation moves it -- `Frame.domChanged` covers structure and, through
 /// `Attribute.List.put`/`remove`, class and id -- and every entry is stale at
 /// once, because a single inserted node changes what `:nth-child`, `+` and `~`
 /// match for other elements.
-cache_dom_version: usize = 0,
+///
+/// `style_version` rather than `dom_version` because a selector can also match
+/// on state the tree never sees: `input:checked`, `:indeterminate`,
+/// `:invalid`, `x-foo:not(:defined)`, `:target`, `:focus`. `Frame.styleChanged`
+/// is the stamp those paths bump, and `domChanged` bumps it too, so this is a
+/// superset of the old key and not a second one.
+cache_style_version: usize = 0,
 
 /// What `CSS.registerProperty` has registered, in registration order. Not
 /// rebuilt with the rules: a registration is the document's for its lifetime
@@ -1056,6 +1062,9 @@ pub fn sheetRemoved(self: *StyleManager) void {
 pub fn sheetModified(self: *StyleManager) void {
     self.dirty = true;
     self.sheet_version += 1;
+    // The rule list is rebuilt lazily, but the cascade memo is not keyed on
+    // `dirty` -- a new rule has to drop entries computed before it existed.
+    self.frame.styleChanged();
     Frame.observers.scheduleResizeDelivery(self.frame);
 }
 
@@ -1183,6 +1192,33 @@ fn generatesNoBox(self: *StyleManager, el: *Element) bool {
 /// Computed display:none for a single element (own property, no ancestor walk).
 /// Honors the UA stylesheet rules per HTML Rendering §15.3.1 "Hidden elements"
 /// via `isElementHidden`.
+/// The coarse display buckets the dumpers act on; everything else is `other`.
+/// Upstream keeps this on its own cascade; here it is derived from
+/// `computedDisplay`, which is the cascade this fork resolves.
+pub const Display = enum(u2) {
+    none,
+    flex,
+    grid,
+    other,
+};
+
+/// The element's own computed display, bucketed. Used by RenderTree/markdown/
+/// screenshot, which only need to tell a box from no box and a flow container
+/// from a flex/grid one.
+pub fn displayBucket(self: *StyleManager, el: *Element) Display {
+    // `hasDisplayNone` rather than a string compare on `computedDisplay`: the UA
+    // stylesheet's hidden elements (`[hidden]`, a closed `<details>` body, a
+    // closed `<dialog>`) never reach the author cascade, so they have no
+    // `display` declaration to read — but they generate no box, which is the
+    // only thing the dumpers ask this for.
+    if (self.hasDisplayNone(el)) return .none;
+    const value = self.computedDisplay(el) orelse return .other;
+    if (std.mem.eql(u8, value, "none")) return .none;
+    if (std.mem.eql(u8, value, "flex") or std.mem.eql(u8, value, "inline-flex")) return .flex;
+    if (std.mem.eql(u8, value, "grid") or std.mem.eql(u8, value, "inline-grid")) return .grid;
+    return .other;
+}
+
 pub fn hasDisplayNone(self: *StyleManager, el: *Element) bool {
     self.rebuildIfDirty() catch return false;
     return self.isElementHidden(el, .{});
@@ -1215,6 +1251,9 @@ fn matchesUaDisplayNoneRule(el: *Element) bool {
             if (input._input_type == .hidden) return true;
         }
     }
+
+    // dialog:not([open]) { display: none }
+    if (tag == .dialog and !el.hasAttributeSafe(comptime .wrap("open"))) return true;
 
     // details:not([open]) > *:not(summary) { display: none }
     if (tag != .summary) {
@@ -1380,7 +1419,7 @@ const RuleHiding = struct {
 };
 
 fn ruleHiding(self: *StyleManager, el: *Element) RuleHiding {
-    self.dropCachesIfDomMoved();
+    self.dropCachesIfStyleMoved();
     if (self.rule_hiding_cache.get(el)) |cached| {
         return cached;
     }
@@ -1889,7 +1928,7 @@ fn countCompoundSpecificity(compound: Selector.Compound, ids: *u32, classes: *u3
 
 fn matchesSelector(el: *Element, selector: Selector.Selector, frame: *Frame) bool {
     const node = el.asNode();
-    return SelectorList.matches(node, selector, node, frame);
+    return SelectorList.matches(node, selector, node, null, frame);
 }
 
 /// A declaration we keep verbatim rather than reducing to a flag, because the
@@ -3015,21 +3054,21 @@ const CascadedProperty = enum { font_size, font_family, text_transform, letter_s
 /// both. `clearRetainingCapacity` keeps the buckets: the arena cannot give
 /// memory back, and a page that mutates a thousand times must not pay for a
 /// thousand maps.
-fn dropCachesIfDomMoved(self: *StyleManager) void {
-    const dom_version = self.frame._page.dom_version;
-    if (dom_version == self.cache_dom_version) {
+fn dropCachesIfStyleMoved(self: *StyleManager) void {
+    const style_version = self.frame._page.style_version;
+    if (style_version == self.cache_style_version) {
         return;
     }
     self.cascade_cache.clearRetainingCapacity();
     self.fixed_cascade_cache.clearRetainingCapacity();
     self.rule_hiding_cache.clearRetainingCapacity();
-    self.cache_dom_version = dom_version;
+    self.cache_style_version = style_version;
 }
 
 fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProperty) ?Declaration {
     self.rebuildIfDirty() catch return null;
 
-    self.dropCachesIfDomMoved();
+    self.dropCachesIfStyleMoved();
     if (self.fixed_cascade_cache.get(.{ .element = el, .property = property })) |cached| {
         return cached;
     }
@@ -3391,7 +3430,7 @@ fn cascadedNamedDeclaration(self: *StyleManager, el: *Element, name: []const u8,
         return null;
     }
 
-    self.dropCachesIfDomMoved();
+    self.dropCachesIfStyleMoved();
     if (self.cascade_cache.get(.{ .element = el, .name = name, .which = which })) |cached| {
         return cached;
     }

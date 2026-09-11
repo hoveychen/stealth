@@ -33,6 +33,7 @@ const Document = @import("webapi/Document.zig");
 const EventTarget = @import("webapi/EventTarget.zig");
 const AbortSignal = @import("webapi/AbortSignal.zig");
 const XMLHttpRequestEventTarget = @import("webapi/net/XMLHttpRequestEventTarget.zig");
+const IDBRequest = @import("webapi/storage/idb/IDBRequest.zig");
 const Blob = @import("webapi/Blob.zig");
 const AbstractRange = @import("webapi/AbstractRange.zig");
 const DOMRect = @import("webapi/DOMRect.zig");
@@ -56,6 +57,10 @@ pub fn init(arena: Allocator) Factory {
         ._arena = arena,
         ._slab = SlabAllocator.init(arena, 128),
     };
+}
+
+pub fn storageAllocator(self: *Factory) Allocator {
+    return self._slab.allocator();
 }
 
 // this is a root object
@@ -608,8 +613,6 @@ pub fn animationEffect(_: *const Factory, allocator: Allocator, child: anytype) 
 // (a store request is one) so it carries no `_type` union naming a leaf; the
 // middle is therefore default-initialised by hand rather than by setMiddle.
 pub fn idbOpenRequest(self: *Factory, child: anytype) !*@TypeOf(child) {
-    const IDBRequest = @import("webapi/storage/idb/IDBRequest.zig");
-
     const chain = try PrototypeChain(
         &.{ EventTarget, IDBRequest, @TypeOf(child) },
     ).allocate(self._slab.allocator());

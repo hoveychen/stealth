@@ -926,6 +926,9 @@ fn collectExternalReferences() [countExternalReferences()]isize {
         }
     }
 
+    // @LOG-UNKNOWN-PROPERTY -- upstream retired the instrument; this fork keeps
+    // it, so the callbacks it installs have to be in the table V8 serializes
+    // against or the snapshot refuses to load them.
     if (comptime lp.IS_DEBUG) {
         inline for (JsApis) |JsApi| {
             if (!hasNamedIndexedGetter(JsApi)) {

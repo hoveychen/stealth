@@ -49,17 +49,20 @@ _vibrate: []const u32 = &.{},
 _data: ?js.Value.Global = null,
 
 const Options = struct {
-    body: ?[]const u8 = null,
-    icon: ?[]const u8 = null,
+    // Alphabetical: a dictionary's members are read in that order, and the
+    // reads are observable.
     badge: ?[]const u8 = null,
-    tag: ?[]const u8 = null,
-    lang: ?[]const u8 = null,
-    dir: ?[]const u8 = null,
-    silent: ?bool = null,
-    requireInteraction: ?bool = null,
-    renotify: ?bool = null,
-    vibrate: ?VibratePattern = null,
+    body: ?[]const u8 = null,
     data: ?js.Value = null,
+    dir: ?[]const u8 = null,
+    icon: ?[]const u8 = null,
+    image: ?[]const u8 = null,
+    lang: ?[]const u8 = null,
+    renotify: ?bool = null,
+    requireInteraction: ?bool = null,
+    silent: ?bool = null,
+    tag: ?[]const u8 = null,
+    vibrate: ?VibratePattern = null,
 
     // `unsigned long or sequence<unsigned long>` -- a bare number is a
     // one-entry pattern.

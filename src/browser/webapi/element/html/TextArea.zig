@@ -28,10 +28,11 @@ const HtmlElement = @import("../Html.zig");
 const Form = @import("Form.zig");
 const Selection = @import("../../Selection.zig");
 const Event = @import("../../Event.zig");
-const InputEvent = @import("../../event/InputEvent.zig");
 const ValidityState = @import("ValidityState.zig");
 const handler_property = @import("../../handler_property.zig");
 const reflection = @import("../reflection.zig");
+const text_entry = @import("../text_entry.zig");
+const InputEvent = @import("../../event/InputEvent.zig");
 const text_selection = @import("text_selection.zig");
 const collections = @import("../../collections.zig");
 
@@ -49,6 +50,8 @@ pub const Proto = HtmlElement;
 
 _proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 _value: ?[]const u8 = null,
+// Only user edits count for tooLong/tooShort; script and attribute values don't.
+_user_edited: bool = false,
 
 _selection_start: u32 = 0,
 _selection_end: u32 = 0,
@@ -89,8 +92,29 @@ pub fn getValue(self: *const TextArea) []const u8 {
 }
 
 pub fn setValue(self: *TextArea, value: []const u8, frame: *Frame) !void {
+    const changed = std.mem.eql(u8, self.getValue(), value) == false;
+    if (changed == false and self._value != null) {
+        // _value itself isn't changing (not to be mixed up with setValue
+        // being called with the same as the default value, which would need
+        // to dupe)
+        self._user_edited = false;
+        return;
+    }
     const owned = try frame.arena.dupe(u8, value);
     self._value = owned;
+    self._user_edited = false;
+
+    // move the text entry cursor position to the end of the text control
+    if (changed) {
+        self._selection_start = @intCast(owned.len);
+        self._selection_end = @intCast(owned.len);
+        self._selection_direction = .none;
+    }
+}
+
+pub fn setUserValue(self: *TextArea, value: []const u8, frame: *Frame) !void {
+    try self.setValue(value, frame);
+    self._user_edited = true;
 }
 
 /// The form-reset half: the API value goes away and the child text takes over
@@ -131,76 +155,24 @@ pub fn getMinLength(self: *const TextArea) i32 {
     return reflection.getLimitedLong(self.asConstElement(), comptime .wrap("minlength"));
 }
 
-pub fn select(self: *TextArea, frame: *Frame) !void {
-    const len = if (self._value) |v| @as(u32, @intCast(v.len)) else 0;
-    try self.setSelectionRange(0, len, null, frame);
-    const event = try Event.init("select", .{ .bubbles = true }, frame._page);
-    try frame._event_manager.dispatch(self.asElement().asEventTarget(), event);
+const entry = text_entry.TextEntry(TextArea);
+
+pub const select = entry.select;
+pub const innerInsert = entry.innerInsert;
+pub const innerDelete = entry.innerDelete;
+pub const moveCaret = entry.moveCaret;
+pub const CaretMove = entry.CaretMove;
+pub const getSelectionDirection = entry.getSelectionDirection;
+pub const setSelectionStart = entry.setSelectionStart;
+
+// <textarea> always supports selection; <input> only does for some types.
+pub fn selectionAvailable(_: *const TextArea) bool {
+    return true;
 }
 
-const HowSelected = union(enum) { partial: struct { u32, u32 }, full, none };
-
-fn howSelected(self: *const TextArea) HowSelected {
-    const value = self._value orelse return .none;
-
-    if (self._selection_start == self._selection_end) return .none;
-    if (self._selection_start == 0 and self._selection_end == value.len) return .full;
-    return .{ .partial = .{ self._selection_start, self._selection_end } };
-}
-
-pub fn innerInsert(self: *TextArea, str: []const u8, frame: *Frame) !void {
-    const arena = frame.arena;
-
-    switch (self.howSelected()) {
-        .full => {
-            // if the text area is fully selected, replace the content.
-            const new_value = try arena.dupe(u8, str);
-            try self.setValue(new_value, frame);
-            self._selection_start = @intCast(new_value.len);
-            self._selection_end = @intCast(new_value.len);
-            self._selection_direction = .none;
-            try self.dispatchSelectionChangeEvent(frame);
-        },
-        .partial => |range| {
-            // if the text area is partially selected, replace the selected content.
-            const current_value = self.getValue();
-            const before = current_value[0..range[0]];
-            const remaining = current_value[range[1]..];
-
-            const new_value = try std.mem.concat(
-                arena,
-                u8,
-                &.{ before, str, remaining },
-            );
-            try self.setValue(new_value, frame);
-
-            const new_pos = range[0] + str.len;
-            self._selection_start = @intCast(new_pos);
-            self._selection_end = @intCast(new_pos);
-            self._selection_direction = .none;
-            try self.dispatchSelectionChangeEvent(frame);
-        },
-        .none => {
-            // if the text area is not selected, just insert at cursor.
-            const current_value = self.getValue();
-            const new_value = try std.mem.concat(arena, u8, &.{ current_value, str });
-            try self.setValue(new_value, frame);
-        },
-    }
-    try self.dispatchInputEvent(str, "insertText", frame);
-}
-
-pub fn getSelectionDirection(self: *const TextArea) []const u8 {
-    return @tagName(self._selection_direction);
-}
-
+// Non-null unlike input
 pub fn getSelectionStart(self: *const TextArea) u32 {
     return self._selection_start;
-}
-
-pub fn setSelectionStart(self: *TextArea, value: u32, frame: *Frame) !void {
-    self._selection_start = value;
-    try self.dispatchSelectionChangeEvent(frame);
 }
 
 pub fn getSelectionEnd(self: *const TextArea) u32 {
@@ -264,12 +236,11 @@ pub fn setSelectionRange(
         } else break :blk .none;
     };
 
-    const value = self._value orelse {
-        self._selection_start = 0;
-        self._selection_end = 0;
-        self._selection_direction = .none;
-        return;
-    };
+    // The API value, not `_value`: a `<textarea>abcdef</textarea>` takes its
+    // raw value from the child text node and `_value` is null until something
+    // assigns to it, and the offsets clamp against what the control actually
+    // holds (https://html.spec.whatwg.org/#dom-textarea-value).
+    const value = self.getValue();
 
     const len_u32: u32 = @intCast(value.len);
     var start: u32 = if (selection_start > len_u32) len_u32 else selection_start;
@@ -299,7 +270,7 @@ pub fn getLabels(self: *TextArea, frame: *Frame) !*collections.NodeList {
 // https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#the-constraint-validation-api
 
 pub fn getWillValidate(self: *const TextArea) bool {
-    return !self.getDisabled();
+    return !self.asConstElement().isDisabled();
 }
 
 pub fn getValidity(self: *TextArea, frame: *Frame) !*ValidityState {
@@ -351,6 +322,7 @@ pub fn suffersValueMissing(self: *const TextArea) bool {
 }
 
 pub fn suffersTooLong(self: *const TextArea) bool {
+    if (!self._user_edited) return false;
     const value = self._value orelse return false;
     const max = self.getMaxLength();
     if (max < 0) return false;
@@ -359,6 +331,7 @@ pub fn suffersTooLong(self: *const TextArea) bool {
 }
 
 pub fn suffersTooShort(self: *const TextArea) bool {
+    if (!self._user_edited) return false;
     const value = self._value orelse return false;
     if (value.len == 0) return false;
     const min = self.getMinLength();
@@ -368,11 +341,11 @@ pub fn suffersTooShort(self: *const TextArea) bool {
 }
 
 pub fn getDisabled(self: *const TextArea) bool {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("disabled")) != null;
+    return self.asConstElement().getAttributeInterned("disabled") != null;
 }
 
 pub fn getRequired(self: *const TextArea) bool {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("required")) != null;
+    return self.asConstElement().getAttributeInterned("required") != null;
 }
 
 pub const JsApi = struct {

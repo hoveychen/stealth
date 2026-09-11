@@ -25,7 +25,7 @@ pub fn asNode(self: *Label) *Node {
 }
 
 pub fn getControl(self: *Label, frame: *Frame) ?*Element {
-    if (self.asElement().getAttributeSafe(comptime .wrap("for"))) |id| {
+    if (self.asElement().getAttributeInterned("for")) |id| {
         const el = frame.getElementByIdFromNode(self.asElement().asNode(), id) orelse return null;
         if (!isLabelable(el)) {
             return null;
@@ -61,17 +61,6 @@ pub fn findWrappingLabel(control: *Element) ?*Element {
     return null;
 }
 
-/// First `<label for="id">` descendant of `root`, if any.
-pub fn findLabelByFor(root: *Node, id: []const u8) ?*Element {
-    var it = TreeWalker.Full.Elements.init(root, .{});
-    while (it.next()) |el| {
-        if (el.getTag() != .label) continue;
-        const for_attr = el.getAttributeSafe(comptime .wrap("for")) orelse continue;
-        if (std.mem.eql(u8, for_attr, id)) return el;
-    }
-    return null;
-}
-
 /// Lazy `for`-attribute → `<label>` index. Built in one tree walk on first
 /// lookup; subsequent lookups are O(1). Use when the same document is queried
 /// multiple times (e.g. one AX tree walk resolves names for every labellable
@@ -85,7 +74,7 @@ pub const LabelByForIndex = struct {
             var it = TreeWalker.Full.Elements.init(root, .{});
             while (it.next()) |el| {
                 if (el.getTag() != .label) continue;
-                const for_attr = el.getAttributeSafe(comptime .wrap("for")) orelse continue;
+                const for_attr = el.getAttributeInterned("for") orelse continue;
                 if (for_attr.len == 0) continue;
                 const gop = try self.map.getOrPut(allocator, for_attr);
                 if (!gop.found_existing) gop.value_ptr.* = el;

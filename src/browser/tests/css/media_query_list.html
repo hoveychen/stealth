@@ -55,6 +55,34 @@
 }
 </script>
 
+<script id=matchMedia_device_width_height>
+{
+  // The deprecated device-* features resolve against window.screen, whatever
+  // the configured display is -- written against `screen` rather than a fixed
+  // 1920×1080 because this fork's display persona is a run-time setting and a
+  // literal here would be asserting that setting, not the feature.
+  const sw = screen.width, sh = screen.height;
+  testing.expectEqual(true,  window.matchMedia('(min-device-width: 1px)').matches);
+  testing.expectEqual(true,  window.matchMedia('(min-device-width: ' + sw + 'px)').matches);
+  testing.expectEqual(false, window.matchMedia('(min-device-width: ' + (sw + 1) + 'px)').matches);
+  testing.expectEqual(true,  window.matchMedia('(max-device-width: ' + sw + 'px)').matches);
+  testing.expectEqual(false, window.matchMedia('(max-device-width: ' + (sw - 1) + 'px)').matches);
+  testing.expectEqual(true,  window.matchMedia('(device-width: ' + sw + 'px)').matches);
+
+  testing.expectEqual(true,  window.matchMedia('(min-device-height: ' + sh + 'px)').matches);
+  testing.expectEqual(false, window.matchMedia('(min-device-height: ' + (sh + 1) + 'px)').matches);
+  testing.expectEqual(true,  window.matchMedia('(device-height: ' + sh + 'px)').matches);
+
+  // .media round-trips the query as written.
+  const mql = window.matchMedia('(min-device-width: 1px)');
+  testing.expectEqual('(min-device-width: 1px)', mql.media);
+
+  // They agree with window.screen, which is what scripts cross-check.
+  testing.expectEqual(true, window.matchMedia('(min-device-width: ' + screen.width + 'px)').matches);
+  testing.expectEqual(true, window.matchMedia('(max-device-width: ' + screen.width + 'px)').matches);
+}
+</script>
+
 <script id=matchMedia_unsupported_feature>
 {
   // Unknown features evaluate to false per Media Queries Level 4. Chrome
@@ -602,5 +630,33 @@
     'min-height at +1/64: ' + m(`(min-height: ${h + U}px)`));
   testing.expectEqual('min-height just past it: false',
     'min-height just past it: ' + m(`(min-height: ${h + U * 1.0001}px)`));
+}
+</script>
+
+<script id=listeners>
+{
+  const mql = window.matchMedia('(min-width: 600px)');
+  let calls = 0;
+  const fn = () => calls++;
+
+  mql.addListener(fn);
+  mql.dispatchEvent(new Event('change'));
+  testing.expectEqual(1, calls);
+
+  mql.removeListener(fn);
+  mql.dispatchEvent(new Event('change'));
+  testing.expectEqual(1, calls);
+
+  mql.onchange = fn;
+  testing.expectEqual(fn, mql.onchange);
+  mql.dispatchEvent(new Event('change'));
+  testing.expectEqual(2, calls);
+  mql.onchange = null;
+  mql.dispatchEvent(new Event('change'));
+  testing.expectEqual(2, calls);
+
+  const ev = new MediaQueryListEvent('change', { matches: true, media: '(min-width: 600px)' });
+  testing.expectEqual(true, ev.matches);
+  testing.expectEqual('(min-width: 600px)', ev.media);
 }
 </script>

@@ -51,7 +51,7 @@ pub fn asNode(self: *Link) *Node {
 
 pub fn getHref(self: *Link, frame: *Frame) ![]const u8 {
     const element = self.asElement();
-    const href = element.getAttributeSafe(comptime .wrap("href")) orelse return "";
+    const href = element.getAttributeInterned("href") orelse return "";
     if (href.len == 0) {
         return "";
     }
@@ -68,7 +68,7 @@ pub fn setHref(self: *Link, value: []const u8, frame: *Frame) !void {
 }
 
 pub fn getRel(self: *Link) []const u8 {
-    return self.asElement().getAttributeSafe(comptime .wrap("rel")) orelse return "";
+    return self.asElement().getAttributeInterned("rel") orelse return "";
 }
 
 pub fn setRel(self: *Link, value: []const u8, frame: *Frame) !void {
@@ -76,7 +76,7 @@ pub fn setRel(self: *Link, value: []const u8, frame: *Frame) !void {
 }
 
 pub fn getMedia(self: *Link) []const u8 {
-    return self.asElement().getAttributeSafe(comptime .wrap("media")) orelse return "";
+    return self.asElement().getAttributeInterned("media") orelse return "";
 }
 
 pub fn setMedia(self: *Link, value: []const u8, frame: *Frame) !void {
@@ -118,12 +118,12 @@ pub fn linkAddedCallback(self: *Link, frame: *Frame) !void {
 
     const element = self.asElement();
 
-    const href = element.getAttributeSafe(comptime .wrap("href")) orelse return;
+    const href = element.getAttributeInterned("href") orelse return;
     if (href.len == 0) {
         return;
     }
 
-    const rel = element.getAttributeSafe(comptime .wrap("rel")) orelse return;
+    const rel = element.getAttributeInterned("rel") orelse return;
 
     // Opt-in fetch for `rel="stylesheet"` — drives `frame.loadExternalStylesheet`,
     // which fires the load/error event itself.
@@ -267,20 +267,26 @@ pub const Build = struct {
 };
 
 const testing = @import("../../../../testing.zig");
+// The fixture is about the <link> element itself -- its reflected attributes,
+// its load events, and what it does NOT fetch -- so it runs with external
+// stylesheets off. Off is not this fork's default (see Config.LoadResources),
+// which is exactly why it has to be said here: on, `rel=stylesheet` really
+// goes to the network and the `/nope` hrefs the fixture uses to prove a link
+// stays quiet would be real requests.
 test "WebApi: HTML.Link" {
-    try testing.htmlRunner("element/html/link.html", .{});
+    try testing.htmlRunner("element/html/link.html", .{ .load_resources = .{ .stylesheet = false, .worker = true, .iframe = true } });
 }
 
 // The stylesheet preload is a real fetch, so the runner has to be told to make
 // it: it leaves external stylesheets off by default.
 test "WebApi: HTML.Link preload fetches what it names" {
     testing.silenceLog(&.{.http});
-    try testing.htmlRunner("element/html/link_preload.html", .{ .load_external_stylesheets = true });
+    try testing.htmlRunner("element/html/link_preload.html", .{ .load_resources = .{ .stylesheet = true, .worker = true, .iframe = true } });
 }
 
 test "WebApi: HTML.Link external stylesheet" {
     testing.silenceLog(&.{.http});
-    try testing.htmlRunner("css/external_stylesheet.html", .{ .load_external_stylesheets = true });
+    try testing.htmlRunner("css/external_stylesheet.html", .{ .load_resources = .{ .stylesheet = true } });
 }
 
 // Regression: a synchronous external-stylesheet fetch must not strand the
@@ -289,5 +295,5 @@ test "WebApi: HTML.Link external stylesheet" {
 // never drains and the document is stuck at readyState "loading".
 test "WebApi: HTML.Link deferred script then external stylesheet" {
     testing.silenceLog(&.{.http});
-    try testing.htmlRunner("css/deferred_script_then_stylesheet.html", .{ .load_external_stylesheets = true });
+    try testing.htmlRunner("css/deferred_script_then_stylesheet.html", .{ .load_resources = .{ .stylesheet = true } });
 }

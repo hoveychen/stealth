@@ -167,10 +167,11 @@ pub const ConfigInit = struct {
 };
 
 pub const IceServerInit = struct {
+    // Alphabetical: a dictionary's members are read in that order.
+    credential: ?lp.String.Global = null,
     // `urls` is a string or a sequence of strings, so it arrives untyped.
     urls: ?js.Value = null,
     username: ?lp.String.Global = null,
-    credential: ?lp.String.Global = null,
 };
 
 // `config` is optional so the reported arity is 0, matching Chrome's
@@ -250,9 +251,10 @@ pub fn asEventTarget(self: *RTCPeerConnection) *EventTarget {
 // == the offer ==
 
 pub const OfferOptions = struct {
+    // Alphabetical: a dictionary's members are read in that order.
+    iceRestart: ?js.Value = null,
     offerToReceiveAudio: ?js.Value = null,
     offerToReceiveVideo: ?js.Value = null,
-    iceRestart: ?js.Value = null,
     voiceActivityDetection: ?js.Value = null,
 };
 

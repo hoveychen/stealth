@@ -2172,3 +2172,94 @@
   testing.expectEqual('128,128', st.getImageData(1, 4, 1, 1).data[3] + ',' + st.getImageData(2, 4, 1, 1).data[3]);
 }
 </script>
+
+<script id=CanvasRenderingContext2D#measureText_font_string>
+{
+  // The `font` property's own round-tripping. No width literals here: this
+  // fork measures against real font tables, so the advance for a string is
+  // asserted once, against Chrome's numbers, in the
+  // `CanvasRenderingContext2D#measureText` block above -- not derived from a
+  // 0.6em-per-character stand-in.
+  const ctx = document.createElement("canvas").getContext("2d");
+  testing.expectEqual("10px sans-serif", ctx.font);
+  const m = ctx.measureText("ab");
+  testing.expectEqual(true, m instanceof TextMetrics);
+  testing.expectTrue(m.width > 0);
+
+  ctx.font = "bold 20px Arial";
+  testing.expectEqual("bold 20px Arial", ctx.font);
+  testing.expectEqual(0, ctx.measureText("").width);
+
+  // Invalid font strings are ignored.
+  ctx.font = "bold";
+  testing.expectEqual("bold 20px Arial", ctx.font);
+
+  // Longer than the inline buffer.
+  const long = "8px " + Array.from({length: 40}, (_, i) => "'Family Number " + i + "'").join(", ");
+  ctx.font = long;
+  // Serialized with double quotes, the way Chrome serializes a quoted family.
+  testing.expectEqual(long.replace(/'/g, '"'), ctx.font);
+  ctx.font = "10px serif";
+  testing.expectEqual("10px serif", ctx.font);
+}
+</script>
+
+<script id=CanvasRenderingContext2D#noops>
+{
+  const ctx = document.createElement("canvas").getContext("2d");
+  ctx.setLineDash([4, 2]);
+  testing.expectEqual("4,2", ctx.getLineDash().join());
+  ctx.setLineDash([3]);
+  testing.expectEqual("3,3", ctx.getLineDash().join());
+  ctx.setLineDash([-1]);
+  testing.expectEqual("3,3", ctx.getLineDash().join());
+  ctx.setLineDash([]);
+  testing.expectEqual(0, ctx.getLineDash().length);
+  // Longer than the inline buffer once doubled.
+  ctx.setLineDash([1, 2, 3, 4, 5]);
+  testing.expectEqual("1,2,3,4,5,1,2,3,4,5", ctx.getLineDash().join());
+  ctx.setLineDash([6, 7]);
+  testing.expectEqual("6,7", ctx.getLineDash().join());
+  ctx.lineDashOffset = 2;
+  testing.expectEqual(2, ctx.lineDashOffset);
+
+  ctx.roundRect(0, 0, 10, 10, 2);
+  ctx.roundRect(0, 0, 10, 10, [1, 2]);
+  ctx.ellipse(5, 5, 4, 3, 0, 0, Math.PI * 2);
+  testing.expectEqual(false, ctx.isPointInPath(1, 1));
+  testing.expectEqual(false, ctx.isPointInStroke(1, 1));
+
+  const gradient = ctx.createLinearGradient(0, 0, 10, 0);
+  testing.expectEqual(true, gradient instanceof CanvasGradient);
+  gradient.addColorStop(0, "red");
+  gradient.addColorStop(1, "blue");
+  testing.expectError("IndexSizeError", () => gradient.addColorStop(2, "red"));
+  testing.expectEqual(true, ctx.createRadialGradient(0, 0, 1, 0, 0, 5) instanceof CanvasGradient);
+  testing.expectEqual(true, ctx.createConicGradient(0, 5, 5) instanceof CanvasGradient);
+  ctx.fillStyle = gradient;
+  testing.expectEqual(true, ctx.fillStyle === gradient);
+  ctx.strokeStyle = gradient;
+  testing.expectEqual(true, ctx.strokeStyle === gradient);
+  ctx.fillRect(0, 0, 10, 10);
+  ctx.fillStyle = "red";
+  testing.expectEqual("#ff0000", ctx.fillStyle);
+  ctx.strokeStyle = "not a color";
+  testing.expectEqual(true, ctx.strokeStyle === gradient);
+  ctx.strokeStyle = "blue";
+  testing.expectEqual("#0000ff", ctx.strokeStyle);
+
+  const pattern = ctx.createPattern(document.createElement("canvas"), "repeat");
+  testing.expectEqual(true, pattern instanceof CanvasPattern);
+  pattern.setTransform();
+  ctx.fillStyle = pattern;
+  testing.expectEqual(true, ctx.fillStyle === pattern);
+  testing.expectError("SyntaxError", () => ctx.createPattern(document.createElement("canvas"), "sideways"));
+
+  testing.expectEqual(0, ctx.shadowBlur);
+  testing.expectEqual("none", ctx.filter);
+  // Serialized the way every other canvas colour is -- Chrome answers the
+  // computed hex, not the keyword it was given.
+  ctx.shadowColor = "red";
+  testing.expectEqual("#ff0000", ctx.shadowColor);
+}
+</script>

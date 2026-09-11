@@ -48,13 +48,21 @@ _target_touches: *TouchList,
 _changed_touches: *TouchList,
 
 pub const TouchEventOptions = struct {
+    // Two IDL levels in one Zig struct: EventModifierInit's members first, then
+    // TouchEventInit's own, each group alphabetical -- which is the order Web
+    // IDL reads them in.
+    js_grouped_dictionary: void = {},
+
+    // EventModifierInit.
     altKey: bool = false,
-    metaKey: bool = false,
     ctrlKey: bool = false,
+    metaKey: bool = false,
     shiftKey: bool = false,
-    touches: ?[]const *Touch = null,
-    targetTouches: ?[]const *Touch = null,
+
+    // TouchEventInit.
     changedTouches: ?[]const *Touch = null,
+    targetTouches: ?[]const *Touch = null,
+    touches: ?[]const *Touch = null,
 };
 
 pub const Options = Event.inheritOptions(

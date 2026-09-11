@@ -50,11 +50,11 @@ pub const Native = struct {
 };
 
 const UnderlyingSink = struct {
-    start: ?js.Function = null,
-    write: ?js.Function.Global = null,
-    close: ?js.Function.Global = null,
     abort: ?js.Function.Global = null,
+    close: ?js.Function.Global = null,
+    start: ?js.Function = null,
     type: ?[]const u8 = null,
+    write: ?js.Function.Global = null,
 };
 
 pub fn init(sink_: ?UnderlyingSink, exec: *const Execution) !*WritableStream {

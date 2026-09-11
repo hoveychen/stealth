@@ -42,11 +42,12 @@ pub const Type = union(enum) {
 };
 
 pub const SpeechSynthesisEventOptions = struct {
-    utterance: *SpeechSynthesisUtterance,
+    // Alphabetical: a dictionary's members are read in that order.
     charIndex: u32 = 0,
     charLength: u32 = 0,
     elapsedTime: f64 = 0,
     name: []const u8 = "",
+    utterance: *SpeechSynthesisUtterance,
 };
 
 pub const Options = Event.inheritOptions(SpeechSynthesisEvent, SpeechSynthesisEventOptions);

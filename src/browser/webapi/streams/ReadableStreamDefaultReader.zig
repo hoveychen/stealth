@@ -99,6 +99,7 @@ pub fn read(self: *ReadableStreamDefaultReader, exec: *const Execution) !js.Prom
     const stream = self._stream orelse {
         return local.rejectPromise(.{ .type_error = "Reader has been released" });
     };
+    stream._disturbed = true;
 
     if (stream._state == .errored) {
         return local.rejectPromise(.{ .type_error = stream._stored_error orelse "Stream errored" });
@@ -125,7 +126,7 @@ pub fn read(self: *ReadableStreamDefaultReader, exec: *const Execution) !js.Prom
     }
 
     // No data, but not closed. We need to queue the read for any future data
-    return stream._controller.addPendingRead();
+    return stream._controller.addPendingRead(local);
 }
 
 pub fn releaseLock(self: *ReadableStreamDefaultReader) void {

@@ -153,7 +153,9 @@ const OpenContext = struct {
     // deliver the open request's outcome and clean up.
     fn drainUpgrade(self: *OpenContext) !?u32 {
         const txn = self._upgrade.?;
-        if (txn.settleStep(self.exec)) {
+        if (txn.settleStep(self.exec) or txn.abortDeliveryPending()) {
+            // either settle succeeded, and we have more batches to deliver, or
+            // abortDeliveryPending succeeded and we have an abort event.
             self._scheduled = true;
             return 1;
         }
@@ -171,12 +173,16 @@ const OpenContext = struct {
     // open request's outcome.
     fn finishUpgrade(self: *OpenContext, txn: *IDBTransaction) !void {
         const exec = self.exec;
-        const aborted = txn.aborted();
+        const db = txn._db;
+        // Our pin is often the last one, so releasing it frees `txn` (its
+        // arena goes back to the pool). Read everything we need first.
+        const failed = txn.aborted() or db._closed;
         self.request._txn = .none;
-        txn._db._txn = null;
+        db._txn = null;
         txn.releaseRef(exec.page);
 
-        if (aborted) {
+        if (failed) {
+            self.request._result = .{ .none = js.Undefined{} };
             self.request.setError(error.AbortError);
             return self.request.deliver(exec);
         }
@@ -249,6 +255,7 @@ const OpenContext = struct {
         self.request.setDatabaseResult(db);
 
         const txn = try IDBTransaction.initVersionChange(db, exec);
+        txn._old_version = existing orelse 0;
         txn.acquireRef();
 
         {
@@ -265,7 +272,12 @@ const OpenContext = struct {
             try self.request.fireUpgradeNeeded(exec, old_version, @intCast(requested));
         }
 
-        if (!txn.aborted() and txn._queue.items.len > 0) {
+        if (!txn.aborted() and txn._queue.items.len == 0) {
+            // Nothing queued, settle synchronously
+            txn.settle(exec);
+        }
+
+        if (txn.aborted() or txn._queue.items.len > 0) {
             // The handler left requests pending (e.g. a keep-alive loop).
             // Deliver their events one batch per scheduler turn — never
             // synchronously — so timer tasks can interleave and observe the
@@ -275,13 +287,6 @@ const OpenContext = struct {
             return true;
         }
 
-        if (!txn.aborted()) {
-            // Nothing queued: settle synchronously (commit + fire `complete`).
-            txn.settle(exec);
-        }
-        // An aborted transaction — the upgradeneeded handler called abort()
-        // (what a jerk!) — already rolled back; finishUpgrade delivers its
-        // AbortError.
         closed = true;
         try self.finishUpgrade(txn);
         return false;
@@ -385,13 +390,15 @@ const DeleteContext = struct {
     }
 };
 
-/// Resolves with the origin's database list. Empty: the engine's databases
-/// live in a per-origin sqlite file it does not enumerate, and the list is
-/// empty for a fresh origin in Chrome too. Being *absent* is the tell -- the
-/// name is on Chrome's prototype (measured).
+/// Resolves with the origin's database list. The name being *absent* is the
+/// tell -- it is on Chrome's prototype (measured) -- and so is answering an
+/// empty list for an origin that has just created a database.
 pub fn databases(_: *IDBFactory, exec: *Execution) !js.Promise {
-    const empty: []const struct {} = &.{};
-    return exec.js.local.?.resolvePromise(empty);
+    const local = exec.js.local.?;
+    // unavailable for opaque origins, e.g. about:blank
+    const origin = exec.origin() orelse return error.SecurityError;
+    const engine = try exec.session.idb.engineForOrigin(origin);
+    return local.resolvePromise(try engine.databases(exec.call_arena));
 }
 
 pub fn cmp(_: *IDBFactory, first: js.Value, second: js.Value, exec: *Execution) !i32 {

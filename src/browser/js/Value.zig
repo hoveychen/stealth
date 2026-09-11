@@ -124,8 +124,53 @@ pub fn isArrayBuffer(self: Value) bool {
     return v8.v8__Value__IsArrayBuffer(self.handle);
 }
 
+pub fn taggedOpaque(self: Value) ?*const TaggedOpaque {
+    // caller must ensure self.isObject()
+    return TaggedOpaque.fromObject(@ptrCast(self.handle));
+}
+
+// === for JS values: identity for objects, value equality for primitives.
+pub fn strictEquals(self: Value, other: Value) bool {
+    return v8.v8__Value__StrictEquals(self.handle, other.handle);
+}
+
 pub fn isDate(self: Value) bool {
     return v8.v8__Value__IsDate(self.handle);
+}
+
+pub fn dateValue(self: Value) f64 {
+    if (comptime lp.IS_DEBUG) {
+        std.debug.assert(self.isDate());
+    }
+    return v8.v8__Date__ValueOf(@ptrCast(self.handle));
+}
+
+pub fn isMap(self: Value) bool {
+    return v8.v8__Value__IsMap(self.handle);
+}
+
+pub fn isSet(self: Value) bool {
+    return v8.v8__Value__IsSet(self.handle);
+}
+
+pub fn isWeakMap(self: Value) bool {
+    return v8.v8__Value__IsWeakMap(self.handle);
+}
+
+pub fn isWeakSet(self: Value) bool {
+    return v8.v8__Value__IsWeakSet(self.handle);
+}
+
+pub fn isRegExp(self: Value) bool {
+    return v8.v8__Value__IsRegExp(self.handle);
+}
+
+pub fn isProxy(self: Value) bool {
+    return v8.v8__Value__IsProxy(self.handle);
+}
+
+pub fn isGeneratorObject(self: Value) bool {
+    return v8.v8__Value__IsGeneratorObject(self.handle);
 }
 
 pub fn isUint8Array(self: Value) bool {
@@ -520,11 +565,7 @@ const CloneDelegate = struct {
 
         blk: {
             const obj = object orelse break :blk;
-            if (v8.v8__Object__InternalFieldCount(obj) == 0) {
-                break :blk;
-            }
-            const tao_ptr = v8.v8__Object__GetAlignedPointerFromInternalField(obj, 0) orelse break :blk;
-            const tao: *TaggedOpaque = @ptrCast(@alignCast(tao_ptr));
+            const tao = TaggedOpaque.fromObject(obj) orelse break :blk;
 
             const prototype_chain = tao.prototype_chain[0..tao.prototype_len];
             if (writeCloneable(ctx, prototype_chain[0].index, tao.value)) |result| {
@@ -726,6 +767,49 @@ pub fn format(self: Value, writer: *std.Io.Writer) !void {
     const js_str = self.toString() catch return error.WriteFailed;
     return js_str.format(writer);
 }
+
+// The JS iteration protocol (@@iterator)
+pub fn iterator(self: Value) !?Iterator {
+    if (!self.isObject()) {
+        return null;
+    }
+    const source = self.toObject();
+
+    const method = try source.getSymbol(v8.v8__Symbol__GetIterator(self.local.isolate.handle).?);
+    if (method.isNullOrUndefined()) {
+        return null;
+    }
+    if (!method.isFunction()) {
+        return error.TypeError;
+    }
+    const iterator_fn: js.Function = .{ .local = self.local, .handle = @ptrCast(method.handle) };
+
+    const iterator_value = try iterator_fn.callWithThisRethrow(Value, source, .{});
+    if (!iterator_value.isObject()) {
+        return error.TypeError;
+    }
+    const iterator_object = iterator_value.toObject();
+    const next_fn = (try iterator_object.getFunction("next")) orelse return error.TypeError;
+
+    return .{ .object = iterator_object, .next_fn = next_fn };
+}
+
+pub const Iterator = struct {
+    object: js.Object,
+    next_fn: js.Function,
+    pub fn next(self: *const Iterator) !?Value {
+        const step = try self.next_fn.callWithThisRethrow(Value, self.object, .{});
+        if (!step.isObject()) {
+            return error.TypeError;
+        }
+
+        const step_object = step.toObject();
+        if ((try step_object.get("done")).toBool()) {
+            return null;
+        }
+        return try step_object.get("value");
+    }
+};
 
 // Copyable handle to our v8::Global wrapper so that releasing a copy resets
 // the underlying v8::Global

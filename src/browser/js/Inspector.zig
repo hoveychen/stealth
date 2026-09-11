@@ -374,18 +374,12 @@ pub fn getTaggedOpaque(value: *const v8.Value) ?*TaggedOpaque {
     if (!v8.v8__Value__IsObject(value)) {
         return null;
     }
-    const internal_field_count = v8.v8__Object__InternalFieldCount(value);
-    if (internal_field_count == 0) {
-        return null;
-    }
-
-    // Having internal fields is not the same as being one of ours. V8 reports a
-    // non-zero count for objects it lays out that way itself -- a promise is
+    // Having internal fields is not the same as being one of ours. V8 reports
+    // a non-zero count for objects it lays out that way itself -- a promise is
     // one -- and reads back a null pointer from the slot, so the count cannot
-    // stand in for the check. The two other readers of this slot (Value.zig,
-    // TaggedOpaque.zig) already treat null as "not a host object".
-    const tao_ptr = v8.v8__Object__GetAlignedPointerFromInternalField(value, 0) orelse return null;
-    return @ptrCast(@alignCast(tao_ptr));
+    // stand in for the check. fromObject makes all three of those tests, and
+    // it is what the other readers of this slot use.
+    return TaggedOpaque.fromObject(@ptrCast(value));
 }
 
 fn cZigStringToString(s: v8.CZigString) ?[]const u8 {

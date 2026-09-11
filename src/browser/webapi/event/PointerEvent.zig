@@ -71,21 +71,23 @@ _coalesced_events: []const *PointerEvent,
 _predicted_events: []const *PointerEvent,
 
 pub const PointerEventOptions = struct {
+    // Alphabetical: a dictionary's members are read in that order, and the
+    // reads are observable.
+    altitudeAngle: f64 = std.math.pi / 2.0,
+    azimuthAngle: f64 = 0.0,
+    coalescedEvents: []const *PointerEvent = &.{},
+    height: f64 = 1.0,
+    isPrimary: bool = false,
+    persistentDeviceId: i32 = 0,
     pointerId: i32 = 0,
     pointerType: []const u8 = "",
-    width: f64 = 1.0,
-    height: f64 = 1.0,
+    predictedEvents: []const *PointerEvent = &.{},
     pressure: f64 = 0.0,
     tangentialPressure: f64 = 0.0,
     tiltX: i32 = 0,
     tiltY: i32 = 0,
     twist: i32 = 0,
-    altitudeAngle: f64 = std.math.pi / 2.0,
-    azimuthAngle: f64 = 0.0,
-    isPrimary: bool = false,
-    persistentDeviceId: i32 = 0,
-    coalescedEvents: []const *PointerEvent = &.{},
-    predictedEvents: []const *PointerEvent = &.{},
+    width: f64 = 1.0,
 };
 
 const Options = Event.inheritOptions(

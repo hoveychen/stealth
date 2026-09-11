@@ -1687,6 +1687,47 @@ test "MediaQuery: min-height / max-height / height" {
     try testing.expect(!matches("(height: 1081px)", v));
 }
 
+test "MediaQuery: device-width / device-height" {
+    const v = Viewport.default;
+    try testing.expect(matches("(min-device-width: 1px)", v));
+    try testing.expect(matches("(min-device-width: 1920px)", v));
+    try testing.expect(!matches("(min-device-width: 1921px)", v));
+    try testing.expect(matches("(max-device-width: 1920px)", v));
+    try testing.expect(!matches("(max-device-width: 1919px)", v));
+    try testing.expect(matches("(device-width: 1920px)", v));
+    try testing.expect(!matches("(device-width: 1919px)", v));
+
+    // The DISPLAY's height, not the viewport's: `device-height` is
+    // `screen.height`, which in this fork is the viewport plus the browser
+    // shell plus the menu bar (see Viewport.screenHeight). 1200 for the
+    // default 1080 viewport.
+    try testing.expect(matches("(min-device-height: 1200px)", v));
+    try testing.expect(!matches("(min-device-height: 1201px)", v));
+    try testing.expect(matches("(max-device-height: 1200px)", v));
+    try testing.expect(!matches("(max-device-height: 1199px)", v));
+    try testing.expect(matches("(device-height: 1200px)", v));
+    try testing.expect(!matches("(device-height: 1201px)", v));
+
+    // boolean form and case-insensitivity
+    try testing.expect(matches("(device-width)", v));
+    try testing.expect(matches("(device-height)", v));
+    try testing.expect(matches("(MIN-DEVICE-WIDTH: 1px)", v));
+
+    // same unit and malformed-value handling as the non-device features
+    try testing.expect(matches("(min-device-width: 120em)", v)); // 1920px
+    try testing.expect(!matches("(min-device-width: 121em)", v));
+    // A negative `<length>` is well-formed and every display is above it --
+    // measured, same as `(min-width: -100px)` below.
+    try testing.expect(matches("(min-device-width: -1999px)", v));
+    try testing.expect(!matches("(min-device-width: foo)", v));
+    try testing.expect(matches("(min-device-width: 0)", v));
+
+    // `device-*` on a viewport smaller than the query, and combined queries
+    const small = Viewport{ .width = 375, .height = 667 };
+    try testing.expect(!matches("(min-device-width: 1024px)", small));
+    try testing.expect(matches("(max-device-width: 480px) and (orientation: portrait)", small));
+}
+
 test "MediaQuery: orientation" {
     const v = Viewport.default;
     try testing.expect(matches("(orientation: landscape)", v));

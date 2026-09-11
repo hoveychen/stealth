@@ -61,13 +61,14 @@ pub const RTCPeerConnectionIceErrorEvent = struct {
     _error_text: []const u8 = "",
 
     const Extra = struct {
+        // Alphabetical: a dictionary's members are read in that order.
         address: ?String.Global = null,
-        port: ?u32 = null,
-        url: ?String.Global = null,
         // Required. Optional here so a missing one is a TypeError from the
         // check in init() rather than a bridge conversion failure.
         errorCode: ?u32 = null,
         errorText: ?String.Global = null,
+        port: ?u32 = null,
+        url: ?String.Global = null,
     };
 
     pub const Options = Event.inheritOptions(RTCPeerConnectionIceErrorEvent, Extra);
@@ -318,9 +319,10 @@ pub const RTCTrackEvent = struct {
     _proto: *Event,
 
     const Extra = struct {
+        // Alphabetical: a dictionary's members are read in that order.
         receiver: ?js.Value = null,
-        track: ?js.Value = null,
         streams: ?[]const js.Value = null,
+        track: ?js.Value = null,
         transceiver: ?js.Value = null,
     };
 

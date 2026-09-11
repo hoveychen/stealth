@@ -58,9 +58,10 @@ _related_port: ?u32 = null,
 pub const Init = struct {
     pub const js_idl_name = "RTCIceCandidateInit";
 
+    // Alphabetical: a dictionary's members are read in that order.
     candidate: ?lp.String.Global = null,
-    sdpMid: ?lp.String.Global = null,
     sdpMLineIndex: ?u32 = null,
+    sdpMid: ?lp.String.Global = null,
     usernameFragment: ?lp.String.Global = null,
 };
 

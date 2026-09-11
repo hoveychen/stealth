@@ -254,3 +254,36 @@
   host.remove();
 }
 </script>
+
+<script id=ctm>
+{
+  const circle = document.querySelector('#transformed > g > circle');
+  const m = circle.getCTM();
+  // SVGMatrix, which in this engine is its own interface rather than the alias
+  // of DOMMatrix that Chrome exposes. Worth closing -- `SVGMatrix === DOMMatrix`
+  // is one expression -- but it is not something this fixture decides.
+  testing.expectEqual(true, m instanceof SVGMatrix);
+  testing.expectEqual(2, m.a);
+  testing.expectEqual(0, m.b);
+  testing.expectEqual(0, m.c);
+  testing.expectEqual(2, m.d);
+  testing.expectEqual(10, m.e);
+  testing.expectEqual(20, m.f);
+
+  const root = $('#root').getCTM();
+  testing.expectEqual(1, root.a);
+  testing.expectEqual(0, root.e);
+
+  const rect = $('#root').getBoundingClientRect();
+  const s = circle.getScreenCTM();
+  testing.expectEqual(2, s.a);
+  testing.expectEqual(rect.x + 10, s.e);
+  testing.expectEqual(rect.y + 20, s.f);
+
+  // The identity, not null: measured on Chrome for an element that is not in
+  // a document (see the note on Graphics.getCTM).
+  const detached = document.createElementNS('http://www.w3.org/2000/svg', 'rect').getCTM();
+  testing.expectEqual(1, detached.a);
+  testing.expectEqual(0, detached.e);
+}
+</script>

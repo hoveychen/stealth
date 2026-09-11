@@ -24,24 +24,24 @@ const Frame = @import("../Frame.zig");
 const Parser = @import("../parser/Parser.zig");
 
 const HTMLDocument = @import("HTMLDocument.zig");
+const Node = @import("Node.zig");
 const Document = @import("Document.zig");
 
 const DOMParser = @This();
 
-// Padding to avoid zero-size struct, which causes identity_map pointer collisions.
-_pad: bool = false,
+_frame: *Frame,
 
-pub fn init() DOMParser {
-    return .{};
+pub fn init(frame: *Frame) !*DOMParser {
+    return frame._factory.create(DOMParser{ ._frame = frame });
 }
 
 pub fn parseFromString(
-    _: *const DOMParser,
+    self: *const DOMParser,
     html: []const u8,
     mime_type: []const u8,
-    frame: *Frame,
 ) !*Document {
-    const target_mime = std.meta.stringToEnum(SupportedType, mime_type) orelse return error.NotSupported;
+    const frame = self._frame;
+    const target_mime = std.meta.stringToEnum(SupportedType, mime_type) orelse return error.TypeError;
 
     switch (target_mime) {
         .@"text/html" => {
@@ -59,10 +59,16 @@ pub fn parseFromString(
             frame._parse_mode = .fragment;
             defer frame._parse_mode = previous_parse_mode;
 
+            // No browsing context, so no custom element registry.
+            const previous_creation = frame._custom_element_creation;
+            frame._custom_element_creation = .undefined;
+            defer frame._custom_element_creation = previous_creation;
+
             // Create a new HTMLDocument
             const doc = try frame._factory.document(HTMLDocument{
                 ._proto = undefined,
             });
+            doc.asDocument()._url = frame.url;
 
             var normalized = std.mem.trim(u8, html, &std.ascii.whitespace);
             if (normalized.len == 0) {
@@ -96,6 +102,10 @@ pub fn parseFromString(
                 break :blk (try Frame.parse.xmlDocument(frame, "<parsererror xmlns=\"" ++ parsererror_ns ++ "\">error</parsererror>")).?;
             };
             const document = doc.asDocument();
+            // The document takes its URL from the realm the DOMParser was
+            // constructed in, not from whichever realm's parseFromString was
+            // invoked -- same as the text/html branch above.
+            document._url = frame.url;
             // `contentType` reports the mime the document was parsed as, the way
             // `createDocument` reports one derived from the namespace it was
             // given -- not a single stand-in for "some kind of XML".
@@ -126,7 +136,6 @@ pub const JsApi = struct {
         pub const name = "DOMParser";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
-        pub const empty_with_no_proto = true;
     };
 
     pub const constructor = bridge.constructor(DOMParser.init, .{});

@@ -20,16 +20,16 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const App = @import("../App.zig");
-const CDP = @import("../cdp/CDP.zig");
+const Watchdog = @import("../Watchdog.zig");
 const Notification = @import("../Notification.zig");
+const HttpClient = @import("../network/HttpClient.zig");
 
 const js = @import("js/js.zig");
 const Page = @import("Page.zig");
-const Watchdog = @import("../Watchdog.zig");
 const Session = @import("Session.zig");
-const Selector = @import("webapi/selector/Selector.zig");
 const Viewport = @import("Viewport.zig");
-const HttpClient = @import("../network/HttpClient.zig");
+const Selector = @import("webapi/selector/Selector.zig");
+const Geolocation = @import("webapi/geolocation/Geolocation.zig");
 const PermissionState = @import("webapi/Permissions.zig").State;
 
 const ArenaPool = App.ArenaPool;
@@ -86,6 +86,12 @@ voices_asked_at_micros: ?u64 = null,
 // observe the same (possibly overridden) value.
 viewport_override: ?Viewport = null,
 
+// Screenshot renderer (fonts, glyph cache); created on the first screenshot.
+renderer: ?*lp.screenshot.Renderer = null,
+
+// Runtime geolocation override
+geolocation_override: ?Geolocation.Override = null,
+
 // used by sessions to allocate pages.
 page_pool: std.heap.MemoryPool(Page),
 
@@ -125,7 +131,7 @@ pub fn nextFrameId(self: *Browser) u32 {
     return id;
 }
 
-pub fn init(self: *Browser, app: *App, opts: InitOpts, cdp: ?*CDP) !void {
+pub fn init(self: *Browser, app: *App, opts: InitOpts) !void {
     const allocator = app.allocator;
 
     var env = try js.Env.init(app, opts.env);
@@ -144,7 +150,7 @@ pub fn init(self: *Browser, app: *App, opts: InitOpts, cdp: ?*CDP) !void {
         .watchdog_entry = undefined,
     };
     self.env.protectHeapLimit();
-    try self.http_client.init(allocator, &app.network, cdp);
+    try self.http_client.init(app);
 
     self.watchdog_entry = .{
         .env = &self.env,
@@ -156,26 +162,29 @@ pub fn init(self: *Browser, app: *App, opts: InitOpts, cdp: ?*CDP) !void {
 pub fn deinit(self: *Browser) void {
     const allocator = self.allocator;
 
+    self.prepareForTeardown();
+
     self.closeSession();
 
     lp.metrics.js_heap_physical_bytes.add(-@as(i64, @intCast(self.last_reported_js_bytes)));
     self.last_reported_js_bytes = 0;
 
-    // After this returns, the watchdog thread holds no reference to our env
-    // or http_client — required before either is torn down.
-    self.app.watchdog.unregister(&self.watchdog_entry);
     self.env.deinit();
     // After env.deinit() the Isolate is gone, so no further weak finalizer can
     // fire — only now is it safe to free the pool backing their parameters.
     self.fc_identity_pool.deinit(allocator);
     self.page_pool.deinit(allocator);
-    if (self.http_client.cache) |cache| {
-        cache.maintenance(lp.datetime.timestamp(.real));
-    }
     self.http_client.deinit();
+    if (self.renderer) |r| r.deinit();
     self.clearPermissions();
     self.permissions.deinit(allocator);
     self.selector_cache.deinit();
+}
+
+// Wait out a watchdog scan before clearing its termination request.
+pub fn prepareForTeardown(self: *Browser) void {
+    self.app.watchdog.unregister(&self.watchdog_entry);
+    self.env.cancelTerminate();
 }
 
 // Set (or overwrite) the stored state for a permission. The name is duped into
@@ -204,6 +213,12 @@ pub fn clearPermissions(self: *Browser) void {
 
 // The viewport every consumer should read: the runtime override if set,
 // otherwise the compile-time default.
+pub fn setViewportOverride(self: *Browser, viewport: ?Viewport) void {
+    self.viewport_override = viewport;
+    const session = &(self.session orelse return);
+    for (session.pages.items) |page| page.viewportChanged();
+}
+
 pub fn getViewport(self: *const Browser) Viewport {
     return self.viewport_override orelse Viewport.default;
 }

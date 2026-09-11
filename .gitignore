@@ -14,7 +14,7 @@ zig-out-rel
 # instrumentation drivers need goes -- 258MB, same reason.
 zig-out-dbg
 lightpanda.id
-/src/html5ever/target/
+/src/rust/target/
 src/snapshot.bin
 /v8/
 /.worktrees/
