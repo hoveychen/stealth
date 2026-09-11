@@ -26,7 +26,6 @@ const URL = @import("../URL.zig");
 const Page = @import("../../Page.zig");
 const Blob = @import("../Blob.zig");
 const AbortSignal = @import("../AbortSignal.zig");
-const ContentTypeIterator = @import("../../Mime.zig").ContentTypeIterator;
 
 const Headers = @import("Headers.zig");
 const FormData = @import("FormData.zig");
@@ -51,9 +50,9 @@ _arena: *lp.Arena,
 _cache: Cache,
 _credentials: Credentials,
 _redirect: Redirect,
+_mode: Mode,
 _signal: ?*AbortSignal,
 _body_used: bool = false,
-_mode: Mode = .cors,
 _referrer: []const u8 = REFERRER_CLIENT,
 _referrer_policy: []const u8 = "",
 _integrity: []const u8 = "",
@@ -237,12 +236,12 @@ fn initWithContext(input: Input, opts_: ?InitOpts, exec: *const Execution, prefi
         .request => |r| r._method,
     };
 
-    var headers = if (opts.headers) |headers_init| switch (headers_init) {
-        .obj => |h| h,
-        else => try Headers.init(headers_init, exec),
-    } else switch (input) {
+    const guard = headerGuard(mode);
+    var headers = if (opts.headers) |headers_init|
+        try Headers.initGuarded(headers_init, guard, exec)
+    else switch (input) {
         .url => null,
-        .request => |r| r._headers,
+        .request => |r| if (r._headers) |h| try Headers.initGuarded(.{ .obj = h }, guard, exec) else null,
     };
 
     if (opts.duplex) |duplex| {
@@ -273,8 +272,8 @@ fn initWithContext(input: Input, opts_: ?InitOpts, exec: *const Execution, prefi
         // Per Fetch §6.5 step 11, the default Content-Type only applies if
         // the user has not already set one via the headers init dict.
         if (extracted.content_type) |ct| {
-            const hs = headers orelse try Headers.init(null, exec);
-            if (!hs.has("content-type", exec)) {
+            const hs = headers orelse try Headers.initGuarded(null, guard, exec);
+            if (try hs.has("content-type", exec) == false) {
                 try hs.append("content-type", ct, exec);
             }
             headers = hs;
@@ -452,9 +451,13 @@ pub fn getHeaders(self: *Request, exec: *const Execution) !*Headers {
         return headers;
     }
 
-    const headers = try Headers.init(null, exec);
+    const headers = try Headers.initGuarded(null, headerGuard(self._mode), exec);
     self._headers = headers;
     return headers;
+}
+
+fn headerGuard(mode: Mode) Headers.Guard {
+    return if (mode == .@"no-cors") .request_no_cors else .request;
 }
 
 pub fn getBodyUsed(self: *const Request) bool {
@@ -573,37 +576,13 @@ pub fn formData(self: *Request, exec: *const Execution) !js.Promise {
     const body = try self.bodyBytes();
 
     const headers = try self.getHeaders(exec);
-    const content_type = try headers.get("content-type", exec) orelse {
-        return local.rejectPromise(.{ .type_error = "Failed to parse body as FormData" });
+    const content_type = try headers.get("content-type", exec);
+    // Per Fetch, a null body acts as an empty byte sequence.
+    const form_data = body_init.parseFormData(body, content_type, exec) catch |err| switch (err) {
+        error.OutOfMemory => return err,
+        error.TypeError => return local.typeError("Failed to parse body as FormData"),
     };
-    var it = ContentTypeIterator.init(content_type);
-    const essence = it.essence;
-
-    // [RFC7578]
-    // Parse bytes, using the value of the `boundary` parameter from mimeType,
-    // per the rules set forth in Returning Values from Forms: multipart/form-data.
-    if (std.ascii.eqlIgnoreCase(essence, "multipart/form-data")) {
-        const boundary = it.findBoundary();
-        if (boundary.len == 0) {
-            return local.rejectPromise(.{ .type_error = "Failed to parse body as FormData" });
-        }
-
-        const form_data = FormData.initFromMultipart(body, boundary, exec) catch |err| switch (err) {
-            error.OutOfMemory => return err,
-            else => return local.rejectPromise(.{ .type_error = "Failed to parse body as FormData" }),
-        };
-        return local.resolvePromise(form_data);
-    }
-
-    if (std.ascii.eqlIgnoreCase(essence, "application/x-www-form-urlencoded")) {
-        const form_data = FormData.initFromUrlEncoded(body, exec) catch |err| switch (err) {
-            error.OutOfMemory => return err,
-            else => return local.rejectPromise(.{ .type_error = "Failed to parse body as FormData" }),
-        };
-        return local.resolvePromise(form_data);
-    }
-
-    return local.rejectPromise(.{ .type_error = "Failed to parse body as FormData" });
+    return local.resolvePromise(form_data);
 }
 
 pub fn clone(self: *Request, exec: *const Execution) !*Request {
@@ -620,6 +599,7 @@ pub fn clone(self: *Request, exec: *const Execution) !*Request {
         ._cache = self._cache,
         ._credentials = self._credentials,
         ._redirect = self._redirect,
+        ._mode = self._mode,
         ._body = if (self._body) |b| try arena.dupe(u8, b) else null,
         ._body_stream = null,
         ._signal = self._signal,

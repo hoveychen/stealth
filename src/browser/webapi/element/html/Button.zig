@@ -53,7 +53,7 @@ pub fn asNode(self: *Button) *Node {
 }
 
 pub fn getType(self: *const Button) []const u8 {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("type")) orelse "submit";
+    return self.asConstElement().getAttributeInterned("type") orelse "submit";
 }
 
 pub fn getForm(self: *Button, frame: *Frame) ?*Form {
@@ -124,7 +124,7 @@ pub fn setFormNoValidate(self: *Button, value: bool, frame: *Frame) !void {
 // are barred from constraint validation entirely.
 
 pub fn getWillValidate(self: *const Button) bool {
-    if (self.getDisabled()) return false;
+    if (self.asConstElement().isDisabled()) return false;
     return std.mem.eql(u8, self.getType(), "submit");
 }
 
@@ -187,11 +187,11 @@ pub fn setPopoverTargetAction(self: *Button, value: []const u8, frame: *Frame) !
 }
 
 pub fn getDisabled(self: *const Button) bool {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("disabled")) != null;
+    return self.asConstElement().getAttributeInterned("disabled") != null;
 }
 
 pub fn getValue(self: *const Button) []const u8 {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("value")) orelse "";
+    return self.asConstElement().getAttributeInterned("value") orelse "";
 }
 
 pub const JsApi = struct {

@@ -50,6 +50,14 @@ pub fn get(self: Object, key: anytype) !js.Value {
     };
 }
 
+pub fn getSymbol(self: Object, symbol: *const v8.Symbol) !js.Value {
+    const handle = v8.v8__Object__Get(self.handle, self.local.handle, @ptrCast(symbol)) orelse return error.JsException;
+    return .{
+        .handle = handle,
+        .local = self.local,
+    };
+}
+
 pub fn set(self: Object, key: anytype, value: anytype, comptime opts: js.Caller.CallOpts) !bool {
     const ctx = self.local.ctx;
 
@@ -170,17 +178,16 @@ pub fn getPropertyNames(self: Object) js.Array {
     };
 }
 
-pub fn nameIterator(self: Object) !NameIterator {
-    const handle = v8.v8__Object__GetOwnPropertyNames(self.handle, self.local.handle) orelse {
+pub fn iterator(self: Object) !Iterator {
+    const names = v8.v8__Object__GetOwnPropertyNames(self.handle, self.local.handle) orelse {
         // see getOwnPropertyNames above
         return error.TypeError;
     };
-    const count = v8.v8__Array__Length(handle);
 
     return .{
-        .local = self.local,
-        .handle = handle,
-        .count = count,
+        .object = self,
+        .names = names,
+        .count = v8.v8__Array__Length(names),
     };
 }
 
@@ -211,21 +218,35 @@ pub const Global = struct {
     }
 };
 
-pub const NameIterator = struct {
+pub const Iterator = struct {
     count: u32,
     idx: u32 = 0,
-    local: *const js.Local,
-    handle: *const v8.Array,
+    object: Object,
+    names: *const v8.Array,
 
-    pub fn next(self: *NameIterator) !?[]const u8 {
+    pub const Entry = struct {
+        name: []const u8,
+        value: js.Value,
+    };
+
+    pub fn next(self: *Iterator) !?Entry {
         const idx = self.idx;
         if (idx == self.count) {
             return null;
         }
-        self.idx += 1;
+        self.idx = idx + 1;
 
-        const local = self.local;
-        const js_val_handle = v8.v8__Object__GetIndex(@ptrCast(self.handle), local.handle, idx) orelse return error.JsException;
-        return try js.Value.toStringSlice(.{ .local = local, .handle = js_val_handle });
+        const object = self.object;
+        const local = object.local;
+        const name_handle = v8.v8__Object__GetIndex(@ptrCast(self.names), local.handle, idx) orelse return error.JsException;
+        const js_name = try js.Value.toString(.{ .local = local, .handle = name_handle });
+
+        // look this up by the js_name, not the js_name.toSlice() which can do
+        // a lossy UTF-8 conversion.
+        const value = try object.get(js_name.handle);
+        return .{
+            .value = value,
+            .name = try js_name.toSlice(),
+        };
     }
 };

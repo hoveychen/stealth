@@ -286,6 +286,34 @@ pub fn transferToImageBitmap(self: *OffscreenCanvas, exec: *Execution) !*ImageBi
     });
 }
 
+pub const BlankPNG = struct {
+    const mime = "image/png";
+
+    const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==";
+
+    pub const data_url = "data:" ++ mime ++ ";base64," ++ base64;
+
+    pub const bytes = blk: {
+        const decoder = std.base64.standard.Decoder;
+        var buf: [decoder.calcSizeForSlice(base64) catch unreachable]u8 = undefined;
+        decoder.decode(&buf, base64) catch unreachable;
+        break :blk buf;
+    };
+
+    /// Largest canvas Chrome backs with a bitmap (16384 x 16384). Past that, and
+    /// at zero size, there are no pixels to serialize and the serializers answer
+    /// with the spec's "no data" values.
+    const max_area = 16384 * 16384;
+
+    pub fn hasBitmap(width: u32, height: u32) bool {
+        return width > 0 and height > 0 and @as(u64, width) * height <= max_area;
+    }
+
+    pub fn blob(exec: *js.Execution) !*Blob {
+        return Blob.initFromBytes(&BlankPNG.bytes, BlankPNG.mime, exec);
+    }
+};
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(OffscreenCanvas);
 

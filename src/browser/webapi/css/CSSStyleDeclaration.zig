@@ -105,7 +105,7 @@ pub fn parseInlineStyle(self: *CSSStyleDeclaration, frame: *Frame) !void {
         return;
     }
     const el = self._element orelse return;
-    const attr_value = el.getAttributeSafe(comptime .wrap("style")) orelse return;
+    const attr_value = el.getAttributeInterned("style") orelse return;
     try self.applyDeclarations(attr_value, frame);
 }
 
@@ -4659,6 +4659,18 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
     );
 }
 
+/// A property's `_value` is the one field a live page rewrites over and over
+/// (a `transform` driven from rAF is a write per frame), so it is the one field
+/// held by the factory's storage allocator rather than the frame arena: the
+/// slab hands the same block back when the replacement is the same size, which
+/// an arena cannot do. `_name` and `_raw` stay on the arena -- a name never
+/// changes and `_raw` is only written alongside a new property.
+fn initOwnedString(allocator: Allocator, value: []const u8) !String {
+    if (value.len <= 12) return String.wrap(value);
+    if (value.len >= std.math.maxInt(i32)) return error.StringTooLarge;
+    return String.wrap(try allocator.dupe(u8, value));
+}
+
 fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_value: []const u8, specified: ?f64, raw: ?[]const u8, important: bool, frame: *Frame) !bool {
 
     // Find existing property
@@ -4679,7 +4691,10 @@ fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_
         if (existing._important == important and std.mem.eql(u8, existing._value.str(), normalized_value)) {
             return false;
         }
-        existing._value = try String.init(frame.arena, normalized_value, .{});
+        const storage = frame._factory.storageAllocator();
+        const new_value = try initOwnedString(storage, normalized_value);
+        existing._value.deinit(storage);
+        existing._value = new_value;
         existing._specified = specified;
         existing._raw = if (raw) |r| try String.init(frame.arena, r, .{}) else null;
         existing._important = important;
@@ -4690,7 +4705,7 @@ fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_
     const prop = try frame._factory.create(Property{
         ._node = .{},
         ._name = try String.init(frame.arena, normalized, .{}),
-        ._value = try String.init(frame.arena, normalized_value, .{}),
+        ._value = try initOwnedString(frame._factory.storageAllocator(), normalized_value),
         ._specified = specified,
         ._raw = if (raw) |r| try String.init(frame.arena, r, .{}) else null,
         ._important = important,
@@ -4719,6 +4734,7 @@ fn removePropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, fra
         for (entry.longhands) |longhand| {
             const prop = self.findProperty(.wrap(longhand)) orelse continue;
             self._properties.remove(&prop._node);
+            prop._value.deinit(frame._factory.storageAllocator());
             frame._factory.destroy(prop);
         }
         return old_value;
@@ -4730,6 +4746,7 @@ fn removePropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, fra
     // optimization), so we need to dupe it.
     const old_value = try frame.call_arena.dupe(u8, prop._value.str());
     self._properties.remove(&prop._node);
+    prop._value.deinit(frame._factory.storageAllocator());
     frame._factory.destroy(prop);
     return old_value;
 }
@@ -4764,6 +4781,7 @@ fn clearProperties(self: *CSSStyleDeclaration, frame: *Frame) void {
         const next = n.next;
         const prop = Property.fromNodeLink(n);
         self._properties.remove(n);
+        prop._value.deinit(frame._factory.storageAllocator());
         frame._factory.destroy(prop);
         node = next;
     }
@@ -4899,6 +4917,20 @@ pub fn format(self: *const CSSStyleDeclaration, writer: *std.Io.Writer) !void {
         }
     }
 }
+
+pub fn iterator(self: *const CSSStyleDeclaration) Iterator {
+    return .{ .node = self._properties.first };
+}
+
+pub const Iterator = struct {
+    node: ?*std.DoublyLinkedList.Node,
+
+    pub fn next(self: *Iterator) ?*Property {
+        const node = self.node orelse return null;
+        self.node = node.next;
+        return Property.fromNodeLink(node);
+    }
+};
 
 pub fn findProperty(self: *const CSSStyleDeclaration, name: String) ?*Property {
     var node = self._properties.first;
@@ -7692,13 +7724,13 @@ pub fn values(self: *CSSStyleDeclaration, exec: *js.Execution) !*ValueIterator {
     return .init(.{ .declaration = self }, exec);
 }
 
-const Iterator = struct {
+const ValueIteratorSource = struct {
     index: u32 = 0,
     declaration: *CSSStyleDeclaration,
 
     const Entry = struct { u32, []const u8 };
 
-    pub fn next(self: *Iterator, _: *js.Execution) ?Entry {
+    pub fn next(self: *ValueIteratorSource, _: *js.Execution) ?Entry {
         const index = self.index;
         if (index >= self.declaration.indexedLength()) {
             return null;
@@ -7709,7 +7741,7 @@ const Iterator = struct {
 };
 
 const GenericIterator = @import("../collections/iterator.zig").Entry;
-pub const ValueIterator = GenericIterator(Iterator, "1");
+pub const ValueIterator = GenericIterator(ValueIteratorSource, "1");
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(CSSStyleDeclaration);
@@ -7758,6 +7790,25 @@ pub const JsApi = struct {
 };
 
 const testing = @import("../../../testing.zig");
+test "CSS property value storage is reused" {
+    const frame = try testing.createFrame();
+    defer testing.test_session.closeAllPages();
+
+    var style = CSSStyleDeclaration{};
+    defer style.clearProperties(frame);
+
+    _ = try style.setPropertyImpl("transform", "translate3d(1px,0,0)", false, frame);
+    const first_ptr = style.findProperty(comptime .wrap("transform")).?._value.suffix.ptr;
+    _ = try style.setPropertyImpl("transform", "translate3d(2px,0,0)", false, frame);
+    _ = try style.setPropertyImpl("transform", "translate3d(3px,0,0)", false, frame);
+
+    const property = style.findProperty(comptime .wrap("transform")).?;
+    try testing.expectEqual(first_ptr, property._value.suffix.ptr);
+    // Normalized, unlike upstream: this fork serializes a transform the way
+    // Chrome does, so the stored value is the canonical spelling.
+    try std.testing.expectEqualStrings("translate3d(3px, 0px, 0px)", property._value.str());
+}
+
 test "normalizePropertyValue: unitless zero to 0px" {
     const cases = .{
         .{ "width", "0", "0px" },

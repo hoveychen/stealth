@@ -342,7 +342,10 @@ const WEB_API_TEST_ROOT = "src/browser/tests/";
 const HtmlRunnerOpts = struct {
     timeout_ms: u32 = 2000,
     inject_script: ?[]const u8 = null,
-    load_external_stylesheets: bool = false,
+    load_resources: Config.LoadResources = .{
+        .worker = true,
+        .iframe = true,
+    },
     // Shortens the engine-wide request timeout (normally 5s) for the duration
     // of the run, so a test can reach it without stalling the suite.
     http_timeout_ms: ?u31 = null,
@@ -382,8 +385,12 @@ pub fn htmlRunner(comptime path: []const u8, opts: HtmlRunnerOpts) !void {
     }
     defer test_session.inject_scripts = &.{};
 
-    test_session.load_external_stylesheets = opts.load_external_stylesheets;
-    defer test_session.load_external_stylesheets = false;
+    test_session.load_resources = opts.load_resources;
+    defer test_session.load_resources = .{
+        // original defaults, tests expect these to be on
+        .worker = true,
+        .iframe = true,
+    };
 
     const previous_http_timeout = test_config.mode.serve.http_timeout;
     if (opts.http_timeout_ms) |http_timeout_ms| {
@@ -524,11 +531,11 @@ pub fn pageTest(comptime test_file: []const u8, opts: PageTestOpts) !Session.Pag
     return page;
 }
 
-const TestHTTPServer = @import("TestHTTPServer.zig");
+const Server = @import("server/Server.zig");
 const TestWSServer = @import("TestWSServer.zig");
+const TestHTTPServer = @import("TestHTTPServer.zig");
 
-const Server = @import("Server.zig");
-var test_cdp_server: ?*Server = null;
+pub var test_cdp_server: ?*Server = null;
 var test_cdp_server_thread: ?std.Thread = null;
 var test_http_server: ?TestHTTPServer = null;
 var test_http_server_thread: ?std.Thread = null;
@@ -541,7 +548,7 @@ var test_ws_server_thread: ?std.Thread = null;
 var sse_flag = std.atomic.Value(bool).init(false);
 var sse_reconnect_hits = std.atomic.Value(usize).init(0);
 
-var test_config: Config = undefined;
+pub var test_config: Config = undefined;
 
 // The three test servers bind fixed ports (9582 HTTP, 9583 CDP, 9584 WS), so two
 // test binaries on one machine are two binaries wanting the same three ports.
@@ -603,16 +610,20 @@ test "tests:beforeAll" {
 
     const test_allocator = @import("root").tracking_allocator;
 
-    test_config = try Config.init(test_allocator, "test", .{ .serve = .{
-        .insecure_disable_tls_host_verification = true,
-        .user_agent_suffix = "internal-tester",
-        .ws_max_concurrent = 50,
-    } });
+    test_config = try Config.init(test_allocator, "test", .{
+        .serve = .{
+            .insecure_disable_tls_host_verification = true,
+            .user_agent_suffix = "internal-tester",
+            .ws_max_concurrent = 50,
+            .load_resources = .{ .worker = true, .iframe = true },
+            .watchdog_ms = 0,
+        },
+    });
 
     test_app = try App.init(test_allocator, &test_config);
     errdefer test_app.deinit();
 
-    try test_browser.init(test_app, .{}, null);
+    try test_browser.init(test_app, .{});
     errdefer test_browser.deinit();
 
     // Create notification for testing
@@ -638,7 +649,9 @@ test "tests:beforeAll" {
 }
 
 test "tests:afterAll" {
-    test_app.network.stop();
+    if (test_cdp_server) |server| {
+        server.shutdown();
+    }
     if (test_cdp_server_thread) |thread| {
         thread.join();
     }
@@ -688,9 +701,10 @@ fn serveCDP(wg: *lp.WaitGroup) !void {
         wg.finish();
         return err;
     };
+    test_cdp_server.?.protocols = .{ .cdp = true, .webdriver = true };
     wg.finish();
 
-    test_app.network.run();
+    test_cdp_server.?.run();
 }
 
 // /serve-count/ counters; only ever touched from the test HTTP server thread.
@@ -1230,6 +1244,33 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    // Scripts, so a cross-origin (localhost) load doesn't depend on CORS.
+    if (std.mem.eql(u8, path, "/resource-timing/tao")) {
+        return req.respond("window.__rt_tao = true;", .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/javascript" },
+                .{ .name = "Timing-Allow-Origin", .value = "https://example.com, *" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/resource-timing/plain")) {
+        return req.respond("window.__rt_plain = true;", .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/javascript" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/resource-timing/redirect")) {
+        return req.respond("", .{
+            .status = .found,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "/resource-timing/plain" },
+            },
+        });
+    }
+
     if (std.mem.eql(u8, path, "/redirect-no-fragment")) {
         return req.respond("", .{
             .status = .found,
@@ -1424,6 +1465,10 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    if (std.mem.eql(u8, path, "/xhr/no_content_type")) {
+        return req.respond("untyped", .{});
+    }
+
     if (std.mem.eql(u8, path, "/xhr/binary")) {
         return req.respond(&.{ 0, 0, 1, 2, 0, 0, 9 }, .{
             .extra_headers = &.{
@@ -1441,6 +1486,24 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
                 .{ .name = "Content-Type", .value = "text/event-stream" },
             },
         });
+    }
+
+    if (std.mem.eql(u8, path, "/stop_loading/streaming.html")) {
+        var send_buffer: [1024]u8 = undefined;
+        var res = try req.respondStreaming(&send_buffer, .{
+            .respond_options = .{
+                .extra_headers = &.{
+                    .{ .name = "Content-Type", .value = "text/html; charset=utf-8" },
+                },
+            },
+        });
+        try res.writer.writeAll("<html><body><p id=first>first</p>");
+        try res.writer.flush();
+        try res.flush();
+        lp.io.sleep(.fromMilliseconds(1500), .awake) catch {};
+        try res.writer.writeAll("<p id=second>second</p></body></html>");
+        try res.writer.flush();
+        return res.end();
     }
 
     if (std.mem.eql(u8, path, "/sse/streaming")) {
@@ -1570,6 +1633,81 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    // Bodies are non-empty so that libcurl always reaches the write callback,
+    // which is where a headers_only request decides whether to drain or abort.
+    // ok.png takes the abort branch, small.png the drain branch; both must
+    // behave identically as far as the DOM is concerned.
+    if (std.mem.eql(u8, path, "/images/ok.png")) {
+        // A real PNG header followed by padding: > HEADERS_ONLY_DRAIN_MAX so
+        // the transfer takes the abort branch, but still a picture -- this
+        // engine decides `load` vs `error` from the bytes, not the status, so
+        // a body of 'x' would answer `error` for a 200.
+        const body = try arena_allocator.alloc(u8, 16 * 1024 + 1);
+        @memset(body, 'x');
+        @memcpy(body[0..ONE_PIXEL_PNG.len], &ONE_PIXEL_PNG);
+        return req.respond(body, .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "image/png" },
+            },
+        });
+    }
+
+    // startsWith, not eql: a caller can append a query string to get distinct
+    // URLs (and so distinct transfers) off this one route.
+    if (std.mem.startsWith(u8, path, "/images/small.png")) {
+        const body = try arena_allocator.alloc(u8, 1024);
+        @memset(body, 'x');
+        @memcpy(body[0..ONE_PIXEL_PNG.len], &ONE_PIXEL_PNG);
+        return req.respond(body, .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "image/png" },
+            },
+        });
+    }
+
+    // No Content-Length: whether the body is small enough to drain can only
+    // be decided as it arrives.
+    if (std.mem.eql(u8, path, "/images/chunked.png")) {
+        var send_buffer: [1024]u8 = undefined;
+        var res = try req.respondStreaming(&send_buffer, .{
+            .respond_options = .{
+                .extra_headers = &.{
+                    .{ .name = "Content-Type", .value = "image/svg+xml" },
+                },
+            },
+        });
+        try res.writer.writeAll("<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
+        try res.writer.flush();
+        return res.end();
+    }
+
+    if (std.mem.eql(u8, path, "/images/404.png")) {
+        return req.respond("not here", .{
+            .status = .not_found,
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/plain" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/images/500.png")) {
+        return req.respond("boom", .{
+            .status = .internal_server_error,
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/plain" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/images/redirect.png")) {
+        return req.respond("", .{
+            .status = .found,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "/images/ok.png" },
+            },
+        });
+    }
+
     if (std.mem.eql(u8, path, "/echo_referer")) {
         // Echo the request's Referer header back as HTML so tests can assert
         // what Referer the navigation sent. Used by the cross-page Referer test.
@@ -1671,6 +1809,41 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         return req.respond(buf[0..pos], .{
             .extra_headers = &.{
                 .{ .name = "Content-Type", .value = "text/plain; charset=utf-8" },
+                // Readable cross-origin, so a test can look at the headers a
+                // request carried across an origin hop. Without it the CORS
+                // response check refuses the body and the only thing the test
+                // could assert is that it failed.
+                .{ .name = "Access-Control-Allow-Origin", .value = "*" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/set_cookie")) {
+        return req.respond("", .{
+            .extra_headers = &.{
+                .{ .name = "Set-Cookie", .value = "lp_hidden=1; Path=/set_cookie_scope" },
+                .{ .name = "X-Visible", .value = "yes" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/redirect_same_echo_headers")) {
+        // Same-origin 302 to /echo_headers: Authorization must survive the hop.
+        return req.respond("", .{
+            .status = .found,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "/echo_headers" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/redirect_cross_echo_headers")) {
+        // 302 to /echo_headers on the localhost alias — a cross-origin hop, so
+        // Authorization must be stripped before the request is re-sent.
+        return req.respond("", .{
+            .status = .found,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "http://localhost:9582/echo_headers" },
             },
         });
     }

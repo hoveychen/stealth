@@ -83,18 +83,20 @@ pub const Status = enum {
 /// back "90%" (measured on Chrome 151). Every field is optional and an absent
 /// one leaves the default alone.
 pub const Descriptors = struct {
-    style: ?[]const u8 = null,
-    weight: ?[]const u8 = null,
-    stretch: ?[]const u8 = null,
-    unicodeRange: ?[]const u8 = null,
-    variant: ?[]const u8 = null,
-    featureSettings: ?[]const u8 = null,
-    display: ?[]const u8 = null,
+    // Alphabetical: a dictionary's members are read in that order, and the
+    // reads are observable.
     ascentOverride: ?[]const u8 = null,
     descentOverride: ?[]const u8 = null,
+    display: ?[]const u8 = null,
+    featureSettings: ?[]const u8 = null,
     lineGapOverride: ?[]const u8 = null,
     sizeAdjust: ?[]const u8 = null,
+    stretch: ?[]const u8 = null,
+    style: ?[]const u8 = null,
+    unicodeRange: ?[]const u8 = null,
+    variant: ?[]const u8 = null,
     variationSettings: ?[]const u8 = null,
+    weight: ?[]const u8 = null,
 };
 
 pub fn init(family: []const u8, source: []const u8, descriptors_: ?Descriptors, exec: *const Execution) !*FontFace {

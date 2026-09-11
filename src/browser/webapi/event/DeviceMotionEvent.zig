@@ -57,9 +57,11 @@ const RotationRateInit = struct {
 };
 
 const DeviceMotionEventOptions = struct {
-    interval: f64 = 0,
+    // Alphabetical: a dictionary's members are read in that order, and the
+    // reads are observable.
     acceleration: ?AccelerationInit = null,
     accelerationIncludingGravity: ?AccelerationInit = null,
+    interval: f64 = 0,
     rotationRate: ?RotationRateInit = null,
 };
 

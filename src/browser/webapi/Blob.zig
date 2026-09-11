@@ -22,8 +22,6 @@ const lp = @import("lightpanda");
 const js = @import("../js/js.zig");
 const Page = @import("../Page.zig");
 
-const Mime = @import("../Mime.zig");
-
 const Writer = std.Io.Writer;
 const Execution = js.Execution;
 
@@ -73,17 +71,36 @@ const InitOptions = struct {
     // carry; nothing derives it from the Zig one.
     pub const js_idl_name = "BlobPropertyBag";
 
-    /// MIME type.
-    type: []const u8 = "",
+    // Alphabetical: a dictionary's members are read in that order.
     /// How to handle line endings (CR and LF).
     /// `transparent` means do nothing, `native` expects CRLF (\r\n) on Windows.
     endings: []const u8 = "transparent",
+    /// MIME type.
+    type: []const u8 = "",
 };
 
 /// Creates a new Blob from JS values with optional MIME validation.
 /// This is the JS Constructor
-pub fn init(parts_: ?[]const js.Value, opts_: ?InitOptions, exec: *const Execution) !*Blob {
-    const blob = try buildValue(parts_, opts_ orelse .{}, exec);
+pub fn init(parts_: ?js.Value, opts_: ?js.Value, exec: *const Execution) !*Blob {
+    const parts = if (parts_) |p| try collectParts("Blob", p, exec) else null;
+    const blob = try buildValue(parts, blk: {
+        const o = opts_ orelse break :blk .{};
+        if (o.isNullOrUndefined()) break :blk .{};
+        // The bridge's own dictionary refusal does not apply here: the
+        // parameter is declared `?js.Value` (so that `parts` can be any
+        // iterable) and converted by hand, which loses the WebIDL name the
+        // sentence is built from. Chrome 151 names the dictionary and carries
+        // no parameter position -- asserted by blob.html's
+        // `blob_dictionary_refusal`.
+        if (!o.isObject()) {
+            const isolate = exec.js.isolate;
+            _ = isolate.throwException(isolate.createTypeError(
+                "Failed to construct 'Blob': The provided value is not of type 'BlobPropertyBag'.",
+            ));
+            return error.JsException;
+        }
+        break :blk (try o.toZig(?InitOptions)) orelse .{};
+    }, exec);
     errdefer blob._arena.release();
 
     const self = try blob._arena.create(Blob);
@@ -93,16 +110,48 @@ pub fn init(parts_: ?[]const js.Value, opts_: ?InitOptions, exec: *const Executi
     return self;
 }
 
-pub fn buildValue(parts_: ?[]const js.Value, opts: InitOptions, exec: *const Execution) !Blob {
+/// `interface` is the WebIDL name for the sentence a non-iterable gets. That
+/// sentence is the one detail message Blink writes with neither a type name
+/// nor a parameter position (measured on Chrome 151), and the bridge cannot
+/// write it for us here: the parameter is declared `?js.Value` so that any
+/// iterable is accepted, which is exactly what loses the sequence type.
+pub fn collectParts(comptime interface: []const u8, value: js.Value, exec: *const Execution) !?[]const []const u8 {
+    if (value.isUndefined()) {
+        return null;
+    }
+    const it = (try value.iterator()) orelse {
+        const isolate = exec.js.isolate;
+        _ = isolate.throwException(isolate.createTypeError(
+            "Failed to construct '" ++ interface ++ "': The provided value cannot be converted to a sequence.",
+        ));
+        return error.JsException;
+    };
+
+    var parts: std.ArrayList([]const u8) = .empty;
+    while (try it.next()) |part| {
+        try parts.append(exec.call_arena, try part.toStringSmart());
+    }
+    return parts.items;
+}
+
+pub fn buildValue(parts_: ?[]const []const u8, opts: InitOptions, exec: *const Execution) !Blob {
+    const use_native_endings = blk: {
+        if (std.mem.eql(u8, opts.endings, "native")) {
+            break :blk true;
+        }
+        if (std.mem.eql(u8, opts.endings, "transparent")) {
+            break :blk false;
+        }
+        return error.TypeError;
+    };
+
     const data, const arena = blk: {
         const parts = parts_ orelse {
             break :blk .{ "", try exec.getPinnedArena(.tiny, "Blob") };
         };
         var len: usize = 0;
-        const slices = try exec.call_arena.alloc([]const u8, parts.len);
-        for (parts, slices) |js_val, *s| {
-            s.* = try js_val.toStringSmart();
-            len += s.len;
+        for (parts) |part| {
+            len += part.len;
         }
         // +256, ~struct overhead, mime dupe, ...
         const arena = try exec.getPinnedArena(len + 256, "blob");
@@ -110,15 +159,13 @@ pub fn buildValue(parts_: ?[]const js.Value, opts: InitOptions, exec: *const Exe
         const buf = try arena.alloc(u8, len);
         var w: Writer = .fixed(buf);
 
-        const use_native_endings = std.mem.eql(u8, opts.endings, "native");
-
-        for (slices) |part| {
+        for (parts) |part| {
             try writePartWithEndings(part, use_native_endings, &w);
         }
         break :blk .{ w.buffered(), arena };
     };
 
-    const mime = try Mime.serialize(arena.allocator(), opts.type);
+    const mime = try normalizeType(arena.allocator(), opts.type);
 
     return .{
         ._rc = .{},
@@ -135,8 +182,21 @@ pub fn buildValueFromBytes(arena: *lp.Arena, data: []const u8, content_type: []c
         ._arena = arena,
         ._type = .generic,
         ._slice = try arena.dupe(u8, data),
-        ._mime = try Mime.serialize(arena.allocator(), content_type),
+        ._mime = try normalizeType(arena.allocator(), content_type),
     };
+}
+
+// Blob's type is NOT a MIME Type. Far less strict.
+fn normalizeType(arena: std.mem.Allocator, input: []const u8) ![]const u8 {
+    if (input.len == 0) {
+        return "";
+    }
+    for (input) |c| {
+        if (c < 0x20 or c > 0x7E) {
+            return "";
+        }
+    }
+    return std.ascii.allocLowerString(arena, input);
 }
 
 /// Creates a new Blob from raw byte slices (for internal Zig use).
@@ -333,31 +393,52 @@ pub fn bytes(self: *const Blob, exec: *Execution) !js.Promise {
 /// from a subset of the blob on which it's called.
 pub fn slice(
     self: *const Blob,
-    start_: ?i32,
-    end_: ?i32,
-    content_type_: ?[]const u8,
+    start_: ?f64,
+    end_: ?f64,
+    content_type_: ?js.NullableString,
     exec: *const Execution,
 ) !*Blob {
     const data = self._slice;
+    const size: i64 = @intCast(data.len);
 
-    const start = blk: {
-        const requested_start = start_ orelse break :blk 0;
-        if (requested_start < 0) {
-            break :blk data.len -| @abs(requested_start);
-        }
-        break :blk @min(data.len, @as(u31, @intCast(requested_start)));
+    const relative_start: i64 = blk: {
+        const requested = clampLongLong(start_ orelse break :blk 0);
+        break :blk if (requested < 0) @max(size + requested, 0) else @min(requested, size);
     };
 
-    const end: usize = blk: {
-        const requested_end = end_ orelse break :blk data.len;
-        if (requested_end < 0) {
-            break :blk @max(start, data.len -| @abs(requested_end));
-        }
-
-        break :blk @min(data.len, @max(start, @as(u31, @intCast(requested_end))));
+    const relative_end: i64 = blk: {
+        const requested = clampLongLong(end_ orelse break :blk size);
+        break :blk if (requested < 0) @max(size + requested, 0) else @min(requested, size);
     };
 
-    return Blob.initFromBytes(data[start..end], content_type_ orelse "", exec);
+    const start: usize = @intCast(relative_start);
+    const span: usize = @intCast(@max(relative_end - relative_start, 0));
+
+    const content_type = if (content_type_) |c| c.value else "";
+    return Blob.initFromBytes(data[start..][0..span], content_type, exec);
+}
+
+// NaN -> 0
+// .5 rounds to even,
+fn clampLongLong(value: f64) i64 {
+    if (std.math.isNan(value)) {
+        return 0;
+    }
+
+    const min = -9223372036854775808.0;
+    const max = 9223372036854775807.0;
+    if (value <= min) {
+        return std.math.minInt(i64);
+    }
+    if (value >= max) {
+        return std.math.maxInt(i64);
+    }
+
+    var rounded = @round(value);
+    if (@abs(value - @trunc(value)) == 0.5 and @mod(rounded, 2) != 0) {
+        rounded -= std.math.sign(value);
+    }
+    return @trunc(rounded);
 }
 
 /// Returns the size of the Blob in bytes.

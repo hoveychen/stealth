@@ -28,9 +28,9 @@ const Execution = js.Execution;
 
 const PluginArray = @import("PluginArray.zig");
 const Permissions = @import("Permissions.zig");
+const ModelContext = @import("ModelContext.zig");
 const StorageManager = @import("StorageManager.zig");
 const NavigatorUAData = @import("NavigatorUAData.zig");
-const ModelContext = @import("ModelContext.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const DOMException = @import("DOMException.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
@@ -43,7 +43,16 @@ const geo = @import("geolocation.zig");
 const devices = @import("navigator/devices.zig");
 
 const Navigator = @This();
-_pad: bool = false,
+
+comptime {
+    // Ensure we don't cause an identity map conflict. Because _geolocation is
+    // lazy and, for now, Zig orders the highest-aligned field first, none of
+    // the other fields land at offset 0.
+    for ([_][]const u8{ "_plugins", "_permissions", "_storage", "_ua_data" }) |name| {
+        if (@offsetOf(Navigator, name) == 0) @compileError(name ++ " aliases the Navigator");
+    }
+}
+
 _plugins: PluginArray = .{},
 _mime_types: PluginArray.MimeTypeArray = .{},
 _permissions: Permissions = .{},
@@ -115,7 +124,7 @@ pub fn getUserAgent(_: *const Navigator, exec: *const Execution) []const u8 {
 /// override changes it, and then a new array is correct.
 pub fn getLanguages(_: *const Navigator, frame: *Frame) !js.Object {
     const local = frame.js.local orelse return error.NotHandled;
-    const header = frame._page.session.browser.http_client.getLanguages();
+    const header = frame._page.session.browser.http_client.getAcceptLanguage();
 
     if (frame._navigator_languages) |cached| {
         if (std.mem.eql(u8, cached.header, header)) {
@@ -146,7 +155,7 @@ pub const LanguagesCache = struct {
 };
 
 pub fn getLanguage(_: *const Navigator, exec: *const Execution) ![]const u8 {
-    const tags = try parseLanguages(exec.call_arena, exec.session.browser.http_client.getLanguages());
+    const tags = try parseLanguages(exec.call_arena, exec.session.browser.http_client.getAcceptLanguage());
     // navigator.language is the first entry of navigator.languages.
     return if (tags.len == 0) "" else tags[0];
 }
@@ -557,10 +566,11 @@ pub fn canShare(_: *const Navigator, data_: ?ShareData) bool {
 }
 
 const ShareData = struct {
-    title: ?[]const u8 = null,
-    text: ?[]const u8 = null,
-    url: ?[]const u8 = null,
+    // Alphabetical: a dictionary's members are read in that order.
     files: ?js.Value = null,
+    text: ?[]const u8 = null,
+    title: ?[]const u8 = null,
+    url: ?[]const u8 = null,
 };
 
 // Sharing needs a user gesture, and nothing here ever has one.
@@ -826,7 +836,7 @@ pub const JsApi = struct {
     pub const connection = bridge.accessor(Navigator.getConnection, null, .{ .exposed = .window });
     pub const getGamepads = bridge.function(Navigator.getGamepads, .{ .exposed = .window });
     pub const javaEnabled = bridge.function(Navigator.javaEnabled, .{});
-    pub const sendBeacon = bridge.function(Navigator.sendBeacon, .{ .exposed = .window, .noop = true });
+    pub const sendBeacon = bridge.function(Navigator.sendBeacon, .{ .exposed = .window });
     pub const vibrate = bridge.function(Navigator.vibrate, .{ .exposed = .window });
     pub const deprecatedRunAdAuctionEnforcesKAnonymity = bridge.accessor(
         Navigator.getDeprecatedRunAdAuctionEnforcesKAnonymity,

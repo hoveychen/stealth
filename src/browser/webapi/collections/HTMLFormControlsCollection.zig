@@ -74,21 +74,7 @@ pub fn namedItem(self: *HTMLFormControlsCollection, name: []const u8, frame: *Fr
 
     var it = try self.iterator();
     while (it.next()) |element| {
-        const is_match = blk: {
-            if (element.getAttributeSafe(comptime .wrap("id"))) |id| {
-                if (std.mem.eql(u8, id, name)) {
-                    break :blk true;
-                }
-            }
-            if (element.getAttributeSafe(comptime .wrap("name"))) |elem_name| {
-                if (std.mem.eql(u8, elem_name, name)) {
-                    break :blk true;
-                }
-            }
-            break :blk false;
-        };
-
-        if (is_match) {
+        if (matchesName(element, name)) {
             if (first_element == null) {
                 first_element = element;
             }
@@ -124,6 +110,20 @@ pub fn namedItem(self: *HTMLFormControlsCollection, name: []const u8, frame: *Fr
     }
 
     return .{ .element = first_element.? };
+}
+
+fn matchesName(element: *Element, name: []const u8) bool {
+    if (element.getId()) |id| {
+        if (std.mem.eql(u8, id, name)) {
+            return true;
+        }
+    }
+    if (element.getName()) |elem_name| {
+        if (std.mem.eql(u8, elem_name, name)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // used internally, by HTMLFormControlsCollection and RadioNodeList
@@ -189,13 +189,29 @@ pub const JsApi = struct {
     // Unlike HTMLCollection's, these named entries are enumerable: Chrome puts
     // them in Object.keys as well as getOwnPropertyNames, and they are
     // read-only and configurable (measured, scratch/b78/expr-named-query.js).
-    fn queryByName(self: *HTMLFormControlsCollection, name: []const u8, frame: *Frame) !u32 {
-        if (name.len > 0 and (try self.namedItem(name, frame)) != null) {
+    fn queryByName(self: *HTMLFormControlsCollection, name: []const u8) !u32 {
+        if (try hasNamed(self, name)) {
             return js.v8.ReadOnly;
         }
         return error.NotHandled;
     }
     pub const namedItem = bridge.function(HTMLFormControlsCollection.namedItem, .{});
+
+    // Presence only: `namedItem` has to build a RadioNodeList for a duplicated
+    // name, which a query has no use for.
+    fn hasNamed(self: *HTMLFormControlsCollection, name: []const u8) !bool {
+        if (name.len == 0) {
+            return false;
+        }
+
+        var it = try self.iterator();
+        while (it.next()) |element| {
+            if (matchesName(element, name)) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
 const testing = @import("../../../testing.zig");

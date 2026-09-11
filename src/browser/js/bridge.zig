@@ -339,6 +339,8 @@ pub const Indexed = struct {
     const Opts = struct {
         as_typed_array: bool = false,
         null_as_undefined: bool = false,
+        // Only applies to setter and deleter; getters don't mutate.
+        ce_reactions: bool = false,
     };
 
     fn init(comptime T: type, comptime getter: anytype, setter: anytype, deleter: anytype, query: anytype, definer: anytype, comptime enumerator: anytype, comptime opts: Opts) Indexed {
@@ -385,6 +387,18 @@ pub const Indexed = struct {
                     }
                     defer caller.deinit();
 
+                    const ce_frame: ?*Frame = if (comptime opts.ce_reactions) switch (caller.local.ctx.global) {
+                        .frame => |frame| frame,
+                        .worker => null,
+                    } else null;
+                    var ce_checkpoint: usize = undefined;
+                    if (comptime opts.ce_reactions) {
+                        if (ce_frame) |frame| ce_checkpoint = frame._ce_reactions.push();
+                    }
+                    defer if (comptime opts.ce_reactions) {
+                        if (ce_frame) |frame| frame._ce_reactions.popAndInvoke(ce_checkpoint, frame);
+                    };
+
                     return caller.setIndex(T, setter, idx, c_value.?, handle.?, .{
                         .as_typed_array = opts.as_typed_array,
                         .null_as_undefined = opts.null_as_undefined,
@@ -402,6 +416,18 @@ pub const Indexed = struct {
                         return js.Intercepted.no;
                     }
                     defer caller.deinit();
+
+                    const ce_frame: ?*Frame = if (comptime opts.ce_reactions) switch (caller.local.ctx.global) {
+                        .frame => |frame| frame,
+                        .worker => null,
+                    } else null;
+                    var ce_checkpoint: usize = undefined;
+                    if (comptime opts.ce_reactions) {
+                        if (ce_frame) |frame| ce_checkpoint = frame._ce_reactions.push();
+                    }
+                    defer if (comptime opts.ce_reactions) {
+                        if (ce_frame) |frame| frame._ce_reactions.popAndInvoke(ce_checkpoint, frame);
+                    };
 
                     return caller.deleteOrDefineIndex(T, deleter, idx, handle.?, .{
                         .as_typed_array = opts.as_typed_array,
@@ -736,6 +762,9 @@ pub fn unknownWindowPropertyCallback(c_name: ?*const v8.Name, handle: ?*const v8
     // hasOwnProperty no, no descriptor -- so the lookup moved to
     // namedWindowPropertyCallback below and this callback kept only the log.
 
+    // @LOG-UNKNOWN-PROPERTY
+    // Upstream retired this instrument; this fork uses it to enumerate what a
+    // guard reads off `window` that the engine does not implement.
     if (comptime lp.IS_DEBUG) {
         if (std.mem.startsWith(u8, property, "__")) {
             // some frameworks will extend built-in types using a __ prefix
@@ -947,7 +976,6 @@ fn logUnknownProperty(local: *const js.Local, key: []const u8) !void {
         };
     }
 }
-
 // Returns the member with its callback wrapped in a recorder that names it, so
 // a run can be asked afterwards which parts of the surface the page actually
 // reached. `unknown_properties` above answers the opposite question -- what we
@@ -1623,6 +1651,8 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/streams/ReadableStreamDefaultController.zig"),
     @import("../webapi/streams/WritableStream.zig"),
     @import("../webapi/streams/WritableStreamDefaultWriter.zig"),
+    @import("../webapi/streams/CountQueuingStrategy.zig"),
+    @import("../webapi/streams/ByteLengthQueuingStrategy.zig"),
     @import("../webapi/streams/WritableStreamDefaultController.zig"),
     @import("../webapi/streams/TransformStream.zig"),
     @import("../webapi/streams/queuing_strategy.zig"),
@@ -1841,6 +1871,8 @@ const worker_common_apis = [_]type{
     @import("../webapi/streams/ReadableStreamDefaultController.zig"),
     @import("../webapi/streams/WritableStream.zig"),
     @import("../webapi/streams/WritableStreamDefaultWriter.zig"),
+    @import("../webapi/streams/CountQueuingStrategy.zig"),
+    @import("../webapi/streams/ByteLengthQueuingStrategy.zig"),
     @import("../webapi/streams/WritableStreamDefaultController.zig"),
     @import("../webapi/web_transport.zig"),
     @import("../webapi/encoding/TextEncoderStream.zig"),

@@ -28,6 +28,7 @@ const Viewport = @import("Viewport.zig");
 
 const Blob = @import("webapi/Blob.zig");
 const filesystem = @import("webapi/filesystem.zig");
+const Element = @import("webapi/Element.zig");
 const SharedWorkerGlobalScope = @import("webapi/SharedWorkerGlobalScope.zig");
 
 const Allocator = std.mem.Allocator;
@@ -73,6 +74,9 @@ dom_version: usize = 0,
 // counter, bumped by the parser, which the named-object cache checks alongside
 // `dom_version` and nothing else looks at.
 parser_dom_version: usize = 0,
+// Superset of dom_version that also moves for non-tree state (see
+// Frame.styleChanged); validates the StyleManager memo.
+style_version: usize = 0,
 
 // Monotonic creation counter for BroadcastChannels in this Page. A postMessage
 // captures the current value so delivery targets only channels that existed
@@ -147,6 +151,10 @@ frame: Frame,
 // takes or loses the focus. Cleared in Frame.deinit, so it never outlives what
 // it points at.
 focused_frame: ?*Frame = null,
+input_modifiers: if (lp.build_config.wpt_extensions) @import("frame/user_input.zig").Modifiers else struct {} = .{},
+
+// The element the synthetic pointer is currently over
+input_hover_target: ?*Element = null,
 
 // Popup Frames opened by window.open. They are top-level browsing contexts
 // (parent == null, no iframe element) but share this Page's factory, arena,
@@ -205,6 +213,14 @@ pub fn liveVersion(self: *const Page) usize {
 
 pub fn getViewport(self: *const Page) Viewport {
     return self.session.browser.getViewport();
+}
+
+pub fn viewportChanged(self: *Page) void {
+    self.frame.viewportChanged();
+    var i: usize = 0;
+    while (i < self.popups.items.len) : (i += 1) {
+        self.popups.items[i].viewportChanged();
+    }
 }
 
 // Initialize a Page and its root Frame.

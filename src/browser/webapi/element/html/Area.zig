@@ -44,7 +44,7 @@ pub fn asNode(self: *Area) *Node {
 }
 
 pub fn getHref(self: *Area, frame: *Frame) ![]const u8 {
-    const href = self.asElement().getAttributeSafe(comptime .wrap("href")) orelse return "";
+    const href = self.asElement().getAttributeInterned("href") orelse return "";
     if (href.len == 0) {
         return "";
     }
@@ -208,7 +208,7 @@ pub fn setRelList(self: *Area, value: lp.String, frame: *Frame) !void {
 }
 
 fn getResolvedHref(self: *Area, frame: *Frame) !?[:0]const u8 {
-    const href = self.asElement().getAttributeSafe(comptime .wrap("href")) orelse return null;
+    const href = self.asElement().getAttributeInterned("href") orelse return null;
     if (href.len == 0) {
         return null;
     }

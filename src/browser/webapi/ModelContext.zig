@@ -36,12 +36,12 @@ _tools: std.ArrayList(*Tool) = .empty,
 pub const init: ModelContext = .{};
 
 pub const Annotations = struct {
-    readOnlyHint: bool = false,
-    untrustedContentHint: bool = false,
     // Not in the W3C spec yet. The CDP `WebMCP.Annotation` type has an
     // `autosubmit` field; storing it here means the CDP follow-up won't have
     // to re-shape this struct.
     autoSubmitHint: bool = false,
+    readOnlyHint: bool = false,
+    untrustedContentHint: bool = false,
 };
 
 pub const Tool = struct {
@@ -60,12 +60,12 @@ pub const Tool = struct {
 };
 
 const ToolDict = struct {
+    annotations: ?Annotations = null,
+    description: []const u8,
+    execute: js.Function.Global,
+    inputSchema: ?js.Object.Global = null,
     name: []const u8,
     title: ?[]const u8 = null,
-    description: []const u8,
-    inputSchema: ?js.Object.Global = null,
-    execute: js.Function.Global,
-    annotations: ?Annotations = null,
 };
 
 const RegisterToolOptions = struct {
@@ -121,11 +121,7 @@ pub fn registerTool(
     // native MCP forwarder) can surface the new tool.
     const event: Notification.ModelContextToolEvent = .{ .exec = exec, .tool = entry };
 
-    const session = switch (exec.js.global) {
-        inline else => |g| g._session,
-    };
-
-    session.notification.dispatch(.model_context_tool_added, &event);
+    exec.session.notification.dispatch(.model_context_tool_added, &event);
 }
 
 /// Snapshot of currently-registered tools.
@@ -147,9 +143,7 @@ pub fn findTool(self: *ModelContext, name: []const u8) ?*Tool {
 /// dispatching `model_context_tool_removed` for each. Cheap when no
 /// signals fired (which is the common case).
 fn markAborted(self: *ModelContext, tool: *Tool, exec: *const Execution) !void {
-    const session = switch (exec.js.global) {
-        inline else => |g| g._session,
-    };
+    const session = exec.session;
 
     var i: usize = 0;
     while (i < self._tools.items.len) {

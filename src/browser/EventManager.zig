@@ -248,6 +248,10 @@ fn dispatchNode(self: *EventManager, target: *Node, event: *Event) !void {
             Frame.user_input.handleKeydown(frame, target, event) catch |err| {
                 log.warn(.event, "frame.keydown", .{ .err = err });
             };
+        } else if (event._type_string.eql(comptime .wrap("keyup"))) {
+            Frame.user_input.handleKeyup(frame, target, event) catch |err| {
+                log.warn(.event, "frame.keyup", .{ .err = err });
+            };
         }
     }
 
@@ -666,6 +670,9 @@ const ActivationState = struct {
                 prev_radio._checked = true;
                 prev_radio._checked_dirty = true;
             }
+            // Listeners ran between setChecked and here, so `:checked` state
+            // built during dispatch has to be stamped as stale.
+            frame.styleChanged();
             return;
         }
 
@@ -686,7 +693,7 @@ const ActivationState = struct {
     fn findCheckedRadioInGroup(input: *Input, frame: *Frame) !?*Input {
         const elem = input.asElement();
 
-        const name = elem.getAttributeSafe(comptime .wrap("name")) orelse return null;
+        const name = elem.getName() orelse return null;
         if (name.len == 0) {
             return null;
         }
@@ -713,7 +720,7 @@ const ActivationState = struct {
                 continue;
             }
 
-            const other_name = other_element.getAttributeSafe(comptime .wrap("name")) orelse continue;
+            const other_name = other_element.getName() orelse continue;
             if (!std.mem.eql(u8, name, other_name)) {
                 continue;
             }

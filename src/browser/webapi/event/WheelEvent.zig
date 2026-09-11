@@ -44,15 +44,17 @@ pub const DOM_DELTA_LINE: u32 = 0x01;
 pub const DOM_DELTA_PAGE: u32 = 0x02;
 
 pub const WheelEventOptions = struct {
-    // Optional so that "absent" is distinguishable from "0": the legacy pair
-    // below only fills a delta in that was never given. See Deltas.
+    // Alphabetical: a dictionary's members are read in that order, and the
+    // reads are observable. The two legacy pairs are optional so that
+    // "absent" is distinguishable from "0" -- they only fill in a delta that
+    // was never given. See Deltas.
+    deltaMode: u32 = 0,
     deltaX: ?f64 = null,
     deltaY: ?f64 = null,
     deltaZ: f64 = 0.0,
-    deltaMode: u32 = 0,
+    momentum: bool = false,
     wheelDeltaX: ?f64 = null,
     wheelDeltaY: ?f64 = null,
-    momentum: bool = false,
 };
 
 // Each axis is two members that fill each other's gaps, and only one of the

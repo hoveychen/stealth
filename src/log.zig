@@ -30,26 +30,31 @@ const max_string_len = 2048;
 
 pub const Scope = enum {
     app,
-    dom,
-    bug,
+    bidi,
     browser,
+    bug,
+    cache,
     cdp,
     console,
-    http,
-    frame,
-    js,
+    disabled,
+    dom,
     event,
-    scheduler,
+    frame,
+    http,
+    js,
+    mcp,
+    note,
     not_implemented,
+    scheduler,
+    serve,
+    storage,
     telemetry,
     unknown_prop,
     prop_read,
     prop_arg,
     text_encode,
-    mcp,
-    cache,
     websocket,
-    storage,
+    cors,
 };
 
 pub const num_scopes = @typeInfo(Scope).@"enum".fields.len;
@@ -66,7 +71,7 @@ pub const FilterRule = struct {
 /// array. Directives apply left-to-right, so `-all,+cdp` disables every
 /// scope then re-enables `cdp`. Scopes untouched by any directive stay
 /// enabled.
-pub fn resolveFilterScopes(rules: []const FilterRule) [num_scopes]bool {
+pub fn resolveFilters(rules: []const FilterRule) [num_scopes]bool {
     var scope_enabled = [_]bool{true} ** num_scopes;
     for (rules) |rule| {
         if (rule.scope) |scope| {
@@ -82,7 +87,6 @@ const Opts = struct {
     format: Format = if (lp.IS_DEBUG) .pretty else .logfmt,
     level: Level = if (lp.IS_DEBUG) .info else .warn,
     // Per-scope enabled flags; a `false` entry suppresses that scope's logs.
-    // Only consulted in Debug builds. Default: everything enabled.
     scope_enabled: [num_scopes]bool = [_]bool{true} ** num_scopes,
 };
 
@@ -98,10 +102,8 @@ pub fn enabled(scope: Scope, level: Level) bool {
         return false;
     }
 
-    if (comptime lp.IS_DEBUG) {
-        if (opts.scope_enabled[@intFromEnum(scope)] == false) {
-            return false;
-        }
+    if (opts.scope_enabled[@intFromEnum(scope)] == false) {
+        return false;
     }
 
     return true;
@@ -176,7 +178,34 @@ pub fn note(scope: Scope, msg: []const u8, data: anytype) void {
     }
 }
 
+var warned_disabled_worker = std.atomic.Value(bool).init(false);
+pub fn warnDisabledWorker() void {
+    if (warned_disabled_worker.swap(true, .monotonic) == false) {
+        warn(.disabled, "workers disabled", .{ .hint = "enable via --load-resources worker" });
+    }
+}
+
+var warned_disabled_iframe = std.atomic.Value(bool).init(false);
+pub fn warnDisabledIFrame() void {
+    if (warned_disabled_iframe.swap(true, .monotonic) == false) {
+        warn(.disabled, "iframes disabled", .{ .hint = "enable via --load-resources iframe" });
+    }
+}
+
 pub fn log(scope: Scope, level: Level, msg: []const u8, data: anytype) void {
+    var kvs: [@typeInfo(@TypeOf(data)).@"struct".fields.len]KV = undefined;
+    initKVs(data, &kvs);
+    logKVs(scope, level, msg, &kvs);
+}
+
+inline fn initKVs(data: anytype, kvs: []KV) void {
+    inline for (@typeInfo(@TypeOf(data)).@"struct".fields, 0..) |f, i| {
+        const value = @field(data, f.name);
+        kvs[i] = .{ .key = f.name, .value = Value.init(&value) };
+    }
+}
+
+pub fn logKVs(scope: Scope, level: Level, msg: []const u8, kvs: []const KV) void {
     if (enabled(scope, level) == false) {
         return;
     }
@@ -192,7 +221,7 @@ pub fn log(scope: Scope, level: Level, msg: []const u8, data: anytype) void {
     if (sink) |s| {
         var buf: [4096]u8 = undefined;
         var w: std.Io.Writer = .fixed(&buf);
-        logTo(scope, level, msg, data, &w) catch |log_err| {
+        logToErased(scope, level, msg, kvs, &w) catch |log_err| {
             std.debug.print("$time={d} $level=fatal $scope={s} $msg=\"log err\" err={s} log_msg=\"{s}\"\n", .{ timestamp(.real), @tagName(scope), @errorName(log_err), msg });
             return;
         };
@@ -204,20 +233,16 @@ pub fn log(scope: Scope, level: Level, msg: []const u8, data: anytype) void {
     const stderr = std.debug.lockStderr(&buf);
     defer std.debug.unlockStderr();
 
-    logTo(scope, level, msg, data, &stderr.file_writer.interface) catch |log_err| {
-        std.debug.print("$time={d} $level=fatal $scope={s} $msg=\"log err\" err={s} log_msg=\"{s}\"\n", .{ timestamp(.real), @errorName(log_err), @tagName(scope), msg });
+    logToErased(scope, level, msg, kvs, &stderr.file_writer.interface) catch |log_err| {
+        std.debug.print("$time={d} $level=fatal $scope={s} $msg=\"log err\" err={s} log_msg=\"{s}\"\n", .{ timestamp(.real), @tagName(scope), @errorName(log_err), msg });
     };
 }
 
-// Converts each field of `data` into a runtime Value so that a single copy of
-// the formatting code (logToErased and below) can do the actual writing.
+// Like `log`, but to an explicit writer and without the enabled/sink
+// gating. Only used by tests.
 fn logTo(scope: Scope, level: Level, msg: []const u8, data: anytype, out: *std.Io.Writer) !void {
-    const fields = @typeInfo(@TypeOf(data)).@"struct".fields;
-    var kvs: [fields.len]KV = undefined;
-    inline for (fields, 0..) |f, i| {
-        const value = @field(data, f.name);
-        kvs[i] = .{ .key = f.name, .value = Value.init(&value) };
-    }
+    var kvs: [@typeInfo(@TypeOf(data)).@"struct".fields.len]KV = undefined;
+    initKVs(data, &kvs);
     return logToErased(scope, level, msg, &kvs, out);
 }
 
@@ -319,10 +344,43 @@ fn logPrettyPrefix(scope: Scope, level: Level, msg: []const u8, writer: *std.Io.
     }
 }
 
-const KV = struct {
+pub const KV = struct {
     key: []const u8,
     value: Value,
+
+    // `vp` is a pointer, as with Value.init. A string literal is already one;
+    // for anything else pass `&value` and keep it alive until the log call.
+    pub fn init(key: []const u8, vp: anytype) KV {
+        return .{
+            .key = key,
+            .value = .init(vp),
+        };
+    }
 };
+
+/// A string the pretty format paints; logfmt writes it plainly.
+pub const Colored = struct {
+    code: []const u8,
+    text: []const u8,
+
+    pub fn logFmt(self: Colored, key: []const u8, writer: LogFormatWriter) !void {
+        return writer.write(key, self.text);
+    }
+
+    pub fn format(self: Colored, writer: *std.Io.Writer) !void {
+        try writer.writeAll(self.code);
+        try writer.writeAll(self.text);
+        return writer.writeAll("\x1b[0m");
+    }
+};
+
+pub fn red(text: []const u8) Colored {
+    return .{ .code = "\x1b[0;31m", .text = text };
+}
+
+pub fn green(text: []const u8) Colored {
+    return .{ .code = "\x1b[0;32m", .text = text };
+}
 
 const Value = union(enum) {
     null,
@@ -578,6 +636,21 @@ fn timestamp(comptime clock: std.Io.Clock) u64 {
 }
 
 const testing = @import("testing.zig");
+test "log: colored" {
+    opts.format = .logfmt;
+    defer opts.format = .pretty;
+
+    var aw = std.Io.Writer.Allocating.init(testing.allocator);
+    defer aw.deinit();
+
+    try logTo(.app, .err, "test", .{ .arg = red("--wait mss") }, &aw.writer);
+    try testing.expectEqual("$time=1739795092929 $scope=app $level=error $msg=\"test\" arg=\"--wait mss\"\n", aw.written());
+
+    aw.clearRetainingCapacity();
+    try writeValue(.pretty, green("--wait-ms"), &aw.writer);
+    try testing.expectEqual("\x1b[0;32m--wait-ms\x1b[0m", aw.written());
+}
+
 test "log: data" {
     opts.format = .logfmt;
     defer opts.format = .pretty;
@@ -678,17 +751,17 @@ test "log: long strings are capped" {
     }
 }
 
-test "log: resolveFilterScopes" {
+test "log: resolveFilters" {
     // No directives: everything enabled.
     {
-        const se = resolveFilterScopes(&.{});
+        const se = resolveFilters(&.{});
         try testing.expectEqual(true, se[@intFromEnum(Scope.cdp)]);
         try testing.expectEqual(true, se[@intFromEnum(Scope.http)]);
     }
 
     // Backward compatible: bare/`-` scope filters that scope out, rest stay in.
     {
-        const se = resolveFilterScopes(&.{
+        const se = resolveFilters(&.{
             .{ .scope = .cdp, .enable = false },
             .{ .scope = .http, .enable = false },
         });
@@ -699,7 +772,7 @@ test "log: resolveFilterScopes" {
 
     // `-all,+cdp`: disable everything, then re-enable cdp.
     {
-        const se = resolveFilterScopes(&.{
+        const se = resolveFilters(&.{
             .{ .scope = null, .enable = false },
             .{ .scope = .cdp, .enable = true },
         });
@@ -710,7 +783,7 @@ test "log: resolveFilterScopes" {
 
     // `+all,-cdp`: enable everything, then disable cdp. Order matters.
     {
-        const se = resolveFilterScopes(&.{
+        const se = resolveFilters(&.{
             .{ .scope = null, .enable = true },
             .{ .scope = .cdp, .enable = false },
         });

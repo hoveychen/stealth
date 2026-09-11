@@ -9,6 +9,9 @@ const HtmlElement = @import("../Html.zig");
 const MediaQuery = @import("../../../css/MediaQuery.zig");
 const srcset = @import("srcset.zig");
 
+const log = lp.log;
+const String = lp.String;
+
 const Image = @This();
 
 pub const Proto = HtmlElement;
@@ -23,6 +26,10 @@ pub const Proto = HtmlElement;
 /// `undeclared` hook an element and nothing else.
 _natural_width: u32 = 0,
 _natural_height: u32 = 0,
+_generation: u32 = 0,
+// Per spec, false only while a fetch is in flight.
+_complete: bool = true,
+
 _proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 
 pub fn constructor(w_: ?u32, h_: ?u32, frame: *Frame) !*Image {
@@ -52,7 +59,7 @@ pub fn asNode(self: *Image) *Node {
 
 pub fn getSrc(self: *const Image, frame: *Frame) ![]const u8 {
     const element = self.asConstElement();
-    const src = element.getAttributeSafe(comptime .wrap("src")) orelse return "";
+    const src = element.getAttributeInterned("src") orelse return "";
     if (src.len == 0) {
         return "";
     }
@@ -69,14 +76,11 @@ pub fn getCurrentSrc(self: *const Image, frame: *Frame) ![]const u8 {
 }
 
 pub fn setSrc(self: *Image, value: []const u8, frame: *Frame) !void {
-    const element = self.asElement();
-    try element.setAttributeSafe(comptime .wrap("src"), .wrap(value), frame);
-    // No need to check if `Image` is connected to DOM; this is a special case.
-    return self.imageAddedCallback(frame);
+    return self.asElement().setAttributeSafe(comptime .wrap("src"), .wrap(value), frame);
 }
 
 pub fn getLoading(self: *const Image) []const u8 {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("loading")) orelse "eager";
+    return self.asConstElement().getAttributeInterned("loading") orelse "eager";
 }
 
 pub fn setLoading(self: *Image, value: []const u8, frame: *Frame) !void {
@@ -143,13 +147,11 @@ fn brokenImageIcon(el: *Element) u32 {
     return @intFromFloat(Element.broken_image_icon_size);
 }
 
-pub fn getComplete(_: *const Image) bool {
-    // Per spec, complete is true when: no src/srcset, src is empty,
-    // image is fully available, or image is broken (with no pending request).
-    // We fetch the bytes but never decode them (see `Frame.loadImage`), so
-    // images stay in the "broken" state, which has complete=true. This is
-    // consistent with naturalWidth/naturalHeight=0.
-    return true;
+pub fn getComplete(self: *const Image) bool {
+    // Per spec, false only while a fetch is in flight. Chrome with images off
+    // leaves it false and fires nothing; answering an unconditional true beside
+    // a naturalWidth of 0 was a shape only this engine produced.
+    return self._complete;
 }
 
 /// Which URL this image actually asks the server for: the candidate a matching
@@ -258,16 +260,26 @@ const DEVICE_PIXEL_RATIO: f64 = 2;
 /// Starts this image's request. Called from the parser's insertion point (see
 /// `Frame._insertNodeRelative`) and from `setSrc`.
 pub fn imageAddedCallback(self: *Image, frame: *Frame) !void {
-    // if we're planning on navigating to another frame, don't trigger load event.
+    // if we're planning on navigating to another frame, don't trigger a load event
+    // or start fetching a resource.
     if (frame.isGoingAway()) {
         return;
     }
+
+    self._generation +%= 1;
+    self._complete = true;
 
     // The candidate wins over the `src`, and asking for BOTH would be a
     // request-count difference rather than a URL one -- the loudest kind. See
     // srcset.zig.
     const src = self.selectedSource(frame) orelse return;
     if (src.len == 0) return;
+
+    // If image loading is off, the load event still has to fire: a page that
+    // never sees one is separable from a browser.
+    if (frame._session.load_resources.image == false) {
+        return frame.queueLoad(Factory.protoOf(self));
+    }
 
     // Request the bytes without decoding them. Never fetching images at all is
     // a server-visible tell; see `Frame.loadImage`.
@@ -362,10 +374,36 @@ pub const JsApi = struct {
 // branch in `Frame._insertNodeRelative`.
 //
 // Nothing is lost on the script path, which never reached the hook with a `src`
-// to load: `document.createElement("img")` carries no attributes, and setting
-// `.src` afterwards goes through `setSrc`.
+// to load: `document.createElement("img")` carries no attributes, and the `src`
+// set afterwards arrives below.
+pub const Build = struct {
+    // Every way the attribute can be written -- `img.src = x`,
+    // `setAttribute("src", x)`, a reassignment while a fetch is in flight --
+    // lands here, which is why the hook is on the attribute and not on the
+    // `src` setter.
+    pub fn attributeChange(element: *Element, name: String, _: String, frame: *Frame) !void {
+        if (!name.eql(comptime .wrap("src"))) {
+            return;
+        }
+        return element.as(Image).imageAddedCallback(frame);
+    }
+
+    // Removing the src leaves no request to make, but any in-flight one still
+    // has to be invalidated -- `imageAddedCallback` bumps the generation the
+    // response checks itself against.
+    pub fn attributeRemove(element: *Element, name: String, frame: *Frame) !void {
+        if (!name.eql(comptime .wrap("src"))) {
+            return;
+        }
+        return element.as(Image).imageAddedCallback(frame);
+    }
+};
 
 const testing = @import("../../../../testing.zig");
 test "WebApi: HTML.Image" {
     try testing.htmlRunner("element/html/image.html", .{});
+}
+
+test "WebApi: HTML.Image fetch" {
+    try testing.htmlRunner("element/html/image_fetch.html", .{ .load_resources = .{ .image = true } });
 }

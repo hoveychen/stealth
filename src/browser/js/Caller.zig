@@ -866,7 +866,6 @@ fn handleError(comptime T: type, comptime F: type, local: *const Local, err: any
     }
 
     const err_local = errorLocal(T, local, info);
-
     // Refusing `new X()` is a TypeError that names the interface, and the
     // interface Chrome names is the one whose constructor ran rather than
     // new.target: a class extending HTMLDivElement that was never registered

@@ -164,14 +164,31 @@ pub fn getSelected(self: *const Option) bool {
 }
 
 pub fn setSelected(self: *Option, selected: bool, frame: *Frame) !void {
-    // TODO: When setting selected=true, may need to unselect other options
-    // in the parent <select> if it doesn't have multiple attribute
     self._selected = selected;
+    if (self.ownerSelect()) |select| {
+        if (selected) {
+            if (!select.getMultiple()) {
+                select.deselectOthers(self);
+            }
+        } else {
+            select.resetToDefaultSelection();
+        }
+    }
     frame.domChanged();
 }
 
+/// The <select> this option belongs to, directly or through an <optgroup>.
+fn ownerSelect(self: *Option) ?*Select {
+    var node = self.asNode().parentNode();
+    while (node) |n| : (node = n.parentNode()) {
+        if (n.is(Select)) |select| return select;
+        if (n.is(Element.Html.OptGroup) == null) return null;
+    }
+    return null;
+}
+
 pub fn getDefaultSelected(self: *const Option) bool {
-    return self.asConstElement().hasAttributeSafe(comptime .wrap("selected"));
+    return self.asConstElement().hasAttributeInterned("selected");
 }
 
 /// Reflects the `selected` content attribute. Adding or removing it also moves
@@ -217,14 +234,11 @@ fn owningSelect(self: *Option) ?*Select {
 }
 
 // https://html.spec.whatwg.org/multipage/form-elements.html#dom-option-label
-// On getting, return the `label` content attribute if present and non-empty,
-// otherwise the value of the `text` IDL attribute. On setting, reflect to the
-// `label` content attribute.
+// On getting, return the `label` content attribute if present (verbatim, even
+// when empty), otherwise the value of the `text` IDL attribute. On setting,
+// reflect to the `label` content attribute.
 pub fn getLabel(self: *const Option, frame: *Frame) []const u8 {
-    if (self.asConstElement().getAttributeSafe(comptime .wrap("label"))) |label| {
-        if (label.len != 0) return label;
-    }
-    return self.getText(frame);
+    return self.asConstElement().getAttributeSafe(comptime .wrap("label")) orelse self.getText(frame);
 }
 
 pub fn setLabel(self: *Option, label: []const u8, frame: *Frame) !void {
@@ -270,10 +284,10 @@ pub const Build = struct {
         const element = self.asElement();
 
         // Check for value attribute
-        self._value = element.getAttributeSafe(comptime .wrap("value"));
+        self._value = element.getAttributeInterned("value");
 
         // Check for selected attribute
-        self._default_selected = element.getAttributeSafe(comptime .wrap("selected")) != null;
+        self._default_selected = element.getAttributeInterned("selected") != null;
         self._selected = self._default_selected;
     }
 
@@ -283,7 +297,7 @@ pub const Build = struct {
         switch (attribute) {
             // `value` is passed by value; for <= 12 bytes, str() points into our
             // own parameter copy, so we have to re-read the owned bytes.
-            .value => self._value = element.getAttributeSafe(comptime .wrap("value")),
+            .value => self._value = element.getAttributeInterned("value"),
             .selected => {
                 self._default_selected = true;
                 self._selected = true;

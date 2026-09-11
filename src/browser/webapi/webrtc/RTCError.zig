@@ -68,11 +68,12 @@ _sent_alert: ?u32 = null,
 // one produces a TypeError from the check below rather than a bridge-level
 // conversion failure.
 pub const Init = struct {
+    // Alphabetical: a dictionary's members are read in that order.
     errorDetail: ?[]const u8 = null,
-    sdpLineNumber: ?i32 = null,
     httpRequestStatusCode: ?i32 = null,
-    sctpCauseCode: ?i32 = null,
     receivedAlert: ?u32 = null,
+    sctpCauseCode: ?i32 = null,
+    sdpLineNumber: ?i32 = null,
     sentAlert: ?u32 = null,
 };
 

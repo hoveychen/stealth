@@ -129,6 +129,7 @@ pub const DOMMatrixInit = struct {
     d: ?f64 = null,
     e: ?f64 = null,
     f: ?f64 = null,
+    is2D: ?bool = null,
     m11: ?f64 = null,
     m12: ?f64 = null,
     m13: ?f64 = null,
@@ -145,7 +146,6 @@ pub const DOMMatrixInit = struct {
     m42: ?f64 = null,
     m43: ?f64 = null,
     m44: ?f64 = null,
-    is2D: ?bool = null,
 };
 
 // Implements "validate and fixup a DOMMatrixInit dictionary".
@@ -738,10 +738,12 @@ pub fn transformPoint(self: *const DOMMatrixReadOnly, point_: ?PointInit, exec: 
 }
 
 pub const PointInit = struct {
+    // Alphabetical: a dictionary's members are read in that order, and the
+    // reads are observable.
+    w: ?f64 = null,
     x: ?f64 = null,
     y: ?f64 = null,
     z: ?f64 = null,
-    w: ?f64 = null,
 };
 
 pub fn getIs2D(self: *const DOMMatrixReadOnly) bool {

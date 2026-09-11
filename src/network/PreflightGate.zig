@@ -144,12 +144,16 @@ fn describe(transfer: *Transfer) !?Plan {
         .document, .stylesheet, .script, .worker, .image, .eventsource, .font => return null,
     }
 
-    // Same-origin first, and without allocating: this runs on every fetch()
-    // and XHR the page makes, and most of them are same-origin.
-    if (URL.isSameOrigin(req.url, req.cookie_origin)) return null;
+    // `req.origin`, not `req.cookie_origin`: the latter is the site for
+    // SameSite checks, and it is deliberately `.none` for exactly the
+    // cross-site case a preflight exists for -- reading it here made every
+    // refusal in net/cors_preflight.html pass through. `origin` is already the
+    // serialized origin the OPTIONS has to announce, so the same-origin test
+    // below still allocates nothing on the common path.
+    const origin = req.origin orelse return null;
+    if (URL.isSameOrigin(req.url, origin)) return null;
 
     const arena = transfer.arena.allocator();
-    const origin = try URL.getOrigin(arena, req.cookie_origin) orelse return null;
 
     // Only what the page itself set counts. Everything this engine adds --
     // Sec-Fetch-*, Origin, Referer, the client hints, Content-Length -- is a
@@ -177,7 +181,7 @@ fn describe(transfer: *Transfer) !?Plan {
         // Chrome sends the preflight itself uncredentialed either way (no
         // Cookie on it, measured); the flag decides how strictly the answer is
         // read, not what goes out.
-        .with_credentials = req.cookie_jar != null,
+        .with_credentials = req.credentialsAllowed(),
     };
 }
 
@@ -245,11 +249,14 @@ fn preflightThenResume(self: *PreflightGate, key: []const u8, transfer: *Transfe
         .preflight = true,
         .skip_cache = true,
         .resource_type = .fetch,
+        .origin = transfer.req.origin,
+        // A preflight is never credentialed, even for `credentials: "include"`.
+        .credentials_mode = .omit,
+        .request_mode = .cors,
         .frame_id = transfer.req.frame_id,
         .document_frame_id = transfer.req.document_frame_id,
         .loader_id = transfer.req.loader_id,
         .notification = transfer.req.notification,
-        .cookie_jar = null,
         .cookie_origin = transfer.req.cookie_origin,
         .ctx = ctx,
         .header_callback = PreflightContext.headerCallback,
@@ -427,5 +434,5 @@ test "PreflightGate: the cross-origin non-simple cases, end to end" {
 // The stylesheet rows are real fetches, so the runner has to be told to make
 // them: it leaves external stylesheets off by default.
 test "PreflightGate: the crossorigin attribute puts a subresource in CORS mode" {
-    try testing.htmlRunner("net/crossorigin_attribute.html", .{ .load_external_stylesheets = true });
+    try testing.htmlRunner("net/crossorigin_attribute.html", .{ .load_resources = .{ .stylesheet = true, .worker = true, .iframe = true } });
 }

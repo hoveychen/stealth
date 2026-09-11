@@ -154,7 +154,6 @@ pub fn observesWithin(self: *const ResizeObserver, ancestor: *Element) bool {
 // any, invoke the callback.
 pub fn deliverEntries(self: *ResizeObserver, frame: *Frame) !void {
     var entries: std.ArrayList(*ResizeObserverEntry) = .empty;
-    // Observed elements share ancestors, so one cache serves the whole pass.
     var visibility_cache: Element.VisibilityCache = .empty;
     for (self._observations.items) |*obs| {
         const target = obs.target;

@@ -39,8 +39,9 @@ pub const TransitionEvent = struct {
     _pseudo_element: []const u8 = "",
 
     const TransitionEventOptions = struct {
-        propertyName: []const u8 = "",
+        // Alphabetical: a dictionary's members are read in that order.
         elapsedTime: f64 = 0,
+        propertyName: []const u8 = "",
         pseudoElement: []const u8 = "",
     };
 
@@ -220,8 +221,9 @@ pub const MediaQueryListEvent = struct {
     _matches: bool = false,
 
     const MediaQueryListEventOptions = struct {
-        media: []const u8 = "",
+        // Alphabetical: a dictionary's members are read in that order.
         matches: bool = false,
+        media: []const u8 = "",
     };
 
     const Options = Event.inheritOptions(MediaQueryListEvent, MediaQueryListEventOptions);

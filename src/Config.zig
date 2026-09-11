@@ -21,6 +21,7 @@ const zenai = @import("zenai");
 const lp = @import("lightpanda");
 
 const cli = @import("cli.zig");
+const string = @import("string.zig");
 const dump = @import("browser/dump.zig");
 const claimed_platform = @import("claimed_platform.zig");
 const Mime = @import("browser/Mime.zig");
@@ -41,8 +42,10 @@ pub const CDP_TCP_USER_TIMEOUT_MS: c_int = 10_000;
 
 const Config = @This();
 
-fn logFilterScopesValidator(allocator: Allocator, args: *std.process.Args.Iterator, list: *std.ArrayList(log.FilterRule)) !void {
+fn logFilterValidator(allocator: Allocator, args: *std.process.Args.Iterator, list: *std.ArrayList(log.FilterRule)) !void {
     const str = args.next() orelse return error.InvalidOption;
+
+    defer log.opts.scope_enabled = log.resolveFilters(list.items);
 
     var it = std.mem.splitScalar(u8, str, ',');
     while (it.next()) |part| {
@@ -67,7 +70,7 @@ fn logFilterScopesValidator(allocator: Allocator, args: *std.process.Args.Iterat
         }
 
         const v = std.meta.stringToEnum(log.Scope, name) orelse {
-            log.fatal(.app, "invalid option choice", .{ .arg = "--log-filter-scopes", .value = part });
+            log.fatal(.app, "invalid option choice", .{ .arg = "--log-filter", .value = part });
             return error.InvalidOption;
         };
 
@@ -79,6 +82,7 @@ fn logLevelValidator(_: Allocator, args: *std.process.Args.Iterator, target: *?l
     const str = args.next() orelse return error.MissingArgument;
     if (std.mem.eql(u8, str, "error")) {
         target.* = .err;
+        log.opts.level = .err;
         return;
     }
 
@@ -86,6 +90,24 @@ fn logLevelValidator(_: Allocator, args: *std.process.Args.Iterator, target: *?l
         log.fatal(.app, "invalid option choice", .{ .arg = "--log-level", .value = str });
         return error.InvalidArgument;
     };
+    log.opts.level = target.*.?;
+}
+
+// The MCP host captures stderr into a log file, where pretty's ANSI
+// escapes and multi-line entries are noise. Runs before any option is
+// read so parse-time lines match; --log-format still overrides.
+fn mcpLogDefaults() void {
+    log.opts.format = .logfmt;
+}
+
+fn logFormatValidator(_: Allocator, args: *std.process.Args.Iterator, target: *?log.Format) !void {
+    const str = args.next() orelse return error.MissingArgument;
+    const format = std.meta.stringToEnum(log.Format, str) orelse {
+        log.fatal(.app, "invalid option choice", .{ .arg = "--log-format", .value = str });
+        return error.InvalidArgument;
+    };
+    target.* = format;
+    log.opts.format = format;
 }
 
 fn httpHeaderValidator(allocator: Allocator, args: *std.process.Args.Iterator, list: *std.ArrayList(HttpHeader)) !void {
@@ -207,6 +229,28 @@ fn caPathValidator(
     }
 }
 
+pub const HttpVersion = enum {
+    auto,
+    @"1.1",
+};
+
+// Upstream defaults all four off and has `--load-resources X` turn them on.
+// This fork defaults them ON and keeps the `--disable-*` opt-outs, because a
+// client that fetches no stylesheets, runs no workers and loads no iframes is
+// separable server-side on that alone, whatever its headers look like -- and
+// skipping CSS also costs accurate visibility checks. `--load-resources` still
+// works; it just has nothing left to turn on unless something turned it off.
+pub const LoadResources = packed struct(u4) {
+    image: bool = true,
+    iframe: bool = true,
+    worker: bool = true,
+    stylesheet: bool = true,
+};
+
+pub const ExperimentalFeatures = packed struct(u1) {
+    cors: bool = false,
+};
+
 /// Common CLI args.
 const CommonOptions = .{
     .{ .name = "obey_robots", .type = bool },
@@ -214,15 +258,19 @@ const CommonOptions = .{
     .{ .name = "http_proxy", .type = ?[:0]const u8 },
     .{ .name = "http_max_concurrent", .type = ?u8 },
     .{ .name = "http_max_host_open", .type = ?u8 },
+    .{ .name = "http_nav_delay", .type = ?u32 },
+    .{ .name = "http_nav_burst", .type = ?u32 },
     .{ .name = "http_timeout", .type = ?u31 },
+    .{ .name = "http_version", .type = HttpVersion, .default = .auto },
     .{ .name = "http_connect_timeout", .type = ?u31 },
     .{ .name = "http_header", .type = HttpHeader, .multiple = true, .validator = httpHeaderValidator },
     .{ .name = "http_max_response_size", .type = ?usize },
     .{ .name = "ws_max_concurrent", .type = ?u8 },
     .{ .name = "insecure_disable_tls_host_verification", .type = bool },
     .{ .name = "log_level", .type = ?log.Level, .validator = logLevelValidator },
-    .{ .name = "log_format", .type = ?log.Format },
-    .{ .name = "log_filter_scopes", .type = log.FilterRule, .multiple = true, .validator = logFilterScopesValidator },
+    .{ .name = "log_format", .type = ?log.Format, .validator = logFormatValidator },
+    .{ .name = "log_filter", .type = log.FilterRule, .multiple = true, .validator = logFilterValidator },
+    .{ .name = "log_filter_scopes", .type = log.FilterRule, .multiple = true, .validator = logFilterValidator, .deprecated = "use --log-filter" },
     .{ .name = "user_agent_suffix", .type = ?[]const u8 },
     .{ .name = "http_cache_dir", .type = ?[]const u8 },
     .{ .name = "http_cache_entry_limit", .type = ?u32, .default = 1000 },
@@ -233,16 +281,20 @@ const CommonOptions = .{
     .{ .name = "sec_ch_ua", .type = ?[]const u8 },
     .{ .name = "sec_ch_ua_platform", .type = ?[]const u8 },
     .{ .name = "accept_language", .type = ?[]const u8 },
+    .{ .name = "locale", .type = [:0]const u8, .default = HttpHeaders.default_locale, .validator = localeValidator },
+    .{ .name = "timezone", .type = ?[:0]const u8, .validator = timezoneValidator },
     .{ .name = "block_private_networks", .type = bool },
-    .{ .name = "block_cidrs", .type = ?[]const u8 },
-    .{ .name = "block_urls", .type = ?[]const u8 },
-    .{ .name = "adblock_lists", .type = ?[]const u8 },
+    .{ .name = "block_cidrs", .type = ?[]const u8, .validator = accumulateValidator },
+    .{ .name = "block_urls", .type = ?[]const u8, .validator = accumulateValidator },
+    .{ .name = "adblock_lists", .type = ?[]const u8, .validator = accumulateValidator },
     .{ .name = "cookie", .type = ?[]const u8 },
     .{ .name = "cookie_jar", .type = ?[]const u8 },
     .{ .name = "disable_subframes", .type = bool },
     .{ .name = "disable_workers", .type = bool },
     .{ .name = "webmcp", .type = bool },
     .{ .name = "disable_external_stylesheets", .type = bool },
+    .{ .name = "experimental_features", .type = ExperimentalFeatures, .default = ExperimentalFeatures{} },
+    .{ .name = "load_resources", .type = LoadResources, .default = LoadResources{} },
     .{ .name = "v8_flags_unsafe", .type = ?[]const u8 },
     .{ .name = "v8_max_heap_mb", .type = ?u32 },
     .{ .name = "watchdog_ms", .type = ?u32 },
@@ -273,6 +325,11 @@ fn dumpValidator(_: Allocator, args: *std.process.Args.Iterator, target: *?DumpF
     var peek_args = args.*;
     if (peek_args.next()) |next_arg| {
         const mode = std.meta.stringToEnum(DumpFormat, next_arg) orelse {
+            // Anything else is the positional url, unless it is a misspelt format.
+            if (string.closest(next_arg, tagNames(DumpFormat), 2)) |near| {
+                log.fatal(.app, "invalid option choice", .{ .arg = "--dump", .value = log.red(next_arg), .did_you_mean = log.green(near) });
+                return error.InvalidArgument;
+            }
             target.* = .html;
             return;
         };
@@ -348,7 +405,8 @@ const Commands = cli.Builder(.{
             .{ .name = "host", .type = []const u8, .default = "127.0.0.1" },
             .{ .name = "port", .type = u16, .default = 9222 },
             .{ .name = "advertise_host", .type = ?[]const u8 },
-            .{ .name = "timeout", .type = ?u31 },
+            // Repeatable; one server can speak several on the same port.
+            .{ .name = "protocol", .type = Protocol, .multiple = true },
             .{ .name = "cdp_max_connections", .type = u16, .default = 16 },
             .{ .name = "cdp_max_pending_connections", .type = u16, .default = 128 },
             .{ .name = "cdp_max_message_size", .type = u32, .default = 1024 * 1024 },
@@ -367,6 +425,9 @@ const Commands = cli.Builder(.{
             .{ .name = "with_base", .type = bool },
             .{ .name = "with_frames", .type = bool },
             .{ .name = "strip_mode", .type = dump.Opts.Strip, .default = dump.Opts.Strip{} },
+            .{ .name = "dump_selector", .type = ?[:0]const u8 },
+            .{ .name = "dump_max_bytes", .type = ?u32 },
+            .{ .name = "fail_on_http_error", .type = bool },
             .{ .name = "wait_ms", .type = u32, .default = 5_000 },
             .{ .name = "wait_until", .type = ?WaitUntil },
             .{
@@ -393,6 +454,7 @@ const Commands = cli.Builder(.{
     },
     .{
         .name = "mcp",
+        .before_parse = mcpLogDefaults,
         .options = .{
             .{ .name = "port", .type = ?u16 },
             .{ .name = "host", .type = []const u8, .default = "127.0.0.1" },
@@ -459,6 +521,23 @@ pub fn init(allocator: Allocator, exec_name: []const u8, mode: Mode) !Config {
     if (modeNeedsHttp(mode)) {
         config.http_headers = try HttpHeaders.init(allocator, &config);
     }
+
+    // The fork's opt-out flags map onto the same store `--load-resources` writes,
+    // so there is one answer per resource rather than two that can disagree.
+    switch (config.mode) {
+        inline else => |*m| {
+            if (@hasField(@TypeOf(m.*), "disable_external_stylesheets")) {
+                if (m.disable_external_stylesheets) m.load_resources.stylesheet = false;
+            }
+            if (@hasField(@TypeOf(m.*), "disable_subframes")) {
+                if (m.disable_subframes) m.load_resources.iframe = false;
+            }
+            if (@hasField(@TypeOf(m.*), "disable_workers")) {
+                if (m.disable_workers) m.load_resources.worker = false;
+            }
+        },
+    }
+
     return config;
 }
 
@@ -493,16 +572,16 @@ pub fn obeyRobots(self: *const Config) bool {
     };
 }
 
-pub fn disableSubframes(self: *const Config) bool {
+pub fn httpVersion(self: *const Config) HttpVersion {
     return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| opts.disable_subframes,
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.http_version,
         else => unreachable,
     };
 }
 
-pub fn disableWorkers(self: *const Config) bool {
+pub fn experimentalFeatures(self: *const Config) ExperimentalFeatures {
     return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| opts.disable_workers,
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.experimental_features,
         else => unreachable,
     };
 }
@@ -537,12 +616,9 @@ pub fn watchdogMs(self: *const Config) ?u32 {
     };
 }
 
-// Stylesheets load unless asked not to: a client that never fetches CSS is
-// separable server-side on that alone, whatever its headers look like. The
-// callers all want the positive sense, so invert here rather than at each one.
-pub fn enableExternalStylesheets(self: *const Config) bool {
+pub fn loadResources(self: *const Config) LoadResources {
     return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| !opts.disable_external_stylesheets,
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.load_resources,
         else => unreachable,
     };
 }
@@ -597,9 +673,25 @@ pub fn httpMaxHostOpen(self: *const Config) u8 {
     };
 }
 
+pub fn httpNavDelay(self: *const Config) ?u32 {
+    const ms = switch (self.mode) {
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.http_nav_delay,
+        else => unreachable,
+    } orelse return null;
+    return if (ms == 0) null else ms;
+}
+
+pub fn httpNavBurst(self: *const Config) u32 {
+    const burst = switch (self.mode) {
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.http_nav_burst,
+        else => unreachable,
+    } orelse 1;
+    return @max(burst, 1);
+}
+
 pub fn httpConnectTimeout(self: *const Config) u31 {
     return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| opts.http_connect_timeout orelse 0,
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.http_connect_timeout orelse 8000,
         .version => 0,
         else => unreachable,
     };
@@ -638,18 +730,6 @@ pub fn wsMaxConcurrent(self: *const Config) u8 {
     };
 }
 
-pub fn logLevel(self: *const Config) ?log.Level {
-    return switch (self.mode) {
-        // Agent mode quiets page-driven `console.error` noise unless verbosity=high.
-        .agent => |opts| opts.log_level orelse switch (agentVerbosity(opts)) {
-            .low, .medium => .err,
-            .high => null,
-        },
-        inline .serve, .fetch, .mcp => |opts| opts.log_level,
-        else => unreachable,
-    };
-}
-
 /// Resolve --verbosity. Explicit value wins. Else: --task with stderr
 /// captured (pipe/file) defaults to .high so benchmark harnesses and
 /// other programmatic consumers get the [tool/result] trace; REPL and
@@ -671,20 +751,6 @@ fn initStderrTty() void {
 fn stderrIsTty() bool {
     stderr_tty_once.call();
     return stderr_tty_cached;
-}
-
-pub fn logFormat(self: *const Config) ?log.Format {
-    return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| opts.log_format,
-        else => unreachable,
-    };
-}
-
-pub fn logFilterScopes(self: *const Config) std.ArrayList(log.FilterRule) {
-    return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| opts.log_filter_scopes,
-        else => unreachable,
-    };
 }
 
 pub fn userAgentSuffix(self: *const Config) ?[]const u8 {
@@ -718,6 +784,20 @@ pub fn secChUaPlatform(self: *const Config) ?[]const u8 {
 pub fn acceptLanguage(self: *const Config) ?[]const u8 {
     return switch (self.mode) {
         inline .serve, .fetch, .mcp, .agent => |opts| opts.accept_language,
+        else => null,
+    };
+}
+
+pub fn locale(self: *const Config) [:0]const u8 {
+    return switch (self.mode) {
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.locale,
+        else => HttpHeaders.default_locale,
+    };
+}
+
+pub fn timezone(self: *const Config) ?[:0]const u8 {
+    return switch (self.mode) {
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.timezone,
         else => null,
     };
 }
@@ -836,6 +916,19 @@ pub fn adblockLists(self: *const Config) ?std.mem.SplitIterator(u8, .scalar) {
     return std.mem.splitScalar(u8, paths, ',');
 }
 
+pub const Protocol = enum {
+    cdp,
+    webdriver,
+};
+
+pub fn protocols(self: *const Config) []const Protocol {
+    return switch (self.mode) {
+        .serve => |opts| if (opts.protocol.items.len == 0) &.{.cdp} else opts.protocol.items,
+        .mcp => &.{.cdp},
+        else => unreachable,
+    };
+}
+
 pub fn maxConnections(self: *const Config) u16 {
     return switch (self.mode) {
         .serve => |opts| opts.cdp_max_connections,
@@ -904,6 +997,8 @@ pub fn customCertStore(self: *const Config) ?*crypto.X509_STORE {
 pub const DumpFormat = enum {
     html,
     markdown,
+    png,
+    pdf,
     wpt,
     semantic_tree,
     semantic_tree_text,
@@ -1052,17 +1147,56 @@ pub const HttpHeaders = struct {
     // stream when a client sends Accept-Encoding without Accept-Language,
     // treating it as a bot signal. Ship a neutral default so we look like a
     // normal client.
-    /// Bare value (e.g. "en-US,en;q=0.9"). Doubles as navigator.languages,
-    /// so the header and the JS list cannot name different languages.
-    accept_language: [:0]const u8,
+    /// The header and the tags it lists. `languages` doubles as
+    /// navigator.languages, so the header and the JS list cannot name
+    /// different languages.
+    accept_language: AcceptLanguage,
 
     proxy_bearer_header: ?[:0]const u8,
+
+    /// An Accept-Language header and the tags it lists.
+    pub const AcceptLanguage = struct {
+        header: [:0]const u8,
+        // Sub-slices of `header`.
+        languages: []const []const u8,
+
+        pub fn init(allocator: Allocator, value: []const u8) !AcceptLanguage {
+            const header = try allocator.dupeZ(u8, value);
+            errdefer allocator.free(header);
+
+            var languages: std.ArrayList([]const u8) = .empty;
+            errdefer languages.deinit(allocator);
+
+            var it = std.mem.splitScalar(u8, header, ',');
+            while (it.next()) |item| {
+                const end = std.mem.indexOfScalar(u8, item, ';') orelse item.len;
+                const tag = std.mem.trim(u8, item[0..end], " \t");
+                if (tag.len > 0) {
+                    try languages.append(allocator, tag);
+                }
+            }
+
+            return .{
+                .header = header,
+                .languages = try languages.toOwnedSlice(allocator),
+            };
+        }
+
+        pub fn deinit(self: *const AcceptLanguage, allocator: Allocator) void {
+            allocator.free(self.languages);
+            allocator.free(self.header);
+        }
+    };
 
     /// The claimed OS, in the spelling the Sec-Ch-Ua-Platform hint and
     /// navigator.userAgentData.platform use. Same source as the user-agent's
     /// token, so the header and the string cannot name different systems.
     const default_platform = claimed_platform.hint;
     const default_languages = "en-US,en;q=0.9";
+
+    /// The locale `--locale` defaults to, from which `default_languages` is
+    /// derived when no explicit `--accept-language` is given.
+    pub const default_locale: [:0]const u8 = "en-US";
 
     pub fn init(allocator: Allocator, config: *const Config) !HttpHeaders {
         const user_agent: [:0]const u8 = if (config.userAgent()) |ua|
@@ -1103,13 +1237,20 @@ pub const HttpHeaders = struct {
         const sec_ch_ua_platform = try std.fmt.allocPrintSentinel(allocator, "\"{s}\"", .{platform}, 0);
         errdefer allocator.free(sec_ch_ua_platform);
 
-        const accept_language = try allocator.dupeZ(u8, config.acceptLanguage() orelse default_languages);
-        errdefer allocator.free(accept_language);
-
         const proxy_bearer_header: ?[:0]const u8 = if (config.proxyBearerToken()) |token|
             try std.fmt.allocPrintSentinel(allocator, "Proxy-Authorization: Bearer {s}", .{token}, 0)
         else
             null;
+        errdefer if (proxy_bearer_header) |hdr| allocator.free(hdr);
+
+        // `--accept-language` names the header outright; `--locale` names one
+        // tag and the q-ladder is derived from it, the way Chrome builds it.
+        var buf: [64]u8 = undefined;
+        const accept_language: AcceptLanguage = try .init(
+            allocator,
+            config.acceptLanguage() orelse acceptLanguageFor(&buf, config.locale()),
+        );
+        errdefer accept_language.deinit(allocator);
 
         return .{
             .user_agent = user_agent,
@@ -1204,7 +1345,7 @@ pub const HttpHeaders = struct {
         if (self.proxy_bearer_header) |hdr| {
             allocator.free(hdr);
         }
-        allocator.free(self.accept_language);
+        self.accept_language.deinit(allocator);
         allocator.free(self.sec_ch_ua_platform);
         allocator.free(self.sec_ch_ua_full_version);
         allocator.free(self.sec_ch_ua_full_version_list);
@@ -1218,6 +1359,24 @@ pub const HttpHeaders = struct {
         if (self.user_agent.ptr != user_agent_base.ptr) {
             allocator.free(self.user_agent);
         }
+    }
+
+    /// Chrome's shape: the tag, then its language alone, then English as a
+    /// last resort, with descending q values. `buf` must hold the longest
+    /// output for a tag that passed validateLocale (35 + 24 bytes).
+    fn acceptLanguageFor(buf: *[64]u8, tag: []const u8) []const u8 {
+        const primary = tag[0 .. std.mem.indexOfScalar(u8, tag, '-') orelse tag.len];
+        var w: std.Io.Writer = .fixed(buf);
+        w.writeAll(tag) catch unreachable;
+        var q: u8 = 9;
+        if (primary.len != tag.len) {
+            w.print(",{s};q=0.{d}", .{ primary, q }) catch unreachable;
+            q -= 1;
+        }
+        if (!std.ascii.eqlIgnoreCase(primary, "en")) {
+            w.print(",en;q=0.{d}", .{q}) catch unreachable;
+        }
+        return w.buffered();
     }
 };
 
@@ -1320,9 +1479,6 @@ fn printPaged(allocator: Allocator, text: []const u8) void {
 
 pub fn parseArgs(allocator: Allocator, proc_args: std.process.Args) !Config {
     const exec_name, var command = try Commands.parse(allocator, proc_args);
-    if (command == .serve and command.serve.timeout != null) {
-        log.warn(.app, "--timeout is deprecated", .{});
-    }
     const invoked = std.meta.activeTag(command);
     // Rewrite `run` to `.agent` so nothing downstream needs a `.run` case.
     if (command == .run) {
@@ -1338,23 +1494,47 @@ pub fn parseArgs(allocator: Allocator, proc_args: std.process.Args) !Config {
         }
         command = .{ .agent = agent_opts };
     }
+
+    // Agent mode quiets page-driven `console.error` noise unless
+    // verbosity=high. Depends on --verbosity/--task, so it can only be
+    // resolved after the options are parsed; an explicit --log-level wins.
+    if (command == .agent) {
+        const opts = command.agent;
+        if (opts.log_level == null and agentVerbosity(opts) != .high) {
+            log.opts.level = .err;
+        }
+    }
+
     var config = try Config.init(allocator, exec_name, command);
     config.command = invoked;
     return config;
 }
 
-test "Config: external stylesheets load by default" {
-    // A client that never fetches CSS is trivially separable server-side, so
-    // the default has to be on; the flag exists to opt back out.
+test "Config: every external resource loads by default" {
+    // A client that never fetches CSS, never runs a worker and never loads an
+    // iframe is trivially separable server-side, so all four defaults have to
+    // be on; the flags exist to opt back out. Upstream defaults them off.
     var on = try Config.init(std.testing.allocator, "test", .{ .serve = .{} });
     defer on.deinit(std.testing.allocator);
-    try std.testing.expectEqual(true, on.enableExternalStylesheets());
+    try std.testing.expectEqual(LoadResources{
+        .image = true,
+        .iframe = true,
+        .worker = true,
+        .stylesheet = true,
+    }, on.loadResources());
 
     var off = try Config.init(std.testing.allocator, "test", .{ .serve = .{
         .disable_external_stylesheets = true,
+        .disable_subframes = true,
+        .disable_workers = true,
     } });
     defer off.deinit(std.testing.allocator);
-    try std.testing.expectEqual(false, off.enableExternalStylesheets());
+    try std.testing.expectEqual(LoadResources{
+        .image = true,
+        .iframe = false,
+        .worker = false,
+        .stylesheet = false,
+    }, off.loadResources());
 }
 
 test "Config: the CDP limits answer for mcp's second listener too" {
@@ -1429,7 +1609,7 @@ test "Config: HttpHeaders default to Chrome's identity" {
         "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
         h.sec_ch_ua,
     );
-    try std.testing.expectEqualStrings("en-US,en;q=0.9", h.accept_language);
+    try std.testing.expectEqualStrings("en-US,en;q=0.9", h.accept_language.header);
     try std.testing.expectEqual(@as(usize, 3), h.brands.len);
     try std.testing.expectEqualStrings("Not=A?Brand", h.brands[0].brand);
     try std.testing.expectEqualStrings("Chromium", h.brands[2].brand);
@@ -1472,7 +1652,7 @@ test "Config: --sec-ch-ua drives both the header and the brand list" {
         h.sec_ch_ua,
     );
     try std.testing.expectEqualStrings("\"Windows\"", h.sec_ch_ua_platform);
-    try std.testing.expectEqualStrings("de-DE,de;q=0.9", h.accept_language);
+    try std.testing.expectEqualStrings("de-DE,de;q=0.9", h.accept_language.header);
 
     // ...and navigator.userAgentData.brands reads this same list.
     try std.testing.expectEqual(@as(usize, 3), h.brands.len);
@@ -1552,6 +1732,124 @@ test "Config: advertiseHost preserves concrete host when not a wildcard" {
     try std.testing.expectEqualStrings("127.0.0.1", config.advertiseHost());
 }
 
+test "Config: parseArgs --http-version" {
+    // parseArgs allocations live for the process; an arena stands in for main's.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    {
+        const argv = [_][*:0]const u8{ "lightpanda", "fetch", "https://example.com" };
+        const proc_args: std.process.Args = .{ .vector = &argv };
+        const config = try parseArgs(arena.allocator(), proc_args);
+        try std.testing.expectEqual(.auto, config.httpVersion());
+    }
+    {
+        const argv = [_][*:0]const u8{ "lightpanda", "serve", "--http-version", "1.1" };
+        const proc_args: std.process.Args = .{ .vector = &argv };
+        const config = try parseArgs(arena.allocator(), proc_args);
+        try std.testing.expectEqual(.@"1.1", config.httpVersion());
+    }
+    {
+        log.expectLog(&.{.app});
+        const argv = [_][*:0]const u8{ "lightpanda", "fetch", "--http-version", "3" };
+        const proc_args: std.process.Args = .{ .vector = &argv };
+        try std.testing.expectError(error.InvalidArgument, parseArgs(std.testing.allocator, proc_args));
+    }
+}
+
+test "Config: validateLocale" {
+    try validateLocale("en");
+    try validateLocale("en-US");
+    try validateLocale("zh-Hant-TW");
+    try validateLocale("es-419");
+    try std.testing.expectError(error.InvalidLanguage, validateLocale(""));
+    try std.testing.expectError(error.InvalidLanguage, validateLocale("e"));
+    try std.testing.expectError(error.InvalidLanguage, validateLocale("en_US"));
+    try std.testing.expectError(error.InvalidSubtag, validateLocale("en-"));
+    try std.testing.expectError(error.InvalidSubtag, validateLocale("en-U"));
+    try std.testing.expectError(error.InvalidSubtag, validateLocale("en-US-x-toolongsub"));
+    try std.testing.expectError(error.InvalidSubtag, validateLocale("en-U$"));
+    try std.testing.expectError(error.TooLong, validateLocale("en-" ++ "a" ** 40));
+}
+
+test "Config: validateTimezone" {
+    try validateTimezone("UTC");
+    try validateTimezone("Europe/Paris");
+    try validateTimezone("America/Argentina/Buenos_Aires");
+    try std.testing.expectError(error.Empty, validateTimezone(""));
+    try std.testing.expectError(error.InvalidCharacter, validateTimezone("Europe/ Paris"));
+    try std.testing.expectError(error.InvalidCharacter, validateTimezone("UTC\n"));
+    try std.testing.expectError(error.TooLong, validateTimezone("a" ** 65));
+}
+
+test "Config: HttpHeaders.acceptLanguageFor" {
+    const cases = [_]struct { tag: []const u8, expected: []const u8 }{
+        .{ .tag = "en-US", .expected = "en-US,en;q=0.9" },
+        .{ .tag = "en-GB", .expected = "en-GB,en;q=0.9" },
+        .{ .tag = "de-DE", .expected = "de-DE,de;q=0.9,en;q=0.8" },
+        .{ .tag = "de", .expected = "de,en;q=0.9" },
+        .{ .tag = "en", .expected = "en" },
+        .{ .tag = "zh-Hant-TW", .expected = "zh-Hant-TW,zh;q=0.9,en;q=0.8" },
+    };
+    for (cases) |case| {
+        var buf: [64]u8 = undefined;
+        try std.testing.expectEqualStrings(case.expected, HttpHeaders.acceptLanguageFor(&buf, case.tag));
+    }
+}
+
+test "Config: HttpHeaders.AcceptLanguage lists the header's tags" {
+    const allocator = std.testing.allocator;
+    const cases = [_]struct { header: []const u8, tags: []const []const u8 }{
+        .{ .header = "en-US,en;q=0.9", .tags = &.{ "en-US", "en" } },
+        .{ .header = "de-DE,de;q=0.9, en;q=0.8", .tags = &.{ "de-DE", "de", "en" } },
+        .{ .header = "fr-FR", .tags = &.{"fr-FR"} },
+        .{ .header = " , ;q=0.5,", .tags = &.{} },
+        .{ .header = "", .tags = &.{} },
+    };
+    for (cases) |case| {
+        const al: HttpHeaders.AcceptLanguage = try .init(allocator, case.header);
+        defer al.deinit(allocator);
+        try std.testing.expectEqualStrings(case.header, al.header);
+        try std.testing.expectEqual(case.tags.len, al.languages.len);
+        for (case.tags, al.languages) |expected, actual| {
+            try std.testing.expectEqualStrings(expected, actual);
+        }
+    }
+}
+
+test "Config: locale drives http_headers" {
+    const allocator = std.testing.allocator;
+    {
+        var config = try Config.init(allocator, "test", .{ .serve = .{ .host = "127.0.0.1" } });
+        defer config.deinit(allocator);
+        try std.testing.expectEqualStrings("en-US,en;q=0.9", config.http_headers.accept_language.header);
+        try std.testing.expectEqual(2, config.http_headers.accept_language.languages.len);
+        try std.testing.expectEqualStrings("en", config.http_headers.accept_language.languages[1]);
+    }
+    {
+        var config = try Config.init(allocator, "test", .{ .serve = .{ .host = "127.0.0.1", .locale = "fr" } });
+        defer config.deinit(allocator);
+        try std.testing.expectEqualStrings("fr,en;q=0.9", config.http_headers.accept_language.header);
+        try std.testing.expectEqual(2, config.http_headers.accept_language.languages.len);
+        try std.testing.expectEqualStrings("fr", config.http_headers.accept_language.languages[0]);
+    }
+}
+
+test "Config: parseArgs refuses an invalid --locale and --timezone" {
+    {
+        log.expectLog(&.{.app});
+        const argv = [_][*:0]const u8{ "lightpanda", "fetch", "--locale", "en_US" };
+        const proc_args: std.process.Args = .{ .vector = &argv };
+        try std.testing.expectError(error.InvalidArgument, parseArgs(std.testing.allocator, proc_args));
+    }
+    {
+        log.expectLog(&.{.app});
+        const argv = [_][*:0]const u8{ "lightpanda", "fetch", "--timezone", "Europe/ Paris" };
+        const proc_args: std.process.Args = .{ .vector = &argv };
+        try std.testing.expectError(error.InvalidArgument, parseArgs(std.testing.allocator, proc_args));
+    }
+}
+
 test "Config: parseArgs refuses an invalid --http-header" {
     const invalid = [_][*:0]const u8{
         // no colon to split on
@@ -1572,6 +1870,30 @@ test "Config: parseArgs refuses an invalid --http-header" {
         const proc_args: std.process.Args = .{ .vector = &argv };
         try std.testing.expectError(error.InvalidArgument, parseArgs(std.testing.allocator, proc_args));
     }
+}
+
+test "Config: parseArgs accumulates repeated list flags" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const argv = [_][*:0]const u8{
+        "lightpanda",         "fetch",
+        "--adblock-lists",    "easylist.txt",
+        "--adblock-lists",    "easyprivacy.txt,annoyances.txt",
+        "--block-cidrs",      "10.0.0.0/8",
+        "--block-cidrs",      "-10.0.0.42/32",
+        "http://example.com",
+    };
+    const proc_args: std.process.Args = .{ .vector = &argv };
+    const config = try parseArgs(arena.allocator(), proc_args);
+
+    var paths = config.adblockLists().?;
+    try std.testing.expectEqualStrings("easylist.txt", paths.next().?);
+    try std.testing.expectEqualStrings("easyprivacy.txt", paths.next().?);
+    try std.testing.expectEqualStrings("annoyances.txt", paths.next().?);
+    try std.testing.expectEqual(null, paths.next());
+
+    try std.testing.expectEqualStrings("10.0.0.0/8,-10.0.0.42/32", config.blockCidrs().?);
 }
 
 test "Config: parseArgs collects --http-header" {
@@ -1621,6 +1943,18 @@ test "Config: httpHeaders accessor" {
     }
 }
 
+/// For comma-separated flags the help documents as repeatable: each
+/// occurrence appends to what earlier ones left, so "--x a --x b" equals
+/// "--x a,b" instead of the last flag silently winning.
+fn accumulateValidator(allocator: Allocator, args: *std.process.Args.Iterator, field: *?[]const u8) !void {
+    const str = args.next() orelse return error.MissingArgument;
+    const existing = field.* orelse {
+        field.* = try allocator.dupe(u8, str);
+        return;
+    };
+    field.* = try std.mem.join(allocator, ",", &.{ existing, str });
+}
+
 fn userAgentValidator(allocator: Allocator, args: *std.process.Args.Iterator, ua: *?[]const u8) !void {
     const str = args.next() orelse return error.MissingArgument;
     validateUserAgent(str) catch |err| {
@@ -1639,15 +1973,71 @@ pub fn validateUserAgent(ua: []const u8) !void {
     }
 }
 
+fn localeValidator(allocator: Allocator, args: *std.process.Args.Iterator, field: *[:0]const u8) !void {
+    const str = args.next() orelse return error.MissingArgument;
+    validateLocale(str) catch |err| {
+        log.fatal(.app, "invalid option value", .{ .arg = "--locale", .value = str, .err = err, .hint = "must be a BCP 47 tag such as en-US, de or zh-Hant-TW" });
+        return error.InvalidArgument;
+    };
+    field.* = try allocator.dupeZ(u8, str);
+}
+
+fn timezoneValidator(allocator: Allocator, args: *std.process.Args.Iterator, field: *?[:0]const u8) !void {
+    const str = args.next() orelse return error.MissingArgument;
+    validateTimezone(str) catch |err| {
+        log.fatal(.app, "invalid option value", .{ .arg = "--timezone", .value = str, .err = err, .hint = "must be an IANA time zone such as Europe/Paris or UTC" });
+        return error.InvalidArgument;
+    };
+    field.* = try allocator.dupeZ(u8, str);
+}
+
+/// A BCP 47 tag restricted to what ICU and the Accept-Language derivation
+/// need: a 2-3 letter language followed by 2-8 character alphanumeric subtags.
+pub fn validateLocale(tag: []const u8) !void {
+    if (tag.len > 35) {
+        return error.TooLong;
+    }
+    var it = std.mem.splitScalar(u8, tag, '-');
+    const language = it.next().?;
+    if (language.len < 2 or language.len > 3) {
+        return error.InvalidLanguage;
+    }
+    for (language) |c| {
+        if (!std.ascii.isAlphabetic(c)) {
+            return error.InvalidLanguage;
+        }
+    }
+    while (it.next()) |subtag| {
+        if (subtag.len < 2 or subtag.len > 8) {
+            return error.InvalidSubtag;
+        }
+        for (subtag) |c| {
+            if (!std.ascii.isAlphanumeric(c)) {
+                return error.InvalidSubtag;
+            }
+        }
+    }
+}
+
+/// Only the shape is checked; ICU resolves the id itself and falls back to
+/// GMT for names it does not know.
+pub fn validateTimezone(id: []const u8) !void {
+    if (id.len == 0) {
+        return error.Empty;
+    }
+    if (id.len > 64) {
+        return error.TooLong;
+    }
+    for (id) |c| {
+        if (c <= ' ' or c == 0x7f) {
+            return error.InvalidCharacter;
+        }
+    }
+}
+
 /// Tag names of a Zig enum, so a command's allowed values can't drift from the
 /// enum it sets.
-pub fn tagNames(comptime E: type) []const []const u8 {
-    const fields = @typeInfo(E).@"enum".fields;
-    var names: [fields.len][]const u8 = undefined;
-    for (fields, &names) |f, *n| n.* = f.name;
-    const frozen = names;
-    return &frozen;
-}
+pub const tagNames = cli.tagNames;
 
 /// `<a|b|c>` ghost-text hint built from the same enum's tag names.
 pub fn tagHint(comptime E: type) []const u8 {

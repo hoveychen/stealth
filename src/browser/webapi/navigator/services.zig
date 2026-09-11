@@ -212,8 +212,9 @@ pub const MediaCapabilities = struct {
     _pad: bool = false,
 
     const Configuration = struct {
-        type: []const u8 = "",
+        // Alphabetical: a dictionary's members are read in that order.
         audio: ?Track = null,
+        type: []const u8 = "",
         video: ?Track = null,
 
         const Track = struct {

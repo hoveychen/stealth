@@ -67,12 +67,13 @@ _buffered_amount_low_threshold: u32 = 0,
 _binary_type: []const u8 = "arraybuffer",
 
 pub const Options = struct {
-    ordered: bool = true,
+    // Alphabetical: a dictionary's members are read in that order.
+    id: ?u32 = null,
     maxPacketLifeTime: ?u32 = null,
     maxRetransmits: ?u32 = null,
-    protocol: ?lp.String.Global = null,
     negotiated: bool = false,
-    id: ?u32 = null,
+    ordered: bool = true,
+    protocol: ?lp.String.Global = null,
 };
 
 pub fn init(exec: *Execution, label: []const u8, opts: ?Options) !*RTCDataChannel {

@@ -320,7 +320,7 @@ pub fn setData(self: *CData, value: ?[]const u8, frame: *Frame) !void {
         self._data = .empty;
     }
 
-    Frame.observers.notifyCharacterDataChange(frame, self.asNode(), old_value);
+    self.dataChanged(old_value, frame);
 }
 
 /// JS bridge wrapper for `data` setter.
@@ -364,6 +364,13 @@ pub fn isEqualNode(self: *const CData, other: *const CData) bool {
     return self._data.eql(other._data);
 }
 
+/// Text data can flip `:empty` but never a live collection, so only the style
+/// stamp moves.
+fn dataChanged(self: *CData, old: String, frame: *Frame) void {
+    frame.styleChanged();
+    Frame.observers.notifyCharacterDataChange(frame, self.asNode(), old);
+}
+
 pub fn appendData(self: *CData, data: []const u8, frame: *Frame) !void {
     // Per DOM spec, appendData(data) is replaceData(length, 0, data).
     const length = self.getLength();
@@ -392,7 +399,7 @@ pub fn deleteData(self: *CData, offset: usize, count: usize, frame: *Frame) !voi
             old_value[range.end..],
         });
     }
-    Frame.observers.notifyCharacterDataChange(frame, self.asNode(), old_data);
+    self.dataChanged(old_data, frame);
 }
 
 pub fn insertData(self: *CData, offset: usize, data: []const u8, frame: *Frame) !void {
@@ -408,7 +415,7 @@ pub fn insertData(self: *CData, offset: usize, data: []const u8, frame: *Frame) 
         data,
         existing[byte_offset..],
     });
-    Frame.observers.notifyCharacterDataChange(frame, self.asNode(), old_value);
+    self.dataChanged(old_value, frame);
 }
 
 pub fn replaceData(self: *CData, offset: usize, count: usize, data: []const u8, frame: *Frame) !void {
@@ -427,7 +434,7 @@ pub fn replaceData(self: *CData, offset: usize, count: usize, data: []const u8, 
         data,
         existing[range.end..],
     });
-    Frame.observers.notifyCharacterDataChange(frame, self.asNode(), old_value);
+    self.dataChanged(old_value, frame);
 }
 
 pub fn substringData(self: *const CData, offset: usize, count: usize) ![]const u8 {

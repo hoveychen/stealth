@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+
+<script id=geo_shape>
+  testing.expectTrue('geolocation' in navigator);
+  testing.expectTrue(navigator.geolocation === navigator.geolocation);
+  testing.expectEqual('function', typeof navigator.geolocation.getCurrentPosition);
+  testing.expectEqual('function', typeof navigator.geolocation.watchPosition);
+  testing.expectEqual('function', typeof navigator.geolocation.clearWatch);
+  testing.expectEqual(1, GeolocationPositionError.PERMISSION_DENIED);
+  testing.expectEqual(2, GeolocationPositionError.POSITION_UNAVAILABLE);
+  testing.expectEqual(3, GeolocationPositionError.TIMEOUT);
+</script>
+
+<!--
+  With no CDP grant the permission sits at "prompt" and NOTHING is delivered --
+  see the module comment in webapi/geolocation.zig. The three blocks below all
+  end on a timer for that reason: there is no callback to wait for, and the
+  thing being asserted is that none arrives.
+-->
+
+<script id=geo_no_permission type=module>
+  {
+    const state = await testing.async();
+    let called = null;
+    navigator.geolocation.getCurrentPosition(
+      () => { called = 'success'; },
+      () => { called = 'error'; }
+    );
+    // Not delivered on the stack that registered it, and not delivered at all:
+    // an unanswered prompt is the state a real Chrome sits in.
+    testing.expectEqual(null, called);
+    setTimeout(() => state.resolve(), 50);
+    state.done(() => { testing.expectEqual(null, called); });
+  }
+</script>
+
+<script id=geo_watch type=module>
+  {
+    const state = await testing.async();
+    let called = null;
+    const id = navigator.geolocation.watchPosition(
+      () => { called = 'success'; },
+      () => { called = 'error'; }
+    );
+    // The id is handed out whether or not anything is ever delivered, and it
+    // counts up from 1.
+    testing.expectTrue(id > 0);
+    setTimeout(() => state.resolve(), 50);
+    state.done(() => {
+      testing.expectEqual(null, called);
+      // clearing a watch that never delivered is a no-op, not an error
+      navigator.geolocation.clearWatch(id);
+    });
+  }
+</script>
+
+<script id=geo_clear_watch type=module>
+  {
+    const state = await testing.async();
+    let watched = false;
+    const id = navigator.geolocation.watchPosition(
+      () => { watched = true; },
+      () => { watched = true; }
+    );
+    navigator.geolocation.clearWatch(id);
+    testing.expectFalse(watched);
+
+    // clearWatch on an id that was never handed out is also a no-op.
+    navigator.geolocation.clearWatch(id + 1000);
+    navigator.geolocation.clearWatch(-1);
+
+    setTimeout(() => state.resolve(), 50);
+    state.done(() => { testing.expectFalse(watched); });
+  }
+</script>

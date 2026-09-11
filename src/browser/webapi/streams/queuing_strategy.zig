@@ -106,6 +106,12 @@ fn byteLengthSize(ctx: *js.Context, chunk_: ?js.Value) !js.Value {
         _ = isolate.throwException(isolate.createTypeError("Cannot convert undefined or null to object"));
         return error.JsException;
     }
+    // ToObject on a primitive gives a wrapper, and a Number wrapper has no
+    // `byteLength` -- so `size(7)` is undefined, the same answer `size({})`
+    // gives. Only null and undefined throw, which the branch above handles.
+    if (!chunk.isObject()) {
+        return .{ .local = local, .handle = local.isolate.initUndefined() };
+    }
     return chunk.toObject().get("byteLength");
 }
 

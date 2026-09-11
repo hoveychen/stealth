@@ -19,69 +19,24 @@
 const std = @import("std");
 const lp = @import("lightpanda");
 
-const http = @import("../network/http.zig");
 const HttpClient = @import("../network/HttpClient.zig");
 
 const js = @import("js/js.zig");
-const Session = @import("Session.zig");
 const Frame = @import("Frame.zig");
 const ImportMap = @import("ImportMap.zig");
-const WorkerGlobalScope = @import("webapi/WorkerGlobalScope.zig");
 
 const Element = @import("webapi/Element.zig");
 const timing = @import("webapi/performance/timing.zig");
+const WorkerGlobalScope = @import("webapi/WorkerGlobalScope.zig");
 
 const log = lp.log;
 const String = lp.String;
+const GlobalScope = lp.GlobalScope;
 const Allocator = std.mem.Allocator;
 
 const ScriptManagerBase = @This();
 
-// Either a *Frame (for page ScriptManagers) or *WorkerGlobalScope (for workers).
-// Used from HTTP callbacks that only have a *Script in hand; the Script reaches
-// the owner through its manager pointer.
-pub const Owner = union(enum) {
-    frame: *Frame,
-    worker: *WorkerGlobalScope,
-
-    pub fn url(self: Owner) [:0]const u8 {
-        return switch (self) {
-            inline else => |g| g.url,
-        };
-    }
-
-    pub fn frameId(self: Owner) u32 {
-        return switch (self) {
-            inline else => |g| g._frame_id,
-        };
-    }
-
-    pub fn loaderId(self: Owner) u32 {
-        return switch (self) {
-            inline else => |g| g._loader_id,
-        };
-    }
-
-    pub fn session(self: Owner) *Session {
-        return switch (self) {
-            inline else => |g| g._session,
-        };
-    }
-
-    pub fn jsContext(self: Owner) *js.Context {
-        return switch (self) {
-            inline else => |g| g.js,
-        };
-    }
-
-    pub fn makeRequest(self: Owner, req: HttpClient.Request) !void {
-        return switch (self) {
-            inline else => |g| g.makeRequest(req),
-        };
-    }
-};
-
-owner: Owner,
+owner: GlobalScope,
 
 // used to prevent recursive evaluation
 is_evaluating: bool,
@@ -121,7 +76,7 @@ importmap: ImportMap,
 // scriptsCompletedLoading. Null for workers.
 tail_hook: ?*const fn (*ScriptManagerBase) void,
 
-pub fn init(allocator: Allocator, http_client: *HttpClient, owner: Owner) ScriptManagerBase {
+pub fn init(allocator: Allocator, http_client: *HttpClient, owner: GlobalScope) ScriptManagerBase {
     return .{
         .owner = owner,
         .async_scripts = .{},
@@ -180,7 +135,7 @@ fn acquireArena(self: *ScriptManagerBase, size_or_bucket: anytype, debug: []cons
 // fetch goes out rather than where it lands: a resource entry's startTime is
 // when the load began, and nothing after the fact can reconstruct it.
 pub fn perfNow(self: *ScriptManagerBase) f64 {
-    return self.owner.jsContext().execution.performance().now();
+    return self.owner.getJs().execution.performance().now();
 }
 
 pub fn scriptList(self: *ScriptManagerBase, script: *const Script) *std.DoublyLinkedList {
@@ -248,7 +203,7 @@ pub fn preloadImport(self: *ScriptManagerBase, url: [:0]const u8, referrer: []co
 
     if (comptime lp.IS_DEBUG) {
         var ls: js.Local.Scope = undefined;
-        self.owner.jsContext().localScope(&ls);
+        self.owner.getJs().localScope(&ls);
         defer ls.deinit();
 
         log.debug(.http, "script queue", .{
@@ -266,22 +221,20 @@ pub fn preloadImport(self: *ScriptManagerBase, url: [:0]const u8, referrer: []co
     self.async_scripts.append(&script.node);
 
     const owner = self.owner;
-    const session = owner.session();
     owner.makeRequest(.{
         .ctx = script,
         .url = url,
         .method = .GET,
-        .frame_id = owner.frameId(),
-        .loader_id = owner.loaderId(),
-        .cookie_jar = &session.cookie_jar,
-        .cookie_origin = owner.url(),
+        .origin = owner.origin(),
+        .request_mode = .cors,
+        .credentials_mode = .same_origin,
         .resource_type = .script,
         // A module script is CORS mode with or without a `crossorigin`
         // attribute -- measured, probes/b87-crossorigin-request-fixture.mjs:
         // Chrome's `<script type=module src>` carries an Origin and says
         // `cors` where the classic one beside it carries neither.
         .cors = true,
-        .notification = session.notification,
+        .notification = self.owner.session().notification,
         .start_callback = if (log.enabled(.http, .debug)) Script.startCallback else null,
         .header_callback = Script.headerCallback,
         .data_callback = Script.dataCallback,
@@ -445,7 +398,7 @@ pub fn getAsyncImport(self: *ScriptManagerBase, url: [:0]const u8, cb: ImportAsy
 
     if (comptime lp.IS_DEBUG) {
         var ls: js.Local.Scope = undefined;
-        self.owner.jsContext().localScope(&ls);
+        self.owner.getJs().localScope(&ls);
         defer ls.deinit();
 
         log.debug(.http, "script queue", .{
@@ -465,20 +418,19 @@ pub fn getAsyncImport(self: *ScriptManagerBase, url: [:0]const u8, cb: ImportAsy
     defer self.endEvaluationWindow(was_evaluating);
 
     const owner = self.owner;
-    const session = self.owner.session();
     self.async_scripts.append(&script.node);
     owner.makeRequest(.{
         .ctx = script,
         .url = url,
         .method = .GET,
-        .frame_id = owner.frameId(),
-        .loader_id = owner.loaderId(),
         .resource_type = .script,
         // Modules are CORS mode; see the note on the sibling request above.
         .cors = true,
-        .cookie_jar = &session.cookie_jar,
-        .cookie_origin = owner.url(),
-        .notification = session.notification,
+        .cookie_origin = .{ .url = owner.url() },
+        .notification = self.owner.session().notification,
+        .origin = owner.origin(),
+        .request_mode = .cors,
+        .credentials_mode = .same_origin,
         .start_callback = if (log.enabled(.http, .debug)) Script.startCallback else null,
         .header_callback = Script.headerCallback,
         .data_callback = Script.dataCallback,
@@ -859,7 +811,7 @@ pub const Script = struct {
         }
         self.perf_recorded = true;
 
-        const exec = &self.manager.owner.jsContext().execution;
+        const exec = &self.manager.owner.getJs().execution;
         const perf = exec.performance();
         const len = self.source.content().len;
         var t: timing.Timing = .{
@@ -1197,6 +1149,7 @@ pub const ImportedModule = struct {
 };
 
 const testing = @import("../testing.zig");
+const Inbox = @import("../Inbox.zig");
 
 test "ScriptManagerBase: shutdownCallback fails a .loading module" {
     const page = try testing.pageTest("mcp_nav.html", .{});
@@ -1232,6 +1185,58 @@ test "ScriptManagerBase: shutdownCallback fails a .loading module" {
     try testing.expectError(error.Failed, sm.waitForImport(url));
 }
 
+test "ScriptManagerBase: import whose submit fails synchronously releases its arena once" {
+    const page = try testing.pageTest("mcp_nav.html", .{});
+    defer page.close();
+    const frame = page.frame().?;
+
+    const sm = &frame._script_manager.base;
+    const client = sm.client;
+    client.test_fail_submit = error.TestSubmitFailure;
+    defer client.test_fail_submit = null;
+
+    // Script.errorCallback logs the fetch error.
+    testing.expectLog(&.{.http});
+
+    const url: [:0]const u8 = "http://127.0.0.1:9582/fails-at-submit.js";
+    try sm.preloadImport(url, frame.url, .{});
+
+    // The failure is delivered through the entry, same as an async one.
+    try testing.expect(sm.async_scripts.first == null);
+    try testing.expect(sm.imported_modules.getPtr(url).?.state == .err);
+    try testing.expectError(error.Failed, sm.waitForImport(url));
+}
+
+test "ScriptManagerBase: dynamic import whose submit fails synchronously rejects once" {
+    const page = try testing.pageTest("mcp_nav.html", .{});
+    defer page.close();
+    const frame = page.frame().?;
+
+    const sm = &frame._script_manager.base;
+    const client = sm.client;
+    client.test_fail_submit = error.TestSubmitFailure;
+    defer client.test_fail_submit = null;
+
+    // Script.errorCallback logs the fetch error.
+    testing.expectLog(&.{.http});
+
+    var ls: js.Local.Scope = undefined;
+    frame.js.localScope(&ls);
+    defer ls.deinit();
+
+    try ls.local.eval(
+        \\globalThis.__dyn = 'pending';
+        \\import('http://127.0.0.1:9582/fails-at-submit.js').then(
+        \\  () => { globalThis.__dyn = 'resolved'; },
+        \\  (e) => { globalThis.__dyn = String(e); },
+        \\);
+    , frame.url); // the resource name is the import's base url
+    ls.local.runMicrotasks();
+
+    try testing.expect(sm.async_scripts.first == null);
+    try testing.expectEqual(true, (try ls.local.exec("globalThis.__dyn === 'TestSubmitFailure'", null)).toBool());
+}
+
 test "ScriptManagerBase: waitForImport stops when teardown is pending" {
     const page = try testing.pageTest("mcp_nav.html", .{});
     defer page.close();
@@ -1256,12 +1261,61 @@ test "ScriptManagerBase: waitForImport stops when teardown is pending" {
     try sm.imported_modules.put(sm.allocator, url, .{ .state = .{ .loading = script } });
     sm.async_scripts.append(&script.node);
 
+    var inbox: Inbox = .{};
+    defer inbox.deinit();
+    client.test_inbox = &inbox;
+    defer client.test_inbox = null;
+
     const message_arena = try client.arena_pool.acquire(.tiny, "test teardown message");
-    client.inbox.push(message_arena, .{ .cdp = .{
+    inbox.push(message_arena, .{ .cdp = .{
         .raw = try message_arena.dupe(u8, "{}"),
         .input = .{ .method = "Target.disposeBrowserContext" },
     } });
-    defer client.inbox.pop().?.deinit();
 
     try testing.expectError(error.SyncWaitInterrupted, sm.waitForImport(url));
+}
+
+test "ScriptManagerBase: evaluate drops a ready async module when termination is pending" {
+    const frame = try testing.createFrame();
+    defer testing.test_session.closeAllPages();
+
+    const sm = &frame._script_manager.base;
+    const element = try frame.document.createElement("script", null, frame);
+
+    // A fetched <script type=module async> sitting in ready_scripts:
+    // doneCallback moved it there and this tick's drain is about to evaluate
+    // it. Classic scripts are already refused by js.Script.run; modules go
+    // through Module.evaluate, which has no gate of its own.
+    const arena = try sm.acquireArena(.small, "test.terminated_async");
+    const script = try arena.create(Script);
+    script.* = .{
+        .arena = arena,
+        .url = "http://127.0.0.1:9582/late-async.js",
+        .node = .{},
+        .manager = sm,
+        .complete = true,
+        .status = 200,
+        .source = .{ .@"inline" = "globalThis.__late_async_ran = true" },
+        .extra = .{ .frame = .{
+            .kind = .module,
+            .mode = .async,
+            .frame = frame,
+            .script_element = element.as(Element.Html.Script),
+        } },
+    };
+    sm.ready_scripts.append(&script.node);
+
+    // The sticky terminate is set but V8's own state was consumed by the
+    // JSEntry unwind of whatever the terminate landed in.
+    const env = frame.js.env;
+    env.terminate();
+    js.v8.v8__Isolate__CancelTerminateExecution(env.isolate.handle);
+
+    sm.evaluate();
+    env.cancelTerminate();
+
+    var ls: js.Local.Scope = undefined;
+    frame.js.localScope(&ls);
+    defer ls.deinit();
+    try testing.expectEqual(false, (try ls.local.exec("globalThis.__late_async_ran === true", null)).toBool());
 }

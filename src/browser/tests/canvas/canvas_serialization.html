@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<head>
+  <script src="../testing.js"></script>
+</head>
+
+<body>
+  <canvas id=c width=64 height=32></canvas>
+</body>
+
+<!--
+  Unlike upstream, this fork rasterizes: a canvas holds a real pixel buffer and
+  serializes to a PNG (or JPEG, or WebP) of the canvas's own size. Canvas
+  serialization is a first-class fingerprinting surface, so "one fixed 1x1
+  transparent PNG for every canvas" is not an option here.
+-->
+
+<script id=toDataURL_basic>
+{
+  const canvas = document.getElementById('c');
+  const url = canvas.toDataURL();
+  testing.expectEqual('string', typeof url);
+  testing.expectEqual(true, url.startsWith('data:image/png;base64,'));
+  // iVBORw0KGgo is the base64 of the 8-byte PNG signature.
+  testing.expectEqual(true, url.startsWith('data:image/png;base64,iVBORw0KGgo'));
+}
+</script>
+
+<script id=toDataURL_is_stable>
+{
+  const canvas = document.getElementById('c');
+  testing.expectEqual(canvas.toDataURL(), canvas.toDataURL());
+}
+</script>
+
+<script id=toDataURL_tracks_size>
+{
+  // This fork encodes the real pixel buffer, so the PNG is the canvas's size
+  // and two canvases of different dimensions do not serialize alike. (Upstream
+  // has no rasterizer and answers one fixed 1x1 transparent PNG for every
+  // canvas -- a single expression a detector can compare against a real
+  // browser, which is why that is not what happens here.)
+  const a = document.createElement('canvas');
+  a.width = 10; a.height = 10;
+  const b = document.createElement('canvas');
+  b.width = 20; b.height = 20;
+  testing.expectEqual(false, a.toDataURL() === b.toDataURL());
+
+  const c = document.createElement('canvas');
+  c.width = 10; c.height = 10;
+  testing.expectEqual(a.toDataURL(), c.toDataURL());
+}
+</script>
+
+<script id=toDataURL_default_size>
+{
+  // Default canvas is 300x150; it must serialize like any other.
+  const canvas = document.createElement('canvas');
+  testing.expectEqual(300, canvas.width);
+  testing.expectEqual(150, canvas.height);
+  testing.expectEqual(true, canvas.toDataURL().startsWith('data:image/png;base64,'));
+}
+</script>
+
+<script id=toDataURL_type_argument>
+{
+  const canvas = document.getElementById('c');
+  // JPEG and WebP are the two other encoders Chrome ships, and this fork
+  // writes both -- a client that answered PNG for all three would be telling
+  // a detector it has no encoder at all.
+  testing.expectEqual(true, canvas.toDataURL('image/jpeg').startsWith('data:image/jpeg;base64,'));
+  testing.expectEqual(true, canvas.toDataURL('image/webp', 0.5).startsWith('data:image/webp;base64,'));
+  // Everything else in the registry falls back to image/png, per spec.
+  testing.expectEqual(true, canvas.toDataURL('image/tiff').startsWith('data:image/png;base64,'));
+}
+</script>
+
+<script id=toDataURL_zero_size>
+{
+  const canvas = document.createElement('canvas');
+  canvas.width = 0;
+  testing.expectEqual('data:,', canvas.toDataURL());
+
+  const other = document.createElement('canvas');
+  other.height = 0;
+  testing.expectEqual('data:,', other.toDataURL());
+}
+</script>
+
+<script id=toBlob_basic>
+{
+  const canvas = document.getElementById('c');
+  testing.expectEqual('function', typeof canvas.toBlob);
+
+  canvas.toBlob(function(blob) {
+    // A thrown TypeError in here is only logged, so guard before dereferencing.
+    testing.expectEqual(true, blob instanceof Blob);
+    testing.expectEqual('image/png', blob.type);
+    // The same bytes toDataURL base64s, rather than a literal: the encoder's
+    // exact output length is not what this block is about.
+    const b64 = canvas.toDataURL().slice('data:image/png;base64,'.length);
+    testing.expectEqual(atob(b64).length, blob.size);
+  });
+}
+</script>
+
+<script id=toBlob_is_async>
+{
+  const canvas = document.getElementById('c');
+  let called = false;
+  canvas.toBlob(function() { called = true; });
+  // The callback runs from a task, never synchronously...
+  testing.expectEqual(false, called);
+  // ...but before any task queued after it.
+  setTimeout(function() { testing.expectEqual(true, called); }, 0);
+}
+</script>
+
+<script id=toBlob_drains_microtasks>
+{
+  const canvas = document.getElementById('c');
+  const order = [];
+  canvas.toBlob(function() {
+    order.push('callback');
+    Promise.resolve().then(function() { order.push('microtask'); });
+  });
+  setTimeout(function() {
+    order.push('timer');
+    // The microtask checkpoint follows the callback's task, as for any task.
+    testing.expectEqual('callback,microtask,timer', order.join(','));
+  }, 0);
+}
+</script>
+
+<script id=toBlob_zero_size_yields_null>
+{
+  const canvas = document.createElement('canvas');
+  canvas.width = 0;
+  canvas.toBlob(function(blob) {
+    testing.expectEqual(null, blob);
+  });
+}
+</script>

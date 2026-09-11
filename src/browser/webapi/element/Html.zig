@@ -438,8 +438,16 @@ pub fn insertAdjacentHTML(
     frame: *Frame,
 ) !void {
     const DocumentFragment = @import("../DocumentFragment.zig");
+
+    // The parse context is the node we insert into
+    const context_node, _ = try self.asNode().findAdjacentNodes(position, .html);
+    const context = if (context_node.is(Element)) |el|
+        if (el.is(Element.Html.Html) == null) el else null
+    else
+        null;
+
     const fragment = (try DocumentFragment.init(frame)).asNode();
-    try Frame.parse.htmlAsChildren(frame, fragment, html);
+    try Frame.parse.fragment(frame, fragment, html, .{ .context = context });
 
     const target_node, const prev_node = try self.asNode().findAdjacentNodes(position, .html);
 
@@ -495,11 +503,7 @@ fn definitionOf(element: *Element, frame: *Frame) ?*CustomElementDefinition {
 
 pub fn click(self: *HtmlElement, frame: *Frame) !void {
     switch (self._type) {
-        inline .button, .input, .textarea, .select => |tag| {
-            if (self.subtype(Subtype(tag)).getDisabled()) {
-                return;
-            }
-        },
+        .button, .input, .textarea, .select, .option, .optgroup => if (self.asElement().isDisabled()) return,
         else => {},
     }
 
@@ -510,12 +514,11 @@ pub fn click(self: *HtmlElement, frame: *Frame) !void {
     flags.click_in_progress = true;
     defer flags.click_in_progress = false;
 
-    const event = (try @import("../event/MouseEvent.zig").init("click", .{
+    const event = (try @import("../event/PointerEvent.zig").init("click", .{
         .bubbles = true,
         .cancelable = true,
         .composed = true,
-        .clientX = 0,
-        .clientY = 0,
+        .pointerId = -1,
     }, frame)).asEvent();
 
     // Keep the event alive past dispatch (which runs handlers/microtasks) so we
@@ -539,7 +542,7 @@ pub fn click(self: *HtmlElement, frame: *Frame) !void {
 // TODO: Per spec, hidden is a tristate: true | false | "until-found".
 // We only support boolean for now; "until-found" would need bridge union support.
 pub fn getHidden(self: *HtmlElement) bool {
-    return self.asElement().getAttributeSafe(comptime .wrap("hidden")) != null;
+    return self.asElement().getAttributeInterned("hidden") != null;
 }
 
 pub fn setHidden(self: *HtmlElement, hidden: bool, frame: *Frame) !void {
@@ -610,7 +613,7 @@ pub fn togglePopover(self: *HtmlElement, force: ?bool, frame: *Frame) !bool {
 }
 
 pub fn getTabIndex(self: *HtmlElement) i32 {
-    if (self.asElement().getAttributeSafe(comptime .wrap("tabindex"))) |attr| {
+    if (self.asElement().getAttributeInterned("tabindex")) |attr| {
         if (parseInteger(attr)) |tab_index| {
             return tab_index;
         }
@@ -629,7 +632,7 @@ pub fn setTabIndex(self: *HtmlElement, value: i32, frame: *Frame) !void {
 }
 
 pub fn getDir(self: *HtmlElement) []const u8 {
-    return reflection.enumeratedValue(self.asElement().getAttributeSafe(comptime .wrap("dir")), &.{ "ltr", "rtl", "auto" }, "", "").?;
+    return reflection.enumeratedValue(self.asElement().getDir(), &.{ "ltr", "rtl", "auto" }, "", "").?;
 }
 
 // An enumerated attribute reflects the value it was given, invalid or not --
@@ -647,7 +650,7 @@ pub fn setAccessKey(self: *HtmlElement, value: []const u8, frame: *Frame) !void 
 }
 
 pub fn getAutofocus(self: *HtmlElement) bool {
-    return self.asElement().getAttributeSafe(comptime .wrap("autofocus")) != null;
+    return self.asElement().getAttributeInterned("autofocus") != null;
 }
 
 pub fn setAutofocus(self: *HtmlElement, autofocus: bool, frame: *Frame) !void {
@@ -668,7 +671,7 @@ pub fn setNonce(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
 }
 
 pub fn getLang(self: *HtmlElement) []const u8 {
-    return self.asElement().getAttributeSafe(comptime .wrap("lang")) orelse "";
+    return self.asElement().getAttributeInterned("lang") orelse "";
 }
 
 pub fn setLang(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
@@ -676,7 +679,7 @@ pub fn setLang(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
 }
 
 pub fn getTitle(self: *HtmlElement) []const u8 {
-    return self.asElement().getAttributeSafe(comptime .wrap("title")) orelse "";
+    return self.asElement().getAttributeInterned("title") orelse "";
 }
 
 pub fn setTitle(self: *HtmlElement, value: []const u8, frame: *Frame) !void {

@@ -20,16 +20,24 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../js/js.zig");
+const Factory = @import("../Factory.zig");
+const Scheduler = @import("../js/Scheduler.zig");
 
+const Event = @import("Event.zig");
+const EventTarget = @import("EventTarget.zig");
 const EventCounts = @import("EventCounts.zig");
 const PerformanceObserver = @import("PerformanceObserver.zig");
 const timing = @import("performance/timing.zig");
-const EventTarget = @import("EventTarget.zig");
 const URL = @import("../URL.zig");
 const http = @import("../../network/http.zig");
 
 const Execution = js.Execution;
 const Allocator = std.mem.Allocator;
+
+// https://w3c.github.io/resource-timing/#dfn-resource-timing-buffer-size-limit
+const DEFAULT_RESOURCE_BUFFER_SIZE = 250;
+
+const BUFFER_FULL = "resourcetimingbufferfull";
 
 pub fn registerTypes() []const type {
     return &.{ Performance, Entry, Mark, Measure, MemoryInfo, PerformanceTiming, PerformanceNavigation };
@@ -50,9 +58,23 @@ _clock_resolution_micros: u64,
 // and chrome.loadTimes() both report the navigation start from it too.
 _epoch_origin_micros: i64,
 _entries: std.ArrayList(*Entry) = .empty,
+// resources has its own cap, so it's split from entries (it's also potentially
+// polled more)
+_resources: std.ArrayList(*Entry) = .empty,
 _timing: PerformanceTiming = .{},
 _navigation: PerformanceNavigation = .{},
 _event_counts: EventCounts = .{},
+_resource_buffer_size: u32 = DEFAULT_RESOURCE_BUFFER_SIZE,
+_buffer_full_pending: bool = false,
+_on_buffer_full: ?js.Function.Global = null,
+
+// The owner's task scheduler and its main-world Execution, both set by the
+// owner once its JS context exists (Frame builds the Window, and thus this,
+// before the context) - see attach. Never taken from a caller's Execution: an
+// isolated-world or cross-frame caller's context can be destroyed while we
+// live on.
+_exec: *Execution = undefined,
+_scheduler: *Scheduler = undefined,
 
 // PerformanceObserver infrastructure. Lives here (rather than on the owning
 // Frame/WorkerGlobalScope) so that both contexts get observers for free.
@@ -89,7 +111,6 @@ _loaf_count: u16 = 0,
 // an EventTarget now (see Proto below), so this could join them; nothing fires
 // the event either way, so the move would be a change with no reading behind
 // it.
-_on_resource_timing_buffer_full: ?js.Function.Global = null,
 
 /// How far the current navigation has got. Level 2 can read an unreached
 /// milestone straight off `_nav` because it is 0 there anyway, but Level 1
@@ -150,6 +171,16 @@ fn clamp(micros: i64, resolution_micros: u64) i64 {
 // (probes/expr-proto-chains.js). It was the last chain difference in either
 // realm.
 pub const Proto = EventTarget;
+
+/// Hands over the owner's context. Called once, by whoever built this
+/// Performance, as soon as its JS context exists -- `_exec` and `_scheduler`
+/// are `undefined` until then, and `notifyObservers` reaches the scheduler
+/// from the HTTP layer with no JS on the stack, so there is nothing to take
+/// them from at that point.
+pub fn attach(self: *Performance, ctx: *js.Context) void {
+    self._exec = &ctx.execution;
+    self._scheduler = &ctx.scheduler;
+}
 
 pub fn asEventTarget(self: *Performance) *EventTarget {
     return self._proto;
@@ -290,14 +321,6 @@ pub fn memoryInfo(exec: *const Execution) !*MemoryInfo {
 
 pub fn getInteractionCount(_: *const Performance) u32 {
     return 0;
-}
-
-pub fn getOnResourceTimingBufferFull(self: *const Performance) ?js.Function.Global {
-    return self._on_resource_timing_buffer_full;
-}
-
-pub fn setOnResourceTimingBufferFull(self: *Performance, callback: ?js.Function) !void {
-    self._on_resource_timing_buffer_full = if (callback) |c| try c.persist() else null;
 }
 
 pub fn clearResourceTimings(self: *Performance) void {
@@ -651,7 +674,7 @@ pub fn resourceLoaded(
     });
     entry._proto._type = .{ .resource = entry };
     try self._entries.append(exec.arena, entry._proto);
-    try self.notifyObservers(entry._proto, exec);
+    try self.notifyObservers(entry._proto);
     return stored;
 }
 
@@ -850,8 +873,8 @@ pub fn mark(
     const opts = _options orelse Mark.Options{};
     const start_time = opts.startTime orelse self.now();
     const m = try Mark.init(name, opts.detail, start_time, exec);
-    try self._entries.append(exec.arena, m._proto);
-    try self.notifyObservers(m._proto, exec);
+    try self.insertOrdered(exec.arena, &self._entries, m._proto);
+    try self.notifyObservers(m._proto);
     return m;
 }
 
@@ -901,8 +924,8 @@ pub fn measure(
                 options.duration,
                 exec,
             );
-            try self._entries.append(exec.arena, m._proto);
-            try self.notifyObservers(m._proto, exec);
+            try self.insertOrdered(exec.arena, &self._entries, m._proto);
+            try self.notifyObservers(m._proto);
             return m;
         },
         .start_mark => |start_mark| {
@@ -925,15 +948,15 @@ pub fn measure(
                 null,
                 exec,
             );
-            try self._entries.append(exec.arena, m._proto);
-            try self.notifyObservers(m._proto, exec);
+            try self.insertOrdered(exec.arena, &self._entries, m._proto);
+            try self.notifyObservers(m._proto);
             return m;
         },
     };
 
     const m = try Measure.init(name, null, 0.0, self.now(), null, exec);
-    try self._entries.append(exec.arena, m._proto);
-    try self.notifyObservers(m._proto, exec);
+    try self.insertOrdered(exec.arena, &self._entries, m._proto);
+    try self.notifyObservers(m._proto);
     return m;
 }
 
@@ -962,8 +985,7 @@ pub fn clearMeasures(self: *Performance, measure_name: ?[]const u8) void {
 }
 
 pub fn setResourceTimingBufferSize(self: *Performance, max_size: u32) void {
-    _ = self;
-    _ = max_size;
+    self._resource_buffer_size = max_size;
 }
 
 pub fn getEntries(self: *Performance, exec: *const Execution) ![]*Entry {
@@ -973,19 +995,21 @@ pub fn getEntries(self: *Performance, exec: *const Execution) ![]*Entry {
 
 pub fn getEntriesByType(self: *Performance, entry_type: []const u8, exec: *const Execution) ![]const *Entry {
     try self.ensureImplicitEntries(exec);
-    return filterEntriesByType(exec.local_arena, self._entries.items, entry_type);
+    const kind = Entry.Type.Enum.parse(entry_type) orelse return &.{};
+    return filterEntriesByType(exec.local_arena, self._entries.items, kind);
 }
 
 pub fn getEntriesByName(self: *Performance, name: []const u8, entry_type: ?[]const u8, exec: *const Execution) ![]const *Entry {
     try self.ensureImplicitEntries(exec);
-    return filterEntriesByName(exec.local_arena, self._entries.items, name, entry_type);
+    const kind = if (entry_type) |t| (Entry.Type.Enum.parse(t) orelse return &.{}) else null;
+    return filterEntriesByName(exec.local_arena, self._entries.items, name, kind);
 }
 
 // Also used by PerformanceObserver
-pub fn filterEntriesByType(arena: Allocator, list: []*Entry, entry_type: []const u8) ![]const *Entry {
+pub fn filterEntriesByType(arena: Allocator, list: []const *Entry, kind: Entry.Type.Enum) ![]const *Entry {
     var result: std.ArrayList(*Entry) = .empty;
     for (list) |entry| {
-        if (std.mem.eql(u8, entry.getEntryType(), entry_type)) {
+        if (entry._type == kind) {
             try result.append(arena, entry);
         }
     }
@@ -993,18 +1017,16 @@ pub fn filterEntriesByType(arena: Allocator, list: []*Entry, entry_type: []const
 }
 
 // Also used by PerformanceObserver
-pub fn filterEntriesByName(arena: Allocator, list: []*Entry, name: []const u8, entry_type: ?[]const u8) ![]const *Entry {
+pub fn filterEntriesByName(arena: Allocator, list: []const *Entry, name: []const u8, kind: ?Entry.Type.Enum) ![]const *Entry {
     var result: std.ArrayList(*Entry) = .empty;
-
     for (list) |entry| {
         if (!std.mem.eql(u8, entry._name, name)) {
             continue;
         }
-        if (entry_type == null or std.mem.eql(u8, entry.getEntryType(), entry_type.?)) {
+        if (kind == null or entry._type == kind.?) {
             try result.append(arena, entry);
         }
     }
-
     return result.items;
 }
 
@@ -1076,25 +1098,85 @@ pub fn unregisterObserver(self: *Performance, observer: *PerformanceObserver) vo
 /// Append the entry to every interested observer's queue and schedule async
 /// delivery. Does NOT fire the callbacks synchronously — that happens later
 /// via the scheduled task.
-pub fn notifyObservers(self: *Performance, entry: *Entry, exec: *const Execution) !void {
+fn notifyObservers(self: *Performance, entry: *Entry) !void {
+    if (self._observers.items.len == 0) {
+        return;
+    }
     for (self._observers.items) |observer| {
         if (observer.interested(entry)) {
-            observer._entries.append(exec.arena, entry) catch |err| {
+            observer._entries.append(observer._arena, entry) catch |err| {
                 lp.log.err(.frame, "Performance.notifyObservers", .{ .err = err });
             };
         }
     }
 
-    try self.scheduleDelivery(exec);
+    try self.scheduleDelivery();
 }
 
-pub fn scheduleDelivery(self: *Performance, exec: *const Execution) !void {
+fn hasObserverFor(self: *const Performance, kind: Entry.Type.Enum) bool {
+    for (self._observers.items) |observer| {
+        if (observer.interestedIn(kind)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// https://w3c.github.io/resource-timing/#dfn-fire-a-buffer-full-event
+// The event is queued rather than fired inline: addResource runs from the
+// HTTP layer, with no JS on the stack. We have no secondary buffer, so an
+// entry that overflows is dropped instead of being copied back in by a
+// handler that calls clearResourceTimings.
+fn scheduleBufferFull(self: *Performance) !void {
+    if (self._buffer_full_pending) {
+        return;
+    }
+    if (self._exec.hasDirectListeners(self.asEventTarget(), BUFFER_FULL, self._on_buffer_full) == false) {
+        return;
+    }
+    self._buffer_full_pending = true;
+
+    return self._scheduler.add(
+        self,
+        struct {
+            fn run(_self: *anyopaque) anyerror!?u32 {
+                const perf: *Performance = @ptrCast(@alignCast(_self));
+                perf._buffer_full_pending = false;
+
+                const exec = perf._exec;
+                const event = try Event.initTrusted(.wrap(BUFFER_FULL), .{}, exec.page);
+                try exec.dispatch(perf.asEventTarget(), event, perf._on_buffer_full, .{
+                    .context = "Performance.resourcetimingbufferfull",
+                });
+                return null;
+            }
+        }.run,
+        0,
+        .{ .name = "Performance.bufferFull" },
+    );
+}
+
+// The property handler for a JS-side dispatchEvent (see EventManager.dispatch).
+pub fn inlineHandler(self: *const Performance, typ: lp.String) ?js.Function.Global {
+    if (typ.eql(.wrap(BUFFER_FULL))) return self._on_buffer_full;
+    return null;
+}
+
+pub fn getOnResourceTimingBufferFull(self: *const Performance) ?js.Function.Global {
+    return self._on_buffer_full;
+}
+
+pub fn setOnResourceTimingBufferFull(self: *Performance, cb: ?js.Function.Global) void {
+    self._on_buffer_full = cb;
+}
+
+pub fn scheduleDelivery(self: *Performance) !void {
     if (self._delivery_scheduled) {
         return;
     }
     self._delivery_scheduled = true;
 
-    return exec._scheduler.add(
+    return self._scheduler.add(
         self,
         struct {
             fn run(_self: *anyopaque) anyerror!?u32 {
@@ -1130,6 +1212,52 @@ pub fn scheduleDelivery(self: *Performance, exec: *const Execution) !void {
         0,
         .{ .name = "Performance.deliverObservers" },
     );
+}
+
+// Entries nearly always arrive in startTime order, so the slot is at (or near)
+// the end.
+fn insertOrdered(_: *Performance, arena: Allocator, list: *std.ArrayList(*Entry), entry: *Entry) !void {
+    var i = list.items.len;
+    while (i > 0 and list.items[i - 1]._start_time > entry._start_time) : (i -= 1) {}
+    try list.insert(arena, i, entry);
+}
+
+// Merge two startTime-ordered lists into one.
+fn mergeOrdered(arena: Allocator, a: []const *Entry, b: []const *Entry) ![]const *Entry {
+    if (a.len == 0) {
+        return b;
+    }
+    if (b.len == 0) {
+        return a;
+    }
+
+    var i: usize = 0;
+    var j: usize = 0;
+    var k: usize = 0;
+    const out = try arena.alloc(*Entry, a.len + b.len);
+    while (i < a.len and j < b.len) : (k += 1) {
+        if (b[j]._start_time < a[i]._start_time) {
+            out[k] = b[j];
+            j += 1;
+        } else {
+            out[k] = a[i];
+            i += 1;
+        }
+    }
+    @memcpy(out[k .. k + a.len - i], a[i..]);
+    k += a.len - i;
+    @memcpy(out[k..], b[j..]);
+    return out;
+}
+
+// Milliseconds since the time origin, rounded like highResTimestamp
+fn relative(self: *const Performance, micros: u64) f64 {
+    if (micros == 0) {
+        return 0;
+    }
+    const elapsed = micros -| self._time_origin;
+    const rounded = @divTrunc(elapsed + 2, 5) * 5;
+    return @as(f64, @floatFromInt(rounded)) / 1000.0;
 }
 
 pub const JsApi = struct {
@@ -1263,6 +1391,12 @@ pub const Entry = struct {
             mark = 14,
             // If we ever have types more than 16, we have to update entry
             // table of PerformanceObserver too.
+
+            // The JS entryType string, e.g. "resource"; null for a type we
+            // don't know (the getters then return nothing).
+            pub fn parse(entry_type: []const u8) ?Enum {
+                return std.meta.stringToEnum(Enum, entry_type);
+            }
         };
     };
 
@@ -1412,9 +1546,9 @@ pub const Measure = struct {
 
     const Options = struct {
         detail: ?js.Value = null,
-        start: ?TimestampOrMark,
-        end: ?TimestampOrMark,
         duration: ?f64 = null,
+        end: ?TimestampOrMark,
+        start: ?TimestampOrMark,
 
         const TimestampOrMark = union(enum) {
             timestamp: f64,
@@ -1465,6 +1599,224 @@ pub const Measure = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
         pub const detail = bridge.accessor(Measure.getDetail, null, .{});
+    };
+};
+
+/// PerformanceResourceTiming — one per fetch the HTTP client completed for
+/// this document (or worker).
+pub const ResourceTiming = struct {
+    pub const Proto = Entry;
+
+    _proto: *Entry,
+    _initiator_type: []const u8,
+    _next_hop_protocol: []const u8,
+    _delivery_type: []const u8,
+    _redirect_start: f64,
+    _redirect_end: f64,
+    _fetch_start: f64,
+    _domain_lookup_start: f64,
+    _domain_lookup_end: f64,
+    _connect_start: f64,
+    _connect_end: f64,
+    _secure_connection_start: f64,
+    _request_start: f64,
+    _response_start: f64,
+    _response_end: f64,
+    _transfer_size: u64,
+    _encoded_body_size: u64,
+    _decoded_body_size: u64,
+    _response_status: u16,
+    _content_type: []const u8,
+    _content_encoding: []const u8,
+
+    pub fn getInitiatorType(self: *const ResourceTiming) []const u8 {
+        return self._initiator_type;
+    }
+
+    pub fn getNextHopProtocol(self: *const ResourceTiming) []const u8 {
+        return self._next_hop_protocol;
+    }
+
+    pub fn getDeliveryType(self: *const ResourceTiming) []const u8 {
+        return self._delivery_type;
+    }
+
+    pub fn getWorkerStart(_: *const ResourceTiming) f64 {
+        // @ServiceWorker
+        return 0;
+    }
+
+    pub fn getRedirectStart(self: *const ResourceTiming) f64 {
+        return self._redirect_start;
+    }
+
+    pub fn getRedirectEnd(self: *const ResourceTiming) f64 {
+        return self._redirect_end;
+    }
+
+    pub fn getFetchStart(self: *const ResourceTiming) f64 {
+        return self._fetch_start;
+    }
+
+    pub fn getDomainLookupStart(self: *const ResourceTiming) f64 {
+        return self._domain_lookup_start;
+    }
+
+    pub fn getDomainLookupEnd(self: *const ResourceTiming) f64 {
+        return self._domain_lookup_end;
+    }
+
+    pub fn getConnectStart(self: *const ResourceTiming) f64 {
+        return self._connect_start;
+    }
+
+    pub fn getConnectEnd(self: *const ResourceTiming) f64 {
+        return self._connect_end;
+    }
+
+    pub fn getSecureConnectionStart(self: *const ResourceTiming) f64 {
+        return self._secure_connection_start;
+    }
+
+    pub fn getRequestStart(self: *const ResourceTiming) f64 {
+        return self._request_start;
+    }
+
+    pub fn getResponseStart(self: *const ResourceTiming) f64 {
+        return self._response_start;
+    }
+
+    pub fn getResponseEnd(self: *const ResourceTiming) f64 {
+        return self._response_end;
+    }
+
+    pub fn getFirstInterimResponseStart(_: *const ResourceTiming) f64 {
+        // 1xx are consumed by libcurl
+        return 0;
+    }
+
+    pub fn getFinalResponseHeadersStart(self: *const ResourceTiming) f64 {
+        return self._response_start;
+    }
+
+    pub fn getTransferSize(self: *const ResourceTiming) u64 {
+        return self._transfer_size;
+    }
+
+    pub fn getEncodedBodySize(self: *const ResourceTiming) u64 {
+        return self._encoded_body_size;
+    }
+
+    pub fn getDecodedBodySize(self: *const ResourceTiming) u64 {
+        return self._decoded_body_size;
+    }
+
+    pub fn getResponseStatus(self: *const ResourceTiming) u16 {
+        return self._response_status;
+    }
+
+    pub fn getContentType(self: *const ResourceTiming) []const u8 {
+        return self._content_type;
+    }
+
+    pub fn getContentEncoding(self: *const ResourceTiming) []const u8 {
+        return self._content_encoding;
+    }
+
+    pub fn toJSON(self: *const ResourceTiming) struct {
+        name: []const u8,
+        entryType: []const u8,
+        startTime: f64,
+        duration: f64,
+        initiatorType: []const u8,
+        nextHopProtocol: []const u8,
+        deliveryType: []const u8,
+        workerStart: f64,
+        redirectStart: f64,
+        redirectEnd: f64,
+        fetchStart: f64,
+        domainLookupStart: f64,
+        domainLookupEnd: f64,
+        connectStart: f64,
+        connectEnd: f64,
+        secureConnectionStart: f64,
+        requestStart: f64,
+        responseStart: f64,
+        firstInterimResponseStart: f64,
+        finalResponseHeadersStart: f64,
+        responseEnd: f64,
+        transferSize: u64,
+        encodedBodySize: u64,
+        decodedBodySize: u64,
+        responseStatus: u16,
+        contentType: []const u8,
+        contentEncoding: []const u8,
+    } {
+        const entry = self._proto;
+        return .{
+            .name = entry._name,
+            .entryType = entry.getEntryType(),
+            .startTime = entry._start_time,
+            .duration = entry._duration,
+            .initiatorType = self._initiator_type,
+            .nextHopProtocol = self._next_hop_protocol,
+            .deliveryType = self._delivery_type,
+            .workerStart = 0,
+            .redirectStart = self._redirect_start,
+            .redirectEnd = self._redirect_end,
+            .fetchStart = self._fetch_start,
+            .domainLookupStart = self._domain_lookup_start,
+            .domainLookupEnd = self._domain_lookup_end,
+            .connectStart = self._connect_start,
+            .connectEnd = self._connect_end,
+            .secureConnectionStart = self._secure_connection_start,
+            .requestStart = self._request_start,
+            .responseStart = self._response_start,
+            .firstInterimResponseStart = 0,
+            .finalResponseHeadersStart = self._response_start,
+            .responseEnd = self._response_end,
+            .transferSize = self._transfer_size,
+            .encodedBodySize = self._encoded_body_size,
+            .decodedBodySize = self._decoded_body_size,
+            .responseStatus = self._response_status,
+            .contentType = self._content_type,
+            .contentEncoding = self._content_encoding,
+        };
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(ResourceTiming);
+
+        pub const Meta = struct {
+            pub const name = "PerformanceResourceTiming";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const initiatorType = bridge.accessor(ResourceTiming.getInitiatorType, null, .{});
+        pub const nextHopProtocol = bridge.accessor(ResourceTiming.getNextHopProtocol, null, .{});
+        pub const deliveryType = bridge.accessor(ResourceTiming.getDeliveryType, null, .{});
+        pub const workerStart = bridge.accessor(ResourceTiming.getWorkerStart, null, .{});
+        pub const redirectStart = bridge.accessor(ResourceTiming.getRedirectStart, null, .{});
+        pub const redirectEnd = bridge.accessor(ResourceTiming.getRedirectEnd, null, .{});
+        pub const fetchStart = bridge.accessor(ResourceTiming.getFetchStart, null, .{});
+        pub const domainLookupStart = bridge.accessor(ResourceTiming.getDomainLookupStart, null, .{});
+        pub const domainLookupEnd = bridge.accessor(ResourceTiming.getDomainLookupEnd, null, .{});
+        pub const connectStart = bridge.accessor(ResourceTiming.getConnectStart, null, .{});
+        pub const connectEnd = bridge.accessor(ResourceTiming.getConnectEnd, null, .{});
+        pub const secureConnectionStart = bridge.accessor(ResourceTiming.getSecureConnectionStart, null, .{});
+        pub const requestStart = bridge.accessor(ResourceTiming.getRequestStart, null, .{});
+        pub const responseStart = bridge.accessor(ResourceTiming.getResponseStart, null, .{});
+        pub const firstInterimResponseStart = bridge.accessor(ResourceTiming.getFirstInterimResponseStart, null, .{});
+        pub const finalResponseHeadersStart = bridge.accessor(ResourceTiming.getFinalResponseHeadersStart, null, .{});
+        pub const responseEnd = bridge.accessor(ResourceTiming.getResponseEnd, null, .{});
+        pub const transferSize = bridge.accessor(ResourceTiming.getTransferSize, null, .{});
+        pub const encodedBodySize = bridge.accessor(ResourceTiming.getEncodedBodySize, null, .{});
+        pub const decodedBodySize = bridge.accessor(ResourceTiming.getDecodedBodySize, null, .{});
+        pub const responseStatus = bridge.accessor(ResourceTiming.getResponseStatus, null, .{});
+        pub const contentType = bridge.accessor(ResourceTiming.getContentType, null, .{});
+        pub const contentEncoding = bridge.accessor(ResourceTiming.getContentEncoding, null, .{});
+        pub const toJSON = bridge.function(ResourceTiming.toJSON, .{});
     };
 };
 
@@ -1787,7 +2139,7 @@ test "WebApi: Performance long animation frame from a task" {
 test "WebApi: Performance resource entries" {
     // The stylesheet is one of the loads under test, so it has to actually go
     // out: the runner leaves external stylesheets off by default.
-    try testing.htmlRunner("performance_resource.html", .{ .load_external_stylesheets = true });
+    try testing.htmlRunner("performance_resource.html", .{ .load_resources = .{ .stylesheet = true, .worker = true, .iframe = true } });
 }
 
 test "WebApi: Performance level 1 timing reports the TLS handshake" {

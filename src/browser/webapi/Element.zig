@@ -98,6 +98,7 @@ pub const PseudoElement = enum {
 
 pub const ClassListLookup = std.AutoHashMapUnmanaged(*Element, *collections.DOMTokenList);
 pub const RelListLookup = std.AutoHashMapUnmanaged(*Element, *collections.DOMTokenList);
+pub const PartListLookup = std.AutoHashMapUnmanaged(*Element, *collections.DOMTokenList);
 pub const ShadowRootLookup = std.AutoHashMapUnmanaged(*Element, *ShadowRoot);
 pub const NamespaceUriLookup = std.AutoHashMapUnmanaged(*Element, []const u8);
 // The namespace prefix an XML document wrote the element with. A side table
@@ -233,7 +234,13 @@ pub const Flags = packed struct(u8) {
     // approach
     click_in_progress: bool = false,
 
-    _unused: u5 = 0,
+    // The element may have inline style: a materialized entry in the frame's
+    // _element_styles, or a `style` attribute not yet materialized. Set once,
+    // never cleared. A clear bit lets the faux layout skip both the map probe
+    // and the attribute scan for the many elements that have neither.
+    has_inline_style: bool = false,
+
+    _unused: u4 = 0,
 };
 
 _type: Type,
@@ -756,7 +763,8 @@ pub fn setOuterHTML(self: *Element, html: []const u8, frame: *Frame) !void {
     var fragment: ?*Node = null;
     if (html.len > 0) {
         const frag = (try Node.DocumentFragment.init(frame)).asNode();
-        try Frame.parse.htmlAsChildren(frame, frag, html);
+        // The parent is the parse context (a fragment parent means body).
+        try Frame.parse.fragment(frame, frag, html, .{ .context = parent.is(Element) });
         fragment = frag;
     }
 
@@ -817,41 +825,52 @@ pub fn setInnerHTML(self: *Element, html: []const u8, frame: *Frame) !void {
         return template.setInnerHTML(html, frame);
     }
     const parent = self.asNode();
-    return parent.setHTML(html, false, frame);
+    return parent.setHTML(html, .{}, frame);
 }
 
 /// allows declarative shadow dom
 pub fn setHTMLUnsafe(self: *Element, html: []const u8, frame: *Frame) !void {
     const parent = self.asNode();
-    return parent.setHTML(html, true, frame);
+    return parent.setHTML(html, .{ .allow_declarative_shadow = true }, frame);
 }
 
-pub fn getId(self: *const Element) []const u8 {
-    return self.getAttributeSafe(comptime .wrap("id")) orelse "";
+pub fn getId(self: *const Element) ?[]const u8 {
+    return self.getAttributeInterned("id");
 }
 
 pub fn setId(self: *Element, value: []const u8, frame: *Frame) !void {
     return self.setAttributeSafe(comptime .wrap("id"), .wrap(value), frame);
 }
 
-pub fn getSlot(self: *const Element) []const u8 {
-    return self.getAttributeSafe(comptime .wrap("slot")) orelse "";
+// ** INTERN ONL **. Unlike other getters, e.g. getClassName, getSlot, this
+// isn't a WebApi (some individual types DO have a name getter, but not Element).
+// BUT, enough code internally needs this, that the helper exists.
+pub fn getName(self: *const Element) ?[]const u8 {
+    return self.getAttributeInterned("name");
+}
+
+pub fn hasName(self: *const Element) bool {
+    return self.hasAttributeInterned("name");
+}
+
+pub fn getSlot(self: *const Element) ?[]const u8 {
+    return self.getAttributeSafe(comptime .wrap("slot"));
 }
 
 pub fn setSlot(self: *Element, value: []const u8, frame: *Frame) !void {
     return self.setAttributeSafe(comptime .wrap("slot"), .wrap(value), frame);
 }
 
-pub fn getDir(self: *const Element) []const u8 {
-    return self.getAttributeSafe(comptime .wrap("dir")) orelse "";
+pub fn getDir(self: *const Element) ?[]const u8 {
+    return self.getAttributeInterned("dir");
 }
 
 pub fn setDir(self: *Element, value: []const u8, frame: *Frame) !void {
     return self.setAttributeSafe(comptime .wrap("dir"), .wrap(value), frame);
 }
 
-pub fn getClassName(self: *const Element) []const u8 {
-    return self.getAttributeSafe(comptime .wrap("class")) orelse "";
+pub fn getClassName(self: *const Element) ?[]const u8 {
+    return self.getAttributeInterned("class");
 }
 
 pub fn setClassName(self: *Element, value: []const u8, frame: *Frame) !void {
@@ -923,6 +942,16 @@ pub fn hasAttributeSafe(self: *const Element, name: String) bool {
     return self._attributes.hasSafe(name);
 }
 
+// Like getAttributeSafe, but faster! Only usable for values that are String.intern
+// so that the comparison becomes a single pointer equality.
+pub fn getAttributeInterned(self: *const Element, comptime name: []const u8) ?[]const u8 {
+    return self._attributes.getInterned(name);
+}
+
+pub fn hasAttributeInterned(self: *const Element, comptime name: []const u8) bool {
+    return self._attributes.hasInterned(name);
+}
+
 // Per HTML "concept-fe-disabled", only listed elements participate in the
 // disabled concept. Anything else (e.g. <div disabled>) has no disabled
 // state and never matches :disabled / :enabled.
@@ -933,12 +962,12 @@ pub fn hasDisabledConcept(self: *const Element) bool {
     };
 }
 
-pub fn isDisabled(self: *Element) bool {
+pub fn isDisabled(self: *const Element) bool {
     if (!self.hasDisabledConcept()) {
         return false;
     }
 
-    if (self.getAttributeSafe(comptime .wrap("disabled")) != null) {
+    if (self.getAttributeInterned("disabled") != null) {
         return true;
     }
 
@@ -947,10 +976,10 @@ pub fn isDisabled(self: *Element) bool {
     // <optgroup disabled>. It does NOT inherit from <select disabled> or
     // an ancestor <fieldset disabled>.
     if (self.getTag() == .option) {
-        if (self.asNode()._parent) |parent_node| {
+        if (self.asConstNode()._parent) |parent_node| {
             if (parent_node.is(Element)) |parent_el| {
                 if (parent_el.getTag() == .optgroup and
-                    parent_el.getAttributeSafe(comptime .wrap("disabled")) != null)
+                    parent_el.getAttributeInterned("disabled") != null)
                 {
                     return true;
                 }
@@ -959,13 +988,13 @@ pub fn isDisabled(self: *Element) bool {
         return false;
     }
 
-    const element_node = self.asNode();
+    const element_node = self.asConstNode();
     var current: ?*Node = element_node._parent;
     while (current) |node| {
         current = node._parent;
         const ancestor = node.is(Element) orelse continue;
 
-        if (ancestor.getTag() == .fieldset and ancestor.getAttributeSafe(comptime .wrap("disabled")) != null) {
+        if (ancestor.getTag() == .fieldset and ancestor.getAttributeInterned("disabled") != null) {
             var child = ancestor.firstElementChild();
             while (child) |c| {
                 if (c.getTag() == .legend) {
@@ -1138,8 +1167,7 @@ pub fn setAttributeNode(self: *Element, attr: *Attribute, frame: *Frame) !?*Attr
         if (el == self) {
             return attr;
         }
-        attr._element = null;
-        _ = try el.removeAttributeNode(attr, frame);
+        return error.InUseAttribute;
     }
 
     return self._attributes.putAttribute(attr, self, frame);
@@ -1244,6 +1272,7 @@ pub fn getOrCreateStyle(self: *Element, frame: *Frame) !*CSSStyleDeclaration {
     if (!gop.found_existing) {
         gop.value_ptr.* = try CSSStyleDeclaration.init(self, false, owner);
     }
+    self._flags.has_inline_style = true;
     return gop.value_ptr.*;
 }
 
@@ -1272,6 +1301,15 @@ fn getStyle(self: *Element, frame: *Frame) ?*CSSStyleDeclaration {
     };
 }
 
+// Marks the element as possibly having inline style once a `style` attribute
+// lands on it. Attribute population paths that bypass attributeChange (the
+// parser, cloneNode) call this after filling the list.
+pub fn noteStyleAttribute(self: *Element) void {
+    if (self._attributes.hasSafe(comptime .wrap("style"))) {
+        self._flags.has_inline_style = true;
+    }
+}
+
 pub fn setStyle(self: *Element, value: []const u8, frame: *Frame) !void {
     const style = try self.getOrCreateStyle(frame);
     try style.setCssText(value, frame);
@@ -1291,6 +1329,17 @@ pub fn getClassList(self: *Element, frame: *Frame) !*collections.DOMTokenList {
 pub fn setClassList(self: *Element, value: String, frame: *Frame) !void {
     const class_list = try self.getClassList(frame);
     try class_list.setValue(value, frame);
+}
+
+pub fn getPartList(self: *Element, frame: *Frame) !*collections.DOMTokenList {
+    const gop = try frame._element_part_lists.getOrPut(frame.arena, self);
+    if (!gop.found_existing) {
+        gop.value_ptr.* = try frame._factory.create(collections.DOMTokenList{
+            ._element = self,
+            ._attribute_name = comptime .wrap("part"),
+        });
+    }
+    return gop.value_ptr.*;
 }
 
 pub fn getRelList(self: *Element, frame: *Frame) !*collections.DOMTokenList {
@@ -1622,7 +1671,7 @@ pub fn focus(self: *Element, frame: *Frame) !void {
     const new_target = self.asEventTarget();
     const doc = self.asNode().ownerDocument(frame) orelse frame.document;
     const old_active = doc._active_element;
-    doc._active_element = self;
+    doc.setActiveElement(self, frame);
 
     // Focusing something moves the whole chain, not just this document: the
     // frame that owns the element holds the focus, and every ancestor of it
@@ -1665,7 +1714,7 @@ pub fn blur(self: *Element, frame: *Frame) !void {
     const doc = self.asNode().ownerDocument(frame) orelse frame.document;
     if (doc._active_element != self) return;
 
-    doc._active_element = null;
+    doc.setActiveElement(null, frame);
 
     const FocusEvent = @import("event/FocusEvent.zig");
     const old_target = self.asEventTarget();
@@ -1831,15 +1880,15 @@ pub fn parentElement(self: *Element) ?*Element {
     return self.asNode().parentElement();
 }
 
+// Style checks go through the StyleManager of the element's own frame, not
+// the caller's: its stylesheets and materialized inline styles are per-frame,
+// and a same-origin script can reach an element in another frame.
 /// Cache for visibility checks - re-exported from StyleManager for convenience.
 pub const VisibilityCache = StyleManager.VisibilityCache;
 
 /// Cache for pointer-events checks - re-exported from StyleManager for convenience.
 pub const PointerEventsCache = StyleManager.PointerEventsCache;
 
-// Style checks go through the StyleManager of the element's own frame, not
-// the caller's: its stylesheets and materialized inline styles are per-frame,
-// and a same-origin script can reach an element in another frame.
 pub fn hasPointerEventsNone(self: *Element, cache: ?*PointerEventsCache, frame: *Frame) bool {
     return self.ownerFrame(frame)._style_manager.hasPointerEventsNone(self, cache);
 }
@@ -1850,8 +1899,8 @@ pub fn checkVisibilityCached(self: *Element, cache: ?*VisibilityCache, frame: *F
 
 const CheckVisibilityOpts = struct {
     checkOpacity: bool = false,
-    opacityProperty: bool = false,
     checkVisibilityCSS: bool = false,
+    opacityProperty: bool = false,
     visibilityProperty: bool = false,
 };
 pub fn checkVisibility(self: *Element, opts_: ?CheckVisibilityOpts, frame: *Frame) bool {
@@ -5211,9 +5260,6 @@ fn contentWidth(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
     // until the first child that says no.
     var share_a_line = true;
 
-    // The cache arrives seeded by the caller's own visibility walk, and
-    // siblings share that ancestor chain, so the loop costs one own-element
-    // check per child rather than N ancestor walks.
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(Element)) |el| {
@@ -5240,6 +5286,8 @@ fn contentWidth(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
     };
 }
 
+// Unlike clientHeight, the root's offsetHeight is its box (the document
+// extent), so it stays on the synthetic root default.
 pub fn getOffsetHeight(self: *Element, frame: *Frame) f64 {
     var visibility_cache: VisibilityCache = .{};
     if (!self.checkVisibilityCached(&visibility_cache, frame)) {
@@ -5582,7 +5630,7 @@ fn documentPosition(node: *Node, frame: *Frame) f64 {
 fn siblingPosition(node: *Node, frame: *Frame) f64 {
     if (node.is(Element)) |element| {
         if (frame.positionOf(element)) |point| {
-            return point.x + relativeOffset(element, frame, "left", "right");
+            return point.x + relativeOffset(element, frame, "left", "right") + translateXChain(element, frame);
         }
     }
     return calculateSiblingPosition(node);
@@ -5617,6 +5665,30 @@ fn relativeOffset(
         if (CSS.parseDimensionViewport(declared, frame)) |px| return -px;
     }
     return 0;
+}
+
+// Calculates horizontal position using the same approach as y,
+// just scaled differently for visual distinction
+fn calculateSiblingPosition(node: *Node) f64 {
+    var position: f64 = 0.0;
+    var current = node;
+
+    // Walk up to root, counting preceding nodes (same as y)
+    while (current.parentNode()) |parent| {
+        // Count all previous siblings and their descendants
+        var sibling = parent.firstChild();
+        while (sibling) |s| {
+            if (s == current) break;
+            position += countSubtreeNodes(s);
+            sibling = s.nextSibling();
+        }
+
+        // Count the parent itself
+        position += 1.0;
+        current = parent;
+    }
+
+    return position * 5.0; // 5px per node
 }
 
 fn calculateDocumentPosition(node: *Node) f64 {
@@ -5654,28 +5726,25 @@ fn countSubtreeNodes(node: *Node) f64 {
     return count;
 }
 
-// Calculates horizontal position using the same approach as y,
-// just scaled differently for visual distinction
-fn calculateSiblingPosition(node: *Node) f64 {
-    var position: f64 = 0.0;
-    var current = node;
-
-    // Walk up to root, counting preceding nodes (same as y)
-    while (current.parentNode()) |parent| {
-        // Count all previous siblings and their descendants
-        var sibling = parent.firstChild();
-        while (sibling) |s| {
-            if (s == current) break;
-            position += countSubtreeNodes(s);
-            sibling = s.nextSibling();
-        }
-
-        // Count the parent itself
-        position += 1.0;
-        current = parent;
+/// How far `transform` moves a box along X, summed over the element and every
+/// ancestor -- the flow pass places boxes and knows nothing about transforms.
+///
+/// A carousel is the case that matters: a track is slid with
+/// `transform: translateX(-Npx)` and the script reads the cards back to decide
+/// when to recycle one, so a rect that ignores the translation never converges.
+/// Only the horizontal axis, and only the length component: `parseTranslateX`
+/// adds up the x argument of each translate/matrix function and skips units it
+/// cannot resolve, so a rotation in the list contributes nothing rather than
+/// turning the offsets it is composed with. Chrome folds the whole list into
+/// one matrix; this is the one term of it that moves carousels.
+fn translateXChain(self: *Element, frame: *Frame) f64 {
+    var x: f64 = 0.0;
+    var current: ?*Element = self;
+    while (current) |el| : (current = el.parentElement()) {
+        const style = el.getStyle(frame) orelse continue;
+        x += CSS.parseTranslateX(style.getPropertyValue("transform", frame));
     }
-
-    return position * 5.0; // 5px per node
+    return x;
 }
 
 pub fn getElementsByTagName(self: *Element, tag_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
@@ -6255,6 +6324,21 @@ pub const JsApi = struct {
     fn _tagName(self: *Element, frame: *Frame) []const u8 {
         return self.getTagNameSpec(frame, &frame.buf);
     }
+
+    // `id`, `slot` and `className` are DOMString, not `DOMString?`: an element
+    // without the attribute reads "". The Zig getters are optional because
+    // their internal callers do have to tell absent from empty (the semantic
+    // tree omits the attribute rather than emitting an empty one), so the
+    // reflection happens here.
+    fn _id(self: *const Element) []const u8 {
+        return self.getId() orelse "";
+    }
+    fn _slot(self: *const Element) []const u8 {
+        return self.getSlot() orelse "";
+    }
+    fn _className(self: *const Element) []const u8 {
+        return self.getClassName() orelse "";
+    }
     // the frame-aware variant returns the original URI for namespaces
     // outside the built-in set instead of the placeholder
 
@@ -6336,11 +6420,11 @@ pub const JsApi = struct {
     }
 
     const ShadowRootInit = struct {
-        mode: String,
-        delegatesFocus: bool = false,
-        slotAssignment: ?String = null,
         clonable: bool = false,
+        delegatesFocus: bool = false,
+        mode: String,
         serializable: bool = false,
+        slotAssignment: ?String = null,
     };
     fn _attachShadow(self: *Element, init: ShadowRootInit, frame: *Frame) !*ShadowRoot {
         const mode: ShadowRoot.Mode = blk: {
@@ -6380,10 +6464,10 @@ pub const JsApi = struct {
     pub const prefix = bridge.accessor(Element._prefix, null, .{});
     pub const localName = bridge.accessor(Element.getLocalName, null, .{});
     pub const tagName = bridge.accessor(_tagName, null, .{});
-    pub const id = bridge.accessor(Element.getId, Element.setId, .{ .ce_reactions = true });
-    pub const className = bridge.accessor(Element.getClassName, Element.setClassName, .{ .ce_reactions = true });
+    pub const id = bridge.accessor(_id, Element.setId, .{ .ce_reactions = true });
+    pub const className = bridge.accessor(_className, Element.setClassName, .{ .ce_reactions = true });
     pub const classList = bridge.accessor(Element.getClassList, Element.setClassList, .{ .ce_reactions = true });
-    pub const slot = bridge.accessor(Element.getSlot, Element.setSlot, .{ .ce_reactions = true });
+    pub const slot = bridge.accessor(_slot, Element.setSlot, .{ .ce_reactions = true });
     pub const attributes = bridge.accessor(Element.getAttributeNamedNodeMap, null, .{});
     pub const shadowRoot = bridge.accessor(Element.getShadowRoot, null, .{});
     pub const part = bridge.accessor(_part, _setPart, .{ .ce_reactions = true });

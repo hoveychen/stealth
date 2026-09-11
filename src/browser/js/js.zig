@@ -36,12 +36,12 @@ pub const Identity = @import("Identity.zig");
 pub const Context = @import("Context.zig");
 pub const Execution = @import("Execution.zig");
 pub const Local = @import("Local.zig");
+pub const TaggedOpaque = @import("TaggedOpaque.zig");
 pub const Inspector = @import("Inspector.zig");
 pub const Snapshot = @import("Snapshot.zig");
 pub const Platform = @import("Platform.zig");
 pub const Isolate = @import("Isolate.zig");
 pub const HandleScope = @import("HandleScope.zig");
-pub const TaggedOpaque = @import("TaggedOpaque.zig");
 pub const access_check = @import("access_check.zig");
 
 pub const Value = @import("Value.zig");
@@ -171,6 +171,11 @@ pub const ArrayBuffer = struct {
     pub fn dupe(self: ArrayBuffer, allocator: Allocator) !ArrayBuffer {
         return .{ .values = try allocator.dupe(u8, self.values) };
     }
+};
+
+// An ArrayBuffer or any typed array kind or a, exposed as its raw bytes.
+pub const BufferSource = struct {
+    bytes: []const u8,
 };
 
 pub const ArrayType = enum(u8) {
@@ -382,13 +387,17 @@ pub fn simpleZigValueToJs(isolate: Isolate, value: anytype, comptime fail: bool,
             if (value >= 0 and value <= 4_294_967_295) {
                 return @ptrCast(isolate.initInteger(@as(u32, @intCast(value))).handle);
             }
-            return @ptrCast(isolate.initBigInt(value).handle);
+            if (value >= -2_147_483_648 and value < 0) {
+                return @ptrCast(isolate.initInteger(@as(i32, @intCast(value))).handle);
+            }
+            // 64-bit numbers are represented as floats (that's how it works in JS)
+            return @ptrCast(isolate.initNumber(@as(f64, @floatFromInt(value))).handle);
         },
         .comptime_int => {
-            if (value > -2_147_483_648 and value <= 4_294_967_295) {
+            if (value >= -2_147_483_648 and value <= 4_294_967_295) {
                 return @ptrCast(isolate.initInteger(value).handle);
             }
-            return @ptrCast(isolate.initBigInt(value).handle);
+            return @ptrCast(isolate.initNumber(@as(f64, value)).handle);
         },
         .float, .comptime_float => return @ptrCast(isolate.initNumber(value).handle),
         .pointer => |ptr| {
@@ -538,7 +547,7 @@ pub export fn v8_inspector__Client__IMPL__descriptionForValueSubtype(
 
 test "TaggedAnyOpaque" {
     // If we grow this, fine, but it should be a conscious decision
-    try std.testing.expectEqual(24, @sizeOf(@import("TaggedOpaque.zig")));
+    try std.testing.expectEqual(24, @sizeOf(TaggedOpaque));
 }
 
 // Every finalizable instance of Zig gets 1 FinalizerCallback registered in the
