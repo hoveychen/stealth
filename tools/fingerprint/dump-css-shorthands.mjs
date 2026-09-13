@@ -59,7 +59,15 @@ const outPath = path.join(repo, 'src/browser/webapi/css/chrome_shorthands.zig');
 // Same pin as the keyword and value-case tables.
 const MDN_DATA = '2.24.0';
 
-const CSS_WIDE = ['inherit', 'initial', 'unset', 'revert', 'revert-layer'];
+// `revert-rule` joined the list in Chrome 152 and behaves like the rest:
+// `border: revert-rule` reaches all seventeen longhands in the CSS-wide
+// per-side order, `grid-template-areas` takes it though it takes no bare
+// identifier otherwise, and CSS.supports answers it exactly as it answers
+// `inherit`. Leaving it out cost real fidelity rather than one row: the
+// shorthand table read its per-side order as a *second* longhand order for
+// `border` and demoted border and twelve of its relatives to `.unmodelled`,
+// which answers style.length 1 where Chrome answers 17.
+const CSS_WIDE = ['inherit', 'initial', 'unset', 'revert', 'revert-layer', 'revert-rule'];
 
 // One representative token per value type a longhand can take. The engine
 // classifies a component by shape and looks the class up here, so this list is

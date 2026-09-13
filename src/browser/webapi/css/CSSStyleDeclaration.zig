@@ -888,6 +888,7 @@ fn cssWideKeyword(value: []const u8) ?CssWide {
         .{ "unset", .unset },
         .{ "revert", .revert },
         .{ "revert-layer", .revert },
+        .{ "revert-rule", .revert },
     });
     if (trimmed.len > "revert-layer".len) return null;
     var lower_buf: ["revert-layer".len]u8 = undefined;
@@ -898,6 +899,16 @@ fn cssWideKeyword(value: []const u8) ?CssWide {
 /// `revert-layer` folds into `revert`: with no cascade layer to fall back to,
 /// the two were measured giving the same answer on every property and tag tried
 /// (scratch/b92/expr-wide-table.js).
+///
+/// `revert-rule` — new in Chrome 152 — folds into the same place, because it
+/// was measured behaving as `revert-layer` does, not as `revert` does: an
+/// inline `color: revert-rule` on an element an author rule already colours
+/// keeps the author's colour, where `revert` drops to the UA sheet's. That
+/// difference between `revert-layer` and `revert` is visible in the same
+/// measurement and is not what this line claims to handle — it is the older
+/// approximation above, unchanged here on purpose. What this entry buys is the
+/// half that is unambiguous: `revert-rule` is a CSS-wide keyword, so it has to
+/// leave the ordinary-identifier path that would store it as a plain value.
 const CssWide = enum { inherit, initial, unset, revert };
 
 /// How deep a chain of `inherit` declarations is followed before the walk gives
