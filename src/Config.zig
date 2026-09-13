@@ -1016,7 +1016,7 @@ pub const WaitUntil = enum {
 /// Must be initialized with an allocator that outlives all HTTP connections.
 pub const HttpHeaders = struct {
     /// The version we claim to be. One constant so the User-Agent's
-    /// "Chrome/151.0.0.0" and the Sec-Ch-Ua brands' v="151" can't drift apart —
+    /// "Chrome/152.0.0.0" and the Sec-Ch-Ua brands' v="152" can't drift apart —
     /// a mismatch between the two is a stronger signal than either value alone.
     ///
     /// This number is not free to move on its own. Several tables in
@@ -1026,19 +1026,32 @@ pub const HttpHeaders = struct {
     /// (`a=rtcp-xr:rcvr-rtt=all`, an `rrtr` feedback line per payload type, and
     /// renumbered video payload types). Claiming a version whose tables were
     /// recorded from a different one is a contradiction a detector reads for
-    /// free — so bump this together with the tables, never alone.
-    const chrome_major = "151";
+    /// free — so bump this together with the tables, never alone. 152 added the
+    /// `window-drag` longhand (475 -> 476) and moved the eight
+    /// `corner-*-shape` initial values from `round` to `superellipse(1)`; it
+    /// left the offer SDP and the media mime table untouched.
+    ///
+    /// Nor is standing still free. A stale major is not a neutral choice: the
+    /// number is checked at the edge, before any JavaScript runs. Akamai
+    /// refused ak-kohls outright — 403 on the first document, an eight-node
+    /// "Access Denied" — for a client claiming 151 on the day Chrome 152 was
+    /// what browsers sent, and the same binary passed 3/3 with nothing changed
+    /// but this constant and the brands below.
+    const chrome_major = "152";
     const chrome_reduced_version = chrome_major ++ ".0.0.0";
     /// The build the reference Chrome reported. This used to be the Linux
     /// build's .137, "because that is what claimed_platform says we are" — and
     /// then the claim moved to macOS (48efdc6b8) and this did not follow, so it
-    /// named a build no Mac ever ran. The Mac reference is 151.0.7922.174.
+    /// named a build no Mac ever ran. The Mac reference is 152.0.7977.83, read
+    /// off the reference Chrome's own `sec-ch-ua-full-version`
+    /// (tools/fingerprint/accept-ch-echo.mjs). It does not track chrome_major:
+    /// the build number is the browser's, not a function of the major.
     /// Only navigator.userAgentData.getHighEntropyValues carries it: the
     /// user-agent string zeroes everything after the major (that is what
-    /// Chrome's user-agent reduction does), so a Chrome whose UA says 151.0.0.0
-    /// and whose uaFullVersion says 151.0.7922.174 is not contradicting itself —
+    /// Chrome's user-agent reduction does), so a Chrome whose UA says 152.0.0.0
+    /// and whose uaFullVersion says 152.0.7977.83 is not contradicting itself —
     /// it's the normal shape, and a full version ending .0.0.0 is the anomaly.
-    const chrome_full_version = chrome_major ++ ".0.7922.174";
+    const chrome_full_version = "152.0.7977.83";
 
     /// Default User-Agent. Since Chrome's user-agent reduction the string is
     /// frozen apart from the major version and a platform token from a closed
@@ -1058,31 +1071,33 @@ pub const HttpHeaders = struct {
         version: []const u8,
     };
 
-    /// Brands used when --sec-ch-ua isn't given. Measured from the Chrome 151
+    /// Brands used when --sec-ch-ua isn't given. Measured from the Chrome 152
     /// build this claims to be, GREASE entry included: Chrome deliberately
     /// ships one deliberately-odd brand so servers can't hardcode the list, and
     /// omitting it is itself distinctive.
     ///
     /// Both the GREASE token and the *order* move between builds — that is the
-    /// point of GREASE — so neither can be carried across a version bump. This
-    /// build answers `Not=A?Brand` at v99 with Chrome ahead of Chromium, where
-    /// 150 answered `Not;A=Brand` at v8 with Chromium first (measured twice, in
-    /// separate container runs, so it is the build's answer and not one roll of
-    /// a die). The real versions track chrome_major so the header and the
-    /// User-Agent agree.
+    /// point of GREASE — so neither can be carried across a version bump, and
+    /// all three have now moved twice: 150 answered `Not;A=Brand` at v8 with
+    /// Chromium first, 151 answered `Not=A?Brand` at v99 with Chrome ahead of
+    /// Chromium, and 152 answers `Not?A_Brand` at v24 with Chromium first
+    /// again. The 152 row is the reference browser's own header, read off
+    /// tools/fingerprint/accept-ch-echo.mjs rather than recalled. The real
+    /// versions track chrome_major so the header and the User-Agent agree.
     pub const default_brands = [_]Brand{
-        .{ .brand = "Not=A?Brand", .version = "99" },
-        .{ .brand = "Google Chrome", .version = chrome_major },
         .{ .brand = "Chromium", .version = chrome_major },
+        .{ .brand = "Not?A_Brand", .version = "24" },
+        .{ .brand = "Google Chrome", .version = chrome_major },
     };
 
     /// The same brands with the four-part versions the high-entropy hints
-    /// carry. Measured alongside default_brands, GREASE included: its version
-    /// pads to 99.0.0.0 rather than carrying a build number of its own.
+    /// carry, in the same order. Measured alongside default_brands off
+    /// `sec-ch-ua-full-version-list`, GREASE included: its version pads to
+    /// 24.0.0.0 rather than carrying a build number of its own.
     pub const default_full_version_brands = [_]Brand{
-        .{ .brand = "Not=A?Brand", .version = "99.0.0.0" },
-        .{ .brand = "Google Chrome", .version = chrome_full_version },
         .{ .brand = "Chromium", .version = chrome_full_version },
+        .{ .brand = "Not?A_Brand", .version = "24.0.0.0" },
+        .{ .brand = "Google Chrome", .version = chrome_full_version },
     };
 
     /// Accept values real Chrome sends, keyed by fetch destination. Measured
@@ -1606,13 +1621,13 @@ test "Config: HttpHeaders default to Chrome's identity" {
 
     const h = config.http_headers;
     try std.testing.expectEqualStrings(
-        "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "\"Chromium\";v=\"152\", \"Not?A_Brand\";v=\"24\", \"Google Chrome\";v=\"152\"",
         h.sec_ch_ua,
     );
     try std.testing.expectEqualStrings("en-US,en;q=0.9", h.accept_language.header);
     try std.testing.expectEqual(@as(usize, 3), h.brands.len);
-    try std.testing.expectEqualStrings("Not=A?Brand", h.brands[0].brand);
-    try std.testing.expectEqualStrings("Chromium", h.brands[2].brand);
+    try std.testing.expectEqualStrings("Chromium", h.brands[0].brand);
+    try std.testing.expectEqualStrings("Google Chrome", h.brands[2].brand);
 
     // The default User-Agent is a whole Chrome string, and its version has to
     // be the one the brands above carry.
@@ -1620,7 +1635,7 @@ test "Config: HttpHeaders default to Chrome's identity" {
     try std.testing.expectEqual(true, std.mem.endsWith(u8, h.user_agent, " Safari/537.36"));
     try std.testing.expectEqual(
         true,
-        std.mem.indexOf(u8, h.user_agent, "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0") != null,
+        std.mem.indexOf(u8, h.user_agent, "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0") != null,
     );
     try std.testing.expectEqual(null, std.mem.indexOf(u8, h.user_agent, "Lightpanda"));
 }

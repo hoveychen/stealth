@@ -18,18 +18,18 @@
 {
     const cs = getComputedStyle(document.body);
 
-    // Chrome 151 enumerates 475 computed longhands by index, in its own order:
+    // Chrome 152 enumerates 476 computed longhands by index, in its own order:
     // alphabetical over the unprefixed names, then the -webkit- block.
-    testing.expectEqual(475, cs.length);
+    testing.expectEqual(476, cs.length);
     testing.expectEqual('accent-color', cs[0]);
     testing.expectEqual('align-content', cs[1]);
-    testing.expectEqual('-webkit-writing-mode', cs[474]);
-    testing.expectEqual(undefined, cs[475]);
+    testing.expectEqual('-webkit-writing-mode', cs[475]);
+    testing.expectEqual(undefined, cs[476]);
 
     // item() is the same list by another name.
     testing.expectEqual('accent-color', cs.item(0));
-    testing.expectEqual('-webkit-writing-mode', cs.item(474));
-    testing.expectEqual('', cs.item(475));
+    testing.expectEqual('-webkit-writing-mode', cs.item(475));
+    testing.expectEqual('', cs.item(476));
 }
 </script>
 
@@ -40,15 +40,15 @@
     const numeric = keys.filter((k) => !isNaN(+k));
     const named = keys.filter((k) => isNaN(+k));
 
-    // 475 indices plus the 736 camelCase names a declaration answers. The alias
+    // 476 indices plus the 737 camelCase names a declaration answers. The alias
     // list is the longer one because it also covers the shorthands and legacy
     // webkit spellings, which are not computed longhands.
-    testing.expectEqual(475, numeric.length);
-    testing.expectEqual(736, named.length);
+    testing.expectEqual(476, numeric.length);
+    testing.expectEqual(737, named.length);
     testing.expectEqual('0', numeric[0]);
-    testing.expectEqual('473', numeric[473]);
+    testing.expectEqual('474', numeric[474]);
     testing.expectEqual('accentColor', named[0]);
-    testing.expectEqual('zoom', named[735]);
+    testing.expectEqual('zoom', named[736]);
 
     // Chrome reports the aliases as own, enumerable, writable data properties
     // on the instance rather than as accessors on the prototype.
@@ -66,14 +66,14 @@
     // the whole alias set — the list does not depend on what is set.
     testing.expectEqual(0, style.length);
     testing.expectEqual(0, keys.filter((k) => !isNaN(+k)).length);
-    testing.expectEqual(736, keys.filter((k) => isNaN(+k)).length);
+    testing.expectEqual(737, keys.filter((k) => isNaN(+k)).length);
 
     // Setting one property adds exactly one index and does not disturb the aliases.
     style.color = 'red';
     const after = Object.keys(style);
     testing.expectEqual(1, style.length);
     testing.expectEqual('color', style[0]);
-    testing.expectEqual(736, after.filter((k) => isNaN(+k)).length);
+    testing.expectEqual(737, after.filter((k) => isNaN(+k)).length);
     style.removeProperty('color');
     testing.expectEqual(0, style.length);
 }

@@ -203,16 +203,16 @@
   // Chrome's own brand list, GREASE entry first. Derived from the same value
   // the Sec-Ch-Ua header carries, so the two cannot disagree.
   testing.expectEqual(3, navigator.userAgentData.brands.length);
-  // GREASE first, then Chrome ahead of Chromium. Both the odd brand and the
-  // order are measured from the Chrome 151 build being claimed, not carried
+  // Chromium first, then GREASE, then Chrome. Both the odd brand and the
+  // order are measured from the Chrome 152 build being claimed, not carried
   // over: Chrome varies them per build precisely so servers cannot hardcode
-  // the list, so a 150-era list beside a 151 user-agent is a mismatch.
-  testing.expectEqual({brand: 'Not=A?Brand', version: "99"}, navigator.userAgentData.brands[0]);
-  testing.expectEqual({brand: 'Google Chrome', version: "151"}, navigator.userAgentData.brands[1]);
-  testing.expectEqual({brand: 'Chromium', version: "151"}, navigator.userAgentData.brands[2]);
+  // the list, so a 151-era list beside a 152 user-agent is a mismatch.
+  testing.expectEqual({brand: 'Chromium', version: "152"}, navigator.userAgentData.brands[0]);
+  testing.expectEqual({brand: 'Not?A_Brand', version: "24"}, navigator.userAgentData.brands[1]);
+  testing.expectEqual({brand: 'Google Chrome', version: "152"}, navigator.userAgentData.brands[2]);
 
   // The brand version has to be the one the user-agent string carries.
-  testing.expectEqual(true, navigator.userAgent.includes('Chrome/151.'));
+  testing.expectEqual(true, navigator.userAgent.includes('Chrome/152.'));
 
   // Same instance returned on repeated access. Chrome builds a fresh
   // NavigatorUAData per read and answers false here (measured on 151); matching
@@ -231,7 +231,7 @@
   testing.expectEqual(false, json.mobile);
   testing.expectEqual(navigator.userAgentData.platform, json.platform);
   testing.expectEqual(true, Array.isArray(json.brands));
-  testing.expectEqual('Not=A?Brand', json.brands[0].brand);
+  testing.expectEqual('Chromium', json.brands[0].brand);
 </script>
 
 <script id=userAgentData_highEntropy type=module>
@@ -280,9 +280,9 @@
       // zeroes everything after the major, so it deliberately does NOT equal
       // this one; a full version ending .0.0.0 is what would be anomalous.
       testing.expectEqual(3, v.fullVersionList.length);
-      testing.expectEqual({brand: 'Not=A?Brand', version: '99.0.0.0'}, v.fullVersionList[0]);
-      testing.expectEqual({brand: 'Google Chrome', version: '151.0.7922.174'}, v.fullVersionList[1]);
-      testing.expectEqual({brand: 'Chromium', version: '151.0.7922.174'}, v.fullVersionList[2]);
+      testing.expectEqual({brand: 'Chromium', version: '152.0.7977.83'}, v.fullVersionList[0]);
+      testing.expectEqual({brand: 'Not?A_Brand', version: '24.0.0.0'}, v.fullVersionList[1]);
+      testing.expectEqual({brand: 'Google Chrome', version: '152.0.7977.83'}, v.fullVersionList[2]);
 
       // Not requested, so not returned.
       testing.expectEqual(undefined, v.uaFullVersion);
@@ -346,10 +346,10 @@
     const v = await navigator.userAgentData.getHighEntropyValues(['uaFullVersion']);
     state.resolve();
     await state.done(() => {
-      testing.expectEqual('151.0.7922.174', v.uaFullVersion);
+      testing.expectEqual('152.0.7977.83', v.uaFullVersion);
       // Same major as the brands and the user-agent string.
-      testing.expectEqual(true, v.uaFullVersion.startsWith('151.'));
-      testing.expectEqual(true, navigator.userAgent.includes('Chrome/151.'));
+      testing.expectEqual(true, v.uaFullVersion.startsWith('152.'));
+      testing.expectEqual(true, navigator.userAgent.includes('Chrome/152.'));
     });
   }
 </script>
