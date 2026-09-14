@@ -144,9 +144,13 @@ export const ANTIBOT = [
     // The one Akamai candidate that refuses at the door rather than behind its
     // sensor -- `server: AkamaiGHost` on a 403, the same shape ak-kohls has.
     { name: 'ak-bloomingdales', vendor: 'akamai', url: 'https://www.bloomingdales.com/', settleMs: 25000, guards: 'challenge' },
-    // 403 with nothing naming a vendor in the headers, the way sony and zillow
-    // looked until their pages were read.
-    { name: 'x-sweetwater', vendor: 'unattributed', url: 'https://www.sweetwater.com/', settleMs: 25000, guards: 'challenge' },
+    // Its headers name nobody, the way sony's and zillow's did until their
+    // pages were read -- and this one's page has now been read too: it answers
+    // PerimeterX's "Access to this page has been denied" in 21 nodes. Measured
+    // over seven runs it refuses us about three times in ten and serves the
+    // site otherwise, so it is a rate rather than a door; the `x-` prefix stays
+    // so readings keep comparing with the ones taken before the vendor showed.
+    { name: 'x-sweetwater', vendor: 'perimeterx', url: 'https://www.sweetwater.com/', settleMs: 25000, guards: 'challenge' },
 ];
 
 // What a guard's own page looks like from inside it. Signals are recorded raw
