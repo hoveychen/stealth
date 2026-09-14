@@ -136,6 +136,24 @@ pub fn configure(ssl_ctx: *crypto.SSL_CTX) Error!void {
     // which suppresses the extension outright; browsers send it.
     _ = crypto.SSL_CTX_clear_options(ssl_ctx, crypto.SSL_OP_NO_TICKET);
 
+    // trust_anchors (0xca34). Chrome 152 sends it and BoringSSL only writes it
+    // when the application has asked for one, so ours was the single extension
+    // Chrome had and we did not: measured against tls.browserleaks.com the two
+    // hellos agreed on everything else -- same cipher hash (8daaf6152771), same
+    // curves, same signature algorithms, byte-identical Akamai h2 fingerprint
+    // -- and differed only in JA4's extension count, t13d1517h2 against
+    // t13d1516h2. One expression told the arms apart.
+    //
+    // The list is empty on purpose. A fingerprint reads the extension's
+    // presence and its code point, never its contents, and an empty list is
+    // the honest thing to say: this client has no trust anchor subset to
+    // advertise. BoringSSL accepts it -- ssl_is_valid_trust_anchor_list walks
+    // the entries and an empty span has none to reject.
+    const requested_trust_anchors = [_]u8{};
+    if (crypto.SSL_CTX_set1_requested_trust_anchors(ssl_ctx, &requested_trust_anchors, 0) != 1) {
+        return error.TlsProfileRejected;
+    }
+
     crypto.SSL_CTX_set_grease_enabled(ssl_ctx, 1);
     // signature_algorithms has its own GREASE switch, and it is off by default,
     // so this was the one GREASE position where our hello differed from

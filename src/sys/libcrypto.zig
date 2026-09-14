@@ -286,6 +286,10 @@ pub extern fn SSL_CTX_set_grease_enabled(ctx: *SSL_CTX, enabled: c_int) void;
 // the cipher list, the extension list and supported_groups but not this.
 pub extern fn SSL_CTX_set_grease_sigalgs_enabled(ctx: *SSL_CTX, enabled: c_int) void;
 pub extern fn SSL_CTX_set_permute_extensions(ctx: *SSL_CTX, enabled: c_int) void;
+/// trust_anchors (0xca34), draft-ietf-tls-trust-anchor-ids. Sending it at all
+/// is what the fingerprint sees; the list itself may be empty, which
+/// `ssl_is_valid_trust_anchor_list` accepts (its loop simply does not run).
+pub extern fn SSL_CTX_set1_requested_trust_anchors(ctx: *SSL_CTX, ids: [*]const u8, ids_len: usize) c_int;
 pub extern fn SSL_CTX_enable_ocsp_stapling(ctx: *SSL_CTX) void;
 pub extern fn SSL_CTX_enable_signed_cert_timestamps(ctx: *SSL_CTX) void;
 pub extern fn SSL_CTX_clear_options(ctx: *SSL_CTX, options: u32) u32;
