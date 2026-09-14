@@ -92,6 +92,61 @@ export const ANTIBOT = [
     // Kasada, which no station covered before this one.
     { name: 'ks-canadagoose', vendor: 'kasada', url: 'https://www.canadagoose.com/', settleMs: 25000, guards: 'challenge' },
     { name: 'x-hyatt', vendor: 'unattributed', url: 'https://www.hyatt.com/', settleMs: 25000, guards: 'challenge' },
+
+    // --- the third batch (2026-09-13) ------------------------------------
+    //
+    // Screened the same way as the second: a browser-shaped bare curl (Chrome
+    // 152 user-agent, the client hints and Sec-Fetch-* headers that go with
+    // it), and a candidate that answered 200 was dropped rather than kept as a
+    // station that can only ever say "pass". Seventy candidates went in and
+    // these came out; the `vendor` on each is what the response named itself,
+    // never an assumption.
+    //
+    // The 200s are worth stating because they are the reason this batch leans
+    // the way it does. Ten Akamai-fronted sites (walmart, bestbuy, lowes,
+    // costco, sephora, united, delta, walgreens, nike, rei) all answered a
+    // bare curl with 200 and an `_abck`/`bm_sz` cookie: that family mostly
+    // guards with its JS sensor rather than at the door, so it screens out
+    // here even though it is a guard in a browser. Same for both PerimeterX
+    // candidates (target, fiverr: `_pxhd`, 200) and both Imperva ones
+    // (pepsico, imperva.com: `x-iinfo`, 200) -- which is why Kasada still has
+    // one station and Imperva none. Finding a station for those two needs a
+    // screen that runs JavaScript, not a better candidate list.
+    //
+    // `guards: 'block'` is new here. The eight `'challenge'` Cloudflare rows
+    // answer 403 *with* `cf-mitigated: challenge`, so an interstitial is
+    // coming; medium and gamestop answer a 403 with no such header, which is
+    // the WAF refusing outright. Both shapes are worth having and they are not
+    // the same reading, so they are not spelled the same. Nothing in the sweep
+    // branches on this field -- it is recorded so a station that changes
+    // behaviour shows up as a changed field.
+    { name: 'cf-upwork', vendor: 'cloudflare', url: 'https://www.upwork.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-crunchyroll', vendor: 'cloudflare', url: 'https://www.crunchyroll.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-udemy', vendor: 'cloudflare', url: 'https://www.udemy.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-namecheap', vendor: 'cloudflare', url: 'https://www.namecheap.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-coinbase', vendor: 'cloudflare', url: 'https://www.coinbase.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-mercari', vendor: 'cloudflare', url: 'https://www.mercari.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-bunnings', vendor: 'cloudflare', url: 'https://www.bunnings.com.au/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-chemistwarehouse', vendor: 'cloudflare', url: 'https://www.chemistwarehouse.com.au/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-medium', vendor: 'cloudflare', url: 'https://www.medium.com/', settleMs: 25000, guards: 'block' },
+    { name: 'cf-gamestop', vendor: 'cloudflare', url: 'https://www.gamestop.com/', settleMs: 25000, guards: 'block' },
+    { name: 'dd-blablacar', vendor: 'datadome', url: 'https://www.blablacar.fr/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-leroymerlin', vendor: 'datadome', url: 'https://www.leroymerlin.fr/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-tripadvisor', vendor: 'datadome', url: 'https://www.tripadvisor.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-grainger', vendor: 'datadome', url: 'https://www.grainger.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-neimanmarcus', vendor: 'datadome', url: 'https://www.neimanmarcus.com/', settleMs: 25000, guards: 'challenge' },
+    // DataDome behind someone else's edge, the way dd-allopneus sits behind
+    // Cloudflare's: sncf-connect answers 403 with both `cf-mitigated` absent
+    // and `x-datadome` present, zoro with Akamai's `ak_bmsc` beside the
+    // DataDome cookie. The 403 is the edge; the cookie names who judged.
+    { name: 'dd-sncf', vendor: 'datadome', url: 'https://www.sncf-connect.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-zoro', vendor: 'datadome', url: 'https://www.zoro.com/', settleMs: 25000, guards: 'challenge' },
+    // The one Akamai candidate that refuses at the door rather than behind its
+    // sensor -- `server: AkamaiGHost` on a 403, the same shape ak-kohls has.
+    { name: 'ak-bloomingdales', vendor: 'akamai', url: 'https://www.bloomingdales.com/', settleMs: 25000, guards: 'challenge' },
+    // 403 with nothing naming a vendor in the headers, the way sony and zillow
+    // looked until their pages were read.
+    { name: 'x-sweetwater', vendor: 'unattributed', url: 'https://www.sweetwater.com/', settleMs: 25000, guards: 'challenge' },
 ];
 
 // What a guard's own page looks like from inside it. Signals are recorded raw
