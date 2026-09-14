@@ -3667,7 +3667,36 @@ pub fn loadImage(self: *Frame, element: *Element.Html, src: []const u8) !void {
         return self.queueElementEvent(element, .@"error");
     };
 
-    return self.requestSubresource(resolved, element, .{});
+    return self.requestSubresource(resolved, element, .{ .priority = imagePriority(element) });
+}
+
+/// The RFC 9218 hint an `<img>` gets, which Chrome decides from the element's
+/// declared size and nothing else.
+///
+/// Measured on Chrome 152 over a page of eight images
+/// (scratch/b146/img-prio.mjs): 1x1, 10x10, 30x30, 50x50, 100x100 and 200x50
+/// all send bare `i`, while 101x101, 141x71, 300x300 and an image with no size
+/// attributes at all send `u=2, i`. The break is the area: 10000 square pixels
+/// inclusive is small, 10001 is not -- Blink's small-image threshold. The
+/// viewport does not enter into it, an absolutely-positioned image 5000px down
+/// the page still sends `u=2, i`, which is what makes this decidable here,
+/// before layout, from the attributes alone.
+///
+/// A missing or unparsable attribute means "not known to be small", the same
+/// answer Chrome gives an `<img>` with no width or height.
+///
+/// This engine used to send `u=1, i` for every image, which matched neither
+/// case; the only two image requests it got right were the ones that never
+/// come through here -- a preloaded image (bare `i`, set at the preload site)
+/// and the favicon (`u=1, i`, and Chrome agrees).
+fn imagePriority(element: *Element.Html) []const u8 {
+    const el = element.asElement();
+    const w = el.getAttributeSafe(comptime .wrap("width")) orelse return "u=2, i";
+    const h = el.getAttributeSafe(comptime .wrap("height")) orelse return "u=2, i";
+    const width = std.fmt.parseInt(u32, std.mem.trim(u8, w, &std.ascii.whitespace), 10) catch return "u=2, i";
+    const height = std.fmt.parseInt(u32, std.mem.trim(u8, h, &std.ascii.whitespace), 10) catch return "u=2, i";
+    const area = @as(u64, width) * @as(u64, height);
+    return if (area <= 10_000) "i" else "u=2, i";
 }
 
 // One in-flight image request, holding what the transfer needs to report an
