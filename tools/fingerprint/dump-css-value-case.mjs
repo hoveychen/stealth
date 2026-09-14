@@ -121,7 +121,7 @@ const keywordList = (names) =>
 const zigList = (names) => names.length === 1
     ? `&.{${zigString(names[0])}}`
     : `&.{ ${names.map(zigString).join(', ')} }`;
-const CSS_WIDE = ['inherit', 'initial', 'revert', 'revert-layer', 'unset'];
+const CSS_WIDE = ['inherit', 'initial', 'revert', 'revert-layer', 'revert-rule', 'unset'];
 const zigString = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 // Every function name appearing in any mdn-data value syntax. The keyword

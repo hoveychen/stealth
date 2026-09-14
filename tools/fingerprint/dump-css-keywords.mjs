@@ -74,7 +74,11 @@ const BLINK_KEYWORDS_URL =
 
 // Accepted by every property, so they are checked separately rather than
 // stored 474 times. Verified against Chrome below.
-const CSS_WIDE = ['inherit', 'initial', 'revert', 'revert-layer', 'unset'];
+// `revert-rule` is one of these as of Chrome 152 (measured: every property
+// takes it, including the ones that take no bare identifier at all). Until it
+// was listed here it was stored as a per-property keyword 683 times over,
+// which is exactly what the sentence above says this table does not do.
+const CSS_WIDE = ['inherit', 'initial', 'revert', 'revert-layer', 'revert-rule', 'unset'];
 
 // Nonsense identifiers, to separate "this property has a keyword set" from
 // "this property takes an arbitrary <custom-ident>". `font-family: MyOwnFont`,

@@ -2,8 +2,9 @@
 <script src="../testing.js"></script>
 
 <!--
-A CSS-wide keyword is not a value. `inherit`, `initial`, `unset`, `revert` and
-`revert-layer` each say where the value comes from, and by the time
+A CSS-wide keyword is not a value. `inherit`, `initial`, `unset`, `revert`,
+`revert-layer` and `revert-rule` each say where the value comes from, and by the
+time
 getComputedStyle answers, the value has come from there -- so the word itself is
 never what a page reads back. This engine answered the word: 462 of the 475
 names getComputedStyle enumerates leaked it, for every one of the five, where
@@ -26,9 +27,14 @@ rather than as a coincidence.
   revert         as if the declaration had never been written, which keeps the
                  UA sheet: `display` stays list-item on a <li> and
                  `unicode-bidi` stays isolate. `revert-layer` is the same answer
-                 here, there being no cascade layer to fall back to.
+                 here, there being no cascade layer to fall back to, and so is
+                 `revert-rule` (Chrome 152), there being no rule either. The
+                 three are only separable with an author rule in play, which
+                 this table deliberately has none of -- see the note beside the
+                 fold in CSSStyleDeclaration.cssWideKeyword.
 
-Measured on Chrome 151 with scratch/b92/expr-wide-table.js.
+Measured on Chrome 151 with scratch/b92/expr-wide-table.js; the `revert-rule`
+rows on Chrome 152, which is where the keyword appeared.
 
 The parent is deliberately not `display: flex`. A flex container blockifies its
 children, so `display: initial` reads back `block` under one -- which looks
@@ -52,18 +58,21 @@ and not the baseline underneath it.
     ['div', 'unset', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
     ['div', 'revert', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; block ; isolate'],
     ['div', 'revert-layer', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; block ; isolate'],
+    ['div', 'revert-rule', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; block ; isolate'],
     ['li', 'bare', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; list-item ; isolate'],
     ['li', 'inherit', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 7px 9px ; 0px ; 0.25 ; 7 ; 13px ; inline-block ; bidi-override'],
     ['li', 'initial', 'rgb(0, 0, 0) ; 16px ; visible ; normal ; start ; normal ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
     ['li', 'unset', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
     ['li', 'revert', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; list-item ; isolate'],
     ['li', 'revert-layer', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; list-item ; isolate'],
+    ['li', 'revert-rule', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 0% 0% ; 0px ; 1 ; auto ; 0px ; list-item ; isolate'],
     ['span', 'bare', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
     ['span', 'inherit', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; 123px ; 7px 9px ; 0px ; 0.25 ; 7 ; 13px ; inline-block ; bidi-override'],
     ['span', 'initial', 'rgb(0, 0, 0) ; 16px ; visible ; normal ; start ; normal ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
     ['span', 'unset', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
     ['span', 'revert', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
     ['span', 'revert-layer', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
+    ['span', 'revert-rule', 'rgb(1, 2, 3) ; 29px ; hidden ; 3px ; right ; pre ; auto ; 0% 0% ; 0px ; 1 ; auto ; 0px ; inline ; normal'],
   ];
 
   const parent = document.createElement('div');
