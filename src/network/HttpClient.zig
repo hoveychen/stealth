@@ -4614,7 +4614,30 @@ pub const Transfer = struct {
         if (req.resource_type == .document) {
             return if (req.nav) |n| n.initiator_origin else null;
         }
-        return switch (req.cookie_origin orelse .none) {
+        return self.initiatorUrl();
+    }
+
+    // The initiating document's URL, from whichever copy holds it.
+    //
+    // There are two, and only one is filled in on a served page: makeTransfer
+    // resolves `req.cookie_origin orelse owner.siteForCookies()` onto the
+    // transfer and then sets `owned.cookie_origin = null`, so a real
+    // subresource always reads null off the request. Reading only the
+    // request's copy is what made Sec-Fetch-Site answer `none` -- "a user
+    // typed this in the address bar" -- on every stylesheet, script, image and
+    // fetch this engine has ever sent, a combination no browser can produce
+    // (measured against Chrome over both relationships, 9 of 9 wrong,
+    // scratch/b146/site-echo.mjs).
+    //
+    // The request's copy is still read first because the unit tests build a
+    // Transfer directly and set it there, never going through makeTransfer.
+    // Dropping it would trade a real-page bug for a test-path one.
+    fn initiatorUrl(self: *const Transfer) ?[:0]const u8 {
+        if (self.req.cookie_origin) |c| switch (c) {
+            .url => |u| return u,
+            .none => {},
+        };
+        return switch (self.cookie_origin) {
             .none => null,
             .url => |u| u,
         };
@@ -4747,10 +4770,12 @@ pub const Transfer = struct {
         // about:blank frame that inherited its parent's origin reports `null`
         // where Chrome would name the parent -- the same limit Sec-Fetch-Site
         // already has, and not one this header introduces.
-        const origin_url = switch (req.cookie_origin orelse .none) {
-            .none => return "null",
-            .url => |u| u,
-        };
+        //
+        // Through initiatorUrl for the same reason Sec-Fetch-Site goes through
+        // it: the request's copy is null on a served page. This line could not
+        // be wrong before, because initiatorOrigin's null returned above and
+        // nothing reached here -- one bug hiding the other.
+        const origin_url = self.initiatorUrl() orelse return "null";
         return (try URL.getOrigin(self.arena.allocator(), origin_url)) orelse "null";
     }
 
