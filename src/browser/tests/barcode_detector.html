@@ -27,7 +27,16 @@
     'aztec,code_128,code_39,code_93,data_matrix,ean_13,ean_8,itf,pdf417,qr_code,upc_e',
     (await BarcodeDetector.getSupportedFormats()).join(','));
 
-  testing.expectEqual('', (await new BarcodeDetector().detect({})).join(','));
+  // The union type check is real, even though nothing here decodes pixels.
+  let detect_err;
+  try { await new BarcodeDetector().detect({}); } catch (e) { detect_err = e; }
+  testing.expectEqual('TypeError', detect_err.name);
+  testing.expectEqual(
+    "Failed to execute 'detect' on 'BarcodeDetector': The provided value is not of type " +
+      "'(Blob or HTMLCanvasElement or HTMLImageElement or HTMLVideoElement or ImageBitmap or " +
+      "ImageData or OffscreenCanvas or SVGImageElement or VideoFrame)'.",
+    detect_err.message);
+  testing.expectEqual('', (await new BarcodeDetector().detect(new Image())).join(','));
 
   let err;
   try { new BarcodeDetector({formats: ['nope']}); } catch (e) { err = e; }

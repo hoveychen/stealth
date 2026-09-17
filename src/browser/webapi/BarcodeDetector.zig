@@ -28,9 +28,13 @@
 //     pdf417, qr_code, upc_e.
 //   * `new BarcodeDetector({formats:['nope']})` is a TypeError reading "Failed
 //     to construct 'BarcodeDetector': Failed to read the 'formats' property
-//     from 'Barcode..." -- the reading was truncated there, and the tail below
-//     is Blink's standard enum sentence, the same one OscillatorNode's `type`
-//     produces (see tests/audio.html), not something measured.
+//     from 'BarcodeDetectorOptions': The provided value 'nope' is not a valid
+//     enum value of type BarcodeFormat." A member of the enum that is not one of
+//     the eleven -- upc_a -- is accepted.
+//   * detect() refuses anything outside the ImageBitmapSource union by name:
+//     "Failed to execute 'detect' on 'BarcodeDetector': The provided value is
+//     not of type '(Blob or HTMLCanvasElement or ...)'."; the whole sentence is
+//     below.
 //   * [SecureContext]: absent from an insecure origin, so the name is in
 //     secure_context.gated_interfaces.
 //
@@ -101,11 +105,43 @@ pub fn getSupportedFormats(exec: *const Execution) !js.Promise {
     return exec.js.local.?.resolvePromise(@as([]const []const u8, &supported_formats));
 }
 
-/// Nothing here reads pixels, so every source is a source with no barcode in
-/// it. The argument is accepted and ignored; its only observable effect is the
-/// arity check, which Chrome does before it looks at the value.
-pub fn detect(_: *BarcodeDetector, _: js.Value, exec: *const Execution) !js.Promise {
+/// Nothing here reads pixels, so every source that is a source at all is a
+/// source with no barcode in it. The type check is still real: Chrome names the
+/// whole ImageBitmapSource union back at a caller that hands it anything else,
+/// and that sentence is a cheaper thing for a script to read than a decode.
+pub fn detect(_: *BarcodeDetector, source: js.Value, exec: *const Execution) !js.Promise {
+    if (isImageBitmapSource(source) == false) {
+        return exec.js.fail(
+            error.TypeError,
+            "Failed to execute 'detect' on 'BarcodeDetector': The provided value is not of type '" ++
+                image_bitmap_source ++ "'.",
+        );
+    }
     return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
+}
+
+const image_bitmap_source =
+    "(Blob or HTMLCanvasElement or HTMLImageElement or HTMLVideoElement or ImageBitmap or " ++
+    "ImageData or OffscreenCanvas or SVGImageElement or VideoFrame)";
+
+fn isImageBitmapSource(source: js.Value) bool {
+    if (source.isObject() == false) {
+        return false;
+    }
+    inline for (.{
+        *@import("Blob.zig"),
+        *@import("element/html/Canvas.zig"),
+        *@import("element/html/Image.zig"),
+        *@import("element/html/Video.zig"),
+        *@import("canvas/ImageBitmap.zig"),
+        *@import("ImageData.zig"),
+        *@import("canvas/OffscreenCanvas.zig"),
+        *@import("element/svg/Image.zig"),
+        *@import("webcodecs/frames.zig").VideoFrame,
+    }) |T| {
+        if (source.toZig(T)) |_| return true else |_| {}
+    }
+    return false;
 }
 
 pub const JsApi = struct {

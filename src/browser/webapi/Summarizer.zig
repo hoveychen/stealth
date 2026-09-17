@@ -31,11 +31,11 @@
 //   * [SecureContext]: absent from an insecure origin, so the name is in
 //     secure_context.gated_interfaces.
 //
-// No instance is reachable: create() rejects, because availability is
-// "downloadable" and nothing here has a user activation to spend on starting
-// the download. That rejection follows the Writing Assistance APIs spec rather
-// than a Chrome reading -- it was not measured -- but no instance means the
-// prototype's members are only ever seen as descriptors, never invoked.
+// No instance is reachable: create() rejects with the NotAllowedError Chrome
+// answers with when availability is "downloadable" and there is no user
+// activation to spend on starting the download (measured, same run). No
+// instance means the prototype's members are only ever seen as descriptors,
+// never invoked.
 
 const js = @import("../js/js.zig");
 const DOMException = @import("DOMException.zig");
@@ -59,7 +59,7 @@ pub fn availability(exec: *const Execution) !js.Promise {
 pub fn create(_: ?js.Value, exec: *const Execution) js.Promise {
     var resolver = exec.js.local.?.createPromiseResolver();
     resolver.reject("Summarizer.create", DOMException.init(
-        "Requires a user gesture when availability is \"downloadable\".",
+        "Requires a user gesture when availability is \"downloading\" or \"downloadable\".",
         "NotAllowedError",
     ));
     return resolver.promise();

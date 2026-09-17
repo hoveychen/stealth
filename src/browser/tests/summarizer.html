@@ -33,4 +33,7 @@
   let create_err;
   try { await Summarizer.create(); } catch (e) { create_err = e; }
   testing.expectEqual('NotAllowedError', create_err.name);
+  testing.expectEqual(
+    'Requires a user gesture when availability is "downloading" or "downloadable".',
+    create_err.message);
 </script>
