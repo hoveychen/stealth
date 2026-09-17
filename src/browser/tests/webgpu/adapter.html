@@ -162,17 +162,18 @@
 </script>
 
 <script type=module id=webgpu_adapter_features_set>
-  // The 22-name *set* is what has to match; Chrome's iteration order is not
+  // The 23-name *set* is what has to match; Chrome's iteration order is not
   // stable (two clusters permute between calls, measured three times over), so
   // the test compares sorted.
   const adapter = await navigator.gpu.requestAdapter();
-  testing.expectEqual(22, adapter.features.size);
+  testing.expectEqual(23, adapter.features.size);
   testing.expectEqual(
     [
       'bgra8unorm-storage', 'clip-distances', 'core-features-and-limits',
       'depth-clip-control', 'depth32float-stencil8', 'dual-source-blending',
       'float32-blendable', 'float32-filterable', 'indirect-first-instance',
-      'primitive-index', 'rg11b10ufloat-renderable', 'shader-f16', 'subgroups',
+      'primitive-index', 'rg11b10ufloat-renderable', 'shader-f16',
+      'subgroup-size-control', 'subgroups',
       'texture-component-swizzle', 'texture-compression-astc',
       'texture-compression-astc-sliced-3d', 'texture-compression-bc',
       'texture-compression-bc-sliced-3d', 'texture-compression-etc2',

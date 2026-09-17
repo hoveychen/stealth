@@ -63,13 +63,13 @@ pub fn registerTypes() []const type {
 /// A readonly setlike of feature-name strings: keys(), values() and the default
 /// iterator all yield the entry itself, and entries() yields it twice. Same
 /// shape as WGSLLanguageFeatures, but the contents differ between the adapter
-/// (22 entries) and the device it hands out (1).
+/// (23 entries) and the device it hands out (1).
 pub const GPUSupportedFeatures = struct {
     _features: []const []const u8,
 
     /// One observed order, and deliberately not treated as more than that.
     /// Chrome's own iteration order is *not* stable: asking the same page for
-    /// three adapters in a row gives the same 22 names with two clusters
+    /// three adapters in a row gives the same 23 names with two clusters
     /// permuted -- {texture-formats-tier1, bgra8unorm-storage} at indices 2-3
     /// and {shader-f16, texture-formats-tier2, clip-distances, timestamp-query}
     /// at 15-18 (measured three times over, Dawn iterates a hash set). So the
@@ -99,6 +99,10 @@ pub const GPUSupportedFeatures = struct {
         "primitive-index",
         "texture-component-swizzle",
         "subgroups",
+        // Chrome 152 on this machine reports this alongside `subgroups`; the
+        // table was recorded before it appeared, and a 22-name set against
+        // Chrome's 23 is one `has()` away from being read.
+        "subgroup-size-control",
     };
 
     // A device only gets the features it was asked for, and a no-argument
