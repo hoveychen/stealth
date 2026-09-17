@@ -922,17 +922,25 @@ const PrivateSymbols = struct {
     // CSSViewTransitionRule.types is [SameObject] as well as a FrozenArray, so
     // the frozen array is built once per rule and cached here.
     view_transition_types: Private,
+    // WebSocketStream's `opened` and `closed` are the same promise on every
+    // read, so each is minted once and cached on the instance.
+    web_socket_stream_opened: Private,
+    web_socket_stream_closed: Private,
 
     fn init(isolate: *v8.Isolate) PrivateSymbols {
         return .{
             .child_nodes = Private.init(isolate, "child_nodes"),
             .view_transition_types = Private.init(isolate, "view_transition_types"),
+            .web_socket_stream_opened = Private.init(isolate, "web_socket_stream_opened"),
+            .web_socket_stream_closed = Private.init(isolate, "web_socket_stream_closed"),
         };
     }
 
     fn deinit(self: *PrivateSymbols) void {
         self.child_nodes.deinit();
         self.view_transition_types.deinit();
+        self.web_socket_stream_opened.deinit();
+        self.web_socket_stream_closed.deinit();
     }
 };
 

@@ -1403,6 +1403,12 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/ClipboardItem.zig"),
     @import("../webapi/EyeDropper.zig"),
     @import("../webapi/IdleDetector.zig"),
+    // The five names DataDome's device-check program read off this engine and
+    // did not find (BarcodeDetector.zig has the provenance); the fifth,
+    // navigator.cpuPerformance, is a Navigator member rather than an interface.
+    @import("../webapi/BarcodeDetector.zig"),
+    @import("../webapi/PressureObserver.zig"),
+    @import("../webapi/Summarizer.zig"),
     @import("../webapi/EditContext.zig"),
     @import("../webapi/TextFormat.zig"),
     @import("../webapi/InputDeviceCapabilities.zig"),
@@ -1644,6 +1650,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/net/XMLHttpRequestEventTarget.zig"),
     @import("../webapi/net/XMLHttpRequestUpload.zig"),
     @import("../webapi/net/WebSocket.zig"),
+    @import("../webapi/net/WebSocketStream.zig"),
     @import("../webapi/net/EventSource.zig"),
     @import("../webapi/event/CloseEvent.zig"),
     @import("../webapi/streams/ReadableStream.zig"),

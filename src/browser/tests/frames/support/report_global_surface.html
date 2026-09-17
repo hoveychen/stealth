@@ -11,12 +11,16 @@
   const GATED = [
     'GPU', 'GPUBufferUsage', 'XRSession', 'SubtleCrypto', 'Cache', 'CacheStorage',
     'BatteryManager', 'ServiceWorker', 'WebTransport', 'EyeDropper',
-    'ClipboardChangeEvent',
+    'ClipboardChangeEvent', 'BarcodeDetector', 'PressureObserver', 'Summarizer',
     'caches', 'cookieStore', 'showOpenFilePicker', 'queryLocalFonts',
     'ondevicemotion', 'onpointerrawupdate',
   ];
-  // Not [SecureContext] in Chrome: present whatever the origin.
-  const UNGATED = ['Document', 'CSS', 'fetch', 'localStorage', 'onclick', 'crypto'];
+  // Not [SecureContext] in Chrome: present whatever the origin. WebSocketStream
+  // is the interesting one -- it sits right next to three gated names that
+  // arrived with it, and Chrome was measured exposing it from an insecure
+  // origin too.
+  const UNGATED = ['Document', 'CSS', 'fetch', 'localStorage', 'onclick', 'crypto',
+    'WebSocketStream'];
 
   const present = (names) => names.filter((n) => n in self);
 
@@ -25,6 +29,9 @@
     secure: self.isSecureContext,
     count: Object.getOwnPropertyNames(self).length,
     gated: present(GATED),
+    // Gated, but a Navigator member rather than a name on the global, so it
+    // travels through its own branch of the gate.
+    navCpuPerformance: 'cpuPerformance' in navigator,
     ungated: present(UNGATED),
   }, '*');
 </script>

@@ -687,6 +687,11 @@ comptime {
             @compileError("secure_context.gated_members: Window has no member named " ++ name);
         }
     }
+    for (secure_context.gated_navigator_members) |name| {
+        if (@hasDecl(@import("../webapi/Navigator.zig").JsApi, name) == false) {
+            @compileError("secure_context.gated_navigator_members: Navigator has no member named " ++ name);
+        }
+    }
 }
 
 fn isPageInterfaceName(comptime name: []const u8) bool {

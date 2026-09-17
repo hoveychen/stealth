@@ -9,7 +9,9 @@
 
 <script id=navigatorPrototypeOrder>
   {
-    // Chrome 150's Navigator.prototype, in Chrome's own order. `constructor`
+    // Chrome 150's Navigator.prototype, in Chrome's own order, plus
+    // cpuPerformance, which Chrome 152 added right after vibrate (re-measured
+    // there; the rest of the table is unchanged between the two). `constructor`
     // is dropped from the comparison: Blink emits it between vibrate and
     // deprecatedRunAdAuctionEnforcesKAnonymity, while V8 puts ours last, and
     // that position isn't something a binding can choose.
@@ -19,14 +21,14 @@
     // twice on x-hyatt — one own name is enough to separate this engine from
     // every real browser, so outside `lightpanda mcp` (and `--webmcp`) the
     // whole surface is gated off and the name table matches Chrome's exactly.
-    const chrome150 = [
+    const chrome = [
       'vendorSub', 'productSub', 'vendor', 'maxTouchPoints', 'scheduling',
       'userActivation', 'geolocation', 'doNotTrack', 'webkitTemporaryStorage',
       'webkitPersistentStorage', 'windowControlsOverlay', 'hardwareConcurrency',
       'cookieEnabled', 'appCodeName', 'appName', 'appVersion', 'platform',
       'product', 'userAgent', 'language', 'languages', 'onLine', 'webdriver',
       'plugins', 'mimeTypes', 'pdfViewerEnabled', 'connection', 'getGamepads',
-      'javaEnabled', 'sendBeacon', 'vibrate',
+      'javaEnabled', 'sendBeacon', 'vibrate', 'cpuPerformance',
       'deprecatedRunAdAuctionEnforcesKAnonymity', 'protectedAudience',
       'bluetooth', 'clipboard', 'credentials', 'keyboard', 'managed',
       'mediaDevices', 'serviceWorker', 'virtualKeyboard', 'wakeLock',
@@ -44,7 +46,7 @@
     ];
     const ours = Object.getOwnPropertyNames(Navigator.prototype)
       .filter((n) => n !== 'constructor');
-    testing.expectEqual(chrome150, ours);
+    testing.expectEqual(chrome, ours);
     testing.expectEqual(false, 'modelContext' in navigator);
   }
 </script>

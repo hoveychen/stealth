@@ -445,6 +445,32 @@ pub fn hideSecureContextGlobals(self: *Context) void {
             target = .{ .local = &ls.local, .handle = @ptrCast(proto) };
         }
     }
+
+    // Navigator.prototype is not on the global's chain, so its gated members are
+    // reached through the interface object -- same route as hideWebMcpSurface,
+    // and for the same reason. This runs before any script of the document, so
+    // `window.Navigator` is still V8's.
+    if (secure_context.gated_navigator_members.len > 0) {
+        const navigator_interface = global.get("Navigator") catch |err| {
+            log.err(.js, "secure context gate", .{ .err = err });
+            return;
+        };
+        if (navigator_interface.isObject() == false) {
+            return;
+        }
+        const prototype = navigator_interface.toObject().get("prototype") catch |err| {
+            log.err(.js, "secure context gate", .{ .err = err });
+            return;
+        };
+        if (prototype.isObject() == false) {
+            return;
+        }
+        for (secure_context.gated_navigator_members) |name| {
+            if (prototype.toObject().delete(name) != true) {
+                log.err(.js, "secure context gate", .{ .member = name });
+            }
+        }
+    }
 }
 
 // Takes this fork's WebMCP surface off the window realm, for a run that did not

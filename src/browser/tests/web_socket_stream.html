@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<head>
+  <title>WebSocketStream Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=web_socket_stream_shape>
+  {
+    testing.expectEqual(1, WebSocketStream.length);
+    testing.expectEqual('WebSocketStream', WebSocketStream.prototype[Symbol.toStringTag]);
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(WebSocketStream.prototype));
+    testing.expectEqual('',
+      Object.getOwnPropertyNames(WebSocketStream).filter(
+        (k) => k !== 'length' && k !== 'name' && k !== 'prototype').join(','));
+    testing.expectEqual('url,opened,closed,close',
+      Object.getOwnPropertyNames(WebSocketStream.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectEqual(0, WebSocketStream.prototype.close.length);
+
+    const s = new WebSocketStream('wss://example.invalid/');
+    testing.expectEqual('[object WebSocketStream]', Object.prototype.toString.call(s));
+    testing.expectEqual('wss://example.invalid/', s.url);
+
+    // Nothing here connects, so both promises stay pending -- but they are the
+    // same promise on every read, the way Chrome's are.
+    testing.expectTrue(s.opened instanceof Promise);
+    testing.expectTrue(s.opened === s.opened);
+    testing.expectTrue(s.closed === s.closed);
+    testing.expectTrue(s.opened !== s.closed);
+
+    // http(s) is rewritten to ws(s), like WebSocket's constructor does.
+    testing.expectEqual('ws://example.invalid/x', new WebSocketStream('http://example.invalid/x').url);
+    testing.expectEqual('wss://example.invalid/x', new WebSocketStream('https://example.invalid/x').url);
+  }
+</script>
+
+<script type=module id=web_socket_stream_refusals>
+  let err;
+  try { new WebSocketStream(); } catch (e) { err = e; }
+  testing.expectEqual('TypeError', err.name);
+  testing.expectEqual(
+    "Failed to construct 'WebSocketStream': 1 argument required, but only 0 present.",
+    err.message);
+
+  let scheme_err;
+  try { new WebSocketStream('ftp://example.invalid/'); } catch (e) { scheme_err = e; }
+  testing.expectEqual('SyntaxError', scheme_err.name);
+
+  let fragment_err;
+  try { new WebSocketStream('wss://example.invalid/#x'); } catch (e) { fragment_err = e; }
+  testing.expectEqual('SyntaxError', fragment_err.name);
+</script>
