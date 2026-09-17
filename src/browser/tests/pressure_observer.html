@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<head>
+  <title>PressureObserver Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=pressure_observer_shape>
+  {
+    testing.expectEqual(1, PressureObserver.length);
+    testing.expectEqual('PressureObserver', PressureObserver.prototype[Symbol.toStringTag]);
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(PressureObserver.prototype));
+    testing.expectEqual('knownSources',
+      Object.getOwnPropertyNames(PressureObserver).filter(
+        (k) => k !== 'length' && k !== 'name' && k !== 'prototype').join(','));
+    testing.expectEqual('disconnect,observe,takeRecords,unobserve',
+      Object.getOwnPropertyNames(PressureObserver.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectEqual('cpu', PressureObserver.knownSources.join(','));
+
+    const o = new PressureObserver(() => {});
+    testing.expectEqual('[object PressureObserver]', Object.prototype.toString.call(o));
+    testing.expectEqual('', o.takeRecords().join(','));
+    testing.expectEqual(undefined, o.unobserve('cpu'));
+    testing.expectEqual(undefined, o.disconnect());
+  }
+</script>
+
+<script type=module id=pressure_observer_behaviour>
+  let err;
+  try { new PressureObserver(); } catch (e) { err = e; }
+  testing.expectEqual('TypeError', err.name);
+  testing.expectEqual(
+    "Failed to construct 'PressureObserver': 1 argument required, but only 0 present.",
+    err.message);
+
+  testing.expectEqual(undefined, await new PressureObserver(() => {}).observe('cpu'));
+</script>

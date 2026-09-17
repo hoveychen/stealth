@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<head>
+  <title>Summarizer Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=summarizer_shape>
+  {
+    testing.expectEqual(0, Summarizer.length);
+    testing.expectEqual('Summarizer', Summarizer.prototype[Symbol.toStringTag]);
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(Summarizer.prototype));
+    testing.expectEqual('availability,create',
+      Object.getOwnPropertyNames(Summarizer).filter(
+        (k) => k !== 'length' && k !== 'name' && k !== 'prototype').join(','));
+    // Chrome's order, not alphabetical (measured on a headed Chrome 152).
+    testing.expectEqual(
+      'sharedContext,type,format,length,expectedInputLanguages,expectedContextLanguages,' +
+        'outputLanguage,inputQuota,destroy,measureInputUsage,summarize,summarizeStreaming',
+      Object.getOwnPropertyNames(Summarizer.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectEqual(0, Summarizer.availability.length);
+    testing.expectEqual(0, Summarizer.create.length);
+  }
+</script>
+
+<script type=module id=summarizer_behaviour>
+  let err;
+  try { new Summarizer(); } catch (e) { err = e; }
+  testing.expectEqual('TypeError', err.name);
+  testing.expectEqual("Failed to construct 'Summarizer': Illegal constructor", err.message);
+
+  testing.expectEqual('downloadable', await Summarizer.availability());
+
+  let create_err;
+  try { await Summarizer.create(); } catch (e) { create_err = e; }
+  testing.expectEqual('NotAllowedError', create_err.name);
+</script>

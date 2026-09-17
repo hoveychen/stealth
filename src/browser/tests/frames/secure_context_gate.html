@@ -47,15 +47,17 @@ insecure origin this suite can reach without a second listener.
     await state.done(({ insecure, secure }) => {
       // The control: 127.0.0.1 is loopback, so nothing is gated away.
       testing.expectEqual(true, secure.secure);
-      testing.expectEqual(17, secure.gated.length);
-      testing.expectEqual(6, secure.ungated.length);
-      testing.expectEqual(1203, secure.count);
+      testing.expectEqual(20, secure.gated.length);
+      testing.expectEqual(7, secure.ungated.length);
+      testing.expectEqual(true, secure.navCpuPerformance);
+      testing.expectEqual(1207, secure.count);
 
       // 0.0.0.0 is not, so every [SecureContext] name is gone -- and the ones
       // that are not gated stay.
       testing.expectEqual(false, insecure.secure);
       testing.expectEqual('', insecure.gated.join(' '));
-      testing.expectEqual(6, insecure.ungated.length);
+      testing.expectEqual(7, insecure.ungated.length);
+      testing.expectEqual(false, insecure.navCpuPerformance);
 
       // The gate now removes 235 names off a surface of 1203. Both totals move
       // together whenever the surface changes and none of the names involved is
@@ -70,11 +72,14 @@ insecure origin this suite can reach without a second listener.
       // interface objects Chrome names nowhere stopped being named, and 1201
       // once the WebMCP pair went behind `--webmcp`, and 1203 with Observable
       // and Subscriber -- both Exposed=* and neither [SecureContext], so both
-      // totals move by two. The two
+      // totals move by two, and 1207 with the four interfaces DataDome's
+      // device-check program asked for: BarcodeDetector, PressureObserver and
+      // Summarizer are [SecureContext] and WebSocketStream is not, so the
+      // secure total moves by four and the insecure one by one. The two
       // totals parted company by one at the Event subclasses: Chrome gates
       // ClipboardChangeEvent and not the other eight (measured, probe-
       // secure-context), so that step added nine names here and eight there.
-      testing.expectEqual(968, insecure.count);
+      testing.expectEqual(969, insecure.count);
     });
   }
 </script>
@@ -105,7 +110,8 @@ insecure origin this suite can reach without a second listener.
       // Trustworthy URL, untrustworthy ancestor.
       testing.expectEqual(false, grandchild.secure);
       testing.expectEqual('', grandchild.gated.join(' '));
-      testing.expectEqual(968, grandchild.count);
+      testing.expectEqual(false, grandchild.navCpuPerformance);
+      testing.expectEqual(969, grandchild.count);
     });
   }
 </script>

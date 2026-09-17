@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<head>
+  <title>BarcodeDetector Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=barcode_detector_shape>
+  {
+    testing.expectEqual(0, BarcodeDetector.length);
+    testing.expectEqual('BarcodeDetector', BarcodeDetector.prototype[Symbol.toStringTag]);
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(BarcodeDetector.prototype));
+    testing.expectEqual('getSupportedFormats',
+      Object.getOwnPropertyNames(BarcodeDetector).filter(
+        (k) => k !== 'length' && k !== 'name' && k !== 'prototype').join(','));
+    testing.expectEqual('detect',
+      Object.getOwnPropertyNames(BarcodeDetector.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectEqual(1, BarcodeDetector.prototype.detect.length);
+
+    const d = new BarcodeDetector();
+    testing.expectEqual('[object BarcodeDetector]', Object.prototype.toString.call(d));
+    testing.expectEqual('', Object.getOwnPropertyNames(d).join(','));
+  }
+</script>
+
+<script type=module id=barcode_detector_behaviour>
+  testing.expectEqual(
+    'aztec,code_128,code_39,code_93,data_matrix,ean_13,ean_8,itf,pdf417,qr_code,upc_e',
+    (await BarcodeDetector.getSupportedFormats()).join(','));
+
+  testing.expectEqual('', (await new BarcodeDetector().detect({})).join(','));
+
+  let err;
+  try { new BarcodeDetector({formats: ['nope']}); } catch (e) { err = e; }
+  testing.expectEqual('TypeError', err.name);
+  testing.expectEqual(
+    "Failed to construct 'BarcodeDetector': Failed to read the 'formats' property from " +
+      "'BarcodeDetectorOptions': The provided value 'nope' is not a valid enum value of type BarcodeFormat.",
+    err.message);
+
+  // A valid enum member is accepted even when it is not one of the eleven
+  // getSupportedFormats() reports.
+  testing.expectEqual('object', typeof new BarcodeDetector({formats: ['upc_a']}));
+</script>

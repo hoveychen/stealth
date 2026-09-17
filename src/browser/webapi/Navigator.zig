@@ -247,6 +247,22 @@ pub fn getMaxTouchPoints(_: *const Navigator) u32 {
     return 0;
 }
 
+// Chrome 152's CPU performance class: a small integer, not a core count or a
+// clock. Read as 4 on a headed Chrome 152 on this host (the plan's P1 reading),
+// and [SecureContext] -- it is undefined from an origin that is not potentially
+// trustworthy, which Context.hideSecureContextGlobals takes care of, since this
+// one lives on Navigator.prototype rather than on the global.
+//
+// One of the five names DataDome's device-check program asked this engine for
+// and did not get; see webapi/BarcodeDetector.zig for the set.
+//
+// Fixed rather than derived: the scale's inputs are not public, so there is no
+// host measurement to map onto it, and 4 is what the one Chrome this was read
+// against answers.
+pub fn getCpuPerformance(_: *const Navigator) u32 {
+    return 4;
+}
+
 // The next three are fixed strings in every Chromium build — they don't vary
 // by platform or version. Values taken from the Chrome 150 capture in
 // tools/fingerprint/results/reference-chrome-headed.json, not from memory.
@@ -838,6 +854,10 @@ pub const JsApi = struct {
     pub const javaEnabled = bridge.function(Navigator.javaEnabled, .{});
     pub const sendBeacon = bridge.function(Navigator.sendBeacon, .{ .exposed = .window });
     pub const vibrate = bridge.function(Navigator.vibrate, .{ .exposed = .window });
+    // Chrome puts cpuPerformance right after vibrate (measured on a headed
+    // Chrome 152); Blink's `constructor` sits between the two, and V8 puts ours
+    // last, which is the one position a binding cannot choose.
+    pub const cpuPerformance = bridge.accessor(Navigator.getCpuPerformance, null, .{ .exposed = .window });
     pub const deprecatedRunAdAuctionEnforcesKAnonymity = bridge.accessor(
         Navigator.getDeprecatedRunAdAuctionEnforcesKAnonymity,
         null,
