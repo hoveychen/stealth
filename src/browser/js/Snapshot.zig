@@ -1417,6 +1417,40 @@ fn indexedConfiguration(member: bridge.Indexed) v8.IndexedPropertyHandlerConfigu
     };
 }
 
+// A [Global] interface's declarations, sorted into the order Chrome creates
+// its members in. Keys are doubled so that a name Chrome does not have can sit
+// on the odd number just past the last one that does -- it stays where its
+// preceding neighbour put it rather than collecting at either end.
+fn globalOrderedDecls(comptime JsApi: type) []const std.builtin.Type.Declaration {
+    comptime {
+        const decls = @typeInfo(JsApi).@"struct".decls;
+        // A linear scan of the 1234-name table per declaration.
+        @setEvalBranchQuota(decls.len * global_order.names.len * 8);
+
+        const Keyed = struct { key: usize, index: usize, decl: std.builtin.Type.Declaration };
+        var keyed: [decls.len]Keyed = undefined;
+        var last: usize = 0;
+        for (decls, 0..) |d, i| {
+            const key = if (global_order.rank(d.name)) |r| blk: {
+                last = r * 2;
+                break :blk last;
+            } else last + 1;
+            keyed[i] = .{ .key = key, .index = i, .decl = d };
+        }
+        std.mem.sort(Keyed, &keyed, {}, struct {
+            fn lessThan(_: void, a: Keyed, b: Keyed) bool {
+                if (a.key != b.key) return a.key < b.key;
+                return a.index < b.index;
+            }
+        }.lessThan);
+
+        var sorted: [decls.len]std.builtin.Type.Declaration = undefined;
+        for (keyed, 0..) |k, i| sorted[i] = k.decl;
+        const frozen = sorted;
+        return &frozen;
+    }
+}
+
 fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolate, template: *const v8.FunctionTemplate, define_on: ?*const v8.ObjectTemplate) void {
     const instance = v8.v8__FunctionTemplate__InstanceTemplate(template);
     const prototype = v8.v8__FunctionTemplate__PrototypeTemplate(template);
@@ -1485,7 +1519,20 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
         );
     }
 
-    const declarations = @typeInfo(JsApi).@"struct".decls;
+    // The [Global] flattening pass is the one whose install order is readable
+    // from script: these members are own properties of `window`, and a guard
+    // that serialises Object.getOwnPropertyNames(window) reads the sequence.
+    // Source order here is Blink's IDL order, which is close to Chrome's but
+    // not it -- `performance`, `crypto`, `indexedDB` and the storage pair sit
+    // with the attributes in the IDL and after the operations on the real
+    // global, and `speechSynthesis` is in the gated batch 300 names later. So
+    // for this one pass the declarations are walked in Chrome's order, off the
+    // same table createSnapshotContext uses for the interface objects. A
+    // member Chrome has no name for keeps the slot its neighbour left it in.
+    const declarations = comptime if (flatten and std.mem.eql(u8, JsApi.Meta.name, "Window"))
+        globalOrderedDecls(JsApi)
+    else
+        @typeInfo(JsApi).@"struct".decls;
     var has_named_index_getter = false;
 
     const wpt_extensions_enabled = lp.build_config.wpt_extensions;
