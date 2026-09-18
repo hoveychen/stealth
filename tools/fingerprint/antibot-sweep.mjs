@@ -313,6 +313,11 @@ async function teardown() {
 // script's own fetches, then maybe a 200 -- so every document response for the
 // station is kept in order rather than only the last.
 let docs = [];
+// The main frame, learned from the first document response of the station: the
+// navigation is what opens the frame tree, so nothing else can report before
+// it. Everything after it that carries a different frameId is an iframe the
+// page itself inserted.
+let mainFrameId;
 let wire = [];
 // The zero for `--trace` timestamps, reset per station.
 let stationStarted = Date.now();
@@ -435,6 +440,16 @@ const onEvent = (msg) => {
     // instrument.
     if (fromFrame) return;
     if (String(p.type ?? '').toLowerCase() !== 'document') return;
+    // Same reason, for the iframes the page inserts into its *own* target: they
+    // report `type: document` on this session too, so without this the chain
+    // ends at whichever ad pixel loaded last. bloomingdales serves its real
+    // page, 200, with its real title, and then a tracking iframe answers 404 --
+    // which scored the station `refused-404` in two runs out of five while
+    // headed Chrome, loading a different set of third-party frames, scored 5/5.
+    // The guard's answer lives in the main frame; nothing else is the station
+    // talking.
+    if (mainFrameId === undefined) mainFrameId = p.frameId ?? null;
+    if ((p.frameId ?? null) !== mainFrameId) return;
     docs.push({ url: p.response?.url, status: p.response?.status, mime: p.response?.mimeType });
 };
 
@@ -648,6 +663,7 @@ try {
         const started = Date.now();
         stationStarted = started;
         docs = [];
+        mainFrameId = undefined;
         wire = [];
         bodyWanted = new Map();
         let reading = null;
@@ -703,7 +719,12 @@ try {
         // Only the child's own death lands here -- see the `killed` guard on
         // the exit handler.
         if (exit) row.engineExit = exit;
-        row.documents = docs.slice(0, 12);
+        // Whole, not a head slice: the verdict reads the *last* entry, so a cap
+        // here means the reason for a refusal can be the one row that did not
+        // get written. That is exactly how the bloomingdales 404 stayed hidden
+        // -- twelve 200s on disk under `last: 404`. Main-frame chains are a
+        // handful of rows now that iframes are filtered out.
+        row.documents = docs;
         // 400 was not enough for a station that loops. Akamai's interstitial
         // re-runs its whole conversation on every reload, and one lightpanda
         // run through macys spent 154 of the first 400 entries on the sensor's
