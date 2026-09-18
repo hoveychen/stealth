@@ -194,15 +194,17 @@
 <script id="ua_unrendered_tags_are_display_none">
   {
     // HTML Rendering §15.3.1 "Hidden elements" lists fourteen tags the UA
-    // stylesheet gives display:none. Chrome does not hide three of them, so
+    // stylesheet gives display:none. Chrome does not hide two of them, so
     // the list here is the measured one rather than the specified one:
     // tools/fingerprint/scratch/expr-area-loose.js creates each tag loose and
-    // appends it to <body>, exactly as below, and `area`, `source` and `track`
-    // each come back `display: inline` with `checkVisibility()` true.
+    // appends it to <body>, exactly as below, and `source` and `track` come
+    // back `display: inline` with `checkVisibility()` true. `area` was among
+    // them through Chrome 152 and is hidden again in 153 -- `none` and false,
+    // loose and inside a <map> alike -- so it is back on this list.
     // (basefont/noembed/noframes/rp are obsolete and not represented in
     // Lightpanda's Element.Tag enum.)
     const tags = [
-      'base', 'datalist', 'link', 'meta', 'noscript', 'param',
+      'area', 'base', 'datalist', 'link', 'meta', 'noscript', 'param',
       'script', 'style', 'template', 'title',
     ];
     for (const t of tags) {
@@ -212,10 +214,10 @@
       testing.expectEqual(false, el.checkVisibility());
       el.remove();
     }
-    // The three Chrome renders instead. `noscript` is not among them: Chrome
+    // The two Chrome renders instead. `noscript` is not among them: Chrome
     // computes `inline` for it too, but answers checkVisibility() false, and
     // this engine drives both answers off one list.
-    for (const t of ['area', 'source', 'track']) {
+    for (const t of ['source', 'track']) {
       const el = document.createElement(t);
       document.body.appendChild(el);
       testing.expectEqual('inline', window.getComputedStyle(el).display);

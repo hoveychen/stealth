@@ -6178,7 +6178,7 @@ test "HttpClient: only an origin that asked gets the six high-entropy hints" {
         try testing.expectEqual(null, quiet.findRequestHeader(hint.header()));
     }
     try testing.expectString(
-        "\"Chromium\";v=\"152\", \"Not?A_Brand\";v=\"24\", \"Google Chrome\";v=\"152\"",
+        "\"Google Chrome\";v=\"153\", \"Not_A Brand\";v=\"8\", \"Chromium\";v=\"153\"",
         seededValue(&quiet, "sec-ch-ua"),
     );
 
@@ -6202,9 +6202,9 @@ test "HttpClient: only an origin that asked gets the six high-entropy hints" {
     try testing.expectString("\"64\"", seededValue(&loud, "sec-ch-ua-bitness"));
     try testing.expectString("\"\"", seededValue(&loud, "sec-ch-ua-model"));
     try testing.expectString("\"26.6.2\"", seededValue(&loud, "sec-ch-ua-platform-version"));
-    try testing.expectString("\"152.0.7977.83\"", seededValue(&loud, "sec-ch-ua-full-version"));
+    try testing.expectString("\"153.0.8010.48\"", seededValue(&loud, "sec-ch-ua-full-version"));
     try testing.expectString(
-        "\"Chromium\";v=\"152.0.7977.83\", \"Not?A_Brand\";v=\"24.0.0.0\", \"Google Chrome\";v=\"152.0.7977.83\"",
+        "\"Google Chrome\";v=\"153.0.8010.48\", \"Not_A Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"153.0.8010.48\"",
         seededValue(&loud, "sec-ch-ua-full-version-list"),
     );
 

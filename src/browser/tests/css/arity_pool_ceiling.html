@@ -13,7 +13,11 @@
     * the identifier pool was every bare identifier in an mdn-data value
       syntax, so `links` and `tabs` -- Blink keywords the standard has never
       heard of -- were never paired with anything, and
-      `scroll-marker-group: after links` read as refused-by-Chrome;
+      `scroll-marker-group: after links` read as refused-by-Chrome (true
+      through Chrome 152; 153 dropped `links`/`tabs` from the grammar
+      outright, so that property is genuinely one-component again and is
+      asserted refused below -- the ceiling it illustrates is what the other
+      three still show);
     * the nineteen generic values carried no shape for a function call, a
       resolution, a dashed ident or a line-name list, so
       `clip-path: circle() padding-box` was never offered either.
@@ -43,8 +47,6 @@
 
     clip-path: circle() nonsense      shape-outside: circle() nonsense
     border-shape: circle() nonsense   border-shape: 1px 2px
-    scroll-marker-group: after nonsense
-    scroll-marker-group: links after
 
   They are not in the list below because this engine keeps them. Over the 52
   readings of scratch/b77/expr-assertions.js the two arms went from 16 differing
@@ -60,10 +62,8 @@
   to, which is what all four of these are, is never measured and never graded.
   The keyword lists cannot stand in for it: they are measured by offering each
   identifier *alone*, and half of a two-component grammar routinely does not
-  parse alone in either position (`align-items: first baseline` leads with one,
-  `scroll-marker-group: after links` trails with one). Measured: reusing the
-  keyword list on the trailing component refuses `after links`, which Chrome
-  keeps.
+  parse alone in either position (`align-items: first baseline` leads with
+  one).
 -->
 
 <body>
@@ -103,8 +103,6 @@
     ['shape-outside', 'circle() border-box'],
     ['shape-outside', 'circle() content-box'],
     ['border-shape', 'circle() circle()'],
-    ['scroll-marker-group', 'after links'],
-    ['scroll-marker-group', 'after tabs'],
   ];
   for (const [property, value] of kept) {
     check('inline ' + property + ': ' + value, inlineValue(property, value), value);
@@ -119,7 +117,11 @@
     ['clip-path', '1px 2px'],
     ['shape-outside', '1px 2px'],
     ['shape-outside', 'fill-box'],
+    // Chrome 153 takes `after` and `before` and nothing beside them: `links`,
+    // `tabs` and any pair built from them are gone from the grammar.
     ['scroll-marker-group', 'links'],
+    ['scroll-marker-group', 'after links'],
+    ['scroll-marker-group', 'after tabs'],
   ];
   for (const [property, value] of refused) {
     check('inline ' + property + ': ' + value, inlineValue(property, value), '(refused)');

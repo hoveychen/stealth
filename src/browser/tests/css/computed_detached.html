@@ -13,7 +13,7 @@ Measured on Chrome 151 with tools/fingerprint/probes/expr-b85-detached-computed.
 
 The predicate is NOT "has no box", and the controls below are what say so: an
 element with `display: none` is in the document and has no box, and its computed
-style is complete -- 476 longhands, `display: none`, `height: auto`. So is
+style is complete -- 477 longhands, `display: none`, `height: auto`. So is
 `visibility: hidden`. What empties the declaration is being out of a browsing
 context, in all four shapes it comes in:
 
@@ -83,7 +83,7 @@ then removing the element makes that same object answer "" and report length 0.
   document.body.appendChild(el);
   const cs = getComputedStyle(el);
   testing.expectEqual('50px', cs.width);
-  testing.expectEqual(476, cs.length);
+  testing.expectEqual(477, cs.length);
 
   el.remove();
   testing.expectEqual('', cs.width);
@@ -105,7 +105,7 @@ then removing the element makes that same object answer "" and report length 0.
     el.style.cssText = css;
     document.body.appendChild(el);
     const cs = getComputedStyle(el);
-    if (cs.length !== 476) wrong.push(label + ' length: want 476, got ' + cs.length);
+    if (cs.length !== 477) wrong.push(label + ' length: want 477, got ' + cs.length);
     if (cs.width !== '50px') wrong.push(label + ' width: want 50px, got ' + cs.width);
     if (cs.display !== wantDisplay) wrong.push(label + ' display: want ' + wantDisplay + ', got ' + cs.display);
     if (cs.height !== wantHeight) wrong.push(label + ' height: want ' + wantHeight + ', got ' + cs.height);

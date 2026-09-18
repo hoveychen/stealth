@@ -302,8 +302,9 @@
 
     // Feedback lines are what the modal lists per codec.
     testing.expectEqual(
-      // Chrome 151 added 'rrtr' (with an a=rtcp-xr:rcvr-rtt=all line per m-section).
-      ['ccm fir', 'goog-remb', 'nack', 'nack pli', 'rrtr', 'transport-cc'],
+      // Chrome 151 added an 'rrtr' line per payload type; 153 dropped them
+      // again and kept only the one a=rtcp-xr:rcvr-rtt=all per m-section.
+      ['ccm fir', 'goog-remb', 'nack', 'nack pli', 'transport-cc'],
       [...new Set((sdp.match(/a=rtcp-fb:96 ([^\r\n]+)/g) || []).map((x) => x.replace('a=rtcp-fb:96 ', '')))].sort(),
     );
   });
@@ -752,7 +753,9 @@
 <script id=offer_carries_the_platform_codecs type=module>
 {
   // The codecs a platform decoder gates. Measured on Chrome 151 here with
-  // tools/fingerprint/probes/expr-sdp-offer.js: the legacy offer is 8398 bytes
+  // tools/fingerprint/probes/expr-sdp-offer.js; the byte counts are Chrome
+  // 153's, which dropped the per-payload `a=rtcp-fb:<pt> rrtr` lines 151 had
+  // added and so lost 969 bytes off the offer: the legacy offer is 7429 bytes
   // and its video m= line ends `... 118 119 120 121 49 50 51 52 122 123 124 53`
   // -- High-profile H264 at 118/120, H265 at 49/51, then red/rtx/ulpfec and
   // flexfec pushed up to 122/123/124 and 53. Recorded in a Linux container the
@@ -786,7 +789,7 @@
     testing.expectEqual('red/90000', rtpmap(122));
     testing.expectEqual('ulpfec/90000', rtpmap(124));
     testing.expectEqual('flexfec-03/90000', rtpmap(53));
-    testing.expectEqual(8398, sdp.length);
+    testing.expectEqual(7429, sdp.length);
   });
 }
 </script>
@@ -862,12 +865,13 @@
     testing.expectEqual('m=video,m=video', kinds(twoOffer.sdp));
 
     // A recvonly transceiver is the section the CreepJS shape already had: no
-    // msid, no ssrc. 1212 bytes, measured.
+    // msid, no ssrc. 1060 bytes, measured -- 152 fewer than through Chrome
+    // 152, which is exactly the audio section's eight `rrtr` lines.
     testing.expectEqual('recvonly', rxT.direction);
     testing.expectEqual('a=recvonly', dirs(rxOffer.sdp));
     testing.expectFalse(/a=ssrc:/.test(rxOffer.sdp));
     testing.expectFalse(/a=msid:/.test(rxOffer.sdp));
-    testing.expectEqual(1212, rxOffer.sdp.length);
+    testing.expectEqual(1060, rxOffer.sdp.length);
 
     // A video sending section ties its two sources together.
     testing.expectEqual(2, (twoOffer.sdp.match(/^a=ssrc-group:FID \d+ \d+$/gm) || []).length);

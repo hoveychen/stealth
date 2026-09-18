@@ -2419,21 +2419,23 @@ fn computedFontStretch(style_manager: *StyleManager, element: *Element, wrapped:
 ///     answer it whatever their style says -- `column-rule-style: none` with
 ///     `column-rule-width: medium` is 3px, where a border would be 0px.
 ///   * `-webkit-text-stroke-width` has two thirds of that scale.
-///   * An element declaring no column rule answers **1.5px**, not the 3px its
-///     own `medium` resolves to. That is three DEVICE pixels: 3px on both dpr-1
-///     arms measured and 1.5px on both dpr-2 arms, with `devicePixelRatio` read
-///     back in the same run as the width every time, so the split is the ratio
-///     and not headedness. This engine reports devicePixelRatio 2 as a fixed
-///     part of its device profile (`Window.getDevicePixelRatio`), so 1.5px is
-///     the number that matches it.
+///   * An element declaring no column rule answered **1.5px** through 152 --
+///     three DEVICE pixels, 3px on a dpr-1 arm and 1.5px on a dpr-2 one, with
+///     `devicePixelRatio` read back in the same run as the width every time.
+///     Chrome 153 stopped folding that answer onto the device grid: at
+///     `--force-device-scale-factor=2`, with `devicePixelRatio` 2 read in the
+///     same object, the undeclared rule widths are **3px**, the same number
+///     their own `medium` resolves to. The fractional grid did NOT move with
+///     it -- `4.6px` is still `4.5px` at dpr 2 -- so this is the undeclared
+///     answer alone, not the family losing its grid.
 ///
 /// `chrome_initial_values.zig` used to record 3px for the three rule widths,
 /// because its generator launched Chrome without `--force-device-scale-factor`
-/// and so measured a dpr-1 arm. The undeclared answer was overridden here to
-/// compensate. The generator now pins the persona's scale
-/// (`personaScaleFlags` in `tools/fingerprint/cdp.mjs`), the table records
-/// 1.5px, and the override is gone -- `undeclared` is null for the rule widths
-/// and the recorded value stands on its own.
+/// and so measured a dpr-1 arm; the undeclared answer was overridden here to
+/// compensate. The generator now pins the persona's scale (`personaScaleFlags`
+/// in `tools/fingerprint/cdp.mjs`) and the override is gone -- `undeclared` is
+/// null for the rule widths and the recorded value stands on its own, which is
+/// why 153's change needed nothing here but a re-dump.
 const RuleWidthScale = struct {
     thin: []const u8,
     medium: []const u8,

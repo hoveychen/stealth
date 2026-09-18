@@ -6263,12 +6263,18 @@ pub const Tag = enum {
     // obsolete and not represented in this enum, so they fall through to
     // `.unknown`/`.custom` and aren't matched here.
     pub fn isHiddenByUaStylesheet(self: Tag) bool {
-        // Three tags came off HTML Rendering 15.3.1's list because Chrome does
-        // not hide them: measured loose with tools/fingerprint/scratch/
-        // expr-area-loose.js, `area`, `source` and `track` each compute
-        // `display: inline` and answer `checkVisibility()` true. Both of
-        // Chrome's answers agree for all three, so they leave together rather
+        // Three tags came off HTML Rendering 15.3.1's list because Chrome 151
+        // did not hide them: measured loose with tools/fingerprint/scratch/
+        // expr-area-loose.js, `area`, `source` and `track` each computed
+        // `display: inline` and answered `checkVisibility()` true. Both of
+        // Chrome's answers agreed for all three, so they left together rather
         // than being special-cased for one of them.
+        //
+        // `area` came back with Chrome 153, which hides it again: `display`
+        // is `none` and `checkVisibility()` false, loose in the body AND
+        // inside a <map>, so the shape it actually ships in is covered.
+        // `source` and `track` did not move. chrome_default_display.zig
+        // records the same `none` from the same browser.
         //
         // `noscript` stays, even though Chrome computes `inline` for it too:
         // there the two answers disagree -- `checkVisibility()` is false and
@@ -6281,6 +6287,7 @@ pub const Tag = enum {
         // declining to give the element a style at all. `inline` is what it
         // says everywhere else, including inside a <picture>.
         return switch (self) {
+            .area,
             .base,
             .datalist,
             .head,

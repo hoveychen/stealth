@@ -19,8 +19,8 @@
      undefined.
 
   2. The nine `epub*` names are the mirror image. getOwnPropertyNames reports
-     them -- which is why Chrome's own non-index name count is 746 against
-     Object.keys' 737 -- while `in` says false, there is no descriptor and
+     them -- which is why Chrome's own non-index name count is 747 against
+     Object.keys' 738 -- while `in` says false, there is no descriptor and
      reading gives undefined.
 
   So the four ways to ask "what names does this object have" give four
@@ -127,10 +127,10 @@
   const at = names.indexOf('epubCaptionSide');
 
   const want = [
-    'computed own names 746',
-    'computed keys 737',
-    'inline own names 746',
-    'inline keys 737',
+    'computed own names 747',
+    'computed keys 738',
+    'inline own names 747',
+    'inline keys 738',
     'listed only epubCaptionSide epubTextCombine epubTextEmphasis ' +
       'epubTextEmphasisColor epubTextEmphasisStyle epubTextOrientation ' +
       'epubTextTransform epubWordBreak epubWritingMode',
