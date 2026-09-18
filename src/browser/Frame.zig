@@ -4178,7 +4178,7 @@ fn lookupWebfont(ctx: *const anyopaque, name: []const u8, optical_size: ?f64) ?f
     // Mutable because a variable face instances on demand and the instance is
     // cached. Nothing about the lookup is logically const once the face can be
     // asked for a size it has not been built at yet.
-    const self: *Frame = @constCast(@ptrCast(@alignCast(ctx)));
+    const self: *Frame = @ptrCast(@alignCast(@constCast(ctx)));
     // The map is keyed lowercased because CSS family matching is ASCII
     // case-insensitive. A name longer than any real family cannot be in it.
     var buf: [128]u8 = undefined;
