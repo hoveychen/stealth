@@ -256,13 +256,16 @@ export const extractAntibot = `(() => {
     // Imperva (Incapsula), whose interstitial answers 200 -- so unlike
     // Akamai's denial there is no status line to fall back on, and unlike
     // Kasada's marks these have to separate the interstitial from a page
-    // Imperva served. The reese84 script rides along on protected pages the
-    // way KPSDK does, so \`protection\` is recorded but not judged; what is
-    // judged are the two marks that belong to the interstitial template alone
-    // -- its "Pardon Our Interruption" wording and the \`/_Incapsula_Resource\`
-    // assets its stylesheet pulls. Note the title lives inside a <noscript>
-    // on that page, so \`document.title\` is empty on it and the wording has to
-    // be matched against the markup rather than the title.
+    // Imperva served. Two of the four ride along on served pages and are
+    // recorded rather than judged: \`protection\` is the reese84 bootstrap,
+    // which stays loaded the way KPSDK does, and \`resource\` turned out to be
+    // one too -- hertz hands over 175KB of its real storefront with
+    // \`/_Incapsula_Resource\` in it, and judging on that mark scored four
+    // consecutive real pages, on both arms, as challenges. What is left is the
+    // interstitial template's own wording and the incident id on the refusal.
+    // Note the title lives inside a <noscript> on the interstitial, so
+    // \`document.title\` is empty there and the wording has to be matched
+    // against the markup rather than the title.
     imperva: {
       interruption: /pardon our interruption/i.test(html),
       resource: /_Incapsula_Resource/.test(html),

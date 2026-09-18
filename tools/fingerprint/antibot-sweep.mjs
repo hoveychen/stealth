@@ -513,10 +513,11 @@ function verdict(station, r, documents) {
     // Imperva and AWS WAF both need judging here rather than by the status
     // rule below: Imperva's interstitial arrives as a 200 and AWS WAF's as a
     // 202, so both would score a pass on their own refusal. The marks used are
-    // the interstitial templates' alone -- reese84 and the AWS token SDK ride
-    // along on pages either vendor served, so `imperva.protection` and
-    // `awswaf.sdkScript` are recorded beside them but deliberately not read.
-    if (imperva.interruption || imperva.incidentId || imperva.resource) {
+    // the interstitial templates' alone -- reese84, `/_Incapsula_Resource` and
+    // the AWS token SDK all ride along on pages either vendor served, so
+    // `imperva.protection`, `imperva.resource` and `awswaf.sdkScript` are
+    // recorded beside them but deliberately not read.
+    if (imperva.interruption || imperva.incidentId) {
         return { verdict: 'imperva-challenge', ...out };
     }
     if (awswaf.gokuProps || awswaf.cookieDomainList) {
