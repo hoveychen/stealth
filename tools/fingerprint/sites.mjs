@@ -274,15 +274,25 @@ export const extractAntibot = `(() => {
         typeof window.initializeProtection !== 'undefined' ||
         typeof window.isImpervaSpaSupport !== 'undefined',
     },
-    // AWS WAF. Only \`gokuProps\` is the interstitial's: it is the encrypted
-    // blob the server injects into the 202, and no page AWS WAF serves has
-    // one. Everything else here rides along on served pages and is recorded
-    // rather than judged -- the token SDK and \`AwsWafIntegration\` on
-    // hollandandbarrett, and \`awsWafCookieDomainList\` on redfin, which puts
-    // it in 282KB of its real homepage under its real title. That last one was
-    // judged for one commit, on the strength of a single serving page that
-    // happened not to carry it. One control page is not enough to call a mark
-    // the interstitial's; this is the same trap the Kasada note below
+    // AWS WAF, which has two interstitial shapes and no single mark covering
+    // both. binance's carries \`gokuProps\`, the encrypted blob the server
+    // injects into the 202; booking.com's carries no such blob at all, just
+    // the cookie domain list and an empty \`#challenge-container\` for the SDK
+    // to fill -- and it too answers 202, which no status rule refuses.
+    //
+    // So the pair is what identifies it: an AWS WAF integration on a page with
+    // nothing in it but the container. Neither half is enough alone.
+    // \`awsWafCookieDomainList\` sits in 282KB of redfin's real homepage under
+    // its real title, and \`#challenge-container\` is a generic enough id that
+    // any site could own one. Measured against four pages AWS WAF served
+    // (hollandandbarrett, redfin, morningstar, stubhub) the container is
+    // absent from every one, redfin's included, and redfin is the one that
+    // carries the cookie list.
+    //
+    // That is the correction of two earlier passes at this: \`cookieDomainList\`
+    // was judged alone for one commit on the strength of hollandandbarrett,
+    // the single control page then available, which happens not to carry it.
+    // One control page is not a sample -- the same trap the Kasada note below
     // describes and the Imperva note above records falling into.
     awswaf: {
       gokuProps: typeof window.gokuProps !== 'undefined',
@@ -293,7 +303,10 @@ export const extractAntibot = `(() => {
       // \`challengeDom\` and it comes first.
       wafChallengeDom: has('#challenge-container') || has('#captcha-container'),
       integration: typeof window.AwsWafIntegration !== 'undefined',
-      sdkScript: srcs.some((s) => /\\.awswaf\\.com\\//.test(s)),
+      // The SDK is not always third-party: booking.com proxies it under
+      // \`/__challenge_<token>/<id>/<id>/challenge.js\` on its own origin, which
+      // a host match on \`*.awswaf.com\` misses entirely.
+      sdkScript: srcs.some((s) => /\\.awswaf\\.com\\//.test(s) || /\\/__challenge_[^/]+\\//.test(s)),
     },
     // Any guard's last resort: an empty document with nothing on it.
     empty: text.trim().length === 0,
