@@ -53,7 +53,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--headed-ua] [--profile-dir DIR] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--trace-headers] [--attach-frames|--same-process]]');
+    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--headed-ua] [--profile-dir DIR] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--trace-headers] [--post-chars N] [--attach-frames|--same-process]]');
     process.exit(2);
 }
 const arg = (name, fallback) => {
@@ -105,6 +105,13 @@ const trace = process.argv.includes('--trace');
 // URL and get different verdicts differ either in what they sent *around* the
 // body, or in the body. This settles the cheap half first.
 const traceHeaders = process.argv.includes('--trace-headers');
+// How much of a POST body `--trace` keeps. 300 characters is enough to name the
+// fields of a form-encoded body and read the first one, and that is all most
+// questions need -- but a guard's device check posts ~10KB of collected state
+// in one field, and diffing two arms' collection is exactly the question that
+// needs the whole thing. Raise it per run rather than always: a station's trace
+// otherwise grows by the size of every upload in it.
+const postChars = Number(arg('--post-chars', '300'));
 // Pull the *body* back for responses whose URL contains one of these, via
 // Network.getResponseBody. Repeatable. A guard's verdict is often in the reply
 // it sends the challenge program rather than in the status line -- Kasada's
@@ -370,7 +377,7 @@ const onEvent = (msg) => {
                 ev: 'req', id: p.requestId, method: p.request?.method, url: p.request?.url, type: p.type,
                 ...(body === undefined
                     ? (p.request?.hasPostData ? { postLen: -1 } : {})
-                    : { postLen: body.length, post: body.slice(0, 300) }),
+                    : { postLen: body.length, post: body.slice(0, postChars) }),
                 ...(traceHeaders ? { headers: p.request?.headers ?? null } : {}),
             });
         } else if (msg.method === 'Network.responseReceived') {
