@@ -48,7 +48,35 @@ export class Cdp {
         this.listeners.push(fn);
     }
 
-    send(method, params, sessionId) {
+    // A command that arrives while the engine is tearing a stalled page off
+    // the stack is refused with this code, and refused before it runs: the
+    // engine answers rather than dispatching, so retrying it is safe and is
+    // the only way to get a reading. A watchdog stall lasts as long as the
+    // page's runaway task (30s on similarweb), and the terminate is cleared on
+    // the worker's next tick, so a few spaced retries cover it.
+    static TERMINATED = '-32000 Page execution terminated';
+
+    // A command that lands in a stall window is only refused when the watchdog
+    // fires, i.e. ~30s in, so the old 30s cap raced the refusal and the retry
+    // above almost never got its turn: the measured refusal arrived at 29.8s.
+    // CDP_TIMEOUT_MS raises it further when a probe needs to measure how long
+    // something really takes rather than hit the cap (a cap reported as a
+    // duration is how the stall was misread as "the first evaluate blocks").
+    static TIMEOUT_MS = Number(process.env.CDP_TIMEOUT_MS || 60000);
+
+    async send(method, params, sessionId) {
+        for (let attempt = 0; ; attempt++) {
+            try {
+                return await this.sendOnce(method, params, sessionId);
+            } catch (e) {
+                const terminated = String(e?.message ?? '').startsWith(Cdp.TERMINATED);
+                if (!terminated || attempt >= 5) throw e;
+                await sleep(500);
+            }
+        }
+    }
+
+    sendOnce(method, params, sessionId) {
         const id = this.nextId++;
         const payload = { id, method };
         if (params) payload.params = params;
@@ -58,7 +86,7 @@ export class Cdp {
             this.pending.set(id, { resolve, reject });
             setTimeout(() => {
                 if (this.pending.delete(id)) reject(new Error(`timeout: ${method}`));
-            }, 30000);
+            }, Cdp.TIMEOUT_MS);
         });
     }
 
