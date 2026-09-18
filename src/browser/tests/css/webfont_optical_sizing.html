@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<!-- A variable font's advances are the instance's, not the file's `hmtx`.
+
+     iphey builds its `SVG Computed Style` axis out of
+     `getComputedTextLength()` on a 16px `<text>` in RobotoFlex, which is a
+     variable font with an `opsz` axis defaulting to 14. Chrome's initial
+     `font-optical-sizing: auto` pins that axis to the font size, so the
+     advances it charges at 16px are the opsz=16 instance's. Taking `hmtx` at
+     face value charged the opsz=14 ones and read 126.04 against Chrome's
+     124.41 -- every character a little too wide, by a different amount each
+     time, which is the shape of an un-applied variation rather than a scale
+     factor.
+
+     `/synth-var-font.ttf` (src/testing.zig) answers with a font whose only
+     axis is `opsz`, min 8 / default 14 / max 16, and whose HVAR takes 100
+     units off every advance at the maximum. 1000 units per em, 500 units per
+     glyph at the default. So at 16px a character is 6.4px if the axis was
+     pinned to the font size and 8px if it was not -- a 25% gap no rounding
+     rule could produce.
+-->
+<script>
+  // The `load` event alone will not do: this engine resolves style resources
+  // just after the DCL dispatch, and the body still has to arrive after that.
+  // So wait for the measurement itself to stop being the fallback's.
+  function whenLoaded(el, fn) {
+    let tries = 0;
+    (function attempt() {
+      const w = el.offsetWidth;
+      if (w === 64 || w === 80 || tries++ > 300) return fn();
+      setTimeout(attempt, 10);
+    })();
+  }
+</script>
+
+<style>
+  @font-face { font-family: VarProbe; src: url(/synth-var-font.ttf) format('truetype') }
+  #at16 { font-family: VarProbe; font-size: 16px }
+  #at15 { font-family: VarProbe; font-size: 15px }
+  #at8 { font-family: VarProbe; font-size: 8px }
+  #off { font-family: VarProbe; font-size: 16px; font-optical-sizing: none }
+</style>
+
+<!-- Spans, not divs: a block-level box fills its containing block, so its
+     offsetWidth says nothing about the text. -->
+<span id=at16>mmmmmmmmmm</span>
+<span id=at15>mmmmmmmmmm</span>
+<span id=at8>mmmmmmmmmm</span>
+<span id=off>mmmmmmmmmm</span>
+
+<script id="optical_sizing_pins_opsz_to_the_font_size" type=module>
+{
+  const state = await testing.async();
+  whenLoaded(document.getElementById('at16'), () => state.resolve([
+    // opsz clamps to the axis maximum of 16, where every glyph is 400 units:
+    // 400 / 1000 * 16 = 6.4px each, 64px for ten.
+    'at16=' + document.getElementById('at16').offsetWidth,
+    // Half way up the axis: opsz=15 normalises to 0.5, so the delta applies
+    // at half strength -- 450 units, 6.75px each. This is what says the axis
+    // is being *interpolated* rather than one instance being picked, and it
+    // needs the fractional width rather than the rounded offsetWidth.
+    'at15=' + document.getElementById('at15').getBoundingClientRect().width,
+    // 8px normalises to -1, and the single region peaks at +1, so no delta
+    // applies: the file's own 500 units, 4px each.
+    'at8=' + document.getElementById('at8').offsetWidth,
+    // `font-optical-sizing: none` leaves the axis at its default, where the
+    // normalised coordinate is 0 and no delta applies: the file's own 500
+    // units, 8px each. Same 16px text as `at16`, so the pair is the whole
+    // claim -- the size reaches the axis only when the property lets it.
+    'off=' + document.getElementById('off').offsetWidth,
+  ].join(' ')));
+  await state.done((seen) => {
+    testing.expectEqual('at16=64 at15=67.5 at8=40 off=80', seen);
+  });
+}
+</script>

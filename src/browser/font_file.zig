@@ -488,6 +488,46 @@ fn build(allocator: Allocator, t: Tables, fallback: font_metrics.Family) !font_m
 /// tested without a binary fixture in the tree. `advance` is in font units at
 /// `upem`, given to every codepoint in U+0020..U+007E.
 pub fn synthesize(allocator: Allocator, upem: u16, advance: u16, win_ascent: u16, win_descent: u16) ![]const u8 {
+    return synthesizeInner(allocator, upem, advance, win_ascent, win_descent, null);
+}
+
+/// One variation axis and the advance delta it carries, for the synthesized
+/// variable font below. `delta_at_max` is added to every advance when the axis
+/// sits at `max`, interpolated linearly down to zero at `default` -- one region
+/// with its peak at the maximum, which is the simplest shape a real HVAR has.
+pub const VarSpec = struct {
+    tag: *const [4]u8,
+    min: f64,
+    default: f64,
+    max: f64,
+    delta_at_max: i8,
+};
+
+/// The same minimal sfnt plus `fvar` and `HVAR`, so optical sizing can be
+/// tested without shipping a real variable font. RobotoFlex -- the face iphey
+/// measures its `SVG Computed Style` axis with -- is variable with an `opsz`
+/// axis defaulting to 14, and Chrome's `font-optical-sizing: auto` pins that
+/// axis to the font size: the advances it charges at 16px are the opsz=16
+/// instance's, not the file's `hmtx`.
+pub fn synthesizeVariable(
+    allocator: Allocator,
+    upem: u16,
+    advance: u16,
+    win_ascent: u16,
+    win_descent: u16,
+    spec: VarSpec,
+) ![]const u8 {
+    return synthesizeInner(allocator, upem, advance, win_ascent, win_descent, spec);
+}
+
+fn synthesizeInner(
+    allocator: Allocator,
+    upem: u16,
+    advance: u16,
+    win_ascent: u16,
+    win_descent: u16,
+    spec: ?VarSpec,
+) ![]const u8 {
     const num_glyphs: u16 = 0x60; // 0x20..0x7f, glyph id == codepoint
     var head = [_]u8{0} ** 54;
     std.mem.writeInt(u16, head[18..20], upem, .big);
@@ -524,19 +564,85 @@ pub fn synthesize(allocator: Allocator, upem: u16, advance: u16, win_ascent: u16
     std.mem.writeInt(i16, sub[26..28], 1, .big);
     // idRangeOffset both zero
 
-    const tables = [_]struct { tag: []const u8, data: []const u8 }{
+    const s = spec orelse return packSfnt(allocator, &.{
         .{ .tag = "OS/2", .data = &os2 },
         .{ .tag = "cmap", .data = &cmap },
         .{ .tag = "head", .data = &head },
         .{ .tag = "hhea", .data = &hhea },
         .{ .tag = "hmtx", .data = hmtx },
-    };
+    });
+
+    // fvar: one axis, no named instances. A 16-byte header then one 20-byte
+    // VariationAxisRecord of 16.16 fixed-point bounds.
+    var fvar = [_]u8{0} ** 36;
+    std.mem.writeInt(u16, fvar[0..2], 1, .big); // majorVersion
+    std.mem.writeInt(u16, fvar[4..6], 16, .big); // axesArrayOffset
+    std.mem.writeInt(u16, fvar[6..8], 2, .big); // reserved, always 2
+    std.mem.writeInt(u16, fvar[8..10], 1, .big); // axisCount
+    std.mem.writeInt(u16, fvar[10..12], 20, .big); // axisSize
+    std.mem.writeInt(u16, fvar[14..16], 8, .big); // instanceSize: axisCount*4+4
+    @memcpy(fvar[16..20], s.tag);
+    std.mem.writeInt(i32, fvar[20..24], fixed16_16(s.min), .big);
+    std.mem.writeInt(i32, fvar[24..28], fixed16_16(s.default), .big);
+    std.mem.writeInt(i32, fvar[28..32], fixed16_16(s.max), .big);
+    std.mem.writeInt(u16, fvar[34..36], 256, .big); // axisNameID
+
+    // HVAR: a 20-byte header, then an ItemVariationStore. Every mapping
+    // offset is zero, which is the spec's "glyph id IS the delta-set index"
+    // shortcut, so `item_count` has to cover the largest glyph id.
+    const item_count: u16 = 128;
+    const hvar_len = 20 + 22 + 8 + item_count;
+    const hvar = try allocator.alloc(u8, hvar_len);
+    defer allocator.free(hvar);
+    @memset(hvar, 0);
+    std.mem.writeInt(u16, hvar[0..2], 1, .big); // majorVersion
+    std.mem.writeInt(u32, hvar[4..8], 20, .big); // itemVariationStoreOffset
+    const ivs = hvar[20..];
+    std.mem.writeInt(u16, ivs[0..2], 1, .big); // format
+    std.mem.writeInt(u32, ivs[2..6], 12, .big); // variationRegionListOffset
+    std.mem.writeInt(u16, ivs[6..8], 1, .big); // itemVariationDataCount
+    std.mem.writeInt(u32, ivs[8..12], 22, .big); // itemVariationDataOffsets[0]
+    // VariationRegionList: one region over one axis, peaking at the axis
+    // maximum so the scalar is the normalised coordinate itself.
+    std.mem.writeInt(u16, ivs[12..14], 1, .big); // axisCount
+    std.mem.writeInt(u16, ivs[14..16], 1, .big); // regionCount
+    std.mem.writeInt(i16, ivs[16..18], 0, .big); // startCoord 0.0
+    std.mem.writeInt(i16, ivs[18..20], 0x4000, .big); // peakCoord 1.0
+    std.mem.writeInt(i16, ivs[20..22], 0x4000, .big); // endCoord 1.0
+    // ItemVariationData: one byte-sized delta per glyph, one region.
+    const ivd = ivs[22..];
+    std.mem.writeInt(u16, ivd[0..2], item_count, .big);
+    std.mem.writeInt(u16, ivd[2..4], 0, .big); // wordDeltaCount: all bytes
+    std.mem.writeInt(u16, ivd[4..6], 1, .big); // regionIndexCount
+    std.mem.writeInt(u16, ivd[6..8], 0, .big); // regionIndexes[0]
+    for (0..item_count) |i| ivd[8 + i] = @bitCast(s.delta_at_max);
+
+    return packSfnt(allocator, &.{
+        .{ .tag = "HVAR", .data = hvar },
+        .{ .tag = "OS/2", .data = &os2 },
+        .{ .tag = "cmap", .data = &cmap },
+        .{ .tag = "fvar", .data = &fvar },
+        .{ .tag = "head", .data = &head },
+        .{ .tag = "hhea", .data = &hhea },
+        .{ .tag = "hmtx", .data = hmtx },
+    });
+}
+
+fn fixed16_16(v: f64) i32 {
+    return @intFromFloat(@round(v * 65536.0));
+}
+
+const SynthTable = struct { tag: []const u8, data: []const u8 };
+
+/// Lay tables out as an sfnt. The directory has to be sorted by tag, which is
+/// the caller's job -- every caller here writes them in order.
+fn packSfnt(allocator: Allocator, tables: []const SynthTable) ![]const u8 {
     var total: usize = 12 + tables.len * 16;
     for (tables) |tab| total += (tab.data.len + 3) & ~@as(usize, 3);
     const out = try allocator.alloc(u8, total);
     @memset(out, 0);
     std.mem.writeInt(u32, out[0..4], 0x00010000, .big);
-    std.mem.writeInt(u16, out[4..6], tables.len, .big);
+    std.mem.writeInt(u16, out[4..6], @intCast(tables.len), .big);
     var at: usize = 12 + tables.len * 16;
     for (tables, 0..) |tab, i| {
         const rec = 12 + i * 16;
@@ -569,6 +675,32 @@ test "font_file: a synthesized sfnt gives linear advances" {
     try std.testing.expectEqual(@as(f64, 80.0), built.max_char_width);
     // U+00AD is zero however wide the font draws it.
     try std.testing.expectEqual(@as(f64, 0), built.glyphs[0x00ad - first].advance);
+}
+
+test "font_file: a synthesized variable font parses, and reads as its default instance" {
+    const allocator = std.testing.allocator;
+    // The same 1000/500 font with an `opsz` axis and an HVAR that takes 100
+    // units off at the maximum. Nothing here applies a variation yet, so the
+    // advance is still the file's own -- what this asserts is that the two
+    // extra tables do not break the parse, which is the only way the HTML
+    // test next door can be read as "the axis was ignored" rather than "the
+    // fixture is malformed".
+    const bytes = try synthesizeVariable(allocator, 1000, 500, 800, 200, .{
+        .tag = "opsz",
+        .min = 8,
+        .default = 14,
+        .max = 16,
+        .delta_at_max = -100,
+    });
+    defer allocator.free(bytes);
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const built = family(arena.allocator(), bytes, font_metrics.sans_serif) orelse
+        return error.TestUnexpectedResult;
+
+    try std.testing.expectEqual(@as(f64, 50.0), built.glyphs['A' - first].advance);
+    try std.testing.expectEqual(@as(f64, 50.0), built.glyphs['m' - first].advance);
 }
 
 test "font_file: canvas ascent and descent round above 4px and not below" {

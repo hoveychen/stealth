@@ -6077,6 +6077,11 @@ test "WebApi: webfont metrics" {
     try testing.htmlRunner("css/webfont_metrics.html", .{});
 }
 
+test "WebApi: webfont optical sizing" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/webfont_optical_sizing.html", .{});
+}
+
 test "WebApi: markup subresources" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("markup_subresources.html", .{});

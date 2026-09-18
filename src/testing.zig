@@ -2117,6 +2117,26 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    // The same font with an `opsz` variation axis. Every glyph is still 500
+    // units at the axis default (14) but 400 at its maximum (16), so a 16px
+    // run says outright whether the axis was pinned to the font size the way
+    // `font-optical-sizing: auto` asks for: 6.4px per character if it was,
+    // 8px if the file's `hmtx` was taken at face value.
+    if (std.mem.startsWith(u8, path, "/synth-var-font.ttf")) {
+        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer arena.deinit();
+        const font = font_file.synthesizeVariable(arena.allocator(), 1000, 500, 800, 200, .{
+            .tag = "opsz",
+            .min = 8,
+            .default = 14,
+            .max = 16,
+            .delta_at_max = -100,
+        }) catch return req.respond("", .{});
+        return req.respond(font, .{
+            .extra_headers = &.{.{ .name = "Content-Type", .value = "font/ttf" }},
+        });
+    }
+
     {
         const without_query = path[0 .. std.mem.indexOfScalar(u8, path, '?') orelse path.len];
         for ([_][]const u8{ ".mp3", ".mp4", ".webm", ".ogg", ".wav", ".vtt", ".swf", ".woff2", ".woff", ".ttf", ".otf" }) |ext| {
