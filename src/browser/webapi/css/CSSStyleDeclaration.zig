@@ -1757,7 +1757,7 @@ pub fn lengthFactor(style_manager: *StyleManager, element: *Element, property_na
         // digit against headed Chrome 151 -- see computed_relative_units.html.
         .ex, .ch => blk: {
             const family = if (style_manager.computedFontFamily(element)) |declared|
-                font_metrics.findInList(declared, style_manager.frame.loadedFonts())
+                font_metrics.findInList(declared, style_manager.frame.loadedFonts(), style_manager.computedOpticalSize(element))
             else
                 font_metrics.fallback;
             const g = font_metrics.glyph(family, if (unit == .ex) 'x' else '0') orelse

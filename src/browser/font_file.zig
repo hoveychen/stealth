@@ -85,6 +85,11 @@ const Tables = struct {
     os2: []const u8 = &.{},
     hmtx: []const u8 = &.{},
     cmap: []const u8 = &.{},
+    /// The three variation tables. A face without them is a static font and
+    /// every path below falls through to `hmtx` unchanged.
+    fvar: []const u8 = &.{},
+    avar: []const u8 = &.{},
+    hvar: []const u8 = &.{},
     /// hmtx carried WOFF2 transform 1, which drops the left-side-bearing
     /// arrays and prefixes the advances with a flags byte.
     hmtx_transformed: bool = false,
@@ -114,8 +119,18 @@ fn u32At(b: []const u8, off: usize) ?u32 {
 /// are not a font we can read. `fallback` supplies everything the file cannot;
 /// see the header comment for which fields those are.
 ///
+/// `optical_size` is the font size the text will be laid out at, which is what
+/// `font-optical-sizing: auto` pins a variable face's `opsz` axis to. Null
+/// leaves the axis alone -- that is `font-optical-sizing: none`, a face with no
+/// such axis, and every static font.
+///
 /// Everything returned is allocated from `allocator` and lives as long as it.
-pub fn family(allocator: Allocator, bytes: []const u8, fallback: font_metrics.Family) ?font_metrics.Family {
+pub fn family(
+    allocator: Allocator,
+    bytes: []const u8,
+    fallback: font_metrics.Family,
+    optical_size: ?f64,
+) ?font_metrics.Family {
     var arena_tables = std.heap.ArenaAllocator.init(allocator);
     defer arena_tables.deinit();
     const tables = read(arena_tables.allocator(), bytes) orelse return null;
@@ -123,7 +138,8 @@ pub fn family(allocator: Allocator, bytes: []const u8, fallback: font_metrics.Fa
         log.debug(.browser, "webfont tables incomplete", .{ .bytes = bytes.len });
         return null;
     }
-    return build(allocator, tables, fallback) catch null;
+    const coords = if (optical_size) |size| coordsFor(tables, "opsz", size) else null;
+    return build(allocator, tables, fallback, coords) catch null;
 }
 
 // --- containers ----------------------------------------------------------
@@ -169,6 +185,9 @@ fn assign(out: *Tables, name: []const u8, slice: []const u8) void {
     if (std.mem.eql(u8, name, "OS/2")) out.os2 = slice;
     if (std.mem.eql(u8, name, "hmtx")) out.hmtx = slice;
     if (std.mem.eql(u8, name, "cmap")) out.cmap = slice;
+    if (std.mem.eql(u8, name, "fvar")) out.fvar = slice;
+    if (std.mem.eql(u8, name, "avar")) out.avar = slice;
+    if (std.mem.eql(u8, name, "HVAR")) out.hvar = slice;
 }
 
 /// WOFF: an sfnt-shaped directory whose tables are individually zlib'd. Only
@@ -378,6 +397,232 @@ fn segmentedCoverage(cmap: []const u8, off: usize, cp: u21) ?u16 {
     return null;
 }
 
+// --- variations ----------------------------------------------------------
+//
+// A variable font's `hmtx` holds the DEFAULT instance's advances, and every
+// other instance is that plus an `HVAR` delta. The one axis that matters here
+// is `opsz`: `font-optical-sizing`'s initial `auto` pins it to the font size,
+// so a 16px run of RobotoFlex -- whose `opsz` defaults to 14 -- is charged the
+// opsz=16 instance's advances, not the file's. Reading `hmtx` and stopping
+// made every character a little too wide by a different amount, which is how
+// iphey's `SVG Computed Style` axis read 126.04 against Chrome's 124.41.
+//
+// Nothing else is instanced. `wght` is already modelled as the family's four
+// weight tables, and the rest of RobotoFlex's eleven axes only move if a page
+// writes `font-variation-settings`, which is not what this defect was.
+
+/// More axes than this and the face is left at its default instance. The
+/// widest real face measured is RobotoFlex at thirteen.
+const max_axes = 32;
+
+const Coords = struct {
+    values: [max_axes]f64 = @splat(0),
+    count: usize = 0,
+};
+
+fn f2dot14At(b: []const u8, off: usize) ?f64 {
+    const raw = i16At(b, off) orelse return null;
+    return @as(f64, @floatFromInt(raw)) / 16384.0;
+}
+
+fn fixedAt(b: []const u8, off: usize) ?f64 {
+    if (off + 4 > b.len) return null;
+    const raw = std.mem.readInt(i32, b[off..][0..4], .big);
+    return @as(f64, @floatFromInt(raw)) / 65536.0;
+}
+
+/// Every axis at its default (a normalised zero) except `tag`, which is put at
+/// `user` in the axis's own units. Null when the face is not variable or does
+/// not carry that axis, which is every static font and is not an error.
+fn coordsFor(t: Tables, tag: *const [4]u8, user: f64) ?Coords {
+    if (t.fvar.len < 16) return null;
+    const axes_at = u16At(t.fvar, 4) orelse return null;
+    const count = u16At(t.fvar, 8) orelse return null;
+    const size = u16At(t.fvar, 10) orelse return null;
+    if (count == 0 or count > max_axes or size < 20) return null;
+
+    var out: Coords = .{ .count = count };
+    var found = false;
+    for (0..count) |i| {
+        const rec = @as(usize, axes_at) + i * @as(usize, size);
+        if (rec + 20 > t.fvar.len) return null;
+        if (!std.mem.eql(u8, t.fvar[rec..][0..4], tag)) continue;
+        const min = fixedAt(t.fvar, rec + 4) orelse return null;
+        const def = fixedAt(t.fvar, rec + 8) orelse return null;
+        const max = fixedAt(t.fvar, rec + 12) orelse return null;
+        if (!(min <= def and def <= max)) return null;
+        const v = std.math.clamp(user, min, max);
+        // The spec's normalisation: the two halves of the axis are scaled
+        // separately, so the default always lands on zero however lopsided
+        // the range is.
+        const n = if (v < def)
+            (if (def > min) (v - def) / (def - min) else 0)
+        else if (v > def)
+            (if (max > def) (v - def) / (max - def) else 0)
+        else
+            0;
+        out.values[i] = avarMap(t.avar, count, i, n);
+        found = true;
+    }
+    if (!found) return null;
+    return out;
+}
+
+/// `avar`'s piecewise-linear remap of one axis's normalised coordinate. A face
+/// with no `avar`, or an axis with no segment map, is the identity -- and
+/// RobotoFlex does carry one, so skipping this misses Chrome by more than the
+/// defect being fixed.
+fn avarMap(avar: []const u8, axis_count: u16, axis: usize, coord: f64) f64 {
+    if (avar.len < 8) return coord;
+    if ((u16At(avar, 6) orelse 0) != axis_count) return coord;
+    // The segment maps are variable-length and consecutive, so the ones ahead
+    // of this axis have to be walked past.
+    var at: usize = 8;
+    for (0..axis) |_| {
+        const n = u16At(avar, at) orelse return coord;
+        at += 2 + @as(usize, n) * 4;
+    }
+    const pairs = u16At(avar, at) orelse return coord;
+    if (pairs < 2) return coord;
+    at += 2;
+    if (at + @as(usize, pairs) * 4 > avar.len) return coord;
+
+    var prev_from: f64 = -1;
+    var prev_to: f64 = -1;
+    for (0..pairs) |i| {
+        const from = f2dot14At(avar, at + i * 4) orelse return coord;
+        const to = f2dot14At(avar, at + i * 4 + 2) orelse return coord;
+        if (coord == from) return to;
+        if (coord < from) {
+            if (i == 0 or from == prev_from) return to;
+            return prev_to + (to - prev_to) * (coord - prev_from) / (from - prev_from);
+        }
+        prev_from = from;
+        prev_to = to;
+    }
+    return prev_to;
+}
+
+/// How much a region contributes at these coordinates: the product of each
+/// axis's own triangular weight, and zero the moment one axis is outside its
+/// region. `regions` is the flat `VariationRegionList` axis-record array.
+fn regionScalar(regions: []const u8, base: usize, axis_count: u16, coords: Coords) f64 {
+    var scalar: f64 = 1;
+    for (0..axis_count) |a| {
+        const rec = base + a * 6;
+        const start = f2dot14At(regions, rec) orelse return 0;
+        const peak = f2dot14At(regions, rec + 2) orelse return 0;
+        const end = f2dot14At(regions, rec + 4) orelse return 0;
+        // A zero peak means this axis does not take part, which is how a
+        // region names a subset of the axes.
+        if (peak == 0) continue;
+        const c = if (a < coords.count) coords.values[a] else 0;
+        if (c == peak) continue;
+        if (c <= start or c >= end) return 0;
+        scalar *= if (c < peak)
+            (c - start) / (peak - start)
+        else
+            (end - c) / (end - peak);
+    }
+    return scalar;
+}
+
+/// The `HVAR` advance delta for one glyph, in font units. Null whenever the
+/// table is absent or shaped in a way we do not read, which leaves the default
+/// instance's advance in place.
+fn advanceDelta(t: Tables, gid: u16, coords: Coords) ?f64 {
+    const hvar = t.hvar;
+    if (hvar.len < 20) return null;
+    const ivs_at = u32At(hvar, 4) orelse return null;
+    const map_at = u32At(hvar, 8) orelse return null;
+    if (ivs_at == 0 or ivs_at >= hvar.len) return null;
+    const ivs = hvar[ivs_at..];
+
+    // With no advance mapping the glyph id IS the delta-set index, with an
+    // implicit outer of zero -- the spec's shortcut for a font whose deltas
+    // are already in glyph order.
+    var outer: u32 = 0;
+    var inner: u32 = gid;
+    if (map_at != 0) {
+        if (map_at >= hvar.len) return null;
+        const pair = deltaSetIndex(hvar[map_at..], gid) orelse return null;
+        outer = pair[0];
+        inner = pair[1];
+    }
+
+    if ((u16At(ivs, 0) orelse return null) != 1) return null;
+    const regions_at = u32At(ivs, 2) orelse return null;
+    const data_count = u16At(ivs, 6) orelse return null;
+    if (outer >= data_count) return null;
+    const data_at = u32At(ivs, 8 + outer * 4) orelse return null;
+    if (regions_at >= ivs.len or data_at >= ivs.len) return null;
+
+    const regions = ivs[regions_at..];
+    const region_axes = u16At(regions, 0) orelse return null;
+    const region_count = u16At(regions, 2) orelse return null;
+    if (region_axes == 0 or region_axes > max_axes) return null;
+
+    const data = ivs[data_at..];
+    const item_count = u16At(data, 0) orelse return null;
+    const word_field = u16At(data, 2) orelse return null;
+    const index_count = u16At(data, 4) orelse return null;
+    if (inner >= item_count or index_count > region_count) return null;
+    // The high bit widens both sizes: 32/16 bit deltas instead of 16/8.
+    const long = word_field & 0x8000 != 0;
+    const word_count = word_field & 0x7fff;
+    if (word_count > index_count) return null;
+    const word_size: usize = if (long) 4 else 2;
+    const short_size: usize = if (long) 2 else 1;
+    const row = @as(usize, word_count) * word_size +
+        (@as(usize, index_count) - word_count) * short_size;
+    const rows_at = 6 + @as(usize, index_count) * 2;
+    const at = rows_at + @as(usize, inner) * row;
+    if (at + row > data.len) return null;
+
+    var total: f64 = 0;
+    var off = at;
+    for (0..index_count) |i| {
+        const region = u16At(data, 6 + i * 2) orelse return null;
+        if (region >= region_count) return null;
+        const delta: f64 = blk: {
+            if (i < word_count) {
+                if (long) break :blk @floatFromInt(std.mem.readInt(i32, data[off..][0..4], .big));
+                break :blk @floatFromInt(std.mem.readInt(i16, data[off..][0..2], .big));
+            }
+            if (long) break :blk @floatFromInt(std.mem.readInt(i16, data[off..][0..2], .big));
+            break :blk @floatFromInt(@as(i8, @bitCast(data[off])));
+        };
+        off += if (i < word_count) word_size else short_size;
+        if (delta == 0) continue;
+        const base = 4 + @as(usize, region) * @as(usize, region_axes) * 6;
+        total += regionScalar(regions, base, region_axes, coords) * delta;
+    }
+    return total;
+}
+
+/// `DeltaSetIndexMap`, formats 0 and 1, which differ only in the width of
+/// `mapCount`. A glyph past the end repeats the last entry.
+fn deltaSetIndex(map: []const u8, gid: u16) ?[2]u32 {
+    if (map.len < 2) return null;
+    const format = map[0];
+    const entry_format = map[1];
+    const inner_bits: u5 = @intCast((entry_format & 0x0f) + 1);
+    const entry_size: usize = ((entry_format & 0x30) >> 4) + 1;
+    const count: u32, const data_at: usize = switch (format) {
+        0 => .{ u16At(map, 2) orelse return null, 4 },
+        1 => .{ u32At(map, 2) orelse return null, 6 },
+        else => return null,
+    };
+    if (count == 0) return null;
+    const index = @min(@as(u32, gid), count - 1);
+    const at = data_at + @as(usize, index) * entry_size;
+    if (at + entry_size > map.len) return null;
+    var entry: u32 = 0;
+    for (map[at..][0..entry_size]) |b| entry = (entry << 8) | b;
+    const mask: u32 = (@as(u32, 1) << inner_bits) - 1;
+    return .{ entry >> inner_bits, entry & mask };
+}
+
 /// Advance in font units. `numberOfHMetrics` entries carry one, and every
 /// glyph past that repeats the last -- which is how a monospace tail is
 /// stored. A WOFF2 transform-1 hmtx drops the left-side-bearing arrays and
@@ -390,7 +635,12 @@ fn advanceUnits(t: Tables, num_h_metrics: u16, gid: u16) ?u16 {
     return u16At(t.hmtx, base + @as(usize, index) * stride);
 }
 
-fn build(allocator: Allocator, t: Tables, fallback: font_metrics.Family) !font_metrics.Family {
+fn build(
+    allocator: Allocator,
+    t: Tables,
+    fallback: font_metrics.Family,
+    coords: ?Coords,
+) !font_metrics.Family {
     const upem = u16At(t.head, 18) orelse return error.NoUnitsPerEm;
     if (upem == 0) return error.NoUnitsPerEm;
     const num_h_metrics = u16At(t.hhea, 34) orelse return error.NoHMetrics;
@@ -406,9 +656,17 @@ fn build(allocator: Allocator, t: Tables, fallback: font_metrics.Family) !font_m
         const base = fallback.glyphs[i];
         // U+00AD is zero-advance in Chrome however wide the font draws it --
         // measured against glyphs_arial, which says 0 where Arial says 33.30.
-        const units: ?u16 = if (cp == 0x00ad) 0 else blk: {
+        const units: ?f64 = if (cp == 0x00ad) 0 else blk: {
             const gid = glyphId(t.cmap, cp) orelse break :blk null;
-            break :blk advanceUnits(t, num_h_metrics, gid);
+            const base_units = advanceUnits(t, num_h_metrics, gid) orelse break :blk null;
+            var v: f64 = @floatFromInt(base_units);
+            // The delta is rounded before it is added, not after: an instance's
+            // advance is an integer number of font units, the same as the
+            // `hmtx` entry it comes from.
+            if (coords) |c| {
+                if (advanceDelta(t, gid, c)) |d| v = @max(0, v + @round(d));
+            }
+            break :blk v;
         };
         if (units == null) {
             // No glyph in this face: leave the fallback's cost, which is what
@@ -417,7 +675,7 @@ fn build(allocator: Allocator, t: Tables, fallback: font_metrics.Family) !font_m
             continue;
         }
         any = true;
-        const advance = @as(f64, @floatFromInt(units.?)) * per_unit;
+        const advance = units.? * per_unit;
         if (cp == 'x') x_advance = advance;
         // Ink bearings are the fallback's, scaled by the advance ratio -- see
         // the header comment. They feed canvas actualBoundingBox* only.
@@ -664,7 +922,7 @@ test "font_file: a synthesized sfnt gives linear advances" {
 
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
-    const built = family(arena.allocator(), bytes, font_metrics.sans_serif) orelse
+    const built = family(arena.allocator(), bytes, font_metrics.sans_serif, null) orelse
         return error.TestUnexpectedResult;
 
     try std.testing.expectEqual(@as(f64, 50.0), built.glyphs['A' - first].advance);
@@ -696,7 +954,7 @@ test "font_file: a synthesized variable font parses, and reads as its default in
 
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
-    const built = family(arena.allocator(), bytes, font_metrics.sans_serif) orelse
+    const built = family(arena.allocator(), bytes, font_metrics.sans_serif, null) orelse
         return error.TestUnexpectedResult;
 
     try std.testing.expectEqual(@as(f64, 50.0), built.glyphs['A' - first].advance);
@@ -710,7 +968,7 @@ test "font_file: canvas ascent and descent round above 4px and not below" {
     defer allocator.free(bytes);
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
-    const built = family(arena.allocator(), bytes, font_metrics.sans_serif) orelse
+    const built = family(arena.allocator(), bytes, font_metrics.sans_serif, null) orelse
         return error.TestUnexpectedResult;
 
     try std.testing.expectEqual(@as(f64, 13), built.ascents[15]);
@@ -723,9 +981,9 @@ test "font_file: canvas ascent and descent round above 4px and not below" {
 test "font_file: bytes that are not a font leave the fallback alone" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    try std.testing.expect(family(arena.allocator(), "", font_metrics.sans_serif) == null);
-    try std.testing.expect(family(arena.allocator(), "<!doctype html>", font_metrics.sans_serif) == null);
+    try std.testing.expect(family(arena.allocator(), "", font_metrics.sans_serif, null) == null);
+    try std.testing.expect(family(arena.allocator(), "<!doctype html>", font_metrics.sans_serif, null) == null);
     // A well-formed header whose directory points past the end.
     var truncated = [_]u8{ 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
-    try std.testing.expect(family(arena.allocator(), &truncated, font_metrics.sans_serif) == null);
+    try std.testing.expect(family(arena.allocator(), &truncated, font_metrics.sans_serif, null) == null);
 }

@@ -105,11 +105,14 @@ fn fontFamily(self: *TextContent, frame: *Frame) font_metrics.Family {
     const list = frame._style_manager.computedFontFamily(self.asElement()) orelse {
         return font_metrics.fallback;
     };
+    // A variable face has one set of advances per optical size, and this path
+    // is the one iphey reads: `getComputedTextLength()` on a 16px `<text>`.
+    const optical_size = frame._style_manager.computedOpticalSize(self.asElement());
     var names = std.mem.splitScalar(u8, list, ',');
     while (names.next()) |raw| {
         // Quotes stay on: `findEntry` needs them to tell the keyword
         // `monospace` from the family name `'monospace'`, which matches nothing.
-        if (font_metrics.findEntry(raw, frame.loadedFonts())) |family| {
+        if (font_metrics.findEntry(raw, frame.loadedFonts(), optical_size)) |family| {
             return family;
         }
     }
