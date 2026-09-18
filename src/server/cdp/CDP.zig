@@ -49,6 +49,12 @@ const InterceptState = fetch.InterceptState;
 
 pub const URL_BASE = "chrome://newtab/";
 
+// Error code for a command that arrived while a terminate was pending, i.e.
+// while the page it would have run against was being torn off the stack.
+// Chrome has no equivalent -- its pages don't get terminated out from under a
+// command -- so this sits with the other server-defined codes above -32000.
+pub const TERMINATED_CODE = -32000;
+
 const SessionIdGen = Incrementing(u32, "SID");
 const BrowserSessionIdGen = Incrementing(u32, "BSID");
 const BrowserContextIdGen = Incrementing(u32, "BID");
@@ -142,8 +148,23 @@ pub fn deinit(self: *CDP) void {
 // frees right after we return), so `c.input`'s string slices stay
 // valid for the duration of dispatch.
 pub fn onMessage(self: *CDP, c: *Inbox.Message.Cdp) anyerror!void {
-    // Once a terminate is pending, don't dispatch
+    // Once a terminate is pending, don't dispatch: nothing may touch the page
+    // while the terminate is on its way through V8. But dropping the message
+    // outright leaves the client waiting forever -- a watchdog stall swallows
+    // every command that arrives in its window, and from the outside that is
+    // indistinguishable from a dead connection. Answer anything that carries
+    // an id so the client can move on and retry.
     if (self.browser.env.terminatePending()) {
+        log.debug(.cdp, "dropped on terminate", .{ .id = c.input.id, .method = c.input.method });
+        if (c.input.id) |id| {
+            self.sendJSON(.{
+                .id = id,
+                .@"error" = .{ .code = TERMINATED_CODE, .message = "Page execution terminated" },
+                .sessionId = c.input.sessionId,
+            }) catch |err| {
+                log.warn(.cdp, "terminate reply", .{ .err = err, .id = id });
+            };
+        }
         return;
     }
 
@@ -1670,6 +1691,48 @@ test "cdp: run sends a close frame on pending terminate" {
     var buf: [WS.CLOSE_GOING_AWAY.len]u8 = undefined;
     const n = try posix.read(ctx.socket, &buf);
     try testing.expectEqualSlices(u8, &WS.CLOSE_GOING_AWAY, buf[0..n]);
+}
+
+test "cdp: a command that arrives while a terminate is pending is answered" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const cdp = ctx.cdp();
+    // A watchdog stall gets here through requestTerminatePage: the page is
+    // torn off the stack while commands keep arriving in its inbox.
+    cdp.browser.env.requestTerminatePage();
+    defer cdp.browser.env.cancelTerminate();
+
+    const raw = "{\"id\":42,\"method\":\"Runtime.evaluate\",\"sessionId\":\"SID-1\"}";
+    var msg = Inbox.Message.Cdp{
+        .raw = @constCast(raw),
+        .input = .{ .id = 42, .method = "Runtime.evaluate", .sessionId = "SID-1" },
+    };
+    try cdp.onMessage(&msg);
+
+    // Not dispatched (that would touch a terminating page), but not silent
+    // either: silence leaves the client waiting for a response that never
+    // comes, which reads as a dead connection.
+    try ctx.expectSentError(TERMINATED_CODE, "Page execution terminated", .{ .id = 42 });
+}
+
+test "cdp: an id-less command during a pending terminate stays silent" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const cdp = ctx.cdp();
+    cdp.browser.env.requestTerminatePage();
+    defer cdp.browser.env.cancelTerminate();
+
+    const raw = "{\"method\":\"Runtime.evaluate\"}";
+    var msg = Inbox.Message.Cdp{
+        .raw = @constCast(raw),
+        .input = .{ .id = null, .method = "Runtime.evaluate" },
+    };
+    try cdp.onMessage(&msg);
+
+    // Nothing to answer: no id means nobody is waiting on a response.
+    try ctx.expectSentCount(0);
 }
 
 test "cdp: syncRequest short-circuits after disconnect" {
