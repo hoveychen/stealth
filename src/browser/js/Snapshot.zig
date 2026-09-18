@@ -40,6 +40,7 @@ const PageJsApis = bridge.PageJsApis;
 const SharedWorkerJsApis = bridge.SharedWorkerJsApis;
 const DedicatedWorkerJsApis = bridge.DedicatedWorkerJsApis;
 const secure_context = @import("secure_context.zig");
+const global_order = @import("global_order.zig");
 
 const Snapshot = @This();
 
@@ -322,6 +323,164 @@ fn build() !Snapshot {
     };
 }
 
+// One name an interface puts on the global, and the position Chrome creates it
+// at. An interface can contribute several: `HTMLOptionElement` also answers to
+// `Option`, `URL` to `webkitURL`.
+const GlobalName = struct {
+    rank: usize,
+    name: []const u8,
+    template_index: usize,
+};
+
+// Names this engine puts on the window global that Chrome has nowhere, so
+// Chrome's order table cannot place them. Every one of them is a tell on its
+// own -- one expression separates the engine from every real browser -- and
+// they are here only because the surface they belong to is switched off by
+// default and deleted per context (Context.hideWebMcpSurface). They sort to the
+// end, after everything Chrome does have, so they cost nothing when they are
+// present and nothing is left behind when they are removed.
+//
+// Anything else missing from the table is a mistake worth a compile error:
+// either Chrome does not expose it and neither should we, or the capture has
+// gone stale and wants regenerating.
+const not_in_chrome = [_][]const u8{ "ModelContext", "ModelContextClient" };
+
+fn rankOf(comptime name: []const u8) usize {
+    comptime {
+        if (global_order.rank(name)) |r| return r;
+        for (not_in_chrome, 0..) |n, i| {
+            if (std.mem.eql(u8, n, name)) return global_order.names.len + i;
+        }
+        return global_order.rankOrFail(name);
+    }
+}
+
+// Every interface-object name this realm puts on the global, sorted into the
+// order Chrome creates them in.
+//
+// Chrome's global is built in five runs -- V8's builtins, `console` and the
+// legacy factory aliases, the interface objects in reverse-alphabetical order,
+// the Window IDL members, and finally a batch of flag- and secure-context-gated
+// names -- and property creation order is readable from script, so the
+// sequence is a fingerprint surface (DataDome's device-check uploads the whole
+// list). Sorting by Chrome's captured rank reproduces all of that without this
+// file having to know which rule produced it.
+//
+// Window realm only: the table is Chrome's *window* order, and a worker global
+// carries a different set in a different order.
+fn constructorNames(comptime realm: Realm, comptime ContextApis: []const type) []const GlobalName {
+    comptime {
+        // Every name gets a linear scan of the 1200-odd entry order table, and
+        // there are several hundred names -- a million-odd comptime branches.
+        @setEvalBranchQuota(20_000_000);
+        var list: []const GlobalName = &.{};
+        for (ContextApis) |JsApi| {
+            const namespace_global = @hasDecl(JsApi.Meta, "namespace_global");
+            const no_interface_object = @hasDecl(JsApi.Meta, "no_interface_object") or namespace_global;
+            const interface_exposed = if (@hasDecl(JsApi.Meta, "exposed")) JsApi.Meta.exposed else Caller.Function.Opts.Exposed.both;
+            if (no_interface_object or !realm.allows(interface_exposed) or !@hasDecl(JsApi.Meta, "name")) {
+                continue;
+            }
+            const template_index = bridge.JsApiLookup.getId(JsApi);
+            const add = struct {
+                fn f(l: []const GlobalName, name: []const u8, index: usize) []const GlobalName {
+                    return l ++ [_]GlobalName{.{ .rank = rankOf(name), .name = name, .template_index = index }};
+                }
+            }.f;
+
+            // A [LegacyFactoryFunction] is reachable under both names, and
+            // both are interface objects as far as the global is concerned.
+            if (@hasDecl(JsApi.Meta, "constructor_alias")) {
+                list = add(list, JsApi.Meta.constructor_alias, template_index);
+            }
+            list = add(list, JsApi.Meta.name, template_index);
+            if (@hasDecl(JsApi.Meta, "constructor_aliases") and realm == .window) {
+                for (JsApi.Meta.constructor_aliases) |alias| {
+                    list = add(list, alias, template_index);
+                }
+            }
+        }
+        // A name can be reached twice, and not always from the same type:
+        // `CountQueuingStrategy` and `ByteLengthQueuingStrategy` each have a
+        // standalone file and a second implementation in queuing_strategy.zig,
+        // and both are in the window list. The old per-context path defined
+        // the property twice and never noticed, so the *later* type is the one
+        // that was live. A template does notice: V8 aborts Genesis with
+        // `Check failed: current_key != *desc->GetKey()` and no mention of the
+        // name. So collapse them the way the repeated define did -- the first
+        // one's position, the last one's template.
+        var deduped: []const GlobalName = &.{};
+        outer: for (list) |a| {
+            for (deduped, 0..) |b, i| {
+                if (std.mem.eql(u8, a.name, b.name)) {
+                    var replaced = deduped[0..deduped.len].*;
+                    replaced[i].template_index = a.template_index;
+                    const frozen_replaced = replaced;
+                    deduped = &frozen_replaced;
+                    continue :outer;
+                }
+            }
+            deduped = deduped ++ [_]GlobalName{a};
+        }
+        var sorted = deduped[0..deduped.len].*;
+        std.mem.sort(GlobalName, &sorted, {}, struct {
+            fn lessThan(_: void, a: GlobalName, b: GlobalName) bool {
+                return a.rank < b.rank;
+            }
+        }.lessThan);
+        const frozen = sorted;
+        return &frozen;
+    }
+}
+
+// Put the interface objects whose Chrome rank is below `hi` on the global's
+// template. Template properties land on the instance in the order they are set
+// here, and this runs before the [Global] interface's own members, so the two
+// interleave the way Chrome's do: the ungated interface objects, then `window`
+// and the rest of the Window IDL surface.
+//
+// Only the names Chrome creates *before* `window` can come this way, and that
+// is not a stylistic choice -- see the budget guard in createSnapshotContext.
+fn setConstructorNames(
+    comptime realm: Realm,
+    comptime ContextApis: []const type,
+    comptime hi: usize,
+    isolate: *v8.Isolate,
+    templates: []*const v8.FunctionTemplate,
+    global_template: *const v8.ObjectTemplate,
+) void {
+    inline for (comptime constructorNames(realm, ContextApis)) |entry| {
+        if (comptime entry.rank < hi) {
+            const key = v8.v8__String__NewFromUtf8(isolate, entry.name.ptr, v8.kNormal, @intCast(entry.name.len));
+            // Web IDL: interface objects on the global are non-enumerable.
+            v8.v8__Template__Set(@ptrCast(global_template), key, @ptrCast(templates[entry.template_index]), v8.DontEnum);
+        }
+    }
+}
+
+// The other half: the interface objects Chrome creates *after* the Window IDL
+// members. A template cannot carry them (the budget guard explains why), so
+// they are defined on the live global instead -- in rank order, which is all
+// the ordering they need, because every per-context define appends.
+fn defineConstructorNames(
+    comptime realm: Realm,
+    comptime ContextApis: []const type,
+    comptime lo: usize,
+    isolate: *v8.Isolate,
+    templates: []*const v8.FunctionTemplate,
+    context: ?*v8.Context,
+    global_obj: ?*const v8.Object,
+) void {
+    inline for (comptime constructorNames(realm, ContextApis)) |entry| {
+        if (comptime entry.rank >= lo) {
+            const func = v8.v8__FunctionTemplate__GetFunction(templates[entry.template_index], context);
+            const key = v8.v8__String__NewFromUtf8(isolate, entry.name.ptr, v8.kNormal, @intCast(entry.name.len));
+            var maybe_result: v8.MaybeBool = undefined;
+            v8.v8__Object__DefineOwnProperty(global_obj, context, key, func, v8.DontEnum, &maybe_result);
+        }
+    }
+}
+
 fn createSnapshotContext(
     comptime realm: Realm,
     comptime ContextApis: []const type,
@@ -379,6 +538,46 @@ fn createSnapshotContext(
             @compileError("[Global] scope interface " ++ @typeName(GlobalScopeApi) ++ " has [Exposed]-gated members. This is not supported");
         }
     }
+    // Chrome creates the window global's own properties in five runs, and the
+    // interface objects are split across two of them: everything ungated goes
+    // in before `window` (rank 680), and the flag- and secure-context-gated
+    // batch goes in after `chrome` (rank 895). The [Global] interface's own
+    // members are the run in between. The first run goes on the template, just
+    // ahead of those members; the second cannot (see the budget below) and is
+    // defined on the live global once the context exists.
+    //
+    // Window realm only. A worker global has a different set in a different
+    // order, and the table is a capture of Chrome's *window*; there the old
+    // per-context definition order stands (see the ContextApis loop below).
+    const order_globals = comptime realm == .window;
+    const window_block_start = comptime global_order.rankOrFail("window");
+    if (comptime order_globals) {
+        // V8 caps a map at 1020 descriptors. Past that, instantiating this
+        // template yields a dictionary-mode object, and Genesis copies a
+        // dictionary-mode template instance onto the global through a path
+        // that assumes every property is data (`TransferNamedProperties`, the
+        // `else` branch, guarded only by a DCHECK): each accessor arrives as a
+        // *data* property whose value is the raw internal AccessorPair. The
+        // whole Window IDL surface -- `window`, `document`, `location` -- then
+        // aborts the process with "Unexpected instance type encountered" on
+        // first read, in a release build, with no other sign anything is
+        // wrong. Measured: all 1207 names landed in the right order and every
+        // one of them was unreadable.
+        //
+        // So the template's share is capped here, well under the limit, and
+        // the rest is defined per context. `expr-global-order` still scores
+        // what it scores; this only decides which mechanism puts a name down.
+        comptime {
+            var on_template = 0;
+            for (constructorNames(realm, ContextApis)) |entry| {
+                if (entry.rank < window_block_start) on_template += 1;
+            }
+            // Plus the ~215 members attachClass is about to add below.
+            if (on_template > 760) @compileError("too many interface objects on the window template; V8 normalizes past 1020 and silently breaks every accessor");
+        }
+        setConstructorNames(realm, ContextApis, window_block_start, isolate, templates, global_template);
+    }
+
     attachClass(GlobalScopeApi, true, isolate, templates[global_scope_index], global_template);
 
     const context = v8.v8__Context__New(isolate, global_template, null);
@@ -407,6 +606,15 @@ fn createSnapshotContext(
             var maybe_deleted: v8.MaybeBool = undefined;
             v8.v8__Object__Delete(proto_obj, context, constructor_key, &maybe_deleted);
         }
+    }
+
+    // The interface objects Chrome creates after the Window IDL members. They
+    // append, so this has to run before anything else that puts a name on the
+    // global -- the WebIDL namespace objects in the loop below, and `chrome`
+    // and the page's `console` later still, all of which Chrome also creates
+    // in its last run.
+    if (comptime order_globals) {
+        defineConstructorNames(realm, ContextApis, window_block_start, isolate, templates, context, global_obj);
     }
 
     inline for (ContextApis) |JsApi| {
@@ -450,7 +658,30 @@ fn createSnapshotContext(
         const interface_exposed = comptime if (@hasDecl(JsApi.Meta, "exposed")) JsApi.Meta.exposed else Caller.Function.Opts.Exposed.both;
         const in_realm = comptime realm.allows(interface_exposed);
 
-        if (@hasDecl(JsApi.Meta, "name") and !no_interface_object and in_realm) {
+        // V8 names a template's function after the *property* it is first
+        // instantiated under -- `maybe_name` in ApiNatives beats the class name
+        // SetClassName put there -- and on the window global that first
+        // property is now the legacy alias, because Chrome creates `Option`,
+        // `Image`, `Audio`, `webkitURL` and the `WebKit*` pair ahead of every
+        // interface object. One function object still answers to both names
+        // here, so it has to report the interface's: `document.images[0]
+        // .constructor.name` is 'HTMLImageElement', not 'Image'. Redefining an
+        // existing own property keeps its slot, so `length` still comes first.
+        if (comptime order_globals and in_realm and !no_interface_object and
+            (@hasDecl(JsApi.Meta, "constructor_alias") or @hasDecl(JsApi.Meta, "constructor_aliases")))
+        {
+            const name = JsApi.Meta.name;
+            const name_key = v8.v8__String__NewFromUtf8(isolate, "name", v8.kNormal, 4);
+            const name_value = v8.v8__String__NewFromUtf8(isolate, name.ptr, v8.kNormal, @intCast(name.len));
+            var maybe_named: v8.MaybeBool = undefined;
+            v8.v8__Object__DefineOwnProperty(@ptrCast(func), context, name_key, @ptrCast(name_value), v8.ReadOnly + v8.DontEnum, &maybe_named);
+        }
+
+        // The window realm defines these on the global's *template* instead,
+        // in Chrome's creation order, before the context exists -- see
+        // setConstructorNames. Defining them again here would be a no-op for
+        // the value and a reshuffle for the order, which is the whole point.
+        if (comptime !order_globals) if (@hasDecl(JsApi.Meta, "name") and !no_interface_object and in_realm) {
             if (@hasDecl(JsApi.Meta, "constructor_alias")) {
                 // Both names, and both non-enumerable: an interface object is
                 // never enumerable on the global, and neither is a legacy
@@ -495,7 +726,7 @@ fn createSnapshotContext(
                     v8.v8__Object__DefineOwnProperty(global_obj, context, alias_name, func, v8.DontEnum, &maybe_alias);
                 }
             }
-        }
+        };
 
         // WebIDL namespaces. Nothing about a namespace looks like an interface:
         // the global carries the namespace *object*, its members are own
@@ -585,6 +816,20 @@ fn createSnapshotContext(
         const code = v8.v8__String__NewFromUtf8(isolate, code_str.ptr, v8.kNormal, @intCast(code_str.len));
         const script = v8.v8__Script__Compile(context, code, null) orelse return error.ScriptCompileFailed;
         _ = v8.v8__Script__Run(script, context) orelse return error.ScriptRunFailed;
+    }
+
+    if (comptime order_globals) {
+        // The tripwire for the V8 normalization trap the template budget above
+        // guards against. If the global's template ever does go past V8's
+        // descriptor cap, every [Global] accessor arrives as a data property
+        // holding a raw internal AccessorPair, and the first script to read
+        // `window` aborts the process -- so catch it here, at build time.
+        // Asking for the descriptor is safe either way: it does not touch the
+        // value, which is the part that aborts.
+        const code_str = "if (typeof Object.getOwnPropertyDescriptor(globalThis, 'window').get !== 'function') throw 0";
+        const code = v8.v8__String__NewFromUtf8(isolate, code_str.ptr, v8.kNormal, @intCast(code_str.len));
+        const script = v8.v8__Script__Compile(context, code, null) orelse return error.ScriptCompileFailed;
+        _ = v8.v8__Script__Run(script, context) orelse return error.GlobalAccessorsNormalized;
     }
 
     // Last, because it reads back the prototypes everything above installed.
@@ -1172,6 +1417,40 @@ fn indexedConfiguration(member: bridge.Indexed) v8.IndexedPropertyHandlerConfigu
     };
 }
 
+// A [Global] interface's declarations, sorted into the order Chrome creates
+// its members in. Keys are doubled so that a name Chrome does not have can sit
+// on the odd number just past the last one that does -- it stays where its
+// preceding neighbour put it rather than collecting at either end.
+fn globalOrderedDecls(comptime JsApi: type) []const std.builtin.Type.Declaration {
+    comptime {
+        const decls = @typeInfo(JsApi).@"struct".decls;
+        // A linear scan of the 1234-name table per declaration.
+        @setEvalBranchQuota(decls.len * global_order.names.len * 8);
+
+        const Keyed = struct { key: usize, index: usize, decl: std.builtin.Type.Declaration };
+        var keyed: [decls.len]Keyed = undefined;
+        var last: usize = 0;
+        for (decls, 0..) |d, i| {
+            const key = if (global_order.rank(d.name)) |r| blk: {
+                last = r * 2;
+                break :blk last;
+            } else last + 1;
+            keyed[i] = .{ .key = key, .index = i, .decl = d };
+        }
+        std.mem.sort(Keyed, &keyed, {}, struct {
+            fn lessThan(_: void, a: Keyed, b: Keyed) bool {
+                if (a.key != b.key) return a.key < b.key;
+                return a.index < b.index;
+            }
+        }.lessThan);
+
+        var sorted: [decls.len]std.builtin.Type.Declaration = undefined;
+        for (keyed, 0..) |k, i| sorted[i] = k.decl;
+        const frozen = sorted;
+        return &frozen;
+    }
+}
+
 fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolate, template: *const v8.FunctionTemplate, define_on: ?*const v8.ObjectTemplate) void {
     const instance = v8.v8__FunctionTemplate__InstanceTemplate(template);
     const prototype = v8.v8__FunctionTemplate__PrototypeTemplate(template);
@@ -1240,7 +1519,20 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
         );
     }
 
-    const declarations = @typeInfo(JsApi).@"struct".decls;
+    // The [Global] flattening pass is the one whose install order is readable
+    // from script: these members are own properties of `window`, and a guard
+    // that serialises Object.getOwnPropertyNames(window) reads the sequence.
+    // Source order here is Blink's IDL order, which is close to Chrome's but
+    // not it -- `performance`, `crypto`, `indexedDB` and the storage pair sit
+    // with the attributes in the IDL and after the operations on the real
+    // global, and `speechSynthesis` is in the gated batch 300 names later. So
+    // for this one pass the declarations are walked in Chrome's order, off the
+    // same table createSnapshotContext uses for the interface objects. A
+    // member Chrome has no name for keeps the slot its neighbour left it in.
+    const declarations = comptime if (flatten and std.mem.eql(u8, JsApi.Meta.name, "Window"))
+        globalOrderedDecls(JsApi)
+    else
+        @typeInfo(JsApi).@"struct".decls;
     var has_named_index_getter = false;
 
     const wpt_extensions_enabled = lp.build_config.wpt_extensions;
