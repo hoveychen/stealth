@@ -274,12 +274,16 @@ export const extractAntibot = `(() => {
         typeof window.initializeProtection !== 'undefined' ||
         typeof window.isImpervaSpaSupport !== 'undefined',
     },
-    // AWS WAF. Its challenge is a 202 carrying nothing but the integration:
-    // \`gokuProps\` is the server-injected encrypted blob, which is what makes
-    // it the interstitial's own mark. The token SDK under \`*.awswaf.com\` is
-    // deliberately separate -- hollandandbarrett loads it on the real site it
-    // serves us, so a rule on the script would score that pass as a challenge,
-    // which is the trap the Kasada note below describes.
+    // AWS WAF. Only \`gokuProps\` is the interstitial's: it is the encrypted
+    // blob the server injects into the 202, and no page AWS WAF serves has
+    // one. Everything else here rides along on served pages and is recorded
+    // rather than judged -- the token SDK and \`AwsWafIntegration\` on
+    // hollandandbarrett, and \`awsWafCookieDomainList\` on redfin, which puts
+    // it in 282KB of its real homepage under its real title. That last one was
+    // judged for one commit, on the strength of a single serving page that
+    // happened not to carry it. One control page is not enough to call a mark
+    // the interstitial's; this is the same trap the Kasada note below
+    // describes and the Imperva note above records falling into.
     awswaf: {
       gokuProps: typeof window.gokuProps !== 'undefined',
       cookieDomainList: typeof window.awsWafCookieDomainList !== 'undefined',
