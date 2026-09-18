@@ -513,15 +513,18 @@ function verdict(station, r, documents) {
     // Imperva and AWS WAF both need judging here rather than by the status
     // rule below: Imperva's interstitial arrives as a 200 and AWS WAF's as a
     // 202, so both would score a pass on their own refusal. The marks used are
-    // the interstitial templates' alone. Everything else either vendor leaves
-    // on a page it *served* is recorded beside them and deliberately not read:
+    // the interstitial templates' alone. Everything either vendor leaves on a
+    // page it *served* is recorded beside them and deliberately not read:
     // reese84 and `/_Incapsula_Resource` for Imperva, and for AWS WAF the
     // token SDK, `AwsWafIntegration` and `awsWafCookieDomainList` -- redfin
-    // serves all three on its real homepage.
+    // serves all three on its real homepage. AWS WAF takes a pair because it
+    // has two interstitial shapes: binance's has the `gokuProps` blob,
+    // booking.com's has only the integration and an empty container, and both
+    // answer 202, which the status rule below lets through.
     if (imperva.interruption || imperva.incidentId) {
         return { verdict: 'imperva-challenge', ...out };
     }
-    if (awswaf.gokuProps) {
+    if (awswaf.gokuProps || (awswaf.wafChallengeDom && awswaf.cookieDomainList)) {
         return { verdict: 'awswaf-challenge', ...out };
     }
     // Kasada is deliberately *not* judged here, only recorded. Its marks ride
