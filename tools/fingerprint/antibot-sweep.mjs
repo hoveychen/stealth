@@ -492,6 +492,8 @@ function verdict(station, r, documents) {
     const px = r.px ?? {};
     const akamai = r.akamai ?? {};
     const kasada = r.kasada ?? {};
+    const imperva = r.imperva ?? {};
+    const awswaf = r.awswaf ?? {};
     const jsDetect = !!(cf.chlOpt || cf.platformScript);
     const out = { ...base, jsDetect };
     if (cf.blocked) return { verdict: 'cf-blocked', ...out };
@@ -507,6 +509,19 @@ function verdict(station, r, documents) {
     }
     if (px.pressAndHold || px.captchaDom || (px.deniedTitle && px.refId)) {
         return { verdict: 'px-challenge', ...out };
+    }
+    // Imperva and AWS WAF both need judging here rather than by the status
+    // rule below: Imperva's interstitial arrives as a 200 and AWS WAF's as a
+    // 202, so both would score a pass on their own refusal. The marks used are
+    // the interstitial templates' alone -- reese84, `/_Incapsula_Resource` and
+    // the AWS token SDK all ride along on pages either vendor served, so
+    // `imperva.protection`, `imperva.resource` and `awswaf.sdkScript` are
+    // recorded beside them but deliberately not read.
+    if (imperva.interruption || imperva.incidentId) {
+        return { verdict: 'imperva-challenge', ...out };
+    }
+    if (awswaf.gokuProps || awswaf.cookieDomainList) {
+        return { verdict: 'awswaf-challenge', ...out };
     }
     // Kasada is deliberately *not* judged here, only recorded. Its marks ride
     // along on pages it served: headed Chrome came back from canadagoose with
@@ -738,7 +753,16 @@ try {
             row.nodes = reading.nodes;
             row.textLength = reading.textLength;
             row.snippet = reading.text.replace(/\s+/g, ' ').slice(0, 200);
-            row.marks = { ...reading.cf, ...reading.dd, ...reading.px, ...reading.akamai, ...reading.kasada };
+            // Flat on purpose, so a mark can be grepped out of a result file
+            // without knowing which vendor owns it. The cost is that mark
+            // names have to be unique across every group in extractAntibot: a
+            // reused one is overwritten here with no warning, which is why AWS
+            // WAF's challenge container is `wafChallengeDom` and not
+            // `challengeDom` (Cloudflare's, and it spreads first).
+            row.marks = {
+                ...reading.cf, ...reading.dd, ...reading.px, ...reading.akamai,
+                ...reading.kasada, ...reading.imperva, ...reading.awswaf,
+            };
         }
         row.ms = Date.now() - started;
         snapshot.stations.push(row);

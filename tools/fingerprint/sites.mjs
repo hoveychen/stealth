@@ -91,7 +91,10 @@ export const ANTIBOT = [
     { name: 'px-wayfair', vendor: 'perimeterx', url: 'https://www.wayfair.com/', settleMs: 25000, guards: 'challenge' },
     // Kasada, which no station covered before this one.
     { name: 'ks-canadagoose', vendor: 'kasada', url: 'https://www.canadagoose.com/', settleMs: 25000, guards: 'challenge' },
-    { name: 'x-hyatt', vendor: 'unattributed', url: 'https://www.hyatt.com/', settleMs: 25000, guards: 'challenge' },
+    // Kasada too, which its headers say outright: a bare curl to it comes back
+    // 429 with `x-kpsdk-*` set. The `x-` prefix stays in the name so readings
+    // keep comparing with the ones taken while the vendor was still unknown.
+    { name: 'x-hyatt', vendor: 'kasada', url: 'https://www.hyatt.com/', settleMs: 25000, guards: 'challenge' },
 
     // --- the third batch (2026-09-13) ------------------------------------
     //
@@ -151,6 +154,33 @@ export const ANTIBOT = [
     // site otherwise, so it is a rate rather than a door; the `x-` prefix stays
     // so readings keep comparing with the ones taken before the vendor showed.
     { name: 'x-sweetwater', vendor: 'perimeterx', url: 'https://www.sweetwater.com/', settleMs: 25000, guards: 'challenge' },
+
+    // --- the fourth batch (2026-09-17): two vendors no station covered ----
+    //
+    // Found by narrowing the tell to what a site cannot claim speculatively:
+    // response headers other than the CSP, and hosts the markup actually
+    // references (`scratch/s35/vendor-probe.py`). The probe before it matched
+    // the whole curl response, which meant it also matched the
+    // `content-security-policy` allowlist — and a CSP enumerates every third
+    // party a site *may* ever load, so petco.com read as hCaptcha + DataDome +
+    // Cloudflare at once. Nobody runs three. About a hundred consumer sites
+    // were screened this way and only these two families came back real:
+    // hCaptcha, Arkose, F5 Shape, FingerprintJS, Radware and Netacea scored
+    // zero, their earlier "hits" having all been CSP entries.
+    //
+    // Imperva (Incapsula), whose interstitial answers *200*: boots serves
+    // "Pardon Our Interruption" with a normal status line, so the status rule
+    // never sees it — the same trap PerimeterX's Press & Hold sets. hertz is
+    // the control: the same vendor, 175KB of its real site. (thrifty.com and
+    // dollar.com are the same deployment as hertz and add nothing.)
+    { name: 'im-boots', vendor: 'imperva', url: 'https://www.boots.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'im-hertz', vendor: 'imperva', url: 'https://www.hertz.com/rentacar/reservation/', settleMs: 25000, guards: 'none' },
+    // AWS WAF. binance answers 202 and a two-kilobyte page that is nothing but
+    // the integration: an encrypted `gokuProps` blob and the token SDK.
+    // hollandandbarrett is its control — real site, SDK loaded, no challenge —
+    // which is also why the SDK script is not on its own a challenge mark.
+    { name: 'aw-binance', vendor: 'awswaf', url: 'https://www.binance.com/en', settleMs: 25000, guards: 'challenge' },
+    { name: 'aw-hollandandbarrett', vendor: 'awswaf', url: 'https://www.hollandandbarrett.com/', settleMs: 25000, guards: 'none' },
 ];
 
 // What a guard's own page looks like from inside it. Signals are recorded raw
@@ -222,6 +252,44 @@ export const extractAntibot = `(() => {
     kasada: {
       sdk: typeof window.KPSDK !== 'undefined',
       script: srcs.some((s) => /\\/[0-9a-f]{8}-[0-9a-f-]{27}\\/[0-9a-f]{8}-[0-9a-f-]{27}\\//.test(s)),
+    },
+    // Imperva (Incapsula), whose interstitial answers 200 -- so unlike
+    // Akamai's denial there is no status line to fall back on, and unlike
+    // Kasada's marks these have to separate the interstitial from a page
+    // Imperva served. Two of the four ride along on served pages and are
+    // recorded rather than judged: \`protection\` is the reese84 bootstrap,
+    // which stays loaded the way KPSDK does, and \`resource\` turned out to be
+    // one too -- hertz hands over 175KB of its real storefront with
+    // \`/_Incapsula_Resource\` in it, and judging on that mark scored four
+    // consecutive real pages, on both arms, as challenges. What is left is the
+    // interstitial template's own wording and the incident id on the refusal.
+    // Note the title lives inside a <noscript> on the interstitial, so
+    // \`document.title\` is empty there and the wording has to be matched
+    // against the markup rather than the title.
+    imperva: {
+      interruption: /pardon our interruption/i.test(html),
+      resource: /_Incapsula_Resource/.test(html),
+      incidentId: /incapsula incident id/i.test(text),
+      protection: typeof window.reeseSkipExpirationCheck !== 'undefined' ||
+        typeof window.initializeProtection !== 'undefined' ||
+        typeof window.isImpervaSpaSupport !== 'undefined',
+    },
+    // AWS WAF. Its challenge is a 202 carrying nothing but the integration:
+    // \`gokuProps\` is the server-injected encrypted blob, which is what makes
+    // it the interstitial's own mark. The token SDK under \`*.awswaf.com\` is
+    // deliberately separate -- hollandandbarrett loads it on the real site it
+    // serves us, so a rule on the script would score that pass as a challenge,
+    // which is the trap the Kasada note below describes.
+    awswaf: {
+      gokuProps: typeof window.gokuProps !== 'undefined',
+      cookieDomainList: typeof window.awsWafCookieDomainList !== 'undefined',
+      // Not \`challengeDom\`: antibot-sweep flattens every one of these groups
+      // into a single \`marks\` object, so a name reused across two vendors
+      // silently overwrites the earlier one -- Cloudflare already has a
+      // \`challengeDom\` and it comes first.
+      wafChallengeDom: has('#challenge-container') || has('#captcha-container'),
+      integration: typeof window.AwsWafIntegration !== 'undefined',
+      sdkScript: srcs.some((s) => /\\.awswaf\\.com\\//.test(s)),
     },
     // Any guard's last resort: an empty document with nothing on it.
     empty: text.trim().length === 0,
