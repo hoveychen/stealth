@@ -755,6 +755,9 @@ pub const CSSFontFaceRule = struct {
 
     pub fn init(block: []const u8, frame: *Frame) !*CSSFontFaceRule {
         const style = try CSSStyleDeclaration.init(null, false, frame);
+        // Before the text is parsed: the block holds descriptors, not
+        // properties, and three of them take a range the property does not.
+        style._is_descriptors = true;
         try style.setCssText(block, frame);
         const rule = try frame._factory.chained(.{
             CSSRule{ ._type = undefined },

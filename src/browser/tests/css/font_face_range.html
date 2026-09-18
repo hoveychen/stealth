@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<!-- An `@font-face` block holds descriptors, not properties.
+
+     `font-weight`, `font-stretch` and `font-style` are spelled the same in
+     both places, but a descriptor takes a RANGE -- a variable font declares
+     `font-weight: 100 900` -- where the property takes one value. The arity
+     count is measured against the property, so the whole descriptor used to
+     be thrown away and `document.fonts`'s face read `normal` where Chrome
+     (measured, scratchpad/wt.mjs against a headed Chrome 153) reads
+     `100 900`. The property itself still refuses the pair, which is the
+     other half of the claim: the range is allowed by the block it is in, not
+     by the name.
+-->
+
+<style>
+  @font-face {
+    font-family: RangeProbe;
+    src: url(/nonexistent-range-probe.ttf) format('truetype');
+    font-weight: 100 900;
+    font-stretch: 75% 125%;
+    font-style: oblique 20deg 50deg;
+  }
+  /* The same three names as properties, each with a second component. */
+  #asprops { font-weight: 100 900; font-stretch: 75% 125%; font-style: oblique 20deg 50deg }
+</style>
+
+<span id=asprops>probe</span>
+
+<script id="font_face_descriptors_take_a_range">
+{
+  let face = null;
+  for (const sheet of document.styleSheets) {
+    for (const rule of sheet.cssRules) {
+      if (rule instanceof CSSFontFaceRule) face = rule;
+    }
+  }
+  testing.expectTrue(face !== null);
+  const d = face.style;
+  testing.expectEqual('100 900', d.getPropertyValue('font-weight'));
+  testing.expectEqual('75% 125%', d.getPropertyValue('font-stretch'));
+  testing.expectEqual('oblique 20deg 50deg', d.getPropertyValue('font-style'));
+}
+</script>
+
+<script id="the_properties_still_refuse_a_second_component">
+{
+  const el = document.getElementById('asprops');
+  const inline = el.style;
+  inline.setProperty('font-weight', '100 900');
+  testing.expectEqual('', inline.getPropertyValue('font-weight'));
+
+  // And in a stylesheet rule, which is the path the descriptor block shares.
+  let rule = null;
+  for (const sheet of document.styleSheets) {
+    for (const r of sheet.cssRules) {
+      if (r.selectorText === '#asprops') rule = r;
+    }
+  }
+  testing.expectTrue(rule !== null);
+  testing.expectEqual('', rule.style.getPropertyValue('font-weight'));
+  testing.expectEqual('', rule.style.getPropertyValue('font-stretch'));
+  testing.expectEqual('', rule.style.getPropertyValue('font-style'));
+
+  // Two components is what the `font-style` PROPERTY takes, which is why it
+  // is not in the arity table at all and why the refusal above has to stop
+  // at the third. Measured alongside the rest
+  // (scratch/s45/expr-style-arity.js).
+  inline.setProperty('font-style', 'oblique 20deg');
+  testing.expectEqual('oblique 20deg', inline.getPropertyValue('font-style'));
+  inline.setProperty('font-style', 'oblique 20deg 50deg 70deg');
+  testing.expectEqual('oblique 20deg', inline.getPropertyValue('font-style'));
+}
+</script>
+
+<script id="the_registered_face_reports_the_range" type=module>
+{
+  const state = await testing.async();
+  // The faces are registered when the frame resolves its style resources,
+  // just after the DCL dispatch, so the set is empty while this script runs.
+  let tries = 0;
+  (function attempt() {
+    if (document.fonts.size > 0 || tries++ > 300) {
+      const out = [];
+      document.fonts.forEach((f) => out.push([f.family, f.weight, f.stretch, f.style].join('|')));
+      state.resolve(out.join(' '));
+      return;
+    }
+    setTimeout(attempt, 10);
+  })();
+  await state.done((seen) => {
+    testing.expectEqual('RangeProbe|100 900|75% 125%|oblique 20deg 50deg', seen);
+  });
+}
+</script>

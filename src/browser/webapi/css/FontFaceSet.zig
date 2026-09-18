@@ -134,13 +134,14 @@ fn syncDeclared(self: *FontFaceSet, exec: *const Execution) void {
         // Reuse the existing object when the same family is still declared, so
         // a face that has already loaded keeps saying so and a page holding a
         // reference to it keeps holding the same one.
-        if (self.findDeclared(face.family, face.weight, face.style, rebuilt.items)) |existing| {
+        if (self.findDeclared(face.family, face.weight, face.style, face.stretch, rebuilt.items)) |existing| {
             rebuilt.appendAssumeCapacity(existing);
             continue;
         }
         const entry = FontFace.init(face.family, "", .{
             .weight = face.weight,
             .style = face.style,
+            .stretch = face.stretch,
         }, exec) catch continue;
         // A face that arrives after the style-resource pass was never fetched,
         // which is what Chrome reports for one too: every face iphey injects
@@ -190,6 +191,7 @@ fn findDeclared(
     family: []const u8,
     weight: []const u8,
     style: []const u8,
+    stretch: []const u8,
     taken: []const *FontFace,
 ) ?*FontFace {
     for (self._faces.items) |face| {
@@ -197,6 +199,7 @@ fn findDeclared(
         if (!std.mem.eql(u8, face.getFamily(), family)) continue;
         if (!std.mem.eql(u8, face.getWeight(), weight)) continue;
         if (!std.mem.eql(u8, face.getStyle(), style)) continue;
+        if (!std.mem.eql(u8, face.getStretch(), stretch)) continue;
         for (taken) |claimed| {
             if (claimed == face) break;
         } else return face;

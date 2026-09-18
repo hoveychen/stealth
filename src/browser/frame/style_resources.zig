@@ -166,6 +166,7 @@ const Scan = struct {
         declared: []const u8,
         weight: []const u8,
         style: []const u8,
+        stretch: []const u8,
         base: [:0]const u8,
         url: []const u8,
     };
@@ -293,6 +294,7 @@ const Scan = struct {
             // is what Chrome reports: `normal` for both.
             .weight = try self.arena().dupe(u8, descriptor(style, "font-weight", self.frame)),
             .style = try self.arena().dupe(u8, descriptor(style, "font-style", self.frame)),
+            .stretch = try self.arena().dupe(u8, descriptor(style, "font-stretch", self.frame)),
             .base = self.base,
             .url = url,
         });
@@ -337,6 +339,7 @@ pub const DeclaredFace = struct {
     family: []const u8,
     weight: []const u8,
     style: []const u8,
+    stretch: []const u8,
     /// Whether the face has a `url()` source at all. A `local(...)`-only face
     /// is still a face -- iphey declares 310 of them as a font enumeration
     /// probe -- but there is nothing to fetch for it, so it can never be
@@ -361,6 +364,7 @@ pub fn declaredFaces(frame: *Frame, allocator: Allocator) ![]const DeclaredFace 
             .family = face.declared,
             .weight = face.weight,
             .style = face.style,
+            .stretch = face.stretch,
             .has_url = face.url.len != 0,
         });
     }
@@ -423,6 +427,7 @@ fn scan(frame: *Frame) !void {
         const entry = FontFace.init(face.declared, face.url, .{
             .weight = face.weight,
             .style = face.style,
+            .stretch = face.stretch,
         }, &frame.js.execution) catch continue;
         // `loaded` means the face is in use, which is what Chrome reports: it
         // leaves an unused face `unloaded` whether its source is a url it

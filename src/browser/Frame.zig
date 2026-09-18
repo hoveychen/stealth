@@ -6112,6 +6112,11 @@ test "WebApi: webfont metrics" {
     try testing.htmlRunner("css/webfont_metrics.html", .{});
 }
 
+test "WebApi: font face range descriptors" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/font_face_range.html", .{});
+}
+
 test "WebApi: webfont optical sizing" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("css/webfont_optical_sizing.html", .{});
