@@ -53,7 +53,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--headed-ua] [--profile-dir DIR] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--trace-headers] [--attach-frames|--same-process]]');
+    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--headed-ua] [--profile-dir DIR] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--trace-headers] [--post-chars N] [--attach-frames|--same-process]]');
     process.exit(2);
 }
 const arg = (name, fallback) => {
@@ -91,6 +91,10 @@ const fresh = process.argv.includes('--fresh');
 // it is not a two-arm reading of stock behaviour.
 const injects = process.argv.reduce((acc, a, i) => (
     a === '--inject' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc), []);
+// Read once, because a target that attaches mid-run installs them too and the
+// attach handler is not a place to be doing file IO per frame.
+const injectSources = await Promise.all(
+    injects.map((f) => fs.readFile(path.resolve(repo, f), 'utf8')));
 // Record every request and every console line, not just the document responses.
 // What a challenge does is a conversation -- fetch the orchestrate script, POST
 // the result back, reload -- and which turn of it is missing is the whole
@@ -105,6 +109,20 @@ const trace = process.argv.includes('--trace');
 // URL and get different verdicts differ either in what they sent *around* the
 // body, or in the body. This settles the cheap half first.
 const traceHeaders = process.argv.includes('--trace-headers');
+// How much of a POST body `--trace` keeps. 300 characters is enough to name the
+// fields of a form-encoded body and read the first one, and that is all most
+// questions need -- but a guard's device check posts ~10KB of collected state
+// in one field, and diffing two arms' collection is exactly the question that
+// needs the whole thing. Raise it per run rather than always: a station's trace
+// otherwise grows by the size of every upload in it.
+const postChars = Number(arg('--post-chars', '300'));
+// Freeze every attached target until its --inject scripts are installed. A
+// challenge iframe's own document usually starts before the attach event
+// arrives, so without this a probe registered on the child session only ever
+// sees the *next* document -- which reads exactly like a challenge that never
+// ran one. Costs an extra round trip per target and only makes sense with
+// --attach-frames.
+const attachPause = process.argv.includes('--attach-pause');
 // Pull the *body* back for responses whose URL contains one of these, via
 // Network.getResponseBody. Repeatable. A guard's verdict is often in the reply
 // it sends the challenge program rather than in the status line -- Kasada's
@@ -344,7 +362,29 @@ const onEvent = (msg) => {
         liveCdp?.send('Runtime.enable', undefined, p.sessionId).catch(() => { });
         // Nested iframes are targets of the target, not of the page.
         liveCdp?.send('Target.setAutoAttach',
-            { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, p.sessionId).catch(() => { });
+            { autoAttach: true, waitForDebuggerOnStart: attachPause, flatten: true }, p.sessionId).catch(() => { });
+        // And the same --inject scripts the page session got. Chrome isolates a
+        // cross-origin challenge iframe into its own target, so a probe
+        // installed only on the page session never runs where the challenge
+        // does -- which reads exactly like a challenge that does nothing. Page
+        // must be enabled first or the registration is accepted and silently
+        // never fires ([[chrome-inject-needs-page-enable]]).
+        if (injectSources.length) {
+            liveCdp?.send('Page.enable', {}, p.sessionId)
+                .then(() => Promise.all(injectSources.map((source) =>
+                    liveCdp?.send('Page.addScriptToEvaluateOnNewDocument', { source }, p.sessionId))))
+                .catch(() => { /* target gone, or one that has no Page domain */ })
+                // Under --attach-pause the target is frozen before its first
+                // script runs, which is the only way a probe lands *before* a
+                // challenge iframe's own document. Nothing in that target moves
+                // until this is sent, so it goes out whether the install above
+                // succeeded or not.
+                .finally(() => {
+                    if (attachPause) liveCdp?.send('Runtime.runIfWaitingForDebugger', {}, p.sessionId).catch(() => { });
+                });
+        } else if (attachPause) {
+            liveCdp?.send('Runtime.runIfWaitingForDebugger', {}, p.sessionId).catch(() => { });
+        }
         return;
     }
     const fromFrame = msg.sessionId !== undefined && msg.sessionId !== pageSession;
@@ -370,7 +410,7 @@ const onEvent = (msg) => {
                 ev: 'req', id: p.requestId, method: p.request?.method, url: p.request?.url, type: p.type,
                 ...(body === undefined
                     ? (p.request?.hasPostData ? { postLen: -1 } : {})
-                    : { postLen: body.length, post: body.slice(0, 300) }),
+                    : { postLen: body.length, post: body.slice(0, postChars) }),
                 ...(traceHeaders ? { headers: p.request?.headers ?? null } : {}),
             });
         } else if (msg.method === 'Network.responseReceived') {
@@ -628,7 +668,7 @@ try {
         pageSession = sessionId;
         if (attachFrames) {
             await cdp.send('Target.setAutoAttach',
-                { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId)
+                { autoAttach: true, waitForDebuggerOnStart: attachPause, flatten: true }, sessionId)
                 .catch(() => { /* lightpanda has one process and no OOPIFs */ });
         }
         const [w, h] = windowSize.split(',').map(Number);
@@ -667,9 +707,8 @@ try {
             // a guard can see the inspector, and --inject runs are compared
             // against each other.
             await cdp.send('Page.enable', {}, sessionId).catch(() => { /* older engine */ });
-            for (const f of injects) {
-                await cdp.send('Page.addScriptToEvaluateOnNewDocument',
-                    { source: await fs.readFile(path.resolve(repo, f), 'utf8') }, sessionId);
+            for (const source of injectSources) {
+                await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source }, sessionId);
             }
         }
         return { cdp, sessionId };
