@@ -32,6 +32,7 @@ const Inbox = @import("../../Inbox.zig");
 const script = @import("script.zig");
 const remote_value = @import("remote_value.zig");
 
+const log = lp.log;
 const posix = std.posix;
 const Allocator = std.mem.Allocator;
 
@@ -174,9 +175,11 @@ pub fn resetRealm(self: *BiDi) void {
 // Dispatch a single BiDi frame from the inbox. Unlike CDP, frames aren't
 // parsed on the Network thread, so `data` is the raw JSON.
 pub fn onMessage(self: *BiDi, data: []const u8) anyerror!void {
-    if (self.browser.env.terminatePending()) {
-        return;
-    }
+    // Nothing may be dispatched while a terminate is pending, but the command
+    // still needs an answer: a watchdog stall swallows every command in its
+    // window, and a client left waiting can't tell that from a dead
+    // connection. Parse far enough to find the id, answer, dispatch nothing.
+    const terminate_pending = self.browser.env.terminatePending();
 
     defer _ = self.message_arena.reset(.{ .retain_with_limit = 4096 });
     const arena = self.message_arena.allocator();
@@ -193,6 +196,11 @@ pub fn onMessage(self: *BiDi, data: []const u8) anyerror!void {
     const method = input.method orelse {
         return self.sendError(id, "invalid argument", "missing command method");
     };
+
+    if (terminate_pending) {
+        log.debug(.bidi, "dropped on terminate", .{ .id = id, .method = method });
+        return self.sendError(id, "unknown error", "page execution terminated");
+    }
 
     lp.metrics.serve_commands.incr(.bidi);
     self.dispatch(arena, id, method, data) catch |err| switch (err) {
