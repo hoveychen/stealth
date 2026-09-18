@@ -19,20 +19,25 @@
       would read 0px.
     * `-webkit-text-stroke-width` has a scale of its own: two thirds of the
       others, 0.666667px / 2px / 3.33333px.
-    * An element that declares NO column rule reads `1.5px`, not the `3px` its
-      own `medium` resolves to. That is three DEVICE pixels: 3px on both dpr-1
-      arms (headless, and headless under --force-device-scale-factor=1) and
-      1.5px on both dpr-2 arms (headless under =2, and headed), with
-      devicePixelRatio read back in the same run as the width every time. So the
-      split is the ratio and not headedness. This engine reports
-      devicePixelRatio 2 as a fixed part of its device profile
-      (Window.getDevicePixelRatio), so 1.5px is the number that matches it.
+    * An element that declares NO column rule read `1.5px` through Chrome 152,
+      not the `3px` its own `medium` resolves to: three DEVICE pixels, 3px on
+      both dpr-1 arms (headless, and headless under
+      --force-device-scale-factor=1) and 1.5px on both dpr-2 arms (headless
+      under =2, and headed), with devicePixelRatio read back in the same run as
+      the width every time.
+
+  Chrome 153 stopped folding that one answer onto the device grid: at
+  --force-device-scale-factor=2, devicePixelRatio 2 read in the same object,
+  the three undeclared rule widths are `3px`. The FRACTIONAL grid did not move
+  with them -- `4.6px` is still `4.5px` and `0.1px` still `0.5px` on the four
+  snapping names -- so the case below changed and the one after it did not.
 
   webapi/css/chrome_initial_values.zig used to record 3px for the three rule
-  widths, because its generator launched Chrome with no
+  widths for an unrelated reason: its generator launched Chrome with no
   --force-device-scale-factor and so measured a dpr-1 arm. The generator now
-  pins the persona's scale, the table records 1.5px, and the override that used
-  to compensate for it in CSSStyleDeclaration is gone.
+  pins the persona's scale, and the override that used to compensate for it in
+  CSSStyleDeclaration is gone, so the table alone carries whatever the
+  reference browser answers.
 
   Cloudflare's widget encodes `JSON.stringify(getComputedStyle(el))` whole, so
   all five names travel in the payload of every page it challenges.
@@ -97,7 +102,7 @@
 }
 </script>
 
-<script id=undeclared_rule_width_is_three_device_pixels>
+<script id=undeclared_rule_width_is_three_css_pixels>
 {
   const el = document.createElement('div');
   el.style.cssText = 'width:100px;height:20px;';
@@ -106,9 +111,9 @@
   const seen = [cs.columnRuleWidth, cs.rowRuleWidth, cs.webkitColumnRuleWidth,
                 cs.outlineWidth, cs.borderTopWidth].join(' ');
   el.remove();
-  // Three device pixels for the rule widths, three CSS pixels for the outline,
-  // and a border with no style is not drawn at all.
-  testing.expectEqual('1.5px 1.5px 1.5px 3px 0px', seen);
+  // Three CSS pixels for the rule widths and the outline since 153, and a
+  // border with no style is not drawn at all.
+  testing.expectEqual('3px 3px 3px 3px 0px', seen);
   testing.expectEqual(2, devicePixelRatio);
 }
 </script>

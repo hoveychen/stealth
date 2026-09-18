@@ -44,13 +44,15 @@ table has.
     // Replaced and form controls: inline or inline-block, never block.
     ['img', 'inline'], ['iframe', 'inline'], ['canvas', 'inline'],
     ['video', 'inline'], ['embed', 'inline'], ['object', 'inline'],
-    ['picture', 'inline'], ['map', 'inline'], ['area', 'inline'],
+    ['picture', 'inline'], ['map', 'inline'],
     // <noscript> is deliberately NOT here. Chrome computes `inline` for it,
     // but its own two answers disagree: expr-noscript-area-render.js measures
     // `checkVisibility()` false and its content missing from innerText, so it
     // has no box. This engine drives both answers off one UA-hidden list, and
-    // splitting them is a separate change; <area>, where Chrome's two answers
-    // agree, came off that list instead.
+    // splitting them is a separate change. <area> used to sit here for the
+    // opposite reason -- through Chrome 152 both its answers said it rendered
+    // -- but 153 hides it again (`none`, checkVisibility() false), so it is
+    // back on the UA-hidden list and off this one.
     ['output', 'inline'], ['data', 'inline'],
     ['input', 'inline-block'], ['button', 'inline-block'],
     ['select', 'inline-block'], ['textarea', 'inline-block'],

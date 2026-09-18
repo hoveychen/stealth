@@ -406,11 +406,11 @@
     testing.expectEqual('StylePropertyMapReadOnly', map.constructor.name);
     testing.expectEqual(['size', 'get', 'getAll', 'has', 'entries', 'forEach', 'keys', 'values', 'constructor'],
                         Object.getOwnPropertyNames(StylePropertyMapReadOnly.prototype));
-    // The same 476 computed longhands getComputedStyle enumerates, in the same
+    // The same 477 computed longhands getComputedStyle enumerates, in the same
     // order, since it is the same list.
-    testing.expectEqual(476, map.size);
+    testing.expectEqual(477, map.size);
     testing.expectEqual('accent-color', [...map.keys()][0]);
-    testing.expectEqual(476, [...map.keys()].length);
+    testing.expectEqual(477, [...map.keys()].length);
     testing.expectEqual(true, map.has('display'));
     testing.expectEqual(false, map.has('not-a-property'));
     testing.expectEqual('block', String(map.get('display')));
