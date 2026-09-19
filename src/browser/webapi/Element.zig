@@ -3492,6 +3492,59 @@ fn staticInlineOffset(
 /// not declare both insets on the axis -- resolves its `auto` margins to 0.
 /// Only a box with no used margin at all keeps `auto`: an element with no box,
 /// and a non-replaced inline one, whose margins size nothing.
+/// One `auto` margin's cut of a flex line's free space, or null when this
+/// element is not an item of a flex ROW and the block rules apply instead.
+///
+/// On the MAIN axis the line is shared: what is left of the container once
+/// every item's border box and declared margin is out of it, split equally
+/// between all the `auto` margins any item declares on that axis. On the CROSS
+/// axis each item has the whole of the container to itself, so the free space
+/// is the container's cross size less this item alone.
+///
+/// A column container is deliberately absent: its main axis is the block one,
+/// which the stacking walk lays out, and its items' widths already go through
+/// `flexItemWidth`'s column branch.
+fn flexLineFreeSpace(self: *Element, frame: *Frame, horizontal: bool, own: f64) ?f64 {
+    const parent = self.parentElement() orelse return null;
+    if (!CSSStyleDeclaration.isFlexRowContainer(parent, frame)) return null;
+    if (!CSSStyleDeclaration.isFlexItem(self, frame)) return null;
+
+    const container = parent.getElementDimensions(frame);
+    var line_width: ?f64 = container.width;
+
+    if (!horizontal) {
+        const free = container.height - own;
+        if (free <= 0) return 0;
+        // The item's own two cross margins are the only claimants.
+        const top_auto = self.marginIsAuto("margin-top", frame);
+        const bottom_auto = self.marginIsAuto("margin-bottom", frame);
+        if (top_auto and bottom_auto) return free / 2;
+        const other = if (top_auto) "margin-bottom" else "margin-top";
+        const taken = self.containerMarginPx(other, frame, &line_width, 0);
+        return @max(0, free - taken);
+    }
+
+    var taken: f64 = 0;
+    var autos: f64 = 0;
+    var sibling = parent.firstElementChild();
+    while (sibling) |item| : (sibling = item.nextElementSibling()) {
+        if (!CSSStyleDeclaration.isFlexItem(item, frame)) continue;
+        const box = item.getElementDimensions(frame);
+        taken += box.width + box.padding_x + box.border_x;
+        for ([_][]const u8{ "margin-left", "margin-right" }) |name| {
+            if (item.marginIsAuto(name, frame)) {
+                autos += 1;
+            } else {
+                taken += item.containerMarginPx(name, frame, &line_width, 0);
+            }
+        }
+    }
+    if (autos == 0) return 0;
+    const free = container.width - taken;
+    if (free <= 0) return 0;
+    return free / autos;
+}
+
 pub fn usedAutoMarginPx(self: *Element, frame: *Frame, side: InsetSide) ?f64 {
     if (!self.checkVisibilityCached(null, frame)) return null;
     if (CSSStyleDeclaration.isInlineBox(self, frame)) return null;
@@ -3504,6 +3557,20 @@ pub fn usedAutoMarginPx(self: *Element, frame: *Frame, side: InsetSide) ?f64 {
         dims.width + dims.padding_x + dims.border_x
     else
         dims.height + dims.padding_y + dims.border_y;
+
+    // A flex item's free space is the LINE's, not the containing block's: the
+    // items share what is left of the container after all of them, and every
+    // `auto` margin on the axis takes an equal cut of it. That is what lets a
+    // flex child centre itself with `margin:auto` and what pushes the last
+    // control of a toolbar to the far end with `margin-left:auto` -- and it is
+    // a share on BOTH axes, unlike a block, where the block axis has none.
+    //
+    // Measured on Chrome 152 with
+    // tools/fingerprint/probes/expr-flex-auto-margin.js: `margin:auto` on a
+    // 100x20 item in a 400x200 row is `90px | 150px | 90px | 150px`, and a
+    // `margin-left:auto` item behind a 100px sibling takes 200 rather than the
+    // 300 the containing block alone would have given it.
+    if (self.flexLineFreeSpace(frame, horizontal, own)) |share| return share;
 
     const available: f64 = switch (CSSStyleDeclaration.flowKind(self, frame)) {
         // A float is sized to fit its content, so there is nothing left over.
@@ -5436,13 +5503,38 @@ fn flexRowContent(
         // share of the line and does not advance the cursor. The stacking walk
         // records its static position; here it simply is not on the line, and
         // Chrome puts one at 0,0 whatever its siblings did.
-        if (!CSSStyleDeclaration.isFlexItem(el, frame)) continue;
         if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
+        if (!CSSStyleDeclaration.isFlexItem(el, frame)) {
+            // Not on the line -- but an out-of-flow one still has a static
+            // position, which is where the flow WOULD have put it and the
+            // answer `left:auto` resolves to. Chrome puts an absolutely
+            // positioned child of a flex row at its container's content
+            // origin, whatever the items around it did.
+            if (pass) |p| {
+                if (CSSStyleDeclaration.flowKind(el, frame) == .positioned) {
+                    const out = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+                    p.recordStatic(frame, el, .{
+                        .x = p.x + cursor,
+                        .y = p.y,
+                        .width = out.width + out.padding_x + out.border_x,
+                        .height = out.height + out.padding_y + out.border_y,
+                    });
+                }
+            }
+            continue;
+        }
 
         const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
-        const margin_left = el.containerMarginPx("margin-left", frame, &line_width, depth);
-        const margin_right = el.containerMarginPx("margin-right", frame, &line_width, depth);
-        const margins = el.verticalMargins(frame, &line_width, depth);
+        // An `auto` margin takes a share of what the line left over, which is
+        // how a flex child centres itself and how `margin-left:auto` pushes the
+        // last control of a toolbar to the far end. `placedMarginPx` is the
+        // same rule the computed style reports.
+        const margin_left = el.placedMarginPx(frame, .left, "margin-left");
+        const margin_right = el.placedMarginPx(frame, .right, "margin-right");
+        const margins: struct { top: f64, bottom: f64 } = .{
+            .top = el.placedMarginPx(frame, .top, "margin-top"),
+            .bottom = el.placedMarginPx(frame, .bottom, "margin-bottom"),
+        };
         const outer_width = box.width + box.padding_x + box.border_x;
         const outer_height = box.height + box.padding_y + box.border_y;
 
