@@ -723,7 +723,30 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     wrapped.eql(comptime .wrap("block-size")) or
                     wrapped.eqlSlice("-webkit-logical-height");
 
-                if (on_width and flexItemWidth(element, frame, 0, true, boxEdges(element, frame)) != null) {
+                // The three shortcuts below all say the same thing: the
+                // declaration is not the USED value, so send the answer to the
+                // box. An element with no box has no used value for them to
+                // send it to, and Chrome does not invent one -- it reports the
+                // declaration, exactly as it does on the plain path below.
+                // Each shortcut answered `auto` instead, which is the initial
+                // value and not what any of the three were reaching for.
+                //
+                // `box-sizing` is the one that made this a real-page defect
+                // rather than a corner: `*{box-sizing:border-box}` is what
+                // every CSS reset in use writes, so a page carrying one had
+                // EVERY `display:none` element answering `auto` for its width
+                // and height. Measured against Chrome on https://lightpanda.io/
+                // (which ships that rule) with
+                // tools/fingerprint/probes/expr-computed-display-none.js: the
+                // same expression answered `50px` in both engines on a page
+                // with no stylesheet and `50px` against `auto` there. See
+                // css/computed_unrendered_shortcuts.html, which holds all three
+                // against a `*` rule.
+                const has_box = element.checkVisibilityCached(null, frame);
+
+                if (has_box and on_width and
+                    flexItemWidth(element, frame, 0, true, boxEdges(element, frame)) != null)
+                {
                     return resolvedDimension(element, .width, frame);
                 }
 
@@ -732,7 +755,7 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // Measured: `width:20px` with 10px of padding and 5px of border
                 // per side computes `30px` -- the border box, clamped up to
                 // what its own parts need, with nothing left for the content.
-                if ((on_width or on_height) and !isInlineBox(element, frame) and
+                if (has_box and (on_width or on_height) and !isInlineBox(element, frame) and
                     usesBorderBox(element, frame))
                 {
                     return resolvedDimension(element, if (on_width) .width else .height, frame);
@@ -744,7 +767,9 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // So a bound sends the answer to the box too, the same way
                 // `box-sizing` does above -- otherwise the shortcut below
                 // hands back the 200 the cascade holds.
-                if (on_height and !isInlineBox(element, frame) and declaresHeightBound(style_manager, element)) {
+                if (has_box and on_height and !isInlineBox(element, frame) and
+                    declaresHeightBound(style_manager, element))
+                {
                     return resolvedDimension(element, .height, frame);
                 }
 
