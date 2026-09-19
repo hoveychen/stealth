@@ -3445,6 +3445,23 @@ fn staticInlineOffset(
     if (!self.marginIsAuto("margin-left", frame)) {
         return self.containerMarginPx("margin-left", frame, containing, depth);
     }
+    // An `auto` margin only has a share to take where the box was given the
+    // whole line to fill. A float and an inline-block are sized to fit their
+    // content instead, and an out-of-flow box that reaches here declared no
+    // inset on this axis -- so none of the three has any free space, and
+    // `margin:auto` on them is 0. This centred all three: a `float:left;
+    // margin:auto` box sat at 150 in a 400px block where Chrome puts it at 0
+    // (tools/fingerprint/probes/expr-auto-margin-used.js). The rule is
+    // `usedAutoMarginPx`'s, which is what the computed style now reports, and
+    // the two must not disagree about the same box.
+    //
+    // Asked only once the margin is known to be `auto`, which keeps the three
+    // cascade reads off every box in the flow.
+    switch (CSSStyleDeclaration.flowKind(self, frame)) {
+        .floated, .positioned => return 0,
+        .in_flow => {},
+    }
+    if (std.mem.startsWith(u8, CSSStyleDeclaration.resolvedDisplay(self, frame), "inline")) return 0;
     const box = available orelse return 0;
     const free = box - own;
     if (free <= 0) {
@@ -3454,6 +3471,87 @@ fn staticInlineOffset(
         return free / 2;
     }
     return free - self.containerMarginPx("margin-right", frame, containing, depth);
+}
+
+/// What an `auto` margin resolved to, in px, or null when `auto` is itself the
+/// answer -- which is what a computed `margin` reports, because a margin is a
+/// USED value like a width or an inset.
+///
+/// `margin: 0 auto` is how the web centres a block, so this is not a corner:
+/// every centred container on every page reported `auto` where Chrome reports a
+/// number. The layout already placed those boxes correctly (`staticInlineOffset`
+/// above is the same arithmetic); only the reported value came straight off the
+/// cascade.
+///
+/// Measured on Chrome 152 over sixteen shapes with
+/// tools/fingerprint/probes/expr-auto-margin-used.js; the rules and their rows
+/// are in css/computed_auto_margin.html. Free space is the whole of it: an
+/// `auto` margin takes a share of what the box left over, both sides halving it
+/// and one side taking all of it, so a box with no free space -- an `auto`
+/// width, a shrink-to-fit float or inline-block, an out-of-flow box that does
+/// not declare both insets on the axis -- resolves its `auto` margins to 0.
+/// Only a box with no used margin at all keeps `auto`: an element with no box,
+/// and a non-replaced inline one, whose margins size nothing.
+pub fn usedAutoMarginPx(self: *Element, frame: *Frame, side: InsetSide) ?f64 {
+    if (!self.checkVisibilityCached(null, frame)) return null;
+    if (CSSStyleDeclaration.isInlineBox(self, frame)) return null;
+
+    const horizontal = side == .left or side == .right;
+    const dims = self.getElementDimensions(frame);
+    // The margin box is what the free space is measured against, so the
+    // element's own border box is what comes out of it.
+    const own = if (horizontal)
+        dims.width + dims.padding_x + dims.border_x
+    else
+        dims.height + dims.padding_y + dims.border_y;
+
+    const available: f64 = switch (CSSStyleDeclaration.flowKind(self, frame)) {
+        // A float is sized to fit its content, so there is nothing left over.
+        .floated => return 0,
+        .positioned => blk: {
+            // Out of flow, the two opposing insets are what create the free
+            // space: without both of them the box is placed by one edge and has
+            // no span to be centred in.
+            const near: []const u8 = if (horizontal) "left" else "top";
+            const far: []const u8 = if (horizontal) "right" else "bottom";
+            if (!self.insetDeclared(frame, near) or !self.insetDeclared(frame, far)) return 0;
+            const position = CSSStyleDeclaration.cascadedComputedValue(self, "position", frame) orelse return 0;
+            const box = self.containingBlockBox(frame, std.ascii.eqlIgnoreCase(position, "fixed"), 0);
+            const span = if (horizontal) box.width else box.height;
+            const near_px = self.insetPx(frame, near, span) orelse return 0;
+            const far_px = self.insetPx(frame, far, span) orelse return 0;
+            break :blk span - near_px - far_px;
+        },
+        .in_flow => blk: {
+            // A block formatting context hands out no vertical free space, so a
+            // vertical `auto` margin in flow is 0 however tall the box is.
+            if (!horizontal) return 0;
+            // An inline-block is shrink-to-fit like a float: it sits on a line
+            // rather than filling one, so the line's width is not its to share.
+            if (std.mem.startsWith(u8, CSSStyleDeclaration.resolvedDisplay(self, frame), "inline")) return 0;
+            const parent = self.containingBlock(frame) orelse return 0;
+            break :blk parent.getElementDimensions(frame).width;
+        },
+    };
+
+    const opposite: []const u8 = switch (side) {
+        .top => "margin-bottom",
+        .right => "margin-left",
+        .bottom => "margin-top",
+        .left => "margin-right",
+    };
+    var free = available - own;
+    if (!self.marginIsAuto(opposite, frame)) {
+        // A declared margin on the other side is spent before anything is
+        // shared: `margin-left:auto; margin-right:10px` on a 100px box in a
+        // 400px block is 290, measured.
+        var containing: ?f64 = null;
+        free -= self.containerMarginPx(opposite, frame, &containing, 0);
+        if (free <= 0) return 0;
+        return free;
+    }
+    if (free <= 0) return 0;
+    return free / 2;
 }
 
 /// One margin in px, from the cascade, so a stylesheet rule counts.
@@ -4060,6 +4158,19 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
                 dims.explicit_width = true;
             }
         }
+
+        // Bounded here as well as at the end, so the text below wraps at the
+        // width the box actually gets: a `max-width:600px` paragraph in a wide
+        // column breaks at 600 and takes the line count that goes with it, and
+        // clamping only the finished number would have measured its height off
+        // the unbounded one.
+        if (width) |sized| {
+            width = CSSStyleDeclaration.clampWidth(self, frame, sized, .{
+                .border_box = border_box,
+                .padding_x = dims.padding_x,
+                .border_x = dims.border_x,
+            });
+        }
     }
 
     // Height comes from the cascade too, and unlike width it is NOT gated:
@@ -4380,6 +4491,21 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
             .padding_y = dims.padding_y,
             .border_y = dims.border_y,
         });
+    }
+
+    // And the inline axis, for the same reason and against whatever filled it
+    // -- a declaration, the containing block an `auto` width takes, an
+    // intrinsic size. `max-width` is how a page builds a centred content
+    // column, so a block that declared one used to lay out at the full width of
+    // its parent and carry every rect inside it along.
+    if (comptime measure_text_width) {
+        if (width) |sized| {
+            width = CSSStyleDeclaration.clampWidth(self, frame, sized, .{
+                .border_box = border_box,
+                .padding_x = dims.padding_x,
+                .border_x = dims.border_x,
+            });
+        }
     }
 
     // The box is a used length, so it lands on the layout grid. Nothing sized
@@ -5551,9 +5677,42 @@ fn edgeOffset(
     available: f64,
     own: f64,
 ) ?f64 {
-    if (self.insetPx(frame, near, available)) |px| return px;
-    if (self.insetPx(frame, far, available)) |px| return available - px - own;
+    // An inset names where the MARGIN box goes, so the element's own margin on
+    // that side sits between the inset and its border box. This counted the
+    // inset alone, which put `position:absolute; left:0; margin-left:30px` at 0
+    // where Chrome puts it at 30 -- and, with both insets declared, left the
+    // `auto` margins nothing to centre with, so the `left:0; right:0; margin:0
+    // auto` an overlay is written with sat against the left edge instead of in
+    // the middle. Eight of eleven shapes in
+    // tools/fingerprint/probes/expr-abspos-margin.js were out by a margin.
+    if (self.insetPx(frame, near, available)) |px| {
+        return px + self.placedMarginPx(frame, comptime insetSideOf(near), "margin-" ++ near);
+    }
+    if (self.insetPx(frame, far, available)) |px| {
+        return available - px - self.placedMarginPx(frame, comptime insetSideOf(far), "margin-" ++ far) - own;
+    }
     return null;
+}
+
+/// The side an inset name belongs to, so a comptime edge name carries its
+/// margin's side with it.
+fn insetSideOf(comptime name: []const u8) InsetSide {
+    if (std.mem.eql(u8, name, "top")) return .top;
+    if (std.mem.eql(u8, name, "right")) return .right;
+    if (std.mem.eql(u8, name, "bottom")) return .bottom;
+    return .left;
+}
+
+/// One used margin of a placed box, in px: the share an `auto` takes of the free
+/// space, or the declared length. Asked for the `auto` share only where the
+/// cascade actually says `auto`, which is what keeps `usedAutoMarginPx`'s own
+/// measurement off the path of every positioned box that declares a length.
+fn placedMarginPx(self: *Element, frame: *Frame, side: InsetSide, comptime name: []const u8) f64 {
+    if (self.marginIsAuto(name, frame)) {
+        return self.usedAutoMarginPx(frame, side) orelse 0;
+    }
+    var containing: ?f64 = null;
+    return self.containerMarginPx(name, frame, &containing, 0);
 }
 
 /// One inset as a USED length.

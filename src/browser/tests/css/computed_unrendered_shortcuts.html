@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+An element with no box reports its `width` and `height` as declared, because
+there is no used value to report instead. css/computed_unrendered_percentages.html
+pins that for a percentage and for a plain length -- but only along the one path
+that reaches the cascade.
+
+Three shortcuts sit in front of that path, each there because the declaration is
+NOT the used value for a rendered element: `box-sizing: border-box` moves which
+box the declaration names, a flex item's width is its container's to give, and a
+`min-height`/`max-height` can clamp the used height away from the declaration.
+All three send the answer to the box -- and an unrendered element's box is
+nothing, so all three answered `auto`.
+
+`box-sizing` is the one that matters. A page-wide `*{box-sizing:border-box}` is
+what every CSS reset in use writes, so on a real page this was not a corner: it
+was EVERY `display:none` element on the page. Measured against Chrome on
+https://lightpanda.io/ (which sets exactly that rule) with
+tools/fingerprint/probes/expr-computed-display-none.js: Chrome answers `50px`
+for `display:none;width:50px` there, this engine answered `auto`, while the same
+expression on a page with no stylesheet answered `50px` in both. A guard walking
+the computed style of the page's hidden elements reads the difference directly.
+
+Chrome's rule is that no box means no used value, full stop -- the three reasons
+a used value would differ from the declaration are all about a box that is not
+there. So `display:none; height:200px; max-height:40px` computes `200px`, the
+declaration, with no clamp applied.
+-->
+
+<script id=unrendered_ignores_used_value_shortcuts>
+{
+  const sheet = document.createElement('style');
+  // The reset every real page ships, and the reason this was not a corner case.
+  sheet.textContent = '* { box-sizing: border-box }';
+  document.head.appendChild(sheet);
+
+  const host = document.createElement('div');
+  host.setAttribute('style', 'width:400px; box-sizing:content-box');
+  document.body.appendChild(host);
+
+  const read = (css, names) => {
+    const el = document.createElement('div');
+    el.setAttribute('style', css);
+    host.appendChild(el);
+    const cs = getComputedStyle(el);
+    const out = names.map((n) => cs.getPropertyValue(n)).join(' | ');
+    el.remove();
+    return out;
+  };
+
+  const BOX = ['width', 'height', 'inline-size', 'block-size'];
+  const wrong = [];
+  const check = (what, got, want) => {
+    if (got !== want) wrong.push(what + ': want [' + want + '], got [' + got + ']');
+  };
+
+  // The border-box shortcut. Inherited from the `*` rule above, then declared
+  // outright, then declared away -- the last is the control, and the only one
+  // of the three that already worked.
+  check('none under * border-box', read('display:none; width:50px; height:30px', BOX),
+        '50px | 30px | 50px | 30px');
+  check('none own border-box',
+        read('display:none; box-sizing:border-box; width:50px; height:30px', BOX),
+        '50px | 30px | 50px | 30px');
+  check('none content-box',
+        read('display:none; box-sizing:content-box; width:50px; height:30px', BOX),
+        '50px | 30px | 50px | 30px');
+
+  // Padding and a border are what border-box would fold in. An unrendered
+  // element folds in nothing, because it has no box to fold them into.
+  check('none border-box with parts',
+        read('display:none; width:50px; height:30px; padding:4px; border:2px solid', BOX),
+        '50px | 30px | 50px | 30px');
+
+  // The flex-item shortcut: `flex:1` sizes from a `0%` basis and the declared
+  // width never enters the sizing of a RENDERED item.
+  check('none flex item', read('display:none; flex:1; width:60px', ['width']), '60px');
+
+  // The height-bound shortcut: a bound moves the used height, and there is no
+  // used height here, so no clamp is applied.
+  check('none max-height', read('display:none; height:200px; max-height:40px', ['height']), '200px');
+  check('none min-height', read('display:none; height:20px; min-height:80px', ['height']), '20px');
+
+  // A percentage still stays a percentage through each of the three, which is
+  // the rule computed_unrendered_percentages.html pins, held here against the
+  // shortcuts rather than against the plain path.
+  check('none pct under border-box', read('display:none; width:50%; height:25%', BOX),
+        '50% | 25% | 50% | 25%');
+
+  // An element under a `display:none` ancestor computes `display:block` of its
+  // own and still has no box.
+  {
+    const wrap = document.createElement('div');
+    wrap.setAttribute('style', 'display:none');
+    const el = document.createElement('div');
+    el.setAttribute('style', 'width:50px; height:30px');
+    wrap.appendChild(el);
+    host.appendChild(wrap);
+    const cs = getComputedStyle(el);
+    check('under none parent', BOX.map((n) => cs.getPropertyValue(n)).join(' | '),
+          '50px | 30px | 50px | 30px');
+    wrap.remove();
+  }
+
+  // The controls: a RENDERED element still reports the used value through all
+  // three shortcuts, which is what they are there for. A used width is the box
+  // `box-sizing` names, so the declared number survives under either -- the
+  // shortcut earns its place on the case where it cannot, which is the last
+  // one: 20px of border box cannot hold 30px of padding and border, so Chrome
+  // reports the 30 the parts force.
+  check('rendered border-box', read('width:50px; height:30px; padding:4px; border:2px solid', ['width']),
+        '50px');
+  check('rendered content-box',
+        read('box-sizing:content-box; width:50px; height:30px; padding:4px; border:2px solid', ['width']),
+        '50px');
+  check('rendered border-box overfull', read('width:20px; padding:10px; border:5px solid', ['width']), '30px');
+  check('rendered max-height', read('height:200px; max-height:40px', ['height']), '40px');
+  check('rendered min-height', read('height:20px; min-height:80px', ['height']), '80px');
+
+  host.remove();
+  sheet.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

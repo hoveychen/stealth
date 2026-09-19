@@ -723,7 +723,30 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     wrapped.eql(comptime .wrap("block-size")) or
                     wrapped.eqlSlice("-webkit-logical-height");
 
-                if (on_width and flexItemWidth(element, frame, 0, true, boxEdges(element, frame)) != null) {
+                // The three shortcuts below all say the same thing: the
+                // declaration is not the USED value, so send the answer to the
+                // box. An element with no box has no used value for them to
+                // send it to, and Chrome does not invent one -- it reports the
+                // declaration, exactly as it does on the plain path below.
+                // Each shortcut answered `auto` instead, which is the initial
+                // value and not what any of the three were reaching for.
+                //
+                // `box-sizing` is the one that made this a real-page defect
+                // rather than a corner: `*{box-sizing:border-box}` is what
+                // every CSS reset in use writes, so a page carrying one had
+                // EVERY `display:none` element answering `auto` for its width
+                // and height. Measured against Chrome on https://lightpanda.io/
+                // (which ships that rule) with
+                // tools/fingerprint/probes/expr-computed-display-none.js: the
+                // same expression answered `50px` in both engines on a page
+                // with no stylesheet and `50px` against `auto` there. See
+                // css/computed_unrendered_shortcuts.html, which holds all three
+                // against a `*` rule.
+                const has_box = element.checkVisibilityCached(null, frame);
+
+                if (has_box and on_width and
+                    flexItemWidth(element, frame, 0, true, boxEdges(element, frame)) != null)
+                {
                     return resolvedDimension(element, .width, frame);
                 }
 
@@ -732,7 +755,7 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // Measured: `width:20px` with 10px of padding and 5px of border
                 // per side computes `30px` -- the border box, clamped up to
                 // what its own parts need, with nothing left for the content.
-                if ((on_width or on_height) and !isInlineBox(element, frame) and
+                if (has_box and (on_width or on_height) and !isInlineBox(element, frame) and
                     usesBorderBox(element, frame))
                 {
                     return resolvedDimension(element, if (on_width) .width else .height, frame);
@@ -744,8 +767,15 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 // So a bound sends the answer to the box too, the same way
                 // `box-sizing` does above -- otherwise the shortcut below
                 // hands back the 200 the cascade holds.
-                if (on_height and !isInlineBox(element, frame) and declaresHeightBound(style_manager, element)) {
+                if (has_box and on_height and !isInlineBox(element, frame) and
+                    declaresHeightBound(style_manager, element))
+                {
                     return resolvedDimension(element, .height, frame);
+                }
+                if (has_box and on_width and !isInlineBox(element, frame) and
+                    declaresWidthBound(style_manager, element))
+                {
+                    return resolvedDimension(element, .width, frame);
                 }
 
                 // `width` and `height` report a USED value, so whatever the
@@ -777,6 +807,32 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                 if (insetSide(normalized)) |which| {
                     if (element.usedInsets(frame)) |insets| {
                         if (insets.side(which)) |value| return usedLengthPx(value, frame);
+                    }
+                }
+
+                // A margin is a used value too, and `auto` is the one
+                // declaration that does not survive to the report: it names a
+                // share of the free space rather than a length, so Chrome hands
+                // back the px the share came to. `margin: 0 auto` is how the web
+                // centres a block, so this is on nearly every page.
+                // Element.usedAutoMarginPx holds the rules and their measured
+                // shapes; it is null for the two boxes that have no used margin
+                // at all, and asked only where the cascade says `auto`, which
+                // keeps every declared margin on the path below.
+                // `min-width: auto` and `min-height: auto` are the initial
+                // value written out, and Chrome prints what the keyword means
+                // rather than the keyword: `0px`, measured. `max-*: none` is
+                // the other initial value and DOES stay a keyword, because
+                // there is no length that means it.
+                if (isMinSize(normalized) and
+                    declaresAuto(style_manager, element, normalized, wrapped, surface))
+                {
+                    return "0px";
+                }
+
+                if (marginSide(normalized)) |which| {
+                    if (declaresAuto(style_manager, element, normalized, wrapped, surface)) {
+                        if (element.usedAutoMarginPx(frame, which)) |px| return usedLengthPx(px, frame);
                     }
                 }
 
@@ -1314,6 +1370,21 @@ fn percentageIsComputedValue(property_name: []const u8) bool {
         .{ "inset-block-end", {} },
         .{ "inset-inline-start", {} },
         .{ "inset-inline-end", {} },
+        // A min or max size is a share of a containing block the LAYOUT has to
+        // find, not one the cascade has: `min-width:25%` computes `25%` in
+        // Chrome, measured over the table in css/computed_minmax_size.html.
+        // This engine answered two different wrong things -- the initial `0px`
+        // / `none` on the inline axis, where the percentage was refused, and a
+        // resolved px on the block axis, where `clampHeight`'s machinery took
+        // the share.
+        .{ "min-width", {} },
+        .{ "max-width", {} },
+        .{ "min-height", {} },
+        .{ "max-height", {} },
+        .{ "min-inline-size", {} },
+        .{ "max-inline-size", {} },
+        .{ "min-block-size", {} },
+        .{ "max-block-size", {} },
         // Resolved against the line box, likewise later.
         .{ "vertical-align", {} },
         .{ "text-indent", {} },
@@ -1972,25 +2043,75 @@ fn declaresHeightBound(style_manager: *StyleManager, element: *Element) bool {
         cascadedRawDeclaration(style_manager, element, "min-height") != null;
 }
 
+/// The inline axis of the same question, asked for the same reason: with a
+/// bound declared, `width:300px; max-width:100px` computes the 100 the box got
+/// and not the 300 the cascade holds.
+fn declaresWidthBound(style_manager: *StyleManager, element: *Element) bool {
+    return cascadedRawDeclaration(style_manager, element, "max-width") != null or
+        cascadedRawDeclaration(style_manager, element, "min-width") != null;
+}
+
 pub fn clampHeight(element: *Element, frame: *Frame, content: f64, box: HeightBox) f64 {
+    return clampToBounds(element, frame, content, "min-height", "max-height", box.border_box, box.padding_y + box.border_y);
+}
+
+/// The same pair on the inline axis. Neither `min-width` nor `max-width` reached
+/// the box at all before this: a `max-width:100px` block in a 400px parent laid
+/// out at 400, and a `width:300px; max-width:100px` one at 300. A centred
+/// content column is built out of `max-width`, so that was most of the main
+/// column of most pages, and every rect inside one with it. Measured over the
+/// table in css/computed_minmax_size.html.
+///
+/// `padding_x`/`border_x` rather than the y pair, and otherwise the identical
+/// rule -- including the order, which is what makes a `min-width` that
+/// disagrees with a `max-width` win.
+pub const WidthBox = struct {
+    border_box: bool,
+    padding_x: f64,
+    border_x: f64,
+};
+
+pub fn clampWidth(element: *Element, frame: *Frame, content: f64, box: WidthBox) f64 {
+    return clampToBounds(element, frame, content, "min-width", "max-width", box.border_box, box.padding_x + box.border_x);
+}
+
+fn clampToBounds(
+    element: *Element,
+    frame: *Frame,
+    content: f64,
+    comptime min_name: []const u8,
+    comptime max_name: []const u8,
+    border_box: bool,
+    edges: f64,
+) f64 {
     var used = content;
-    if (boundInContentTerms(element, frame, "max-height", box)) |max| {
+    if (boundInContentTerms(element, frame, max_name, border_box, edges)) |max| {
         used = @min(used, max);
     }
-    if (boundInContentTerms(element, frame, "min-height", box)) |min| {
+    if (boundInContentTerms(element, frame, min_name, border_box, edges)) |min| {
         used = @max(used, min);
     }
     return used;
 }
 
-/// One bound, as a content height. Null when the page declares none, or
+/// One bound, as a content length. Null when the page declares none, or
 /// declares one this engine cannot resolve -- `max-height: none` and a
 /// percentage against an indefinite containing block both land there, and both
 /// have to leave the box alone.
-fn boundInContentTerms(element: *Element, frame: *Frame, comptime name: []const u8, box: HeightBox) ?f64 {
-    const declared = cascadedComputedLength(element, name, frame) orelse return null;
-    if (!box.border_box) return @max(0, declared);
-    return @max(0, declared - box.padding_y - box.border_y);
+fn boundInContentTerms(
+    element: *Element,
+    frame: *Frame,
+    comptime name: []const u8,
+    border_box: bool,
+    edges: f64,
+) ?f64 {
+    // Resolved as the property it bounds: a percentage bound is a share of the
+    // containing block on its own axis, even though the computed style reports
+    // it as written.
+    const axis = comptime if (std.mem.endsWith(u8, name, "-width")) "width" else "height";
+    const declared = cascadedComputedLengthAs(element, name, axis, frame) orelse return null;
+    if (!border_box) return @max(0, declared);
+    return @max(0, declared - edges);
 }
 
 /// The nearest ancestor that establishes a containing block for an absolutely
@@ -3763,27 +3884,73 @@ fn borderPx(element: *Element, comptime side: []const u8, frame: *Frame) f64 {
 /// declares the property, or when the value is not a length this engine
 /// resolves.
 pub fn cascadedComputedLength(element: *Element, name: []const u8, frame: *Frame) ?f64 {
+    return cascadedComputedLengthAs(element, name, name, frame);
+}
+
+/// The same, with the percentage resolved as if it had been declared under
+/// another name.
+///
+/// One caller, and the reason the two names come apart at all: a `min-width` is
+/// REPORTED as the percentage the page wrote -- it is in
+/// `percentageIsComputedValue` -- and is still a share of the containing
+/// block's width when the layout applies it. Asking for it under `width`
+/// resolves that share; asking under its own name would answer the number 25
+/// for `25%`, which is a length nobody declared.
+pub fn cascadedComputedLengthAs(element: *Element, name: []const u8, resolve_as: []const u8, frame: *Frame) ?f64 {
     const style_manager = &element.ownerFrame(frame)._style_manager;
-    const declared = cascadedLengthToken(style_manager, element, name) orelse blk: {
+    const declared = cascadedLengthToken(style_manager, element, name, resolve_as) orelse blk: {
         const other = chrome_logical.counterpart(name) orelse return null;
-        break :blk cascadedLengthToken(style_manager, element, other) orelse return null;
+        break :blk cascadedLengthToken(style_manager, element, other, resolve_as) orelse return null;
     };
     return declared;
 }
 
-fn cascadedLengthToken(style_manager: *StyleManager, element: *Element, name: []const u8) ?f64 {
+fn cascadedLengthToken(style_manager: *StyleManager, element: *Element, name: []const u8, resolve_as: []const u8) ?f64 {
     const declaration = cascadedRawDeclaration(style_manager, element, name) orelse return null;
     const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
-    const parsed = units.parse(trimmed) catch return null;
+    // A `calc()` is a length too, and this is the only path the layout reaches
+    // one by. `units.parse` refuses the whole expression, so a declared
+    // `width: calc(100% - 2rem)` used to reach the box as no declaration at
+    // all: the computed style printed `50px` off `computedCalcText` while the
+    // layout laid the element out at its parent's full width, and a page built
+    // on calc() widths measured as if it had declared nothing.
+    const parsed = units.parse(trimmed) catch
+        return cascadedCalcLength(style_manager, element, resolve_as, trimmed);
     // The author's number when there is one, and the print only when there is
     // not: this is the path a used `width` reaches the layout by, and six
     // significant figures of it lands a grid step off.
     const number = declaration.specified orelse parsed.value;
-    return switch (lengthFactor(style_manager, element, name, parsed.unit)) {
+    return switch (lengthFactor(style_manager, element, resolve_as, parsed.unit)) {
         .verbatim => number,
         .pixels => |factor| number * factor,
         .unresolvable => null,
     };
+}
+
+/// A whole-value `calc()` as a NUMBER of px, for the layout. The computed-value
+/// side of the same expression is `computedCalcText`, which prints it; this is
+/// the same fold and the same `resolveFolded` walk without the printing, so the
+/// two cannot disagree about what the page declared.
+///
+/// Null for everything that is not one finished length: a value that is not a
+/// single math function, a sum that stays a sum because a term's percentage
+/// does not resolve here, and a unitless total -- `z-index: calc(1 + 1)` is a
+/// number and not a length, and handing the layout a `2` would be inventing
+/// `2px`.
+fn cascadedCalcLength(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    value: []const u8,
+) ?f64 {
+    if (value.len < 6 or value[value.len - 1] != ')') return null;
+    const open = std.mem.indexOfScalar(u8, value, '(') orelse return null;
+    if (!std.ascii.eqlIgnoreCase(value[0..open], "calc") and calc.callOf(value) == null) return null;
+    const frame = element.ownerFrame(style_manager.frame);
+    const folded = calc.foldBodyIn(frame.call_arena, value) catch return null;
+    const sum = resolveFolded(style_manager, element, property_name, folded) orelse return null;
+    if (sum.stays_a_calc or sum.unitless) return null;
+    return sum.total;
 }
 
 /// The cascade's answer before anything a computed style does to it: the
@@ -4198,6 +4365,57 @@ fn insetSide(property_name: []const u8) ?Element.InsetSide {
     if (physicalInsetSide(property_name)) |which| return which;
     const other = chrome_logical.counterpart(property_name) orelse return null;
     return physicalInsetSide(other);
+}
+
+/// Whether the cascade's answer for this name is the keyword `auto`, under
+/// whichever of the two spellings carries it.
+fn declaresAuto(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    wrapped: String,
+    surface: Surface,
+) bool {
+    const declared = switch (cascadedValue(style_manager, element, property_name, wrapped, surface)) {
+        .value => |value| value,
+        .unreportable, .none => blk: {
+            const other = chrome_logical.counterpart(property_name) orelse return false;
+            break :blk switch (cascadedValue(style_manager, element, other, .wrap(other), surface)) {
+                .value => |value| value,
+                .unreportable, .none => return false,
+            };
+        },
+    };
+    return std.ascii.eqlIgnoreCase(std.mem.trim(u8, declared, &std.ascii.whitespace), "auto");
+}
+
+/// The four names whose `auto` means zero.
+fn isMinSize(property_name: []const u8) bool {
+    const NAMES = std.StaticStringMap(void).initComptime(.{
+        .{ "min-width", {} },
+        .{ "min-height", {} },
+        .{ "min-inline-size", {} },
+        .{ "min-block-size", {} },
+    });
+    return NAMES.has(property_name);
+}
+
+/// Which side a margin longhand names, under either spelling, or null when the
+/// name is not a margin at all.
+fn marginSide(property_name: []const u8) ?Element.InsetSide {
+    if (physicalMarginSide(property_name)) |which| return which;
+    const other = chrome_logical.counterpart(property_name) orelse return null;
+    return physicalMarginSide(other);
+}
+
+fn physicalMarginSide(property_name: []const u8) ?Element.InsetSide {
+    const SIDES = std.StaticStringMap(Element.InsetSide).initComptime(.{
+        .{ "margin-top", .top },
+        .{ "margin-right", .right },
+        .{ "margin-bottom", .bottom },
+        .{ "margin-left", .left },
+    });
+    return SIDES.get(property_name);
 }
 
 fn physicalInsetSide(property_name: []const u8) ?Element.InsetSide {
@@ -8408,6 +8626,18 @@ test "WebApi: CSSStyleDeclaration computed transform-origin" {
 
 test "WebApi: CSSStyleDeclaration unrendered percentages" {
     try testing.htmlRunner("css/computed_unrendered_percentages.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration unrendered shortcuts" {
+    try testing.htmlRunner("css/computed_unrendered_shortcuts.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration minmax size" {
+    try testing.htmlRunner("css/computed_minmax_size.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration auto margin" {
+    try testing.htmlRunner("css/computed_auto_margin.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration percentage kept" {
