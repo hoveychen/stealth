@@ -6192,6 +6192,11 @@ test "WebApi: css style subresources" {
     try testing.htmlRunner("css/style_subresources.html", .{});
 }
 
+test "WebApi: css style subresources behind var" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/style_subresources_var.html", .{});
+}
+
 test "WebApi: webfont metrics" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("css/webfont_metrics.html", .{});

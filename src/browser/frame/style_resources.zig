@@ -221,10 +221,27 @@ const Scan = struct {
         // something to fetch in the first place.
         if (!declaresAnything(style)) return;
 
+        // `background-image: var(--icon)` names no file until an element
+        // supplies the custom property, and a different element supplies a
+        // different one -- so which elements matched is the answer, not
+        // whether any did. iphey hands each icon its own url through an
+        // inline `style="--icon: url(...)"` and consumes them all through one
+        // external rule; reading the two halves apart sees neither, and two
+        // of its files went unrequested (waterfall.mjs, both arms).
+        if (referencesAVariable(self, style)) {
+            const list = Selector.querySelectorAll(self.frame.document.asNode(), selector, self.frame) catch return;
+            defer list.deinit(self.frame._page);
+            for (list._nodes) |node| {
+                const element = node.is(Element) orelse continue;
+                try self.declarations(style, element);
+            }
+            return;
+        }
+
         const match = Selector.querySelector(self.frame.document.asNode(), selector, self.frame) catch null;
         if (match == null) return;
 
-        try self.declarations(style);
+        try self.declarations(style, null);
     }
 
     fn declaresAnything(style: *CSSStyleDeclaration) bool {
@@ -237,25 +254,62 @@ const Scan = struct {
         return false;
     }
 
-    // Take the resources one matched rule names, and remember the families it
-    // asks for so the `@font-face` pass can decide what to fetch.
-    fn declarations(self: *Scan, style: *CSSStyleDeclaration) Allocator.Error!void {
+    // Does any declaration worth reading here reach for a custom property?
+    // Answered before the selector engine is asked for all of the matches
+    // rather than one, because that is the only reason to pay for all of them.
+    fn referencesAVariable(self: *Scan, style: *CSSStyleDeclaration) bool {
         var i: u32 = 0;
         const n = style.length();
         while (i < n) : (i += 1) {
             const name = style.item(i);
-            try self.declaration(name, style.getPropertyValue(name, self.frame));
+            if (!namesAResource(name) and !namesAFamily(name)) continue;
+            const value = style.getPropertyValue(name, self.frame);
+            if (std.ascii.indexOfIgnoreCase(value, "var(") != null) return true;
+        }
+        return false;
+    }
+
+    // Take the resources one matched rule names, and remember the families it
+    // asks for so the `@font-face` pass can decide what to fetch.
+    //
+    // `element` is the element the rule matched, when the caller knows which
+    // one: a value is only substituted against the element that carries the
+    // custom properties it reads.
+    fn declarations(self: *Scan, style: *CSSStyleDeclaration, element: ?*Element) Allocator.Error!void {
+        var i: u32 = 0;
+        const n = style.length();
+        while (i < n) : (i += 1) {
+            const name = style.item(i);
+            try self.declaration(name, style.getPropertyValue(name, self.frame), element);
         }
     }
 
-    fn declaration(self: *Scan, name: []const u8, value: []const u8) Allocator.Error!void {
+    fn declaration(self: *Scan, name: []const u8, value: []const u8, element: ?*Element) Allocator.Error!void {
         if (value.len == 0) return;
+        const resolved = self.substituted(value, element) orelse return;
+        if (resolved.len == 0) return;
         if (namesAResource(name)) {
-            var it: UrlIterator = .{ .rest = value };
+            var it: UrlIterator = .{ .rest = resolved };
             while (it.next()) |url| try self.fetch(url, .image);
             return;
         }
-        if (namesAFamily(name)) try self.rememberFamilies(value);
+        if (namesAFamily(name)) try self.rememberFamilies(resolved);
+    }
+
+    /// `value` with its `var()` references replaced, or null when the value is
+    /// invalid at computed-value time (an undeclared name with no fallback)
+    /// and so names nothing at all. Chrome resolves style before it asks for
+    /// anything, which is the same reason a rule that matches nothing is not
+    /// fetched: what reaches the network is the computed value.
+    ///
+    /// The relative url inside a substituted value keeps resolving against
+    /// the sheet holding the *rule*, not the one holding the custom property.
+    /// Chrome resolves it where the `url()` token was written; telling the two
+    /// apart needs an origin the cascade does not keep, and every url measured
+    /// through this path so far is absolute or root-relative.
+    fn substituted(self: *Scan, value: []const u8, element: ?*Element) ?[]const u8 {
+        const el = element orelse return value;
+        return self.frame._style_manager.substituteVars(el, value);
     }
 
     fn rememberFamilies(self: *Scan, value: []const u8) Allocator.Error!void {
@@ -402,7 +456,7 @@ fn scan(frame: *Frame) !void {
     while (tw.next()) |el| {
         const text = el.getAttributeSafe(comptime .wrap("style")) orelse continue;
         var it: InlineDeclarations = .{ .rest = text };
-        while (it.next()) |d| try s.declaration(d.name, d.value);
+        while (it.next()) |d| try s.declaration(d.name, d.value, el);
     }
 
     // Two things come out of the same walk, and they have to agree: what to
