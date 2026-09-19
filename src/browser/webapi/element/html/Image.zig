@@ -87,6 +87,12 @@ pub fn setLoading(self: *Image, value: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("loading"), .wrap(value), frame);
 }
 
+/// `loading` is an enumerated attribute with `eager` as both the invalid and
+/// the missing default, so only the one spelling defers anything.
+pub fn isLazy(self: *const Image) bool {
+    return std.ascii.eqlIgnoreCase(self.getLoading(), "lazy");
+}
+
 /// The size the arriving header declared. 0 until something arrives, which is
 /// still the answer for an element with no src, for a request that failed, and
 /// for bytes that were not a picture -- all three are states a real browser
@@ -280,6 +286,12 @@ pub fn imageAddedCallback(self: *Image, frame: *Frame) !void {
     if (frame._session.load_resources.image == false) {
         return frame.queueLoad(Factory.protoOf(self));
     }
+
+    // A lazy image's request turns on where its box lands, and nothing here has
+    // a box yet -- the document is still being parsed. frame/lazy_images.zig
+    // picks it up once the document is laid out and asks only for the ones
+    // near enough the fold, which is the set Chrome asks for.
+    if (self.isLazy() and frame.document._ready_state == .loading) return;
 
     // Request the bytes without decoding them. Never fetching images at all is
     // a server-visible tell; see `Frame.loadImage`.

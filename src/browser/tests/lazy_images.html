@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<!--
+  Which `loading=lazy` image is asked for.
+
+  A run that never scrolls never reaches the bottom of a long page, so Chrome
+  never asks for the images down there -- and this engine asked for all of
+  them, which is the same shape of tell as never asking at all, just pointing
+  the other way. On iphey.com the FAQ's `chevron-up...svg` was the one path
+  this engine requested and Chrome did not.
+
+  The line is 1250px past the bottom of the viewport, measured rather than read
+  off a spec: a local page with a lazy image at each of fifteen depths, counted
+  in the server's own access log with headless Chrome driving, drew it between
+  an image whose top sat 2018px down and one at 2418px, against an 800px
+  viewport.
+
+  The eager image at the same depth is the control in the other direction: only
+  `loading=lazy` defers, and the default is eager whatever the attribute says.
+-->
+
+<img id="lazy-near" loading="lazy" src="/wire/lazy-near.png" width="10" height="10">
+<div style="height:9000px"></div>
+<img id="lazy-far" loading="lazy" src="/wire/lazy-far.png" width="10" height="10">
+<img id="eager-far" src="/wire/eager-far.png" width="10" height="10">
+<img id="bogus-far" loading="nonsense" src="/wire/bogus-far.png" width="10" height="10">
+
+<script id="lazy_images_below_the_fold" type=module>
+{
+  const WANTED = ['lazy-near.png', 'eager-far.png', 'bogus-far.png'];
+  const UNWANTED = ['lazy-far.png'];
+
+  const asked = () => new Set(
+    performance.getEntriesByType('resource').map((e) => e.name.split('/').pop()));
+
+  const test = await testing.async();
+  // Same budget and same reason as css/style_subresources.html: a poll that
+  // outruns the runner reports TestTimedOut, which names no path.
+  const deadline = Date.now() + 600;
+  while (Date.now() < deadline) {
+    const seen = asked();
+    if (WANTED.every((w) => seen.has(w))) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  test.resolve({
+    seen: asked(),
+    // The gate is the distance, so a run where the far images are not
+    // actually far says nothing: assert the premise, not just the outcome.
+    farTop: document.getElementById('lazy-far').getBoundingClientRect().top,
+    viewport: window.innerHeight,
+  });
+
+  await test.done((got) => {
+    testing.expectEqual(true, got.farTop > got.viewport + 1250);
+
+    const missing = WANTED.filter((w) => !got.seen.has(w));
+    testing.expectEqual('missing: ', 'missing: ' + missing.join(','));
+
+    const spurious = UNWANTED.filter((u) => got.seen.has(u));
+    testing.expectEqual('spurious: ', 'spurious: ' + spurious.join(','));
+  });
+}
+</script>
