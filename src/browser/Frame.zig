@@ -547,6 +547,10 @@ static_position_table: Element.PositionTable = .empty,
 /// Memo for `offsetParentEdge`, dropped with the two tables above because it is
 /// keyed on the same thing they are.
 offset_parent_edges: std.AutoHashMapUnmanaged(*Element, Element.DOMRect.Data) = .empty,
+/// Memo for `elementTransform`, dropped with the tables above for the same
+/// reason: the matrix turns about the element's own box, so nothing can change
+/// it without moving that counter.
+element_transforms: std.AutoHashMapUnmanaged(*Element, Element.Affine) = .empty,
 position_table_version: usize = 0,
 /// True while the pass is running. `layoutPassPositions` measures boxes, and
 /// measuring an out-of-flow box asks its containing block where it is -- which
@@ -2003,6 +2007,26 @@ pub fn offsetParentEdge(self: *Frame, parent: *Element) Element.DOMRect.Data {
     return edge;
 }
 
+/// One element's own CSS transform, memoised.
+///
+/// Every rect on a page that declares `transform` anywhere walks its whole
+/// ancestor chain asking this, and the answer is two cascade reads and a box.
+/// The cost is per reader and the answer is per element, so a page whose rows
+/// share one transformed host pays for it once -- the same trade
+/// `offsetParentEdge` above makes.
+pub fn elementTransform(self: *Frame, element: *Element) Element.Affine {
+    if (!self.fillPositionTables()) {
+        return element.ownTransform(self);
+    }
+    if (self.element_transforms.get(element)) |cached| {
+        return cached;
+    }
+    const matrix = element.ownTransform(self);
+    // An entry it could not store is a slower read rather than a wrong one.
+    self.element_transforms.put(self.arena, element, matrix) catch {};
+    return matrix;
+}
+
 /// Brings both tables up to date, or reports that they cannot be read right now.
 fn fillPositionTables(self: *Frame) bool {
     if (self.position_table_building) {
@@ -2024,6 +2048,7 @@ fn fillPositionTables(self: *Frame) bool {
         self.position_table = .empty;
         self.static_position_table = .empty;
         self.offset_parent_edges = .empty;
+        self.element_transforms = .empty;
         _ = Element.layoutPassPositions(root, self, &self.position_table, &self.static_position_table);
         self.position_table_version = version;
         self.position_table_filled = true;

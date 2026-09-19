@@ -288,30 +288,123 @@
   shell.appendChild(track);
   document.body.appendChild(shell);
 
+  card.style.width = '40px';
+  card.style.height = '10px';
+
   // A row starts at its parent's left edge.
   const base = shell.getBoundingClientRect().x;
   testing.expectEqual(base, card.getBoundingClientRect().x);
   testing.expectEqual(base, card.offsetLeft);
 
-  // The X translation of the element and of its ancestors moves it. Whole
-  // pixels: offsetLeft is a `long` in the IDL and rounds, so a half-pixel
-  // translation would be asserting this engine's rounding rule rather than
-  // that the translation is honored -- the fractional case is the
-  // getBoundingClientRect one below.
+  // The X translation of the element and of its ancestors moves the rect --
+  // and moves offsetLeft not at all. Measured on Chrome 152 over thirteen
+  // transforms (probes/expr-transform-rect.js): a box at `left:-9999px`
+  // reports -9999 for offsetLeft under every one of them, translations
+  // included, while its rect moves under all of them.
   track.style.transform = 'translateX(-12px)';
   testing.expectEqual(base - 12, card.getBoundingClientRect().x);
-  testing.expectEqual(base - 12, card.offsetLeft);
-  card.style.transform = 'translate3d(2px, 100px, 0) rotate(45deg) matrix(1, 0, 0, 1, 3, 9)';
+  testing.expectEqual(base, card.offsetLeft);
+  card.style.transform = 'translate3d(2px, 100px, 0) matrix(1, 0, 0, 1, 3, 9)';
   testing.expectEqual(base - 7, card.getBoundingClientRect().x);
-  testing.expectEqual(base - 7, card.offsetLeft);
+  testing.expectEqual(base, card.offsetLeft);
 
   // The rect keeps the fraction.
   card.style.transform = 'translateX(0.5px)';
   testing.expectEqual(base - 11.5, card.getBoundingClientRect().x);
 
-  // Percentages and other units are not resolved.
-  track.style.transform = 'translateX(-100%)';
-  testing.expectEqual(base + 0.5, card.getBoundingClientRect().x);
+  // A percentage translation is a percentage of the element's own border box,
+  // which is the card's 40px and not the track's width.
+  card.style.transform = 'translateX(-50%)';
+  testing.expectEqual(base - 32, card.getBoundingClientRect().x);
+}
+</script>
+
+<!--
+  The rest of the transform list, not just its X translation. iphey's
+  `dom-element-geometry` check puts a 100x100 box at `left:-9999px`, rotates it
+  45 degrees and sends all three readings it takes; a rect that ignores the
+  rotation answers a 100x100 square where every browser answers 141.42 on both
+  axes, which is one number away from a tell.
+
+  Expected values are this engine's own: the matrix comes from the COMPUTED
+  `transform`, which keeps six significant digits, so a rotation's cosine is
+  0.707107 and the 141.4214 below is Chrome's 141.421875 to within a
+  hundredth. Chrome's last digits are its layout grid (1/64 px) and are not
+  something to reproduce here. Everything else -- which corner, which origin,
+  which composition order -- is measured, with
+  tools/fingerprint/probes/expr-transform-rect.js on Chrome 152.
+-->
+<script id="transformRectMatrix">
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute; top:0; left:0; width:400px; height:200px;');
+  const el = document.createElement('div');
+  el.setAttribute('style', 'position:absolute; top:0; left:0; width:100px; height:100px;');
+  host.appendChild(el);
+  document.body.appendChild(host);
+
+  const hostBox = host.getBoundingClientRect();
+  testing.expectEqual(400, hostBox.width);
+  testing.expectEqual(200, hostBox.height);
+  const base = el.getBoundingClientRect();
+  testing.expectEqual(100, base.width);
+  testing.expectEqual(100, base.height);
+
+  // Two decimals: the third is the six-digit matrix above.
+  const at = (value, origin) => {
+    el.style.transformOrigin = origin ?? '';
+    el.style.transform = value;
+    const r = el.getBoundingClientRect();
+    const round = (n) => Math.round(n * 100) / 100;
+    return [round(r.x - base.x), round(r.y - base.y), round(r.width), round(r.height)];
+  };
+
+  // A rotation turns about the box's centre, so the rect is the bounding box
+  // of the turned square: 100 * sqrt(2) on both axes, centred where it was.
+  testing.expectEqual([-20.71, -20.71, 141.42, 141.42], at('rotate(45deg)'));
+
+  // The `.shift` class iphey adds on top of the rotation.
+  testing.expectEqual([-29.44, -29.44, 158.88, 158.88], at('rotate(45deg) scale(1.123456789)'));
+
+  // A scale grows about the centre too, per axis.
+  testing.expectEqual([-50, -50, 200, 200], at('scale(2)'));
+  testing.expectEqual([-50, 25, 200, 50], at('scale(2, 0.5)'));
+
+  // A translation moves the box and leaves its size alone; a percentage is of
+  // the element's own border box.
+  testing.expectEqual([50, 10, 100, 100], at('translate(50%, 10%)'));
+  testing.expectEqual([-12.5, 0, 100, 100], at('translateX(-12.5px)'));
+
+  // A skew leans one axis: tan(30deg) * 100 of extra width, no extra height.
+  testing.expectEqual([-28.87, 0, 157.74, 100], at('skewX(30deg)'));
+  testing.expectEqual([-15, -5, 150, 150], at('matrix(1, 0.5, -0.5, 1, 10, 20)'));
+
+  // `transform-origin` moves the point it all turns about.
+  testing.expectEqual([-70.71, 0, 141.42, 141.42], at('rotate(45deg)', '0 0'));
+  testing.expectEqual([29.29, -41.42, 141.42, 141.42], at('rotate(45deg)', 'bottom right'));
+
+  // The list composes left to right: the last function applies first, in the
+  // space the ones before it have already turned.
+  testing.expectEqual([0, 10, 100, 100], at('rotate(90deg) translateX(10px)'));
+  testing.expectEqual([10, 0, 100, 100], at('translateX(10px) rotate(90deg)'));
+
+  // An ancestor's transform applies to the descendant's already-transformed
+  // box, about the ANCESTOR's own centre: 200,100 into a 400x200 host.
+  host.style.transform = 'translateX(30px) scale(2)';
+  testing.expectEqual([-211.42, -141.42, 282.84, 282.84], at('rotate(45deg)'));
+  host.style.transform = '';
+
+  // getClientRects reports the same box, and offsetLeft/offsetWidth report the
+  // untransformed one.
+  el.style.transform = 'rotate(45deg)';
+  const list = el.getClientRects();
+  testing.expectEqual(1, list.length);
+  testing.expectEqual(Math.round(el.getBoundingClientRect().x * 100), Math.round(list[0].x * 100));
+  testing.expectEqual(100, el.offsetWidth);
+  testing.expectEqual(100, el.offsetHeight);
+  testing.expectEqual(base.x, el.offsetLeft);
+
+  host.remove();
 }
 </script>
 
