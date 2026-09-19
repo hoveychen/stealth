@@ -8488,6 +8488,10 @@ test "WebApi: CSSStyleDeclaration computed flex shorthands" {
     try testing.htmlRunner("css/flex_computed_shorthands.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration flex line placement" {
+    try testing.htmlRunner("css/flex_line_placement.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration computed timeline-trigger" {
     try testing.htmlRunner("css/timeline_trigger_computed.html", .{});
 }
