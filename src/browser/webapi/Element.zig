@@ -4141,6 +4141,19 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
                 dims.explicit_width = true;
             }
         }
+
+        // Bounded here as well as at the end, so the text below wraps at the
+        // width the box actually gets: a `max-width:600px` paragraph in a wide
+        // column breaks at 600 and takes the line count that goes with it, and
+        // clamping only the finished number would have measured its height off
+        // the unbounded one.
+        if (width) |sized| {
+            width = CSSStyleDeclaration.clampWidth(self, frame, sized, .{
+                .border_box = border_box,
+                .padding_x = dims.padding_x,
+                .border_x = dims.border_x,
+            });
+        }
     }
 
     // Height comes from the cascade too, and unlike width it is NOT gated:
@@ -4461,6 +4474,21 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
             .padding_y = dims.padding_y,
             .border_y = dims.border_y,
         });
+    }
+
+    // And the inline axis, for the same reason and against whatever filled it
+    // -- a declaration, the containing block an `auto` width takes, an
+    // intrinsic size. `max-width` is how a page builds a centred content
+    // column, so a block that declared one used to lay out at the full width of
+    // its parent and carry every rect inside it along.
+    if (comptime measure_text_width) {
+        if (width) |sized| {
+            width = CSSStyleDeclaration.clampWidth(self, frame, sized, .{
+                .border_box = border_box,
+                .padding_x = dims.padding_x,
+                .border_x = dims.border_x,
+            });
+        }
     }
 
     // The box is a used length, so it lands on the layout grid. Nothing sized
