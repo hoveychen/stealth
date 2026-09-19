@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<!-- When a webfont is asked for, and what `document.fonts` says while it is
+     on the way.
+
+     Measured against a headed Chrome 153 with
+     tools/fingerprint/webfont-timeline.mjs on a page whose `<div>` sits ahead
+     of a `<script src>` that takes 1500ms to answer:
+
+                    Chrome    before    after
+       discovered     17.3    1552.2     13.3
+       check flips   at the same instant the measurement does, on both arms
+
+     The whole 1540ms was the `@font-face` scan waiting for DOMContentLoaded --
+     no part of it was transfer or decode. Three separate claims come out of
+     that and each has its own block below: the scan runs when the parser
+     stops, `check()` does not say `true` before the advances change, and a
+     face whose file never became a font says `error` rather than `loading`
+     forever.
+-->
+
+<style>
+  @font-face { font-family: EarlyProbe; src: url(/synth-font.ttf?early) format('truetype') }
+  #early { font-family: EarlyProbe; font-size: 20px }
+</style>
+<span id=early>mmmmmmmmmm</span>
+
+<!-- The parser stops here. Everything above it is the document the scan has to
+     be able to see; the block after it runs on the resume, which is still
+     ahead of DOMContentLoaded. -->
+<script src="blocker.js"></script>
+
+<script id="webfont_is_requested_when_the_parser_stops">
+{
+  // The face's own status is the record of having been asked for: the scan
+  // marks it `loading` when it puts the url on the wire, and a face nobody has
+  // asked for yet is `unloaded` -- which is what this read gets from a scan
+  // that only runs at DOMContentLoaded. (A resource entry would not do: it is
+  // filed when the transfer COMPLETES, so it says nothing about when the
+  // request went out.)
+  //
+  // A pure ordering assertion -- nothing here is a duration, so a slow machine
+  // cannot change the answer.
+  testing.expectTrue(globalThis.__blockerRan);
+  testing.expectTrue(document.readyState !== 'complete');
+  const face = [...document.fonts].filter((f) => f.family === 'EarlyProbe')[0];
+  testing.expectTrue(face !== undefined);
+  testing.expectTrue(face.status === 'loading' || face.status === 'loaded');
+}
+</script>
+
+<style>
+  /* Held back 250ms so the transfer is still open when the document finishes,
+     which is what gives `check()` a window to be wrong in. */
+  @font-face { font-family: LateProbe; src: url(/synth-font.ttf?delay=250) format('truetype') }
+  #late { font-family: LateProbe; font-size: 20px }
+</style>
+<span id=late>mmmmmmmmmm</span>
+<!-- The same ten characters in a family nothing supplies: whatever the standard
+     fallback charges for them, which is what `#late` measures until its own
+     file is in force. Taken from a twin rather than written down, so the
+     assertion is "the measurement moved" and not a fallback table's constant. -->
+<span id=late-twin style="font-family: NoSuchFamilyAtAll; font-size: 20px">mmmmmmmmmm</span>
+
+<script id="fonts_check_flips_with_the_measurement" type=module>
+{
+  const state = await testing.async();
+  const el = document.getElementById('late');
+  const twin = document.getElementById('late-twin');
+  const probe = () => 'check=' + document.fonts.check('20px LateProbe') +
+    ' status=' + [...document.fonts].filter((f) => f.family === 'LateProbe')[0].status;
+
+  const at_load = () => {
+    // Still on the wire, so the span measures as its twin does. Afterwards
+    // every glyph in /synth-font.ttf is half an em, so ten of them at 20px is
+    // 100 exactly -- a width no real fallback family produces.
+    const during = probe() + ' fallback=' + (el.offsetWidth === twin.offsetWidth);
+    document.fonts.ready.then(() => state.resolve(
+      'during[' + during + '] after[' + probe() + ' width=' + el.offsetWidth + ']',
+    ));
+  };
+  if (document.readyState === 'complete') at_load();
+  else window.addEventListener('load', at_load);
+
+  await state.done((seen) => {
+    // `check` used to answer true here the moment the scan put the url on the
+    // wire, 40ms before the advances changed -- a page that believed it and
+    // measured got the fallback.
+    testing.expectEqual(
+      'during[check=false status=loading fallback=true] ' +
+      'after[check=true status=loaded width=100]',
+      seen,
+    );
+  });
+}
+</script>
+
+<style>
+  /* No such path: the transfer completes with a 404 and no face comes of it. */
+  @font-face { font-family: GoneProbe; src: url(/no/such/font.ttf) format('truetype') }
+  #gone { font-family: GoneProbe; font-size: 20px }
+</style>
+<span id=gone>mmmmmmmmmm</span>
+
+<script id="a_face_whose_file_failed_says_error" type=module>
+{
+  const state = await testing.async();
+  // Without the failure being recorded the face sits at `loading` for the rest
+  // of the page's life, which is a status no real browser ever settles on --
+  // and `ready` would be resolving while a face claimed to still be loading.
+  document.fonts.ready.then(() => state.resolve(
+    [...document.fonts].filter((f) => f.family === 'GoneProbe')[0].status +
+    ' check=' + document.fonts.check('20px GoneProbe'),
+  ));
+  await state.done((seen) => {
+    testing.expectEqual('error check=false', seen);
+  });
+}
+</script>

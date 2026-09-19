@@ -288,11 +288,24 @@ _stylesheet_bodies: std.StringHashMapUnmanaged([]const u8) = .empty,
 // size -- a page uses a handful of sizes, not a continuum. See `Webfont`.
 _webfonts: std.StringHashMapUnmanaged(Webfont) = .empty,
 
+// The families whose file came off the wire without becoming a usable face:
+// a 404, a transport error, or bytes `font_file` could not read. Kept beside
+// the table above because `document.fonts` has to tell those two apart -- a
+// face whose source failed reports `error`, not a perpetual `loading` -- and
+// the table itself only ever holds successes. Keyed lowercased, like it.
+_webfonts_failed: std.StringHashMapUnmanaged(void) = .empty,
+
 // How many `@font-face` files are still on the wire. `document.fonts.ready`
 // and `.status` are answered from this: before webfonts were read at all both
 // were constants, and a page that awaited `ready` and then measured would have
 // been told the fonts had landed before they had.
 _webfonts_pending: usize = 0,
+
+// Whether a `@font-face` file has EVER been on this document's wire. Once one
+// has, `document.fonts.ready` belongs to the transition out of `loading` and
+// stops waiting for the load event -- measured on Chrome 153, which resolved
+// it at 44.6ms on a page whose load event was 1.5s away (FontFaceSet.everLoaded).
+_webfonts_ever_pending: bool = false,
 
 _queued_events_1: std.ArrayList(QueuedEvent) = .empty,
 _queued_events_2: std.ArrayList(QueuedEvent) = .empty,
@@ -1892,6 +1905,18 @@ fn _documentIsComplete(self: *Frame) !void {
         // with the document as the target.
         event._target = self.document.asEventTarget();
         try self._event_manager.dispatchDirect(window_target, event, null, .{ .inject_target = false, .context = "page load" });
+    }
+
+    // `document.fonts.ready` for a document that never put a font on the wire:
+    // nothing else is ever going to settle it, and Chrome does not resolve it
+    // at once either -- it waits for this event even on a page declaring no
+    // face at all (611.6ms against a 605.3ms load). A document that DID load a
+    // face settled it from the transfer's own callback, possibly long before
+    // now (`ImageRequest.fontSettled`), and this is a no-op for it.
+    if (self._webfonts_pending == 0) {
+        if (self.document.getFonts(&self.js.execution) catch null) |fonts| {
+            fonts.settle(&self.js.execution);
+        }
     }
 
     self._session.notification.dispatch(.frame_loaded, &.{
@@ -4059,8 +4084,21 @@ const ImageRequest = struct {
         if (!self.counted_pending) return;
         self.counted_pending = false;
         const frame = self.frame;
+        // Off the wire and no face to show for it: a 404, a dead connection,
+        // or bytes `registerWebfont` could not parse. The set reports `error`
+        // for those, and without this the face would sit at `loading` for the
+        // rest of the page's life.
+        if (self.font_family) |family| {
+            if (!frame.hasWebfont(family)) frame.noteWebfontFailed(family);
+        }
         frame._webfonts_pending -= 1;
         if (frame._webfonts_pending != 0) return;
+        // Not gated on the document being complete. A set that HAS loaded is
+        // ready the moment the last face lands, whatever the document is still
+        // doing: Chrome resolved `ready` at 44.6ms on a page whose load event
+        // was at 1522.0 (FontFaceSet.everLoaded). The load event settles the
+        // other case -- a document that never put a font on the wire.
+        //
         // Scheduled, not called: resolving a promise needs a JS scope and
         // these callbacks run inside the HTTP pump, where there is none. Same
         // reason `queueElementEvent` schedules rather than dispatching -- done
@@ -4219,6 +4257,35 @@ fn registerWebfont(self: *Frame, family: []const u8, body: []const u8) void {
         return;
     };
     log.debug(.browser, "webfont loaded", .{ .family = family, .bytes = body.len });
+}
+
+/// Whether `family` measures with its own downloaded file yet.
+///
+/// `document.fonts` reads through here rather than keeping its own record of
+/// which transfers finished, so the status it reports and the advances the
+/// text is laid out with can never disagree -- `lookupWebfont` answers off
+/// this same table (see FontFaceSet.refreshLoading).
+pub fn hasWebfont(self: *const Frame, family: []const u8) bool {
+    var buf: [128]u8 = undefined;
+    if (family.len == 0 or family.len > buf.len) return false;
+    const key = std.ascii.lowerString(buf[0..family.len], family);
+    return self._webfonts.contains(key);
+}
+
+/// Whether `family`'s file left the wire without producing a face.
+pub fn webfontFailed(self: *const Frame, family: []const u8) bool {
+    var buf: [128]u8 = undefined;
+    if (family.len == 0 or family.len > buf.len) return false;
+    const key = std.ascii.lowerString(buf[0..family.len], family);
+    return self._webfonts_failed.contains(key);
+}
+
+fn noteWebfontFailed(self: *Frame, family: []const u8) void {
+    if (family.len == 0) return;
+    const key = std.ascii.allocLowerString(self.arena, family) catch return;
+    self._webfonts_failed.put(self.arena, key, {}) catch |err| {
+        log.warn(.browser, "webfont failed", .{ .err = err, .family = family });
+    };
 }
 
 pub fn requestStyleResource(
@@ -4434,6 +4501,7 @@ fn requestSubresource(self: *Frame, resolved: [:0]const u8, element: ?*Element.H
     if (opts.resource_type == .font and opts.font_family != null) {
         pending.counted_pending = true;
         self._webfonts_pending += 1;
+        self._webfonts_ever_pending = true;
     }
 
     self.makeRequest(request) catch |err| {
@@ -6125,6 +6193,11 @@ test "WebApi: webfont optical sizing" {
 test "WebApi: webfont kerning" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("css/webfont_kerning.html", .{});
+}
+
+test "WebApi: webfont ready timing" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/webfont_ready_timing.html", .{});
 }
 
 test "WebApi: markup subresources" {

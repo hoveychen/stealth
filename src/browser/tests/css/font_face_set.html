@@ -222,6 +222,15 @@ referenced) plus a JS-added FontFace:
   one whose url is perfectly good. Chrome requests neither of those two files,
   which is what "used" means here.
 
+  A used face whose file does NOT arrive is a fourth state, and `AlphaFont`
+  below is one: its url 404s. Chrome reports `error` for it and `check()`
+  answers false -- measured on headed Chrome 153 with
+  tools/fingerprint/webfont-timeline.mjs against a page whose only
+  `@font-face` names a path that is not there (`faceStates:
+  ["LocalProbe|error"]`, `lastCheck: false`). This engine used to say `loaded`
+  for it, because the scan marked a face the moment it put the url on the wire
+  and never looked at what came back.
+
   `check()` follows the set, not the name: `false` for a declared face that is
   still unloaded, `true` once it has loaded, and `true` for a family NOTHING
   declares (`NoSuchFontXYZ`, `Courier New`) because the fallback renders it.
@@ -338,7 +347,11 @@ Both ways in are here on purpose: appending a `<style>` element and
 <script id="a_sheet_added_after_load_reaches_the_set" type=module>
 {
   const state = await testing.async();
-  whenReady(() => {
+  // `document.fonts.ready` and not the load event: AlphaFont's 404 is still
+  // on the wire at load (it reads `loading` there, measured), and what this
+  // block is about is the injected sheets rather than the moment. `ready` is
+  // the point every face has a final status.
+  document.fonts.ready.then(() => {
     const shot = () => document.fonts.size + ':' +
       Array.from(document.fonts).map((f) => f.family + '/' + f.status).join('|');
     const before = shot();
@@ -363,9 +376,9 @@ Both ways in are here on purpose: appending a `<style>` element and
     // The two faces the markup above declares are already in the set, so the
     // counts are theirs plus the injected ones.
     testing.expectEqual(
-      '2:AlphaFont/loaded|BetaFont/unloaded' +
-      ' -> 4:AlphaFont/loaded|BetaFont/unloaded|InjectedA/unloaded|InjectedB/unloaded' +
-      ' -> 5:AlphaFont/loaded|BetaFont/unloaded|InjectedA/unloaded|InjectedB/unloaded|InsertedC/unloaded',
+      '2:AlphaFont/error|BetaFont/unloaded' +
+      ' -> 4:AlphaFont/error|BetaFont/unloaded|InjectedA/unloaded|InjectedB/unloaded' +
+      ' -> 5:AlphaFont/error|BetaFont/unloaded|InjectedA/unloaded|InjectedB/unloaded|InsertedC/unloaded',
       seen,
     );
   });
