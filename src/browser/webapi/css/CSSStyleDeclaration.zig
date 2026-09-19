@@ -8410,6 +8410,10 @@ test "WebApi: CSSStyleDeclaration unrendered percentages" {
     try testing.htmlRunner("css/computed_unrendered_percentages.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration unrendered shortcuts" {
+    try testing.htmlRunner("css/computed_unrendered_shortcuts.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration percentage kept" {
     try testing.htmlRunner("css/computed_percentage_kept.html", .{});
 }
