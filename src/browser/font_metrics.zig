@@ -69,6 +69,7 @@
 // report.
 
 const std = @import("std");
+const font_kerning = @import("font_kerning.zig");
 
 /// One glyph, at a 100px font size. `left` and `right` are the ink bearings
 /// TextMetrics reports as actualBoundingBoxLeft / Right: positive `left`
@@ -167,6 +168,23 @@ pub const Family = struct {
     max_char_width: f64,
     seeds_last_resort: []const u21,
     after_fallback: []const Override,
+    /// The kern pairs a DOWNLOADED face carries in its own `GPOS`. The tables
+    /// in `font_kerning.zig` are keyed by family and a webfont has no entry
+    /// there, so the pairs a variable webfont kerns with have to travel with
+    /// the instance they were evaluated at -- `opsz` moves them. Empty for
+    /// every family in this file; only `font_file.build` fills it.
+    own_kerns: font_kerning.Table = .{},
+    /// The face's own `unitsPerEm`, for a DOWNLOADED face only.
+    ///
+    /// The advances of a variable instance are stored here UNROUNDED, because
+    /// Chrome quantises the measured run and not the glyph: `Hello, SVG
+    /// World!` in RobotoFlex at 16px comes to 15923.4731 font units and
+    /// Chrome answers 124.40625px, which is 15924 -- the sum rounded UP to a
+    /// whole unit. Rounding each advance first lands on 124.3984375, and four
+    /// of ten strings measured against a headed Chrome 153 disagree that way
+    /// (tools/fingerprint/scratch/s45/predict.py). Zero for every family in
+    /// this file, whose advances arrive already quantised from Chrome.
+    units_per_em: f64 = 0,
 };
 
 /// 100px sans-serif — Chrome resolves it to `100px sans-serif`.

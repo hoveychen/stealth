@@ -63,6 +63,7 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const font_metrics = @import("font_metrics.zig");
+const font_kerning = @import("font_kerning.zig");
 const brotli = @import("../sys/libbrotli.zig");
 
 const log = lp.log;
@@ -90,6 +91,10 @@ const Tables = struct {
     fvar: []const u8 = &.{},
     avar: []const u8 = &.{},
     hvar: []const u8 = &.{},
+    /// The two tables a pair adjustment needs: `GPOS` holds the `kern`
+    /// feature and `GDEF` the variation store its Device tables index into.
+    gpos: []const u8 = &.{},
+    gdef: []const u8 = &.{},
     /// hmtx carried WOFF2 transform 1, which drops the left-side-bearing
     /// arrays and prefixes the advances with a flags byte.
     hmtx_transformed: bool = false,
@@ -188,6 +193,8 @@ fn assign(out: *Tables, name: []const u8, slice: []const u8) void {
     if (std.mem.eql(u8, name, "fvar")) out.fvar = slice;
     if (std.mem.eql(u8, name, "avar")) out.avar = slice;
     if (std.mem.eql(u8, name, "HVAR")) out.hvar = slice;
+    if (std.mem.eql(u8, name, "GPOS")) out.gpos = slice;
+    if (std.mem.eql(u8, name, "GDEF")) out.gdef = slice;
 }
 
 /// WOFF: an sfnt-shaped directory whose tables are individually zlib'd. Only
@@ -550,6 +557,15 @@ fn advanceDelta(t: Tables, gid: u16, coords: Coords) ?f64 {
         inner = pair[1];
     }
 
+    return ivsDelta(ivs, outer, inner, coords);
+}
+
+/// One delta out of an `ItemVariationStore`, in font units: the sum over the
+/// store's regions of each region's scalar times the delta it holds for this
+/// item. `HVAR` reaches it through a glyph's advance mapping, and a `GPOS`
+/// ValueRecord through a Device table whose format says `0x8000` -- the two
+/// callers differ only in where the (outer, inner) pair comes from.
+fn ivsDelta(ivs: []const u8, outer: u32, inner: u32, coords: Coords) ?f64 {
     if ((u16At(ivs, 0) orelse return null) != 1) return null;
     const regions_at = u32At(ivs, 2) orelse return null;
     const data_count = u16At(ivs, 6) orelse return null;
@@ -635,6 +651,300 @@ fn advanceUnits(t: Tables, num_h_metrics: u16, gid: u16) ?u16 {
     return u16At(t.hmtx, base + @as(usize, index) * stride);
 }
 
+// --- GPOS kerning ---------------------------------------------------------
+//
+// A string's width is the sum of its glyphs' advances PLUS what the font
+// adjusts across a pair, and for a downloaded face that adjustment lives in
+// `GPOS`'s `kern` feature. `font_kerning.zig` holds the pairs Chrome applies
+// for every family on the host, keyed by that family's glyph table -- a
+// webfont has no entry there, so this reads the pairs out of the file.
+//
+// Measured on iphey's RobotoFlex: `Hello, SVG World!` at 16px charges three
+// pairs (`o,` -20, `VG` -13, `Wo` -31 font units), which is the 0.48px that
+// separated this engine's 124.88 from Chrome's 124.41 once the optical size
+// was right. Every one of those three carries a Device table in variation
+// form, so the `opsz` instance moves the kern as well as the advance -- which
+// is why the table is built per instance rather than once per file.
+//
+// Latin-1 only, because `font_kerning.Pair` is: the advance tables it sits
+// beside cover the same range.
+
+/// `GDEF`'s `ItemVariationStore`, which is what a `GPOS` Device table in
+/// variation form indexes into. Empty unless the table declares version 1.3,
+/// where the offset was added.
+fn gdefVarStore(gdef: []const u8) []const u8 {
+    if (gdef.len < 18) return &.{};
+    if ((u16At(gdef, 2) orelse 0) < 3) return &.{};
+    const off = u32At(gdef, 14) orelse return &.{};
+    if (off == 0 or off >= gdef.len) return &.{};
+    return gdef[off..];
+}
+
+/// The index `gid` has in a Coverage table, or null when it is not covered.
+fn coverageIndex(cov: []const u8, gid: u16) ?u16 {
+    switch (u16At(cov, 0) orelse return null) {
+        1 => {
+            const count = u16At(cov, 2) orelse return null;
+            // Sorted by glyph id, which is what makes the bisection legal.
+            var lo: usize = 0;
+            var hi: usize = count;
+            while (lo < hi) {
+                const mid = lo + (hi - lo) / 2;
+                const at = u16At(cov, 4 + mid * 2) orelse return null;
+                if (at == gid) return @intCast(mid);
+                if (at < gid) lo = mid + 1 else hi = mid;
+            }
+            return null;
+        },
+        2 => {
+            const count = u16At(cov, 2) orelse return null;
+            for (0..count) |i| {
+                const rec = 4 + i * 6;
+                const start = u16At(cov, rec) orelse return null;
+                const end = u16At(cov, rec + 2) orelse return null;
+                if (gid < start) return null;
+                if (gid > end) continue;
+                const base = u16At(cov, rec + 4) orelse return null;
+                return base + (gid - start);
+            }
+            return null;
+        },
+        else => return null,
+    }
+}
+
+/// The class `gid` belongs to. Class 0 is both "declared as zero" and "not
+/// listed", which the spec makes the same thing.
+fn classOf(def: []const u8, gid: u16) u16 {
+    switch (u16At(def, 0) orelse return 0) {
+        1 => {
+            const start = u16At(def, 2) orelse return 0;
+            const count = u16At(def, 4) orelse return 0;
+            if (gid < start or gid - start >= count) return 0;
+            return u16At(def, 6 + @as(usize, gid - start) * 2) orelse 0;
+        },
+        2 => {
+            const count = u16At(def, 2) orelse return 0;
+            for (0..count) |i| {
+                const rec = 4 + i * 6;
+                const start = u16At(def, rec) orelse return 0;
+                const end = u16At(def, rec + 2) orelse return 0;
+                if (gid < start) return 0;
+                if (gid > end) continue;
+                return u16At(def, rec + 4) orelse 0;
+            }
+            return 0;
+        },
+        else => return 0,
+    }
+}
+
+/// How many bytes a ValueRecord of this format occupies: one 16-bit field per
+/// bit set.
+fn valueSize(format: u16) usize {
+    return @as(usize, @popCount(format)) * 2;
+}
+
+/// The horizontal advance adjustment one ValueRecord charges, in font units,
+/// with its variation applied. `at` is the record's offset from the start of
+/// `sub`, which is also what a Device offset inside it is measured from.
+fn valueXAdvance(
+    sub: []const u8,
+    at: usize,
+    format: u16,
+    /// What a Device offset inside the record is measured from. NOT `sub`:
+    /// in a format-1 PairPos the offsets in a PairValueRecord are from the
+    /// start of the PairSet that holds it, and reading them from the
+    /// subtable instead landed on a deltaFormat of 0x0019 where the real
+    /// table says 0x8000 -- so every pair in a PairSet silently kept its
+    /// unvaried value, which for iphey's `VG` is -13 against the -12.4188
+    /// the `opsz` instance charges.
+    dev_base: []const u8,
+    ivs: []const u8,
+    coords: ?Coords,
+) f64 {
+    var total: f64 = 0;
+    if (format & 0x0004 != 0) {
+        const off = at + @as(usize, @popCount(format & 0x0003)) * 2;
+        const raw = i16At(sub, off) orelse return 0;
+        total = @floatFromInt(raw);
+    }
+    if (format & 0x0040 != 0) {
+        const off = at + @as(usize, @popCount(format & 0x003f)) * 2;
+        const dev_at = u16At(sub, off) orelse return total;
+        const c = coords orelse return total;
+        if (dev_at == 0 or ivs.len == 0) return total;
+        // Only the variation form says anything about a pair at a design
+        // coordinate. The three older formats are per-ppem pixel adjustments
+        // for hinted rendering, which is not what is being measured here.
+        if ((u16At(dev_base, dev_at + 4) orelse 0) != 0x8000) return total;
+        const outer = u16At(dev_base, dev_at) orelse return total;
+        const inner = u16At(dev_base, dev_at + 2) orelse return total;
+        if (ivsDelta(ivs, outer, inner, c)) |d| total += d;
+    }
+    return total;
+}
+
+/// What one PairPos subtable charges across `first`/`second`, in font units.
+fn pairPosAdjust(sub: []const u8, left: u16, right: u16, ivs: []const u8, coords: ?Coords) f64 {
+    const format = u16At(sub, 0) orelse return 0;
+    const cov_at = u16At(sub, 2) orelse return 0;
+    if (cov_at >= sub.len) return 0;
+    const index = coverageIndex(sub[cov_at..], left) orelse return 0;
+    const fmt1 = u16At(sub, 4) orelse return 0;
+    const fmt2 = u16At(sub, 6) orelse return 0;
+    switch (format) {
+        1 => {
+            const set_count = u16At(sub, 8) orelse return 0;
+            if (index >= set_count) return 0;
+            const set_at = u16At(sub, 10 + @as(usize, index) * 2) orelse return 0;
+            if (set_at >= sub.len) return 0;
+            const count = u16At(sub, set_at) orelse return 0;
+            const stride = 2 + valueSize(fmt1) + valueSize(fmt2);
+            for (0..count) |i| {
+                const rec = set_at + 2 + i * stride;
+                const glyph = u16At(sub, rec) orelse return 0;
+                if (glyph != right) continue;
+                return valueXAdvance(sub, rec + 2, fmt1, sub[set_at..], ivs, coords);
+            }
+            return 0;
+        },
+        2 => {
+            const def1_at = u16At(sub, 8) orelse return 0;
+            const def2_at = u16At(sub, 10) orelse return 0;
+            const class1_count = u16At(sub, 12) orelse return 0;
+            const class2_count = u16At(sub, 14) orelse return 0;
+            if (def1_at >= sub.len or def2_at >= sub.len) return 0;
+            const c1 = classOf(sub[def1_at..], left);
+            const c2 = classOf(sub[def2_at..], right);
+            if (c1 >= class1_count or c2 >= class2_count) return 0;
+            const cell = valueSize(fmt1) + valueSize(fmt2);
+            const at = 16 + (@as(usize, c1) * @as(usize, class2_count) + c2) * cell;
+            // A Class2Record sits in the subtable itself, so its Device
+            // offsets are measured from there.
+            return valueXAdvance(sub, at, fmt1, sub, ivs, coords);
+        },
+        else => return 0,
+    }
+}
+
+/// The subtable a Lookup's `i`th entry points at, unwrapping the Extension
+/// indirection a large font uses to reach past 64KB. Null when the entry is
+/// not a pair adjustment.
+fn pairPosSubtable(gpos: []const u8, lookup_at: usize, i: usize) ?[]const u8 {
+    const kind = u16At(gpos, lookup_at) orelse return null;
+    const off = u16At(gpos, lookup_at + 6 + i * 2) orelse return null;
+    const at = lookup_at + off;
+    if (at >= gpos.len) return null;
+    const sub = gpos[at..];
+    if (kind == 2) return sub;
+    // Type 9 is `ExtensionPos`, whose only job is to carry a 32-bit offset to
+    // a subtable of the type it names.
+    if (kind != 9) return null;
+    if ((u16At(sub, 0) orelse 0) != 1) return null;
+    if ((u16At(sub, 2) orelse 0) != 2) return null;
+    const far = u32At(sub, 4) orelse return null;
+    if (far == 0 or far >= sub.len) return null;
+    return sub[far..];
+}
+
+/// Every PairPos subtable the `kern` feature reaches, in lookup order.
+fn kernSubtables(allocator: Allocator, gpos: []const u8) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    if (gpos.len < 10) return out.items;
+    const feature_at = u16At(gpos, 6) orelse return out.items;
+    const lookup_at = u16At(gpos, 8) orelse return out.items;
+    if (feature_at >= gpos.len or lookup_at >= gpos.len) return out.items;
+    const lookup_count = u16At(gpos, lookup_at + 0) orelse return out.items;
+
+    // The feature list rather than a script/language walk: `kern` is declared
+    // once per script here and the lookups it names are the same set, so the
+    // union over the list is what any script's chain would reach. Every
+    // feature record with the tag is taken, which is what a page that mixes
+    // scripts would get anyway.
+    const feature_count = u16At(gpos, feature_at) orelse return out.items;
+    var seen: std.AutoHashMapUnmanaged(u16, void) = .empty;
+    for (0..feature_count) |i| {
+        const rec = feature_at + 2 + i * 6;
+        if (rec + 6 > gpos.len) break;
+        if (!std.mem.eql(u8, gpos[rec..][0..4], "kern")) continue;
+        const off = u16At(gpos, rec + 4) orelse continue;
+        const feature = feature_at + off;
+        const indices = u16At(gpos, feature + 2) orelse continue;
+        for (0..indices) |j| {
+            const index = u16At(gpos, feature + 4 + j * 2) orelse break;
+            if (index >= lookup_count) continue;
+            if ((try seen.getOrPut(allocator, index)).found_existing) continue;
+            const lk_off = u16At(gpos, lookup_at + 2 + @as(usize, index) * 2) orelse continue;
+            const lk = lookup_at + lk_off;
+            const sub_count = u16At(gpos, lk + 4) orelse continue;
+            for (0..sub_count) |k| {
+                if (pairPosSubtable(gpos, lk, k)) |sub| try out.append(allocator, sub);
+            }
+        }
+    }
+    return out.items;
+}
+
+/// The face's own kern pairs over Latin-1, at the 100px basis every advance in
+/// `font_metrics.zig` is stored at. Empty whenever the face has no `GPOS`
+/// `kern` feature, which leaves the engine summing bare advances as before.
+fn kernTable(
+    allocator: Allocator,
+    t: Tables,
+    coords: ?Coords,
+    per_unit: f64,
+) !font_kerning.Table {
+    if (t.gpos.len == 0) return .{};
+
+    var scratch = std.heap.ArenaAllocator.init(allocator);
+    defer scratch.deinit();
+    const subtables = try kernSubtables(scratch.allocator(), t.gpos);
+    if (subtables.len == 0) return .{};
+    const ivs = gdefVarStore(t.gdef);
+
+    // The glyph each Latin-1 code point maps to, once: the pair loop below
+    // would otherwise walk `cmap` 65 536 times.
+    var gids: [256]?u16 = @splat(null);
+    for (0..256) |cp| gids[cp] = glyphId(t.cmap, @intCast(cp));
+
+    var pairs: std.ArrayList(font_kerning.Pair) = .empty;
+    var starts: [4]u64 = .{ 0, 0, 0, 0 };
+    for (0..256) |a| {
+        const left = gids[a] orelse continue;
+        // Most characters start no pair at all, and a Coverage miss is one
+        // bisection against 256 subtable walks.
+        var covered = false;
+        for (subtables) |sub| {
+            const cov_at = u16At(sub, 2) orelse continue;
+            if (cov_at >= sub.len) continue;
+            if (coverageIndex(sub[cov_at..], left) != null) covered = true;
+        }
+        if (!covered) continue;
+        for (0..256) |b| {
+            const right = gids[b] orelse continue;
+            var units: f64 = 0;
+            for (subtables) |sub| {
+                const one = pairPosAdjust(sub, left, right, ivs, coords);
+                units += one;
+            }
+            // Unrounded, for the same reason the advances above are: the
+            // quantisation Chrome applies is one `@ceil` over the whole run.
+            if (units == 0) continue;
+            try pairs.append(allocator, .{
+                .first = @intCast(a),
+                .second = @intCast(b),
+                .kern = units * per_unit,
+            });
+            starts[a >> 6] |= @as(u64, 1) << @intCast(a & 63);
+        }
+    }
+    // Already in (first, second) order, which is what the bisection in
+    // `font_kerning.kern` needs -- the loops above walk both in ascending
+    // code point order.
+    return .{ .pairs = try pairs.toOwnedSlice(allocator), .starts = starts };
+}
+
 fn build(
     allocator: Allocator,
     t: Tables,
@@ -660,11 +970,12 @@ fn build(
             const gid = glyphId(t.cmap, cp) orelse break :blk null;
             const base_units = advanceUnits(t, num_h_metrics, gid) orelse break :blk null;
             var v: f64 = @floatFromInt(base_units);
-            // The delta is rounded before it is added, not after: an instance's
-            // advance is an integer number of font units, the same as the
-            // `hmtx` entry it comes from.
+            // UNROUNDED, unlike the `hmtx` entry it comes from: Chrome
+            // quantises the measured run rather than the glyph, so the
+            // fraction has to survive to the sum. See
+            // `font_metrics.Family.units_per_em`.
             if (coords) |c| {
-                if (advanceDelta(t, gid, c)) |d| v = @max(0, v + @round(d));
+                if (advanceDelta(t, gid, c)) |d| v = @max(0, v + d);
             }
             break :blk v;
         };
@@ -737,6 +1048,11 @@ fn build(
         // A face carrying its own coverage seeds no last-resort run.
         .seeds_last_resort = &.{},
         .after_fallback = &.{},
+        // The pairs the file's own `GPOS` kerns with, at this instance.
+        .own_kerns = kernTable(allocator, t, coords, per_unit) catch .{},
+        // Which makes the advances above quantisable at the point of
+        // measurement rather than here.
+        .units_per_em = @floatFromInt(upem),
     };
 }
 

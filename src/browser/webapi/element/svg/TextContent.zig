@@ -119,6 +119,23 @@ fn fontFamily(self: *TextContent, frame: *Frame) font_metrics.Family {
     return font_metrics.fallback;
 }
 
+/// The face a `<text>` measures with: its family plus the one text property
+/// that changes a width without changing a glyph. Measured on a headed
+/// Chrome 153 over iphey's RobotoFlex
+/// (tools/fingerprint/scratch/s45/kern-page.html): a 16px `<text>` reading
+/// `Hello, SVG World!` is 124.40625 and the same one under
+/// `font-kerning: none` is 124.890625, so SVG honours the property exactly
+/// as layout does.
+///
+/// The spacing and transform halves of `computedTextStyle` are deliberately
+/// not carried: `letter-spacing` on an SVG `<text>` has not been measured
+/// here, and claiming it would be a width model with no reading behind it.
+fn face(self: *TextContent, frame: *Frame) text_measure.Face {
+    var out = text_measure.Face.regular(self.fontFamily(frame));
+    out.kerning = frame._style_manager.computedTextStyle(self.asElement()).kerning;
+    return out;
+}
+
 /// Where the element's first glyph sits, from its `x` / `y` attributes. Only
 /// the single-value form is read: a `x="10 20 30"` list positions each glyph
 /// separately, which needs a layout we do not have.
@@ -150,7 +167,7 @@ fn origin(self: *TextContent, frame: *Frame) !struct { x: f64, y: f64 } {
 /// than we answer (scratch/expr-svg-ascent-split.js).
 pub fn getBounds(self: *TextContent, frame: *Frame) !PathData.Bounds {
     const size = self.fontSize(frame);
-    const width = text_measure.svgWidth(self.fontFamily(frame), self.text(frame), size);
+    const width = text_measure.svgWidth(self.face(frame), self.text(frame), size);
     if (!std.math.isFinite(width) or width <= 0) {
         return .{};
     }
@@ -177,7 +194,7 @@ pub fn getNumberOfChars(self: *TextContent, frame: *Frame) u32 {
 }
 
 pub fn getComputedTextLength(self: *TextContent, frame: *Frame) f64 {
-    return text_measure.svgWidth(self.fontFamily(frame), self.text(frame), self.fontSize(frame));
+    return text_measure.svgWidth(self.face(frame), self.text(frame), self.fontSize(frame));
 }
 
 pub fn getSubStringLength(self: *TextContent, charnum: u32, nchars: u32, frame: *Frame) !f64 {
