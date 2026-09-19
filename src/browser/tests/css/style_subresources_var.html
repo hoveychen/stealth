@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  What a stylesheet asks the server for when the url is behind a var().
+
+  Split across two places, a file can be named by neither half on its own: the
+  `url()` token sits in a custom property (here, in a style attribute) and the
+  declaration that consumes it sits in a rule that says only `var(--bg)`. A
+  scan that reads the two apart sees a custom property that is not a property
+  taking a url, and a rule value that holds no url at all.
+
+  Measured on iphey.com (tools/fingerprint/scratch/s48/waterfall.mjs, both
+  arms): two of its files -- an icon and a CTA background, both handed to the
+  rule through an inline `--icon` -- were requested by Chrome and not by this
+  engine, and that is the whole shape of it.
+
+  The `never` rule and the `unused` property are the controls in the other
+  direction. A custom property is not fetched for its own sake, and a rule that
+  matches nothing is not fetched at all, so over-fetching stays visible here
+  too.
+
+  Two elements match `.var-bg` with a different `--bg` each: which elements
+  matched is the answer, not whether any did.
+
+  The other half of the same rule is the pseudo-element, because that is the
+  shape iphey actually wrote: `a.code-block:after { content: ""; ...;
+  background-image: var(--icon) }`. No element *is* a `::after` box, so the
+  selector engine answers nothing for that rule and every url in it went
+  unrequested -- var() or not.
+
+  Which pseudo-elements Chrome then puts on the wire is a measured table, one
+  url per pseudo counted in a local server's access log: `::before`/`::after`
+  only when the rule declares `content` at all -- `content: none` is requested
+  and no `content` is not, so the gate is style being resolved and not the box
+  being made -- plus `::first-line`, `::first-letter` and `::placeholder`
+  unconditionally, and never `::marker` (against a real `li`), `::selection`
+  or `::backdrop`.
+-->
+<style>
+  .var-bg { background-image: var(--bg); }
+  .var-mask { -webkit-mask-image: var(--mask); }
+  .var-inherit { background-image: var(--inh); }
+  .var-fallback { background-image: var(--absent, url(/wire/var-fallback.png)); }
+
+  .var-nothing { background-image: var(--absent); }
+  .var-never { background-image: var(--bg); }
+
+  .var-pseudo:after { content: ""; background-image: var(--pseudo); }
+  .var-pseudo-plain::before { content: ""; background-image: url(/wire/var-pseudo-plain.png); }
+
+  .var-pseudo-none::after { content: none; background-image: url(/wire/var-pseudo-none.png); }
+  .var-pseudo-letter::first-letter { background-image: url(/wire/var-pseudo-letter.png); }
+  .var-pseudo-list::after, .var-pseudo-absent { content: ""; background-image: url(/wire/var-pseudo-list.png); }
+
+  .var-pseudo-empty::after { background-image: url(/wire/var-pseudo-empty.png); }
+  .var-pseudo-marker::marker { background-image: url(/wire/var-pseudo-marker.png); }
+  .var-pseudo-select::selection { background-image: url(/wire/var-pseudo-select.png); }
+  .var-pseudo-gone::after { content: ""; background-image: url(/wire/var-pseudo-gone.png); }
+</style>
+
+<div class="var-bg" style="--bg: url(/wire/var-one.png)">one</div>
+<div class="var-bg" style="--bg: url(/wire/var-two.png)">two</div>
+<div class="var-mask" style="--mask: url(/wire/var-mask.png)">mask</div>
+<div style="--inh: url(/wire/var-inherited.png)"><p class="var-inherit">inherited</p></div>
+<div class="var-fallback">fallback</div>
+<div class="var-nothing">nothing</div>
+<div style="--unused: url(/wire/var-unused.png)">unused</div>
+
+<div class="var-pseudo" style="--pseudo: url(/wire/var-pseudo.png)">pseudo</div>
+<div class="var-pseudo-plain">pseudo plain</div>
+<div class="var-pseudo-none">content none</div>
+<p class="var-pseudo-letter">first letter</p>
+<div class="var-pseudo-list">list</div>
+<div class="var-pseudo-empty">no content</div>
+<ul><li class="var-pseudo-marker">marker</li></ul>
+<div class="var-pseudo-select">selection</div>
+
+<script id="var_referenced_subresources" type=module>
+{
+  const WANTED = [
+    'var-one.png',
+    'var-two.png',
+    'var-mask.png',
+    'var-inherited.png',
+    'var-fallback.png',
+    'var-pseudo.png',
+    'var-pseudo-plain.png',
+    'var-pseudo-none.png',
+    'var-pseudo-letter.png',
+    'var-pseudo-list.png',
+  ];
+  // var-unused.png: a custom property nothing reads is not a request.
+  // var-never.png: `.var-never` matches no element, so its var() is not
+  // resolved and nothing behind it is asked for.
+  const UNWANTED = [
+    'var-unused.png',
+    'var-pseudo-empty.png',
+    'var-pseudo-marker.png',
+    'var-pseudo-select.png',
+    'var-pseudo-gone.png',
+  ];
+
+  const asked = () => new Set(
+    performance.getEntriesByType('resource').map((e) => e.name.split('/').pop()));
+
+  const test = await testing.async();
+  // Same budget and same reason as style_subresources.html: a poll that
+  // outruns the runner reports TestTimedOut, which names no path.
+  const deadline = Date.now() + 600;
+  while (Date.now() < deadline) {
+    const seen = asked();
+    if (WANTED.every((w) => seen.has(w))) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  test.resolve(asked());
+
+  await test.done((seen) => {
+    const missing = WANTED.filter((w) => !seen.has(w));
+    testing.expectEqual('missing: ', 'missing: ' + missing.join(','));
+
+    const spurious = UNWANTED.filter((u) => seen.has(u));
+    testing.expectEqual('spurious: ', 'spurious: ' + spurious.join(','));
+  });
+}
+</script>

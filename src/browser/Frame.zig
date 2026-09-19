@@ -111,6 +111,7 @@ pub const user_input = @import("frame/user_input.zig");
 pub const node_factory = @import("frame/node_factory.zig");
 pub const style_resources = @import("frame/style_resources.zig");
 pub const markup_resources = @import("frame/markup_resources.zig");
+pub const lazy_images = @import("frame/lazy_images.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -1789,6 +1790,10 @@ pub fn _documentIsLoaded(self: *Frame) !void {
     // <embed>, a media element's poster and source, and the rest. See
     // frame/markup_resources.zig for why it is a walk rather than a hook.
     markup_resources.requestAll(self);
+
+    // And the `<img loading=lazy>` the parse deferred, now that there is a
+    // layout to ask how far past the fold each one sits.
+    lazy_images.requestAll(self);
 }
 
 // Fired at the document on every change to document.readyState: before
@@ -6192,6 +6197,11 @@ test "WebApi: css style subresources" {
     try testing.htmlRunner("css/style_subresources.html", .{});
 }
 
+test "WebApi: css style subresources behind var" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/style_subresources_var.html", .{});
+}
+
 test "WebApi: webfont metrics" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("css/webfont_metrics.html", .{});
@@ -6220,6 +6230,11 @@ test "WebApi: webfont ready timing" {
 test "WebApi: webfont fetched once" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("css/webfont_fetched_once.html", .{});
+}
+
+test "WebApi: lazy images below the fold" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("lazy_images.html", .{});
 }
 
 test "WebApi: markup subresources" {
