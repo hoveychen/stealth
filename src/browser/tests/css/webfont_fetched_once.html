@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<!-- One `@font-face` rule, one request.
+
+     The scan that fetches what the stylesheets name runs twice in one parse:
+     when the parser stops for a `<script src>`, and again at
+     DOMContentLoaded. The transfer started by the first one used to close its
+     cache slot on completion -- the slot only survived for bytes that turned
+     out to be a picture -- so the second scan asked for the same file over
+     again. Measured on iphey: one 914KB `.ttf`, two requests on the wire
+     against Chrome's one (tools/fingerprint/scratch/s48/font-dup.mjs counts
+     the same 2-vs-1 on a local page).
+
+     The count is the only place the difference shows. `document.fonts` holds
+     one face either way, and the resource table filed one entry for the two
+     requests, so a page-side assertion would have passed throughout. -->
+
+<style>
+  @font-face { font-family: CountedOnce; src: url(/served/counted-font.ttf) format('truetype') }
+  #counted { font-family: CountedOnce; font-size: 20px }
+</style>
+<span id=counted>mmmmmmmmmm</span>
+
+<!-- The parser stops here, which is the first of the two scans. -->
+<script src="blocker.js"></script>
+
+<script id="a_used_face_is_fetched_once" type=module>
+  const state = await testing.async();
+  const hits = async () => Number(await (await fetch("/served/counted-font-hits")).text());
+
+  // A module script runs before DOMContentLoaded, so the second scan has not
+  // happened yet: the reading has to be taken after it.
+  addEventListener("load", async () => {
+    await document.fonts.ready;
+    const face = [...document.fonts].filter((f) => f.family === "CountedOnce")[0];
+    state.resolve({ requests: await hits(), status: face && face.status });
+  });
+
+  await state.done((r) => {
+    testing.expectEqual("requests 1", "requests " + r.requests);
+    // The face still arrived: a slot that stays open must not be a slot that
+    // swallowed the body.
+    testing.expectEqual("loaded", r.status);
+  });
+</script>

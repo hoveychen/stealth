@@ -3966,9 +3966,7 @@ const ImageRequest = struct {
             .times = self.times,
             .cors = self.cors,
         });
-        if (self.keep_body and !self.body_overflowed and
-            self.status >= 200 and self.status < 300)
-        {
+        if (self.bodyWasKept()) {
             // Same map the two-`<link rel=stylesheet>` case fills, and the same
             // reason: one sheet named twice is one request. The key is
             // `self.url`, which `preloadResource` took from the frame arena
@@ -3996,13 +3994,32 @@ const ImageRequest = struct {
         self.report(if (!self.sniff or became_a_picture) .load else .@"error");
     }
 
+    /// Whether this transfer's bytes were kept for something downstream to
+    /// read: a stylesheet's text, a webfont's file. The same test twice, so
+    /// "the body is in hand" and "the slot stays open" cannot drift apart.
+    fn bodyWasKept(self: *const ImageRequest) bool {
+        return self.keep_body and !self.body_overflowed and
+            self.status >= 200 and self.status < 300;
+    }
+
     // Close the cache slot this transfer opened and hand the outcome to every
     // element that attached to it while it was open.
     //
-    // A slot only survives when the bytes became a picture; a transfer that
-    // failed, or one whose bytes were not an image, is removed so the next
-    // load asks the server again -- which is what Chrome does for both (the
-    // `404` and `200 that is not a picture` rows above).
+    // A slot survives when the bytes became a picture, or when they were kept
+    // for a reader -- a stylesheet, a webfont. A transfer that failed, or one
+    // whose bytes were neither, is removed so the next load asks the server
+    // again, which is what Chrome does for both (the `404` and `200 that is
+    // not a picture` rows above).
+    //
+    // Keeping the second case is not an optimisation. The scan that fetches
+    // what the stylesheets name runs more than once -- when the parser stops
+    // for a script, and again at DOMContentLoaded -- and a slot closed at the
+    // end of the first transfer makes the second scan ask for the same file
+    // over again. Measured on iphey: one 914KB `.ttf`, two requests on the
+    // wire against Chrome's one, and the same 2-vs-1 on a two-rule local page
+    // (tools/fingerprint/scratch/s48/font-dup.mjs). The body is already in
+    // `registerWebfont`/`_stylesheet_bodies` by then, so the second request
+    // was not even buying anything.
     fn settle(self: *ImageRequest, became_a_picture: bool, size: ?IntrinsicSize) void {
         const entry = self.cache;
         entry.done = true;
@@ -4026,7 +4043,7 @@ const ImageRequest = struct {
             };
         }
         entry.waiting.clearRetainingCapacity();
-        if (!became_a_picture) {
+        if (!became_a_picture and !self.bodyWasKept()) {
             _ = self.frame._image_cache.remove(self.cache_key);
         }
     }
@@ -6198,6 +6215,11 @@ test "WebApi: webfont kerning" {
 test "WebApi: webfont ready timing" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("css/webfont_ready_timing.html", .{});
+}
+
+test "WebApi: webfont fetched once" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/webfont_fetched_once.html", .{});
 }
 
 test "WebApi: markup subresources" {

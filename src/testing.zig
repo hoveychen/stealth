@@ -722,6 +722,15 @@ var serve_counts = [_]struct { name: []const u8, count: u32 = 0 }{
 // thread.
 var counted_png_hits: std.atomic.Value(u32) = .init(0);
 
+// The same thing for a font, read back over `/served/counted-font-hits`. A
+// `@font-face` file is asked for by a scan that runs more than once in one
+// parse -- when the parser stops for a script, and again at DOMContentLoaded --
+// so "how many requests did one rule cost" is a question only the server can
+// answer. The page cannot: `document.fonts` shows one face and the resource
+// table filed one entry while the wire carried two (measured on iphey,
+// tools/fingerprint/scratch/s48/waterfall.mjs).
+var counted_font_hits: std.atomic.Value(u32) = .init(0);
+
 // Smallest valid PNG: a single transparent pixel. Served for any image request
 // the tests make; see the image branch at the end of `testHTTPHandler`.
 const ONE_PIXEL_PNG = [_]u8{
@@ -1967,6 +1976,27 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
             },
         });
     }
+    if (std.mem.eql(u8, path, "/served/counted-font.ttf")) {
+        _ = counted_font_hits.fetchAdd(1, .monotonic);
+        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer arena.deinit();
+        const font = font_file.synthesize(arena.allocator(), 1000, 500, 800, 200) catch
+            return req.respond("", .{});
+        return req.respond(font, .{
+            .extra_headers = &.{.{ .name = "Content-Type", .value = "font/ttf" }},
+        });
+    }
+    if (std.mem.eql(u8, path, "/served/counted-font-hits")) {
+        var buf: [16]u8 = undefined;
+        const body = std.fmt.bufPrint(&buf, "{d}", .{counted_font_hits.load(.monotonic)}) catch unreachable;
+        return req.respond(body, .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/plain" },
+                .{ .name = "Cache-Control", .value = "no-store" },
+            },
+        });
+    }
+
     if (std.mem.eql(u8, path, "/served/counted-hits")) {
         var buf: [16]u8 = undefined;
         const body = std.fmt.bufPrint(&buf, "{d}", .{counted_png_hits.load(.monotonic)}) catch unreachable;
