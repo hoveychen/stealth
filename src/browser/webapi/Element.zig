@@ -3445,6 +3445,23 @@ fn staticInlineOffset(
     if (!self.marginIsAuto("margin-left", frame)) {
         return self.containerMarginPx("margin-left", frame, containing, depth);
     }
+    // An `auto` margin only has a share to take where the box was given the
+    // whole line to fill. A float and an inline-block are sized to fit their
+    // content instead, and an out-of-flow box that reaches here declared no
+    // inset on this axis -- so none of the three has any free space, and
+    // `margin:auto` on them is 0. This centred all three: a `float:left;
+    // margin:auto` box sat at 150 in a 400px block where Chrome puts it at 0
+    // (tools/fingerprint/probes/expr-auto-margin-used.js). The rule is
+    // `usedAutoMarginPx`'s, which is what the computed style now reports, and
+    // the two must not disagree about the same box.
+    //
+    // Asked only once the margin is known to be `auto`, which keeps the three
+    // cascade reads off every box in the flow.
+    switch (CSSStyleDeclaration.flowKind(self, frame)) {
+        .floated, .positioned => return 0,
+        .in_flow => {},
+    }
+    if (std.mem.startsWith(u8, CSSStyleDeclaration.resolvedDisplay(self, frame), "inline")) return 0;
     const box = available orelse return 0;
     const free = box - own;
     if (free <= 0) {
