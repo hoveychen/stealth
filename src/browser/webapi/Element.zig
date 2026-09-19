@@ -4946,6 +4946,18 @@ pub fn layoutPassPositions(
 // Both measured at dpr 2 with
 // tools/fingerprint/scratch/expr-inline-content-lines.js.
 fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass) ContentHeight {
+    // A flex ROW puts its items beside one another, so the walk below -- which
+    // stacks -- is the wrong one for it. Nothing had ever placed a flex line:
+    // three 60x20 children of a `display:flex` container sat at 0,0 / 0,20 /
+    // 0,40 where Chrome puts them at 0,0 / 60,0 / 120,0, which is every navbar,
+    // toolbar and button group on the web.
+    //
+    // A COLUMN keeps the stacking walk: its main axis IS the block axis, and
+    // the measurements agree with Chrome there already.
+    if (self.flexRowContent(frame, visibility_cache, content_width, depth, pass)) |flexed| {
+        return flexed;
+    }
+
     var total: f64 = 0;
     // The margins that LEAVE through this box's two block edges. They are not
     // part of its height -- that is what escaping means -- but they are part of
@@ -5341,6 +5353,97 @@ fn hasInlineBaseline(self: *Element, frame: *Frame, depth: u8) bool {
 /// scrollHeight. Measured; an `absolute` child is out of both.
 /// What a box holds: its content height, and the margins that left through its
 /// two block edges on the way out. See `contentHeight`.
+/// A flex row's own content walk, or null when this element is not one and the
+/// stacking walk is the right one after all.
+///
+/// The line is what makes this a different walk rather than a flag on the other
+/// one: the items advance along the INLINE axis, each starting where the
+/// previous one's margin box ended, and the container's height is the tallest
+/// of them rather than their sum. `flexItemWidth` had always divided the line
+/// correctly -- three `flex:1` items measured 133px wide -- so the sizes were
+/// right and only the positions were the block walk's.
+///
+/// No margin escapes a flex container: it establishes a formatting context, so
+/// the two escaped groups a stacking walk reports are empty here by definition.
+///
+/// Measured over eighteen shapes on Chrome 152 with
+/// tools/fingerprint/probes/expr-flex-line-placement.js; the rules are in
+/// css/flex_line_placement.html.
+fn flexRowContent(
+    self: *Element,
+    frame: *Frame,
+    visibility_cache: *VisibilityCache,
+    content_width: ?f64,
+    depth: u8,
+    pass: ?PositionPass,
+) ?ContentHeight {
+    if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return null;
+    if (!CSSStyleDeclaration.isFlexRowContainer(self, frame)) return null;
+
+    // The containing block every item's percentage margin takes its share of,
+    // measured once for the whole line the way the stacking walk does it.
+    var line_width: ?f64 = content_width;
+    // The cross size the items are aligned within. `null` leaves each item
+    // where its own height puts it, which is what an indefinite one means for
+    // every alignment except `stretch`.
+    const cross = CSSStyleDeclaration.definiteContentHeight(self, frame);
+
+    var cursor: f64 = 0;
+    var tallest: f64 = 0;
+
+    var child = self.firstElementChild();
+    while (child) |el| : (child = el.nextElementSibling()) {
+        // An out-of-flow child of a flex container is not an item: it takes no
+        // share of the line and does not advance the cursor. The stacking walk
+        // records its static position; here it simply is not on the line, and
+        // Chrome puts one at 0,0 whatever its siblings did.
+        if (!CSSStyleDeclaration.isFlexItem(el, frame)) continue;
+        if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
+
+        const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+        const margin_left = el.containerMarginPx("margin-left", frame, &line_width, depth);
+        const margin_right = el.containerMarginPx("margin-right", frame, &line_width, depth);
+        const margins = el.verticalMargins(frame, &line_width, depth);
+        const outer_width = box.width + box.padding_x + box.border_x;
+        const outer_height = box.height + box.padding_y + box.border_y;
+
+        // Where the item sits on the cross axis. `align-items` decides, its
+        // initial value is `stretch`, and a stretched item was already given
+        // the container's height by `flexItemHeight` -- so what is left here is
+        // only the offset the other three place it at.
+        const cross_offset = if (cross) |line_cross| switch (CSSStyleDeclaration.flexCrossAlign(el, self, frame)) {
+            .stretch, .start => margins.top,
+            .center => @max(0, (line_cross - outer_height) / 2),
+            .end => @max(0, line_cross - outer_height - margins.bottom),
+        } else margins.top;
+
+        const x = cursor + margin_left;
+        if (pass) |p| {
+            p.record(frame, el, .{
+                .x = p.x + x,
+                .y = p.y + cross_offset,
+                .width = outer_width,
+                .height = outer_height,
+            });
+            const child_pass: PositionPass = .{
+                .table = p.table,
+                .static_table = p.static_table,
+                .nodes = p.nodes,
+                .x = p.x + x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &line_width, depth),
+                .y = p.y + cross_offset + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &line_width, depth),
+            };
+            _ = el.contentHeight(frame, visibility_cache, .in_flow, box.width, depth + 1, child_pass);
+        }
+
+        // The MARGIN box is what advances the line: `margin: 0 10px` on two
+        // 60px items puts them at 10 and 90, measured.
+        cursor += margin_left + outer_width + margin_right;
+        tallest = @max(tallest, margins.top + outer_height + margins.bottom);
+    }
+
+    return .{ .total = tallest };
+}
+
 const ContentHeight = struct {
     total: f64 = 0,
     escaped_top: MarginGroup = .{},

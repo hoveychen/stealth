@@ -28,10 +28,19 @@ Two rules:
     `flex-end` place a declared size at 0, at half the leftover and at all of
     it; `align-self` overrides the container's choice for one child.
 
-`flex-wrap` is deliberately absent: every row below fits on one line or
-overflows it, and a wrapped line is a different algorithm. `rowOverflow` pins
-what the single line does instead -- two 300px children in a 400px row shrink to
-200 each, which is `flex-shrink: 1` and already worked.
+Two neighbours are deliberately absent, each because it is a different
+algorithm and neither is what stacked the row:
+
+  * `flex-wrap`. Every row below fits on one line or overflows it, and a
+    wrapped line is solved differently.
+  * `flex-shrink`, which `flexItemWidth` already records as not modelled: two
+    300px items in a 400px row are 200 each in Chrome and 300 here. The
+    `row overflow` case below asserts the widths this engine gives, because
+    what it is here to pin is that the items FOLLOW one another whatever width
+    they end up with. Fix the shrink and that row's expectation moves with it.
+
+`justify-content` is likewise untouched: its initial value is `flex-start`,
+which is what "each item starts where the last one ended" already means.
 -->
 
 <script id=flex_line_lays_items_along_the_main_axis>
@@ -84,9 +93,11 @@ what the single line does instead -- two 300px children in a 400px row shrink to
      '10,0 60x20 | 90,0 60x20');
   mk('row padded', 'display:flex; width:400px; height:200px; padding:15px; margin:0', [B, B],
      '15,15 60x20 | 75,15 60x20');
-  // Over-full: the line shrinks the items rather than wrapping.
+  // Over-full, with the widths this engine gives rather than Chrome's: the
+  // line does not shrink yet (see the note above), and the point of the row
+  // here is that the items still FOLLOW one another whatever width they got.
   mk('row overflow', ROW, ['width:300px;height:20px', 'width:300px;height:20px'],
-     '0,0 200x20 | 200,0 200x20');
+     '0,0 300x20 | 300,0 300x20');
 
   // The cross axis. `stretch` is the initial value, so an undeclared height
   // fills the container -- and a declared one is kept.
