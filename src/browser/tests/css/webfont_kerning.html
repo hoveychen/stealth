@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<!-- A downloaded face kerns from its own `GPOS`, and the run is rounded once.
+
+     iphey measures its `SVG Computed Style` axis with `getComputedTextLength()`
+     on a 16px `<text>` in RobotoFlex. Once the optical size was right this
+     engine still read 124.8828125 against Chrome's 124.40625: the pairs the
+     file's `GPOS` charges were never applied, because `font_kerning.tableFor`
+     is keyed by the glyph tables in `font_metrics.zig` and a webfont is in
+     none of them.
+
+     `/synth-kern-font.ttf` (src/testing.zig) answers with a font whose every
+     glyph is a flat 500 units of a 1000-unit em -- so a run says nothing but
+     what the pairs charge -- plus one `GPOS` `kern` pair over `mm` worth -20
+     units, carrying a Device table in variation form that adds 5 more at the
+     top of the `opsz` axis. That axis runs 8..40 with its default at the
+     minimum, so a 16px instance sits a quarter of the way up and the pair is
+     -18.75.
+-->
+<script>
+  // The `load` event alone will not do: this engine resolves style resources
+  // just after the DCL dispatch, and the body still has to arrive after that.
+  // `nokern` is the signal because it is the one reading the fallback cannot
+  // produce and the pairs cannot move: ten flat 500-unit glyphs at 16px, an
+  // exact 80.
+  function whenLoaded(fn) {
+    let tries = 0;
+    (function attempt() {
+      const w = document.getElementById('nokern').getComputedTextLength();
+      if (w === 80 || tries++ > 300) return fn();
+      setTimeout(attempt, 10);
+    })();
+  }
+</script>
+
+<style>
+  @font-face { font-family: KernProbe; src: url(/synth-kern-font.ttf) format('truetype') }
+  svg text { font-family: KernProbe; font-size: 16px }
+  #nokern { font-kerning: none }
+  #off { font-optical-sizing: none }
+</style>
+
+<svg width="400" height="200">
+  <text id="kerned" x="0" y="40">mmmmmmmmmm</text>
+  <text id="nokern" x="0" y="80">mmmmmmmmmm</text>
+  <text id="off" x="0" y="120">mmmmmmmmmm</text>
+</svg>
+
+<script id="a_webfont_kerns_from_its_own_gpos" type=module>
+{
+  const state = await testing.async();
+  const at = (id) => document.getElementById(id).getComputedTextLength().toFixed(4);
+  whenLoaded(() => state.resolve([
+    // 10 * 500 + 9 * -18.75 = 4831.25 units, and Chrome rounds a downloaded
+    // face's whole run UP to a font unit: 4832, which is 77.312px. Each of
+    // the ways of getting this wrong lands somewhere else -- rounding or
+    // flooring the run reads 77.296, rounding each pair as it is read reads
+    // 77.264, and dropping the pair's variation (by measuring its Device
+    // offset from the subtable instead of from the PairSet) reads 77.12.
+    'kerned=' + at('kerned'),
+    // The pairs are the only thing between this and the reading above, so
+    // the pair of them together is the whole claim that the kerning came out
+    // of the file: 10 * 500 units, an exact 80px.
+    'nokern=' + at('nokern'),
+    // `font-optical-sizing: none` leaves the axis at its default, where the
+    // normalised coordinate is zero: the pair keeps its bare -20 and no
+    // rounding is left to do, 10 * 500 + 9 * -20 = 4820 units.
+    'off=' + at('off'),
+  ].join(' ')));
+  await state.done((seen) => {
+    testing.expectEqual('kerned=77.3120 nokern=80.0000 off=77.1200', seen);
+  });
+}
+</script>

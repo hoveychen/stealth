@@ -2137,6 +2137,29 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    // A variable font that kerns `mm` out of its own `GPOS`, with the pair's
+    // adjustment riding the `opsz` axis through a Device table in variation
+    // form. Advances are flat at 500 units so a run says nothing but what the
+    // pairs charge: `opsz` 8..40 with the default at the minimum puts a 16px
+    // instance a quarter of the way up, where the pair is -20 + 0.25*5 =
+    // -18.75 and ten characters sum to 4831.25 units -- a fractional total,
+    // which is the only way to see which way the run gets rounded.
+    if (std.mem.startsWith(u8, path, "/synth-kern-font.ttf")) {
+        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer arena.deinit();
+        const font = font_file.synthesizeVariable(arena.allocator(), 1000, 500, 800, 200, .{
+            .tag = "opsz",
+            .min = 8,
+            .default = 8,
+            .max = 40,
+            .delta_at_max = 0,
+            .kern = .{ .first = 'm', .second = 'm', .x_advance = -20, .delta_at_max = 5 },
+        }) catch return req.respond("", .{});
+        return req.respond(font, .{
+            .extra_headers = &.{.{ .name = "Content-Type", .value = "font/ttf" }},
+        });
+    }
+
     {
         const without_query = path[0 .. std.mem.indexOfScalar(u8, path, '?') orelse path.len];
         for ([_][]const u8{ ".mp3", ".mp4", ".webm", ".ogg", ".wav", ".vtt", ".swf", ".woff2", ".woff", ".ttf", ".otf" }) |ext| {

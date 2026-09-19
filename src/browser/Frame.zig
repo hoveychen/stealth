@@ -6122,6 +6122,11 @@ test "WebApi: webfont optical sizing" {
     try testing.htmlRunner("css/webfont_optical_sizing.html", .{});
 }
 
+test "WebApi: webfont kerning" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/webfont_kerning.html", .{});
+}
+
 test "WebApi: markup subresources" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("markup_subresources.html", .{});

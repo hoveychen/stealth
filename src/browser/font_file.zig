@@ -1075,6 +1075,21 @@ pub const VarSpec = struct {
     default: f64,
     max: f64,
     delta_at_max: i8,
+    /// When set, the font also carries a `GPOS` `kern` feature charging this
+    /// one pair, and the `GDEF` `ItemVariationStore` the pair's Device table
+    /// indexes into.
+    kern: ?KernSpec = null,
+};
+
+/// The single kern pair the synthesized font charges, in font units.
+/// `delta_at_max` rides the same axis and region as the advance delta above,
+/// so the adjustment is `x_advance` at the axis default and
+/// `x_advance + delta_at_max` at its maximum.
+pub const KernSpec = struct {
+    first: u8,
+    second: u8,
+    x_advance: i16,
+    delta_at_max: i8,
 };
 
 /// The same minimal sfnt plus `fvar` and `HVAR`, so optical sizing can be
@@ -1165,33 +1180,14 @@ fn synthesizeInner(
     // offset is zero, which is the spec's "glyph id IS the delta-set index"
     // shortcut, so `item_count` has to cover the largest glyph id.
     const item_count: u16 = 128;
-    const hvar_len = 20 + 22 + 8 + item_count;
-    const hvar = try allocator.alloc(u8, hvar_len);
+    const hvar = try allocator.alloc(u8, 20 + ivsLen(item_count));
     defer allocator.free(hvar);
     @memset(hvar, 0);
     std.mem.writeInt(u16, hvar[0..2], 1, .big); // majorVersion
     std.mem.writeInt(u32, hvar[4..8], 20, .big); // itemVariationStoreOffset
-    const ivs = hvar[20..];
-    std.mem.writeInt(u16, ivs[0..2], 1, .big); // format
-    std.mem.writeInt(u32, ivs[2..6], 12, .big); // variationRegionListOffset
-    std.mem.writeInt(u16, ivs[6..8], 1, .big); // itemVariationDataCount
-    std.mem.writeInt(u32, ivs[8..12], 22, .big); // itemVariationDataOffsets[0]
-    // VariationRegionList: one region over one axis, peaking at the axis
-    // maximum so the scalar is the normalised coordinate itself.
-    std.mem.writeInt(u16, ivs[12..14], 1, .big); // axisCount
-    std.mem.writeInt(u16, ivs[14..16], 1, .big); // regionCount
-    std.mem.writeInt(i16, ivs[16..18], 0, .big); // startCoord 0.0
-    std.mem.writeInt(i16, ivs[18..20], 0x4000, .big); // peakCoord 1.0
-    std.mem.writeInt(i16, ivs[20..22], 0x4000, .big); // endCoord 1.0
-    // ItemVariationData: one byte-sized delta per glyph, one region.
-    const ivd = ivs[22..];
-    std.mem.writeInt(u16, ivd[0..2], item_count, .big);
-    std.mem.writeInt(u16, ivd[2..4], 0, .big); // wordDeltaCount: all bytes
-    std.mem.writeInt(u16, ivd[4..6], 1, .big); // regionIndexCount
-    std.mem.writeInt(u16, ivd[6..8], 0, .big); // regionIndexes[0]
-    for (0..item_count) |i| ivd[8 + i] = @bitCast(s.delta_at_max);
+    writeIvs(hvar[20..], item_count, s.delta_at_max);
 
-    return packSfnt(allocator, &.{
+    const k = s.kern orelse return packSfnt(allocator, &.{
         .{ .tag = "HVAR", .data = hvar },
         .{ .tag = "OS/2", .data = &os2 },
         .{ .tag = "cmap", .data = &cmap },
@@ -1200,6 +1196,109 @@ fn synthesizeInner(
         .{ .tag = "hhea", .data = &hhea },
         .{ .tag = "hmtx", .data = hmtx },
     });
+
+    // GDEF 1.3, which is the version that added the item variation store a
+    // `GPOS` Device table in variation form indexes into. One delta, at
+    // (outer 0, inner 0).
+    const gdef = try allocator.alloc(u8, 18 + ivsLen(1));
+    defer allocator.free(gdef);
+    @memset(gdef, 0);
+    std.mem.writeInt(u16, gdef[0..2], 1, .big); // majorVersion
+    std.mem.writeInt(u16, gdef[2..4], 3, .big); // minorVersion
+    std.mem.writeInt(u32, gdef[14..18], 18, .big); // itemVarStoreOffset
+    writeIvs(gdef[18..], 1, k.delta_at_max);
+
+    // GPOS: a 10-byte header, an empty ScriptList, a FeatureList naming
+    // `kern` once, a LookupList of one type-2 lookup, and one PairPos format
+    // 1 subtable charging the single pair.
+    var gpos = [_]u8{0} ** 70;
+    std.mem.writeInt(u16, gpos[0..2], 1, .big); // majorVersion
+    std.mem.writeInt(u16, gpos[4..6], 10, .big); // scriptListOffset
+    std.mem.writeInt(u16, gpos[6..8], 12, .big); // featureListOffset
+    std.mem.writeInt(u16, gpos[8..10], 26, .big); // lookupListOffset
+    // ScriptList at 10: no scripts. The kern lookups are found through the
+    // feature list, which is the union any script's chain would reach.
+    std.mem.writeInt(u16, gpos[10..12], 0, .big); // scriptCount
+    // FeatureList at 12: one record, whose feature table sits at 20.
+    std.mem.writeInt(u16, gpos[12..14], 1, .big); // featureCount
+    @memcpy(gpos[14..18], "kern");
+    std.mem.writeInt(u16, gpos[18..20], 8, .big); // featureOffset, from 12
+    // Feature at 20: lookup 0.
+    std.mem.writeInt(u16, gpos[22..24], 1, .big); // lookupIndexCount
+    std.mem.writeInt(u16, gpos[24..26], 0, .big); // lookupListIndices[0]
+    // LookupList at 26: one lookup, at 30.
+    std.mem.writeInt(u16, gpos[26..28], 1, .big); // lookupCount
+    std.mem.writeInt(u16, gpos[28..30], 4, .big); // lookupOffsets[0], from 26
+    // Lookup at 30: type 2 (pair adjustment), one subtable at 38.
+    std.mem.writeInt(u16, gpos[30..32], 2, .big); // lookupType
+    std.mem.writeInt(u16, gpos[34..36], 1, .big); // subTableCount
+    std.mem.writeInt(u16, gpos[36..38], 8, .big); // subtableOffsets[0], from 30
+    // PairPos format 1 at 38. Offsets below are from there.
+    const pp = gpos[38..];
+    std.mem.writeInt(u16, pp[0..2], 1, .big); // posFormat
+    std.mem.writeInt(u16, pp[2..4], 12, .big); // coverageOffset
+    // XAdvance plus XAdvDevice: the pair's adjustment varies with the axis.
+    std.mem.writeInt(u16, pp[4..6], 0x0044, .big); // valueFormat1
+    std.mem.writeInt(u16, pp[6..8], 0, .big); // valueFormat2
+    std.mem.writeInt(u16, pp[8..10], 1, .big); // pairSetCount
+    std.mem.writeInt(u16, pp[10..12], 18, .big); // pairSetOffsets[0]
+    // Coverage format 1 at 12: the pair's first glyph. Glyph id is the code
+    // point, which is what the cmap above declares.
+    std.mem.writeInt(u16, pp[12..14], 1, .big); // coverageFormat
+    std.mem.writeInt(u16, pp[14..16], 1, .big); // glyphCount
+    std.mem.writeInt(u16, pp[16..18], k.first, .big); // glyphArray[0]
+    // PairSet at 18: one PairValueRecord.
+    std.mem.writeInt(u16, pp[18..20], 1, .big); // pairValueCount
+    std.mem.writeInt(u16, pp[20..22], k.second, .big); // secondGlyph
+    std.mem.writeInt(i16, pp[22..24], k.x_advance, .big); // xAdvance
+    // The Device offset a PairValueRecord carries is measured from the start
+    // of the PairSet, not of the subtable -- and this font is laid out so the
+    // two disagree: 8 from the PairSet reaches the VariationIndex at 26,
+    // while 8 from the subtable reaches `pairSetCount` and reads a
+    // deltaFormat of 1 rather than 0x8000, which silently drops the pair's
+    // variation. That is the bug this fixture exists to catch.
+    std.mem.writeInt(u16, pp[24..26], 8, .big); // xAdvDeviceOffset, from 18
+    // VariationIndex at 26: (outer 0, inner 0) into GDEF's store.
+    std.mem.writeInt(u16, pp[30..32], 0x8000, .big); // deltaFormat
+
+    return packSfnt(allocator, &.{
+        .{ .tag = "GDEF", .data = gdef },
+        .{ .tag = "GPOS", .data = &gpos },
+        .{ .tag = "HVAR", .data = hvar },
+        .{ .tag = "OS/2", .data = &os2 },
+        .{ .tag = "cmap", .data = &cmap },
+        .{ .tag = "fvar", .data = &fvar },
+        .{ .tag = "head", .data = &head },
+        .{ .tag = "hhea", .data = &hhea },
+        .{ .tag = "hmtx", .data = hmtx },
+    });
+}
+
+/// How long `writeIvs` needs its destination to be.
+fn ivsLen(item_count: u16) usize {
+    return 22 + 8 + @as(usize, item_count);
+}
+
+/// An `ItemVariationStore` holding one byte-sized `delta` per item, over a
+/// single region of a single axis peaking at the axis maximum -- so the
+/// region's scalar is the normalised coordinate itself.
+fn writeIvs(ivs: []u8, item_count: u16, delta: i8) void {
+    std.mem.writeInt(u16, ivs[0..2], 1, .big); // format
+    std.mem.writeInt(u32, ivs[2..6], 12, .big); // variationRegionListOffset
+    std.mem.writeInt(u16, ivs[6..8], 1, .big); // itemVariationDataCount
+    std.mem.writeInt(u32, ivs[8..12], 22, .big); // itemVariationDataOffsets[0]
+    std.mem.writeInt(u16, ivs[12..14], 1, .big); // axisCount
+    std.mem.writeInt(u16, ivs[14..16], 1, .big); // regionCount
+    std.mem.writeInt(i16, ivs[16..18], 0, .big); // startCoord 0.0
+    std.mem.writeInt(i16, ivs[18..20], 0x4000, .big); // peakCoord 1.0
+    std.mem.writeInt(i16, ivs[20..22], 0x4000, .big); // endCoord 1.0
+    // ItemVariationData: one byte-sized delta per item, one region.
+    const ivd = ivs[22..];
+    std.mem.writeInt(u16, ivd[0..2], item_count, .big);
+    std.mem.writeInt(u16, ivd[2..4], 0, .big); // wordDeltaCount: all bytes
+    std.mem.writeInt(u16, ivd[4..6], 1, .big); // regionIndexCount
+    std.mem.writeInt(u16, ivd[6..8], 0, .big); // regionIndexes[0]
+    for (0..item_count) |i| ivd[8 + i] = @bitCast(delta);
 }
 
 fn fixed16_16(v: f64) i32 {
@@ -1275,6 +1374,50 @@ test "font_file: a synthesized variable font parses, and reads as its default in
 
     try std.testing.expectEqual(@as(f64, 50.0), built.glyphs['A' - first].advance);
     try std.testing.expectEqual(@as(f64, 50.0), built.glyphs['m' - first].advance);
+}
+
+test "font_file: a GPOS kern pair varies with the instance" {
+    const allocator = std.testing.allocator;
+    // `opsz` 8..40 with the default at the minimum, so a 16px instance
+    // normalises to (16-8)/(40-8) = 0.25 and the pair's variation applies at
+    // a quarter strength. Advances are flat -- the whole reading is the pair.
+    const bytes = try synthesizeVariable(allocator, 1000, 500, 800, 200, .{
+        .tag = "opsz",
+        .min = 8,
+        .default = 8,
+        .max = 40,
+        .delta_at_max = 0,
+        .kern = .{ .first = 'm', .second = 'm', .x_advance = -20, .delta_at_max = 5 },
+    });
+    defer allocator.free(bytes);
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const at_default = family(arena.allocator(), bytes, font_metrics.sans_serif, null) orelse
+        return error.TestUnexpectedResult;
+    const at16 = family(arena.allocator(), bytes, font_metrics.sans_serif, 16) orelse
+        return error.TestUnexpectedResult;
+
+    const per_unit = font_metrics.basis / 1000.0;
+    // The default instance charges the bare ValueRecord: no coordinates, so
+    // no Device table to evaluate.
+    try std.testing.expectEqual(
+        -20.0 * per_unit,
+        font_kerning.kern(at_default.own_kerns, 'm', 'm'),
+    );
+    // At 16px the VariationIndex adds 0.25 * 5. Reading its offset from the
+    // subtable rather than from the PairSet lands on a deltaFormat of 1, and
+    // this pair would silently stay at -20 -- which is exactly what the two
+    // readings being equal would mean.
+    try std.testing.expectEqual(
+        -18.75 * per_unit,
+        font_kerning.kern(at16.own_kerns, 'm', 'm'),
+    );
+    // Only the one pair, and only in the one direction the font declares.
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(at16.own_kerns, 'n', 'm'));
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(at16.own_kerns, 'm', 'n'));
+    // Declared, so `text_measure.quantise` has a grid to round the run onto.
+    try std.testing.expectEqual(@as(f64, 1000), at16.units_per_em);
 }
 
 test "font_file: canvas ascent and descent round above 4px and not below" {
