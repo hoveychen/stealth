@@ -5750,7 +5750,7 @@ fn countSubtreeNodes(node: *Node) f64 {
 /// `left:-9999px` reports `offsetLeft` of -9999 under every one of thirteen
 /// transforms -- rotations, scales, skews, an ancestor's -- while its rect moves
 /// under all of them (probes/expr-transform-rect.js).
-const Affine = struct {
+pub const Affine = struct {
     a: f64 = 1,
     b: f64 = 0,
     c: f64 = 0,
@@ -5852,27 +5852,42 @@ fn parseAffine(text: []const u8) ?Affine {
 /// and 282.84 square, which is the host's matrix applied to the child's
 /// rotated box about the host's centre.
 fn transformChain(self: *Element, frame: *Frame) ?Affine {
-    // The cascade read below is the expensive part, and all but a handful of
-    // pages never declare a transform at all. `declared_longhands` answers that
-    // for the sheets in one lookup; an inline `style=` is not in it, so each
-    // element in the walk is also asked for its own, which is the same map
-    // lookup the translation-only chain this replaced did.
-    const in_sheets = self.ownerFrame(frame)._style_manager.declared_longhands.contains("transform");
-
     var total: Affine = .identity;
     var any = false;
     var current: ?*Element = self;
     while (current) |el| : (current = el.parentElement()) {
-        if (!in_sheets and !declaresInlineTransform(el, frame)) continue;
-        const text = CSSStyleDeclaration.cascadedComputedValue(el, "transform", frame) orelse continue;
-        const matrix = parseAffine(text) orelse continue;
+        const matrix = frame.elementTransform(el);
         if (matrix.isIdentity()) continue;
-        const box = el.layoutRectValuesAt(frame, 0);
-        const origin = transformOriginOf(el, frame, box);
-        total = Affine.compose(matrix.about(origin[0], origin[1]), total);
+        total = Affine.compose(matrix, total);
         any = true;
     }
     return if (any) total else null;
+}
+
+/// One element's own transform, about its own origin and in document
+/// coordinates -- the unit `transformChain` composes and the unit
+/// `Frame.elementTransform` memoises.
+///
+/// Two cascade reads and a box, which is why it is worth caching: every rect on
+/// a page that declares `transform` anywhere walks its whole ancestor chain
+/// through here, and on a 15790-node page (aw-hollandandbarrett) paying that
+/// per reader rather than per element took the load past its CDP deadline.
+pub fn ownTransform(self: *Element, frame: *Frame) Affine {
+    // All but a handful of pages never declare a transform at all.
+    // `declared_longhands` answers that for the sheets in one lookup; an inline
+    // `style=` is not in it, so an element is also asked for its own, which is
+    // the same map lookup the translation-only chain this replaced did.
+    if (!self.ownerFrame(frame)._style_manager.declared_longhands.contains("transform") and
+        !declaresInlineTransform(self, frame))
+    {
+        return .identity;
+    }
+    const text = CSSStyleDeclaration.cascadedComputedValue(self, "transform", frame) orelse return .identity;
+    const matrix = parseAffine(text) orelse return .identity;
+    if (matrix.isIdentity()) return .identity;
+    const box = self.layoutRectValuesAt(frame, 0);
+    const origin = transformOriginOf(self, frame, box);
+    return matrix.about(origin[0], origin[1]);
 }
 
 fn declaresInlineTransform(self: *Element, frame: *Frame) bool {
