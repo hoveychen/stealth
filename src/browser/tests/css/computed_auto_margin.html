@@ -137,6 +137,18 @@ one. It is the block-flow walk's to fix, not this path's.
         '0px | 0px | 0px | 300px');
   check('flex item top only', inFlex(FLEX, [ITEM + '; margin-top:auto'], 0),
         '180px | 0px | 0px | 0px');
+  // A cross-axis `auto` margin takes the free space, so the item is NOT
+  // stretched into it first: an item with no height keeps none, and its two
+  // margins split the whole 200.
+  check('flex item auto beats stretch', inFlex(FLEX, ['width:100px; margin:auto'], 0),
+        '100px | 150px | 100px | 150px');
+  check('flex item one cross auto takes all', inFlex(FLEX, ['width:100px; margin-top:auto'], 0),
+        '200px | 0px | 0px | 0px');
+  // Only the CROSS axis blocks the stretch. Horizontal autos on the same
+  // heightless item leave it stretched to the full 200, measured.
+  check('flex item main autos still stretch',
+        inFlex(FLEX, ['width:100px; margin-left:auto; margin-right:auto'], 0),
+        '0px | 150px | 0px | 150px');
   // The line is shared, so a sibling's width comes off the free space first.
   check('flex item behind a sibling',
         inFlex(FLEX, [ITEM, ITEM + '; margin-left:auto'], 1),

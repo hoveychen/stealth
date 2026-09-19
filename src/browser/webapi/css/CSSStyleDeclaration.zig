@@ -4321,6 +4321,13 @@ pub fn flexItemHeight(element: *Element, frame: *Frame, depth: u8) ?f64 {
     if (!isFlexRowContainer(parent, frame)) return null;
     if (!isFlexItem(element, frame)) return null;
     if (flexCrossAlign(element, parent, frame) != .stretch) return null;
+    // An `auto` margin on the cross axis takes the free space instead, so there
+    // is none left to stretch into: `margin:auto; width:100px` in a 400x200 row
+    // computes `100px | 150px | 100px | 150px` in Chrome, which only adds up if
+    // the item stayed 0 tall. Stretching it first would eat the 200 the two
+    // margins split.
+    if (element.marginIsAuto("margin-top", frame) or
+        element.marginIsAuto("margin-bottom", frame)) return null;
     return definiteContentHeight(parent, frame);
 }
 

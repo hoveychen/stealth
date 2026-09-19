@@ -3417,7 +3417,7 @@ fn containerMarginPx(self: *Element, name: []const u8, frame: *Frame, containing
 
 /// Whether one margin is `auto`, which `marginPx` cannot say: it resolves a
 /// length, and `auto` is not one, so it answers 0 for both `auto` and `0`.
-fn marginIsAuto(self: *Element, name: []const u8, frame: *Frame) bool {
+pub fn marginIsAuto(self: *Element, name: []const u8, frame: *Frame) bool {
     const declared = CSSStyleDeclaration.cascadedComputedValue(self, name, frame) orelse return false;
     return std.ascii.eqlIgnoreCase(std.mem.trim(u8, declared, " \t\r\n"), "auto");
 }
