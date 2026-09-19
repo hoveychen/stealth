@@ -22,6 +22,20 @@
 
   Two elements match `.var-bg` with a different `--bg` each: which elements
   matched is the answer, not whether any did.
+
+  The other half of the same rule is the pseudo-element, because that is the
+  shape iphey actually wrote: `a.code-block:after { content: ""; ...;
+  background-image: var(--icon) }`. No element *is* a `::after` box, so the
+  selector engine answers nothing for that rule and every url in it went
+  unrequested -- var() or not.
+
+  Which pseudo-elements Chrome then puts on the wire is a measured table, one
+  url per pseudo counted in a local server's access log: `::before`/`::after`
+  only when the rule declares `content` at all -- `content: none` is requested
+  and no `content` is not, so the gate is style being resolved and not the box
+  being made -- plus `::first-line`, `::first-letter` and `::placeholder`
+  unconditionally, and never `::marker` (against a real `li`), `::selection`
+  or `::backdrop`.
 -->
 <style>
   .var-bg { background-image: var(--bg); }
@@ -31,6 +45,18 @@
 
   .var-nothing { background-image: var(--absent); }
   .var-never { background-image: var(--bg); }
+
+  .var-pseudo:after { content: ""; background-image: var(--pseudo); }
+  .var-pseudo-plain::before { content: ""; background-image: url(/wire/var-pseudo-plain.png); }
+
+  .var-pseudo-none::after { content: none; background-image: url(/wire/var-pseudo-none.png); }
+  .var-pseudo-letter::first-letter { background-image: url(/wire/var-pseudo-letter.png); }
+  .var-pseudo-list::after, .var-pseudo-absent { content: ""; background-image: url(/wire/var-pseudo-list.png); }
+
+  .var-pseudo-empty::after { background-image: url(/wire/var-pseudo-empty.png); }
+  .var-pseudo-marker::marker { background-image: url(/wire/var-pseudo-marker.png); }
+  .var-pseudo-select::selection { background-image: url(/wire/var-pseudo-select.png); }
+  .var-pseudo-gone::after { content: ""; background-image: url(/wire/var-pseudo-gone.png); }
 </style>
 
 <div class="var-bg" style="--bg: url(/wire/var-one.png)">one</div>
@@ -41,6 +67,15 @@
 <div class="var-nothing">nothing</div>
 <div style="--unused: url(/wire/var-unused.png)">unused</div>
 
+<div class="var-pseudo" style="--pseudo: url(/wire/var-pseudo.png)">pseudo</div>
+<div class="var-pseudo-plain">pseudo plain</div>
+<div class="var-pseudo-none">content none</div>
+<p class="var-pseudo-letter">first letter</p>
+<div class="var-pseudo-list">list</div>
+<div class="var-pseudo-empty">no content</div>
+<ul><li class="var-pseudo-marker">marker</li></ul>
+<div class="var-pseudo-select">selection</div>
+
 <script id="var_referenced_subresources" type=module>
 {
   const WANTED = [
@@ -49,11 +84,22 @@
     'var-mask.png',
     'var-inherited.png',
     'var-fallback.png',
+    'var-pseudo.png',
+    'var-pseudo-plain.png',
+    'var-pseudo-none.png',
+    'var-pseudo-letter.png',
+    'var-pseudo-list.png',
   ];
   // var-unused.png: a custom property nothing reads is not a request.
   // var-never.png: `.var-never` matches no element, so its var() is not
   // resolved and nothing behind it is asked for.
-  const UNWANTED = ['var-unused.png'];
+  const UNWANTED = [
+    'var-unused.png',
+    'var-pseudo-empty.png',
+    'var-pseudo-marker.png',
+    'var-pseudo-select.png',
+    'var-pseudo-gone.png',
+  ];
 
   const asked = () => new Set(
     performance.getEntriesByType('resource').map((e) => e.name.split('/').pop()));

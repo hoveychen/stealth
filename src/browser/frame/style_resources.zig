@@ -134,6 +134,120 @@ const InlineDeclarations = struct {
     }
 };
 
+// The comma-separated selectors of a rule, one at a time. A comma inside
+// `:is(a, b)` or `[title="a,b"]` separates nothing, so the split tracks
+// nesting and quoting rather than calling splitScalar.
+const SelectorParts = struct {
+    rest: []const u8,
+
+    fn next(self: *SelectorParts) ?[]const u8 {
+        if (self.rest.len == 0) return null;
+        var depth: usize = 0;
+        var quote: u8 = 0;
+        var i: usize = 0;
+        while (i < self.rest.len) : (i += 1) {
+            const c = self.rest[i];
+            if (quote != 0) {
+                if (c == '\\') i += 1 else if (c == quote) quote = 0;
+                continue;
+            }
+            switch (c) {
+                '"', '\'' => quote = c,
+                '(', '[' => depth += 1,
+                ')', ']' => depth -|= 1,
+                ',' => if (depth == 0) {
+                    const part = self.rest[0..i];
+                    self.rest = self.rest[i + 1 ..];
+                    return part;
+                },
+                else => {},
+            }
+        }
+        const part = self.rest;
+        self.rest = "";
+        return part;
+    }
+};
+
+const PseudoElement = struct {
+    // Where the token starts in the compound, so the part before it is the
+    // selector for the element the box hangs off.
+    at: usize,
+    name: []const u8,
+};
+
+// A pseudo-element has to be last in its compound, so the first one found is
+// the one that decides. `::x` always names one; a single colon only does for
+// the four that predate the double-colon spelling, which is also the only
+// reading that keeps `:hover` and `:nth-child(2)` out of it.
+fn findPseudoElement(part: []const u8) ?PseudoElement {
+    const legacy = [_][]const u8{ "before", "after", "first-line", "first-letter" };
+    var depth: usize = 0;
+    var quote: u8 = 0;
+    var i: usize = 0;
+    while (i < part.len) : (i += 1) {
+        const c = part[i];
+        if (quote != 0) {
+            if (c == '\\') i += 1 else if (c == quote) quote = 0;
+            continue;
+        }
+        switch (c) {
+            '"', '\'' => quote = c,
+            '(', '[' => depth += 1,
+            ')', ']' => depth -|= 1,
+            ':' => {
+                if (depth != 0) continue;
+                const double = i + 1 < part.len and part[i + 1] == ':';
+                var end: usize = if (double) i + 2 else i + 1;
+                const name_at = end;
+                while (end < part.len and UrlIterator.isIdentChar(part[end])) end += 1;
+                const name = part[name_at..end];
+                if (double) return .{ .at = i, .name = name };
+                for (legacy) |known| {
+                    if (std.ascii.eqlIgnoreCase(name, known)) return .{ .at = i, .name = name };
+                }
+                // Skip the pseudo-class wholesale: its name cannot be
+                // mistaken for anything, and its argument is walked as
+                // nesting on the next pass.
+                i = end - 1;
+            },
+            else => {},
+        }
+    }
+    return null;
+}
+
+/// Whether a rule written for this pseudo-element puts its url on the wire.
+///
+/// One url per pseudo-element, on a local page, counted in the server's own
+/// access log with headless Chrome driving:
+///
+///   fetched: `::before`/`::after` (conditionally, below), `::first-line`,
+///            `::first-letter`, `::placeholder`
+///   not:     `::marker` (against a real `li`), `::selection`, `::backdrop`
+///
+/// `::before` and `::after` turn on whether the rule declares `content` at
+/// all, and not on what it says: no `content` declaration and the url is not
+/// requested, while `content: none` and `content: normal` -- neither of which
+/// makes a box -- are both requested. So what Chrome is gating on there is
+/// style being resolved for the pseudo, one step before the box question.
+const PseudoFetch = enum { never, always, declares_content };
+
+fn pseudoElementFetches(name: []const u8) PseudoFetch {
+    const always = [_][]const u8{ "first-line", "first-letter", "placeholder" };
+    if (std.ascii.eqlIgnoreCase(name, "before") or std.ascii.eqlIgnoreCase(name, "after")) {
+        return .declares_content;
+    }
+    for (always) |known| {
+        if (std.ascii.eqlIgnoreCase(name, known)) return .always;
+    }
+    return .never;
+}
+
+fn declaresContent(style: *CSSStyleDeclaration, frame: *Frame) bool {
+    return style.getPropertyValue("content", frame).len != 0;
+}
+
 const Scan = struct {
     frame: *Frame,
 
@@ -221,6 +335,10 @@ const Scan = struct {
         // something to fetch in the first place.
         if (!declaresAnything(style)) return;
 
+        // A rule written for a pseudo-element's box is asked about the element
+        // the box hangs off, because no element *is* that box.
+        const to_match = try self.originatingSelector(selector, style) orelse return;
+
         // `background-image: var(--icon)` names no file until an element
         // supplies the custom property, and a different element supplies a
         // different one -- so which elements matched is the answer, not
@@ -229,7 +347,7 @@ const Scan = struct {
         // external rule; reading the two halves apart sees neither, and two
         // of its files went unrequested (waterfall.mjs, both arms).
         if (referencesAVariable(self, style)) {
-            const list = Selector.querySelectorAll(self.frame.document.asNode(), selector, self.frame) catch return;
+            const list = Selector.querySelectorAll(self.frame.document.asNode(), to_match, self.frame) catch return;
             defer list.deinit(self.frame._page);
             for (list._nodes) |node| {
                 const element = node.is(Element) orelse continue;
@@ -238,10 +356,72 @@ const Scan = struct {
             return;
         }
 
-        const match = Selector.querySelector(self.frame.document.asNode(), selector, self.frame) catch null;
+        const match = Selector.querySelector(self.frame.document.asNode(), to_match, self.frame) catch null;
         if (match == null) return;
 
         try self.declarations(style, null);
+    }
+
+    /// The selector to test against the document, or null when this rule's box
+    /// cannot exist here at all.
+    ///
+    /// `#x::before` selects a box no element owns, so the selector engine
+    /// answers nothing for it (List.matchesPart) -- right for
+    /// `querySelector`, and the reason every url in a `::before` rule went
+    /// unrequested. Chrome does ask for them: on a local page
+    /// `.p::after { content: ""; background-image: url(a) }` is on the wire.
+    ///
+    /// Which pseudo-elements count, and when, is `pseudoElementFetches`: not
+    /// all of them put their url on the wire, and the ones that do not are
+    /// dropped rather than matched, which is the safe direction because
+    /// over-fetching is its own tell.
+    ///
+    /// `content` declared by a *different* rule for the same pseudo-element is
+    /// not seen from here, so a `::after` that takes its content from one rule
+    /// and its background from another stays unrequested. A miss, and the same
+    /// safe direction.
+    fn originatingSelector(self: *Scan, selector: []const u8, style: *CSSStyleDeclaration) Allocator.Error!?[]const u8 {
+        if (std.mem.indexOfScalar(u8, selector, ':') == null) return selector;
+
+        var has_content: ?bool = null;
+        var out: std.ArrayList(u8) = .empty;
+        var kept: usize = 0;
+        var rewritten = false;
+
+        var parts: SelectorParts = .{ .rest = selector };
+        while (parts.next()) |raw| {
+            const part = std.mem.trim(u8, raw, &std.ascii.whitespace);
+            if (part.len == 0) continue;
+
+            var keep = part;
+            if (findPseudoElement(part)) |cut| {
+                rewritten = true;
+                switch (pseudoElementFetches(cut.name)) {
+                    .never => continue,
+                    .always => {},
+                    .declares_content => {
+                        if (has_content == null) has_content = declaresContent(style, self.frame);
+                        if (has_content == false) continue;
+                    },
+                }
+                keep = std.mem.trim(u8, part[0..cut.at], &std.ascii.whitespace);
+                // `.x > ::before` leaves a dangling combinator behind, and
+                // `::before` alone leaves nothing: both mean "any element".
+                if (keep.len == 0) {
+                    keep = "*";
+                } else if (std.mem.indexOfScalar(u8, ">+~", keep[keep.len - 1]) != null) {
+                    keep = try std.fmt.allocPrint(self.arena(), "{s} *", .{keep});
+                }
+            }
+
+            if (kept != 0) try out.append(self.arena(), ',');
+            try out.appendSlice(self.arena(), keep);
+            kept += 1;
+        }
+
+        if (!rewritten) return selector;
+        if (kept == 0) return null;
+        return out.items;
     }
 
     fn declaresAnything(style: *CSSStyleDeclaration) bool {
