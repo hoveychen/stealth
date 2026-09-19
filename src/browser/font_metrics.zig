@@ -69,6 +69,7 @@
 // report.
 
 const std = @import("std");
+const font_kerning = @import("font_kerning.zig");
 
 /// One glyph, at a 100px font size. `left` and `right` are the ink bearings
 /// TextMetrics reports as actualBoundingBoxLeft / Right: positive `left`
@@ -167,6 +168,23 @@ pub const Family = struct {
     max_char_width: f64,
     seeds_last_resort: []const u21,
     after_fallback: []const Override,
+    /// The kern pairs a DOWNLOADED face carries in its own `GPOS`. The tables
+    /// in `font_kerning.zig` are keyed by family and a webfont has no entry
+    /// there, so the pairs a variable webfont kerns with have to travel with
+    /// the instance they were evaluated at -- `opsz` moves them. Empty for
+    /// every family in this file; only `font_file.build` fills it.
+    own_kerns: font_kerning.Table = .{},
+    /// The face's own `unitsPerEm`, for a DOWNLOADED face only.
+    ///
+    /// The advances of a variable instance are stored here UNROUNDED, because
+    /// Chrome quantises the measured run and not the glyph: `Hello, SVG
+    /// World!` in RobotoFlex at 16px comes to 15923.4731 font units and
+    /// Chrome answers 124.40625px, which is 15924 -- the sum rounded UP to a
+    /// whole unit. Rounding each advance first lands on 124.3984375, and four
+    /// of ten strings measured against a headed Chrome 153 disagree that way
+    /// (tools/fingerprint/scratch/s45/predict.py). Zero for every family in
+    /// this file, whose advances arrive already quantised from Chrome.
+    units_per_em: f64 = 0,
 };
 
 /// 100px sans-serif — Chrome resolves it to `100px sans-serif`.
@@ -59253,16 +59271,16 @@ fn isGenericKeyword(name: []const u8) bool {
 /// quotes, whitespace and all. This is the entry point every caller wants:
 /// whether the name was quoted is part of what it means, and stripping the
 /// quotes before asking throws that away.
-pub fn findEntry(raw: []const u8, loaded: ?Loaded) ?Family {
+pub fn findEntry(raw: []const u8, loaded: ?Loaded, optical_size: ?f64) ?Family {
     const name = std.mem.trim(u8, raw, &std.ascii.whitespace);
     if (name.len < 2 or (name[0] != '"' and name[0] != '\'') or name[name.len - 1] != name[0]) {
-        return Loaded.get(loaded, name) orelse find(name);
+        return Loaded.get(loaded, name, optical_size) orelse find(name);
     }
     const unquoted = name[1 .. name.len - 1];
     if (isGenericKeyword(unquoted)) {
         return null;
     }
-    return Loaded.get(loaded, unquoted) orelse find(unquoted);
+    return Loaded.get(loaded, unquoted, optical_size) orelse find(unquoted);
 }
 
 /// The families a document's own `@font-face` files supplied, which shadow a
@@ -59275,11 +59293,14 @@ pub fn findEntry(raw: []const u8, loaded: ?Loaded) ?Family {
 /// the null case means rather than a compromise.
 pub const Loaded = struct {
     ctx: *const anyopaque,
-    lookup: *const fn (ctx: *const anyopaque, name: []const u8) ?Family,
+    lookup: *const fn (ctx: *const anyopaque, name: []const u8, optical_size: ?f64) ?Family,
 
-    fn get(self: ?Loaded, name: []const u8) ?Family {
+    /// `optical_size` is the size the text will be laid out at, which is what
+    /// `font-optical-sizing: auto` pins a variable face's `opsz` axis to --
+    /// see font_file.zig. Null asks for the file's default instance.
+    fn get(self: ?Loaded, name: []const u8, optical_size: ?f64) ?Family {
         const l = self orelse return null;
-        return l.lookup(l.ctx, name);
+        return l.lookup(l.ctx, name, optical_size);
     }
 };
 
@@ -59510,10 +59531,10 @@ pub fn find(name: []const u8) ?Family {
 /// monospace` and compares the result against `monospace` alone: skipping the
 /// names we have no table for is what makes a font we do have measure
 /// differently, and a font we do not measure identically to its base.
-pub fn findInList(list: []const u8, loaded: ?Loaded) Family {
+pub fn findInList(list: []const u8, loaded: ?Loaded, optical_size: ?f64) Family {
     var it = std.mem.splitScalar(u8, list, ',');
     while (it.next()) |raw| {
-        if (findEntry(raw, loaded)) |family| {
+        if (findEntry(raw, loaded, optical_size)) |family| {
             return family;
         }
     }

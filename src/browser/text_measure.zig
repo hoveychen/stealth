@@ -332,7 +332,7 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
     // Empty rather than skipped at the use site: the pair lookup below is per
     // character of every string the engine measures, and an empty table already
     // answers zero from its start bitmap without a branch of its own.
-    const kerns = if (face.kerning) font_kerning.tableFor(face.family, face.variant) else font_kerning.Table{};
+    const kerns = kernsFor(face);
     // The pairs with a space on one side, which Chrome applies in layout and
     // not in the canvas. Resolved once when the face was built, so this costs
     // nothing here; empty on the canvas surface and for the 142 families that
@@ -474,7 +474,7 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
         }
     }
 
-    metrics.width = toPixels(pen_basis, size) + pen_pixels;
+    metrics.width = toPixels(quantise(face.family, pen_basis), size) + pen_pixels;
     metrics.actualBoundingBoxAscent = ascent;
     metrics.actualBoundingBoxDescent = descent;
     if (any_ink) {
@@ -1087,17 +1087,47 @@ fn unitLength(codepoint: u21) u32 {
     return if (codepoint >= 0x10000) 2 else 1;
 }
 
-/// Total advance of `text` at `font_size`, cluster by cluster.
-pub fn svgWidth(family: font_metrics.Family, text: []const u8, font_size: f64) f64 {
-    const face = Face.regular(family);
+/// The pair table a face kerns with: its own if it carries one, otherwise the
+/// host family's.
+///
+/// A DOWNLOADED face brings its pairs with it. `font_kerning.tableFor` is
+/// keyed by the glyph tables in `font_metrics.zig`, and a webfont is in none
+/// of them, so a `@font-face` string used to come out as the bare sum of its
+/// advances however much the file kerned it -- 124.8828125 for iphey's
+/// `Hello, SVG World!` against Chrome's 124.40625, the 0.484375 being three
+/// pairs the file's `GPOS` charges (see font_file.zig).
+fn kernsFor(face: Face) font_kerning.Table {
+    if (!face.kerning) return .{};
+    if (face.family.own_kerns.pairs.len != 0) return face.family.own_kerns;
+    return font_kerning.tableFor(face.family, face.variant);
+}
+
+/// Total advance of `text` at `font_size`, cluster by cluster, plus what the
+/// font adjusts across each pair.
+///
+/// SVG kerns: measured against a headed Chrome 153 on a local page serving
+/// iphey's own RobotoFlex (tools/fingerprint/scratch/s45/kern-page.html), a
+/// 16px `<text>` reading `Hello, SVG World!` answers 124.40625 and the same
+/// `<text>` under `font-kerning: none` answers 124.890625.
+pub fn svgWidth(face: Face, text: []const u8, font_size: f64) f64 {
+    const kerns = kernsFor(face);
     var offset: usize = 0;
     var total: f64 = 0;
+    var previous: ?u21 = null;
     while (offset < text.len) {
         const cluster = nextCluster(face, text[offset..]);
+        if (cluster.bytes == 0) break;
+        // Per code point rather than per cluster, the same way `measureAt`
+        // charges them: a cluster's own characters are adjacent glyphs too.
+        var codepoints = std.unicode.Utf8Iterator{ .bytes = text[offset..][0..cluster.bytes], .i = 0 };
+        while (codepoints.nextCodepoint()) |codepoint| {
+            if (previous) |before| total += font_kerning.kern(kerns, before, codepoint);
+            previous = codepoint;
+        }
         total += cluster.advance;
         offset += cluster.bytes;
     }
-    return toPixels(total, font_size);
+    return toPixels(quantise(face.family, total), font_size);
 }
 
 /// The advance of the `nchars` characters starting at `charnum`, counted in
@@ -1115,6 +1145,23 @@ pub fn svgCharExtent(family: font_metrics.Family, text: []const u8, charnum: u32
         .offset = toPixels(range.before, font_size),
         .advance = toPixels(range.advance, font_size),
     };
+}
+
+/// A run's total advance, rounded UP to a whole font unit, which is what
+/// Chrome answers for a DOWNLOADED face and the one place the quantisation
+/// happens: `Hello, SVG World!` in iphey's RobotoFlex at 16px sums to
+/// 15923.4731 units and Chrome reads 124.40625px, which is 15924 of them.
+/// Ten strings measured against a headed Chrome 153 agree, and four of them
+/// separate this from rounding each advance as it is read
+/// (tools/fingerprint/scratch/s45/predict.py).
+///
+/// A family out of `font_metrics.zig` declares no `unitsPerEm` and is left
+/// alone: its advances arrive already quantised from Chrome, at whatever
+/// grid Chrome applied, and there is nothing left here to round.
+fn quantise(family: font_metrics.Family, basis_total: f64) f64 {
+    const upem = family.units_per_em;
+    if (upem == 0 or basis_total == 0 or !std.math.isFinite(basis_total)) return basis_total;
+    return @ceil(basis_total * upem / font_metrics.basis) * font_metrics.basis / upem;
 }
 
 /// Accumulates at the tables' 100px basis and converts once, so a sum of
@@ -1277,7 +1324,7 @@ test "svg metrics measure whole clusters, addressed by utf-16 unit" {
 
     // 'A' from the table, the combining acute absorbed into it, and an
     // untabulated wide glyph charged one em.
-    try std.testing.expectApproxEqAbs(@as(f64, 7.2216796875 + 10), svgWidth(serif, "A\u{0301}界", 10), 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f64, 7.2216796875 + 10), svgWidth(Face.regular(serif), "A\u{0301}界", 10), 0.0001);
     try std.testing.expectApproxEqAbs(@as(f64, 10), try svgSubstringWidth(serif, "A界", 1, 1, 10), 0.0001);
     try std.testing.expectApproxEqAbs(@as(f64, 10), try svgSubstringWidth(serif, "🌍", 0, 1, 10), 0.0001);
     try std.testing.expectApproxEqAbs(@as(f64, 10), try svgSubstringWidth(serif, "🌍", 1, 1, 10), 0.0001);
@@ -1288,22 +1335,22 @@ test "svg metrics measure whole clusters, addressed by utf-16 unit" {
 
     // Straight from the emoji table: Chrome makes these 73.6875 and 60.2109375
     // at 100px, not one em each.
-    try std.testing.expectEqual(@as(f64, 73.6875), svgWidth(serif, "☺", 100));
-    try std.testing.expectEqual(@as(f64, 60.2109375), svgWidth(serif, "☠", 100));
+    try std.testing.expectEqual(@as(f64, 73.6875), svgWidth(Face.regular(serif), "☺", 100));
+    try std.testing.expectEqual(@as(f64, 60.2109375), svgWidth(Face.regular(serif), "☠", 100));
 
     // A ZWJ sequence is five code units and a single glyph, so summing its
     // parts (which would charge the ♂ separately) is wrong.
     try std.testing.expectEqual(@as(u32, 5), utf16Length("🤵‍♂️"));
-    try std.testing.expectEqual(@as(f64, 100), svgWidth(serif, "🤵‍♂️", 100));
+    try std.testing.expectEqual(@as(f64, 100), svgWidth(Face.regular(serif), "🤵‍♂️", 100));
     try std.testing.expectEqual(@as(f64, 100), try svgSubstringWidth(serif, "🤵‍♂️", 3, 1, 100));
 
     // An unmeasured ZWJ sequence still collapses to one cluster.
-    try std.testing.expectEqual(@as(f64, 100), svgWidth(serif, "🧑\u{200d}🚀", 100));
+    try std.testing.expectEqual(@as(f64, 100), svgWidth(Face.regular(serif), "🧑\u{200d}🚀", 100));
     // As does a flag, which is a pair of regional indicators.
-    try std.testing.expectEqual(@as(f64, 100), svgWidth(serif, "🇫🇷", 100));
+    try std.testing.expectEqual(@as(f64, 100), svgWidth(Face.regular(serif), "🇫🇷", 100));
 
     // Chrome's own answer for the SVG default font.
-    try std.testing.expectEqual(@as(f64, 444.3359375), svgWidth(serif, "Hello", 200));
+    try std.testing.expectEqual(@as(f64, 444.3359375), svgWidth(Face.regular(serif), "Hello", 200));
     const extent = try svgCharExtent(serif, "Hello", 4, 20);
     try std.testing.expectEqual(@as(f64, 34.43359375), extent.offset);
     try std.testing.expectEqual(@as(f64, 10), extent.advance);

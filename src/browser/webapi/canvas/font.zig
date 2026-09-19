@@ -161,7 +161,10 @@ pub fn parse(arena: Allocator, input: []const u8, loaded: ?font_metrics.Loaded) 
     if (variant == .small_caps) serialised.writer.writeAll("small-caps ") catch return null;
     serialised.writer.print("{d}px ", .{significant(size, 6)}) catch return null;
 
-    const family = (serialiseFamilies(&serialised.writer, families, loaded) catch return null) orelse return null;
+    // The size goes in because a variable face has one set of advances per
+    // optical size: canvas has no `font-optical-sizing` property, so the
+    // initial `auto` stands and the axis follows the size the shorthand named.
+    const family = (serialiseFamilies(&serialised.writer, families, loaded, size) catch return null) orelse return null;
 
     return .{
         .css = serialised.written(),
@@ -245,7 +248,7 @@ fn parseSize(token: []const u8) ?f64 {
 /// returns the table for the first name we have measurements for. Null when
 /// the list is malformed; an unresolvable list still parses, and falls back
 /// the way Chrome's does.
-fn serialiseFamilies(writer: *std.Io.Writer, list: []const u8, loaded: ?font_metrics.Loaded) !?font_metrics.Family {
+fn serialiseFamilies(writer: *std.Io.Writer, list: []const u8, loaded: ?font_metrics.Loaded, optical_size: f64) !?font_metrics.Family {
     var resolved: ?font_metrics.Family = null;
     var wrote_one = false;
 
@@ -268,7 +271,7 @@ fn serialiseFamilies(writer: *std.Io.Writer, list: []const u8, loaded: ?font_met
             // `name`, not `unquoted`: a quoted generic is an ordinary family
             // name and must not resolve to the keyword's face. The serialised
             // form below still comes from `unquoted`, which is a separate rule.
-            resolved = font_metrics.findEntry(name, loaded);
+            resolved = font_metrics.findEntry(name, loaded, optical_size);
         }
 
         if (wrote_one) try writer.writeAll(", ");

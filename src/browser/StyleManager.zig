@@ -721,6 +721,8 @@ fn addRawRuleAtDepth(self: *StyleManager, build_arena: Allocator, selector_text:
             props.font_kerning = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "font-feature-settings")) {
             props.font_feature_settings = .{ .value = val, .important = decl.important };
+        } else if (std.ascii.eqlIgnoreCase(name, "font-optical-sizing")) {
+            props.font_optical_sizing = .{ .value = val, .important = decl.important };
         }
 
         if (CSSStyleDeclaration.isCustomProperty(name)) {
@@ -1788,6 +1790,13 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
         };
     }
 
+    if (decl.findProperty(String.wrap("font-optical-sizing"))) |property| {
+        props.font_optical_sizing = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
+    }
+
     if (decl.findProperty(String.wrap("font-feature-settings"))) |property| {
         props.font_feature_settings = .{
             .value = try arena.dupe(u8, property._value.str()),
@@ -1991,6 +2000,10 @@ const RuleProperties = struct {
     /// two ways -- `font-kerning: none` and `font-feature-settings: "kern" 0`.
     font_kerning: ?Declaration = null,
     font_feature_settings: ?Declaration = null,
+    /// And here for the same reason again: a variable font's advances depend
+    /// on the size through its `opsz` axis, and this is the property that says
+    /// whether the size reaches the axis at all -- see font_file.zig.
+    font_optical_sizing: ?Declaration = null,
     // Every custom property the rule declares, in declaration order. Unlike
     // the fields above there is no fixed set of names to pick from, and a page
     // can read any of them back through getComputedStyle.
@@ -2019,6 +2032,7 @@ const RuleProperties = struct {
             self.word_spacing != null or
             self.font_kerning != null or
             self.font_feature_settings != null or
+            self.font_optical_sizing != null or
             self.custom.len > 0 or
             self.longhands.len > 0;
     }
@@ -2552,6 +2566,8 @@ fn carryFontProp(props: *RuleProperties, name: []const u8, value: []const u8, im
         props.font_kerning = .{ .value = value, .important = important };
     } else if (std.ascii.eqlIgnoreCase(name, "font-feature-settings")) {
         props.font_feature_settings = .{ .value = value, .important = important };
+    } else if (std.ascii.eqlIgnoreCase(name, "font-optical-sizing")) {
+        props.font_optical_sizing = .{ .value = value, .important = important };
     }
 }
 
@@ -2589,6 +2605,51 @@ fn computedFontFamilyAt(self: *StyleManager, element: ?*Element, depth: u8) ?[]c
         return raw;
     }
     return self.computedFontFamilyAt(current.parentElement(), depth + 1);
+}
+
+/// The size a variable face's `opsz` axis sits at for this element, or null
+/// when the axis is to be left at the file's default.
+///
+/// `font-optical-sizing` is inherited and initially `auto`, and `auto` means
+/// the axis follows the font size -- so the answer is the computed font size
+/// for all but the pages that opt out. Without it every variable webfont
+/// measured as its default instance: RobotoFlex defaults its `opsz` to 14, so
+/// iphey's 16px `<text>` read 126.04 where Chrome says 124.41, every character
+/// a shade too wide.
+pub fn computedOpticalSize(self: *StyleManager, element: ?*Element) ?f64 {
+    if (!self.opticalSizingAuto(element, 0)) return null;
+    return self.computedFontSize(element);
+}
+
+fn opticalSizingAuto(self: *StyleManager, element: ?*Element, depth: u8) bool {
+    if (depth >= MAX_FONT_ANCESTOR_DEPTH) return true;
+    const current = element orelse return true;
+
+    const inline_property = getInlineStyleProperty(current, String.wrap("font-optical-sizing"), self.frame);
+    const rule = self.cascadedDeclaration(current, .font_optical_sizing);
+
+    // Same source order as computedFontFamilyAt: an important rule beats
+    // inline, inline beats a normal rule, and a source that declares nothing
+    // hands the question up the chain rather than answering it.
+    if (rule) |declaration| {
+        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
+            return !isOpticalSizingNone(declaration.value);
+        }
+    }
+    if (inline_property) |property| {
+        return !isOpticalSizingNone(property._value.str());
+    }
+    if (rule) |declaration| {
+        return !isOpticalSizingNone(declaration.value);
+    }
+    return self.opticalSizingAuto(current.parentElement(), depth + 1);
+}
+
+/// `none` is the only value that turns the axis off. Anything else -- `auto`,
+/// a typo, an `inherit` we do not model -- leaves it following the size, which
+/// is the initial value and so the safe way to be wrong.
+fn isOpticalSizingNone(value: []const u8) bool {
+    return std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, &std.ascii.whitespace), "none");
 }
 
 /// Cascaded, inherited `font-weight` as a number. `bold` is 700 and `normal`
@@ -3045,7 +3106,7 @@ fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
     return self.cascadedDeclaration(el, .font_size);
 }
 
-const CascadedProperty = enum { font_size, font_family, text_transform, letter_spacing, word_spacing, font_kerning, font_feature_settings, display, visibility };
+const CascadedProperty = enum { font_size, font_family, text_transform, letter_spacing, word_spacing, font_kerning, font_feature_settings, font_optical_sizing, display, visibility };
 
 /// The winning declaration of `property` among the stylesheet rules matching
 /// `el`, or null when none match. Importance outranks specificity, which is
@@ -3088,6 +3149,7 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
                     .word_spacing => props.word_spacing,
                     .font_kerning => props.font_kerning,
                     .font_feature_settings => props.font_feature_settings,
+                    .font_optical_sizing => props.font_optical_sizing,
                     .display => props.display,
                     .visibility => props.visibility,
                 }) orelse continue;

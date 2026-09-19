@@ -76,6 +76,14 @@ _parsing: bool = false,
 /// the accessors behind it (`cs.length`, `cs[0]`, the iterator) are not all
 /// handed a frame.
 _frame: *Frame = undefined,
+/// Whether this declaration is an at-rule's descriptor block rather than a
+/// list of properties. `@font-face` reuses the property names `font-weight`,
+/// `font-stretch` and `font-style`, but as descriptors they take a RANGE --
+/// `font-weight: 100 900` on a variable font -- where the property takes one
+/// value. The arity count below is measured against the property, so without
+/// this the whole descriptor was thrown away and `FontFace.weight` read
+/// `normal` against Chrome's `100 900` (tests/css/font_face_range.html).
+_is_descriptors: bool = false,
 /// The Typed OM view of this declaration, created on first use. Measured:
 /// `el.attributeStyleMap` and `rule.styleMap` are stable objects, so the map
 /// has to be cached rather than rebuilt per access.
@@ -1757,7 +1765,7 @@ pub fn lengthFactor(style_manager: *StyleManager, element: *Element, property_na
         // digit against headed Chrome 151 -- see computed_relative_units.html.
         .ex, .ch => blk: {
             const family = if (style_manager.computedFontFamily(element)) |declared|
-                font_metrics.findInList(declared, style_manager.frame.loadedFonts())
+                font_metrics.findInList(declared, style_manager.frame.loadedFonts(), style_manager.computedOpticalSize(element))
             else
                 font_metrics.fallback;
             const g = font_metrics.glyph(family, if (unit == .ex) 'x' else '0') orelse
@@ -4655,7 +4663,8 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
         }
         if (shorthand.refusesDeclined(entry, value)) return false;
     } else if (shorthand.refusesLonghand(normalized, value) or
-        tooManyComponents(normalized, value))
+        (!(self._is_descriptors and takesDescriptorRange(normalized)) and
+            tooManyComponents(normalized, value)))
     {
         return false;
     }
@@ -6996,6 +7005,19 @@ fn twoValueRule(name: []const u8) ?TwoValueRule {
 /// var(--b)` and resolves it later. A comment is taken out before Chrome's own
 /// count -- `margin-top: 10px /* c */` reads back `10px` -- and nothing here
 /// removes one, so its components would come back as punctuation.
+/// Whether this name is one of the three `@font-face` descriptors whose
+/// grammar is a range, so a second component is the upper bound rather than
+/// one value too many. `font-weight: 100 900` and `font-stretch: 75% 125%`
+/// are the two a variable font declares; `font-style: oblique 20deg 50deg`
+/// is a range of three and is not in the arity table at all, so it is named
+/// here for the same reason -- a later sweep that adds it must not start
+/// throwing the descriptor away.
+fn takesDescriptorRange(name: []const u8) bool {
+    return std.mem.eql(u8, name, "font-weight") or
+        std.mem.eql(u8, name, "font-stretch") or
+        std.mem.eql(u8, name, "font-style");
+}
+
 fn tooManyComponents(name: []const u8, value: []const u8) bool {
     if (std.mem.indexOf(u8, value, "/*") != null) return false;
     if (std.ascii.indexOfIgnoreCase(value, "var(") != null) return false;
@@ -7018,6 +7040,16 @@ fn tooManyComponents(name: []const u8, value: []const u8) bool {
 
     const holds: usize = if (is_transform or chrome_arity.one_component.has(name))
         1
+    else if (std.mem.eql(u8, name, "font-style"))
+        // `oblique <angle>` is two components the property takes, so the arity
+        // sweep never read it as one-component and it is not in the table --
+        // but a third is refused, and the sweep offered no three-component
+        // value to find that out. Measured on a headed Chrome 153
+        // (scratch/s45/expr-style-arity.js): `oblique 20deg` is kept,
+        // `oblique 20deg 50deg` and `oblique 20deg 50deg 70deg` both read
+        // back `""` and compute to `normal`. The `@font-face` descriptor of
+        // the same name does take the range, which `_is_descriptors` answers.
+        2
     else if (twoValueRule(name) != null)
         2
     else

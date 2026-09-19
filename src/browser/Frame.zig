@@ -280,7 +280,13 @@ _stylesheet_bodies: std.StringHashMapUnmanaged([]const u8) = .empty,
 //
 // Arena-owned and per-document like the sheet bodies above, and for the same
 // reason: a face belongs to the navigation whose stylesheet declared it.
-_webfonts: std.StringHashMapUnmanaged(font_metrics.Family) = .empty,
+//
+// The file's own bytes are kept beside the default instance because a variable
+// face has no single set of advances: `font-optical-sizing: auto` pins its
+// `opsz` axis to the font size, so a 16px run and a 32px run of the same face
+// are two different instances. Instances are built on demand and cached by
+// size -- a page uses a handful of sizes, not a continuum. See `Webfont`.
+_webfonts: std.StringHashMapUnmanaged(Webfont) = .empty,
 
 // How many `@font-face` files are still on the wire. `document.fonts.ready`
 // and `.status` are answered from this: before webfonts were read at all both
@@ -4148,6 +4154,18 @@ pub fn preloadResource(self: *Frame, link: *Element.Html, href: []const u8, opts
 // resource, and nothing here decodes the bytes, so the request itself is the
 // whole of it. The resource entry says "css", which is what Chrome files these
 // under (initiatorType, measured by resource-timing-initiators.mjs).
+/// One downloaded `@font-face` file: its bytes, the default instance built
+/// from them, and whatever optical sizes have been asked for since.
+///
+/// The bytes are kept because a variable face has no single set of advances --
+/// `font-optical-sizing: auto` pins its `opsz` axis to the font size, so a
+/// 16px run and a 32px run are two different instances of the same file.
+const Webfont = struct {
+    bytes: []const u8,
+    default_instance: font_metrics.Family,
+    by_optical_size: std.AutoHashMapUnmanaged(u64, font_metrics.Family) = .empty,
+};
+
 /// The families this document's `@font-face` files supplied, for whoever is
 /// resolving a `font-family` list. Null while none has arrived, so the built-in
 /// tables answer exactly as they did before.
@@ -4156,14 +4174,28 @@ pub fn loadedFonts(self: *Frame) ?font_metrics.Loaded {
     return .{ .ctx = self, .lookup = lookupWebfont };
 }
 
-fn lookupWebfont(ctx: *const anyopaque, name: []const u8) ?font_metrics.Family {
-    const self: *const Frame = @ptrCast(@alignCast(ctx));
+fn lookupWebfont(ctx: *const anyopaque, name: []const u8, optical_size: ?f64) ?font_metrics.Family {
+    // Mutable because a variable face instances on demand and the instance is
+    // cached. Nothing about the lookup is logically const once the face can be
+    // asked for a size it has not been built at yet.
+    const self: *Frame = @ptrCast(@alignCast(@constCast(ctx)));
     // The map is keyed lowercased because CSS family matching is ASCII
     // case-insensitive. A name longer than any real family cannot be in it.
     var buf: [128]u8 = undefined;
     if (name.len == 0 or name.len > buf.len) return null;
     const key = std.ascii.lowerString(buf[0..name.len], name);
-    return self._webfonts.get(key);
+    const face = self._webfonts.getPtr(key) orelse return null;
+    const size = optical_size orelse return face.default_instance;
+    if (!std.math.isFinite(size) or size <= 0) return face.default_instance;
+
+    // Keyed on the bits so two sizes that differ below the point stay two
+    // entries -- `font-size` is fractional far more often than it looks.
+    const bits: u64 = @bitCast(size);
+    if (face.by_optical_size.get(bits)) |built| return built;
+    const built = font_file.family(self.arena, face.bytes, font_metrics.fallback, size) orelse
+        return face.default_instance;
+    face.by_optical_size.put(self.arena, bits, built) catch return built;
+    return built;
 }
 
 /// Parse a downloaded `@font-face` body and register it under `family`.
@@ -4174,12 +4206,15 @@ fn lookupWebfont(ctx: *const anyopaque, name: []const u8) ?font_metrics.Family {
 /// before.
 fn registerWebfont(self: *Frame, family: []const u8, body: []const u8) void {
     if (family.len == 0 or body.len == 0) return;
-    const built = font_file.family(self.arena, body, font_metrics.fallback) orelse {
+    const built = font_file.family(self.arena, body, font_metrics.fallback, null) orelse {
         log.debug(.browser, "webfont unreadable", .{ .family = family, .bytes = body.len });
         return;
     };
+    // The bytes outlive the transfer that carried them: a variable face has to
+    // be re-instanced every time the page measures it at a new size.
+    const kept = self.arena.dupe(u8, body) catch return;
     const key = std.ascii.allocLowerString(self.arena, family) catch return;
-    self._webfonts.put(self.arena, key, built) catch |err| {
+    self._webfonts.put(self.arena, key, .{ .bytes = kept, .default_instance = built }) catch |err| {
         log.warn(.browser, "webfont register", .{ .err = err, .family = family });
         return;
     };
@@ -6075,6 +6110,21 @@ test "WebApi: css style subresources" {
 test "WebApi: webfont metrics" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("css/webfont_metrics.html", .{});
+}
+
+test "WebApi: font face range descriptors" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/font_face_range.html", .{});
+}
+
+test "WebApi: webfont optical sizing" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/webfont_optical_sizing.html", .{});
+}
+
+test "WebApi: webfont kerning" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/webfont_kerning.html", .{});
 }
 
 test "WebApi: markup subresources" {
