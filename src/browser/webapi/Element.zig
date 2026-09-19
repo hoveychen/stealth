@@ -4075,6 +4075,53 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         dims.explicit_height = true;
     }
 
+    // An out-of-flow box that declares BOTH insets on an axis and no size on it
+    // is stretched between them -- CSS 2 10.3.7 for the width, 10.6.4 for the
+    // height. `position:absolute; inset:0` is the whole containing block, which
+    // is what every overlay, backdrop and full-bleed hit target on the web is
+    // made of. This engine sized such a box from its content, so an empty one
+    // was 0x0: iphey hangs its geometry probe inside one, and the challenge
+    // pages of both doors are full of them.
+    //
+    // Before the tag branches below, because those fill an `auto` axis with
+    // something intrinsic and a stretched box has an answer that outranks it.
+    if (width == null or height == null) {
+        if (self.insetStretchedBox(frame, depth)) |stretch| {
+            // The stretch names the MARGIN box, so this element's own edges
+            // come out of it the way they do for the root above. Asked for here
+            // rather than read off `dims` for the same reason: the y-only path
+            // never fills them.
+            const edges = if (comptime measure_text_width)
+                CSSStyleDeclaration.BoxEdges{
+                    .padding_x = dims.padding_x,
+                    .padding_y = dims.padding_y,
+                    .border_x = dims.border_x,
+                    .border_y = dims.border_y,
+                }
+            else
+                CSSStyleDeclaration.boxEdgesSharing(self, frame, &containing, depth);
+
+            if (width == null) {
+                if (stretch.width) |available| {
+                    width = @max(0, available - horizontalMargin(self, frame, &containing, depth) -
+                        edges.border_x - edges.padding_x);
+                    // The box has a width of its own now, so clientWidth must
+                    // not take the max with its content and the text walk below
+                    // has nothing left to answer.
+                    dims.explicit_width = true;
+                }
+            }
+            if (height == null) {
+                if (stretch.height) |available| {
+                    const margins = verticalMargins(self, frame, &containing, depth);
+                    height = @max(0, available - margins.top - margins.bottom -
+                        edges.border_y - edges.padding_y);
+                    dims.explicit_height = true;
+                }
+            }
+        }
+    }
+
     if (width == null or height == null) {
         const tag = self.getTag();
 
@@ -5497,13 +5544,111 @@ fn edgeOffset(
     available: f64,
     own: f64,
 ) ?f64 {
-    if (CSSStyleDeclaration.cascadedComputedValue(self, near, frame)) |declared| {
-        if (CSS.parseDimensionViewport(declared, frame)) |px| return px;
-    }
-    if (CSSStyleDeclaration.cascadedComputedValue(self, far, frame)) |declared| {
-        if (CSS.parseDimensionViewport(declared, frame)) |px| return available - px - own;
-    }
+    if (self.insetPx(frame, near, available)) |px| return px;
+    if (self.insetPx(frame, far, available)) |px| return available - px - own;
     return null;
+}
+
+/// One inset as a USED length.
+///
+/// A percentage inset is a share of the containing block -- of its width on the
+/// inline axis and of its height on the block axis, which is what the caller
+/// hands over as `available` -- and the cascade does not take that share: all
+/// four insets are in CSSStyleDeclaration.percentageIsComputedValue, because a
+/// computed `left:10%` is reported as written. Resolving it here is the reason
+/// `top:10%; bottom:10%; left:25%; right:25%` used to fall back to the static
+/// position instead of landing at 480,99.3 in a 1920x993 viewport
+/// (probes/expr-abspos-inset.js against Chrome 152).
+///
+/// Null for `auto`, for an absent declaration, and for a length this engine
+/// cannot resolve -- all three mean the caller has no edge on this side.
+fn insetPx(self: *Element, frame: *Frame, name: []const u8, available: f64) ?f64 {
+    const declared = CSSStyleDeclaration.cascadedComputedValue(self, name, frame) orelse return null;
+    const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
+    if (std.mem.endsWith(u8, trimmed, "%")) {
+        const share = std.fmt.parseFloat(f64, trimmed[0 .. trimmed.len - 1]) catch return null;
+        return available * share / 100.0;
+    }
+    return CSS.parseDimensionViewport(trimmed, frame);
+}
+
+/// What an out-of-flow box's two insets leave for it on each axis, or null on
+/// an axis whose insets do not both resolve.
+///
+/// The MARGIN box: the caller takes this element's own margins, border and
+/// padding out of it, the same way the root's branch does.
+const InsetStretch = struct {
+    width: ?f64,
+    height: ?f64,
+};
+
+/// The size an out-of-flow box takes from its insets: CSS 2 10.3.7 for the
+/// width and 10.6.4 for the height. With both insets on an axis declared and no
+/// size of its own, the box is stretched between them -- `inset:0` covers the
+/// whole containing block.
+///
+/// The declarations are checked before `position` is even asked for, and the
+/// ancestor walk behind it happens later still. Nearly every element on a page
+/// declares no inset at all, and this runs inside every measurement of every
+/// box: two lookups that miss in StyleManager's longhand index are what it costs
+/// them, against a cascade read for `position` -- a property pages DO declare --
+/// plus an ancestor walk and a second measurement if the order were reversed.
+fn insetStretchedBox(self: *Element, frame: *Frame, depth: u8) ?InsetStretch {
+    if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return null;
+
+    const has_x = self.insetDeclared(frame, "left") and self.insetDeclared(frame, "right");
+    const has_y = self.insetDeclared(frame, "top") and self.insetDeclared(frame, "bottom");
+    if (!has_x and !has_y) return null;
+
+    const position = CSSStyleDeclaration.cascadedComputedValue(self, "position", frame) orelse return null;
+    const is_fixed = std.ascii.eqlIgnoreCase(position, "fixed");
+    if (!is_fixed and !std.ascii.eqlIgnoreCase(position, "absolute")) return null;
+
+    const box = self.containingBlockBox(frame, is_fixed, depth);
+
+    var stretch: InsetStretch = .{ .width = null, .height = null };
+    if (has_x) {
+        if (self.insetPx(frame, "left", box.width)) |left| {
+            if (self.insetPx(frame, "right", box.width)) |right| {
+                stretch.width = box.width - left - right;
+            }
+        }
+    }
+    if (has_y) {
+        if (self.insetPx(frame, "top", box.height)) |top| {
+            if (self.insetPx(frame, "bottom", box.height)) |bottom| {
+                stretch.height = box.height - top - bottom;
+            }
+        }
+    }
+    if (stretch.width == null and stretch.height == null) return null;
+    return stretch;
+}
+
+/// Whether an inset is declared as something other than `auto`, which is the
+/// question `insetPx` cannot answer cheaply: it resolves a length, and reaching
+/// a length needs the containing block this is the pre-check for.
+fn insetDeclared(self: *Element, frame: *Frame, name: []const u8) bool {
+    const declared = CSSStyleDeclaration.cascadedComputedValue(self, name, frame) orelse return false;
+    const trimmed = std.mem.trim(u8, declared, &std.ascii.whitespace);
+    return trimmed.len != 0 and !std.ascii.eqlIgnoreCase(trimmed, "auto");
+}
+
+/// The box an out-of-flow child is placed and sized against: the nearest
+/// positioned ancestor's PADDING box, or the viewport for a fixed box and for an
+/// absolute one that has no positioned ancestor. Only the size; where it sits is
+/// `outOfFlowPosition`'s, which needs the ancestor itself for its edges.
+fn containingBlockBox(self: *Element, frame: *Frame, is_fixed: bool, depth: u8) DOMRect.Data {
+    const containing: ?*Element = if (is_fixed) null else self.nearestPositionedAncestor(frame);
+    if (containing) |cb| {
+        const dims = cb.dimensionsAt(frame, true, depth + 1, true);
+        return .{ .width = dims.width + dims.padding_x, .height = dims.height + dims.padding_y };
+    }
+    const viewport = self.ownerFrame(frame)._page.getViewport();
+    return .{
+        .width = @floatFromInt(viewport.width),
+        .height = @floatFromInt(viewport.height),
+    };
 }
 
 /// The ancestor an absolutely positioned box is placed against: the nearest one
