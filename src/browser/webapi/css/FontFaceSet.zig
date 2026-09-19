@@ -138,7 +138,7 @@ fn syncDeclared(self: *FontFaceSet, exec: *const Execution) void {
             rebuilt.appendAssumeCapacity(existing);
             continue;
         }
-        const entry = FontFace.init(face.family, "", .{
+        const entry = FontFace.init(face.family, face.url, .{
             .weight = face.weight,
             .style = face.style,
             .stretch = face.stretch,
@@ -170,6 +170,29 @@ fn syncDeclared(self: *FontFaceSet, exec: *const Execution) void {
 
     self._faces = rebuilt;
     self._sheet_version = version;
+}
+
+/// Set the status of the `index`th `@font-face` rule, in source order.
+///
+/// The style-resource pass owns the "was this face actually fetched" answer
+/// and this set owns the objects, so the pass reaches them through here rather
+/// than building its own -- two objects for one rule is what `check()` then
+/// answers `false` off forever (see `style_resources.scan`).
+///
+/// The index is the rule's position in the same source-order walk this set
+/// derives its declared half from: both go through `style_resources`, so the
+/// `i`th rule there is the `i`th declared face here.
+pub fn markDeclaredAt(self: *FontFaceSet, index: usize, used: bool, exec: *const Execution) void {
+    self.syncDeclared(exec);
+    var seen: usize = 0;
+    for (self._faces.items) |face| {
+        if (!face.isDeclared()) continue;
+        if (seen == index) {
+            face.markDeclared(used);
+            return;
+        }
+        seen += 1;
+    }
 }
 
 /// The existing object for one declared rule, or null to build a new one.
@@ -231,7 +254,7 @@ pub fn getReady(self: *FontFaceSet, exec: *const Execution) !js.Promise {
     if (self._ready) |resolver| {
         return local.toLocal(resolver).promise();
     }
-    if (pending(exec) == 0) {
+    if (pending(exec) == 0 and documentLoaded(exec)) {
         return local.resolvePromise({});
     }
     const resolver = local.createPromiseResolver();
@@ -254,6 +277,25 @@ pub fn settle(self: *FontFaceSet, exec: *Execution) void {
     exec.js.localScope(&ls);
     defer ls.deinit();
     ls.local.toLocal(resolver).resolve("FontFaceSet.ready", {});
+}
+
+/// Whether the document has finished loading, which is half of what makes a
+/// font source ready: the other half is nothing being on the wire.
+///
+/// A document still parsing has not been scanned for `@font-face` yet -- that
+/// runs at DOMContentLoaded -- so `pending` is legitimately zero there and
+/// resolving on it alone promised a set nobody had looked at. Measured with
+/// tools/fingerprint/webfont-timeline.mjs: on a two-line page declaring one
+/// face this resolved at 11ms against Chrome's 618, and on a page declaring
+/// NO face at all Chrome still waited for its load event rather than
+/// resolving at once -- so "there is nothing to load" is not the question
+/// being asked.
+fn documentLoaded(exec: *const Execution) bool {
+    return switch (exec.js.global) {
+        .frame => |frame| frame.document._ready_state == .complete,
+        // A worker has no document to wait for.
+        .worker => true,
+    };
 }
 
 /// How many declared faces are still on the wire. A worker has no document and

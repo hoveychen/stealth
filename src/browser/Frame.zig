@@ -1894,6 +1894,17 @@ fn _documentIsComplete(self: *Frame) !void {
         try self._event_manager.dispatchDirect(window_target, event, null, .{ .inject_target = false, .context = "page load" });
     }
 
+    // `document.fonts.ready` is a promise about the DOCUMENT's font source,
+    // and a document still loading has one nobody has finished collecting --
+    // the `@font-face` scan runs at DOMContentLoaded. So the load event is
+    // where it settles, unless a face is still on the wire, in which case the
+    // transfer's own callback settles it later (`ImageRequest.fontSettled`).
+    if (self._webfonts_pending == 0) {
+        if (self.document.getFonts(&self.js.execution) catch null) |fonts| {
+            fonts.settle(&self.js.execution);
+        }
+    }
+
     self._session.notification.dispatch(.frame_loaded, &.{
         .req_id = self._req_id,
         .frame_id = self._frame_id,
@@ -4061,6 +4072,12 @@ const ImageRequest = struct {
         const frame = self.frame;
         frame._webfonts_pending -= 1;
         if (frame._webfonts_pending != 0) return;
+        // The load event settles it instead when the fonts beat the document
+        // there, which is the ordinary case on a fast connection: a font
+        // source is not ready until the document that names it has finished
+        // loading, and Chrome waits for that even on a page declaring no face
+        // at all (FontFaceSet.documentLoaded).
+        if (frame.document._ready_state != .complete) return;
         // Scheduled, not called: resolving a promise needs a JS scope and
         // these callbacks run inside the HTTP pump, where there is none. Same
         // reason `queueElementEvent` schedules rather than dispatching -- done

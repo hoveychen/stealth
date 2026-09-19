@@ -113,9 +113,12 @@ const recorder = (watched) => `
   // a twin rather than from the probe's own first sample means a face that
   // was ready before the first tick is still seen to have arrived.
   let twin = null;
+  out.ticks = 0;
 
   const tick = () => {
     const t = now();
+    out.ticks++;
+    out.lastTick = t;
     if (!out.family) {
       const fam = pick();
       if (!fam) return;
@@ -127,8 +130,10 @@ const recorder = (watched) => `
     }
     if (out.check === null) {
       try {
-        if (document.fonts.check('16px ' + JSON.stringify(out.family))) out.check = t;
-      } catch {}
+        out.lastCheck = document.fonts.check('16px ' + JSON.stringify(out.family));
+        if (out.lastCheck) out.check = t;
+        out.faceStates = [...document.fonts].map((f) => f.family + '|' + f.status).slice(0, 8);
+      } catch (e) { out.checkError = String(e); }
     }
     if (out.usable === null) {
       const w = probe.getBoundingClientRect().width;

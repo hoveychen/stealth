@@ -340,11 +340,11 @@ pub const DeclaredFace = struct {
     weight: []const u8,
     style: []const u8,
     stretch: []const u8,
-    /// Whether the face has a `url()` source at all. A `local(...)`-only face
-    /// is still a face -- iphey declares 310 of them as a font enumeration
-    /// probe -- but there is nothing to fetch for it, so it can never be
-    /// `loaded` in this engine.
-    has_url: bool,
+    /// The face's `url()` source, empty when it has none. A `local(...)`-only
+    /// face is still a face -- iphey declares 310 of them as a font
+    /// enumeration probe -- but there is nothing to fetch for it, so it can
+    /// never be `loaded` in this engine.
+    url: []const u8,
 };
 
 pub fn declaredFaces(frame: *Frame, allocator: Allocator) ![]const DeclaredFace {
@@ -365,7 +365,7 @@ pub fn declaredFaces(frame: *Frame, allocator: Allocator) ![]const DeclaredFace 
             .weight = face.weight,
             .style = face.style,
             .stretch = face.stretch,
-            .has_url = face.url.len != 0,
+            .url = face.url,
         });
     }
     return out.items;
@@ -416,7 +416,7 @@ fn scan(frame: *Frame) !void {
     // their url is perfectly good, so "used" is exactly what decides the
     // status too (tests/css/font_face_set.html).
     const fonts = frame.document.getFonts(&frame.js.execution) catch null;
-    for (s.faces.items) |face| {
+    for (s.faces.items, 0..) |face, rule_index| {
         // Only a face with a url has anything to fetch, and only a face
         // something asks for is fetched at all.
         const used = s.used_families.contains(face.family);
@@ -424,21 +424,22 @@ fn scan(frame: *Frame) !void {
             try s.fetchFrom(face.base, face.url, .font, face.family);
         }
         const set = fonts orelse continue;
-        const entry = FontFace.init(face.declared, face.url, .{
-            .weight = face.weight,
-            .style = face.style,
-            .stretch = face.stretch,
-        }, &frame.js.execution) catch continue;
-        // `loaded` means the face is in use, which is what Chrome reports: it
+        // Mark the face the SET already derived from this same rule, rather
+        // than building a second object for it. The set derives its declared
+        // half lazily, on the first read of `size`/`check`/the iterator, and a
+        // page that touches `document.fonts` before DOMContentLoaded -- which
+        // is when this scan runs, and is exactly what a detector's
+        // document-start script does -- had already made it do so. Adding here
+        // then left two FontFaces for one rule, the derived one `unloaded` in
+        // front of the fetched one, and `check()` answers on the first match:
+        // it returned false for the rest of the page's life, measured on both
+        // iphey and a two-line local page (tools/fingerprint/webfont-timeline.mjs).
+        //
+        // `used` is what decides `loaded`, which is what Chrome reports: it
         // leaves an unused face `unloaded` whether its source is a url it
         // never fetched or a `local()` name -- iphey's 310 local probes are all
         // `unloaded` there.
-        entry.markDeclared(used and face.url.len != 0);
-        // The set takes the only reference: a face built here is never handed
-        // to JS, so there is no wrapper holding one, and releasing after the
-        // add drops it to zero and frees a face the set still lists (the
-        // runner catches that as a `release overflow`).
-        _ = set.add(entry) catch {};
+        set.markDeclaredAt(rule_index, used and face.url.len != 0, &frame.js.execution);
     }
 }
 
