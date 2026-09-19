@@ -46,10 +46,17 @@
 //! graph being nothing but these two nodes. A gain node hanging off the side
 //! does not change what Chrome renders, so refusing to replay for one would be
 //! a divergence invented here rather than a fidelity gained. Hence the match is
-//! on the destination's *incoming* edges: exactly one node feeds it, that node
-//! is a recorded graph's compressor, exactly one node feeds the compressor, and
-//! that node is that graph's oscillator. Anything else in the context is
-//! ignored, the way Chrome ignores it.
+//! on the destination's *incoming* edges: every one of them reaches a recorded
+//! graph's compressor — directly or through nodes that pass their input on
+//! unchanged — exactly one node feeds that compressor, and that node is the
+//! graph's oscillator. Anything else in the context is ignored, the way Chrome
+//! ignores it.
+//!
+//! More than one edge is allowed because iphey builds exactly that: the
+//! compressor reaches the destination directly *and* through an analyser, and
+//! Chrome sums the two into precisely twice the single-path buffer. Requiring a
+//! sole source handed that page silence where Chrome renders a tone, which is
+//! the loudest tell this file can produce.
 //!
 //! The numbers are read through `AudioParam.renderValue()` rather than off
 //! `param.value`, because a page can put them on the automation timeline
@@ -82,6 +89,13 @@
 //!     Chrome — cannot be told from one that truncates.
 //!   * a graph that modulates an AudioParam. Those edges are not recorded at
 //!     all, only counted (BaseAudioContext._param_edges).
+//!   * three or more edges into the destination. Two sum to exactly twice the
+//!     recording; three do not come out at exactly three times it in Chrome
+//!     (372.13042371820484 against 372.1304244073908), so the sum stops being a
+//!     multiple of what is stored here.
+//!   * a gain node the page moved off 1. Chrome scales the signal by it —
+//!     exactly half the canonical tail at 0.5 — and scaling a recording is
+//!     arithmetic this file has no measurement to back.
 
 const std = @import("std");
 
@@ -115,13 +129,29 @@ fn platform() chrome_audio.Platform {
 /// which is where Chrome captures the graph too.
 pub fn apply(context: *BaseAudioContext, buffer: *AudioBuffer, exec: *const Execution) void {
     if (buffer._channels.len != 1) return;
-    const graph = which(context) orelse return;
+    const match = which(context) orelse return;
 
-    const samples = chrome_audio.samples(graph, platform());
+    const samples = chrome_audio.samples(match.graph, platform());
     const channel = buffer._channels[0].local(exec.js.local.?).slice();
     const count = @min(channel.len, samples.len);
     @memcpy(channel[0..count], samples[0..count]);
+    if (match.paths == 2) {
+        // Two edges carrying one signal into the destination sum there, and
+        // Chrome's sum of a value with itself is exactly twice it: iphey's
+        // graph renders 248.0869496049272 against the single path's
+        // 124.0434748024636, to the last bit. Three paths do *not* come out at
+        // exactly three times (372.13042371820484 against 372.1304244073908),
+        // so `which` refuses anything past two rather than guess at the
+        // ordering Chrome mixes them in.
+        for (channel[0..count]) |*sample| sample.* *= 2;
+    }
 }
+
+/// A recorded graph, and how many edges carry it into the destination.
+const Match = struct {
+    graph: chrome_audio.Graph,
+    paths: u8,
+};
 
 /// Which recorded graph `context` builds, or null when it builds anything else.
 ///
@@ -129,14 +159,31 @@ pub fn apply(context: *BaseAudioContext, buffer: *AudioBuffer, exec: *const Exec
 /// triangle oscillator into a compressor into a mono destination -- and only
 /// the six numbers differ, so the shape is checked once and the numbers are
 /// checked against each candidate in turn.
-fn which(context: *BaseAudioContext) ?chrome_audio.Graph {
+fn which(context: *BaseAudioContext) ?Match {
     if (context._sample_rate != chrome_audio.sample_rate) return null;
     if (context._param_edges != 0) return null;
 
     const destination = context._destination orelse return null;
     if (destination._proto._channel_count != 1) return null;
 
-    const compressor = switch ((context.soleSource(destination._proto) orelse return null)._type) {
+    // The destination is allowed more than one incoming edge, because the graph
+    // iphey builds has two: the compressor reaches it directly *and* through an
+    // analyser. An analyser passes its input through unchanged, so both edges
+    // carry the same signal and the destination sums them. Refusing that shape
+    // is what handed iphey silence where Chrome renders a tone, and silence off
+    // a graph Chrome renders is the loudest tell this file has.
+    var edge_storage: [2]*AudioNode = undefined;
+    const edges = context.sources(destination._proto, &edge_storage) orelse return null;
+    if (edges.len == 0) return null;
+
+    var compressor_node: ?*AudioNode = null;
+    for (edges) |edge| {
+        const reached = passThrough(context, edge) orelse return null;
+        if (compressor_node != null and compressor_node != reached) return null;
+        compressor_node = reached;
+    }
+
+    const compressor = switch ((compressor_node orelse return null)._type) {
         .dynamics_compressor => |compressor| compressor,
         else => return null,
     };
@@ -174,7 +221,34 @@ fn which(context: *BaseAudioContext) ?chrome_audio.Graph {
         if (ratio != want.ratio) continue;
         if (attack != want.attack) continue;
         if (release != want.release) continue;
-        return graph;
+        return .{ .graph = graph, .paths = @intCast(edges.len) };
+    }
+    return null;
+}
+
+/// Walks back from `node` through the nodes that hand their input on unchanged,
+/// and returns the first node that does something. Null when the chain does not
+/// end somewhere -- an analyser fed by two things carries a mix, which is not
+/// the recorded signal.
+///
+/// An analyser is transparent unconditionally -- it has nothing to set. A gain
+/// node is transparent only while its gain renders as 1, which is its default:
+/// Chrome renders the single-path sum through one (`gainDefault` and `gainOne`
+/// in tools/fingerprint/probes/expr-b153-gain.js) and exactly half of it at 0.5,
+/// so a gain the page moved is a graph with no recording rather than one to
+/// replay through. `renderValue` answers null for a gain on the automation
+/// timeline, which lands in the same place.
+fn passThrough(context: *BaseAudioContext, node: *AudioNode) ?*AudioNode {
+    var current = node;
+    // Chrome renders a transparent chain of any depth as the plain signal; two
+    // is as deep as anything measured goes, and a cycle cannot outlast this.
+    for (0..8) |_| {
+        switch (current._type) {
+            .analyser => {},
+            .gain => |gain| if ((gain._gain.renderValue() orelse return null) != 1) return current,
+            else => return current,
+        }
+        current = context.soleSource(current) orelse return null;
     }
     return null;
 }

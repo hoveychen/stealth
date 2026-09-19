@@ -134,6 +134,29 @@ pub fn soleSource(self: *BaseAudioContext, target: *AudioNode) ?*AudioNode {
     return found;
 }
 
+/// Every distinct node with an edge into `target`, written into `out` and
+/// counted. A node connected twice counts once, for the same reason
+/// `soleSource` collapses it: Chrome treats a repeated connect() as a no-op and
+/// renders one copy of the signal (measured — `doubleConnect` in
+/// tools/fingerprint/probes/expr-b153-fanin.js renders the single-path sum).
+///
+/// Returns null when there are more sources than `out` can hold, which reads
+/// the same as "a graph nothing here has a recording for".
+pub fn sources(self: *BaseAudioContext, target: *AudioNode, out: []*AudioNode) ?[]*AudioNode {
+    var count: usize = 0;
+    for (self._nodes.items) |node| {
+        if (node == target) continue;
+        for (node._outputs.items) |output| {
+            if (output != target) continue;
+            if (count == out.len) return null;
+            out[count] = node;
+            count += 1;
+            break;
+        }
+    }
+    return out[0..count];
+}
+
 pub fn getSampleRate(self: *const BaseAudioContext) f64 {
     return self._sample_rate;
 }
