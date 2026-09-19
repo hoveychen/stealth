@@ -4498,6 +4498,17 @@ pub fn boundingClientRectValuesForVisible(self: *Element, frame: *Frame) DOMRect
 }
 
 pub fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
+    const rect = self.layoutRectValuesAt(frame, depth);
+    const matrix = transformChain(self, frame) orelse return rect;
+    return matrix.boundingBox(rect);
+}
+
+/// The box the flow pass placed, before any `transform` moves it.
+///
+/// Separate from the rect a script reads because the transform chain needs it:
+/// an ancestor's transform turns about the ancestor's own untransformed box, so
+/// asking for its rect instead would compose that ancestor's transform twice.
+fn layoutRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
     const dims = self.getElementDimensions(frame);
 
     // getBoundingClientRect is the BORDER box, the same box offsetWidth
@@ -5437,7 +5448,11 @@ fn outOfFlowPosition(self: *Element, frame: *Frame, depth: u8) ?DOMRect.Data {
     //
     // The viewport branch below carries no edges, so a fixed box is unaffected.
     const origin: DOMRect.Data = if (containing) |cb| blk: {
-        const rect = cb.boundingClientRectValuesAt(frame, depth + 1);
+        // The containing block's LAYOUT box. A transform on the ancestor moves
+        // this box too, but it moves it as part of the chain the descendant's
+        // own rect composes -- taking the ancestor's transformed rect here and
+        // then composing its transform again applies it twice.
+        const rect = cb.layoutRectValuesAt(frame, depth + 1);
         break :blk .{
             .x = rect.x + cb.getClientLeft(frame),
             .y = rect.y + cb.getClientTop(frame),
@@ -5630,7 +5645,7 @@ fn documentPosition(node: *Node, frame: *Frame) f64 {
 fn siblingPosition(node: *Node, frame: *Frame) f64 {
     if (node.is(Element)) |element| {
         if (frame.positionOf(element)) |point| {
-            return point.x + relativeOffset(element, frame, "left", "right") + translateXChain(element, frame);
+            return point.x + relativeOffset(element, frame, "left", "right");
         }
     }
     return calculateSiblingPosition(node);
@@ -5726,25 +5741,164 @@ fn countSubtreeNodes(node: *Node) f64 {
     return count;
 }
 
-/// How far `transform` moves a box along X, summed over the element and every
-/// ancestor -- the flow pass places boxes and knows nothing about transforms.
+/// The 2D half of a CSS transform: `matrix(a, b, c, d, e, f)`, which is what a
+/// computed `transform` folds any list into.
 ///
-/// A carousel is the case that matters: a track is slid with
-/// `transform: translateX(-Npx)` and the script reads the cards back to decide
-/// when to recycle one, so a rect that ignores the translation never converges.
-/// Only the horizontal axis, and only the length component: `parseTranslateX`
-/// adds up the x argument of each translate/matrix function and skips units it
-/// cannot resolve, so a rotation in the list contributes nothing rather than
-/// turning the offsets it is composed with. Chrome folds the whole list into
-/// one matrix; this is the one term of it that moves carousels.
-fn translateXChain(self: *Element, frame: *Frame) f64 {
-    var x: f64 = 0.0;
+/// The flow pass places boxes and knows nothing about transforms, so this is
+/// applied on the way out, to the rect and to nothing else. `offsetLeft` and
+/// `offsetTop` are the measured counter-example: on Chrome 152 a 100x100 box at
+/// `left:-9999px` reports `offsetLeft` of -9999 under every one of thirteen
+/// transforms -- rotations, scales, skews, an ancestor's -- while its rect moves
+/// under all of them (probes/expr-transform-rect.js).
+const Affine = struct {
+    a: f64 = 1,
+    b: f64 = 0,
+    c: f64 = 0,
+    d: f64 = 1,
+    e: f64 = 0,
+    f: f64 = 0,
+
+    const identity: Affine = .{};
+
+    fn isIdentity(self: Affine) bool {
+        return self.a == 1 and self.b == 0 and self.c == 0 and
+            self.d == 1 and self.e == 0 and self.f == 0;
+    }
+
+    /// `outer` applied after `inner`, which is the order a transform LIST reads
+    /// in and the order an ancestor's transform applies in: Chrome answers
+    /// `matrix(0, 1, -1, 0, 0, 10)` for `rotate(90deg) translateX(10px)` and
+    /// `matrix(0, 1, -1, 0, 10, 0)` for the two swapped.
+    fn compose(outer: Affine, inner: Affine) Affine {
+        return .{
+            .a = outer.a * inner.a + outer.c * inner.b,
+            .b = outer.b * inner.a + outer.d * inner.b,
+            .c = outer.a * inner.c + outer.c * inner.d,
+            .d = outer.b * inner.c + outer.d * inner.d,
+            .e = outer.a * inner.e + outer.c * inner.f + outer.e,
+            .f = outer.b * inner.e + outer.d * inner.f + outer.f,
+        };
+    }
+
+    /// The same matrix turned about `x, y` instead of about the origin, which is
+    /// what `transform-origin` names.
+    fn about(self: Affine, x: f64, y: f64) Affine {
+        return compose(compose(.{ .e = x, .f = y }, self), .{ .e = -x, .f = -y });
+    }
+
+    /// The axis-aligned box the transformed rect occupies. A rotation makes the
+    /// four corners the only thing left to take a box of -- Chrome's rect for a
+    /// 100x100 box under `rotate(45deg)` is 141.42 on both axes.
+    fn boundingBox(self: Affine, rect: DOMRect.Data) DOMRect.Data {
+        var min_x = std.math.inf(f64);
+        var min_y = std.math.inf(f64);
+        var max_x = -std.math.inf(f64);
+        var max_y = -std.math.inf(f64);
+        for ([_][2]f64{
+            .{ rect.x, rect.y },
+            .{ rect.x + rect.width, rect.y },
+            .{ rect.x, rect.y + rect.height },
+            .{ rect.x + rect.width, rect.y + rect.height },
+        }) |corner| {
+            const x = self.a * corner[0] + self.c * corner[1] + self.e;
+            const y = self.b * corner[0] + self.d * corner[1] + self.f;
+            min_x = @min(min_x, x);
+            min_y = @min(min_y, y);
+            max_x = @max(max_x, x);
+            max_y = @max(max_y, y);
+        }
+        return .{ .x = min_x, .y = min_y, .width = max_x - min_x, .height = max_y - min_y };
+    }
+};
+
+/// The matrix `matrix()`/`matrix3d()` text names, or null for `none` and for
+/// anything else -- a computed `transform` is only ever one of those three.
+///
+/// `matrix3d` is flattened rather than refused: with no perspective in the list
+/// the box a page reads back is the 2D projection, and the six entries taken
+/// here are that projection.
+fn parseAffine(text: []const u8) ?Affine {
+    const open = std.mem.indexOfScalar(u8, text, '(') orelse return null;
+    const name = std.mem.trim(u8, text[0..open], " ");
+    const three_d = std.ascii.eqlIgnoreCase(name, "matrix3d");
+    if (!three_d and !std.ascii.eqlIgnoreCase(name, "matrix")) return null;
+    const close = std.mem.lastIndexOfScalar(u8, text, ')') orelse return null;
+    if (close < open) return null;
+
+    var values: [16]f64 = undefined;
+    var count: usize = 0;
+    var it = std.mem.splitScalar(u8, text[open + 1 .. close], ',');
+    while (it.next()) |raw| {
+        if (count == values.len) return null;
+        values[count] = std.fmt.parseFloat(f64, std.mem.trim(u8, raw, " \t\r\n")) catch return null;
+        count += 1;
+    }
+    if (three_d) {
+        if (count != 16) return null;
+        return .{ .a = values[0], .b = values[1], .c = values[4], .d = values[5], .e = values[12], .f = values[13] };
+    }
+    if (count != 6) return null;
+    return .{ .a = values[0], .b = values[1], .c = values[2], .d = values[3], .e = values[4], .f = values[5] };
+}
+
+/// The transform an element and every ancestor compose onto its box, or null
+/// when none of them declares one.
+///
+/// Each element's matrix turns about its OWN border box, so the walk needs that
+/// element's untransformed rect as well -- and the ancestors multiply on the
+/// left, because a descendant sits in the coordinate space its ancestor then
+/// transforms. Measured on Chrome 152: a 100x100 box under `rotate(45deg)`
+/// inside a host under `translateX(30px) scale(2)` lands at -20969.42,-537.92
+/// and 282.84 square, which is the host's matrix applied to the child's
+/// rotated box about the host's centre.
+fn transformChain(self: *Element, frame: *Frame) ?Affine {
+    // The cascade read below is the expensive part, and all but a handful of
+    // pages never declare a transform at all. `declared_longhands` answers that
+    // for the sheets in one lookup; an inline `style=` is not in it, so each
+    // element in the walk is also asked for its own, which is the same map
+    // lookup the translation-only chain this replaced did.
+    const in_sheets = self.ownerFrame(frame)._style_manager.declared_longhands.contains("transform");
+
+    var total: Affine = .identity;
+    var any = false;
     var current: ?*Element = self;
     while (current) |el| : (current = el.parentElement()) {
-        const style = el.getStyle(frame) orelse continue;
-        x += CSS.parseTranslateX(style.getPropertyValue("transform", frame));
+        if (!in_sheets and !declaresInlineTransform(el, frame)) continue;
+        const text = CSSStyleDeclaration.cascadedComputedValue(el, "transform", frame) orelse continue;
+        const matrix = parseAffine(text) orelse continue;
+        if (matrix.isIdentity()) continue;
+        const box = el.layoutRectValuesAt(frame, 0);
+        const origin = transformOriginOf(el, frame, box);
+        total = Affine.compose(matrix.about(origin[0], origin[1]), total);
+        any = true;
     }
-    return x;
+    return if (any) total else null;
+}
+
+fn declaresInlineTransform(self: *Element, frame: *Frame) bool {
+    const style = self.getStyle(frame) orelse return false;
+    return style.getPropertyValue("transform", frame).len != 0;
+}
+
+/// Where an element's transform turns, in document coordinates. The computed
+/// `transform-origin` is already resolved against the border box -- `top right`
+/// on a 200x50 box is `200px 0px` on Chrome 152 -- so this only has to add the
+/// box's own position. Its initial value is the box's centre.
+fn transformOriginOf(self: *Element, frame: *Frame, box: DOMRect.Data) [2]f64 {
+    var x = box.width / 2;
+    var y = box.height / 2;
+    if (CSSStyleDeclaration.cascadedComputedValue(self, "transform-origin", frame)) |text| {
+        var it = std.mem.tokenizeAny(u8, text, " \t\r\n");
+        if (it.next()) |first| {
+            if (CSS.parseDimension(first)) |value| {
+                x = value;
+                if (it.next()) |second| {
+                    y = CSS.parseDimension(second) orelse y;
+                }
+            }
+        }
+    }
+    return .{ box.x + x, box.y + y };
 }
 
 pub fn getElementsByTagName(self: *Element, tag_name: []const u8, frame: *Frame) !*collections.HTMLCollection {
