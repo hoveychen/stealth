@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`min-width` and `max-width` did nothing. Not to the reported value and not to
+the box: `width:300px; max-width:100px` measured 300 here against Chrome's 100,
+and `max-width:100px` alone on a block in a 400px parent measured the full 400.
+`max-width` is how the whole web builds a centred content column, so every page
+that writes one laid its main column out at the viewport's width -- and then
+every rect inside it was wrong too, which is the reading a guard actually takes.
+
+The height half of the same pair already worked (`clampHeight`); this is the
+width half, plus what both report.
+
+Measured on Chrome 152 with tools/fingerprint/probes/expr-minmax-size.js in a
+400x200 block. Three rules:
+
+  * the bounds are applied to whatever decided the size -- a declaration, the
+    containing block, the content -- and the MINIMUM is applied after the
+    maximum, so a `min-width` that disagrees with a `max-width` wins:
+    `width:300px; min-width:250px; max-width:100px` is 250. That is the same
+    order `clampHeight` already uses.
+  * a percentage bound is NOT resolved at computed-value time. It is a share of
+    a containing block the layout has to find, so Chrome reports it as written
+    -- `min-width:25%` computes `25%` -- exactly as it does for `top` and
+    `text-indent`. This engine reported the initial `0px` / `none` for a
+    percentage and a resolved px for a percentage height bound, two different
+    wrong answers to one rule.
+  * `min-width: auto` computes `0px` -- the keyword is the initial value and
+    Chrome prints what it means -- while `max-width: none` stays `none`.
+-->
+
+<script id=minmax_bounds_size_the_box>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'width:400px; height:200px; font-size:16px');
+  document.body.appendChild(host);
+
+  const NAMES = ['min-width', 'max-width', 'min-height', 'max-height', 'width', 'height'];
+  const wrong = [];
+  const read = (css) => {
+    const el = document.createElement('div');
+    el.setAttribute('style', css);
+    el.textContent = 'x';
+    host.appendChild(el);
+    const cs = getComputedStyle(el);
+    const out = NAMES.map((n) => cs.getPropertyValue(n)).join(' | ');
+    el.remove();
+    return out;
+  };
+  const check = (what, got, want) => {
+    if (got !== want) wrong.push(what + ': want [' + want + '], got [' + got + ']');
+  };
+
+  // The initial values, and the control for everything below.
+  check('bare', read(''), '0px | none | 0px | none | 400px | 18.5px');
+
+  // What the bounds REPORT. A length resolves, a percentage does not.
+  check('px bounds', read('min-width:50px; max-width:120px; min-height:10px; max-height:40px'),
+        '50px | 120px | 10px | 40px | 120px | 18.5px');
+  check('pct bounds', read('min-width:25%; max-width:60%; min-height:10%; max-height:80%'),
+        '25% | 60% | 10% | 80% | 240px | 20px');
+  check('em bounds', read('min-width:3em; max-width:10em; min-height:2em; max-height:4em'),
+        '48px | 160px | 32px | 64px | 160px | 32px');
+  check('calc bounds', read('min-width:calc(10% + 10px); max-width:calc(50% - 4px)'),
+        'calc(10% + 10px) | calc(50% - 4px) | 0px | none | 196px | 18.5px');
+  check('keywords', read('width:300px; max-width:none'), '0px | none | 0px | none | 300px | 18.5px');
+  check('min auto', read('width:300px; min-width:auto'), '0px | none | 0px | none | 300px | 18.5px');
+
+  // What the bounds DO. Each of these measured the unclamped number before.
+  check('max-width clamps', read('width:300px; max-width:100px; height:50px'),
+        '0px | 100px | 0px | none | 100px | 50px');
+  check('min-width clamps', read('width:50px; min-width:200px; height:50px'),
+        '200px | none | 0px | none | 200px | 50px');
+  check('max-width pct clamps', read('width:300px; max-width:25%; height:50px'),
+        '0px | 25% | 0px | none | 100px | 50px');
+  check('min-width pct clamps', read('width:50px; min-width:75%; height:50px'),
+        '75% | none | 0px | none | 300px | 50px');
+  // An `auto` width is bounded too: the bound is applied to whatever sized the
+  // box, and for a block in flow that is the containing block.
+  check('auto width, max-width', read('max-width:100px; height:50px'),
+        '0px | 100px | 0px | none | 100px | 50px');
+  check('auto width, min-width', read('min-width:600px; height:50px'),
+        '600px | none | 0px | none | 600px | 50px');
+  // The minimum is applied last, so it wins over a maximum that disagrees.
+  check('min beats max', read('width:300px; min-width:250px; max-width:100px'),
+        '250px | 100px | 0px | none | 250px | 18.5px');
+
+  // The height half, which already worked, as the control for the order and
+  // for the clamp reaching the reported size.
+  check('max-height clamps', read('width:50px; height:300px; max-height:100px'),
+        '0px | none | 0px | 100px | 50px | 100px');
+  check('min-height clamps', read('width:50px; height:20px; min-height:120px'),
+        '0px | none | 120px | none | 50px | 120px');
+
+  // With no box there is no used value for any of the six, so every one of them
+  // reports the declaration -- the rule in css/computed_unrendered_shortcuts.html.
+  check('display none', read('display:none; min-width:25%; max-width:60%; min-height:10%; width:50%'),
+        '25% | 60% | 10% | none | 50% | auto');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

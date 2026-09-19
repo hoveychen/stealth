@@ -8494,6 +8494,10 @@ test "WebApi: CSSStyleDeclaration unrendered shortcuts" {
     try testing.htmlRunner("css/computed_unrendered_shortcuts.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration minmax size" {
+    try testing.htmlRunner("css/computed_minmax_size.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration auto margin" {
     try testing.htmlRunner("css/computed_auto_margin.html", .{});
 }
