@@ -1114,6 +1114,22 @@ fn isGated(self: *const Client, transfer: *const Transfer) bool {
         // or even sibling blocking scripts to fetch.
         return true;
     }
+    if (transfer.req.resource_type == .font) {
+        // A `@font-face` file runs no JS on arrival, which is the only thing
+        // this gate exists to prevent: `Frame.ImageRequest.doneCallback` parses
+        // the bytes, files a resource entry and QUEUES whatever has to reach
+        // the page (`fontSettled` schedules a task, `report` queues an event) --
+        // it has no element to size and no callback to call. So holding it back
+        // buys nothing, and it costs the page its fonts.
+        //
+        // Measured on a page whose <div> sits ahead of a 1500ms <script src>
+        // (tools/fingerprint/webfont-timeline.mjs): the font's bytes landed at
+        // 16.6ms and the face became usable at 1524.1ms, the entire wait being
+        // this gate. Chrome had it usable at 31.9ms -- it lays out and paints
+        // while a parser-blocking script is outstanding, so its fonts land
+        // there too.
+        return false;
+    }
     if (self.blocking_requests.count() == 0) {
         // O(1) quick check.
         return false;

@@ -112,6 +112,11 @@ pub fn getSize(self: *FontFaceSet, exec: *const Execution) u32 {
 /// `document.fonts.size` is not a place to raise, and the alternative -- an
 /// empty set on one bad allocation -- is worse than a stale one.
 fn syncDeclared(self: *FontFaceSet, exec: *const Execution) void {
+    self.rebuildDeclared(exec);
+    self.refreshLoading(exec);
+}
+
+fn rebuildDeclared(self: *FontFaceSet, exec: *const Execution) void {
     const frame = switch (exec.js.global) {
         .frame => |frame| frame,
         // A worker has no stylesheets, so there is nothing to derive and the
@@ -146,7 +151,7 @@ fn syncDeclared(self: *FontFaceSet, exec: *const Execution) void {
         // A face that arrives after the style-resource pass was never fetched,
         // which is what Chrome reports for one too: every face iphey injects
         // reads `unloaded` there.
-        entry.markDeclared(false);
+        entry.markDeclared(.unloaded);
         // Appending bypasses `add()`, which is where the reference is normally
         // taken. Without this the set holds a face at zero and the runner
         // catches the double release on teardown.
@@ -182,16 +187,43 @@ fn syncDeclared(self: *FontFaceSet, exec: *const Execution) void {
 /// The index is the rule's position in the same source-order walk this set
 /// derives its declared half from: both go through `style_resources`, so the
 /// `i`th rule there is the `i`th declared face here.
-pub fn markDeclaredAt(self: *FontFaceSet, index: usize, used: bool, exec: *const Execution) void {
+pub fn markDeclaredAt(self: *FontFaceSet, index: usize, status: FontFace.Status, exec: *const Execution) void {
     self.syncDeclared(exec);
     var seen: usize = 0;
     for (self._faces.items) |face| {
         if (!face.isDeclared()) continue;
         if (seen == index) {
-            face.markDeclared(used);
+            face.markDeclared(status);
             return;
         }
         seen += 1;
+    }
+}
+
+/// Promote the faces whose file has arrived since the last look.
+///
+/// The scan marks a face `loading` when it puts its url on the wire, and the
+/// thing that ends the loading is `Frame.registerWebfont` -- which runs in the
+/// HTTP pump, where there is no JS scope to reach a FontFace through. So the
+/// transition is read rather than pushed: the frame's webfont table IS the
+/// record of which families measure with their own file, and it is the same
+/// table `lookupWebfont` answers text measurement from. `check()` therefore
+/// flips in the same instant the measurement does, which is the whole contract
+/// (it answered true 40ms early when the scan marked the face `loaded` itself).
+fn refreshLoading(self: *FontFaceSet, exec: *const Execution) void {
+    const frame = switch (exec.js.global) {
+        .frame => |frame| frame,
+        .worker => return,
+    };
+    for (self._faces.items) |face| {
+        if (!face.isDeclared()) continue;
+        if (!face.isLoading()) continue;
+        const family = face.getFamily();
+        if (frame.hasWebfont(family)) {
+            face.markDeclared(.loaded);
+        } else if (frame.webfontFailed(family)) {
+            face.markDeclared(.failed);
+        }
     }
 }
 
@@ -254,7 +286,7 @@ pub fn getReady(self: *FontFaceSet, exec: *const Execution) !js.Promise {
     if (self._ready) |resolver| {
         return local.toLocal(resolver).promise();
     }
-    if (pending(exec) == 0 and documentLoaded(exec)) {
+    if (pending(exec) == 0 and (everLoaded(exec) or documentLoaded(exec))) {
         return local.resolvePromise({});
     }
     const resolver = local.createPromiseResolver();
@@ -279,22 +311,40 @@ pub fn settle(self: *FontFaceSet, exec: *Execution) void {
     ls.local.toLocal(resolver).resolve("FontFaceSet.ready", {});
 }
 
-/// Whether the document has finished loading, which is half of what makes a
-/// font source ready: the other half is nothing being on the wire.
+/// Whether the document has finished loading, which is what makes a set that
+/// never loaded anything ready.
 ///
-/// A document still parsing has not been scanned for `@font-face` yet -- that
-/// runs at DOMContentLoaded -- so `pending` is legitimately zero there and
-/// resolving on it alone promised a set nobody had looked at. Measured with
-/// tools/fingerprint/webfont-timeline.mjs: on a two-line page declaring one
-/// face this resolved at 11ms against Chrome's 618, and on a page declaring
-/// NO face at all Chrome still waited for its load event rather than
-/// resolving at once -- so "there is nothing to load" is not the question
-/// being asked.
+/// A document still parsing has not been scanned for `@font-face` yet, so
+/// `pending` is legitimately zero there and resolving on it alone promised a
+/// set nobody had looked at: measured with
+/// tools/fingerprint/webfont-timeline.mjs, this resolved at 11ms on a two-line
+/// page declaring one face, against Chrome's 618. Chrome waits for its load
+/// event even on a page declaring NO face at all (611.6 against a 605.3 load),
+/// so "there is nothing to load" is not on its own the question being asked.
+///
+/// It is only the question for a set that never went `loading`, though --
+/// which is the pair of readings this and `everLoaded` split between them.
 fn documentLoaded(exec: *const Execution) bool {
     return switch (exec.js.global) {
         .frame => |frame| frame.document._ready_state == .complete,
         // A worker has no document to wait for.
         .worker => true,
+    };
+}
+
+/// Whether this document has had a font on the wire at all.
+///
+/// Once it has, the document's load event stops mattering: the set went
+/// `loading` and `ready` belongs to the transition out of it. Measured on the
+/// same slow-DOMContentLoaded page as everything else here, where the face
+/// lands early and the document does not for another second and a half:
+/// Chrome resolved `ready` at 44.6ms against a load event at 1522.0ms. Waiting
+/// for the document there put `ready` 1.5 SECONDS late -- the same tell as
+/// resolving early, pointed the other way.
+fn everLoaded(exec: *const Execution) bool {
+    return switch (exec.js.global) {
+        .frame => |frame| frame._webfonts_ever_pending,
+        .worker => false,
     };
 }
 

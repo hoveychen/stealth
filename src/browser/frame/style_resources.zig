@@ -439,7 +439,22 @@ fn scan(frame: *Frame) !void {
         // leaves an unused face `unloaded` whether its source is a url it
         // never fetched or a `local()` name -- iphey's 310 local probes are all
         // `unloaded` there.
-        set.markDeclaredAt(rule_index, used and face.url.len != 0, &frame.js.execution);
+        // `loading` rather than `loaded`: the file is on the wire at this
+        // point, not in the measurement. What ends the loading is the
+        // registration of its bytes, and the set reads that off the frame's
+        // webfont table (FontFaceSet.refreshLoading) -- so the two cases below
+        // are only the scan catching up with a face whose transfer already
+        // finished, which happens on the DOMContentLoaded pass when the early
+        // one had already put it on the wire.
+        const status: FontFace.Status = if (!(used and face.url.len != 0))
+            .unloaded
+        else if (frame.hasWebfont(face.family))
+            .loaded
+        else if (frame.webfontFailed(face.family))
+            .failed
+        else
+            .loading;
+        set.markDeclaredAt(rule_index, status, &frame.js.execution);
     }
 }
 

@@ -442,6 +442,29 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
             self.base.is_evaluating = true;
             defer self.base.endEvaluationWindow(was_evaluating);
 
+            // The parser is about to stop for the network, so the style the
+            // document has NAMED so far is the style it is going to be shown
+            // with for however long this takes. Chrome resolves it here -- it
+            // has to, it paints -- and the fonts a resolved rule asks for go on
+            // the wire at that moment rather than at DOMContentLoaded.
+            //
+            // Measured against headed Chrome 153 on a page whose <div> sits
+            // ahead of a <script src> that takes 1500ms to answer
+            // (tools/fingerprint/webfont-timeline.mjs): Chrome discovered the
+            // @font-face at 11.7ms and had it usable at 31.9ms, while this
+            // engine discovered it at 1552.2ms -- the whole 1540ms gap was the
+            // scan waiting for DOMContentLoaded, and none of it was transfer or
+            // decode.
+            //
+            // Running it here does not over-fetch, which is the thing the
+            // DOMContentLoaded timing was protecting (see the header of
+            // frame/style_resources.zig): a rule is still tested against real
+            // nodes, there are just fewer of them, so a rule that only matches
+            // something below this <script> is passed over now and picked up by
+            // the DOMContentLoaded pass. The second pass costs no second
+            // request -- Frame._image_cache keys on the resolved URL.
+            Frame.style_resources.requestAll(frame);
+
             if (self.waitForPreload(remote_url)) |pre| {
                 // There was a preloaded script, we borrow it's source and status
                 consumed_preload = pre;

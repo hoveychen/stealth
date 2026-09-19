@@ -66,12 +66,14 @@ _variation_settings: []const u8 = "normal",
 /// (probes/expr-fontface-status.js).
 pub const Status = enum {
     unloaded,
+    loading,
     loaded,
     failed,
 
     fn text(self: Status) []const u8 {
         return switch (self) {
             .unloaded => "unloaded",
+            .loading => "loading",
             .loaded => "loaded",
             .failed => "error",
         };
@@ -177,13 +179,19 @@ pub fn acquireRef(self: *FontFace) void {
 }
 
 /// A face the document DECLARED with an `@font-face` rule, rather than one a
-/// script handed to `add()`. `used` is whether anything on the page asks for
-/// the family, which is the same predicate that decides whether the file is
-/// fetched at all -- Chrome leaves an unused face `unloaded` even when its url
-/// is good, and requests nothing for it (tests/css/font_face_set.html).
-pub fn markDeclared(self: *FontFace, used: bool) void {
+/// script handed to `add()`. A face nothing on the page asks for stays
+/// `unloaded` -- that is the same predicate that decides whether the file is
+/// fetched at all, and Chrome leaves an unused face `unloaded` even when its
+/// url is good, requesting nothing for it (tests/css/font_face_set.html).
+///
+/// A face that IS asked for goes `loading` while its file is on the wire and
+/// `loaded` once the bytes are registered and the text actually measures with
+/// them. The set decides which of the two on every read (`refreshLoading`);
+/// marking it `loaded` at scan time made `check()` answer true 40ms before the
+/// measurement changed (tools/fingerprint/webfont-timeline.mjs).
+pub fn markDeclared(self: *FontFace, status: Status) void {
     self._declared = true;
-    self._status = if (used) .loaded else .unloaded;
+    self._status = status;
 }
 
 /// Whether this face came from an `@font-face` rule rather than from
@@ -191,6 +199,12 @@ pub fn markDeclared(self: *FontFace, used: bool) void {
 /// stylesheets on every read and must not touch the other half.
 pub fn isDeclared(self: *const FontFace) bool {
     return self._declared;
+}
+
+/// Whether this face's file is still on the wire, which is the one status the
+/// set has to re-read on every look (see FontFaceSet.refreshLoading).
+pub fn isLoading(self: *const FontFace) bool {
+    return self._status == .loading;
 }
 
 pub fn getFamily(self: *const FontFace) []const u8 {
