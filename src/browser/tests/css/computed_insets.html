@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+An inset resolves at LAYOUT time, so a positioned element's computed `top`,
+`right`, `bottom` and `left` are USED lengths: the declaration where there is
+one, and the distance the layout actually gave the box where there is not.
+`position:absolute` with nothing else reports the far edges of its containing
+block, and `left:25%` reports the pixels.
+
+This engine reported the cascade -- `auto` and the percentage as written -- for
+every position. An unpositioned box is the one where that IS Chrome's answer,
+and computed_percentage_kept.html pins that half.
+
+Measured against Chrome 152 over thirty shapes, five positions by six inset
+declarations, with tools/fingerprint/probes/expr-computed-insets.js. The host
+below is the 400x200 containing block those readings were taken in.
+-->
+
+<script id=computed_insets>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute; top:0; left:0; width:400px; height:200px';
+  document.body.appendChild(host);
+
+  const read = (decl) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:50px;height:30px;' + decl;
+    host.appendChild(el);
+    const c = getComputedStyle(el);
+    const got = [c.top, c.right, c.bottom, c.left].join(' ');
+    el.remove();
+    return got;
+  };
+
+  // declaration, Chrome's "top right bottom left"
+  const CASES = [
+    // An unpositioned box has no used inset at all: the cascade answers, and
+    // `auto` and a percentage both stay as written.
+    ['position:static', 'auto auto auto auto'],
+    ['position:static; top:10px; left:20px', '10px auto auto 20px'],
+    ['position:static; top:10%; left:25%', '10% auto auto 25%'],
+
+    // A relative box moves without leaving the flow, so an `auto` inset is the
+    // NEGATION of the opposite one rather than a distance measured in the
+    // containing block.
+    ['position:relative', '0px 0px 0px 0px'],
+    ['position:relative; top:10px; left:20px', '10px -20px -10px 20px'],
+    ['position:relative; top:10%; left:25%', '20px -100px -20px 100px'],
+    ['position:relative; right:10px; bottom:20px', '-20px 10px 20px -10px'],
+    // Over-constrained: every side is declared, and every side is reported as
+    // declared. The complement is what fills an `auto`, not what overrides a
+    // declaration no layout can honour.
+    ['position:relative; top:1px; right:2px; bottom:3px; left:4px', '1px 2px 3px 4px'],
+
+    // An absolute box's `auto` inset is the containing block less the opposite
+    // inset and the box's own border box.
+    ['position:absolute', '0px 350px 170px 0px'],
+    ['position:absolute; top:10px; left:20px', '10px 330px 160px 20px'],
+    ['position:absolute; top:10%; left:25%', '20px 250px 150px 100px'],
+    ['position:absolute; right:10px; bottom:20px', '150px 10px 20px 340px'],
+    ['position:absolute; top:1px; right:2px; bottom:3px; left:4px', '1px 2px 3px 4px'],
+    ['position:absolute; top:auto; left:auto; right:auto; bottom:auto', '0px 350px 170px 0px'],
+
+    // A sticky box keeps `auto`: it names an edge that does not stick, not an
+    // offset of zero. Its declared insets are offsets into the scrollport.
+    ['position:sticky', 'auto auto auto auto'],
+    ['position:sticky; top:10px; left:20px', '10px auto auto 20px'],
+    ['position:sticky; right:10px; bottom:20px', 'auto 10px 20px auto'],
+
+    // No box, so nothing used: the declaration answers, percentage and all.
+    ['position:absolute; display:none; top:10%; left:25%', '10% auto auto 25%'],
+  ];
+
+  const wrong = [];
+  for (const [decl, want] of CASES) {
+    const got = read(decl);
+    if (got !== want) wrong.push(decl + ': want [' + want + '], got [' + got + ']');
+  }
+
+  // A box with no size of its own still has the complement measured against it.
+  {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute; top:10px; left:20px';
+    host.appendChild(el);
+    const c = getComputedStyle(el);
+    testing.expectEqual('380px', c.right);
+    testing.expectEqual('190px', c.bottom);
+    el.remove();
+  }
+
+  // A fixed box is measured against the viewport, whatever it is nested in.
+  {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed; width:50px; height:30px; top:10px; left:20px';
+    host.appendChild(el);
+    const c = getComputedStyle(el);
+    testing.expectEqual('10px', c.top);
+    testing.expectEqual('20px', c.left);
+    testing.expectEqual((window.innerWidth - 20 - 50) + 'px', c.right);
+    testing.expectEqual((window.innerHeight - 10 - 30) + 'px', c.bottom);
+    el.remove();
+  }
+
+  // `top` and `inset-block-start` are one property under two spellings, so the
+  // used value comes out of either.
+  {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute; width:50px; height:30px; top:10px';
+    host.appendChild(el);
+    const c = getComputedStyle(el);
+    testing.expectEqual('10px', c.getPropertyValue('inset-block-start'));
+    testing.expectEqual('160px', c.getPropertyValue('inset-block-end'));
+    el.remove();
+  }
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

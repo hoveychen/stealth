@@ -763,6 +763,23 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     }
                 }
 
+                // An inset is resolved at LAYOUT time, so a positioned element
+                // reports a used length here and not the declaration: a bare
+                // `position:absolute` box reports the distance from its
+                // containing block's far edge where the cascade holds `auto`,
+                // and `left:25%` reports the pixels and not the percentage.
+                // Element.usedInsets is where the thirty measured shapes are.
+                //
+                // Asked before the cascade for the same reason a flex item's
+                // width is: the declaration is not the answer. It is null for
+                // every unpositioned element, which is nearly all of them, and
+                // that costs one cascade read for `position`.
+                if (insetSide(normalized)) |which| {
+                    if (element.usedInsets(frame)) |insets| {
+                        if (insets.side(which)) |value| return usedLengthPx(value, frame);
+                    }
+                }
+
                 switch (cascadedValue(style_manager, element, normalized, wrapped, surface)) {
                     .value => |value| return self.resolveCurrentColour(value, frame, surface),
                     .unreportable => {},
@@ -4168,6 +4185,34 @@ fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame
     // `{d}` printed a fractional box in full -- a percentage-padded element
     // computed `1619.8527949957197px` here where Chrome prints `1619.85px`,
     // and seventeen digits is a number no browser has ever answered.
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    units.writeNumber(&buf.writer, value) catch return "auto";
+    buf.writer.writeAll("px") catch return "auto";
+    return buf.written();
+}
+
+/// Which inset a property name is, under either spelling -- `top` and
+/// `inset-block-start` are one property, the way `width` and `inline-size` are.
+/// Null for every other property.
+fn insetSide(property_name: []const u8) ?Element.InsetSide {
+    if (physicalInsetSide(property_name)) |which| return which;
+    const other = chrome_logical.counterpart(property_name) orelse return null;
+    return physicalInsetSide(other);
+}
+
+fn physicalInsetSide(property_name: []const u8) ?Element.InsetSide {
+    const SIDES = std.StaticStringMap(Element.InsetSide).initComptime(.{
+        .{ "top", .top },
+        .{ "right", .right },
+        .{ "bottom", .bottom },
+        .{ "left", .left },
+    });
+    return SIDES.get(property_name);
+}
+
+/// A used length as a computed style writes it: six significant figures and a
+/// `px`, the way `resolvedDimension` prints the box it measures.
+fn usedLengthPx(value: f64, frame: *Frame) []const u8 {
     var buf = std.Io.Writer.Allocating.init(frame.local_arena);
     units.writeNumber(&buf.writer, value) catch return "auto";
     buf.writer.writeAll("px") catch return "auto";
@@ -8367,6 +8412,10 @@ test "WebApi: CSSStyleDeclaration unrendered percentages" {
 
 test "WebApi: CSSStyleDeclaration percentage kept" {
     try testing.htmlRunner("css/computed_percentage_kept.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed insets" {
+    try testing.htmlRunner("css/computed_insets.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration position keywords" {
