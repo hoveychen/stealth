@@ -1311,6 +1311,65 @@
     osc.connect(comp); // a duplicate connect() is a no-op in Chrome
   });
 
+  // What reaches the destination is what it renders, and more than one edge can
+  // carry it there. iphey builds the fingerprintjs graph with the compressor
+  // wired to the destination twice -- directly, and through an analyser -- and
+  // Chrome sums the two into exactly double the single-path buffer
+  // (248.0869496049272 against 124.0434748024636, measured by
+  // tools/fingerprint/probes/expr-b153-fanin.js). Refusing that shape is what
+  // handed iphey silence where Chrome renders a tone, and silence off a graph
+  // Chrome renders is the tell this whole file exists to avoid.
+  const fanIn = {
+    // A pass-through node in the chain changes nothing.
+    analyserOnly: await render(5000, 44100, (ctx, osc, comp) => {
+      osc.connect(comp);
+      comp.connect(ctx.createAnalyser()).connect(ctx.destination);
+      return { wired: false };
+    }),
+    analyserChain: await render(5000, 44100, (ctx, osc, comp) => {
+      osc.connect(comp);
+      comp.connect(ctx.createAnalyser()).connect(ctx.createAnalyser()).connect(ctx.destination);
+      return { wired: false };
+    }),
+    // A gain node is transparent while its gain is 1, which is its default.
+    gainDefault: await render(5000, 44100, (ctx, osc, comp) => {
+      osc.connect(comp);
+      comp.connect(ctx.createGain()).connect(ctx.destination);
+      return { wired: false };
+    }),
+    gainOne: await render(5000, 44100, (ctx, osc, comp) => {
+      const g = ctx.createGain();
+      g.gain.value = 1;
+      osc.connect(comp);
+      comp.connect(g).connect(ctx.destination);
+      return { wired: false };
+    }),
+    // A repeated connect() of the same pair is a no-op, so this is still one
+    // path and still the single-path buffer.
+    doubleConnect: await render(5000, 44100, (ctx, osc, comp) => {
+      osc.connect(comp);
+      comp.connect(ctx.destination);
+      comp.connect(ctx.destination);
+      return { wired: false };
+    }),
+  };
+  // iphey's own shape, and the same thing with a gain in place of the analyser:
+  // two edges, so twice the buffer.
+  const doubled = {
+    iphey: await render(5000, 44100, (ctx, osc, comp) => {
+      osc.connect(comp);
+      comp.connect(ctx.createAnalyser()).connect(ctx.destination);
+      comp.connect(ctx.destination);
+      return { wired: false };
+    }),
+    gainPlusDirect: await render(5000, 44100, (ctx, osc, comp) => {
+      osc.connect(comp);
+      comp.connect(ctx.createGain()).connect(ctx.destination);
+      comp.connect(ctx.destination);
+      return { wired: false };
+    }),
+  };
+
   // The widget's own graph, and the 1 000 frames of it it actually asks for.
   const turnstile = await render(5000, 44100, null, GRAPHS.turnstile);
   const turnstileShort = await render(1000, 44100, null, GRAPHS.turnstile);
@@ -1336,6 +1395,26 @@
     late: await render(5000, 44100, () => ({ start: 1 })),
     // Connected to nothing, so the destination sees no input.
     unwired: await render(5000, 44100, () => ({ wired: false })),
+    // A gain the page moved off 1 scales the signal (Chrome renders exactly
+    // half of the canonical tail at 0.5), and there is no recording of that.
+    gainHalf: await render(5000, 44100, (ctx, osc, comp) => {
+      const g = ctx.createGain();
+      g.gain.value = 0.5;
+      osc.connect(comp);
+      comp.connect(g).connect(ctx.destination);
+      return { wired: false };
+    }),
+    // Three edges do NOT come out at exactly three times the single path in
+    // Chrome (372.13042371820484 against 372.1304244073908), so the sum stops
+    // being a multiple of the recording and there is nothing honest to hand
+    // back.
+    threePaths: await render(5000, 44100, (ctx, osc, comp) => {
+      osc.connect(comp);
+      comp.connect(ctx.createAnalyser()).connect(ctx.destination);
+      comp.connect(ctx.createAnalyser()).connect(ctx.destination);
+      comp.connect(ctx.destination);
+      return { wired: false };
+    }),
     // Two sources mixing into the compressor is a different signal.
     second: await render(5000, 44100, (ctx, osc, comp) => {
       const other = ctx.createOscillator();
@@ -1484,6 +1563,16 @@
     testing.expectEqual(expectedSecond.turnstile.last, turnstileSecond[44099]);
 
     testing.expectEqual(expected.fingerprintjs, tail(harmless));
+
+    // One signal through a transparent chain is still one signal.
+    for (const [which, data] of Object.entries(fanIn)) {
+      testing.expectEqual(`${which}:${expected.fingerprintjs}`, `${which}:${tail(data)}`);
+    }
+    // Two edges into the destination sum there, bit for bit.
+    for (const [which, data] of Object.entries(doubled)) {
+      testing.expectEqual(`${which}:${expected.fingerprintjs * 2}`, `${which}:${tail(data)}`);
+      testing.expectEqual(true, data.every((v, i) => v === canonical[i] * 2));
+    }
 
     // The widget's graph, which used to fall through to silence: the same 6 ms
     // of pre-delay, then 735 frames of signal in the 1 000 it asks for.
