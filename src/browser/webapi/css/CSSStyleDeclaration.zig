@@ -4304,6 +4304,26 @@ pub fn flexCrossAlign(element: *Element, parent: *Element, frame: *Frame) CrossA
     return .stretch;
 }
 
+/// The cross size a flex ROW gives an item that declares none, or null when the
+/// item is not stretched across the line or the line has no definite size to
+/// give. The container's CONTENT height, out of which the caller takes the
+/// item's own margins, padding and border.
+///
+/// Null for an indefinite container too: a flex row with an `auto` height takes
+/// its own height from the tallest item, and stretching the others to that
+/// needs the line measured before any item is sized. Nothing here measures the
+/// line, so a stretched item in such a container keeps its content height --
+/// which is the number it already had, so this can only improve the definite
+/// case and cannot make the indefinite one worse.
+pub fn flexItemHeight(element: *Element, frame: *Frame, depth: u8) ?f64 {
+    if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
+    const parent = element.parentElement() orelse return null;
+    if (!isFlexRowContainer(parent, frame)) return null;
+    if (!isFlexItem(element, frame)) return null;
+    if (flexCrossAlign(element, parent, frame) != .stretch) return null;
+    return definiteContentHeight(parent, frame);
+}
+
 /// Whether the container stacks its items down the page, which puts a width on
 /// the cross axis.
 fn isColumnFlex(style_manager: *StyleManager, container: *Element) bool {

@@ -4186,6 +4186,27 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         dims.explicit_height = true;
     }
 
+    // A flex item with no height of its own is STRETCHED across the line, which
+    // is what `align-items: stretch` means and what it is initially. The width
+    // half of this is `flexItemWidth`'s column branch; the row branch had no
+    // counterpart, so a `width:60px` child of a 200px-tall flex row measured
+    // 60x0 against Chrome's 60x200 -- and a card row built on stretch had every
+    // card collapsed to nothing.
+    //
+    // After the cascade, because a declared height wins: `stretch` only fills
+    // an axis the item left auto.
+    if (height == null) {
+        if (CSSStyleDeclaration.flexItemHeight(self, frame, depth)) |line_cross| {
+            // The MARGIN box fills the line, so the item's own parts come out
+            // of it the same way a stretched block's do.
+            var cross_containing: ?f64 = containing_width;
+            const margins = self.verticalMargins(frame, &cross_containing, depth);
+            height = @max(0, line_cross - margins.top - margins.bottom -
+                dims.padding_y - dims.border_y);
+            dims.explicit_height = true;
+        }
+    }
+
     // An out-of-flow box that declares BOTH insets on an axis and no size on it
     // is stretched between them -- CSS 2 10.3.7 for the width, 10.6.4 for the
     // height. `position:absolute; inset:0` is the whole containing block, which
@@ -5111,12 +5132,30 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 // where the run of lines has got to; only the single-line case
                 // is in the matrix, so that is the only one measured.
                 if (pass) |p| {
+                    const at_x = p.x + at.inline_at;
+                    const at_y = p.y + total + at.block_at;
                     p.record(frame, el, .{
-                        .x = p.x + at.inline_at,
-                        .y = p.y + total + at.block_at,
+                        .x = at_x,
+                        .y = at_y,
                         .width = box.width + box.padding_x + box.border_x,
                         .height = box.height + box.padding_y + box.border_y,
                     });
+                    // And what is INSIDE it. The walk recorded the atomic box
+                    // and went no further, so every descendant of an
+                    // inline-block or an inline-flex kept the node-count
+                    // position the table falls back to -- three children of an
+                    // `inline-flex` read 62,62 / 67,67 / 72,72, where the same
+                    // three under `display:flex` read 0,0 / 60,0 / 120,0. The
+                    // box is atomic to the LINE, not to the tree.
+                    if (depth < MAX_CONTAINING_BLOCK_DEPTH) {
+                        _ = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1, .{
+                            .table = p.table,
+                            .static_table = p.static_table,
+                            .nodes = p.nodes,
+                            .x = at_x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &margin_containing, depth),
+                            .y = at_y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &margin_containing, depth),
+                        });
+                    }
                 }
                 continue;
             }
