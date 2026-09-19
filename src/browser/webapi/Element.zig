@@ -5184,7 +5184,24 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                     // starts at 23,23 (scratch/h86/expr-h86-offsetparent.js).
                     switch (kind) {
                         .floated => p.record(frame, el, at),
-                        .positioned => p.recordStatic(frame, el, at),
+                        .positioned => {
+                            // Its own block-axis margin moves it from there.
+                            // The inline axis already carried one --
+                            // `staticInlineOffset` reads `margin-left` -- so
+                            // `position:absolute; margin-left:30px;
+                            // margin-top:12px` landed at 30,0 where Chrome puts
+                            // it at 30,12, measured over the shapes in
+                            // tools/fingerprint/probes/expr-abspos-margin.js.
+                            //
+                            // Added here rather than folded into the margin
+                            // group above: an out-of-flow box's margin does not
+                            // collapse with anything, so it is a plain offset
+                            // and must not join the run the in-flow siblings
+                            // share.
+                            var placed_at = at;
+                            placed_at.y += el.containerMarginPx("margin-top", frame, &margin_containing, depth);
+                            p.recordStatic(frame, el, placed_at);
+                        },
                         .in_flow => {},
                     }
                 }

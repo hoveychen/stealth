@@ -199,6 +199,30 @@ one. It is the block-flow walk's to fix, not this path's.
   // One inset alone leaves nothing over, so an `auto` there is 0.
   check('abs one inset, auto margin', place(A + ' left:0; margin-left:auto'), '0');
 
+  // With NO inset on an axis the box takes its static position -- where the
+  // flow would have put it -- and its own margin moves it from there, on both
+  // axes. The inline axis was already right, because the flow's recorded
+  // position carries the horizontal margin; the block axis dropped it, so
+  // `position:absolute; margin-top:12px` sat at the flow's y rather than 12
+  // past it.
+  const placeXY = (css, before) => {
+    const wrap = document.createElement('div');
+    if (before) wrap.innerHTML = before;
+    host.appendChild(wrap);
+    const el = document.createElement('div');
+    el.setAttribute('style', css);
+    wrap.appendChild(el);
+    const r = el.getBoundingClientRect(), hr = host.getBoundingClientRect();
+    const out = Math.round(r.x - hr.x) + ',' + Math.round(r.y - hr.y);
+    wrap.remove();
+    return out;
+  };
+  check('abs static both margins', placeXY(A + ' margin-left:30px; margin-top:12px'), '30,12');
+  check('abs static behind a block',
+        placeXY(A + ' margin-top:12px', '<div style="height:40px"></div>'), '0,52');
+  check('abs top inset keeps static x',
+        placeXY(A + ' top:0; margin-left:30px; margin-top:12px'), '30,12');
+
   // The three boxes with no free space are PLACED by the same rule they report,
   // and this engine centred all three. A shrink-to-fit box is sized to its
   // content rather than given the line, and an out-of-flow box that declares no
