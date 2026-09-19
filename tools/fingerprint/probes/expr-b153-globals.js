@@ -1,0 +1,16 @@
+({
+  CSS: typeof CSS,
+  CSS_supports: typeof CSS !== 'undefined' && typeof CSS.supports,
+  CSS_escape: typeof CSS !== 'undefined' && typeof CSS.escape,
+  CSS_in_window: 'CSS' in window,
+  console: typeof console,
+  console_in_window: 'console' in window,
+  console_own: Object.getOwnPropertyNames(window).includes('console'),
+  chrome: typeof window.chrome,
+  chrome_in_window: 'chrome' in window,
+  PushEvent: typeof PushEvent,
+  PushMessageData: typeof PushMessageData,
+  PushSubscription: typeof PushSubscription,
+  PushManager: typeof PushManager,
+  devtoolsFormatters: typeof window.devtoolsFormatters,
+})

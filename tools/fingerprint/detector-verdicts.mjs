@@ -165,6 +165,9 @@ if (engine === 'chrome') {
         '--window-size=1920,1080',
         ...(headed ? [] : ['--headless=new']),
         ...(proxy ? [`--proxy-server=${proxy}`] : []),
+        // Zero-point controls: knock one capability out of the reference arm and
+        // watch whether iphey's score follows. Repeatable: --chrome-arg X --chrome-arg Y
+        ...process.argv.reduce((acc, a, i) => (a === '--chrome-arg' ? [...acc, process.argv[i + 1]] : acc), []),
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {
     // LP_BIN so a run can be pinned to one build while a peer session rebuilds
