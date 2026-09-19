@@ -850,3 +850,86 @@
   testing.expectEqual(targetY, window.scrollY);
 }
 </script>
+
+<!--
+  An out-of-flow box whose size is `auto` on an axis, with BOTH insets on that
+  axis declared, is stretched to fill what is left of its containing block:
+  `position:absolute; inset:0` covers the whole containing block, which is what
+  every overlay on the web is built out of. CSS 2 resolves it in 10.3.7 (width)
+  and 10.6.4 (height).
+
+  This engine sized such a box from its content, so an empty one was 0x0 --
+  iphey hangs its geometry probe inside exactly this shape, and the Cloudflare
+  and Kasada challenge pages are full of them. Measured against Chrome 152 with
+  tools/fingerprint/probes/expr-abspos-inset.js: with a 1920x993 viewport,
+  `inset:0` is 1920x993, `top:10px;bottom:20px;left:5px;right:7px` is 1908x963,
+  and `top:10%;bottom:10%;left:25%;right:25%` is 960x794.41.
+-->
+<script id="absoluteInsetSizing">
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute; top:0; left:0; width:400px; height:200px;');
+  document.body.appendChild(host);
+
+  const box = (css) => {
+    const el = document.createElement('div');
+    el.setAttribute('style', css);
+    host.appendChild(el);
+    const r = el.getBoundingClientRect();
+    const computed = getComputedStyle(el);
+    const out = [r.x - 0, r.y - 0, r.width, r.height, computed.width, computed.height];
+    el.remove();
+    return out;
+  };
+  const hostBox = host.getBoundingClientRect();
+  const at = (css) => {
+    const r = box(css);
+    return [Math.round((r[0] - hostBox.x) * 100) / 100, Math.round((r[1] - hostBox.y) * 100) / 100,
+            Math.round(r[2] * 100) / 100, Math.round(r[3] * 100) / 100];
+  };
+
+  // Both insets zero: the box IS the containing block.
+  testing.expectEqual([0, 0, 400, 200], at('position:absolute; inset:0;'));
+
+  // Each inset comes off its own side.
+  testing.expectEqual([5, 10, 388, 170], at('position:absolute; top:10px; bottom:20px; left:5px; right:7px;'));
+
+  // One axis at a time: the other keeps whatever it had.
+  testing.expectEqual([0, 0, 40, 200], at('position:absolute; top:0; bottom:0; left:0; width:40px;'));
+  testing.expectEqual([0, 0, 400, 40], at('position:absolute; left:0; right:0; top:0; height:40px;'));
+
+  // A declared size wins over the insets -- the box is over-constrained and
+  // CSS drops the `right`/`bottom` edge, not the size.
+  testing.expectEqual([0, 0, 50, 60], at('position:absolute; inset:0; width:50px; height:60px;'));
+
+  // Percentage insets resolve against the containing block, like any other
+  // percentage length here.
+  testing.expectEqual([100, 20, 200, 160], at('position:absolute; top:10%; bottom:10%; left:25%; right:25%;'));
+
+  // Negative insets stretch the box PAST its containing block.
+  testing.expectEqual([-10, -10, 420, 220], at('position:absolute; inset:-10px;'));
+
+  // The padding and the border come out of the content box, so the BORDER box
+  // is still the full 400x200 and the computed `width` is what is left.
+  testing.expectEqual([0, 0, 400, 200], at('position:absolute; inset:0; padding:10px; border:5px solid;'));
+  testing.expectEqual('370px', box('position:absolute; inset:0; padding:10px; border:5px solid;')[4]);
+  testing.expectEqual('170px', box('position:absolute; inset:0; padding:10px; border:5px solid;')[5]);
+
+  // A fixed box is stretched the same way, against the viewport.
+  {
+    const el = document.createElement('div');
+    el.setAttribute('style', 'position:fixed; inset:0;');
+    document.body.appendChild(el);
+    const r = el.getBoundingClientRect();
+    testing.expectEqual(window.innerWidth, r.width);
+    testing.expectEqual(window.innerHeight, r.height);
+    el.remove();
+  }
+
+  // Only one inset on an axis leaves the size alone: an empty shrink-to-fit
+  // box is still 0 wide.
+  testing.expectEqual([0, 0, 0, 0], at('position:absolute; top:0; left:0;'));
+
+  host.remove();
+}
+</script>
