@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`margin` reports a USED value, so an `auto` margin computes to the px it
+actually took. `margin: 0 auto` is how the web centres a block, so this is not a
+corner: every centred container on every page answered `auto` here where Chrome
+answers a number, and a guard walking the computed style reads the difference on
+the page's own layout.
+
+The layout already resolves these -- `staticInlineOffset` in Element.zig puts a
+`margin:0 auto` block at its centred offset, and `getBoundingClientRect` agreed
+with Chrome to the pixel before this. Only the reported value did not: it came
+straight off the cascade, and the cascade says `auto`.
+
+Measured on Chrome 152 with
+tools/fingerprint/probes/expr-auto-margin-used.js, in a 400x200 relatively
+positioned parent. Five rules, and each row below is one of them:
+
+  * no box, no used value: a `display:none` element reports `auto`, the same
+    rule as css/computed_unrendered_shortcuts.html.
+  * a non-replaced INLINE box reports `auto` too. Its margins take no part in
+    sizing anything, so there is nothing for them to have used.
+  * a block with an `auto` width has no free space to hand out, so an `auto`
+    margin is 0 -- and a vertical `auto` margin in flow is 0 whatever the
+    width, because there is no vertical free space to share.
+  * a block with a definite width splits the free space: both sides `auto`
+    halves it, one side `auto` takes all of it.
+  * a shrink-to-fit box -- a float, an inline-block -- has no free space
+    either, so 0.
+  * an out-of-flow box only has free space when the two opposing insets are
+    both declared. With them it centres on that axis (and THIS is also a layout
+    fix: `position:absolute; left:0; right:0; margin:0 auto` sat at offset 0
+    instead of centring). Without them, 0.
+
+One measured shape deliberately left out, because it is the flex algorithm and
+not this one: a flex item's `auto` margin absorbs the container's free space on
+BOTH axes, so `margin:auto; width:100px` in a 400x200 flex container computes
+`100px | 150px | 100px | 150px`. Recorded for its own plan.
+-->
+
+<script id=auto_margin_reports_its_used_value>
+{
+  const host = document.createElement('div');
+  host.setAttribute('style', 'width:400px; height:200px; position:relative; margin:0');
+  document.body.appendChild(host);
+
+  const M = ['margin-top', 'margin-right', 'margin-bottom', 'margin-left'];
+  const wrong = [];
+
+  const read = (css) => {
+    const el = document.createElement('div');
+    el.setAttribute('style', css);
+    host.appendChild(el);
+    const cs = getComputedStyle(el);
+    const out = M.map((n) => cs.getPropertyValue(n)).join(' | ');
+    el.remove();
+    return out;
+  };
+  const check = (what, got, want) => {
+    if (got !== want) wrong.push(what + ': want [' + want + '], got [' + got + ']');
+  };
+
+  // No free space to hand out: the width already took all of it.
+  check('auto width', read('margin:auto'), '0px | 0px | 0px | 0px');
+  // A definite width leaves 300px, split or handed to the one `auto` side.
+  check('auto both sides', read('margin:auto; width:100px'), '0px | 150px | 0px | 150px');
+  check('auto sides only', read('margin-left:auto; margin-right:auto; width:100px'),
+        '0px | 150px | 0px | 150px');
+  check('auto left only', read('margin-left:auto; width:100px'), '0px | 0px | 0px | 300px');
+  check('auto right only', read('margin-right:auto; width:100px'), '0px | 300px | 0px | 0px');
+  // A declared margin on the other side comes off the free space first.
+  check('auto left, fixed right', read('margin-left:auto; margin-right:10px; width:100px'),
+        '0px | 10px | 0px | 290px');
+  // Vertical `auto` in flow is 0 whatever the width: there is no vertical free
+  // space in a block formatting context.
+  check('auto top and bottom', read('margin-top:auto; margin-bottom:auto; width:100px'),
+        '0px | 0px | 0px | 0px');
+
+  // Shrink-to-fit boxes: no free space, so 0 rather than a share.
+  check('float', read('float:left; margin:auto; width:100px'), '0px | 0px | 0px | 0px');
+  check('inline-block', read('display:inline-block; margin:auto; width:100px'),
+        '0px | 0px | 0px | 0px');
+
+  // Out of flow. Opposing insets are what create the free space.
+  check('abs both insets one axis',
+        read('position:absolute; left:0; right:0; margin-left:auto; margin-right:auto; width:100px'),
+        '0px | 150px | 0px | 150px');
+  check('abs both insets both axes',
+        read('position:absolute; top:0; bottom:0; left:0; right:0; margin:auto; width:100px; height:50px'),
+        '75px | 150px | 75px | 150px');
+  check('abs no insets', read('position:absolute; margin:auto; width:100px; height:50px'),
+        '0px | 0px | 0px | 0px');
+
+  // The two that keep `auto`, because neither has a used value to report.
+  check('inline', read('display:inline; margin:auto'), 'auto | auto | auto | auto');
+  check('display none', read('display:none; margin:auto; width:100px'),
+        'auto | auto | auto | auto');
+
+  // A declared margin is unaffected by any of this.
+  check('declared', read('margin:5px 10px; width:100px'), '5px | 10px | 5px | 10px');
+
+  // The layout half: an out-of-flow box between two insets centres on its auto
+  // margins. The in-flow cases already did, and are the control.
+  const place = (css) => {
+    const el = document.createElement('div');
+    el.setAttribute('style', css);
+    host.appendChild(el);
+    const x = Math.round((el.getBoundingClientRect().x - host.getBoundingClientRect().x) * 100) / 100;
+    el.remove();
+    return String(x);
+  };
+  check('abs centred box', place('position:absolute; left:0; right:0; margin:0 auto; width:100px; height:20px'),
+        '150');
+  check('in-flow centred box', place('margin:0 auto; width:100px; height:20px'), '150');
+  check('in-flow left-auto box', place('margin-left:auto; width:100px; height:20px'), '300');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
