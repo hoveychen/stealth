@@ -38,6 +38,17 @@ One measured shape deliberately left out, because it is the flex algorithm and
 not this one: a flex item's `auto` margin absorbs the container's free space on
 BOTH axes, so `margin:auto; width:100px` in a 400x200 flex container computes
 `100px | 150px | 100px | 150px`. Recorded for its own plan.
+
+Two more shapes the two probes measure and this does not assert, both still out
+by the margin and both recorded rather than fixed here:
+
+  * an out-of-flow box that declares NO inset on an axis takes its static
+    position, and its own margin on that axis should move it from there.
+    `position:absolute; margin-top:12px` sits at y=12 in Chrome and at 0 here --
+    the inline axis of the same shape is already right, because the flow's
+    recorded position carries the horizontal margin and not the vertical one.
+    It is the block-flow walk's to fix, not this path's.
+  * a flex item, per above.
 -->
 
 <script id=auto_margin_reports_its_used_value>
@@ -115,6 +126,32 @@ BOTH axes, so `margin:auto; width:100px` in a 400x200 flex container computes
         '150');
   check('in-flow centred box', place('margin:0 auto; width:100px; height:20px'), '150');
   check('in-flow left-auto box', place('margin-left:auto; width:100px; height:20px'), '300');
+
+  // An inset names where the MARGIN box goes, so a declared margin sits between
+  // the inset and the border box -- on either edge, and on either axis. This
+  // engine counted the inset alone. Eleven shapes in
+  // tools/fingerprint/probes/expr-abspos-margin.js, measured on Chrome 152.
+  const A = 'position:absolute; width:100px; height:20px;';
+  const placeY = (css) => {
+    const el = document.createElement('div');
+    el.setAttribute('style', css);
+    host.appendChild(el);
+    const y = Math.round((el.getBoundingClientRect().y - host.getBoundingClientRect().y) * 100) / 100;
+    el.remove();
+    return String(y);
+  };
+  check('abs left inset plus margin', place(A + ' left:0; margin-left:30px'), '30');
+  check('abs right inset plus margin', place(A + ' right:0; margin-right:30px'), '270');
+  check('abs top inset plus margin', placeY(A + ' top:0; margin-top:30px'), '30');
+  check('abs both insets, fixed margin', place(A + ' left:0; right:0; margin-left:30px'), '30');
+  check('abs both insets, no margin', place(A + ' left:0; right:0'), '0');
+  // An `auto` margin on one side takes the whole leftover; on the far side it
+  // takes none of it, because the near edge already placed the box.
+  check('abs both insets, auto left', place(A + ' left:0; right:0; margin-left:auto'), '300');
+  check('abs both insets, auto right', place(A + ' left:0; right:0; margin-right:auto'), '0');
+  check('abs both insets, auto vertical', placeY(A + ' top:0; bottom:0; margin:auto 0'), '90');
+  // One inset alone leaves nothing over, so an `auto` there is 0.
+  check('abs one inset, auto margin', place(A + ' left:0; margin-left:auto'), '0');
 
   host.remove();
   testing.expectEqual('', wrong.join(' | '));

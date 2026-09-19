@@ -805,6 +805,21 @@ fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, 
                     }
                 }
 
+                // A margin is a used value too, and `auto` is the one
+                // declaration that does not survive to the report: it names a
+                // share of the free space rather than a length, so Chrome hands
+                // back the px the share came to. `margin: 0 auto` is how the web
+                // centres a block, so this is on nearly every page.
+                // Element.usedAutoMarginPx holds the rules and their measured
+                // shapes; it is null for the two boxes that have no used margin
+                // at all, and asked only where the cascade says `auto`, which
+                // keeps every declared margin on the path below.
+                if (marginSide(normalized)) |which| {
+                    if (declaresAuto(style_manager, element, normalized, wrapped, surface)) {
+                        if (element.usedAutoMarginPx(frame, which)) |px| return usedLengthPx(px, frame);
+                    }
+                }
+
                 switch (cascadedValue(style_manager, element, normalized, wrapped, surface)) {
                     .value => |value| return self.resolveCurrentColour(value, frame, surface),
                     .unreportable => {},
@@ -4223,6 +4238,46 @@ fn insetSide(property_name: []const u8) ?Element.InsetSide {
     if (physicalInsetSide(property_name)) |which| return which;
     const other = chrome_logical.counterpart(property_name) orelse return null;
     return physicalInsetSide(other);
+}
+
+/// Whether the cascade's answer for this name is the keyword `auto`, under
+/// whichever of the two spellings carries it.
+fn declaresAuto(
+    style_manager: *StyleManager,
+    element: *Element,
+    property_name: []const u8,
+    wrapped: String,
+    surface: Surface,
+) bool {
+    const declared = switch (cascadedValue(style_manager, element, property_name, wrapped, surface)) {
+        .value => |value| value,
+        .unreportable, .none => blk: {
+            const other = chrome_logical.counterpart(property_name) orelse return false;
+            break :blk switch (cascadedValue(style_manager, element, other, .wrap(other), surface)) {
+                .value => |value| value,
+                .unreportable, .none => return false,
+            };
+        },
+    };
+    return std.ascii.eqlIgnoreCase(std.mem.trim(u8, declared, &std.ascii.whitespace), "auto");
+}
+
+/// Which side a margin longhand names, under either spelling, or null when the
+/// name is not a margin at all.
+fn marginSide(property_name: []const u8) ?Element.InsetSide {
+    if (physicalMarginSide(property_name)) |which| return which;
+    const other = chrome_logical.counterpart(property_name) orelse return null;
+    return physicalMarginSide(other);
+}
+
+fn physicalMarginSide(property_name: []const u8) ?Element.InsetSide {
+    const SIDES = std.StaticStringMap(Element.InsetSide).initComptime(.{
+        .{ "margin-top", .top },
+        .{ "margin-right", .right },
+        .{ "margin-bottom", .bottom },
+        .{ "margin-left", .left },
+    });
+    return SIDES.get(property_name);
 }
 
 fn physicalInsetSide(property_name: []const u8) ?Element.InsetSide {
