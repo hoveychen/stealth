@@ -25,6 +25,7 @@ const font_space_kerning = @import("font_space_kerning.zig");
 const text_case = @import("text_case.zig");
 const font_variants = @import("font_variants.zig");
 const emoji_metrics = @import("emoji_metrics.zig");
+const emoji_presentation = @import("emoji_presentation.zig");
 const emoji_properties = @import("emoji_properties.zig");
 
 // Two measurement paths live here, both reading tables transcribed from
@@ -424,7 +425,18 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
                     //
                     // Whether an untabulated codepoint would seed the fallback is
                     // not something we have measured, so it leaves the state alone.
-                    if (!isZeroWidth(codepoint)) pen_basis += meanAdvance(face.family);
+                    if (isZeroWidth(codepoint)) continue;
+                    // An emoji-capable character asked for its TEXT presentation
+                    // -- the colour one never reaches here, `isColourEmoji`
+                    // answered it above. Arial draws some of these itself and
+                    // falls back for the rest, and each fallback font has its own
+                    // advance: the mean-advance guess answers one number for all
+                    // eighty-one, which is exactly what Kasada's ten readings
+                    // separate. Measured, emoji_presentation.zig.
+                    pen_basis += if (emoji_presentation.find(codepoint)) |row|
+                        row.advance
+                    else
+                        meanAdvance(face.family);
                     continue;
                 };
 
@@ -636,9 +648,19 @@ fn scaleBox(row: @TypeOf(emoji_sizes[0]), factor: f64) EmojiBox {
 fn isColourEmoji(text: []const u8) bool {
     var iterator = std.unicode.Utf8Iterator{ .bytes = text, .i = 0 };
     const base = iterator.nextCodepoint() orelse return false;
-    if (!emoji_properties.isEmoji(base)) return false;
+    // The measured table wins over the Unicode property where it has a row.
+    // Emoji_Presentation is a statement about the character, and what Chrome
+    // draws is a statement about the fonts installed: U+261D and U+26AA are
+    // both text-presentation characters that Arial cannot draw, so Chrome
+    // reaches Apple Color Emoji for them and renders colour where the property
+    // says it should not. Measured -- see emoji_presentation.zig.
+    const tabulated = emoji_presentation.find(base);
+    if (tabulated == null and !emoji_properties.isEmoji(base)) return false;
 
-    var colour = emoji_properties.isDefaultPresentation(base);
+    var colour = if (tabulated) |row|
+        row.bare_is_emoji
+    else
+        emoji_properties.isDefaultPresentation(base);
     while (iterator.nextCodepoint()) |codepoint| {
         switch (codepoint) {
             VARIATION_SELECTOR_16, ZERO_WIDTH_JOINER => colour = true,
@@ -649,6 +671,106 @@ fn isColourEmoji(text: []const u8) bool {
     }
     return colour;
 }
+
+/// A line box split at the baseline, in CSS pixels.
+pub const LineBox = struct {
+    above: f64 = 0,
+    below: f64 = 0,
+};
+
+/// The line box a run of text forces open because of a glyph the requesting
+/// family cannot draw, zero for a run that has none.
+///
+/// A line box is the FONT's, not the family's: `<div style="font:100px Arial">`
+/// holding a U+2B05 is 150 tall in Chrome and not Arial's 115, because Arial has
+/// no arrow and the font Chrome reached for has a taller line. Layout asks this
+/// and raises the line to it; the strut stays the requesting family's, so the
+/// taller of the two wins exactly the way an inline box with its own
+/// `line-height` does.
+///
+/// A variation selector picks which of the two boxes a character opens --
+/// U+FE0E the text font's, U+FE0F Apple Color Emoji's -- which is why this
+/// cannot be answered a character at a time.
+///
+/// Called once per text node of a box being laid out, not once per character,
+/// and it leaves after one byte comparison for a run of ordinary text.
+/// Null -- not a zero box -- for a run that has none: a line box half is signed
+/// (a font taller than its declared `line-height` gets a negative one), so a
+/// caller that maxed a zero against the strut would clamp that half to zero and
+/// make an empty block taller than Chrome does.
+pub fn fallbackLineBox(text: []const u8, size: f64) ?LineBox {
+    var result: LineBox = .{};
+    if (!mayNeedFallbackLine(text)) return null;
+
+    const raise = struct {
+        fn one(into: *LineBox, above: f64, below: f64, at: f64) void {
+            into.above = @max(into.above, above * at / emoji_presentation.basis);
+            into.below = @max(into.below, below * at / emoji_presentation.basis);
+        }
+    }.one;
+
+    var iterator = std.unicode.Utf8Iterator{ .bytes = text, .i = 0 };
+    // The character a selector would apply to, held back until the next
+    // character says whether one followed it.
+    var pending: ?emoji_presentation.Glyph = null;
+    var colour = false;
+    var any = false;
+    while (iterator.nextCodepoint()) |codepoint| {
+        if (pending != null) {
+            switch (codepoint) {
+                VARIATION_SELECTOR_15 => {
+                    colour = false;
+                    continue;
+                },
+                VARIATION_SELECTOR_16 => {
+                    colour = true;
+                    continue;
+                },
+                else => {},
+            }
+        }
+        if (pending) |row| {
+            if (colour) {
+                raise(&result, emoji_presentation.colour_above, emoji_presentation.colour_below, size);
+            } else {
+                raise(&result, row.above, row.below, size);
+            }
+            any = true;
+        }
+        pending = emoji_presentation.find(codepoint);
+        colour = if (pending) |row| row.bare_is_emoji else false;
+    }
+    if (pending) |row| {
+        if (colour) {
+            raise(&result, emoji_presentation.colour_above, emoji_presentation.colour_below, size);
+        } else {
+            raise(&result, row.above, row.below, size);
+        }
+        any = true;
+    }
+    return if (any) result else null;
+}
+
+/// Whether any byte of `text` could begin a tabulated character. Every row of
+/// emoji_presentation.zig is non-ASCII, so a run of plain text leaves on the
+/// first byte and never decodes anything.
+fn mayNeedFallbackLine(text: []const u8) bool {
+    for (text) |byte| {
+        if (starts_a_presentation_glyph[byte]) return true;
+    }
+    return false;
+}
+
+/// Derived from the table so it cannot drift out of step with it.
+const starts_a_presentation_glyph = blk: {
+    var table = [_]bool{false} ** 256;
+    for (emoji_presentation.glyphs) |row| {
+        var encoded: [4]u8 = undefined;
+        _ = std.unicode.utf8Encode(row.codepoint, &encoded) catch unreachable;
+        table[encoded[0]] = true;
+    }
+    break :blk table;
+};
 
 /// What an unmeasured glyph is charged. Not a Chrome number.
 ///

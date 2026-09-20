@@ -2216,12 +2216,24 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
         // a preserved run keeps its spaces and sends a tab to the next stop,
         // and the flow below is where that lives.
         var shortcut = true;
-        if (measure_width or available != null) {
+        // A character the family cannot draw raises the one line this shortcut
+        // can produce, exactly as it raises a line the flow below builds. Walked
+        // whether or not the width is wanted: the height is what this asks for.
+        var fallback: ?text_measure.LineBox = null;
+        {
             var run: CollapsedRun = .{};
+            const wants_width = measure_width or available != null;
             var child = self.asNode().firstChild();
             while (child) |node| : (child = node.nextSibling()) {
                 if (node.is(CData.Text)) |text| {
                     const str = Factory.protoOf(text)._data.str();
+                    if (text_measure.fallbackLineBox(str, font.size)) |raised| {
+                        fallback = if (fallback) |had| .{
+                            .above = @max(had.above, raised.above),
+                            .below = @max(had.below, raised.below),
+                        } else raised;
+                    }
+                    if (!wants_width) continue;
                     // Each text node meets the grid on its own -- see
                     // textAdvanceUnit, where the two-node cases that say so are.
                     width += textAdvanceUnit(run.measure(str, font.face, font.size));
@@ -2231,11 +2243,17 @@ fn textLayout(self: *Element, frame: *Frame, measure_width: bool, available: ?f6
             // words and none at either end, which is most text -- renders the
             // same either way, so the cascade read below is paid for only by the
             // boxes whose answer it can change.
-            shortcut = !run.differs() or !CSSStyleDeclaration.preservesWhitespace(self, frame);
+            if (wants_width) {
+                shortcut = !run.differs() or !CSSStyleDeclaration.preservesWhitespace(self, frame);
+            }
         }
+        const height = if (fallback) |raised|
+            @max(strut.above, raised.above) + @max(strut.below, raised.below)
+        else
+            strut.above + strut.below;
         if (shortcut) {
-            const box = available orelse return .{ .width = width, .height = strut.above + strut.below };
-            if (width <= box) return .{ .width = width, .height = strut.above + strut.below };
+            const box = available orelse return .{ .width = width, .height = height };
+            if (width <= box) return .{ .width = width, .height = height };
         }
     }
 
@@ -2574,6 +2592,21 @@ const LineFlow = struct {
     /// One text node's words, measured in the font that reaches them.
     fn addText(self: *LineFlow, str: []const u8, face: text_measure.Face, size: f64) void {
         if (str.len == 0) return;
+        // A character the face cannot draw raises every line this run lands on,
+        // the same way an inline box with a taller `line-height` does -- and
+        // like that one, it is scoped to the run rather than left open for the
+        // text after it. Chrome makes `<div style="font:100px Arial">` holding
+        // one U+2B05 150 tall where its own strut is 115.
+        const outer_above = self.open_above;
+        const outer_below = self.open_below;
+        defer {
+            self.open_above = outer_above;
+            self.open_below = outer_below;
+        }
+        if (text_measure.fallbackLineBox(str, size)) |raised| {
+            self.open_above = @max(outer_above, raised.above);
+            self.open_below = @max(outer_below, raised.below);
+        }
         self.raise();
         // Every character this call sees is in this face, so one answer covers
         // the words it accumulates and the look-ahead a preserved space does.
@@ -4009,6 +4042,17 @@ fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?IntrinsicBox {
         // box, like every other type that follows the font.
         if (buttonLabel(self, input_type)) |label| {
             const font = self.resolveFont(frame);
+            // A label the family cannot draw raises the button the same way it
+            // raises a line of flowed text. Kasada reads exactly this: five
+            // codepoints in an `input[type=button]` at `font-size: 100px`, each
+            // with both variation selectors, and the height separates the fonts
+            // Chrome reached for -- 117, 124, 134 and 152 where one family alone
+            // answers 117 ten times.
+            const own = font_metrics.lineBox(font.face.family, font.size);
+            const line = if (text_measure.fallbackLineBox(label, font.size)) |raised|
+                @max(own, raised.above + raised.below)
+            else
+                own;
             return .{
                 // The measured advance on the 1/64th grid, and nothing further.
                 // At the device scale factor 2 this is exact: Chrome's `submit`
@@ -4017,7 +4061,7 @@ fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?IntrinsicBox {
                 // to the last bit. The scale-1 basis needed a nudge here to keep
                 // the client box off a rounding boundary; this one does not.
                 .width = textAdvanceUnit(text_measure.measure(font.face, label, font.size).width),
-                .height = deviceRound(font_metrics.lineBox(font.face.family, font.size)),
+                .height = deviceRound(line),
             };
         }
     }
