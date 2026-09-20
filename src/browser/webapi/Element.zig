@@ -5053,9 +5053,14 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
     // 0,40 where Chrome puts them at 0,0 / 60,0 / 120,0, which is every navbar,
     // toolbar and button group on the web.
     //
-    // A COLUMN keeps the stacking walk: its main axis IS the block axis, and
-    // the measurements agree with Chrome there already.
     if (self.flexRowContent(frame, visibility_cache, content_width, depth, pass)) |flexed| {
+        return flexed;
+    }
+    // A COLUMN stacks, which is what the walk below does -- but it stacks as a
+    // flex container and not as a block: the gap between two items is its own,
+    // no margin collapses through it, and the space its items did not take is
+    // shared out rather than left at the end.
+    if (self.flexColumnContent(frame, visibility_cache, content_width, depth, pass)) |flexed| {
         return flexed;
     }
 
@@ -5842,6 +5847,120 @@ fn flexRowContent(
     // than the tallest item the moment there is a second line.
     if (wrapped) |lines| return .{ .total = @max(tallest, lines.total) };
     return .{ .total = tallest };
+}
+
+/// A flex column's own content walk, or null when this element is not one.
+///
+/// It stacks, so the plain block walk had the common case right by accident --
+/// which is why a column looked laid out while none of the rules that make it a
+/// flex container reached it. The three that move a real page:
+///
+///   * the `gap` BETWEEN two items, which on a column is `row-gap` and whose
+///     percentage is a share of the container's HEIGHT.
+///   * `align-items` on the cross axis, which here is the inline one: it is
+///     what puts a narrow item in the middle of a wide column.
+///   * no margin collapses through any of it, because a flex container
+///     establishes a formatting context -- so the two escaped groups a stacking
+///     walk reports are empty here by definition.
+///
+/// Measured over twenty-six shapes on Chrome 152 with
+/// tools/fingerprint/probes/expr-flex-column-direction.js; the rules are in
+/// css/flex_column_direction.html.
+fn flexColumnContent(
+    self: *Element,
+    frame: *Frame,
+    visibility_cache: *VisibilityCache,
+    content_width: ?f64,
+    depth: u8,
+    pass: ?PositionPass,
+) ?ContentHeight {
+    if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return null;
+    if (!CSSStyleDeclaration.isFlexColumnContainer(self, frame)) return null;
+
+    // The containing block a percentage margin takes its share of is the
+    // container's INLINE size on both axes, so it is the same number the row
+    // walk uses.
+    var column_width: ?f64 = content_width;
+    // The container's own main size, which the gap's percentage is a share of.
+    // Indefinite means a column as tall as its items, and then there is no
+    // leftover for a percentage to be part of either.
+    const main = CSSStyleDeclaration.definiteContentHeight(self, frame) orelse 0;
+    // The cross size the items are aligned within -- the inline axis here, so
+    // it is the content width the caller already measured.
+    const cross = content_width;
+
+    const gap = CSSStyleDeclaration.flexMainGapPx(self, frame, main);
+
+    var cursor: f64 = 0;
+    var placed_any = false;
+
+    var child = self.firstElementChild();
+    while (child) |el| : (child = el.nextElementSibling()) {
+        if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
+        if (!CSSStyleDeclaration.isFlexItem(el, frame)) {
+            // Out of flow, so not on the column -- but it still has a static
+            // position, which is the container's content origin whatever the
+            // items around it did.
+            if (pass) |p| {
+                if (CSSStyleDeclaration.flowKind(el, frame) == .positioned) {
+                    const out = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+                    p.recordStatic(frame, el, .{
+                        .x = p.x,
+                        .y = p.y + cursor,
+                        .width = out.width + out.padding_x + out.border_x,
+                        .height = out.height + out.padding_y + out.border_y,
+                    });
+                }
+            }
+            continue;
+        }
+
+        if (placed_any) cursor += gap;
+        placed_any = true;
+
+        const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+        const margin_top = el.placedMarginPx(frame, .top, "margin-top");
+        const margin_bottom = el.placedMarginPx(frame, .bottom, "margin-bottom");
+        const margins: struct { left: f64, right: f64 } = .{
+            .left = el.placedMarginPx(frame, .left, "margin-left"),
+            .right = el.placedMarginPx(frame, .right, "margin-right"),
+        };
+        const outer_width = box.width + box.padding_x + box.border_x;
+        const outer_height = box.height + box.padding_y + box.border_y;
+
+        // Where the item sits on the cross axis. A stretched one was already
+        // given the container's width by `flexItemWidth`'s column branch, so
+        // what is left here is only the offset the other three place it at.
+        const cross_offset = if (cross) |line_cross| switch (CSSStyleDeclaration.flexCrossAlign(el, self, frame)) {
+            .stretch, .start => margins.left,
+            .center => @max(0, (line_cross - outer_width) / 2),
+            .end => @max(0, line_cross - outer_width - margins.right),
+        } else margins.left;
+
+        const y = cursor + margin_top;
+        if (pass) |p| {
+            p.record(frame, el, .{
+                .x = p.x + cross_offset,
+                .y = p.y + y,
+                .width = outer_width,
+                .height = outer_height,
+            });
+            const child_pass: PositionPass = .{
+                .table = p.table,
+                .static_table = p.static_table,
+                .nodes = p.nodes,
+                .x = p.x + cross_offset + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &column_width, depth),
+                .y = p.y + y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &column_width, depth),
+            };
+            _ = el.contentHeight(frame, visibility_cache, .in_flow, box.width, depth + 1, child_pass);
+        }
+
+        // The MARGIN box is what advances the column, the same way it advances
+        // a row's line.
+        cursor += margin_top + outer_height + margin_bottom;
+    }
+
+    return .{ .total = cursor };
 }
 
 const ContentHeight = struct {
