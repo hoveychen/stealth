@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A variation selector picks which font draws an emoji-capable character, and the
+two fonts are not the same size. Kasada reads exactly this on x-hyatt: it builds
+
+  <input type=button value="<cp><VS>" style="...; font-size: 100px">
+
+for U+203C, U+3030, U+2B05, U+2B06 and U+26AA, once with U+FE0E (text
+presentation) and once with U+FE0F (colour), and submits clientWidth x
+clientHeight for all ten. Chrome answers four distinct boxes; this engine
+answered 65x117 for eight of the ten and 112x117 for the other two, because
+every codepoint it could not draw was charged the family's mean advance and the
+family's own line box. One expression separates that from a browser.
+
+The ten readings below are headed Chrome 153 on macOS at the device scale
+factor 2 this engine's persona claims, measured with
+tools/fingerprint/dump-emoji-presentation.mjs, which is also what generates
+src/browser/emoji_presentation.zig.
+
+The shape of the answer, which is what the table encodes:
+
+  * U+FE0F is Apple Color Emoji for every one of them -- 112x134, five times.
+  * U+FE0E is whichever text font has the glyph. Arial draws U+203C itself
+    (62x117, its own line box); U+3030, U+2B05 and U+2B06 fall back to a font
+    with a 150px line (112x152); U+26AA to a third one (81x124).
+-->
+
+<script id=variation_selector_picks_the_font>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const box = (cp, vs) => {
+    const el = document.createElement('input');
+    el.type = 'button';
+    el.value = String.fromCodePoint(cp) + String.fromCodePoint(vs);
+    el.style.cssText = 'all: revert; font-size: 100px; margin: -9999px;';
+    host.appendChild(el);
+    const out = el.clientWidth + 'x' + el.clientHeight;
+    el.remove();
+    return out;
+  };
+
+  const rows = [
+    [0x203c, 0xfe0e, '62x117'],
+    [0x203c, 0xfe0f, '112x134'],
+    [0x3030, 0xfe0e, '112x152'],
+    [0x3030, 0xfe0f, '112x134'],
+    [0x2b05, 0xfe0e, '112x152'],
+    [0x2b05, 0xfe0f, '112x134'],
+    [0x2b06, 0xfe0e, '112x152'],
+    [0x2b06, 0xfe0f, '112x134'],
+    [0x26aa, 0xfe0e, '81x124'],
+    [0x26aa, 0xfe0f, '112x134'],
+  ];
+
+  const wrong = [];
+  for (const [cp, vs, want] of rows) {
+    const got = box(cp, vs);
+    if (got !== want) {
+      wrong.push('U+' + cp.toString(16) + ' U+' + vs.toString(16) +
+                 ': ' + got + ' want ' + want);
+    }
+  }
+  testing.expectEqual('', wrong.join(' | '));
+
+  // The ten are four distinct boxes and not one, which is the shape the
+  // guard's report is keyed on: an engine that regressed to a single answer
+  // for everything it cannot draw would still pass a row-by-row check written
+  // loosely enough.
+  const distinct = new Set(rows.map(([cp, vs]) => box(cp, vs)));
+  testing.expectEqual(4, distinct.size);
+
+  host.remove();
+}
+</script>
+
+<script id=fallback_line_does_not_reach_plain_text>
+{
+  // The raised line box is scoped to the run that needs it. A block of ordinary
+  // text keeps the family's own line box, and a block whose emoji sits in one
+  // child does not raise the sibling text nodes' own measurement -- only the
+  // line they share, which is the taller of the two exactly as an inline box
+  // with its own `line-height` is.
+  const host = document.createElement('div');
+  host.style.cssText = 'width:900px;font:100px Arial';
+  document.body.appendChild(host);
+
+  const height = (html) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:900px;font:100px Arial';
+    el.innerHTML = html;
+    host.appendChild(el);
+    const out = el.clientHeight;
+    el.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const rows = [
+    ['x', 115],
+    ['⬅︎', 150],
+    ['x⬅︎', 150],
+    ['⬅️', 132],
+    ['<span>x</span>', 115],
+    // The raise crosses an inline box: the arrow is inside the span and the
+    // line it opens is the whole block's, which is the same rule a taller
+    // `line-height` on that span follows.
+    ['<span>⬅︎</span>x', 150],
+    ['', 0],
+  ];
+  for (const [html, want] of rows) {
+    const got = height(html);
+    if (got !== want) wrong.push(JSON.stringify(html) + ': ' + got + ' want ' + want);
+  }
+  testing.expectEqual('', wrong.join(' | '));
+
+  host.remove();
+}
+</script>
