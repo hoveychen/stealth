@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A flex row never put its children side by side. Three 60x20 children in a
+`display:flex` container sat at `0,0`, `0,20`, `0,40` -- stacked, exactly as a
+block container would stack them -- where Chrome puts them at `0,0`, `60,0`,
+`120,0`. A flex row is the navbar, the toolbar, the button group and the card
+row of most of the modern web, so every rect inside one was wrong on both axes.
+
+The main-axis SIZE already worked: `flexItemWidth` distributes the line, and
+three `flex:1` children measured 133px wide here and in Chrome before this. It
+was only the position, and the cross axis, that no one had written.
+
+Measured on Chrome 152 with
+tools/fingerprint/probes/expr-flex-line-placement.js, in a 400x200 container.
+Two rules:
+
+  * along the MAIN axis the items follow one another: each starts where the
+    previous one's margin box ended, from the container's content edge. That is
+    all `justify-content: flex-start` means, and it is the initial value; the
+    other justifications are a separate rule and are not asserted here.
+  * along the CROSS axis `align-items` decides, and its initial value is
+    `stretch`: a child with no size of its own on that axis fills the container,
+    so a `width:60px` child of a 200px-tall row is 60x200. A child that DOES
+    declare one keeps it and sits at the cross start. `flex-start`, `center` and
+    `flex-end` place a declared size at 0, at half the leftover and at all of
+    it; `align-self` overrides the container's choice for one child.
+
+Two neighbours are deliberately absent, each because it is a different
+algorithm and neither is what stacked the row:
+
+  * `flex-wrap`. Every row below fits on one line or overflows it, and a
+    wrapped line is solved differently.
+  * `flex-shrink`, which `flexItemWidth` already records as not modelled: two
+    300px items in a 400px row are 200 each in Chrome and 300 here. The
+    `row overflow` case below asserts the widths this engine gives, because
+    what it is here to pin is that the items FOLLOW one another whatever width
+    they end up with. Fix the shrink and that row's expectation moves with it.
+
+`justify-content` is likewise untouched: its initial value is `flex-start`,
+which is what "each item starts where the last one ended" already means.
+-->
+
+<script id=flex_line_lays_items_along_the_main_axis>
+{
+  const wrong = [];
+  const mk = (label, hostCss, childCss, want) => {
+    const host = document.createElement('div');
+    host.setAttribute('style', hostCss);
+    document.body.appendChild(host);
+    for (const css of childCss) {
+      const el = document.createElement('div');
+      el.setAttribute('style', css);
+      host.appendChild(el);
+    }
+    const hr = host.getBoundingClientRect();
+    const rows = [];
+    for (const el of host.children) {
+      const r = el.getBoundingClientRect();
+      rows.push(Math.round(r.x - hr.x) + ',' + Math.round(r.y - hr.y) +
+        ' ' + Math.round(r.width) + 'x' + Math.round(r.height));
+    }
+    host.remove();
+    const got = rows.join(' | ');
+    if (got !== want) wrong.push(label + ': want [' + want + '], got [' + got + ']');
+  };
+
+  const ROW = 'display:flex; width:400px; height:200px; margin:0';
+  const COL = 'display:flex; flex-direction:column; width:400px; height:200px; margin:0';
+  const B = 'width:60px; height:20px';
+  const three = [B, B, B];
+
+  // The main axis. A row advances in x, a column in y -- and a block container
+  // is the control that says the row's old answer was the block one.
+  mk('row', ROW, three, '0,0 60x20 | 60,0 60x20 | 120,0 60x20');
+  mk('column', COL, three, '0,0 60x20 | 0,20 60x20 | 0,40 60x20');
+  mk('inline-flex row', 'display:inline-flex; width:400px; height:200px; margin:0', three,
+     '0,0 60x20 | 60,0 60x20 | 120,0 60x20');
+  mk('block', 'width:400px; height:200px; margin:0', three,
+     '0,0 60x20 | 0,20 60x20 | 0,40 60x20');
+
+  // Each item starts where the previous one ended, whatever decided its width.
+  mk('row grow', ROW, ['flex:1; height:20px', 'flex:1; height:20px', 'flex:1; height:20px'],
+     '0,0 133x20 | 133,0 133x20 | 267,0 133x20');
+  mk('row uneven', ROW, ['width:30px;height:20px', 'width:150px;height:20px', 'width:20px;height:20px'],
+     '0,0 30x20 | 30,0 150x20 | 180,0 20x20');
+  // The MARGIN box is what advances, and the container's PADDING box is where
+  // the first one starts.
+  mk('row with margins', ROW,
+     ['width:60px;height:20px;margin:0 10px', 'width:60px;height:20px;margin:0 10px'],
+     '10,0 60x20 | 90,0 60x20');
+  mk('row padded', 'display:flex; width:400px; height:200px; padding:15px; margin:0', [B, B],
+     '15,15 60x20 | 75,15 60x20');
+  // Over-full, with the widths this engine gives rather than Chrome's: the
+  // line does not shrink yet (see the note above), and the point of the row
+  // here is that the items still FOLLOW one another whatever width they got.
+  mk('row overflow', ROW, ['width:300px;height:20px', 'width:300px;height:20px'],
+     '0,0 300x20 | 300,0 300x20');
+
+  // The cross axis. `stretch` is the initial value, so an undeclared height
+  // fills the container -- and a declared one is kept.
+  mk('cross stretch default', ROW, ['width:60px', 'width:60px'], '0,0 60x200 | 60,0 60x200');
+  mk('cross stretch declared', ROW + '; align-items:stretch', ['width:60px', 'width:60px'],
+     '0,0 60x200 | 60,0 60x200');
+  mk('cross flex-start', ROW + '; align-items:flex-start', ['width:60px', 'width:60px'],
+     '0,0 60x0 | 60,0 60x0');
+  mk('cross stretch with height', ROW, [B, B], '0,0 60x20 | 60,0 60x20');
+  mk('cross center', ROW + '; align-items:center', [B, B], '0,90 60x20 | 60,90 60x20');
+  mk('cross flex-end', ROW + '; align-items:flex-end', [B, B], '0,180 60x20 | 60,180 60x20');
+  mk('cross align-self', ROW + '; align-items:flex-start',
+     [B, 'width:60px;height:20px;align-self:flex-end'], '0,0 60x20 | 60,180 60x20');
+  // A column's cross axis is the inline one, so stretch fills the width.
+  mk('column cross stretch', COL, ['height:20px', 'height:20px'],
+     '0,0 400x20 | 0,20 400x20');
+
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

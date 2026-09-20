@@ -34,21 +34,20 @@ positioned parent. Five rules, and each row below is one of them:
     fix: `position:absolute; left:0; right:0; margin:0 auto` sat at offset 0
     instead of centring). Without them, 0.
 
-One measured shape deliberately left out, because it is the flex algorithm and
-not this one: a flex item's `auto` margin absorbs the container's free space on
-BOTH axes, so `margin:auto; width:100px` in a 400x200 flex container computes
-`100px | 150px | 100px | 150px`. Recorded for its own plan.
+A FLEX item is the sixth rule, and it is the one that does not fit the five
+above: the free space is the LINE's, so every `auto` margin any item on the
+line declares takes an equal cut of what is left of the container after all of
+them -- and unlike a block, it is a share on BOTH axes.
+css/flex_line_placement.html is where the line itself is pinned; the margins
+are here because they are the same reported value.
 
-Two more shapes the two probes measure and this does not assert, both still out
-by the margin and both recorded rather than fixed here:
-
-  * an out-of-flow box that declares NO inset on an axis takes its static
-    position, and its own margin on that axis should move it from there.
-    `position:absolute; margin-top:12px` sits at y=12 in Chrome and at 0 here --
-    the inline axis of the same shape is already right, because the flow's
-    recorded position carries the horizontal margin and not the vertical one.
-    It is the block-flow walk's to fix, not this path's.
-  * a flex item, per above.
+One shape the probes measure and this does not assert, still out by the margin
+and recorded rather than fixed: an out-of-flow box that declares NO inset on an
+axis takes its static position, and its own margin on that axis should move it
+from there. `position:absolute; margin-top:12px` sits at y=12 in Chrome and at
+0 here -- the inline axis of the same shape is already right, because the
+flow's recorded position carries the horizontal margin and not the vertical
+one. It is the block-flow walk's to fix, not this path's.
 -->
 
 <script id=auto_margin_reports_its_used_value>
@@ -112,6 +111,53 @@ by the margin and both recorded rather than fixed here:
   // A declared margin is unaffected by any of this.
   check('declared', read('margin:5px 10px; width:100px'), '5px | 10px | 5px | 10px');
 
+  // A flex item takes a cut of the LINE's free space, on both axes, and the
+  // cuts are shared between every `auto` margin the line declares.
+  const inFlex = (containerCss, items, index) => {
+    const flex = document.createElement('div');
+    flex.setAttribute('style', containerCss);
+    host.appendChild(flex);
+    for (const css of items) {
+      const el = document.createElement('div');
+      el.setAttribute('style', css);
+      flex.appendChild(el);
+    }
+    const cs = getComputedStyle(flex.children[index]);
+    const out = M.map((n) => cs.getPropertyValue(n)).join(' | ');
+    flex.remove();
+    return out;
+  };
+  const FLEX = 'display:flex; width:400px; height:200px';
+  const ITEM = 'width:100px; height:20px';
+  check('flex item all auto', inFlex(FLEX, [ITEM + '; margin:auto'], 0),
+        '90px | 150px | 90px | 150px');
+  check('flex item sides', inFlex(FLEX, [ITEM + '; margin-left:auto; margin-right:auto'], 0),
+        '0px | 150px | 0px | 150px');
+  check('flex item left only', inFlex(FLEX, [ITEM + '; margin-left:auto'], 0),
+        '0px | 0px | 0px | 300px');
+  check('flex item top only', inFlex(FLEX, [ITEM + '; margin-top:auto'], 0),
+        '180px | 0px | 0px | 0px');
+  // A cross-axis `auto` margin takes the free space, so the item is NOT
+  // stretched into it first: an item with no height keeps none, and its two
+  // margins split the whole 200.
+  check('flex item auto beats stretch', inFlex(FLEX, ['width:100px; margin:auto'], 0),
+        '100px | 150px | 100px | 150px');
+  check('flex item one cross auto takes all', inFlex(FLEX, ['width:100px; margin-top:auto'], 0),
+        '200px | 0px | 0px | 0px');
+  // Only the CROSS axis blocks the stretch. Horizontal autos on the same
+  // heightless item leave it stretched to the full 200, measured.
+  check('flex item main autos still stretch',
+        inFlex(FLEX, ['width:100px; margin-left:auto; margin-right:auto'], 0),
+        '0px | 150px | 0px | 150px');
+  // The line is shared, so a sibling's width comes off the free space first.
+  check('flex item behind a sibling',
+        inFlex(FLEX, [ITEM, ITEM + '; margin-left:auto'], 1),
+        '0px | 0px | 0px | 200px');
+  // An out-of-flow child of a flex container is not an item, so the block
+  // rules apply to it and it has no line to take a share of.
+  check('flex out of flow', inFlex(FLEX, [ITEM + '; position:absolute; margin:auto'], 0),
+        '0px | 0px | 0px | 0px');
+
   // The layout half: an out-of-flow box between two insets centres on its auto
   // margins. The in-flow cases already did, and are the control.
   const place = (css) => {
@@ -152,6 +198,30 @@ by the margin and both recorded rather than fixed here:
   check('abs both insets, auto vertical', placeY(A + ' top:0; bottom:0; margin:auto 0'), '90');
   // One inset alone leaves nothing over, so an `auto` there is 0.
   check('abs one inset, auto margin', place(A + ' left:0; margin-left:auto'), '0');
+
+  // With NO inset on an axis the box takes its static position -- where the
+  // flow would have put it -- and its own margin moves it from there, on both
+  // axes. The inline axis was already right, because the flow's recorded
+  // position carries the horizontal margin; the block axis dropped it, so
+  // `position:absolute; margin-top:12px` sat at the flow's y rather than 12
+  // past it.
+  const placeXY = (css, before) => {
+    const wrap = document.createElement('div');
+    if (before) wrap.innerHTML = before;
+    host.appendChild(wrap);
+    const el = document.createElement('div');
+    el.setAttribute('style', css);
+    wrap.appendChild(el);
+    const r = el.getBoundingClientRect(), hr = host.getBoundingClientRect();
+    const out = Math.round(r.x - hr.x) + ',' + Math.round(r.y - hr.y);
+    wrap.remove();
+    return out;
+  };
+  check('abs static both margins', placeXY(A + ' margin-left:30px; margin-top:12px'), '30,12');
+  check('abs static behind a block',
+        placeXY(A + ' margin-top:12px', '<div style="height:40px"></div>'), '0,52');
+  check('abs top inset keeps static x',
+        placeXY(A + ' top:0; margin-left:30px; margin-top:12px'), '30,12');
 
   // The three boxes with no free space are PLACED by the same rule they report,
   // and this engine centred all three. A shrink-to-fit box is sized to its

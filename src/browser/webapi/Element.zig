@@ -3417,7 +3417,7 @@ fn containerMarginPx(self: *Element, name: []const u8, frame: *Frame, containing
 
 /// Whether one margin is `auto`, which `marginPx` cannot say: it resolves a
 /// length, and `auto` is not one, so it answers 0 for both `auto` and `0`.
-fn marginIsAuto(self: *Element, name: []const u8, frame: *Frame) bool {
+pub fn marginIsAuto(self: *Element, name: []const u8, frame: *Frame) bool {
     const declared = CSSStyleDeclaration.cascadedComputedValue(self, name, frame) orelse return false;
     return std.ascii.eqlIgnoreCase(std.mem.trim(u8, declared, " \t\r\n"), "auto");
 }
@@ -3492,6 +3492,59 @@ fn staticInlineOffset(
 /// not declare both insets on the axis -- resolves its `auto` margins to 0.
 /// Only a box with no used margin at all keeps `auto`: an element with no box,
 /// and a non-replaced inline one, whose margins size nothing.
+/// One `auto` margin's cut of a flex line's free space, or null when this
+/// element is not an item of a flex ROW and the block rules apply instead.
+///
+/// On the MAIN axis the line is shared: what is left of the container once
+/// every item's border box and declared margin is out of it, split equally
+/// between all the `auto` margins any item declares on that axis. On the CROSS
+/// axis each item has the whole of the container to itself, so the free space
+/// is the container's cross size less this item alone.
+///
+/// A column container is deliberately absent: its main axis is the block one,
+/// which the stacking walk lays out, and its items' widths already go through
+/// `flexItemWidth`'s column branch.
+fn flexLineFreeSpace(self: *Element, frame: *Frame, horizontal: bool, own: f64) ?f64 {
+    const parent = self.parentElement() orelse return null;
+    if (!CSSStyleDeclaration.isFlexRowContainer(parent, frame)) return null;
+    if (!CSSStyleDeclaration.isFlexItem(self, frame)) return null;
+
+    const container = parent.getElementDimensions(frame);
+    var line_width: ?f64 = container.width;
+
+    if (!horizontal) {
+        const free = container.height - own;
+        if (free <= 0) return 0;
+        // The item's own two cross margins are the only claimants.
+        const top_auto = self.marginIsAuto("margin-top", frame);
+        const bottom_auto = self.marginIsAuto("margin-bottom", frame);
+        if (top_auto and bottom_auto) return free / 2;
+        const other = if (top_auto) "margin-bottom" else "margin-top";
+        const taken = self.containerMarginPx(other, frame, &line_width, 0);
+        return @max(0, free - taken);
+    }
+
+    var taken: f64 = 0;
+    var autos: f64 = 0;
+    var sibling = parent.firstElementChild();
+    while (sibling) |item| : (sibling = item.nextElementSibling()) {
+        if (!CSSStyleDeclaration.isFlexItem(item, frame)) continue;
+        const box = item.getElementDimensions(frame);
+        taken += box.width + box.padding_x + box.border_x;
+        for ([_][]const u8{ "margin-left", "margin-right" }) |name| {
+            if (item.marginIsAuto(name, frame)) {
+                autos += 1;
+            } else {
+                taken += item.containerMarginPx(name, frame, &line_width, 0);
+            }
+        }
+    }
+    if (autos == 0) return 0;
+    const free = container.width - taken;
+    if (free <= 0) return 0;
+    return free / autos;
+}
+
 pub fn usedAutoMarginPx(self: *Element, frame: *Frame, side: InsetSide) ?f64 {
     if (!self.checkVisibilityCached(null, frame)) return null;
     if (CSSStyleDeclaration.isInlineBox(self, frame)) return null;
@@ -3504,6 +3557,20 @@ pub fn usedAutoMarginPx(self: *Element, frame: *Frame, side: InsetSide) ?f64 {
         dims.width + dims.padding_x + dims.border_x
     else
         dims.height + dims.padding_y + dims.border_y;
+
+    // A flex item's free space is the LINE's, not the containing block's: the
+    // items share what is left of the container after all of them, and every
+    // `auto` margin on the axis takes an equal cut of it. That is what lets a
+    // flex child centre itself with `margin:auto` and what pushes the last
+    // control of a toolbar to the far end with `margin-left:auto` -- and it is
+    // a share on BOTH axes, unlike a block, where the block axis has none.
+    //
+    // Measured on Chrome 152 with
+    // tools/fingerprint/probes/expr-flex-auto-margin.js: `margin:auto` on a
+    // 100x20 item in a 400x200 row is `90px | 150px | 90px | 150px`, and a
+    // `margin-left:auto` item behind a 100px sibling takes 200 rather than the
+    // 300 the containing block alone would have given it.
+    if (self.flexLineFreeSpace(frame, horizontal, own)) |share| return share;
 
     const available: f64 = switch (CSSStyleDeclaration.flowKind(self, frame)) {
         // A float is sized to fit its content, so there is nothing left over.
@@ -4184,6 +4251,27 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         const h = layoutUnit(declared);
         height = if (border_box) @max(0, h - dims.padding_y - dims.border_y) else h;
         dims.explicit_height = true;
+    }
+
+    // A flex item with no height of its own is STRETCHED across the line, which
+    // is what `align-items: stretch` means and what it is initially. The width
+    // half of this is `flexItemWidth`'s column branch; the row branch had no
+    // counterpart, so a `width:60px` child of a 200px-tall flex row measured
+    // 60x0 against Chrome's 60x200 -- and a card row built on stretch had every
+    // card collapsed to nothing.
+    //
+    // After the cascade, because a declared height wins: `stretch` only fills
+    // an axis the item left auto.
+    if (height == null) {
+        if (CSSStyleDeclaration.flexItemHeight(self, frame, depth)) |line_cross| {
+            // The MARGIN box fills the line, so the item's own parts come out
+            // of it the same way a stretched block's do.
+            var cross_containing: ?f64 = containing_width;
+            const margins = self.verticalMargins(frame, &cross_containing, depth);
+            height = @max(0, line_cross - margins.top - margins.bottom -
+                dims.padding_y - dims.border_y);
+            dims.explicit_height = true;
+        }
     }
 
     // An out-of-flow box that declares BOTH insets on an axis and no size on it
@@ -4946,6 +5034,18 @@ pub fn layoutPassPositions(
 // Both measured at dpr 2 with
 // tools/fingerprint/scratch/expr-inline-content-lines.js.
 fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass) ContentHeight {
+    // A flex ROW puts its items beside one another, so the walk below -- which
+    // stacks -- is the wrong one for it. Nothing had ever placed a flex line:
+    // three 60x20 children of a `display:flex` container sat at 0,0 / 0,20 /
+    // 0,40 where Chrome puts them at 0,0 / 60,0 / 120,0, which is every navbar,
+    // toolbar and button group on the web.
+    //
+    // A COLUMN keeps the stacking walk: its main axis IS the block axis, and
+    // the measurements agree with Chrome there already.
+    if (self.flexRowContent(frame, visibility_cache, content_width, depth, pass)) |flexed| {
+        return flexed;
+    }
+
     var total: f64 = 0;
     // The margins that LEAVE through this box's two block edges. They are not
     // part of its height -- that is what escaping means -- but they are part of
@@ -5084,7 +5184,24 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                     // starts at 23,23 (scratch/h86/expr-h86-offsetparent.js).
                     switch (kind) {
                         .floated => p.record(frame, el, at),
-                        .positioned => p.recordStatic(frame, el, at),
+                        .positioned => {
+                            // Its own block-axis margin moves it from there.
+                            // The inline axis already carried one --
+                            // `staticInlineOffset` reads `margin-left` -- so
+                            // `position:absolute; margin-left:30px;
+                            // margin-top:12px` landed at 30,0 where Chrome puts
+                            // it at 30,12, measured over the shapes in
+                            // tools/fingerprint/probes/expr-abspos-margin.js.
+                            //
+                            // Added here rather than folded into the margin
+                            // group above: an out-of-flow box's margin does not
+                            // collapse with anything, so it is a plain offset
+                            // and must not join the run the in-flow siblings
+                            // share.
+                            var placed_at = at;
+                            placed_at.y += el.containerMarginPx("margin-top", frame, &margin_containing, depth);
+                            p.recordStatic(frame, el, placed_at);
+                        },
                         .in_flow => {},
                     }
                 }
@@ -5099,12 +5216,30 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 // where the run of lines has got to; only the single-line case
                 // is in the matrix, so that is the only one measured.
                 if (pass) |p| {
+                    const at_x = p.x + at.inline_at;
+                    const at_y = p.y + total + at.block_at;
                     p.record(frame, el, .{
-                        .x = p.x + at.inline_at,
-                        .y = p.y + total + at.block_at,
+                        .x = at_x,
+                        .y = at_y,
                         .width = box.width + box.padding_x + box.border_x,
                         .height = box.height + box.padding_y + box.border_y,
                     });
+                    // And what is INSIDE it. The walk recorded the atomic box
+                    // and went no further, so every descendant of an
+                    // inline-block or an inline-flex kept the node-count
+                    // position the table falls back to -- three children of an
+                    // `inline-flex` read 62,62 / 67,67 / 72,72, where the same
+                    // three under `display:flex` read 0,0 / 60,0 / 120,0. The
+                    // box is atomic to the LINE, not to the tree.
+                    if (depth < MAX_CONTAINING_BLOCK_DEPTH) {
+                        _ = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1, .{
+                            .table = p.table,
+                            .static_table = p.static_table,
+                            .nodes = p.nodes,
+                            .x = at_x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &margin_containing, depth),
+                            .y = at_y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &margin_containing, depth),
+                        });
+                    }
                 }
                 continue;
             }
@@ -5341,6 +5476,122 @@ fn hasInlineBaseline(self: *Element, frame: *Frame, depth: u8) bool {
 /// scrollHeight. Measured; an `absolute` child is out of both.
 /// What a box holds: its content height, and the margins that left through its
 /// two block edges on the way out. See `contentHeight`.
+/// A flex row's own content walk, or null when this element is not one and the
+/// stacking walk is the right one after all.
+///
+/// The line is what makes this a different walk rather than a flag on the other
+/// one: the items advance along the INLINE axis, each starting where the
+/// previous one's margin box ended, and the container's height is the tallest
+/// of them rather than their sum. `flexItemWidth` had always divided the line
+/// correctly -- three `flex:1` items measured 133px wide -- so the sizes were
+/// right and only the positions were the block walk's.
+///
+/// No margin escapes a flex container: it establishes a formatting context, so
+/// the two escaped groups a stacking walk reports are empty here by definition.
+///
+/// Measured over eighteen shapes on Chrome 152 with
+/// tools/fingerprint/probes/expr-flex-line-placement.js; the rules are in
+/// css/flex_line_placement.html.
+fn flexRowContent(
+    self: *Element,
+    frame: *Frame,
+    visibility_cache: *VisibilityCache,
+    content_width: ?f64,
+    depth: u8,
+    pass: ?PositionPass,
+) ?ContentHeight {
+    if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return null;
+    if (!CSSStyleDeclaration.isFlexRowContainer(self, frame)) return null;
+
+    // The containing block every item's percentage margin takes its share of,
+    // measured once for the whole line the way the stacking walk does it.
+    var line_width: ?f64 = content_width;
+    // The cross size the items are aligned within. `null` leaves each item
+    // where its own height puts it, which is what an indefinite one means for
+    // every alignment except `stretch`.
+    const cross = CSSStyleDeclaration.definiteContentHeight(self, frame);
+
+    var cursor: f64 = 0;
+    var tallest: f64 = 0;
+
+    var child = self.firstElementChild();
+    while (child) |el| : (child = el.nextElementSibling()) {
+        // An out-of-flow child of a flex container is not an item: it takes no
+        // share of the line and does not advance the cursor. The stacking walk
+        // records its static position; here it simply is not on the line, and
+        // Chrome puts one at 0,0 whatever its siblings did.
+        if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
+        if (!CSSStyleDeclaration.isFlexItem(el, frame)) {
+            // Not on the line -- but an out-of-flow one still has a static
+            // position, which is where the flow WOULD have put it and the
+            // answer `left:auto` resolves to. Chrome puts an absolutely
+            // positioned child of a flex row at its container's content
+            // origin, whatever the items around it did.
+            if (pass) |p| {
+                if (CSSStyleDeclaration.flowKind(el, frame) == .positioned) {
+                    const out = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+                    p.recordStatic(frame, el, .{
+                        .x = p.x + cursor,
+                        .y = p.y,
+                        .width = out.width + out.padding_x + out.border_x,
+                        .height = out.height + out.padding_y + out.border_y,
+                    });
+                }
+            }
+            continue;
+        }
+
+        const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+        // An `auto` margin takes a share of what the line left over, which is
+        // how a flex child centres itself and how `margin-left:auto` pushes the
+        // last control of a toolbar to the far end. `placedMarginPx` is the
+        // same rule the computed style reports.
+        const margin_left = el.placedMarginPx(frame, .left, "margin-left");
+        const margin_right = el.placedMarginPx(frame, .right, "margin-right");
+        const margins: struct { top: f64, bottom: f64 } = .{
+            .top = el.placedMarginPx(frame, .top, "margin-top"),
+            .bottom = el.placedMarginPx(frame, .bottom, "margin-bottom"),
+        };
+        const outer_width = box.width + box.padding_x + box.border_x;
+        const outer_height = box.height + box.padding_y + box.border_y;
+
+        // Where the item sits on the cross axis. `align-items` decides, its
+        // initial value is `stretch`, and a stretched item was already given
+        // the container's height by `flexItemHeight` -- so what is left here is
+        // only the offset the other three place it at.
+        const cross_offset = if (cross) |line_cross| switch (CSSStyleDeclaration.flexCrossAlign(el, self, frame)) {
+            .stretch, .start => margins.top,
+            .center => @max(0, (line_cross - outer_height) / 2),
+            .end => @max(0, line_cross - outer_height - margins.bottom),
+        } else margins.top;
+
+        const x = cursor + margin_left;
+        if (pass) |p| {
+            p.record(frame, el, .{
+                .x = p.x + x,
+                .y = p.y + cross_offset,
+                .width = outer_width,
+                .height = outer_height,
+            });
+            const child_pass: PositionPass = .{
+                .table = p.table,
+                .static_table = p.static_table,
+                .nodes = p.nodes,
+                .x = p.x + x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &line_width, depth),
+                .y = p.y + cross_offset + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &line_width, depth),
+            };
+            _ = el.contentHeight(frame, visibility_cache, .in_flow, box.width, depth + 1, child_pass);
+        }
+
+        // The MARGIN box is what advances the line: `margin: 0 10px` on two
+        // 60px items puts them at 10 and 90, measured.
+        cursor += margin_left + outer_width + margin_right;
+        tallest = @max(tallest, margins.top + outer_height + margins.bottom);
+    }
+
+    return .{ .total = tallest };
+}
+
 const ContentHeight = struct {
     total: f64 = 0,
     escaped_top: MarginGroup = .{},

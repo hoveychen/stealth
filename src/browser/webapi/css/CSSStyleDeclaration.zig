@@ -1992,7 +1992,7 @@ fn containingHeightForPercentage(element: *Element, frame: *Frame) ?f64 {
 /// Terminates because `containingBlock` strictly ascends: the recursion through
 /// `cascadedComputedLength` -> the percentage branch -> here can only walk
 /// towards the root, and the root answers from the viewport without recursing.
-fn definiteContentHeight(block: *Element, frame: *Frame) ?f64 {
+pub fn definiteContentHeight(block: *Element, frame: *Frame) ?f64 {
     const declared = cascadedComputedLength(block, "height", frame) orelse return null;
     // `box-sizing: border-box` means the declaration named the border box, so
     // the content a child takes its share of is what is left inside it: 80 for
@@ -4257,13 +4257,78 @@ fn flexFactor(element: *Element, name: []const u8, frame: *Frame) f64 {
 /// Whether a child of a flex container is one of its items. An out-of-flow box
 /// is not laid out on the line, and a `display: none` one is not laid out at
 /// all; both were measured taking no share of a 400px row.
-fn isFlexItem(element: *Element, frame: *Frame) bool {
+pub fn isFlexItem(element: *Element, frame: *Frame) bool {
     const style_manager = &element.ownerFrame(frame)._style_manager;
     if (cascadedKeyword(style_manager, element, "position")) |position| {
         if (std.ascii.eqlIgnoreCase(position, "absolute") or
             std.ascii.eqlIgnoreCase(position, "fixed")) return false;
     }
     return !std.mem.eql(u8, resolvedDisplay(element, frame), "none");
+}
+
+/// Whether this element lays its children out along a flex LINE -- a flex or
+/// inline-flex container whose direction is a row. A column keeps the stacking
+/// walk, whose main axis is already the block one.
+pub fn isFlexRowContainer(element: *Element, frame: *Frame) bool {
+    const display = resolvedDisplay(element, frame);
+    if (!std.mem.eql(u8, display, "flex") and !std.mem.eql(u8, display, "inline-flex")) return false;
+    return !isColumnFlex(&element.ownerFrame(frame)._style_manager, element);
+}
+
+/// Where one flex item sits on the cross axis. `align-self` answers for the
+/// item when it says anything but `auto`, and otherwise the container's
+/// `align-items` does; the initial value of both is `stretch`.
+///
+/// `normal` is `stretch` here, the same pairing `stretchesAcrossFlexLine`
+/// measured for a column container. `baseline` is not modelled and takes the
+/// start, which is where it lands for the single-line rows measured.
+pub const CrossAlign = enum { stretch, start, center, end };
+
+pub fn flexCrossAlign(element: *Element, parent: *Element, frame: *Frame) CrossAlign {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const declared = if (cascadedKeyword(style_manager, element, "align-self")) |self_value| blk: {
+        if (std.ascii.eqlIgnoreCase(self_value, "auto")) break :blk null;
+        break :blk self_value;
+    } else null;
+    const effective = declared orelse
+        cascadedKeyword(style_manager, parent, "align-items") orelse
+        return .stretch;
+    if (std.ascii.eqlIgnoreCase(effective, "center")) return .center;
+    if (std.ascii.eqlIgnoreCase(effective, "flex-end") or
+        std.ascii.eqlIgnoreCase(effective, "end") or
+        std.ascii.eqlIgnoreCase(effective, "self-end")) return .end;
+    if (std.ascii.eqlIgnoreCase(effective, "flex-start") or
+        std.ascii.eqlIgnoreCase(effective, "start") or
+        std.ascii.eqlIgnoreCase(effective, "self-start") or
+        std.ascii.eqlIgnoreCase(effective, "baseline")) return .start;
+    return .stretch;
+}
+
+/// The cross size a flex ROW gives an item that declares none, or null when the
+/// item is not stretched across the line or the line has no definite size to
+/// give. The container's CONTENT height, out of which the caller takes the
+/// item's own margins, padding and border.
+///
+/// Null for an indefinite container too: a flex row with an `auto` height takes
+/// its own height from the tallest item, and stretching the others to that
+/// needs the line measured before any item is sized. Nothing here measures the
+/// line, so a stretched item in such a container keeps its content height --
+/// which is the number it already had, so this can only improve the definite
+/// case and cannot make the indefinite one worse.
+pub fn flexItemHeight(element: *Element, frame: *Frame, depth: u8) ?f64 {
+    if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
+    const parent = element.parentElement() orelse return null;
+    if (!isFlexRowContainer(parent, frame)) return null;
+    if (!isFlexItem(element, frame)) return null;
+    if (flexCrossAlign(element, parent, frame) != .stretch) return null;
+    // An `auto` margin on the cross axis takes the free space instead, so there
+    // is none left to stretch into: `margin:auto; width:100px` in a 400x200 row
+    // computes `100px | 150px | 100px | 150px` in Chrome, which only adds up if
+    // the item stayed 0 tall. Stretching it first would eat the 200 the two
+    // margins split.
+    if (element.marginIsAuto("margin-top", frame) or
+        element.marginIsAuto("margin-bottom", frame)) return null;
+    return definiteContentHeight(parent, frame);
 }
 
 /// Whether the container stacks its items down the page, which puts a width on
@@ -8486,6 +8551,10 @@ test "WebApi: CSSStyleDeclaration computed animation shorthand" {
 
 test "WebApi: CSSStyleDeclaration computed flex shorthands" {
     try testing.htmlRunner("css/flex_computed_shorthands.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration flex line placement" {
+    try testing.htmlRunner("css/flex_line_placement.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration computed timeline-trigger" {
