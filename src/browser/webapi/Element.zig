@@ -4285,6 +4285,22 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         dims.explicit_height = true;
     }
 
+    // A flex COLUMN's item takes its height from the container the way a row's
+    // item takes its width: it is a share of what the column has left, and it
+    // gives space back when the column is over-full. It outranks the height
+    // just read for the same reason the width branch outranks a declared width
+    // -- `flex:1` sizes from a `0%` basis and never looks at one -- and two
+    // 150px items in a 200px column are 100 each in Chrome, not 150.
+    if (distribute_flex) {
+        if (CSSStyleDeclaration.flexColumnItemHeight(self, frame, depth, .{
+            .padding_y = dims.padding_y,
+            .border_y = dims.border_y,
+        })) |h| {
+            height = h;
+            dims.explicit_height = true;
+        }
+    }
+
     // A flex item with no height of its own is STRETCHED across the line, which
     // is what `align-items: stretch` means and what it is initially. The width
     // half of this is `flexItemWidth`'s column branch; the row branch had no
