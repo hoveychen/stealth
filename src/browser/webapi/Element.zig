@@ -5519,31 +5519,48 @@ const Spread = struct {
 /// A line with nothing left over gets nothing from any of them -- an over-full
 /// one included, which is why `justify-content:center` on two 300px items in a
 /// 400px row still starts at 0.
+/// The two axes differ only in which of each item's four edges are ON the main
+/// axis and which container size the leftover is measured against. The
+/// percentage margins resolve against the container's INLINE size either way,
+/// which is why `content_width` is handed over even for a column.
+const MainAxis = struct {
+    /// The container's content size along the main axis: its width on a row,
+    /// its height on a column.
+    size: f64,
+    content_width: ?f64,
+    column: bool,
+};
+
 fn flexJustify(
     self: *Element,
     frame: *Frame,
     justify: CSSStyleDeclaration.MainJustify,
-    content_width: f64,
+    axis: MainAxis,
     gap: f64,
     depth: u8,
 ) Spread {
     var used: f64 = 0;
     var items: f64 = 0;
-    var line_width: ?f64 = content_width;
+    var line_width: ?f64 = axis.content_width;
     var child = self.firstElementChild();
     while (child) |el| : (child = el.nextElementSibling()) {
         if (!CSSStyleDeclaration.isFlexItem(el, frame)) continue;
         if (!el.checkVisibilityCached(null, frame)) continue;
-        const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
-        used += box.width + box.padding_x + box.border_x +
-            el.containerMarginPx("margin-left", frame, &line_width, depth) +
-            el.containerMarginPx("margin-right", frame, &line_width, depth);
+        const box = el.dimensionsIn(frame, true, depth + 1, true, axis.content_width);
+        used += if (axis.column)
+            box.height + box.padding_y + box.border_y +
+                el.containerMarginPx("margin-top", frame, &line_width, depth) +
+                el.containerMarginPx("margin-bottom", frame, &line_width, depth)
+        else
+            box.width + box.padding_x + box.border_x +
+                el.containerMarginPx("margin-left", frame, &line_width, depth) +
+                el.containerMarginPx("margin-right", frame, &line_width, depth);
         items += 1;
     }
     if (items == 0) return .{};
     if (items > 1) used += (items - 1) * gap;
 
-    const free = content_width - used;
+    const free = axis.size - used;
     if (free <= 0) return .{};
 
     return switch (justify) {
@@ -5737,7 +5754,7 @@ fn flexRowContent(
     const spread: Spread = if (justify == .start or wrapped != null) .{} else self.flexJustify(
         frame,
         justify,
-        content_width orelse 0,
+        .{ .size = content_width orelse 0, .content_width = content_width, .column = false },
         gap,
         depth,
     );
@@ -5891,7 +5908,21 @@ fn flexColumnContent(
 
     const gap = CSSStyleDeclaration.flexMainGapPx(self, frame, main);
 
-    var cursor: f64 = 0;
+    // What `justify-content` does with the column's leftover -- the same five
+    // cuts a row makes, down the block axis instead. Asked before the items are
+    // placed because it moves the first one, and skipped entirely for the
+    // `flex-start` that is the initial value and needs neither the leftover nor
+    // the pre-pass that finds it.
+    const justify = CSSStyleDeclaration.flexMainJustify(self, frame);
+    const spread: Spread = if (justify == .start) .{} else self.flexJustify(
+        frame,
+        justify,
+        .{ .size = main, .content_width = content_width, .column = true },
+        gap,
+        depth,
+    );
+
+    var cursor: f64 = spread.leading;
     var placed_any = false;
 
     var child = self.firstElementChild();
@@ -5915,7 +5946,7 @@ fn flexColumnContent(
             continue;
         }
 
-        if (placed_any) cursor += gap;
+        if (placed_any) cursor += gap + spread.between;
         placed_any = true;
 
         const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
