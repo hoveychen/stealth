@@ -33,11 +33,10 @@ algorithm and neither is what stacked the row:
 
   * `flex-wrap`. Every row below fits on one line or overflows it, and a
     wrapped line is solved differently.
-  * `flex-shrink`, which `flexItemWidth` already records as not modelled: two
-    300px items in a 400px row are 200 each in Chrome and 300 here. The
-    `row overflow` case below asserts the widths this engine gives, because
-    what it is here to pin is that the items FOLLOW one another whatever width
-    they end up with. Fix the shrink and that row's expectation moves with it.
+  * `flex-shrink`, which is css/flex_line_distribution.html's. The
+    `row overflow` case below carries its widths only so the FOLLOWING can be
+    asserted on an over-full line; what those widths should be is pinned
+    there.
 
 `justify-content` is likewise untouched: its initial value is `flex-start`,
 which is what "each item starts where the last one ended" already means.
@@ -93,11 +92,13 @@ which is what "each item starts where the last one ended" already means.
      '10,0 60x20 | 90,0 60x20');
   mk('row padded', 'display:flex; width:400px; height:200px; padding:15px; margin:0', [B, B],
      '15,15 60x20 | 75,15 60x20');
-  // Over-full, with the widths this engine gives rather than Chrome's: the
-  // line does not shrink yet (see the note above), and the point of the row
-  // here is that the items still FOLLOW one another whatever width they got.
+  // Over-full: the line takes the overflow back out of the items rather than
+  // hanging out of its container, and they still follow one another at
+  // whatever width that left them. `flex-shrink` is
+  // css/flex_line_distribution.html's rule; this row is here because the
+  // FOLLOWING is this file's.
   mk('row overflow', ROW, ['width:300px;height:20px', 'width:300px;height:20px'],
-     '0,0 300x20 | 300,0 300x20');
+     '0,0 200x20 | 200,0 200x20');
 
   // The cross axis. `stretch` is the initial value, so an undeclared height
   // fills the container -- and a declared one is kept.

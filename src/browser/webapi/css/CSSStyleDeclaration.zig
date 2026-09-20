@@ -4119,7 +4119,14 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
     // pay for a share it is not taking.
     const own_basis = flexBase(element, container, frame, edges);
     const own_grow = flexFactor(element, "flex-grow", frame);
-    if (own_grow <= 0) {
+    const own_shrink = flexShrinkFactor(element, frame);
+    // An item that neither grows nor shrinks needs nothing from its siblings:
+    // a declared basis is its width, and otherwise the box keeps the one it
+    // has. `flex-shrink` is 1 unless the page says otherwise, so this is now
+    // the `flex-shrink: 0` case rather than the common one -- but the walk
+    // below is solved once per CONTAINER and cached on the frame, not once per
+    // item, so the line is measured once either way.
+    if (own_grow <= 0 and own_shrink <= 0) {
         return flooredAtMinContent(element, frame, own_basis orelse return null);
     }
 
@@ -4139,8 +4146,33 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
     const own_base = own_basis orelse element.dimensionsAt(frame, true, depth + 1, false).width;
 
     const free = container - totals.taken;
-    if (totals.total_grow > 0 and free > 0) {
-        return flooredAtMinContent(element, frame, own_base + free * own_grow / totals.total_grow);
+    if (free > 0) {
+        if (own_grow > 0 and totals.total_grow > 0) {
+            return flooredAtMinContent(element, frame, own_base + free * own_grow / totals.total_grow);
+        }
+        return flooredAtMinContent(element, frame, own_basis orelse return null);
+    }
+    // An OVER-FULL line takes the overflow back out of the items, weighted by
+    // each one's `flex-shrink` times its base size -- which is what makes two
+    // equal items give up half each while a `1` beside a `3` gives up one part
+    // to three. Measured on Chrome 152 with
+    // tools/fingerprint/probes/expr-flex-line-distribution.js: two 300px items
+    // in a 400px row are 200 each, `flex-shrink:0` beside a default one leaves
+    // 300 and 100, and `1` beside `3` is 250 and 150.
+    //
+    // This engine did not shrink at all, so an over-full line simply hung out
+    // of its container -- and since `flex-wrap` defaults to `nowrap`, that is
+    // what happened to every row whose items did not fit.
+    //
+    // A WRAPPING container is the exception: an over-full line there breaks
+    // rather than squeezing, so the items keep their bases and go on a second
+    // line. `flex-wrap:wrap` with two 300px bases in a 400px row is 300 and
+    // 300 in Chrome, measured -- element/flex_item_width.html.
+    if (free < 0 and own_shrink > 0 and totals.scaled_shrink > 0 and
+        !wrapsFlexLine(style_manager, parent))
+    {
+        const share = -free * (own_shrink * own_base) / totals.scaled_shrink;
+        return flooredAtMinContent(element, frame, @max(0, own_base - share));
     }
     return flooredAtMinContent(element, frame, own_basis orelse return null);
 }
@@ -4171,6 +4203,7 @@ fn flexLine(frame: *Frame, parent: *Element, depth: u8) Element.FlexLine {
 fn flexLineTotals(parent: *Element, container: f64, frame: *Frame, depth: u8) Element.FlexLine.Totals {
     var taken: f64 = 0;
     var total_grow: f64 = 0;
+    var scaled_shrink: f64 = 0;
 
     // Every item on this line has the same containing block -- the flex
     // container, which `container` is already the content width of -- so the
@@ -4192,6 +4225,7 @@ fn flexLineTotals(parent: *Element, container: f64, frame: *Frame, depth: u8) El
         taken += base + sibling_edges.padding_x + sibling_edges.border_x +
             Element.horizontalMargin(sibling, frame, &line_width, depth);
         total_grow += flexFactor(sibling, "flex-grow", frame);
+        scaled_shrink += flexShrinkFactor(sibling, frame) * base;
     }
     // The gaps are spent before anything is shared out, so they narrow a
     // growing item rather than pushing it past the container's edge: two
@@ -4199,7 +4233,7 @@ fn flexLineTotals(parent: *Element, container: f64, frame: *Frame, depth: u8) El
     if (items > 1) {
         taken += @as(f64, @floatFromInt(items - 1)) * flexMainGapPx(parent, frame, container);
     }
-    return .{ .taken = taken, .total_grow = total_grow };
+    return .{ .taken = taken, .total_grow = total_grow, .scaled_shrink = scaled_shrink };
 }
 
 /// A flex item's automatic minimum size: it is never laid out narrower than its
@@ -4259,6 +4293,17 @@ fn flexFactor(element: *Element, name: []const u8, frame: *Frame) f64 {
     const declared = cascadedComputedValue(element, name, frame) orelse return 0;
     const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return 0;
     if (parsed.unit != .none) return 0;
+    return @max(0, parsed.value);
+}
+
+/// `flex-shrink`, whose initial value is ONE and not zero -- which is why it
+/// cannot go through `flexFactor`, where an undeclared property is 0. Every
+/// item an over-full line holds shrinks unless the page says otherwise, and
+/// reading the default as 0 would have left the line over-full instead.
+fn flexShrinkFactor(element: *Element, frame: *Frame) f64 {
+    const declared = cascadedComputedValue(element, "flex-shrink", frame) orelse return 1;
+    const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return 1;
+    if (parsed.unit != .none) return 1;
     return @max(0, parsed.value);
 }
 
@@ -4388,6 +4433,15 @@ pub fn flexMainJustify(container: *Element, frame: *Frame) MainJustify {
         std.ascii.eqlIgnoreCase(declared, "end") or
         std.ascii.eqlIgnoreCase(declared, "right")) return .end;
     return .start;
+}
+
+/// Whether the container breaks its line when the items do not fit, rather
+/// than squeezing them onto it. `nowrap` is the initial value, so an absent
+/// declaration does not wrap.
+fn wrapsFlexLine(style_manager: *StyleManager, container: *Element) bool {
+    const declared = cascadedKeyword(style_manager, container, "flex-wrap") orelse return false;
+    return std.ascii.eqlIgnoreCase(declared, "wrap") or
+        std.ascii.eqlIgnoreCase(declared, "wrap-reverse");
 }
 
 /// Whether the container stacks its items down the page, which puts a width on

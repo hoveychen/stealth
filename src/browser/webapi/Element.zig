@@ -158,6 +158,11 @@ pub const FlexLine = struct {
     pub const Totals = struct {
         taken: f64,
         total_grow: f64,
+        /// Σ of each item's `flex-shrink` TIMES its flex base size. Shrinking
+        /// is weighted by the base and growing is not, because taking the same
+        /// fraction off every item is what keeps a wide one from collapsing
+        /// before a narrow one has given anything up.
+        scaled_shrink: f64 = 0,
     };
 };
 
