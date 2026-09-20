@@ -48,6 +48,7 @@ const chrome_bounds = @import("chrome_bounds.zig");
 const shorthand = @import("shorthand.zig");
 const supports = @import("supports.zig");
 const font_metrics = @import("../../font_metrics.zig");
+const text_measure = @import("../../text_measure.zig");
 const transform = @import("transform.zig");
 const animation_timing = @import("animation_timing.zig");
 const typed_om = @import("typed_om.zig");
@@ -1859,7 +1860,11 @@ pub fn lengthFactor(style_manager: *StyleManager, element: *Element, property_na
             const g = font_metrics.glyph(family, if (unit == .ex) 'x' else '0') orelse
                 break :blk .unresolvable;
             const ratio = (if (unit == .ex) g.ascent else g.advance) / font_metrics.basis;
-            break :blk .{ .pixels = style_manager.computedFontSize(element) * ratio };
+            // Both are read off the font, so both are read at the size the font
+            // was built at -- `10ch` steps only on the 1/200px buckets
+            // text_measure.effectiveSize describes, not on every 0.001px of
+            // computed size (scratch/s61/quant-scope.js).
+            break :blk .{ .pixels = text_measure.effectiveSize(style_manager.computedFontSize(element)) * ratio };
         },
         // `font-size` and `line-height` are the two percentages with no
         // containing block in them. `width` now has one -- the containing

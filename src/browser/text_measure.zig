@@ -1286,6 +1286,41 @@ fn quantise(family: font_metrics.Family, basis_total: f64) f64 {
     return @ceil(basis_total * upem / font_metrics.basis) * font_metrics.basis / upem;
 }
 
+/// The grid Blink snaps a font size onto before it builds the font: 1/200 of a
+/// CSS pixel. `FontDescription::EffectiveFontSize` exists so a size and the
+/// font cache key it produces cannot disagree, and it FLOORS rather than
+/// rounds.
+const SIZE_GRID_STEPS: f32 = 200;
+
+/// The size the shaper actually runs at, which is not the computed font size.
+///
+/// A control laid out at the UA's `-webkit-small-control` — computed
+/// `13.3333px` — shapes at `13.33`, so every glyph is about 0.0002px narrower
+/// than the linear answer and a six-character label comes out 1/128px short of
+/// one. That is the whole of the two rows Kasada disagreed with this engine on:
+/// `Submit` is 57.4921875 wide in Chrome against 57.5 here, and `Reset`
+/// 50.828125 against 50.8359375.
+///
+/// Measured by recovering the effective size out of 1000 copies of one glyph,
+/// which puts the reading on a 1e-5px grid: 65 sizes across 13..14 at 1/64px
+/// steps, 41 across 13.32..13.36 at 0.001, and 0.05 steps through 8..9 and
+/// 40..41 all land on `floor(size * 200) / 200`
+/// (scratch/s61/{size-grid,glyph-precision}.js). The 18 places
+/// `line-height: normal` steps between 8px and 16px land on the same grid, so
+/// the vertical metrics come through here too.
+///
+/// The narrowing to `f32` is not decoration. `8.15px` parses to a float a hair
+/// UNDER 8.15, so its bucket is 8.145 and not 8.15, and Chrome answers 8.145;
+/// `8.4px`, `9.9px` and `40.1px` are the same shape. Those two sizes are the
+/// pair `textAdvanceUnit` records as "an advance Chrome does not derive
+/// linearly" — they are this, and they are linear once the size is snapped.
+pub fn effectiveSize(px: f64) f64 {
+    if (!(px > 0) or !std.math.isFinite(px)) return px;
+    const narrowed: f32 = @floatCast(px);
+    const scaled: f32 = narrowed * SIZE_GRID_STEPS;
+    return @as(f64, @floor(scaled)) / SIZE_GRID_STEPS;
+}
+
 /// Accumulates at the tables' 100px basis and converts once, so a sum of
 /// dyadic rationals stays exact until the last step.
 fn toPixels(value: f64, font_size: f64) f64 {
