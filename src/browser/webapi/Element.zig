@@ -5484,6 +5484,69 @@ fn hasInlineBaseline(self: *Element, frame: *Frame, depth: u8) bool {
 /// scrollHeight. Measured; an `absolute` child is out of both.
 /// What a box holds: its content height, and the margins that left through its
 /// two block edges on the way out. See `contentHeight`.
+/// What `justify-content` adds in front of the first item and between every
+/// pair after it.
+const Spread = struct {
+    leading: f64 = 0,
+    between: f64 = 0,
+};
+
+/// The leftover a flex line has along its main axis, cut the way
+/// `justify-content` asks for.
+///
+/// Measured on Chrome 152 with
+/// tools/fingerprint/probes/expr-flex-line-distribution.js, on three 60px items
+/// in a 400px row -- 220 of leftover:
+///
+///   `center`         110 in front, nothing between
+///   `flex-end`       220 in front, nothing between
+///   `space-between`  nothing in front, 110 in each of the n-1 gaps
+///   `space-around`   each item gets half a share on either side, so the
+///                    leftover is cut into n and the ends get half of one:
+///                    36.67 in front and 73.33 between
+///   `space-evenly`   all n+1 gaps are equal: 55 everywhere
+///
+/// A line with nothing left over gets nothing from any of them -- an over-full
+/// one included, which is why `justify-content:center` on two 300px items in a
+/// 400px row still starts at 0.
+fn flexJustify(
+    self: *Element,
+    frame: *Frame,
+    justify: CSSStyleDeclaration.MainJustify,
+    content_width: f64,
+    gap: f64,
+    depth: u8,
+) Spread {
+    var used: f64 = 0;
+    var items: f64 = 0;
+    var line_width: ?f64 = content_width;
+    var child = self.firstElementChild();
+    while (child) |el| : (child = el.nextElementSibling()) {
+        if (!CSSStyleDeclaration.isFlexItem(el, frame)) continue;
+        if (!el.checkVisibilityCached(null, frame)) continue;
+        const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+        used += box.width + box.padding_x + box.border_x +
+            el.containerMarginPx("margin-left", frame, &line_width, depth) +
+            el.containerMarginPx("margin-right", frame, &line_width, depth);
+        items += 1;
+    }
+    if (items == 0) return .{};
+    if (items > 1) used += (items - 1) * gap;
+
+    const free = content_width - used;
+    if (free <= 0) return .{};
+
+    return switch (justify) {
+        .start => .{},
+        .center => .{ .leading = free / 2 },
+        .end => .{ .leading = free },
+        // One item has no gap to put anything in, so it stays at the start.
+        .between => if (items > 1) .{ .between = free / (items - 1) } else .{},
+        .around => .{ .leading = free / items / 2, .between = free / items },
+        .evenly => .{ .leading = free / (items + 1), .between = free / (items + 1) },
+    };
+}
+
 /// A flex row's own content walk, or null when this element is not one and the
 /// stacking walk is the right one after all.
 ///
@@ -5526,7 +5589,24 @@ fn flexRowContent(
     const gap = CSSStyleDeclaration.flexMainGapPx(self, frame, content_width orelse 0);
     var placed_any = false;
 
-    var cursor: f64 = 0;
+    // What `justify-content` does with the line's leftover. Asked before the
+    // items are placed because it moves the first one: the leading goes in
+    // front of the cursor and the spacing is added to every gap after it.
+    //
+    // The measurement that costs is only paid where the page actually asks for
+    // one: `flex-start` is the initial value, it is what an absent declaration
+    // answers, and it needs neither the leftover nor the pre-pass that finds
+    // it.
+    const justify = CSSStyleDeclaration.flexMainJustify(self, frame);
+    const spread: Spread = if (justify == .start) .{} else self.flexJustify(
+        frame,
+        justify,
+        content_width orelse 0,
+        gap,
+        depth,
+    );
+
+    var cursor: f64 = spread.leading;
     var tallest: f64 = 0;
 
     var child = self.firstElementChild();
@@ -5556,7 +5636,7 @@ fn flexRowContent(
             continue;
         }
 
-        if (placed_any) cursor += gap;
+        if (placed_any) cursor += gap + spread.between;
         placed_any = true;
 
         const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);

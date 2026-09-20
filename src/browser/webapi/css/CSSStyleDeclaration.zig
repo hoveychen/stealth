@@ -4368,6 +4368,28 @@ pub fn flexMainGapPx(container: *Element, frame: *Frame, container_width: f64) f
     return @max(0, parsed.value);
 }
 
+/// How a flex line spreads what its items left over along the main axis.
+///
+/// `flex-start` is the initial value and the one that does nothing, which is
+/// why it is what an absent or unrecognised declaration answers. The three
+/// `space-*` values differ only in how many shares the leftover is cut into and
+/// how many of them go outside the end items -- see Element.flexJustify for the
+/// arithmetic and the measured numbers.
+pub const MainJustify = enum { start, center, end, between, around, evenly };
+
+pub fn flexMainJustify(container: *Element, frame: *Frame) MainJustify {
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const declared = cascadedKeyword(style_manager, container, "justify-content") orelse return .start;
+    if (std.ascii.eqlIgnoreCase(declared, "center")) return .center;
+    if (std.ascii.eqlIgnoreCase(declared, "space-between")) return .between;
+    if (std.ascii.eqlIgnoreCase(declared, "space-around")) return .around;
+    if (std.ascii.eqlIgnoreCase(declared, "space-evenly")) return .evenly;
+    if (std.ascii.eqlIgnoreCase(declared, "flex-end") or
+        std.ascii.eqlIgnoreCase(declared, "end") or
+        std.ascii.eqlIgnoreCase(declared, "right")) return .end;
+    return .start;
+}
+
 /// Whether the container stacks its items down the page, which puts a width on
 /// the cross axis.
 fn isColumnFlex(style_manager: *StyleManager, container: *Element) bool {
