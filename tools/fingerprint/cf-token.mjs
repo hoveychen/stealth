@@ -21,9 +21,24 @@
 //   chrome --headed-ua                edge 1279   widget 1514 (68 blocks)  2/2 served
 //   lightpanda                        edge 1279   widget 1663 (75 blocks)  0/5 served
 //
-// So the edge stage records the same thing about this engine as it does about
-// the arm that clears, and the whole difference -- 7 blocks, 112 bytes -- is
+// So the edge stage recorded the same thing about this engine as it did about
+// the arm that clears, and the whole difference -- 7 blocks, 112 bytes -- was
 // recorded in the widget stage.
+//
+// **That gap is gone, and with it this tool's power to tell the arms apart.**
+// Re-measured 2026-09-20, same window, station-level alternation:
+//
+//   chrome (UA says HeadlessChrome)   edge 1301   widget 1535 (69 blocks)  0/2 served
+//   chrome --headed-ua                edge 1279   widget 1514 (68 blocks)  3/3 served
+//   lightpanda                        edge 1279   widget 1514 (68 blocks)  0/3 served
+//
+// This engine now reads exactly what the arm that clears reads, at both stages,
+// with no jitter -- while `served=` still splits 3/3 against 0/3. So the server
+// records the same encrypted state about both arms and still refuses one of
+// them: the blob length is a health check now, not a discriminator. The headed
+// -against-bare property the self-test asserts does still hold (68 against 69).
+// For a reading that tracks the verdict, use `cf-branch.mjs`, which watches the
+// third `fo/` post's response instead.
 //
 // Readings are only comparable inside one window: the same headless Chrome read
 // 1279/1514 on 2026-08-xx (the b111 captures) and 1301/1535 the next day. Always
