@@ -8557,6 +8557,10 @@ test "WebApi: CSSStyleDeclaration flex line placement" {
     try testing.htmlRunner("css/flex_line_placement.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration flex line distribution" {
+    try testing.htmlRunner("css/flex_line_distribution.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration computed timeline-trigger" {
     try testing.htmlRunner("css/timeline_trigger_computed.html", .{});
 }
