@@ -5552,6 +5552,117 @@ fn flexJustify(
     };
 }
 
+/// Where each line of a WRAPPING flex row starts on the cross axis, and which
+/// item begins it.
+///
+/// `starts[i]` is line i's cross origin and `breaks[i]` is the index of the
+/// first item on line i+1, so the main walk only has to count items and
+/// compare.
+const WrappedLines = struct {
+    breaks: []const usize,
+    starts: []const f64,
+    /// The cross size each line ended up with, for the items that align
+    /// within it.
+    sizes: []const f64,
+    total: f64,
+};
+
+/// Break a flex row's items into lines and give each line its cross origin.
+/// Null when the container does not wrap, which is the initial value and the
+/// path the single-line walk keeps.
+///
+/// An item starts a new line when it does not fit on the current one, and a
+/// line always holds at least one item however wide it is. Once the lines are
+/// known, `align-content` shares the container's cross size between them: its
+/// initial `stretch` splits whatever is left over equally, so two lines of 20px
+/// content in a 200px row are 100 tall each and the second starts at y=100 --
+/// measured on Chrome 152, tools/fingerprint/probes/expr-flex-line-distribution.js.
+///
+/// `align-content` beyond `stretch` and `flex-start` is deliberately not
+/// modelled: neither `center` nor the `space-*` family was measured, and
+/// anything but `stretch` here leaves the lines at their own heights, which is
+/// what `flex-start` means.
+fn flexWrappedLines(
+    self: *Element,
+    frame: *Frame,
+    visibility_cache: *VisibilityCache,
+    content_width: f64,
+    gap: f64,
+    depth: u8,
+) ?WrappedLines {
+    if (!CSSStyleDeclaration.wrapsFlexLine2(self, frame)) return null;
+
+    var sizes: std.ArrayList(f64) = .empty;
+    var breaks: std.ArrayList(usize) = .empty;
+    var line_width: ?f64 = content_width;
+
+    var line_main: f64 = 0;
+    var line_cross: f64 = 0;
+    var on_line: usize = 0;
+    var index: usize = 0;
+
+    var child = self.firstElementChild();
+    while (child) |el| : (child = el.nextElementSibling()) {
+        if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
+        if (!CSSStyleDeclaration.isFlexItem(el, frame)) continue;
+
+        const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+        const outer_width = box.width + box.padding_x + box.border_x +
+            el.containerMarginPx("margin-left", frame, &line_width, depth) +
+            el.containerMarginPx("margin-right", frame, &line_width, depth);
+        const margins = el.verticalMargins(frame, &line_width, depth);
+        const outer_height = box.height + box.padding_y + box.border_y + margins.top + margins.bottom;
+
+        if (on_line > 0 and line_main + gap + outer_width > content_width) {
+            sizes.append(frame.call_arena, line_cross) catch return null;
+            breaks.append(frame.call_arena, index) catch return null;
+            line_main = 0;
+            line_cross = 0;
+            on_line = 0;
+        }
+        if (on_line > 0) line_main += gap;
+        line_main += outer_width;
+        line_cross = @max(line_cross, outer_height);
+        on_line += 1;
+        index += 1;
+    }
+    if (on_line == 0 and sizes.items.len == 0) return null;
+    sizes.append(frame.call_arena, line_cross) catch return null;
+
+    const lines: f64 = @floatFromInt(sizes.items.len);
+    const row_gap = CSSStyleDeclaration.flexCrossGapPx(self, frame, content_width);
+
+    var total: f64 = (lines - 1) * row_gap;
+    for (sizes.items) |size| total += size;
+
+    // `stretch` is the initial `align-content`, and it hands the leftover out
+    // equally rather than in proportion: two lines in a 200px row are 100 each
+    // whatever they hold.
+    if (CSSStyleDeclaration.flexLinesStretch(self, frame)) {
+        if (CSSStyleDeclaration.definiteContentHeight(self, frame)) |cross| {
+            if (cross > total) {
+                const extra = (cross - total) / lines;
+                for (sizes.items) |*size| size.* += extra;
+                total = cross;
+            }
+        }
+    }
+
+    var starts: std.ArrayList(f64) = .empty;
+    var at: f64 = 0;
+    for (sizes.items) |size| {
+        starts.append(frame.call_arena, at) catch return null;
+        at += size + row_gap;
+    }
+
+    return .{
+        .breaks = breaks.items,
+        .starts = starts.items,
+        .sizes = sizes.items,
+        .total = total,
+    };
+}
+
 /// A flex row's own content walk, or null when this element is not one and the
 /// stacking walk is the right one after all.
 ///
@@ -5602,8 +5713,23 @@ fn flexRowContent(
     // one: `flex-start` is the initial value, it is what an absent declaration
     // answers, and it needs neither the leftover nor the pre-pass that finds
     // it.
+    // Which items start a new line, and where each line sits on the cross
+    // axis. Null for the `nowrap` container every page writes by default, and
+    // the single-line walk below is then exactly what it was.
+    const wrapped = self.flexWrappedLines(
+        frame,
+        visibility_cache,
+        content_width orelse 0,
+        gap,
+        depth,
+    );
+
     const justify = CSSStyleDeclaration.flexMainJustify(self, frame);
-    const spread: Spread = if (justify == .start) .{} else self.flexJustify(
+    // A wrapping container justifies each line separately, and what each line
+    // holds is not measured here -- so the leftover is left alone rather than
+    // spread from a total that spans two lines. Neither combination was
+    // measured; this is the one that cannot move a row that does not wrap.
+    const spread: Spread = if (justify == .start or wrapped != null) .{} else self.flexJustify(
         frame,
         justify,
         content_width orelse 0,
@@ -5613,6 +5739,9 @@ fn flexRowContent(
 
     var cursor: f64 = spread.leading;
     var tallest: f64 = 0;
+    var item_index: usize = 0;
+    var line_index: usize = 0;
+    var cross_origin: f64 = 0;
 
     var child = self.firstElementChild();
     while (child) |el| : (child = el.nextElementSibling()) {
@@ -5641,6 +5770,19 @@ fn flexRowContent(
             continue;
         }
 
+        // A wrapping container starts a new line here: the cursor goes back to
+        // the content edge and the cross origin moves down by whatever the
+        // lines above took.
+        if (wrapped) |lines| {
+            if (line_index < lines.breaks.len and item_index == lines.breaks[line_index]) {
+                line_index += 1;
+                cross_origin = lines.starts[line_index];
+                cursor = 0;
+                placed_any = false;
+            }
+        }
+        item_index += 1;
+
         if (placed_any) cursor += gap + spread.between;
         placed_any = true;
 
@@ -5662,7 +5804,11 @@ fn flexRowContent(
         // initial value is `stretch`, and a stretched item was already given
         // the container's height by `flexItemHeight` -- so what is left here is
         // only the offset the other three place it at.
-        const cross_offset = if (cross) |line_cross| switch (CSSStyleDeclaration.flexCrossAlign(el, self, frame)) {
+        //
+        // On a wrapping container it is the LINE's cross size and not the
+        // container's, and the line's own origin comes on top.
+        const within: ?f64 = if (wrapped) |lines| lines.sizes[line_index] else cross;
+        const cross_offset = cross_origin + if (within) |line_cross| switch (CSSStyleDeclaration.flexCrossAlign(el, self, frame)) {
             .stretch, .start => margins.top,
             .center => @max(0, (line_cross - outer_height) / 2),
             .end => @max(0, line_cross - outer_height - margins.bottom),
@@ -5689,9 +5835,12 @@ fn flexRowContent(
         // The MARGIN box is what advances the line: `margin: 0 10px` on two
         // 60px items puts them at 10 and 90, measured.
         cursor += margin_left + outer_width + margin_right;
-        tallest = @max(tallest, margins.top + outer_height + margins.bottom);
+        tallest = @max(tallest, cross_origin + margins.top + outer_height + margins.bottom);
     }
 
+    // A wrapping container is as tall as its lines together, which is more
+    // than the tallest item the moment there is a second line.
+    if (wrapped) |lines| return .{ .total = @max(tallest, lines.total) };
     return .{ .total = tallest };
 }
 

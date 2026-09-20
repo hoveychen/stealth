@@ -4444,6 +4444,39 @@ fn wrapsFlexLine(style_manager: *StyleManager, container: *Element) bool {
         std.ascii.eqlIgnoreCase(declared, "wrap-reverse");
 }
 
+/// The same question from the layout side, which has an element and a frame
+/// rather than a StyleManager.
+pub fn wrapsFlexLine2(container: *Element, frame: *Frame) bool {
+    return wrapsFlexLine(&container.ownerFrame(frame)._style_manager, container);
+}
+
+/// The `row-gap` a wrapping flex container puts between two of its LINES. A
+/// percentage is a share of the container on that axis, the same rule
+/// `flexMainGapPx` follows for the inline one.
+pub fn flexCrossGapPx(container: *Element, frame: *Frame, container_size: f64) f64 {
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const declaration = cascadedRawDeclaration(style_manager, container, "row-gap") orelse return 0;
+    const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(trimmed, "normal")) return 0;
+    if (std.mem.endsWith(u8, trimmed, "%")) {
+        const share = std.fmt.parseFloat(f64, trimmed[0 .. trimmed.len - 1]) catch return 0;
+        return @max(0, container_size * share / 100.0);
+    }
+    const parsed = units.parse(trimmed) catch return 0;
+    if (parsed.unit != .px) return 0;
+    return @max(0, parsed.value);
+}
+
+/// Whether the lines of a wrapping container share its leftover cross size
+/// between them. `stretch` is the initial `align-content` and `normal` behaves
+/// as it does; anything else leaves each line at its own height.
+pub fn flexLinesStretch(container: *Element, frame: *Frame) bool {
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const declared = cascadedKeyword(style_manager, container, "align-content") orelse return true;
+    return std.ascii.eqlIgnoreCase(declared, "stretch") or
+        std.ascii.eqlIgnoreCase(declared, "normal");
+}
+
 /// Whether the container stacks its items down the page, which puts a width on
 /// the cross axis.
 fn isColumnFlex(style_manager: *StyleManager, container: *Element) bool {
