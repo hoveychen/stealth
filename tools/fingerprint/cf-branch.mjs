@@ -1,10 +1,19 @@
 // Where Cloudflare's challenge actually forks, read off the exchange instead of
 // off whether the station served the page.
 //
-//   node tools/fingerprint/cf-branch.mjs <lightpanda|chrome>[:headed-ua]
-//   node tools/fingerprint/cf-branch.mjs --arms lightpanda,chrome:headed-ua --pairs 3
+//   node tools/fingerprint/cf-branch.mjs <lightpanda|chrome>[:headed-ua|:headed]
+//   node tools/fingerprint/cf-branch.mjs --arms lightpanda,chrome:headed --pairs 3
 //        [--url u] [--settle ms] [--port n] [--out path]
 // env: LP_BIN, CHROME
+//
+// `:headed-ua` is a headless Chrome wearing the headed UA string, and
+// `--user-agent` blanks every client hint, so its request shape is not a real
+// browser's (`ua-override-blanks-client-hints`). `:headed` is a real window.
+// On this criterion the two read the same -- measured 2026-09-20 over 3 station-
+// level alternated triples, `branch=clear` and `served=true` 3/3 on BOTH Chrome
+// arms against 0/3 here -- so no earlier cf comparison run against `:headed-ua`
+// is void on account of its reference arm. Prefer `:headed` anyway when the
+// thing being compared is request-side.
 //
 // `served=` is the criterion this repo trusts, and it is also a 1-in-6 lottery:
 // a clean Chrome drops a ticket every sixth run, so only `0/N` ever refutes
@@ -61,9 +70,9 @@ const OUT = arg('--out', null);
 // next pair -- because a station that hardens with each visit gives the arm
 // that ran first a window the other one never sees (`block-ab-biases-the-second-arm`).
 const ARMS = (arg('--arms', null) ?? process.argv[2] ?? '').split(',').filter(Boolean);
-if (!ARMS.length || ARMS.some((a) => !/^(lightpanda|chrome)(:headed-ua)?$/.test(a))) {
-    console.error('usage: cf-branch.mjs <lightpanda|chrome>[:headed-ua] [--out p]');
-    console.error('       cf-branch.mjs --arms lightpanda,chrome:headed-ua --pairs 3');
+if (!ARMS.length || ARMS.some((a) => !/^(lightpanda|chrome)(:headed-ua|:headed)?$/.test(a))) {
+    console.error('usage: cf-branch.mjs <lightpanda|chrome>[:headed-ua|:headed] [--out p]');
+    console.error('       cf-branch.mjs --arms lightpanda,chrome:headed --pairs 3');
     process.exit(2);
 }
 
@@ -86,8 +95,14 @@ function branchOf(posts) {
 async function runOnce(arm, port) {
     const engine = arm.split(':')[0];
     const headedUa = arm.endsWith(':headed-ua');
+    // `:headed` is a real browser window, not a headless one wearing a headed
+    // UA string. `--user-agent` blanks every client hint, so `:headed-ua` does
+    // not have this engine's request shape -- comparing anything request-side
+    // against it reads a difference that is the flag's, not the engine's
+    // (`ua-override-blanks-client-hints`, `cf-mdrd-length-is-a-request-shape-probe`).
+    const headed = arm.endsWith(':headed');
     const state = {
-        arm, engine, url: URL_, settleMs: SETTLE, headedUa,
+        arm, engine, url: URL_, settleMs: SETTLE, headedUa, headed,
         userAgentOverride: null, posts: [], exceptions: [],
     };
 
@@ -99,7 +114,7 @@ async function runOnce(arm, port) {
             `--remote-debugging-port=${port}`,
             `--user-data-dir=${profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-br-'))}`,
             '--no-first-run', '--no-default-browser-check', '--window-size=1920,1080',
-            '--headless=new',
+            ...(headed ? [] : ['--headless=new']),
             ...personaScaleFlags(),
             ...(state.userAgentOverride ? [`--user-agent=${state.userAgentOverride}`] : []),
         ], { stdio: ['ignore', 'pipe', 'pipe'] })
