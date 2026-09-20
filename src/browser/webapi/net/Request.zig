@@ -71,13 +71,19 @@ pub const InitOpts = struct {
     // reports as a shorter, differently ordered log -- measured with
     // probes/expr-b85-dictionary-traps.js.
     //
-    // The seven with no implementation behind them are read and discarded.
+    // The four with no implementation behind them are read and discarded.
     // Chrome reads them too, and on an ordinary page ignores them just as
     // thoroughly; what is observable either way is the read.
+    //
+    // `attributionReporting`, `browsingTopics` and `sharedStorageWritable` are
+    // NOT among them any more. Chrome 151 read all three; Chrome 153 reads
+    // none, so a Proxy handed to `Request` logs seventeen names there and
+    // logged twenty here -- three extra reads no browser performs. Measured
+    // both ways in one capture: on the live x-hyatt page the guard submits
+    // this very list, and again offline with scratch/s60/expr-requestinit.js
+    // against a real Chrome.
     adAuctionHeaders: ?bool = null,
-    attributionReporting: ?js.Value = null,
     body: ?BodyInit = null,
-    browsingTopics: ?bool = null,
     // Read as strings rather than as the typed enums: an out-of-range value has
     // to name the member, the dictionary and the enum type, and the bridge's
     // enum conversion knows none of the three.
@@ -94,7 +100,6 @@ pub const InitOpts = struct {
     redirect: ?[]const u8 = null,
     referrer: ?[]const u8 = null,
     referrerPolicy: ?[]const u8 = null,
-    sharedStorageWritable: ?bool = null,
     signal: ?*AbortSignal = null,
     targetAddressSpace: ?[]const u8 = null,
 };
