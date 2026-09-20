@@ -1936,7 +1936,7 @@ const default_font_size = 16.0;
 /// declaration with `!important` ordering, the legacy presentational
 /// attributes, and inheritance up the chain with the same depth cap this walk
 /// had. Asking it is the whole fix.
-fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, size: f64 } {
+fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, size: f64, css_size: f64 } {
     const style_manager = &self.ownerFrame(frame)._style_manager;
     const family = if (style_manager.computedFontFamily(self)) |declared|
         font_metrics.findInList(declared, style_manager.frame.loadedFonts(), style_manager.computedOpticalSize(self))
@@ -1972,7 +1972,12 @@ fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, 
             text_style.kerning,
             text_style.transform,
         ),
-        .size = style_manager.computedFontSize(self),
+        // Not the computed size: the size the shaper runs at. See
+        // text_measure.effectiveSize.
+        .size = text_measure.effectiveSize(style_manager.computedFontSize(self)),
+        // The computed size, for the one reading that does not come out of the
+        // shaper -- see the avgCharWidth branch in intrinsicFormControlBox.
+        .css_size = style_manager.computedFontSize(self),
     };
 }
 
@@ -4105,7 +4110,16 @@ fn intrinsicBox(self: *Element, frame: *Frame, tag: Tag) ?IntrinsicBox {
             // The scale-1 basis needed `avg` and `max` rounded to whole pixels
             // below 24px; at scale 2 they are used as measured and the fit is
             // better for it -- see the ceil below.
-            const scale = font.size / font_metrics.basis;
+            // The COMPUTED size here, not the shaped one. A field of characters
+            // is not a shaped run -- Chrome multiplies a per-family constant by
+            // the size -- and the reading says the constant does not move onto
+            // the 1/200 px grid with the shaper: a default `<textarea>` at the
+            // UA's 13.3333px is 177 wide in Chrome, which is 20 columns plus the
+            // 16.5 gutter at the computed size (177.03, floored to the device
+            // pixel). At the shaped 13.33 the same sum is 176.99 and floors to
+            // 176.5 -- half a pixel out, and the one reading in
+            // css/block_height.html that separates the two sizes.
+            const scale = font.css_size / font_metrics.basis;
             const avg = font.face.family.avg_char_width * scale;
             const max = font.face.family.max_char_width * scale;
             const columns: f64 = if (tag == .textarea)

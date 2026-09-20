@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+The size the shaper runs at is the computed font size floored onto a 1/200 px
+grid, not the computed size itself.
+
+Kasada's collection appends one `<input>` per type carrying
+`style="all: revert; margin: -9999px;"` and reads `getClientRects()[0]` beside
+`clientWidth`/`clientHeight`. `all: revert` throws the page's cascade away, so
+every control lands on the UA's `-webkit-small-control` font -- computed
+`13.3333px` -- and shapes at `13.33`. Two of the fifteen rows it submits came
+back 1/128 px wider here than in Chrome because this engine shaped at the
+computed size: `Submit` 57.5 against Chrome's 57.4921875, and `Reset`
+50.8359375 against 50.828125.
+
+Values from Chrome 153 at --force-device-scale-factor=2, the factor this
+engine's persona claims (scratch/s61/{revert-inputs,ref-values}.js, run through
+tools/fingerprint/run-expr.mjs against a local page). The grid itself was
+measured by dividing 1000 copies of one glyph back out, which reads the
+effective size to ~1e-5 px: 65 sizes across 13..14 at 1/64 steps, 41 across
+13.32..13.36 at 0.001, and 0.05 steps through 8..9 and 40..41 all land on
+floor(size * 200) / 200 (scratch/s61/size-grid.js).
+
+Not asserted here, and not changed: `line-height: normal` at a fractional size
+is extrapolated from the integer table and is wrong for its own reason (plan
+normal-line-height-ladder); canvas `measureText` snaps on a 0.01 px grid of its
+own; and SVG text has its own size path.
+-->
+
+<script id=font_size_floors_onto_the_1_200_grid>
+{
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // The guard's probe, verbatim. Every type it reads, so a fix that moves one
+  // row has to leave the other twelve alone.
+  const row = (type) => {
+    const el = document.createElement('input');
+    el.type = type;
+    el.setAttribute('style', 'all: revert; margin: -9999px;');
+    document.body.appendChild(el);
+    const r = el.getClientRects()[0];
+    const s = (r ? r.width + 'x' + r.height : 'none') + ':' + el.clientWidth + 'x' + el.clientHeight;
+    el.remove();
+    return s;
+  };
+  // The two that moved.
+  eq('submit', row('submit'), '57.4921875x21.5:53x18');
+  eq('reset', row('reset'), '50.828125x21.5:47x18');
+  // The thirteen that must not.
+  eq('button', row('button'), '16x21.5:12x18');
+  eq('text', row('text'), '147x21.5:143x18');
+  eq('search', row('search'), '147x21.5:143x18');
+  eq('password', row('password'), '147x21.5:143x18');
+  eq('number', row('number'), '147x21.5:143x18');
+  eq('file', row('file'), '252.5x21.5:253x22');
+  eq('color', row('color'), '50x27:48x25');
+  eq('checkbox', row('checkbox'), '13x13:13x13');
+  eq('radio', row('radio'), '13x13:13x13');
+  eq('range', row('range'), '129x16:129x16');
+  eq('date', row('date'), '124.828125x21.5:121x18');
+
+  // The grid under it, without a form control in the way. Five sizes inside one
+  // bucket answer the bucket, and the two neighbouring buckets differ.
+  const host = document.createElement('div');
+  host.setAttribute('style', 'position:absolute;left:0;top:0;white-space:pre');
+  host.textContent = 'Submit';
+  document.body.appendChild(host);
+  const at = (px) => {
+    host.style.font = '400 ' + px + 'px Arial';
+    return host.getBoundingClientRect().width;
+  };
+  eq('13.325', at('13.325'), 41.4765625);
+  eq('13.329', at('13.329'), 41.4765625);
+  eq('13.33', at('13.33'), 41.4921875);
+  eq('13.3333', at('13.3333'), 41.4921875);
+  eq('13.334', at('13.334'), 41.4921875);
+  eq('13.335', at('13.335'), 41.5078125);
+  // Sizes already on the grid are untouched.
+  eq('13', at('13'), 40.4609375);
+  eq('16', at('16'), 49.796875);
+  eq('40', at('40'), 124.4921875);
+  eq('12.5', at('12.5'), 38.90625);
+  // The two sizes textAdvanceUnit records as "an advance Chrome does not derive
+  // linearly": both parse to a float just under the literal, so both fall into
+  // the bucket below.
+  eq('8.4', at('8.4'), 26.1328125);
+  eq('9.9', at('9.9'), 30.796875);
+  host.remove();
+
+  // `ch` and `ex` are read off the font, so they are on the same grid.
+  const u = document.createElement('div');
+  u.setAttribute('style', 'position:absolute;left:0;top:0');
+  document.body.appendChild(u);
+  const unit = (px, len) => {
+    u.style.font = '400 ' + px + 'px Arial';
+    u.style.width = len;
+    return u.getBoundingClientRect().width;
+  };
+  eq('10ch at 13.3333', unit('13.3333', '10ch'), 74.1328125);
+  eq('10ex at 13.3333', unit('13.3333', '10ex'), 69.1171875);
+  eq('10ch at 13.335', unit('13.335', '10ch'), 74.15625);
+  eq('10ex at 13.335', unit('13.335', '10ex'), 69.1484375);
+  u.remove();
+
+  // The computed font size itself is NOT quantised: Chrome still serialises
+  // 13.3333px, and `em` is the computed size rather than the shaped one.
+  const c = document.createElement('div');
+  c.setAttribute('style', 'position:absolute;left:0;top:0;font:400 13.3333px Arial;width:10em');
+  document.body.appendChild(c);
+  eq('computed font-size', getComputedStyle(c).fontSize, '13.3333px');
+  // 10 * 13.3333 floored onto the 1/128 length grid, i.e. the unquantised size.
+  eq('10em', c.getBoundingClientRect().width, 133.328125);
+  c.remove();
+
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

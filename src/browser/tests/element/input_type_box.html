@@ -105,15 +105,14 @@ which is what the guard reads:
     // the same reason the date family does. Chrome at 100px is 1891x121.
     ['file',           '253x22/253x22',   '253x22/253x22'],
     // The buttons: 1px/6px of padding in a 2px border, border-box.
-    // Chrome answers 53x18/57x22 here and this answers 54x18/58x22, and the
-    // cause is not the button model: our button's content box and our own
-    // <span> of the same label agree exactly, which is what Chrome's do too.
-    // It is the text advance itself, which runs high by a 1/64th step on some
-    // strings -- "Submit" and "Hello" by one, "XXXXXXXXXX" by three, "X" not at
-    // all -- and 41.5 against Chrome's 41.4921875 is just enough to carry the
-    // client box over a rounding boundary. That is the advance model's residual
-    // (README: it reproduces 100 of 107 readings), not this table's.
-    ['submit',         '54x18/58x22',     '323x117/327x121'],
+    // These used to read 54x18/58x22 against Chrome's 53x18/57x22, and the
+    // cause was never the button model: the advance ran a 1/64th step high on
+    // "Submit", "Hello" and "XXXXXXXXXX" but not on "X", which was just enough
+    // to carry the client box over a rounding boundary. It was the font SIZE --
+    // the UA's `13.3333px` shapes at `13.33` in Chrome, see
+    // text_measure.effectiveSize and element/font_size_quantisation.html -- so
+    // at 100px, already on that grid, the column beside it never moved.
+    ['submit',         '53x18/57x22',     '323x117/327x121'],
     ['reset',          '47x18/51x22',     '273x117/277x121'],
     ['button',         '12x18/16x22',     '12x117/16x121'],
     // No box at all.
