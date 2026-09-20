@@ -24,6 +24,7 @@ const bridge = @import("bridge.zig");
 const Context = @import("Context.zig");
 const Isolate = @import("Isolate.zig");
 const Platform = @import("Platform.zig");
+const Snapshot = @import("Snapshot.zig");
 const Inspector = @import("Inspector.zig");
 
 const App = @import("../../App.zig");
@@ -420,8 +421,9 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
             log.err(.js, "wasm streaming bootstrap", .{ .err = err });
         };
 
-        // Snapshot creation deletes V8's built-in `console` from the global so
-        // ours takes over, and it deletes the [Global] copy with it. Chrome has
+        // Snapshot creation empties V8's built-in `console` slot so ours takes
+        // over (the slot itself is kept -- it is the position Chrome's own V8
+        // creates `console` at, rank 60). Chrome has
         // it as an own, non-enumerable data property of `window` (measured on a
         // headed Chrome 150: Object.getOwnPropertyDescriptor(window, 'console')
         // is a value descriptor, and Window.prototype has no `console` at all),
@@ -460,8 +462,13 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
             // {writable: true, enumerable: true, configurable: false}, so
             // DontDelete and nothing else. Note it enumerates, unlike every
             // other property installed here.
+            //
+            // Configurable for now: it lands at the end of the global's own
+            // names and Chrome creates it at rank 895, so the reorder pass
+            // below has to be able to delete and redefine it. The attribute is
+            // put back straight after, in place, which keeps the slot.
             if (Chrome.build(&ls.local)) |chrome| {
-                _ = global_object.defineOwnProperty("chrome", chrome.toValue(), v8.DontDelete);
+                _ = global_object.defineOwnProperty("chrome", chrome.toValue(), 0);
             } else |err| {
                 log.err(.js, "chrome own property", .{ .err = err });
             }
@@ -518,6 +525,28 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
         if (comptime is_frame) {
             if (self.app.config.enableWebMcp() == false) {
                 context.hideWebMcpSurface();
+            }
+        }
+
+        // Last on the global, because it reads back every name the rest of this
+        // function put there. `Object.getOwnPropertyNames(window)` is read in
+        // full by DataDome's device check and by Kasada's collector, and three
+        // groups of names arrive too late to be in Chrome's creation order --
+        // V8's conditionally-installed builtins, the WebIDL namespace objects,
+        // and `chrome` -- so the tail is put back in order here. See
+        // Snapshot.reorderScript for what moves and why it can.
+        if (comptime is_frame) {
+            ls.local.eval(Snapshot.reorder_globals_source, "global-order") catch |err| {
+                log.err(.js, "global order", .{ .err = err });
+            };
+
+            // And now that it has its slot, `chrome` gets the attributes Chrome
+            // gives it: {writable: true, enumerable: true, configurable: false}.
+            // Redefining in place keeps the position the pass above chose.
+            if (global_object.get("chrome")) |value| {
+                _ = global_object.defineOwnProperty("chrome", value, v8.DontDelete);
+            } else |err| {
+                log.err(.js, "chrome own property", .{ .err = err });
             }
         }
     }

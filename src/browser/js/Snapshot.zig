@@ -330,7 +330,20 @@ const GlobalName = struct {
     rank: usize,
     name: []const u8,
     template_index: usize,
+    // A slot reserved for a name Env.zig fills in per context. The value it
+    // carries here is never read; what it buys is the *position*, because a
+    // later define of a name that already exists keeps the slot it has.
+    placeholder: bool = false,
 };
+
+// Names whose value only exists per context, and whose Chrome rank falls inside
+// the stretch of the global that cannot be reordered afterwards (see
+// reorderScript). Their slot is opened on the global's template, at Chrome's
+// position, and Env.zig writes the real value into it later.
+//
+// `console` is not here: V8 creates it during Genesis, at the position Chrome's
+// own V8 puts it, and the snapshot only has to leave that slot alone.
+const reserved_globals = [_][]const u8{"CSS"};
 
 // Names this engine puts on the window global that Chrome has nowhere, so
 // Chrome's order table cannot place them. Every one of them is a tell on its
@@ -422,6 +435,16 @@ fn constructorNames(comptime realm: Realm, comptime ContextApis: []const type) [
             }
             deduped = deduped ++ [_]GlobalName{a};
         }
+        if (realm == .window) {
+            for (reserved_globals) |name| {
+                deduped = deduped ++ [_]GlobalName{.{
+                    .rank = rankOf(name),
+                    .name = name,
+                    .template_index = 0,
+                    .placeholder = true,
+                }};
+            }
+        }
         var sorted = deduped[0..deduped.len].*;
         std.mem.sort(GlobalName, &sorted, {}, struct {
             fn lessThan(_: void, a: GlobalName, b: GlobalName) bool {
@@ -453,7 +476,11 @@ fn setConstructorNames(
         if (comptime entry.rank < hi) {
             const key = v8.v8__String__NewFromUtf8(isolate, entry.name.ptr, v8.kNormal, @intCast(entry.name.len));
             // Web IDL: interface objects on the global are non-enumerable.
-            v8.v8__Template__Set(@ptrCast(global_template), key, @ptrCast(templates[entry.template_index]), v8.DontEnum);
+            const value: *const v8.Data = if (comptime entry.placeholder)
+                @ptrCast(v8.v8__Undefined(isolate))
+            else
+                @ptrCast(templates[entry.template_index]);
+            v8.v8__Template__Set(@ptrCast(global_template), key, value, v8.DontEnum);
         }
     }
 }
@@ -473,6 +500,10 @@ fn defineConstructorNames(
 ) void {
     inline for (comptime constructorNames(realm, ContextApis)) |entry| {
         if (comptime entry.rank >= lo) {
+            // Every reserved slot so far sits below `window`, so the template
+            // pass above opens all of them. One above the line would need a
+            // define here instead -- and reorderScript would move it anyway.
+            if (comptime entry.placeholder) @compileError("reserved global '" ++ entry.name ++ "' ranks after `window`");
             const func = v8.v8__FunctionTemplate__GetFunction(templates[entry.template_index], context);
             const key = v8.v8__String__NewFromUtf8(isolate, entry.name.ptr, v8.kNormal, @intCast(entry.name.len));
             var maybe_result: v8.MaybeBool = undefined;
@@ -781,17 +812,24 @@ fn createSnapshotContext(
     }
 
     {
-        // Delete built-in console so we can inject our own. V8's own console
-        // object wins the slot over the template's accessor -- measured: with
-        // this delete removed, `Object.getOwnPropertyNames(console)` came back
-        // as V8's list (`context`, `createTask`, no `memory`) and carried V8's
+        // Empty out V8's built-in console so ours can take the slot. V8's own
+        // console object wins it over the template's accessor -- measured: with
+        // this removed, `Object.getOwnPropertyNames(console)` came back as V8's
+        // list (`context`, `createTask`, no `memory`) and carried V8's
         // '[object console]' brand, so the brand alone does not tell them
-        // apart. Env.zig installs the page's Console over the hole this leaves.
+        // apart. Env.zig installs the page's Console per context.
+        //
+        // Overwritten rather than deleted, because the *slot* is worth keeping:
+        // V8 creates `console` during Genesis, right where Chrome's V8 creates
+        // it (rank 60, between `isNaN` and `Option`), and a delete would send
+        // the name to the very end of `Object.getOwnPropertyNames(window)`
+        // where no real browser has it. Redefining an existing own property
+        // keeps its position; the value here is only a placeholder.
         const console_key = v8.v8__String__NewFromUtf8(isolate, "console", v8.kNormal, 7);
-        var maybe_deleted: v8.MaybeBool = undefined;
-        v8.v8__Object__Delete(global_obj, context, console_key, &maybe_deleted);
-        if (maybe_deleted.value == false) {
-            return error.ConsoleDeleteError;
+        var maybe_defined: v8.MaybeBool = undefined;
+        v8.v8__Object__DefineOwnProperty(global_obj, context, console_key, @ptrCast(v8.v8__Undefined(isolate)), v8.DontEnum, &maybe_defined);
+        if (maybe_defined.value == false) {
+            return error.ConsoleSlotError;
         }
     }
 
@@ -896,6 +934,68 @@ fn moveConstructorSlots(isolate: *v8.Isolate, context: ?*const v8.Context) !void
     const script = v8.v8__Script__Compile(context, code, null) orelse return error.ScriptCompileFailed;
     _ = v8.v8__Script__Run(script, context) orelse return error.ScriptRunFailed;
 }
+
+// The rank the reorder region starts at. Everything Chrome creates before
+// `SuppressedError` this engine already creates in the same relative order, and
+// the region has to start after the last name that cannot move: `window`,
+// `document`, `location` and `top` are [LegacyUnforgeable] and therefore
+// non-configurable, so a pass that tried to reshuffle across them would leave
+// the four stranded ahead of everything it re-added.
+const reorder_from = global_order.rankOrFail("SuppressedError");
+
+// Put the tail of the window global's own-property list back into Chrome's
+// order, per context.
+//
+// Three groups arrive after everything else and cannot be placed where they
+// belong when they are created:
+//
+//   * V8's late builtins -- SuppressedError, DisposableStack,
+//     AsyncDisposableStack, Float16Array, WebAssembly (Chrome 890-894) -- which
+//     V8 installs on the deserialized context, after every name the snapshot
+//     put down;
+//   * the WebIDL namespace objects (GPUBufferUsage and friends, Chrome
+//     933-963), defined in the per-API loop that runs after
+//     defineConstructorNames;
+//   * `chrome` (895), and the seventeen Window IDL members Chrome creates in
+//     its last, gated run (getScreenDetails, speechSynthesis, onpageswap,
+//     webkitRequestFileSystem, ...), which reach this engine's global on the
+//     [Global] template, ahead of every interface object.
+//
+// String keys enumerate in insertion order, so the fix is the one
+// moveConstructorSlots uses on prototypes: delete each name and define it again
+// with the descriptor it already has -- the same getter, setter and attributes,
+// so nothing but the position changes. Only from the first name that is out of
+// place; a context whose tail already matches does no work at all.
+//
+// Window realm only. The table is a capture of Chrome's *window* and a worker
+// global carries a different set in a different order.
+fn reorderScript() []const u8 {
+    comptime {
+        @setEvalBranchQuota(global_order.names.len * 64);
+        var table: []const u8 = "";
+        for (global_order.names[reorder_from..]) |name| {
+            table = table ++ "'" ++ name ++ "',";
+        }
+        // The engine's own extra names sort last, behind everything Chrome has,
+        // the same way rankOf places them.
+        for (not_in_chrome) |name| {
+            table = table ++ "'" ++ name ++ "',";
+        }
+        return "(function(o){" ++
+            "var r=Object.create(null);for(var i=0;i<o.length;i++)r[o[i]]=i;" ++
+            "var have=Object.getOwnPropertyNames(globalThis),cur=[];" ++
+            "for(var i=0;i<have.length;i++)if(r[have[i]]!==undefined)cur.push(have[i]);" ++
+            "var want=cur.slice().sort(function(a,b){return r[a]-r[b];});" ++
+            "var k=0;while(k<want.length&&want[k]===cur[k])k++;" ++
+            "for(var j=k;j<want.length;j++){var n=want[j];" ++
+            "var d=Object.getOwnPropertyDescriptor(globalThis,n);" ++
+            "if(!d||!d.configurable)continue;" ++
+            "delete globalThis[n];Object.defineProperty(globalThis,n,d);}" ++
+            "})([" ++ table ++ "])";
+    }
+}
+
+pub const reorder_globals_source = reorderScript();
 
 fn hasGatedMember(comptime JsApi: type) bool {
     comptime {

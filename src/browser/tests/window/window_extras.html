@@ -197,3 +197,49 @@
     testing.expectEqual('function', typeof window.console.log);
   }
 </script>
+
+<script id="global_creation_order">
+  {
+    // `Object.getOwnPropertyNames(window)` hands back the order the names were
+    // created in, and both DataDome's device check and Kasada's collector
+    // upload the whole sequence -- Kasada was measured refusing a ticket over
+    // nothing but a perturbation of this list. Three groups reach the global
+    // too late to be in Chrome's order when they are created: V8's
+    // conditionally-installed builtins, the WebIDL namespace objects, and
+    // `chrome`. Env.createContext puts the tail back (Snapshot.reorderScript).
+    const names = Object.getOwnPropertyNames(window);
+    const at = (n) => names.indexOf(n);
+
+    // V8 creates `console` between `isNaN` and `Option`, which is where Chrome
+    // has it too, so the snapshot empties that slot rather than deleting it --
+    // a delete would send the name to the very end, where no browser has it.
+    testing.expectEqual(at('isNaN') + 1, at('console'));
+    testing.expectEqual(at('console') + 1, at('Option'));
+
+    // Chrome 152's order for the names that used to trail the whole list.
+    const ordered = [
+      'SuppressedError', 'DisposableStack', 'AsyncDisposableStack', 'Float16Array',
+      'WebAssembly', 'chrome', 'GPUBufferUsage', 'GPUColorWrite', 'GPUMapMode',
+      'GPUShaderStage', 'GPUTextureUsage', 'getScreenDetails', 'speechSynthesis',
+      'ongamepadconnected', 'webkitRequestFileSystem', 'webkitResolveLocalFileSystemURL',
+    ];
+    let previous = -1;
+    for (const name of ordered) {
+      const index = at(name);
+      testing.expectEqual(true, index > previous);
+      previous = index;
+    }
+
+    // `CSS` keeps Chrome's slot too, which the snapshot reserves on the global
+    // template because it ranks below the stretch the pass above can move.
+    testing.expectEqual(true, at('CSS') > 0 && at('CSS') < at('SuppressedError'));
+    testing.expectEqual(at('CSSAnimation') + 1, at('CSS'));
+
+    // {writable: true, enumerable: true, configurable: false} -- the attributes
+    // survive being moved, which is what the move puts back afterwards.
+    const chrome_descriptor = Object.getOwnPropertyDescriptor(window, 'chrome');
+    testing.expectEqual(true, chrome_descriptor.writable);
+    testing.expectEqual(true, chrome_descriptor.enumerable);
+    testing.expectEqual(false, chrome_descriptor.configurable);
+  }
+</script>
