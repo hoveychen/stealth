@@ -4320,12 +4320,22 @@ pub fn isFlexItem(element: *Element, frame: *Frame) bool {
 }
 
 /// Whether this element lays its children out along a flex LINE -- a flex or
-/// inline-flex container whose direction is a row. A column keeps the stacking
-/// walk, whose main axis is already the block one.
+/// inline-flex container whose direction is a row.
 pub fn isFlexRowContainer(element: *Element, frame: *Frame) bool {
     const display = resolvedDisplay(element, frame);
     if (!std.mem.eql(u8, display, "flex") and !std.mem.eql(u8, display, "inline-flex")) return false;
     return !isColumnFlex(&element.ownerFrame(frame)._style_manager, element);
+}
+
+/// Whether this element lays its children out down a flex COLUMN. Its main axis
+/// is the block one, so the stacking walk put each item under the previous one
+/// and got the common case right by accident -- but a column is still a flex
+/// container, and `gap`, `justify-content`, `flex-shrink` and a main-axis
+/// `auto` margin all apply to it. None of them reached the stacking walk.
+pub fn isFlexColumnContainer(element: *Element, frame: *Frame) bool {
+    const display = resolvedDisplay(element, frame);
+    if (!std.mem.eql(u8, display, "flex") and !std.mem.eql(u8, display, "inline-flex")) return false;
+    return isColumnFlex(&element.ownerFrame(frame)._style_manager, element);
 }
 
 /// Where one flex item sits on the cross axis. `align-self` answers for the
@@ -4384,29 +4394,140 @@ pub fn flexItemHeight(element: *Element, frame: *Frame, depth: u8) ?f64 {
     return definiteContentHeight(parent, frame);
 }
 
-/// The `gap` a flex row puts BETWEEN two items, in px. `column-gap` on the
-/// inline axis, which the `gap` shorthand already expands to; `normal` and an
-/// unresolvable length are both no gap.
+/// The main size a flex COLUMN gives one of its items -- its HEIGHT, because
+/// the main axis of a column is the block one. Null when the item is not one,
+/// when the column has no definite main size to share, and when the item
+/// neither grows nor shrinks, which are the three that leave the height where
+/// the cascade put it.
+///
+/// The same two distributions `flexItemWidth` makes along a row, so the
+/// measurements agree: two `flex:1` items in a 200px column with a 20px gap
+/// are 90 tall each, and two 150px items in that column are 100 each --
+/// `flex-shrink:0` beside a default one leaves 150 and 50. Measured on
+/// Chrome 152 with tools/fingerprint/probes/expr-flex-column-direction.js.
+///
+/// An INDEFINITE column is left alone rather than guessed at: a column as tall
+/// as its items has no leftover to grow into and no overflow to shrink out of,
+/// so the number each item already has is the right one.
+///
+/// `min-height`, `max-height` and the automatic minimum size of the block axis
+/// are deliberately not modelled here, the same three `flexItemWidth` leaves
+/// out on the inline one.
+pub fn flexColumnItemHeight(element: *Element, frame: *Frame, depth: u8, edges: BoxEdges) ?f64 {
+    if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
+    const parent = element.parentElement() orelse return null;
+    if (!isFlexColumnContainer(parent, frame)) return null;
+    if (!isFlexItem(element, frame)) return null;
+
+    const container = definiteContentHeight(parent, frame) orelse return null;
+
+    const own_basis = flexColumnBase(element, container, frame, edges);
+    const own_grow = flexFactor(element, "flex-grow", frame);
+    const own_shrink = flexShrinkFactor(element, frame);
+    if (own_grow <= 0 and own_shrink <= 0) return own_basis;
+
+    var taken: f64 = 0;
+    var total_grow: f64 = 0;
+    var scaled_shrink: f64 = 0;
+    var items: usize = 0;
+    // A percentage margin is a share of the containing block's inline size even
+    // on the block axis, so the column's own width is what resolves these.
+    var line_width: ?f64 = parent.getElementDimensions(frame).width;
+
+    var child = parent.firstElementChild();
+    while (child) |sibling| : (child = sibling.nextElementSibling()) {
+        if (!isFlexItem(sibling, frame)) continue;
+        items += 1;
+        const sibling_edges = boxEdges(sibling, frame);
+        const base = flexColumnBaseSize(sibling, container, frame, depth, sibling_edges);
+        const block_margins = sibling.verticalMargins(frame, &line_width, depth);
+        taken += base + sibling_edges.padding_y + sibling_edges.border_y +
+            block_margins.top + block_margins.bottom;
+        total_grow += flexFactor(sibling, "flex-grow", frame);
+        scaled_shrink += flexShrinkFactor(sibling, frame) * base;
+    }
+    if (items > 1) {
+        taken += @as(f64, @floatFromInt(items - 1)) * flexMainGapPx(parent, frame, container);
+    }
+
+    const own_base = own_basis orelse element.dimensionsAt(frame, true, depth + 1, false).height;
+    const free = container - taken;
+    if (free > 0) {
+        if (own_grow > 0 and total_grow > 0) {
+            return @max(0, own_base + free * own_grow / total_grow);
+        }
+        return own_basis;
+    }
+    // An over-full column takes the overflow back out of its items, weighted by
+    // each one's `flex-shrink` times its base -- the same weighting a row uses,
+    // and the reason `flex-shrink:0` beside a default one gives up nothing
+    // while its sibling gives up all 100.
+    if (free < 0 and own_shrink > 0 and scaled_shrink > 0 and
+        !wrapsFlexLine(&element.ownerFrame(frame)._style_manager, parent))
+    {
+        const share = -free * (own_shrink * own_base) / scaled_shrink;
+        return @max(0, own_base - share);
+    }
+    return own_basis;
+}
+
+/// The declared flex base size of a column's item as a CONTENT height, or null
+/// when the page named none and the box's own height is the base.
+fn flexColumnBase(element: *Element, container: f64, frame: *Frame, edges: BoxEdges) ?f64 {
+    const basis = flexColumnBasisLength(element, container, frame) orelse return null;
+    if (!usesBorderBox(element, frame)) return basis;
+    return @max(0, basis - edges.padding_y - edges.border_y);
+}
+
+/// The `flex-basis` of one item of a column in px, whose percentage is a share
+/// of the container's HEIGHT. Null for `auto`, `content` and nothing at all,
+/// the three that send the base back to the box.
+fn flexColumnBasisLength(element: *Element, container: f64, frame: *Frame) ?f64 {
+    const declared = cascadedComputedValue(element, "flex-basis", frame) orelse return null;
+    const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return null;
+    return switch (parsed.unit) {
+        .px => parsed.value,
+        .percentage => container * parsed.value / 100.0,
+        else => null,
+    };
+}
+
+/// The base one item of a column starts from, measured with the distribution
+/// turned off -- which is what keeps an item asking for its sibling's base from
+/// sending the sibling back around this same walk.
+fn flexColumnBaseSize(element: *Element, container: f64, frame: *Frame, depth: u8, edges: BoxEdges) f64 {
+    if (flexColumnBase(element, container, frame, edges)) |px| return px;
+    return element.dimensionsAt(frame, true, depth + 1, false).height;
+}
+
+/// The `gap` a flex container puts BETWEEN two items along its MAIN axis, in
+/// px. That is `column-gap` on a row and `row-gap` on a column -- the `gap`
+/// shorthand expands to both, so it reads the same either way, and naming the
+/// one axis is what makes `column-gap:20px` separate nothing on a column.
+/// `normal` and an unresolvable length are both no gap.
 ///
 /// A percentage is a share of the container's own size on the gap's axis, so it
-/// is resolved here rather than at computed-value time: `gap:10%` in a 400px
-/// row is 40px between each pair, measured.
+/// is resolved here rather than at computed-value time -- and the share is of
+/// the container's MAIN size, which is why the caller hands one over: `gap:10%`
+/// is 40px between each pair of a 400px-wide row and 20px between each pair of
+/// a 200px-tall column, both measured.
 ///
 /// It sits between the items and nowhere else -- n items have n-1 of them, one
 /// item has none, and neither container edge gets one. And it comes off the
 /// line before anything is distributed, which is why `flexLineTotals` charges
 /// for it: two `flex:1` items with a 20px gap are 190 each and not 200.
-pub fn flexMainGapPx(container: *Element, frame: *Frame, container_width: f64) f64 {
+pub fn flexMainGapPx(container: *Element, frame: *Frame, container_main: f64) f64 {
     // The RAW cascade, not the computed text: a percentage `column-gap` is not
     // one the computed-value machinery resolves, so asking for the computed
     // value answers null and a `gap:10%` row came out with no gap at all.
     const style_manager = &container.ownerFrame(frame)._style_manager;
-    const declaration = cascadedRawDeclaration(style_manager, container, "column-gap") orelse return 0;
+    const axis: []const u8 = if (isColumnFlex(style_manager, container)) "row-gap" else "column-gap";
+    const declaration = cascadedRawDeclaration(style_manager, container, axis) orelse return 0;
     const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
     if (std.ascii.eqlIgnoreCase(trimmed, "normal")) return 0;
     if (std.mem.endsWith(u8, trimmed, "%")) {
         const share = std.fmt.parseFloat(f64, trimmed[0 .. trimmed.len - 1]) catch return 0;
-        return @max(0, container_width * share / 100.0);
+        return @max(0, container_main * share / 100.0);
     }
     const parsed = units.parse(trimmed) catch return 0;
     if (parsed.unit != .px) return 0;
@@ -8705,6 +8826,10 @@ test "WebApi: CSSStyleDeclaration flex line placement" {
 
 test "WebApi: CSSStyleDeclaration flex line distribution" {
     try testing.htmlRunner("css/flex_line_distribution.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration flex column direction" {
+    try testing.htmlRunner("css/flex_column_direction.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration computed timeline-trigger" {
