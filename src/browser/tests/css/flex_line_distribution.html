@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+What a flex line does with the space its items did not take. The line itself is
+css/flex_line_placement.html: the items follow one another from the content
+edge, which is `justify-content: flex-start` with no `gap`. This is the rest of
+it, and none of the four was modelled -- twelve of the thirteen shapes measured
+came out wrong, the thirteenth being the control that says a `gap` on a BLOCK
+container is ignored.
+
+Each of the four is what a real page writes:
+
+  * `gap` is the modern spacing idiom -- `display:flex; gap:16px` instead of a
+    margin on every child -- and it comes off the free space before anything is
+    distributed, so it also changes how wide a `flex:1` item ends up.
+  * `justify-content` is how a navbar puts its logo and its menu at the two
+    ends. `space-between` puts the first item at the start, the last at the end
+    and splits the rest between the n-1 gaps; `space-around` gives each item
+    half a share on either side; `space-evenly` makes all n+1 gaps equal.
+  * `flex-shrink` takes space back when the line is over-full, in proportion to
+    each item's shrink factor TIMES its base size -- so `1` beside `3` on two
+    300px items in a 400px row is 250 and 150, not 275 and 125.
+  * `flex-wrap` starts a second line. With `align-content` at its initial
+    `stretch` the lines share the container's cross size, so two lines of 20px
+    content in a 200px row are 100 tall each and the second starts at y=100;
+    `flex-start` leaves them at their own heights and the second starts at 20.
+
+Measured on Chrome 152 with
+tools/fingerprint/probes/expr-flex-line-distribution.js.
+
+The COLUMN direction is deliberately absent from the assertions, because its
+main axis is the block one and the stacking walk lays it out -- a different
+place to put all four rules. Both shapes are measured and recorded here so the
+next plan starts from a number rather than a guess: in a 400x200 column,
+`gap:20px` on three 20px items puts them at y=0, 40, 80, and
+`justify-content:center` puts them at y=70, 90, 110.
+-->
+
+<script id=flex_line_distributes_what_is_left>
+{
+  const wrong = [];
+  const mk = (label, hostCss, childCss, want) => {
+    const host = document.createElement('div');
+    host.setAttribute('style', hostCss);
+    document.body.appendChild(host);
+    for (const css of childCss) {
+      const el = document.createElement('div');
+      el.setAttribute('style', css);
+      host.appendChild(el);
+    }
+    const hr = host.getBoundingClientRect();
+    const rows = [];
+    for (const el of host.children) {
+      const r = el.getBoundingClientRect();
+      rows.push(Math.round(r.x - hr.x) + ',' + Math.round(r.y - hr.y) +
+        ' ' + Math.round(r.width) + 'x' + Math.round(r.height));
+    }
+    host.remove();
+    const got = rows.join(' | ');
+    if (got !== want) wrong.push(label + ': want [' + want + '], got [' + got + ']');
+  };
+
+  const ROW = 'display:flex; width:400px; height:200px; margin:0';
+  const B = 'width:60px; height:20px';
+  const three = [B, B, B];
+
+  // `gap` sits BETWEEN the items: n items have n-1 of them, so one item has
+  // none and the container's own edges get none either.
+  mk('gap', ROW + '; gap:20px', three, '0,0 60x20 | 80,0 60x20 | 160,0 60x20');
+  mk('column-gap', ROW + '; column-gap:10px', three, '0,0 60x20 | 70,0 60x20 | 140,0 60x20');
+  // A percentage gap is a share of the container on the gap's own axis.
+  mk('percentage gap', ROW + '; gap:10%', three, '0,0 60x20 | 100,0 60x20 | 200,0 60x20');
+  // And it comes off the line before anything is shared, so it narrows a
+  // growing item rather than pushing it out of the container.
+  mk('gap with grow', ROW + '; gap:20px', ['flex:1;height:20px', 'flex:1;height:20px'],
+     '0,0 190x20 | 210,0 190x20');
+  mk('gap with one item', ROW + '; gap:20px', [B], '0,0 60x20');
+  // The control: `gap` on a block container is not a property that applies.
+  mk('gap on a block', 'width:400px; height:200px; gap:20px; margin:0', three,
+     '0,0 60x20 | 0,20 60x20 | 0,40 60x20');
+
+  // `justify-content` distributes what the items left over. 400 - 180 = 220.
+  mk('justify flex-start', ROW + '; justify-content:flex-start', three,
+     '0,0 60x20 | 60,0 60x20 | 120,0 60x20');
+  mk('justify center', ROW + '; justify-content:center', three,
+     '110,0 60x20 | 170,0 60x20 | 230,0 60x20');
+  mk('justify flex-end', ROW + '; justify-content:flex-end', three,
+     '220,0 60x20 | 280,0 60x20 | 340,0 60x20');
+  // n-1 gaps of 110.
+  mk('justify space-between', ROW + '; justify-content:space-between', three,
+     '0,0 60x20 | 170,0 60x20 | 340,0 60x20');
+  // Half a share outside the two end items, a whole one between: 36.67 and 73.33.
+  mk('justify space-around', ROW + '; justify-content:space-around', three,
+     '37,0 60x20 | 170,0 60x20 | 303,0 60x20');
+  // n+1 equal gaps of 55.
+  mk('justify space-evenly', ROW + '; justify-content:space-evenly', three,
+     '55,0 60x20 | 170,0 60x20 | 285,0 60x20');
+  // The gap is spent first; what is left is what gets distributed.
+  mk('justify with gap', ROW + '; justify-content:space-between; gap:20px', three,
+     '0,0 60x20 | 170,0 60x20 | 340,0 60x20');
+  // Nothing left over, so nothing to distribute -- and a shrunk line is
+  // exactly full.
+  mk('justify over-full', ROW + '; justify-content:center',
+     ['width:300px;height:20px', 'width:300px;height:20px'], '0,0 200x20 | 200,0 200x20');
+  mk('justify space-between, one item', ROW + '; justify-content:space-between', [B],
+     '0,0 60x20');
+
+  // `flex-shrink` when the line is over-full. The weight is the factor TIMES
+  // the base size, which is why equal factors on equal bases halve the overflow
+  // and a 1-beside-3 splits it one to three.
+  mk('shrink', ROW, ['width:300px;height:20px', 'width:300px;height:20px'],
+     '0,0 200x20 | 200,0 200x20');
+  mk('shrink zero', ROW, ['width:300px;height:20px;flex-shrink:0', 'width:300px;height:20px'],
+     '0,0 300x20 | 300,0 100x20');
+  mk('shrink uneven', ROW,
+     ['width:300px;height:20px;flex-shrink:1', 'width:300px;height:20px;flex-shrink:3'],
+     '0,0 250x20 | 250,0 150x20');
+  // The gap is part of what over-fills the line.
+  mk('shrink with gap', ROW + '; gap:20px',
+     ['width:300px;height:20px', 'width:300px;height:20px'], '0,0 190x20 | 210,0 190x20');
+
+  // `flex-wrap`. Two 150px items fit on a 400px line and the third starts a
+  // new one; with `align-content` at its initial `stretch` the two lines split
+  // the container's 200 between them.
+  const W = 'width:150px;height:20px';
+  mk('wrap', ROW + '; flex-wrap:wrap', [W, W, W],
+     '0,0 150x20 | 150,0 150x20 | 0,100 150x20');
+  mk('wrap with gap', ROW + '; flex-wrap:wrap; gap:20px', [W, W, W],
+     '0,0 150x20 | 170,0 150x20 | 0,110 150x20');
+  mk('wrap align-content flex-start', ROW + '; flex-wrap:wrap; align-content:flex-start', [W, W, W],
+     '0,0 150x20 | 150,0 150x20 | 0,20 150x20');
+  // `nowrap` is the initial value, so the same three items stay on one line and
+  // shrink to fit it -- which is the control that says wrapping is a choice
+  // and not what an over-full line does by itself.
+  mk('nowrap shrinks instead', ROW + '; flex-wrap:nowrap', [W, W, W],
+     '0,0 133x20 | 133,0 133x20 | 267,0 133x20');
+
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>

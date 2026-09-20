@@ -4119,7 +4119,14 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
     // pay for a share it is not taking.
     const own_basis = flexBase(element, container, frame, edges);
     const own_grow = flexFactor(element, "flex-grow", frame);
-    if (own_grow <= 0) {
+    const own_shrink = flexShrinkFactor(element, frame);
+    // An item that neither grows nor shrinks needs nothing from its siblings:
+    // a declared basis is its width, and otherwise the box keeps the one it
+    // has. `flex-shrink` is 1 unless the page says otherwise, so this is now
+    // the `flex-shrink: 0` case rather than the common one -- but the walk
+    // below is solved once per CONTAINER and cached on the frame, not once per
+    // item, so the line is measured once either way.
+    if (own_grow <= 0 and own_shrink <= 0) {
         return flooredAtMinContent(element, frame, own_basis orelse return null);
     }
 
@@ -4139,8 +4146,33 @@ pub fn flexItemWidth(element: *Element, frame: *Frame, depth: u8, width_declared
     const own_base = own_basis orelse element.dimensionsAt(frame, true, depth + 1, false).width;
 
     const free = container - totals.taken;
-    if (totals.total_grow > 0 and free > 0) {
-        return flooredAtMinContent(element, frame, own_base + free * own_grow / totals.total_grow);
+    if (free > 0) {
+        if (own_grow > 0 and totals.total_grow > 0) {
+            return flooredAtMinContent(element, frame, own_base + free * own_grow / totals.total_grow);
+        }
+        return flooredAtMinContent(element, frame, own_basis orelse return null);
+    }
+    // An OVER-FULL line takes the overflow back out of the items, weighted by
+    // each one's `flex-shrink` times its base size -- which is what makes two
+    // equal items give up half each while a `1` beside a `3` gives up one part
+    // to three. Measured on Chrome 152 with
+    // tools/fingerprint/probes/expr-flex-line-distribution.js: two 300px items
+    // in a 400px row are 200 each, `flex-shrink:0` beside a default one leaves
+    // 300 and 100, and `1` beside `3` is 250 and 150.
+    //
+    // This engine did not shrink at all, so an over-full line simply hung out
+    // of its container -- and since `flex-wrap` defaults to `nowrap`, that is
+    // what happened to every row whose items did not fit.
+    //
+    // A WRAPPING container is the exception: an over-full line there breaks
+    // rather than squeezing, so the items keep their bases and go on a second
+    // line. `flex-wrap:wrap` with two 300px bases in a 400px row is 300 and
+    // 300 in Chrome, measured -- element/flex_item_width.html.
+    if (free < 0 and own_shrink > 0 and totals.scaled_shrink > 0 and
+        !wrapsFlexLine(style_manager, parent))
+    {
+        const share = -free * (own_shrink * own_base) / totals.scaled_shrink;
+        return flooredAtMinContent(element, frame, @max(0, own_base - share));
     }
     return flooredAtMinContent(element, frame, own_basis orelse return null);
 }
@@ -4171,15 +4203,18 @@ fn flexLine(frame: *Frame, parent: *Element, depth: u8) Element.FlexLine {
 fn flexLineTotals(parent: *Element, container: f64, frame: *Frame, depth: u8) Element.FlexLine.Totals {
     var taken: f64 = 0;
     var total_grow: f64 = 0;
+    var scaled_shrink: f64 = 0;
 
     // Every item on this line has the same containing block -- the flex
     // container, which `container` is already the content width of -- so the
     // percentage margins below resolve against it without measuring anything.
     var line_width: ?f64 = container;
 
+    var items: usize = 0;
     var child = parent.firstElementChild();
     while (child) |sibling| : (child = sibling.nextElementSibling()) {
         if (!isFlexItem(sibling, frame)) continue;
+        items += 1;
         const sibling_edges = boxEdges(sibling, frame);
         const base = flexBaseSize(sibling, container, frame, depth, sibling_edges);
         // What the line gives out is BORDER boxes: an item's padding, border
@@ -4190,8 +4225,15 @@ fn flexLineTotals(parent: *Element, container: f64, frame: *Frame, depth: u8) El
         taken += base + sibling_edges.padding_x + sibling_edges.border_x +
             Element.horizontalMargin(sibling, frame, &line_width, depth);
         total_grow += flexFactor(sibling, "flex-grow", frame);
+        scaled_shrink += flexShrinkFactor(sibling, frame) * base;
     }
-    return .{ .taken = taken, .total_grow = total_grow };
+    // The gaps are spent before anything is shared out, so they narrow a
+    // growing item rather than pushing it past the container's edge: two
+    // `flex:1` items with `gap:20px` in a 400px row are 190 each, measured.
+    if (items > 1) {
+        taken += @as(f64, @floatFromInt(items - 1)) * flexMainGapPx(parent, frame, container);
+    }
+    return .{ .taken = taken, .total_grow = total_grow, .scaled_shrink = scaled_shrink };
 }
 
 /// A flex item's automatic minimum size: it is never laid out narrower than its
@@ -4251,6 +4293,17 @@ fn flexFactor(element: *Element, name: []const u8, frame: *Frame) f64 {
     const declared = cascadedComputedValue(element, name, frame) orelse return 0;
     const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return 0;
     if (parsed.unit != .none) return 0;
+    return @max(0, parsed.value);
+}
+
+/// `flex-shrink`, whose initial value is ONE and not zero -- which is why it
+/// cannot go through `flexFactor`, where an undeclared property is 0. Every
+/// item an over-full line holds shrinks unless the page says otherwise, and
+/// reading the default as 0 would have left the line over-full instead.
+fn flexShrinkFactor(element: *Element, frame: *Frame) f64 {
+    const declared = cascadedComputedValue(element, "flex-shrink", frame) orelse return 1;
+    const parsed = units.parse(std.mem.trim(u8, declared, &std.ascii.whitespace)) catch return 1;
+    if (parsed.unit != .none) return 1;
     return @max(0, parsed.value);
 }
 
@@ -4329,6 +4382,99 @@ pub fn flexItemHeight(element: *Element, frame: *Frame, depth: u8) ?f64 {
     if (element.marginIsAuto("margin-top", frame) or
         element.marginIsAuto("margin-bottom", frame)) return null;
     return definiteContentHeight(parent, frame);
+}
+
+/// The `gap` a flex row puts BETWEEN two items, in px. `column-gap` on the
+/// inline axis, which the `gap` shorthand already expands to; `normal` and an
+/// unresolvable length are both no gap.
+///
+/// A percentage is a share of the container's own size on the gap's axis, so it
+/// is resolved here rather than at computed-value time: `gap:10%` in a 400px
+/// row is 40px between each pair, measured.
+///
+/// It sits between the items and nowhere else -- n items have n-1 of them, one
+/// item has none, and neither container edge gets one. And it comes off the
+/// line before anything is distributed, which is why `flexLineTotals` charges
+/// for it: two `flex:1` items with a 20px gap are 190 each and not 200.
+pub fn flexMainGapPx(container: *Element, frame: *Frame, container_width: f64) f64 {
+    // The RAW cascade, not the computed text: a percentage `column-gap` is not
+    // one the computed-value machinery resolves, so asking for the computed
+    // value answers null and a `gap:10%` row came out with no gap at all.
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const declaration = cascadedRawDeclaration(style_manager, container, "column-gap") orelse return 0;
+    const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(trimmed, "normal")) return 0;
+    if (std.mem.endsWith(u8, trimmed, "%")) {
+        const share = std.fmt.parseFloat(f64, trimmed[0 .. trimmed.len - 1]) catch return 0;
+        return @max(0, container_width * share / 100.0);
+    }
+    const parsed = units.parse(trimmed) catch return 0;
+    if (parsed.unit != .px) return 0;
+    return @max(0, parsed.value);
+}
+
+/// How a flex line spreads what its items left over along the main axis.
+///
+/// `flex-start` is the initial value and the one that does nothing, which is
+/// why it is what an absent or unrecognised declaration answers. The three
+/// `space-*` values differ only in how many shares the leftover is cut into and
+/// how many of them go outside the end items -- see Element.flexJustify for the
+/// arithmetic and the measured numbers.
+pub const MainJustify = enum { start, center, end, between, around, evenly };
+
+pub fn flexMainJustify(container: *Element, frame: *Frame) MainJustify {
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const declared = cascadedKeyword(style_manager, container, "justify-content") orelse return .start;
+    if (std.ascii.eqlIgnoreCase(declared, "center")) return .center;
+    if (std.ascii.eqlIgnoreCase(declared, "space-between")) return .between;
+    if (std.ascii.eqlIgnoreCase(declared, "space-around")) return .around;
+    if (std.ascii.eqlIgnoreCase(declared, "space-evenly")) return .evenly;
+    if (std.ascii.eqlIgnoreCase(declared, "flex-end") or
+        std.ascii.eqlIgnoreCase(declared, "end") or
+        std.ascii.eqlIgnoreCase(declared, "right")) return .end;
+    return .start;
+}
+
+/// Whether the container breaks its line when the items do not fit, rather
+/// than squeezing them onto it. `nowrap` is the initial value, so an absent
+/// declaration does not wrap.
+fn wrapsFlexLine(style_manager: *StyleManager, container: *Element) bool {
+    const declared = cascadedKeyword(style_manager, container, "flex-wrap") orelse return false;
+    return std.ascii.eqlIgnoreCase(declared, "wrap") or
+        std.ascii.eqlIgnoreCase(declared, "wrap-reverse");
+}
+
+/// The same question from the layout side, which has an element and a frame
+/// rather than a StyleManager.
+pub fn wrapsFlexLine2(container: *Element, frame: *Frame) bool {
+    return wrapsFlexLine(&container.ownerFrame(frame)._style_manager, container);
+}
+
+/// The `row-gap` a wrapping flex container puts between two of its LINES. A
+/// percentage is a share of the container on that axis, the same rule
+/// `flexMainGapPx` follows for the inline one.
+pub fn flexCrossGapPx(container: *Element, frame: *Frame, container_size: f64) f64 {
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const declaration = cascadedRawDeclaration(style_manager, container, "row-gap") orelse return 0;
+    const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(trimmed, "normal")) return 0;
+    if (std.mem.endsWith(u8, trimmed, "%")) {
+        const share = std.fmt.parseFloat(f64, trimmed[0 .. trimmed.len - 1]) catch return 0;
+        return @max(0, container_size * share / 100.0);
+    }
+    const parsed = units.parse(trimmed) catch return 0;
+    if (parsed.unit != .px) return 0;
+    return @max(0, parsed.value);
+}
+
+/// Whether the lines of a wrapping container share its leftover cross size
+/// between them. `stretch` is the initial `align-content` and `normal` behaves
+/// as it does; anything else leaves each line at its own height.
+pub fn flexLinesStretch(container: *Element, frame: *Frame) bool {
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const declared = cascadedKeyword(style_manager, container, "align-content") orelse return true;
+    return std.ascii.eqlIgnoreCase(declared, "stretch") or
+        std.ascii.eqlIgnoreCase(declared, "normal");
 }
 
 /// Whether the container stacks its items down the page, which puts a width on
@@ -8555,6 +8701,10 @@ test "WebApi: CSSStyleDeclaration computed flex shorthands" {
 
 test "WebApi: CSSStyleDeclaration flex line placement" {
     try testing.htmlRunner("css/flex_line_placement.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration flex line distribution" {
+    try testing.htmlRunner("css/flex_line_distribution.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration computed timeline-trigger" {
