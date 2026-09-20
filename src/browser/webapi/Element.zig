@@ -3498,7 +3498,7 @@ fn staticInlineOffset(
 /// Only a box with no used margin at all keeps `auto`: an element with no box,
 /// and a non-replaced inline one, whose margins size nothing.
 /// One `auto` margin's cut of a flex line's free space, or null when this
-/// element is not an item of a flex ROW and the block rules apply instead.
+/// element is not a flex item and the block rules apply instead.
 ///
 /// On the MAIN axis the line is shared: what is left of the container once
 /// every item's border box and declared margin is out of it, split equally
@@ -3506,28 +3506,44 @@ fn staticInlineOffset(
 /// axis each item has the whole of the container to itself, so the free space
 /// is the container's cross size less this item alone.
 ///
-/// A column container is deliberately absent: its main axis is the block one,
-/// which the stacking walk lays out, and its items' widths already go through
-/// `flexItemWidth`'s column branch.
+/// Which of the two an axis IS depends on the container's direction: the main
+/// axis of a row is the inline one and of a column the block one, so
+/// `margin-top:auto` is a cross margin on a row and the whole of a column's
+/// leftover on a column -- which is how the last row of a sidebar is pinned to
+/// its bottom. Measured on Chrome 152 with
+/// tools/fingerprint/probes/expr-flex-auto-margin.js and
+/// probes/expr-flex-column-direction.js.
 fn flexLineFreeSpace(self: *Element, frame: *Frame, horizontal: bool, own: f64) ?f64 {
     const parent = self.parentElement() orelse return null;
-    if (!CSSStyleDeclaration.isFlexRowContainer(parent, frame)) return null;
+    const column = CSSStyleDeclaration.isFlexColumnContainer(parent, frame);
+    if (!column and !CSSStyleDeclaration.isFlexRowContainer(parent, frame)) return null;
     if (!CSSStyleDeclaration.isFlexItem(self, frame)) return null;
 
     const container = parent.getElementDimensions(frame);
+    // A percentage margin is a share of the containing block's INLINE size on
+    // both axes, so this is the container's width whichever way it runs.
     var line_width: ?f64 = container.width;
 
-    if (!horizontal) {
-        const free = container.height - own;
+    // The main axis is the inline one exactly when the container is a row.
+    if (horizontal != !column) {
+        const free = (if (horizontal) container.width else container.height) - own;
         if (free <= 0) return 0;
         // The item's own two cross margins are the only claimants.
-        const top_auto = self.marginIsAuto("margin-top", frame);
-        const bottom_auto = self.marginIsAuto("margin-bottom", frame);
-        if (top_auto and bottom_auto) return free / 2;
-        const other = if (top_auto) "margin-bottom" else "margin-top";
+        const near: []const u8 = if (horizontal) "margin-left" else "margin-top";
+        const far: []const u8 = if (horizontal) "margin-right" else "margin-bottom";
+        const near_auto = self.marginIsAuto(near, frame);
+        const far_auto = self.marginIsAuto(far, frame);
+        if (near_auto and far_auto) return free / 2;
+        const other = if (near_auto) far else near;
         const taken = self.containerMarginPx(other, frame, &line_width, 0);
         return @max(0, free - taken);
     }
+
+    const main_size = if (column) container.height else container.width;
+    const sides: [2][]const u8 = if (column)
+        .{ "margin-top", "margin-bottom" }
+    else
+        .{ "margin-left", "margin-right" };
 
     var taken: f64 = 0;
     var autos: f64 = 0;
@@ -3537,8 +3553,11 @@ fn flexLineFreeSpace(self: *Element, frame: *Frame, horizontal: bool, own: f64) 
         if (!CSSStyleDeclaration.isFlexItem(item, frame)) continue;
         items += 1;
         const box = item.getElementDimensions(frame);
-        taken += box.width + box.padding_x + box.border_x;
-        for ([_][]const u8{ "margin-left", "margin-right" }) |name| {
+        taken += if (column)
+            box.height + box.padding_y + box.border_y
+        else
+            box.width + box.padding_x + box.border_x;
+        for (sides) |name| {
             if (item.marginIsAuto(name, frame)) {
                 autos += 1;
             } else {
@@ -3551,9 +3570,9 @@ fn flexLineFreeSpace(self: *Element, frame: *Frame, horizontal: bool, own: f64) 
     // they are before a growing item does.
     if (items > 1) {
         taken += @as(f64, @floatFromInt(items - 1)) *
-            CSSStyleDeclaration.flexMainGapPx(parent, frame, container.width);
+            CSSStyleDeclaration.flexMainGapPx(parent, frame, main_size);
     }
-    const free = container.width - taken;
+    const free = main_size - taken;
     if (free <= 0) return 0;
     return free / autos;
 }
