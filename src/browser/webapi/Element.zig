@@ -3526,9 +3526,11 @@ fn flexLineFreeSpace(self: *Element, frame: *Frame, horizontal: bool, own: f64) 
 
     var taken: f64 = 0;
     var autos: f64 = 0;
+    var items: usize = 0;
     var sibling = parent.firstElementChild();
     while (sibling) |item| : (sibling = item.nextElementSibling()) {
         if (!CSSStyleDeclaration.isFlexItem(item, frame)) continue;
+        items += 1;
         const box = item.getElementDimensions(frame);
         taken += box.width + box.padding_x + box.border_x;
         for ([_][]const u8{ "margin-left", "margin-right" }) |name| {
@@ -3540,6 +3542,12 @@ fn flexLineFreeSpace(self: *Element, frame: *Frame, horizontal: bool, own: f64) 
         }
     }
     if (autos == 0) return 0;
+    // The gaps are spent before the auto margins get a share, the same way
+    // they are before a growing item does.
+    if (items > 1) {
+        taken += @as(f64, @floatFromInt(items - 1)) *
+            CSSStyleDeclaration.flexMainGapPx(parent, frame, container.width);
+    }
     const free = container.width - taken;
     if (free <= 0) return 0;
     return free / autos;
@@ -5511,6 +5519,13 @@ fn flexRowContent(
     // every alignment except `stretch`.
     const cross = CSSStyleDeclaration.definiteContentHeight(self, frame);
 
+    // The gap the container puts BETWEEN two items, charged once per pair --
+    // so the first item pays none and neither container edge gets one.
+    // `flexLineTotals` has already taken the same gaps out of the line, which
+    // is what keeps a growing item inside the container.
+    const gap = CSSStyleDeclaration.flexMainGapPx(self, frame, content_width orelse 0);
+    var placed_any = false;
+
     var cursor: f64 = 0;
     var tallest: f64 = 0;
 
@@ -5540,6 +5555,9 @@ fn flexRowContent(
             }
             continue;
         }
+
+        if (placed_any) cursor += gap;
+        placed_any = true;
 
         const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
         // An `auto` margin takes a share of what the line left over, which is

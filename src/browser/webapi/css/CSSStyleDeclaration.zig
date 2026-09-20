@@ -4177,9 +4177,11 @@ fn flexLineTotals(parent: *Element, container: f64, frame: *Frame, depth: u8) El
     // percentage margins below resolve against it without measuring anything.
     var line_width: ?f64 = container;
 
+    var items: usize = 0;
     var child = parent.firstElementChild();
     while (child) |sibling| : (child = sibling.nextElementSibling()) {
         if (!isFlexItem(sibling, frame)) continue;
+        items += 1;
         const sibling_edges = boxEdges(sibling, frame);
         const base = flexBaseSize(sibling, container, frame, depth, sibling_edges);
         // What the line gives out is BORDER boxes: an item's padding, border
@@ -4190,6 +4192,12 @@ fn flexLineTotals(parent: *Element, container: f64, frame: *Frame, depth: u8) El
         taken += base + sibling_edges.padding_x + sibling_edges.border_x +
             Element.horizontalMargin(sibling, frame, &line_width, depth);
         total_grow += flexFactor(sibling, "flex-grow", frame);
+    }
+    // The gaps are spent before anything is shared out, so they narrow a
+    // growing item rather than pushing it past the container's edge: two
+    // `flex:1` items with `gap:20px` in a 400px row are 190 each, measured.
+    if (items > 1) {
+        taken += @as(f64, @floatFromInt(items - 1)) * flexMainGapPx(parent, frame, container);
     }
     return .{ .taken = taken, .total_grow = total_grow };
 }
@@ -4329,6 +4337,35 @@ pub fn flexItemHeight(element: *Element, frame: *Frame, depth: u8) ?f64 {
     if (element.marginIsAuto("margin-top", frame) or
         element.marginIsAuto("margin-bottom", frame)) return null;
     return definiteContentHeight(parent, frame);
+}
+
+/// The `gap` a flex row puts BETWEEN two items, in px. `column-gap` on the
+/// inline axis, which the `gap` shorthand already expands to; `normal` and an
+/// unresolvable length are both no gap.
+///
+/// A percentage is a share of the container's own size on the gap's axis, so it
+/// is resolved here rather than at computed-value time: `gap:10%` in a 400px
+/// row is 40px between each pair, measured.
+///
+/// It sits between the items and nowhere else -- n items have n-1 of them, one
+/// item has none, and neither container edge gets one. And it comes off the
+/// line before anything is distributed, which is why `flexLineTotals` charges
+/// for it: two `flex:1` items with a 20px gap are 190 each and not 200.
+pub fn flexMainGapPx(container: *Element, frame: *Frame, container_width: f64) f64 {
+    // The RAW cascade, not the computed text: a percentage `column-gap` is not
+    // one the computed-value machinery resolves, so asking for the computed
+    // value answers null and a `gap:10%` row came out with no gap at all.
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const declaration = cascadedRawDeclaration(style_manager, container, "column-gap") orelse return 0;
+    const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(trimmed, "normal")) return 0;
+    if (std.mem.endsWith(u8, trimmed, "%")) {
+        const share = std.fmt.parseFloat(f64, trimmed[0 .. trimmed.len - 1]) catch return 0;
+        return @max(0, container_width * share / 100.0);
+    }
+    const parsed = units.parse(trimmed) catch return 0;
+    if (parsed.unit != .px) return 0;
+    return @max(0, parsed.value);
 }
 
 /// Whether the container stacks its items down the page, which puts a width on
