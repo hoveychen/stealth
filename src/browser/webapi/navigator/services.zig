@@ -452,7 +452,11 @@ pub const GPU = struct {
 pub const WGSLLanguageFeatures = struct {
     _pad: bool = false,
 
-    // Chrome 150's list, in its own iteration order.
+    // Chrome 153's list, in its own iteration order. DataDome's interstitial
+    // serialises this set verbatim into the collection it POSTs, so a list left
+    // behind at an older Chrome is a difference an arm-to-arm diff reads off
+    // the wire: 153 added `buffer_view` and `texture_formats_tier1` where they
+    // appear below, measured against a headed Chrome in the same window.
     const features = [_][]const u8{
         "packed_4x8_integer_dot_product",
         "subgroup_uniformity",
@@ -461,8 +465,10 @@ pub const WGSLLanguageFeatures = struct {
         "subgroup_id",
         "readonly_and_readwrite_storage_textures",
         "unrestricted_pointer_parameters",
+        "buffer_view",
         "pointer_composite_access",
         "texture_and_sampler_let",
+        "texture_formats_tier1",
         "uniform_buffer_standard_layout",
     };
 

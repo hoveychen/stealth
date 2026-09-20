@@ -247,8 +247,8 @@
       ['size', 'entries', 'forEach', 'has', 'keys', 'values', 'constructor'],
       Object.getOwnPropertyNames(WGSLLanguageFeatures.prototype),
     );
-    // Chrome 150's list, in its own order.
-    testing.expectEqual(10, f.size);
+    // Chrome 153's list, in its own order.
+    testing.expectEqual(12, f.size);
     testing.expectEqual([
       'packed_4x8_integer_dot_product',
       'subgroup_uniformity',
@@ -257,8 +257,10 @@
       'subgroup_id',
       'readonly_and_readwrite_storage_textures',
       'unrestricted_pointer_parameters',
+      'buffer_view',
       'pointer_composite_access',
       'texture_and_sampler_let',
+      'texture_formats_tier1',
       'uniform_buffer_standard_layout',
     ], Array.from(f));
     testing.expectEqual(true, f.has('subgroup_id'));
