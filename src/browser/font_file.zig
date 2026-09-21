@@ -1045,6 +1045,18 @@ fn build(
         .avg_char_width = x_advance orelse fallback.avg_char_width,
         // See the header: the closest estimator measured, not Chrome's rule.
         .max_char_width = @round(@as(f64, @floatFromInt(win_ascent)) * per_unit * 2) / 2,
+        // Between the swept sizes the box comes off the file's own metrics
+        // rather than the fallback's, which is where Chrome gets it: the two
+        // agree at the integer sizes above only up to the ratio applied there,
+        // and the `hhea` pair is the thing Blink actually rounds onto the
+        // device grid. No line gap and no Safari-compat hack -- that one is
+        // keyed on three installed face names, which a downloaded face is not.
+        .ladder = .{
+            .asc = @as(f64, @floatFromInt(win_ascent)) / @as(f64, @floatFromInt(upem)),
+            .desc = @as(f64, @floatFromInt(win_descent)) / @as(f64, @floatFromInt(upem)),
+            .gap = 0,
+            .hack = false,
+        },
         // A face carrying its own coverage seeds no last-resort run.
         .seeds_last_resort = &.{},
         .after_fallback = &.{},
