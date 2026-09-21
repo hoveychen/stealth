@@ -163,7 +163,7 @@
 
 <script type=module id=webgpu_adapter_features_set>
   // The 23-name *set* is what has to match; Chrome's iteration order is not
-  // stable (two clusters permute between calls, measured three times over), so
+  // stable (two clusters permute between calls, measured twelve times over), so
   // the test compares sorted.
   const adapter = await navigator.gpu.requestAdapter();
   testing.expectEqual(23, adapter.features.size);
