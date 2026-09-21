@@ -269,3 +269,92 @@
   plain.remove();
 }
 </script>
+
+<!-- An SVG <text> measures on the LAYOUT surface, not the canvas one: it
+     charges the kern pairs with a space on one side that `measureText` does
+     not. Read off a headed Chrome 153 over six families by nine strings
+     (scratch/s69/expr-svg-vs-span.js): `getComputedTextLength()` equalled the
+     width of a <span> holding the same string in the same font on every row,
+     and differed from `measureText` on exactly the rows with a space pair.
+     This engine answered the canvas number, 0.28125 over on the string iphey
+     reads. -->
+<script id=spacePairsAreCharged>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const host = document.createElementNS(ns, 'svg');
+  document.body.appendChild(host);
+  const svgWidth = (family, content) => {
+    const el = document.createElementNS(ns, 'text');
+    el.style.fontFamily = family;
+    el.style.fontSize = '16px';
+    el.textContent = content;
+    host.appendChild(el);
+    return el.getComputedTextLength();
+  };
+  const spanWidth = (family, content) => {
+    const el = document.createElement('span');
+    el.style.cssText = `font:16px ${family};white-space:pre;display:inline-block`;
+    el.textContent = content;
+    document.body.appendChild(el);
+    return el.getBoundingClientRect().width;
+  };
+  const canvas = document.createElement('canvas').getContext('2d');
+  const canvasWidth = (family, content) => {
+    canvas.font = `16px ${family}`;
+    return canvas.measureText(content).width;
+  };
+
+  // Chrome's own numbers, to the digit. Each pair is one where the two
+  // surfaces disagree, so a row that passed by measuring like the canvas
+  // cannot pass here.
+  testing.expectEqual(108.5234375, svgWidth('sans-serif', 'AVATAR To Wo'));
+  testing.expectEqual(108.8046875, canvasWidth('sans-serif', 'AVATAR To Wo'));
+  testing.expectEqual(53.3984375, svgWidth('sans-serif', 'A V A V'));
+  testing.expectEqual(56.0234375, canvasWidth('sans-serif', 'A V A V'));
+  testing.expectEqual(124.203125, svgWidth('serif', 'Hello, SVG World!'));
+  testing.expectEqual(124.484375, canvasWidth('serif', 'Hello, SVG World!'));
+  testing.expectEqual(105.4140625, svgWidth('serif', 'AVATAR To Wo'));
+
+  // And the invariant behind them: the two paths answer one number. A family
+  // that kerns no space pair at all (monospace) is on the list to show the
+  // equality is not the space table answering everything.
+  for (const family of ['sans-serif', 'serif', 'monospace', 'Courier New']) {
+    for (const content of ['AVATAR To Wo', 'A V A V', 'Hello, SVG World!', 'Hello', ', S']) {
+      testing.expectEqual(spanWidth(family, content), svgWidth(family, content));
+    }
+  }
+}
+</script>
+
+<!-- The UA declaration that says so. Chrome's SVG stylesheet gives <text>
+     `white-space: nowrap`, which its HTML sheet gives no element of that name
+     — the two sheets are keyed by the same local names. -->
+<script id=svgTextIsNowrap>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const host = document.createElementNS(ns, 'svg');
+  document.body.appendChild(host);
+  const make = (tag) => {
+    const el = document.createElementNS(ns, tag);
+    host.appendChild(el);
+    return getComputedStyle(el);
+  };
+
+  const text = make('text');
+  testing.expectEqual('nowrap', text.whiteSpace);
+  testing.expectEqual('nowrap', text.getPropertyValue('text-wrap'));
+  testing.expectEqual('nowrap', text.getPropertyValue('text-wrap-mode'));
+  testing.expectEqual('normal', text.unicodeBidi);
+
+  // Only <text>: Chrome's sheet says nothing about the others, and a <tspan>
+  // is nowrap only by inheriting from the <text> it sits in.
+  testing.expectEqual('normal', make('tspan').whiteSpace);
+  testing.expectEqual('normal', make('rect').whiteSpace);
+
+  // An HTML element of the same name is a different sheet's business, and that
+  // sheet has no rule for it.
+  const html = document.createElement('text');
+  document.body.appendChild(html);
+  testing.expectEqual('normal', getComputedStyle(html).whiteSpace);
+}
+</script>

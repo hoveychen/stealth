@@ -22,6 +22,7 @@ const js = @import("../../../js/js.zig");
 const Frame = @import("../../../Frame.zig");
 const text_measure = @import("../../../text_measure.zig");
 const font_metrics = @import("../../../font_metrics.zig");
+const font_space_kerning = @import("../../../font_space_kerning.zig");
 
 const Node = @import("../../Node.zig");
 const Text = @import("../../cdata/Text.zig");
@@ -130,9 +131,17 @@ fn fontFamily(self: *TextContent, frame: *Frame) font_metrics.Family {
 /// The spacing and transform halves of `computedTextStyle` are deliberately
 /// not carried: `letter-spacing` on an SVG `<text>` has not been measured
 /// here, and claiming it would be a width model with no reading behind it.
+///
+/// The surface is the LAYOUT one, which is the pairs with a space on one side
+/// -- see `text_measure.svgWidth` for the six-family reading that puts SVG
+/// text on the same surface a `<span>` is measured on.
 fn face(self: *TextContent, frame: *Frame) text_measure.Face {
-    var out = text_measure.Face.regular(self.fontFamily(frame));
-    out.kerning = frame._style_manager.computedTextStyle(self.asElement()).kerning;
+    const family = self.fontFamily(frame);
+    const kerning = frame._style_manager.computedTextStyle(self.asElement()).kerning;
+    var out = text_measure.Face.regular(family);
+    out.kerning = kerning;
+    out.surface = .layout;
+    out.space_kerns = if (kerning) font_space_kerning.tableFor(family, out.variant) else .{};
     return out;
 }
 
