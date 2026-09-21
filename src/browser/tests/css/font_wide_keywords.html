@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A CSS-wide keyword is not a value of the property's own kind, and the font
+walks in StyleManager read a declaration as one: a family name, a weight, a
+slant. Three of them reached a walk unhandled, and each was wrong in its own
+direction (scratch/s73/expr-kw2.js, Georgia at 20px, against headed Chrome 153):
+
+  | declared on the child     | this engine | Chrome  |
+  |---------------------------|-------------|---------|
+  | font-family: inherit      | 184.625     | 203.086 |
+  | font-weight: initial      | 235.211     | 203.086 |
+  | font-style:  initial      | 207.328     | 203.086 |
+
+`font-family: inherit` matched no installed family and fell back to the default
+face; `initial` was refused by the weight and slant parsers, and refusing sends
+the walk on to the next source -- the UA sheet, then the inherited value -- so
+a child that reset itself laid out in the parent's bold italic. The computed
+style printed the right answer beside all three, because the cascade resolves
+keywords and only these walks did not.
+
+Asserted as an EQUALITY between two boxes rather than against those numbers:
+what is under test is which value the keyword resolves to, and the face the
+runner's page happens to have would otherwise decide whether the test passes.
+-->
+
+<script id=wide_keywords_resolve_on_the_font_walks>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:2000px';
+  document.body.appendChild(host);
+
+  // One child under `parent_css`, declaring `child_css`, measured.
+  const w = (parent_css, child_css) => {
+    const p = document.createElement('div');
+    p.style.cssText = 'white-space:pre;font-size:20px;' + parent_css;
+    const c = document.createElement('span');
+    c.style.cssText = 'white-space:pre;' + child_css;
+    c.textContent = 'Hamburgefonstiv 0123';
+    p.appendChild(c);
+    host.appendChild(p);
+    const width = c.getBoundingClientRect().width;
+    p.remove();
+    return width;
+  };
+
+  const wrong = [];
+  const same = (what, a, b) => { if (a !== b) wrong.push(what + ': ' + a + ' vs ' + b); };
+  const apart = (what, a, b) => { if (a === b) wrong.push(what + ': both ' + a); };
+
+  // `inherit` and `unset` take the parent's family; `revert` finds no UA
+  // declaration and lands there too. All three must measure as declaring
+  // nothing does.
+  const georgia = 'font-family:Georgia';
+  const bare = w(georgia, '');
+  same('family/inherit', w(georgia, 'font-family:inherit'), bare);
+  same('family/unset', w(georgia, 'font-family:unset'), bare);
+  same('family/revert', w(georgia, 'font-family:revert'), bare);
+  // `initial` is the default face, which under a Georgia parent is a different
+  // one -- the guard that the four are not all answering "inherit".
+  apart('family/initial', w(georgia, 'font-family:initial'), bare);
+
+  // The weight walk. `initial` is 400 even under a bold parent; the inheriting
+  // three stay bold.
+  const bold = 'font-weight:700';
+  same('weight/initial', w(bold, 'font-weight:initial'), w('', 'font-weight:400'));
+  same('weight/inherit', w(bold, 'font-weight:inherit'), w(bold, ''));
+  same('weight/unset', w(bold, 'font-weight:unset'), w(bold, ''));
+  same('weight/revert', w(bold, 'font-weight:revert'), w(bold, ''));
+  apart('weight/initial is not the inherited one', w(bold, 'font-weight:initial'), w(bold, ''));
+
+  // The slant walk, same four.
+  const italic = 'font-family:Georgia;font-style:italic';
+  same('style/initial', w(italic, 'font-style:initial'), w('font-family:Georgia', ''));
+  same('style/inherit', w(italic, 'font-style:inherit'), w(italic, ''));
+  same('style/unset', w(italic, 'font-style:unset'), w(italic, ''));
+  same('style/revert', w(italic, 'font-style:revert'), w(italic, ''));
+  apart('style/initial is not the inherited one', w(italic, 'font-style:initial'), w(italic, ''));
+
+  // Two deep: the keyword resolves against the PARENT's computed value, so a
+  // grandchild reaching through an `inherit` still lands on Georgia.
+  {
+    const a = document.createElement('div');
+    a.style.cssText = 'white-space:pre;font-size:20px;font-family:Georgia';
+    const b = document.createElement('div');
+    b.style.cssText = 'font-family:inherit';
+    const c = document.createElement('span');
+    c.style.cssText = 'white-space:pre;font-family:inherit';
+    c.textContent = 'Hamburgefonstiv 0123';
+    b.appendChild(c); a.appendChild(b); host.appendChild(a);
+    same('family/inherit twice', c.getBoundingClientRect().width, bare);
+    a.remove();
+  }
+
+  host.remove();
+  testing.expectEqual([], wrong);
+}
+</script>

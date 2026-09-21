@@ -8901,6 +8901,10 @@ test "WebApi: CSSStyleDeclaration computed system fonts" {
     try testing.htmlRunner("css/computed_system_fonts.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration wide keywords on the font walks" {
+    try testing.htmlRunner("css/font_wide_keywords.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration font shorthand" {
     try testing.htmlRunner("css/font_shorthand.html", .{});
 }
