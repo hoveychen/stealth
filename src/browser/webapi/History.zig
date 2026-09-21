@@ -84,9 +84,23 @@ fn stateUrl(frame: *Frame, _url: ?[]const u8, comptime method: []const u8) ![:0]
     return url;
 }
 
+/// The state argument is structured-serialised, not JSON-stringified, so a
+/// value JSON quietly drops or flattens -- a function, a DOM node, `location`,
+/// `document` -- is a DataCloneError rather than `{}`. We keep the JSON for
+/// storage and run the serialiser only for its verdict; `serialize` raises the
+/// exception itself, with Blink's own sentence after this prefix.
+///
+/// Measured order: Chrome answers `replaceState(document, '', <cross-origin>)`
+/// with DataCloneError, so this runs before the URL check.
+fn checkCloneable(state: js.Value, comptime method: []const u8) !void {
+    const serialized = try state.serialize("Failed to execute '" ++ method ++ "' on 'History': ");
+    serialized.deinit();
+}
+
 pub fn pushState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8, frame: *Frame) !void {
     const session = frame._session;
     const arena = session.arena;
+    try checkCloneable(state, "pushState");
     const url = try stateUrl(frame, _url, "pushState");
 
     const json = state.toJson(arena.allocator()) catch return error.DataClone;
@@ -108,6 +122,7 @@ pub fn pushState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8
 pub fn replaceState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8, frame: *Frame) !void {
     const session = frame._session;
     const arena = session.arena;
+    try checkCloneable(state, "replaceState");
     const url = try stateUrl(frame, _url, "replaceState");
 
     const json = state.toJson(arena.allocator()) catch return error.DataClone;
