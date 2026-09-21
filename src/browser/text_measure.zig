@@ -1231,8 +1231,20 @@ fn kernsFor(face: Face) font_kerning.Table {
 /// iphey's own RobotoFlex (tools/fingerprint/scratch/s45/kern-page.html), a
 /// 16px `<text>` reading `Hello, SVG World!` answers 124.40625 and the same
 /// `<text>` under `font-kerning: none` answers 124.890625.
+///
+/// And it kerns ACROSS A SPACE, which puts it on the LAYOUT surface and not
+/// the canvas one this path used to share. Measured on a headed Chrome 153
+/// (scratch/s69/expr-svg-vs-span.js): over six families by nine strings, a
+/// `<text>`'s `getComputedTextLength` equals the width of a `<span>` holding
+/// the same string in the same font on every row, and differs from
+/// `measureText` on exactly the rows with a space pair -- `AVATAR To Wo` at
+/// 16px sans-serif is 108.5234375 through both layout and SVG against the
+/// canvas's 108.8046875, and `A V A V` 53.3984375 against 56.0234375. This
+/// engine answered the canvas number, which is the 0.28125 the iphey `SVG
+/// Computed Style` axis was over on.
 pub fn svgWidth(face: Face, text: []const u8, font_size: f64) f64 {
     const kerns = kernsFor(face);
+    const space_kerns = face.space_kerns;
     var offset: usize = 0;
     var total: f64 = 0;
     var previous: ?u21 = null;
@@ -1243,7 +1255,14 @@ pub fn svgWidth(face: Face, text: []const u8, font_size: f64) f64 {
         // charges them: a cluster's own characters are adjacent glyphs too.
         var codepoints = std.unicode.Utf8Iterator{ .bytes = text[offset..][0..cluster.bytes], .i = 0 };
         while (codepoints.nextCodepoint()) |codepoint| {
-            if (previous) |before| total += font_kerning.kern(kerns, before, codepoint);
+            if (previous) |before| {
+                total += font_kerning.kern(kerns, before, codepoint);
+                // Gated on a space the same way `measureAt` gates it: the
+                // second table can only ever answer at one.
+                if (before == ' ' or codepoint == ' ') {
+                    total += font_kerning.kern(space_kerns, before, codepoint);
+                }
+            }
             previous = codepoint;
         }
         total += cluster.advance;

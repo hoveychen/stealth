@@ -34,6 +34,7 @@ const SelectorList = @import("webapi/selector/List.zig");
 const CSSStyleRule = @import("webapi/css/CSSStyleRule.zig");
 const CSSStyleSheet = @import("webapi/css/CSSStyleSheet.zig");
 const chrome_per_tag_values = @import("webapi/css/chrome_per_tag_values.zig");
+const chrome_svg_tag_values = @import("webapi/css/chrome_svg_tag_values.zig");
 const CSSStyleDeclaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const text_case = @import("text_case.zig");
 const CSSStyleProperty = @import("webapi/css/CSSStyleDeclaration.zig").Property;
@@ -2326,6 +2327,14 @@ fn userAgentFontProperty(element: *Element, comptime property: []const u8) ?[]co
 /// (scratch/b99/expr-escape-with-text.js: an explicit `margin-top:16px` on a
 /// plain div was already right, so it was the UA half alone).
 pub fn userAgentValue(element: *Element, property: []const u8) ?[]const u8 {
+    // The SVG namespace has a UA sheet of its own, keyed by the same local
+    // names: `<text>` is `white-space: nowrap` there where an HTML element of
+    // that name carries no rule at all.
+    if (element._namespace == .svg) {
+        if (chrome_svg_tag_values.per_tag.get(element.getTagNameLower())) |rows| {
+            if (rows.get(property)) |value| return value;
+        }
+    }
     const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse return null;
     return rows.get(property);
 }

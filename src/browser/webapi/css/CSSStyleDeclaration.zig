@@ -40,6 +40,7 @@ const chrome_inherited = @import("chrome_inherited.zig");
 const chrome_initial_values = @import("chrome_initial_values.zig");
 const chrome_logical = @import("chrome_logical.zig");
 const chrome_per_tag_values = @import("chrome_per_tag_values.zig");
+const chrome_svg_tag_values = @import("chrome_svg_tag_values.zig");
 const chrome_input_type_values = @import("chrome_input_type_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
@@ -3733,8 +3734,19 @@ fn uaValue(element: *Element, name: []const u8) ?[]const u8 {
     if (element.inputTypeForBox()) |input_type| {
         if (chrome_input_type_values.get(input_type, name)) |value| return value;
     }
+    if (svgUaValue(element, name)) |value| return value;
     const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse
         chrome_per_tag_values.unknown_tag;
+    return rows.get(name);
+}
+
+/// The SVG namespace's own UA sheet, which is keyed by the SAME local names as
+/// the HTML one and says different things: `<text>` is `white-space: nowrap`
+/// there and an HTML element named `text` is an unknown tag. Gated on the
+/// namespace for exactly that reason.
+fn svgUaValue(element: *Element, name: []const u8) ?[]const u8 {
+    if (element._namespace != .svg) return null;
+    const rows = chrome_svg_tag_values.per_tag.get(element.getTagNameLower()) orelse return null;
     return rows.get(name);
 }
 
@@ -7875,6 +7887,7 @@ fn getDefaultPropertyValue(element_opt: ?*Element, name: String, surface: Surfac
         if (element.inputTypeForBox()) |input_type| {
             if (chrome_input_type_values.get(input_type, name.str())) |value| return value;
         }
+        if (svgUaValue(element, name.str())) |value| return value;
         const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse
             chrome_per_tag_values.unknown_tag;
         if (rows.get(name.str())) |value| {

@@ -22,12 +22,14 @@ const js = @import("../../../js/js.zig");
 const Frame = @import("../../../Frame.zig");
 const text_measure = @import("../../../text_measure.zig");
 const font_metrics = @import("../../../font_metrics.zig");
+const font_space_kerning = @import("../../../font_space_kerning.zig");
 
 const Node = @import("../../Node.zig");
 const Text = @import("../../cdata/Text.zig");
 const SvgRect = @import("../../svg/Rect.zig");
 const SvgPoint = @import("../../svg/Point.zig");
 const Element = @import("../../Element.zig");
+const CSSStyleDeclaration = @import("../../css/CSSStyleDeclaration.zig");
 const Factory = @import("../../../Factory.zig");
 
 const AnimatedEnumeration = @import("../../svg/AnimatedEnumeration.zig");
@@ -88,8 +90,83 @@ pub fn asNode(self: *TextContent) *Node {
     return self.asElement().asNode();
 }
 
+/// The string this element MEASURES, which is not its text content: an SVG
+/// `<text>` collapses its whitespace, and every one of these methods -- the
+/// widths, the per-character boxes and `getNumberOfChars` alike -- addresses
+/// the collapsed string.
+///
+/// Measured on a headed Chrome 153 (scratch/s69/expr-svg-ws{,2,3}.js), twenty
+/// strings by two attribute values by five `white-space` declarations:
+///
+///   * a tab, a newline and a carriage return are each ONE SPACE, always --
+///     `A\nB` is 11 code units and the width of `Hello World`, under
+///     `white-space: pre` too. That is the SVG half: in HTML `pre` the
+///     newline would be a line break.
+///   * a run of spaces then collapses to one and the ends are stripped, so a
+///     markup-indented `<text>` measures its trimmed string: `'\n  Hello\n  '`
+///     is 5 characters and `'   '` is 0. This engine measured the raw string,
+///     which for the indentation every SVG in a document carries meant a
+///     leading space's worth of width on every `<text>` on the page.
+///   * both of those stop at `white-space-collapse: preserve` or
+///     `break-spaces`, which is `pre`, `pre-wrap` and `break-spaces` -- and at
+///     `xml:space="preserve"`, which Chrome reports as a computed
+///     `white-space: pre`. We honour the attribute HERE, in the measurement,
+///     and do not map it into the computed style, which is a smaller and
+///     separate difference.
+///   * U+00A0 is not whitespace and survives all of it.
 fn text(self: *TextContent, frame: *Frame) []const u8 {
-    return self.asNode().getTextContentAlloc(frame.local_arena) catch "";
+    const raw = self.asNode().getTextContentAlloc(frame.local_arena) catch "";
+    if (raw.len == 0) {
+        return raw;
+    }
+
+    const collapses = !self.preservesWhitespace(frame);
+    var out = frame.local_arena.alloc(u8, raw.len) catch return raw;
+    var length: usize = 0;
+    var pending_space = false;
+    for (raw) |byte| {
+        const is_space = switch (byte) {
+            ' ', '\t', '\n', '\r' => true,
+            else => false,
+        };
+        if (is_space) {
+            if (!collapses) {
+                out[length] = ' ';
+                length += 1;
+                continue;
+            }
+            // Held rather than written: a run of them is one space, and one
+            // that reaches the end of the string is none at all.
+            pending_space = length != 0;
+            continue;
+        }
+        if (pending_space) {
+            out[length] = ' ';
+            length += 1;
+            pending_space = false;
+        }
+        out[length] = byte;
+        length += 1;
+    }
+    return out[0..length];
+}
+
+/// Whether this element's spaces survive as they are written. `xml:space` is
+/// the SVG spelling and takes two values -- `preserve` and the default
+/// `default` -- and the CSS one is the same longhand every other element is
+/// asked for.
+fn preservesWhitespace(self: *TextContent, frame: *Frame) bool {
+    const element = self.asElement();
+    // Captured by pointer: a short String keeps its bytes inside the struct,
+    // so a by-value capture of the optional hands out a slice into a copy
+    // that the `if` has already dropped.
+    const declared = element.getAttribute(comptime .wrap("xml:space"), frame) catch null;
+    if (declared) |*value| {
+        if (std.ascii.eqlIgnoreCase(std.mem.trim(u8, value.str(), &std.ascii.whitespace), "preserve")) {
+            return true;
+        }
+    }
+    return CSSStyleDeclaration.preservesWhitespace(element, frame);
 }
 
 fn fontSize(self: *TextContent, frame: *Frame) f64 {
@@ -130,9 +207,17 @@ fn fontFamily(self: *TextContent, frame: *Frame) font_metrics.Family {
 /// The spacing and transform halves of `computedTextStyle` are deliberately
 /// not carried: `letter-spacing` on an SVG `<text>` has not been measured
 /// here, and claiming it would be a width model with no reading behind it.
+///
+/// The surface is the LAYOUT one, which is the pairs with a space on one side
+/// -- see `text_measure.svgWidth` for the six-family reading that puts SVG
+/// text on the same surface a `<span>` is measured on.
 fn face(self: *TextContent, frame: *Frame) text_measure.Face {
-    var out = text_measure.Face.regular(self.fontFamily(frame));
-    out.kerning = frame._style_manager.computedTextStyle(self.asElement()).kerning;
+    const family = self.fontFamily(frame);
+    const kerning = frame._style_manager.computedTextStyle(self.asElement()).kerning;
+    var out = text_measure.Face.regular(family);
+    out.kerning = kerning;
+    out.surface = .layout;
+    out.space_kerns = if (kerning) font_space_kerning.tableFor(family, out.variant) else .{};
     return out;
 }
 
