@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`font-variant-caps` did nothing to a measurement: a `small-caps` span laid out
+exactly as wide as the same text without it. Blink does not select a small-caps
+face -- it shapes the affected characters UPPERCASED at a reduced size in the
+same face -- so ignoring the property overstates the run by the difference
+between a lowercase letter and a seven-tenths capital.
+
+Measured on headed Chrome 153 (scratch/s73/expr-sc{,2,3}.js, Georgia at 100px):
+
+  | text          | plain    | small-caps |
+  |---------------|----------|------------|
+  | abcdefghij    | 457.7188 | 449.0938   |
+  | AbCdEfGhIj    | 541.4609 | 541.5234   |
+  | a b c         | 200.0547 | 185.9219   |
+  | 0123456789    | 547.7578 | 547.7578   |
+
+and `ABCDEFGHIJ` at 70px is 449.0938 -- the same number the first row's
+small-caps gives, which is the reading this rests on. The reduced size is
+`round(0.7 * size * 2) / 2`: seven tenths snapped to half a CSS pixel.
+Eighteen sizes solve to it exactly against a 0.005-step scan of candidates,
+across six families.
+
+Asserted as equalities between two boxes of this engine's own rather than
+against those numbers. Chrome's Georgia advances and this engine's table agree
+to about 1e-5 of a width -- `abcdefghij` is 457.7148 here against Chrome's
+457.7188 -- and that gap predates this and belongs to the table, so absolute
+assertions would be testing it instead of the variant.
+-->
+
+<script id=font_variant_caps_shapes_a_reduced_uppercase_run>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:4000px';
+  document.body.appendChild(host);
+
+  const w = (text, css) => {
+    const s = document.createElement('span');
+    s.style.cssText = 'white-space:pre;' + css;
+    s.textContent = text;
+    host.appendChild(s);
+    const width = s.getBoundingClientRect().width;
+    s.remove();
+    return width;
+  };
+
+  const wrong = [];
+  const same = (what, a, b) => { if (a !== b) wrong.push(what + ': ' + a + ' vs ' + b); };
+  const apart = (what, a, b) => { if (a === b) wrong.push(what + ': both ' + a); };
+
+  const base = 'font-family:Georgia;font-size:100px';
+  const sc = base + ';font-variant-caps:small-caps';
+
+  // The whole rule in one line: a lowercase run under `small-caps` is the
+  // uppercase run at seven tenths of the size.
+  same('lowercase run', w('abcdefghij', sc),
+                        w('ABCDEFGHIJ', 'font-family:Georgia;font-size:70px'));
+  // And it is NOT what the property being ignored would give.
+  apart('the property does something', w('abcdefghij', sc), w('abcdefghij', base));
+
+  // Characters uppercasing does not change keep the full size, which is what
+  // makes digits, punctuation and capitals immune rather than a rule of their
+  // own.
+  for (const text of ['0123456789', '.,;:!?', 'ABCDEFGHIJ']) {
+    same('untouched ' + text, w(text, sc), w(text, base));
+  }
+
+  // A mixed string is two runs, and Chrome's 541.5234 against the plain
+  // 541.4609 says so: the capitals stay put and only the five lowercase
+  // letters shrink, which happens to come out slightly WIDER.
+  apart('mixed', w('AbCdEfGhIj', sc), w('AbCdEfGhIj', base));
+
+  // Latin-1 accents map like the ASCII letters do.
+  same('accented', w('áéíóú', sc),
+                   w('ÁÉÍÓÚ', 'font-family:Georgia;font-size:70px'));
+
+  // `all-small-caps` shrinks every character, so a capital run measures as the
+  // lowercase one does.
+  const all = base + ';font-variant-caps:all-small-caps';
+  same('all-small-caps on capitals', w('ABCDEFGHIJ', all), w('abcdefghij', sc));
+  same('all-small-caps on lowercase', w('abcdefghij', all), w('abcdefghij', sc));
+
+  // The shorthands carry it: `font-variant` and `font`'s variant slot.
+  same('via font-variant', w('abcdefghij', base + ';font-variant:small-caps'), w('abcdefghij', sc));
+  same('via font shorthand', w('abcdefghij', 'font:small-caps 100px Georgia'), w('abcdefghij', sc));
+
+  // A non-integer size, where the half-pixel snap is the whole question:
+  // `13.3333px` shapes its small caps at 9.5 and not at 9.33331.
+  const frac = 'font-family:Georgia;font-size:13.3333px';
+  same('fractional size', w('abcdefghij', frac + ';font-variant-caps:small-caps'),
+                          w('ABCDEFGHIJ', 'font-family:Georgia;font-size:9.5px'));
+  apart('fractional size is not the linear one', w('abcdefghij', frac + ';font-variant-caps:small-caps'),
+                                                 w('ABCDEFGHIJ', 'font-family:Georgia;font-size:9.33331px'));
+
+  // The property inherits, and an explicit `normal` on the child beats the
+  // inherited `small-caps` rather than falling through to it.
+  {
+    const p = document.createElement('div');
+    p.style.cssText = 'white-space:pre;' + sc;
+    const c = document.createElement('span');
+    c.style.cssText = 'white-space:pre';
+    c.textContent = 'abcdefghij';
+    const n = document.createElement('span');
+    n.style.cssText = 'white-space:pre;font-variant-caps:normal';
+    n.textContent = 'abcdefghij';
+    p.appendChild(c); p.appendChild(n); host.appendChild(p);
+    same('inherited', c.getBoundingClientRect().width, w('abcdefghij', sc));
+    same('normal on the child', n.getBoundingClientRect().width, w('abcdefghij', base));
+    p.remove();
+  }
+
+  host.remove();
+  testing.expectEqual([], wrong);
+}
+</script>
+
+<!--
+The property arrives through a stylesheet as well as through a style attribute,
+which are two different paths into the cascade in this engine: one reads the
+declarations off the rule, the other off the element's own
+`CSSStyleDeclaration`.
+-->
+<style>
+  #sheet_sc { font-family: Georgia; font-size: 100px; font-variant-caps: small-caps; white-space: pre }
+  #sheet_plain { font-family: Georgia; font-size: 70px; white-space: pre }
+</style>
+<span id=sheet_sc>abcdefghij</span><span id=sheet_plain>ABCDEFGHIJ</span>
+
+<script id=font_variant_caps_through_a_stylesheet>
+  testing.expectEqual(
+    document.getElementById('sheet_plain').getBoundingClientRect().width,
+    document.getElementById('sheet_sc').getBoundingClientRect().width,
+  );
+</script>

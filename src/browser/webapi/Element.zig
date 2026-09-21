@@ -1971,6 +1971,7 @@ fn resolveFont(self: *Element, frame: *Frame) struct { face: text_measure.Face, 
             .layout,
             text_style.kerning,
             text_style.transform,
+            text_style.caps,
         ),
         // Not the computed size: the size the shaper runs at. See
         // text_measure.effectiveSize.
