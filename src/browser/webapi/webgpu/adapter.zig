@@ -67,15 +67,23 @@ pub fn registerTypes() []const type {
 pub const GPUSupportedFeatures = struct {
     _features: []const []const u8,
 
-    /// One observed order, and deliberately not treated as more than that.
-    /// Chrome's own iteration order is *not* stable: asking the same page for
-    /// three adapters in a row gives the same 23 names with two clusters
-    /// permuted -- {texture-formats-tier1, bgra8unorm-storage} at indices 2-3
-    /// and {shader-f16, texture-formats-tier2, clip-distances, timestamp-query}
-    /// at 15-18 (measured three times over, Dawn iterates a hash set). So the
-    /// order is not a fingerprint a detector can rely on, and any one of
-    /// Chrome's orders is as authentic as another; the *set* is what has to
-    /// match.
+    /// Chrome's own iteration order is *not* stable everywhere -- Dawn iterates
+    /// a hash set -- but it is not free either, and the two halves were measured
+    /// apart rather than assumed. Twelve adapters in a row off a headed Chrome
+    /// 153 (scratch/s72/expr-gpuidx.js) permute exactly two clusters and pin the
+    /// other nineteen positions to one name each:
+    ///
+    ///   indices 2-3    {texture-formats-tier1, bgra8unorm-storage}
+    ///   indices 16-19  {shader-f16, texture-formats-tier2, clip-distances,
+    ///                   timestamp-query}
+    ///
+    /// So a position outside those two clusters IS a reading, and this table had
+    /// one wrong: `subgroup-size-control` was appended at the end (index 22)
+    /// where Chrome puts it at 11, twelve times out of twelve -- and the
+    /// Cloudflare guard serialises this list into its payload verbatim, so the
+    /// arm-to-arm diff read it straight off the wire. The order inside a cluster
+    /// stays whatever it is; any of Chrome's permutations there is as authentic
+    /// as another.
     pub const adapter = [_][]const u8{
         "depth32float-stencil8",
         "rg11b10ufloat-renderable",
@@ -88,6 +96,7 @@ pub const GPUSupportedFeatures = struct {
         "indirect-first-instance",
         "texture-compression-astc-sliced-3d",
         "float32-blendable",
+        "subgroup-size-control",
         "texture-compression-astc",
         "texture-compression-etc2",
         "depth-clip-control",
@@ -99,10 +108,6 @@ pub const GPUSupportedFeatures = struct {
         "primitive-index",
         "texture-component-swizzle",
         "subgroups",
-        // Chrome 152 on this machine reports this alongside `subgroups`; the
-        // table was recorded before it appeared, and a 22-name set against
-        // Chrome's 23 is one `has()` away from being read.
-        "subgroup-size-control",
     };
 
     // A device only gets the features it was asked for, and a no-argument
