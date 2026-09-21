@@ -261,6 +261,47 @@ pub fn smallCapsSize(size: f64) f64 {
     return effectiveSize(@round(size * 0.7 * 2) / 2);
 }
 
+/// One source codepoint as it is SHAPED: `text-transform` first, then
+/// `font-variant-caps` on what that produced.
+///
+/// That order is the spec's -- `text-transform` rewrites the text and the
+/// variant is a shaping feature over the rewritten text -- and it is not
+/// something we have read off Chrome; the two properties together are not
+/// asserted anywhere.
+///
+/// `small` belongs to the group and not to each character it produced, which
+/// costs nothing: the only source that lengthens is U+00DF, and its 'SS' is
+/// already uppercase, so the two characters of a pair always agree.
+///
+/// Composing two `Mapped`s can produce at most two characters in the range
+/// `text_case` maps: `map` lengthens only U+00DF, and the 'S' it gives back
+/// uppercases to itself.
+const Shaped = struct {
+    mapped: text_case.Mapped,
+    /// Whether the characters shape at `smallCapsSize` rather than at the
+    /// font size.
+    small: bool,
+};
+
+inline fn shapeCodepoint(source: u21, face: Face, at_word_start: *bool) Shaped {
+    // The `.none` cases are spelled out rather than left to the general path
+    // for the reason `text_case.map` is inline: this runs once per codepoint
+    // of every string the engine measures, and almost every one of them
+    // declares neither property.
+    if (face.transform == .none and face.caps == .none) {
+        return .{ .mapped = .{ .first = source }, .small = false };
+    }
+    const transformed = text_case.map(source, face.transform, at_word_start);
+    if (face.caps == .none) return .{ .mapped = transformed, .small = false };
+    if (transformed.second != null) {
+        // Already two uppercase characters, which uppercasing leaves alone.
+        return .{ .mapped = transformed, .small = face.caps == .all };
+    }
+    const uppercased = text_case.upper(transformed.first);
+    const changed = uppercased.second != null or uppercased.first != transformed.first;
+    return .{ .mapped = uppercased, .small = face.caps == .all or changed };
+}
+
 /// Whether two faces shape as one run, so a kern pair may cross between them.
 ///
 /// Measured: Chrome charges the pair across a space only when the text either
@@ -339,6 +380,14 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
     // 15px font-size comes back as 20.000000000000004 — so they are kept
     // apart. A string of printable ASCII never touches the second piece.
     var pen_basis: f64 = 0;
+    // The same, for the characters `font-variant-caps` shrinks. A second
+    // accumulator and not a scaled addition into the first, because the two
+    // runs quantise SEPARATELY: Blink shapes them at two sizes, so each sum
+    // meets `quantise` at its own basis, exactly as two adjacent spans of
+    // different sizes would. Zero -- and so free -- for every face that
+    // declares no variant.
+    var small_basis: f64 = 0;
+    const small_size = if (face.caps == .none) size else smallCapsSize(size);
     var pen_pixels: f64 = 0;
     var ink_min: f64 = 0;
     var ink_max: f64 = 0;
@@ -378,6 +427,11 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
     // kern no space pair either way.
     const space_kerns = face.space_kerns;
     var previous: ?u21 = null;
+    // Which of the two sizes `previous` was shaped at. A size change breaks
+    // the shaping run -- `shapesAsOneRun` is the same reading, one size
+    // against another -- so a kern pair cannot straddle the boundary between a
+    // small-cap and a full-size character.
+    var previous_small = false;
 
     var offset: usize = 0;
     while (offset < text.len) {
@@ -406,7 +460,7 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
 
         if (isColourEmoji(shaped)) {
             const glyph = emojiBox(size);
-            const pen = toPixels(pen_basis, size) + pen_pixels;
+            const pen = toPixels(pen_basis, size) + toPixels(small_basis, small_size) + pen_pixels;
             const first = !any_ink;
             foldInk(&ink_min, &ink_max, &any_ink, pen - glyph.left, pen + glyph.right);
             ascent = if (first) glyph.ascent else @max(ascent, glyph.ascent);
@@ -428,15 +482,23 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
             // source cluster and not once per character it produced. Whether
             // Chrome charges the transformed count has not been measured, and
             // one character in the whole range can differ.
-            // The `.none` case is spelled out rather than left to `map`: this
-            // runs once per codepoint of every string the engine measures, and
-            // almost every one of them declares no transform. Through `map` and
-            // the two-element loop it cost 3.6% of the 60k-measurement budget
-            // test in a debug build.
-            const mapped: text_case.Mapped = if (face.transform == .none)
-                .{ .first = source }
-            else
-                text_case.map(source, face.transform, at_word_start);
+            // The `.none` case is spelled out inside `shapeCodepoint` rather
+            // than left to `map`: this runs once per codepoint of every string
+            // the engine measures, and almost every one of them declares no
+            // transform. Through `map` and the two-element loop it cost 3.6% of
+            // the 60k-measurement budget test in a debug build.
+            //
+            // `font-variant-caps` rides along in the same call, because what it
+            // shrinks is decided on what `text-transform` produced.
+            const shaping = shapeCodepoint(source, face, at_word_start);
+            const mapped = shaping.mapped;
+            // Which of the two accumulators and which of the two sizes this
+            // character's group belongs to.
+            const small = shaping.small;
+            const run_size = if (small) small_size else size;
+            const basis = if (small) &small_basis else &pen_basis;
+            if (small != previous_small) previous = null;
+            previous_small = small;
             // A counted loop rather than a slice of a two-element array: the
             // array wanted a stack write and the slice a bounds check, per
             // codepoint of every string, and this loop runs exactly once unless
@@ -445,13 +507,13 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
             while (emitted < mapped.len()) : (emitted += 1) {
                 const codepoint = if (emitted == 0) mapped.first else mapped.second.?;
                 if (previous) |prev| {
-                    pen_basis += font_kerning.kern(kerns, prev, codepoint);
+                    basis.* += font_kerning.kern(kerns, prev, codepoint);
                     // Gated on one of the two being a space rather than looked up
                     // unconditionally: this is per character of every string the
                     // engine measures, and the second table can only ever answer at
                     // a space.
                     if (prev == ' ' or codepoint == ' ') {
-                        pen_basis += font_kerning.kern(space_kerns, prev, codepoint);
+                        basis.* += font_kerning.kern(space_kerns, prev, codepoint);
                     }
                 }
                 previous = codepoint;
@@ -471,7 +533,7 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
                     // advance: the mean-advance guess answers one number for all
                     // eighty-one, which is exactly what Kasada's ten readings
                     // separate. Measured, emoji_presentation.zig.
-                    pen_basis += if (emoji_presentation.find(codepoint)) |row|
+                    basis.* += if (emoji_presentation.find(codepoint)) |row|
                         row.advance
                     else
                         meanAdvance(face.family);
@@ -506,25 +568,34 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
                     // descent -6.883 at 16px sans-serif — its ink is wholly above
                     // the baseline — and U+0084's ascent -1.594.
                     const first = !any_ink;
+                    // The other run's contribution to the pen is added in
+                    // pixels, while this run's keeps the subtraction at the
+                    // basis: the exactness the two-piece pen buys is about the
+                    // SUM of one run's advances, and the other run is one
+                    // already-converted number here either way. Zero, and so
+                    // exactly the old expression, for a face with no variant.
+                    const other = if (small) toPixels(pen_basis, size) else toPixels(small_basis, small_size);
                     foldInk(
                         &ink_min,
                         &ink_max,
                         &any_ink,
-                        toPixels(pen_basis - glyph.left, size) + pen_pixels,
-                        toPixels(pen_basis + glyph.right, size) + pen_pixels,
+                        toPixels(basis.* - glyph.left, run_size) + other + pen_pixels,
+                        toPixels(basis.* + glyph.right, run_size) + other + pen_pixels,
                     );
-                    const glyph_ascent = toPixels(glyph.ascent, size);
-                    const glyph_descent = toPixels(glyph.descent, size);
+                    const glyph_ascent = toPixels(glyph.ascent, run_size);
+                    const glyph_descent = toPixels(glyph.descent, run_size);
                     ascent = if (first) glyph_ascent else @max(ascent, glyph_ascent);
                     descent = if (first) glyph_descent else @max(descent, glyph_descent);
                 }
 
-                pen_basis += glyph.advance;
+                basis.* += glyph.advance;
             }
         }
     }
 
-    metrics.width = toPixels(quantise(face.family, pen_basis), size) + pen_pixels;
+    metrics.width = toPixels(quantise(face.family, pen_basis), size) +
+        toPixels(quantise(face.family, small_basis), small_size) +
+        pen_pixels;
     metrics.actualBoundingBoxAscent = ascent;
     metrics.actualBoundingBoxDescent = descent;
     if (any_ink) {
@@ -1568,4 +1639,40 @@ test "svg metrics measure whole clusters, addressed by utf-16 unit" {
     const extent = try svgCharExtent(serif, "Hello", 4, 20);
     try std.testing.expectEqual(@as(f64, 34.43359375), extent.offset);
     try std.testing.expectEqual(@as(f64, 10), extent.advance);
+}
+
+test "text_measure: a small-caps run shapes at its own size and does not kern across the break" {
+    // The size ladder on its own. Half a CSS pixel is the grid, so 100px gives
+    // 70 exactly, and the two fractional sizes round rather than truncate.
+    try std.testing.expectEqual(@as(f64, 70), smallCapsSize(100));
+    try std.testing.expectEqual(@as(f64, 9.5), smallCapsSize(13.33));
+    try std.testing.expectEqual(@as(f64, 11), smallCapsSize(16));
+
+    const plain: Face = .of(font_metrics.serif, 400, false, .{}, .layout, true, .none, .none);
+    const sc: Face = .of(font_metrics.serif, 400, false, .{}, .layout, true, .none, .lowercase);
+    const all: Face = .of(font_metrics.serif, 400, false, .{}, .layout, true, .none, .all);
+
+    // What the whole thing is: the lowercase run becomes the uppercase one at
+    // the reduced size. `all-small-caps` reduces the capitals too.
+    try std.testing.expectEqual(measure(plain, "ABCDEFGHIJ", 70).width, measure(sc, "abcdefghij", 100).width);
+    try std.testing.expectEqual(measure(plain, "ABCDEFGHIJ", 70).width, measure(all, "ABCDEFGHIJ", 100).width);
+    // A character uppercasing leaves alone keeps the full size, which is why
+    // the digits are untouched.
+    try std.testing.expectEqual(measure(plain, "0123456789", 100).width, measure(sc, "0123456789", 100).width);
+
+    // A size change breaks the shaping run, so the pair 'AV' is charged when
+    // both are full size and NOT when the variant put them at two sizes. At
+    // 16px serif the pair is worth 2.0625, and a small-caps 'aV' has to be the
+    // bare sum of an 'A' at 11 and a 'V' at 16.
+    try std.testing.expectEqual(@as(f64, 21.046875), measure(plain, "AV", 16).width);
+    try std.testing.expectEqual(
+        measure(plain, "A", 11).width + measure(plain, "V", 16).width,
+        measure(sc, "aV", 16).width,
+    );
+    // Both sides small, and the pair IS charged: one run again.
+    try std.testing.expectEqual(measure(plain, "AV", 11).width, measure(sc, "av", 16).width);
+
+    // U+00DF uppercases to two characters, and the pair it produces is priced
+    // at the reduced size like any other small cap.
+    try std.testing.expectEqual(measure(plain, "SS", 11).width, measure(sc, "\u{00df}", 16).width);
 }
