@@ -50,13 +50,44 @@ pub fn setScrollRestoration(self: *History, str: []const u8) void {
     }
 }
 
-pub fn pushState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8, frame: *Frame) !void {
-    const session = frame._session;
-    const arena = session.arena;
+/// Resolves the `url` argument of pushState/replaceState and refuses it when it
+/// leaves the document's origin, which is what the spec's "can have its URL
+/// rewritten" step says and what Blink throws a SecurityError for.
+///
+/// Not a pedantic detail: a Cloudflare guard calls
+/// `replaceState({}, '', 'https://example.org/')` from inside the challenge
+/// widget and branches on whether it throws. Without this check the call
+/// succeeded here AND retargeted the widget's own `location.href` at
+/// example.org, so the guard then issued a second call to put the real URL
+/// back -- a two-call signature no browser produces (measured 3/3 on both
+/// arms, scratch/s70/w-*.json).
+///
+/// A frame with no origin (about:blank, and anything else that never committed
+/// a network document) is left alone: there is nothing to compare against, and
+/// the same-URL call such a page makes is legal.
+fn stateUrl(frame: *Frame, _url: ?[]const u8, comptime method: []const u8) ![:0]const u8 {
+    const arena = frame._session.arena;
     const url = if (_url) |u|
         try @import("../URL.zig").resolve(arena.allocator(), frame.url, u, .{})
     else
-        try arena.dupeZ(u8, frame.url);
+        return try arena.dupeZ(u8, frame.url);
+
+    if (frame.origin) |origin| {
+        if (!@import("../URL.zig").isSameOrigin(url, origin)) {
+            return frame.js.fail(error.SecurityError, try std.fmt.allocPrint(
+                frame.call_arena,
+                "Failed to execute '" ++ method ++ "' on 'History': A history state object with URL '{s}' cannot be created in a document with origin '{s}' and URL '{s}'.",
+                .{ url, origin, frame.url },
+            ));
+        }
+    }
+    return url;
+}
+
+pub fn pushState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8, frame: *Frame) !void {
+    const session = frame._session;
+    const arena = session.arena;
+    const url = try stateUrl(frame, _url, "pushState");
 
     const json = state.toJson(arena.allocator()) catch return error.DataClone;
     _ = try frame._navigation.pushEntry(url, .{ .source = .history, .value = json }, frame, true);
@@ -77,10 +108,7 @@ pub fn pushState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8
 pub fn replaceState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8, frame: *Frame) !void {
     const session = frame._session;
     const arena = session.arena;
-    const url = if (_url) |u|
-        try @import("../URL.zig").resolve(arena.allocator(), frame.url, u, .{})
-    else
-        try arena.dupeZ(u8, frame.url);
+    const url = try stateUrl(frame, _url, "replaceState");
 
     const json = state.toJson(arena.allocator()) catch return error.DataClone;
     _ = try frame._navigation.replaceEntry(url, .{ .source = .history, .value = json }, frame, true);

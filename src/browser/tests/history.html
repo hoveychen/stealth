@@ -31,3 +31,35 @@
     "TypeError: Failed to execute 'pushState' on 'History': 2 arguments required, but only 1 present.",
     () => history.pushState(1));
 </script>
+
+<script id=history_cross_origin_url>
+  // A history entry cannot be given a URL outside the document's origin. A
+  // Cloudflare guard probes exactly this from inside its challenge widget --
+  // `replaceState({}, '', 'https://example.org/')` -- and branches on whether
+  // it throws, so letting it through both answered the probe wrong and
+  // retargeted the frame's own location.href at the other origin.
+  const before = location.href;
+
+  testing.expectError(
+    "SecurityError: Failed to execute 'replaceState' on 'History': A history state object with URL 'https://example.org/' cannot be created in a document with origin ",
+    () => history.replaceState({}, '', 'https://example.org/'));
+  testing.expectError(
+    "SecurityError: Failed to execute 'pushState' on 'History': A history state object with URL 'https://example.org/' cannot be created in a document with origin ",
+    () => history.pushState({}, '', 'https://example.org/'));
+  // The refusal leaves the document where it was.
+  testing.expectEqual(before, location.href);
+
+  // A different port and a different scheme are different origins too.
+  testing.expectError(
+    "SecurityError: Failed to execute 'replaceState' on 'History': A history state object with URL 'http://127.0.0.1:1/x'",
+    () => history.replaceState({}, '', 'http://127.0.0.1:1/x'));
+
+  // Same origin stays legal, whatever shape the argument has, and an omitted
+  // URL is never checked.
+  history.replaceState({}, '', '/samepath?a=1');
+  history.replaceState({}, '', '#frag');
+  history.replaceState({}, '', location.origin + '/absolute');
+  history.replaceState({});
+  history.replaceState({}, '', before);
+  testing.expectEqual(before, location.href);
+</script>
