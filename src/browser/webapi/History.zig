@@ -50,13 +50,58 @@ pub fn setScrollRestoration(self: *History, str: []const u8) void {
     }
 }
 
-pub fn pushState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8, frame: *Frame) !void {
-    const session = frame._session;
-    const arena = session.arena;
+/// Resolves the `url` argument of pushState/replaceState and refuses it when it
+/// leaves the document's origin, which is what the spec's "can have its URL
+/// rewritten" step says and what Blink throws a SecurityError for.
+///
+/// Not a pedantic detail: a Cloudflare guard calls
+/// `replaceState({}, '', 'https://example.org/')` from inside the challenge
+/// widget and branches on whether it throws. Without this check the call
+/// succeeded here AND retargeted the widget's own `location.href` at
+/// example.org, so the guard then issued a second call to put the real URL
+/// back -- a two-call signature no browser produces (measured 3/3 on both
+/// arms, scratch/s70/w-*.json).
+///
+/// A frame with no origin (about:blank, and anything else that never committed
+/// a network document) is left alone: there is nothing to compare against, and
+/// the same-URL call such a page makes is legal.
+fn stateUrl(frame: *Frame, _url: ?[]const u8, comptime method: []const u8) ![:0]const u8 {
+    const arena = frame._session.arena;
     const url = if (_url) |u|
         try @import("../URL.zig").resolve(arena.allocator(), frame.url, u, .{})
     else
-        try arena.dupeZ(u8, frame.url);
+        return try arena.dupeZ(u8, frame.url);
+
+    if (frame.origin) |origin| {
+        if (!@import("../URL.zig").isSameOrigin(url, origin)) {
+            return frame.js.fail(error.SecurityError, try std.fmt.allocPrint(
+                frame.call_arena,
+                "Failed to execute '" ++ method ++ "' on 'History': A history state object with URL '{s}' cannot be created in a document with origin '{s}' and URL '{s}'.",
+                .{ url, origin, frame.url },
+            ));
+        }
+    }
+    return url;
+}
+
+/// The state argument is structured-serialised, not JSON-stringified, so a
+/// value JSON quietly drops or flattens -- a function, a DOM node, `location`,
+/// `document` -- is a DataCloneError rather than `{}`. We keep the JSON for
+/// storage and run the serialiser only for its verdict; `serialize` raises the
+/// exception itself, with Blink's own sentence after this prefix.
+///
+/// Measured order: Chrome answers `replaceState(document, '', <cross-origin>)`
+/// with DataCloneError, so this runs before the URL check.
+fn checkCloneable(state: js.Value, comptime method: []const u8) !void {
+    const serialized = try state.serialize("Failed to execute '" ++ method ++ "' on 'History': ");
+    serialized.deinit();
+}
+
+pub fn pushState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8, frame: *Frame) !void {
+    const session = frame._session;
+    const arena = session.arena;
+    try checkCloneable(state, "pushState");
+    const url = try stateUrl(frame, _url, "pushState");
 
     const json = state.toJson(arena.allocator()) catch return error.DataClone;
     _ = try frame._navigation.pushEntry(url, .{ .source = .history, .value = json }, frame, true);
@@ -77,10 +122,8 @@ pub fn pushState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8
 pub fn replaceState(_: *History, state: js.Value, _: ?[]const u8, _url: ?[]const u8, frame: *Frame) !void {
     const session = frame._session;
     const arena = session.arena;
-    const url = if (_url) |u|
-        try @import("../URL.zig").resolve(arena.allocator(), frame.url, u, .{})
-    else
-        try arena.dupeZ(u8, frame.url);
+    try checkCloneable(state, "replaceState");
+    const url = try stateUrl(frame, _url, "replaceState");
 
     const json = state.toJson(arena.allocator()) catch return error.DataClone;
     _ = try frame._navigation.replaceEntry(url, .{ .source = .history, .value = json }, frame, true);

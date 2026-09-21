@@ -31,3 +31,85 @@
     "TypeError: Failed to execute 'pushState' on 'History': 2 arguments required, but only 1 present.",
     () => history.pushState(1));
 </script>
+
+<script id=history_cross_origin_url>
+  // A history entry cannot be given a URL outside the document's origin. A
+  // Cloudflare guard probes exactly this from inside its challenge widget --
+  // `replaceState({}, '', 'https://example.org/')` -- and branches on whether
+  // it throws, so letting it through both answered the probe wrong and
+  // retargeted the frame's own location.href at the other origin.
+  const before = location.href;
+
+  testing.expectError(
+    "SecurityError: Failed to execute 'replaceState' on 'History': A history state object with URL 'https://example.org/' cannot be created in a document with origin ",
+    () => history.replaceState({}, '', 'https://example.org/'));
+  testing.expectError(
+    "SecurityError: Failed to execute 'pushState' on 'History': A history state object with URL 'https://example.org/' cannot be created in a document with origin ",
+    () => history.pushState({}, '', 'https://example.org/'));
+  // The refusal leaves the document where it was.
+  testing.expectEqual(before, location.href);
+
+  // A different port and a different scheme are different origins too.
+  testing.expectError(
+    "SecurityError: Failed to execute 'replaceState' on 'History': A history state object with URL 'http://127.0.0.1:1/x'",
+    () => history.replaceState({}, '', 'http://127.0.0.1:1/x'));
+
+  // Same origin stays legal, whatever shape the argument has, and an omitted
+  // URL is never checked.
+  history.replaceState({}, '', '/samepath?a=1');
+  history.replaceState({}, '', '#frag');
+  history.replaceState({}, '', location.origin + '/absolute');
+  history.replaceState({});
+  history.replaceState({}, '', before);
+  testing.expectEqual(before, location.href);
+</script>
+
+<script id=history_state_must_be_cloneable>
+  // The state argument goes through structured serialisation, not
+  // JSON.stringify, so the values JSON silently turns into `{}` or drops are
+  // DataCloneErrors here. Measured against Chrome 153, including the order:
+  // an unserialisable state beats a cross-origin URL to the throw.
+  const here = location.href;
+  const cases = [
+    ['HTMLDocument', () => document],
+    ['HTMLHtmlElement', () => document.documentElement],
+    ['Location', () => location],
+  ];
+  for (const [what, make] of cases) {
+    testing.expectError(
+      `DataCloneError: Failed to execute 'replaceState' on 'History': ${what} object could not be cloned.`,
+      () => history.replaceState(make(), '', here));
+    testing.expectError(
+      `DataCloneError: Failed to execute 'pushState' on 'History': ${what} object could not be cloned.`,
+      () => history.pushState(make(), '', here));
+  }
+  // Window words itself differently in V8: `#<Window>`, not `Window object`.
+  testing.expectError(
+    "DataCloneError: Failed to execute 'replaceState' on 'History': #<Window> could not be cloned.",
+    () => history.replaceState(window, '', here));
+  testing.expectError(
+    "DataCloneError: Failed to execute 'replaceState' on 'History': function f() {} could not be cloned.",
+    () => history.replaceState(function f() {}, '', here));
+  // Nested one level down, and inside an array.
+  testing.expectError(
+    "DataCloneError: Failed to execute 'replaceState' on 'History'",
+    () => history.replaceState({ d: document }, '', here));
+  testing.expectError(
+    "DataCloneError: Failed to execute 'replaceState' on 'History'",
+    () => history.replaceState([document], '', here));
+
+  // Structured serialisation is the WIDER contract of the two: a Map, a Date
+  // and a RegExp are all cloneable even though JSON has no room for them.
+  history.replaceState(new Map([['a', 1]]), '', here);
+  history.replaceState(new Date(0), '', here);
+  history.replaceState(/x/g, '', here);
+  history.replaceState({ a: [1, 'two', null] }, '', here);
+
+  // An unserialisable state is refused before a cross-origin URL is.
+  testing.expectError(
+    "DataCloneError: Failed to execute 'replaceState' on 'History': HTMLDocument object could not be cloned.",
+    () => history.replaceState(document, '', 'https://example.org/'));
+
+  history.replaceState({}, '', here);
+  testing.expectEqual(here, location.href);
+</script>
