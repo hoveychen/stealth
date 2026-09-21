@@ -613,6 +613,7 @@ parts.push(`// Copyright (C) 2023-2026  Lightpanda (Selecy SAS)
 
 const std = @import("std");
 const font_kerning = @import("font_kerning.zig");
+const font_line_box = @import("font_line_box.zig");
 
 /// One glyph, at a 100px font size. \`left\` and \`right\` are the ink bearings
 /// TextMetrics reports as actualBoundingBoxLeft / Right: positive \`left\`
@@ -668,6 +669,12 @@ pub const Family = struct {
     /// laid-out block at every size of every family while measuring.
     layout_ascents: []const f64,
     layout_descents: []const f64,
+    /// The rule that produces the layout box at a size the sweep above does not
+    /// hold, which is every fractional one. Scaling the last swept entry the way
+    /// `boundingBox` does is wrong here: Chrome's answer is always on a 1/dpr
+    /// grid and a ratio times a size is not, so 297 of 301 fractional sizes
+    /// came out wrong while all 13 integer ones were right. See font_line_box.zig.
+    ladder: font_line_box.Ladder,
     /// The ascent and descent an SVG \`<text>\` stands on, which is the layout
     /// pair less the face's leading: a face with no line gap answers the same
     /// two numbers, and Arial at 16px lays a line out 18 tall while drawing its
@@ -793,6 +800,7 @@ for (const [name, t] of names) {
             `.descents = &descents_${bare}, .layout_ascents = &layout_ascents_${bare}, ` +
             `.layout_descents = &layout_descents_${bare}, .svg_ascents = &svg_ascents_${bare}, ` +
             `.svg_descents = &svg_descents_${bare}, ` +
+            `.ladder = font_line_box.${bare}, ` +
             `.avg_char_width = ${num(t.avgCharWidth)}, ` +
             `.max_char_width = ${num(t.maxCharWidth)}, ` +
             `.seeds_last_resort = &seeds_${bare}, .after_fallback = &after_${bare} };`,
@@ -946,25 +954,22 @@ pub fn boundingBox(family: Family, size: f64) struct { ascent: f64, descent: f64
 }
 
 /// The ascent and descent LAYOUT stands this family's text on at this size, from
-/// the swept table where there is one and scaled from its last entry above that.
-/// See \`Family.layout_ascents\`: this is a separate measurement from
-/// \`boundingBox\`, because at the device pixel ratio this engine claims the two
-/// pairs disagree for most sizes.
+/// the swept table at an integer size and from the ladder in font_line_box.zig
+/// between them. See \`Family.layout_ascents\`: this is a separate measurement
+/// from \`boundingBox\`, because at the device pixel ratio this engine claims the
+/// two pairs disagree for most sizes.
 pub fn layoutBox(family: Family, size: f64) struct { ascent: f64, descent: f64 } {
     const rounded = @round(size);
     if (rounded >= 1 and rounded <= @as(f64, @floatFromInt(family.layout_ascents.len)) and rounded == size) {
         const index: usize = @intFromFloat(rounded - 1);
         return .{ .ascent = family.layout_ascents[index], .descent = family.layout_descents[index] };
     }
-    // Multiplied before it is divided, the way text_measure carries the pen:
-    // scaling by \`size / last\` first costs an ulp, and the ulp is visible --
-    // a 200px sans-serif SVG box comes out 230.00000000000003 that way and
-    // exactly 230 this way, against Chrome's 230.
-    const last: f64 = @floatFromInt(family.layout_ascents.len);
-    return .{
-        .ascent = family.layout_ascents[family.layout_ascents.len - 1] * size / last,
-        .descent = family.layout_descents[family.layout_descents.len - 1] * size / last,
-    };
+    // Off the swept sizes the table has nothing to interpolate, so the box is
+    // computed the way Blink computes it -- two rounded ladders on the device
+    // grid, see font_line_box.zig. Scaling the last swept entry instead was
+    // right for 4 of 301 fractional sizes measured against Chrome.
+    const box = family.ladder.box(size, layout_device_pixel_ratio);
+    return .{ .ascent = box.ascent, .descent = box.descent };
 }
 
 /// The height of one \`line-height: normal\` line: the layout box, top to bottom.

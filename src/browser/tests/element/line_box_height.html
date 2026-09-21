@@ -92,6 +92,105 @@ worth: twenty of them are 360 at dpr 1 and 370 at dpr 2.
   one('fantasy', 12, 18.5);
   one('fantasy', 32, 49.5);
 
+  // Fractional sizes, which are the ones that used to be wrong: the line box
+  // does not scale with the size, it steps on the device grid, and scaling the
+  // 120px table entry linearly the way the canvas box does got 4 of 301 right.
+  // See font_line_box.zig for the rule. Read off a headed Chrome 153 at
+  // --force-device-scale-factor=2 (scratch/s67/lh3-ch.json, 1201 sizes a
+  // family); these thirteen are spread over 8..20 and include 17.21, which is
+  // where Helvetica's ascent lands exactly on a rounding boundary.
+  one('serif', 8.01, 9);
+  one('serif', 8.25, 9);
+  one('serif', 8.5, 10);
+  one('serif', 9.33, 11);
+  one('serif', 10.5, 12);
+  one('serif', 11.67, 14);
+  one('serif', 12.5, 14.5);
+  one('serif', 13.33, 15.5);
+  one('serif', 14.75, 16.5);
+  one('serif', 16.5, 19);
+  one('serif', 17.21, 20);
+  one('serif', 18.4, 21.5);
+  one('serif', 19.99, 23);
+  one('sans-serif', 8.01, 9);
+  one('sans-serif', 8.25, 10);
+  one('sans-serif', 8.5, 10);
+  one('sans-serif', 9.33, 10.5);
+  one('sans-serif', 10.5, 12);
+  one('sans-serif', 11.67, 13);
+  one('sans-serif', 12.5, 14.5);
+  one('sans-serif', 13.33, 15.5);
+  one('sans-serif', 14.75, 17.5);
+  one('sans-serif', 16.5, 19);
+  one('sans-serif', 17.21, 19.5);
+  one('sans-serif', 18.4, 20.5);
+  one('sans-serif', 19.99, 23);
+  one('monospace', 8.01, 9.5);
+  one('monospace', 8.25, 9.5);
+  one('monospace', 8.5, 10);
+  one('monospace', 9.33, 10.5);
+  one('monospace', 10.5, 12);
+  one('monospace', 11.67, 14);
+  one('monospace', 12.5, 14.5);
+  one('monospace', 13.33, 15.5);
+  one('monospace', 14.75, 17);
+  one('monospace', 16.5, 19.5);
+  one('monospace', 17.21, 20);
+  one('monospace', 18.4, 21.5);
+  one('monospace', 19.99, 23);
+  one('system-ui', 8.01, 9);
+  one('system-ui', 8.25, 9.5);
+  one('system-ui', 8.5, 10);
+  one('system-ui', 9.33, 11);
+  one('system-ui', 10.5, 12);
+  one('system-ui', 11.67, 14);
+  one('system-ui', 12.5, 14.5);
+  one('system-ui', 13.33, 16);
+  one('system-ui', 14.75, 17.5);
+  one('system-ui', 16.5, 19.5);
+  one('system-ui', 17.21, 20);
+  one('system-ui', 18.4, 22);
+  one('system-ui', 19.99, 23.5);
+  one('cursive', 8.01, 12.5);
+  one('cursive', 8.25, 13);
+  one('cursive', 8.5, 13.5);
+  one('cursive', 9.33, 15);
+  one('cursive', 10.5, 16.5);
+  one('cursive', 11.67, 18.5);
+  one('cursive', 12.5, 20);
+  one('cursive', 13.33, 21);
+  one('cursive', 14.75, 23.5);
+  one('cursive', 16.5, 26);
+  one('cursive', 17.21, 27);
+  one('cursive', 18.4, 29);
+  one('cursive', 19.99, 32);
+  one('fantasy', 8.01, 12.5);
+  one('fantasy', 8.25, 13);
+  one('fantasy', 8.5, 13);
+  one('fantasy', 9.33, 14.5);
+  one('fantasy', 10.5, 16.5);
+  one('fantasy', 11.67, 18);
+  one('fantasy', 12.5, 19);
+  one('fantasy', 13.33, 20.5);
+  one('fantasy', 14.75, 23);
+  one('fantasy', 16.5, 25.5);
+  one('fantasy', 17.21, 26.5);
+  one('fantasy', 18.4, 28.5);
+  one('fantasy', 19.99, 31);
+  one('Arial', 8.01, 9.5);
+  one('Arial', 8.25, 9.5);
+  one('Arial', 8.5, 10);
+  one('Arial', 9.33, 11);
+  one('Arial', 10.5, 12);
+  one('Arial', 11.67, 13.5);
+  one('Arial', 12.5, 14.5);
+  one('Arial', 13.33, 15.5);
+  one('Arial', 14.75, 17);
+  one('Arial', 16.5, 19);
+  one('Arial', 17.21, 19.5);
+  one('Arial', 18.4, 21);
+  one('Arial', 19.99, 22.5);
+
   host.remove();
   testing.expectEqual('', wrong.join(' | '));
 }
