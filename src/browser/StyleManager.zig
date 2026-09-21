@@ -37,6 +37,7 @@ const chrome_per_tag_values = @import("webapi/css/chrome_per_tag_values.zig");
 const chrome_svg_tag_values = @import("webapi/css/chrome_svg_tag_values.zig");
 const CSSStyleDeclaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const text_case = @import("text_case.zig");
+const text_measure = @import("text_measure.zig");
 const CSSStyleProperty = @import("webapi/css/CSSStyleDeclaration.zig").Property;
 const shorthand = @import("webapi/css/shorthand.zig");
 const registered_property = @import("webapi/css/registered_property.zig");
@@ -714,6 +715,8 @@ fn addRawRuleAtDepth(self: *StyleManager, build_arena: Allocator, selector_text:
             props.font_family = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "text-transform")) {
             props.text_transform = .{ .value = val, .important = decl.important };
+        } else if (std.ascii.eqlIgnoreCase(name, "font-variant-caps")) {
+            props.font_variant_caps = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "letter-spacing")) {
             props.letter_spacing = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "word-spacing")) {
@@ -1770,6 +1773,13 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
         };
     }
 
+    if (decl.findProperty(String.wrap("font-variant-caps"))) |property| {
+        props.font_variant_caps = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
+    }
+
     if (decl.findProperty(String.wrap("letter-spacing"))) |property| {
         props.letter_spacing = .{
             .value = try arena.dupe(u8, property._value.str()),
@@ -1988,6 +1998,7 @@ const RuleProperties = struct {
     font_size: ?Declaration = null,
     font_family: ?Declaration = null,
     text_transform: ?Declaration = null,
+    font_variant_caps: ?Declaration = null,
     // Kept here rather than in `longhands` for the same reason as the fields
     // above: they are read per element per layout, off `resolveFont`. Through
     // the name-keyed list instead, ak-homedepot -- 107 of its 4857 rules
@@ -2029,6 +2040,7 @@ const RuleProperties = struct {
             self.font_size != null or
             self.font_family != null or
             self.text_transform != null or
+            self.font_variant_caps != null or
             self.letter_spacing != null or
             self.word_spacing != null or
             self.font_kerning != null or
@@ -2369,6 +2381,34 @@ pub fn computedTextTransform(self: *StyleManager, element: ?*Element) text_case.
 
 /// What one element declares for `text-transform`, or null when it declares
 /// nothing usable and the value has to come from an ancestor.
+/// One `font-variant-caps` declaration as the enum, or null when it says
+/// nothing this can use and the answer has to come from an ancestor.
+///
+/// Same shape as `transformOn`: `normal` is a real answer -- an explicit
+/// `font-variant-caps: normal` on a child has to beat an inherited
+/// `small-caps` rather than fall through to it -- and the CSS-wide keywords
+/// fall through, the property being inherited.
+///
+/// Only the two values whose cost was measured. `petite-caps`,
+/// `all-petite-caps`, `unicase` and `titling-caps` fall through to whatever an
+/// ancestor says, which leaves them measuring as `normal` and is the honest
+/// answer for a value nothing here has read off Chrome.
+fn capsOn(
+    self: *StyleManager,
+    el: *Element,
+    in_sheets: bool,
+    style: ?*CSSStyleDeclaration,
+) ?text_measure.SmallCaps {
+    for (self.cascadedCandidates(el, "font-variant-caps", .font_variant_caps, in_sheets, style)) |candidate| {
+        const raw = candidate orelse continue;
+        const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        if (std.ascii.eqlIgnoreCase(value, "normal")) return .none;
+        if (std.ascii.eqlIgnoreCase(value, "small-caps")) return .lowercase;
+        if (std.ascii.eqlIgnoreCase(value, "all-small-caps")) return .all;
+    }
+    return null;
+}
+
 fn transformOn(
     self: *StyleManager,
     el: *Element,
@@ -2843,7 +2883,7 @@ fn computedFontItalicAt(self: *StyleManager, element: ?*Element, depth: u8) bool
 /// do to EACH OTHER -- a parent's `"kern" 0` against a child's
 /// `font-kerning: normal` -- has not been measured, so the AND is a choice and
 /// not a reading; nothing asserts it.
-pub fn computedTextStyle(self: *StyleManager, element: ?*Element) struct { letter: f64, word: f64, kerning: bool, transform: text_case.Transform } {
+pub fn computedTextStyle(self: *StyleManager, element: ?*Element) struct { letter: f64, word: f64, kerning: bool, transform: text_case.Transform, caps: text_measure.SmallCaps } {
     // Probed once per read rather than once per ancestor level per property.
     self.rebuildIfDirty() catch {};
     const in_sheets_letter = self.declared_longhands.contains("letter-spacing");
@@ -2851,17 +2891,20 @@ pub fn computedTextStyle(self: *StyleManager, element: ?*Element) struct { lette
     const in_sheets_kerning = self.declared_longhands.contains("font-kerning");
     const in_sheets_features = self.declared_longhands.contains("font-feature-settings");
     const in_sheets_transform = self.declared_longhands.contains("text-transform");
+    const in_sheets_caps = self.declared_longhands.contains("font-variant-caps");
 
     var letter: f64 = 0;
     var word: f64 = 0;
     var kerning = true;
     var features_kern = true;
     var transform: text_case.Transform = .none;
+    var caps: text_measure.SmallCaps = .none;
     var want_letter = true;
     var want_word = true;
     var want_kerning = true;
     var want_features = true;
     var want_transform = true;
+    var want_caps = true;
 
     var current = element;
     var depth: u8 = 0;
@@ -2904,7 +2947,13 @@ pub fn computedTextStyle(self: *StyleManager, element: ?*Element) struct { lette
                 want_transform = false;
             }
         }
-        if (!want_letter and !want_word and !want_kerning and !want_features and !want_transform) break;
+        if (want_caps and (style != null or in_sheets_caps)) {
+            if (self.capsOn(el, in_sheets_caps, style)) |on| {
+                caps = on;
+                want_caps = false;
+            }
+        }
+        if (!want_letter and !want_word and !want_kerning and !want_features and !want_transform and !want_caps) break;
         current = el.parentElement();
         depth += 1;
     }
@@ -2913,6 +2962,7 @@ pub fn computedTextStyle(self: *StyleManager, element: ?*Element) struct { lette
         .word = word,
         .kerning = kerning and features_kern,
         .transform = transform,
+        .caps = caps,
     };
 }
 
@@ -3176,7 +3226,7 @@ fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
     return self.cascadedDeclaration(el, .font_size);
 }
 
-const CascadedProperty = enum { font_size, font_family, text_transform, letter_spacing, word_spacing, font_kerning, font_feature_settings, font_optical_sizing, display, visibility };
+const CascadedProperty = enum { font_size, font_family, text_transform, font_variant_caps, letter_spacing, word_spacing, font_kerning, font_feature_settings, font_optical_sizing, display, visibility };
 
 /// The winning declaration of `property` among the stylesheet rules matching
 /// `el`, or null when none match. Importance outranks specificity, which is
@@ -3215,6 +3265,7 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
                     .font_size => props.font_size,
                     .font_family => props.font_family,
                     .text_transform => props.text_transform,
+                    .font_variant_caps => props.font_variant_caps,
                     .letter_spacing => props.letter_spacing,
                     .word_spacing => props.word_spacing,
                     .font_kerning => props.font_kerning,

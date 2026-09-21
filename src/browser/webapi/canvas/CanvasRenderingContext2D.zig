@@ -133,6 +133,11 @@ pub fn measureText(self: *const CanvasRenderingContext2D, text: []const u8, exec
                 // and `measureText` sees none of the element's style. Measured --
                 // 'hello world' is 73.3203125 through measureText whatever the
                 // canvas element's own `text-transform` says.
+                .none,
+                // Nor a `font-variant-caps`: the `font` attribute's grammar has
+                // a variant slot, but what a small-caps canvas font measures has
+                // not been read off Chrome, so this stays at the value that
+                // changes nothing.
                 .none),
             text,
             self._font.size,

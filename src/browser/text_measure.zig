@@ -186,11 +186,31 @@ pub const Face = struct {
     /// come back out -- so that one is `measureAt`'s pointer.
     transform: text_case.Transform = .none,
 
+    /// `font-variant-caps`, which Blink renders by shaping the affected
+    /// characters UPPERCASED at a reduced size in the same face rather than by
+    /// selecting a small-caps face. Measured on headed Chrome 153 across six
+    /// families and eighteen sizes (scratch/s73/expr-sc{,2,3}.js):
+    ///
+    ///   * the reduced size is `round(0.7 * size * 2) / 2` -- seven tenths,
+    ///     snapped to half a CSS pixel, which is one device pixel at the
+    ///     device pixel ratio this build claims. All eighteen sizes solve to
+    ///     it exactly, against a scan of candidate sizes at 0.005 steps;
+    ///   * the characters are mapped by the ordinary uppercase mapping --
+    ///     `ss`, `fi`, dotless i, final sigma, Cyrillic and accented Greek all
+    ///     land on what `toUpperCase` gives, and a character already uppercase
+    ///     (or already a small-cap letter) is left at the full size;
+    ///   * `small-caps` reduces only what uppercasing CHANGES;
+    ///     `all-small-caps` reduces every character.
+    ///
+    /// Digits and punctuation are untouched by both, which follows from the
+    /// mapping rather than being a rule of its own.
+    caps: SmallCaps = .none,
+
     /// The face `weight` and `italic` select. The threshold is measured: at
     /// 16px serif 'M' is 14.2265625 at 500 and 15.1015625 at 600, 700 and 900
     /// alike, so `bold` the keyword is 700 arriving here and not a case of its
     /// own.
-    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing, surface: Surface, kerning: bool, transform: text_case.Transform) Face {
+    pub fn of(family: font_metrics.Family, weight: u16, italic: bool, spacing: Spacing, surface: Surface, kerning: bool, transform: text_case.Transform, caps: SmallCaps) Face {
         const variant = font_variants.variantFor(weight, italic);
         return .{
             .family = family,
@@ -204,6 +224,7 @@ pub const Face = struct {
                 .{},
             .kerning = kerning,
             .transform = transform,
+            .caps = caps,
         };
     }
 
@@ -222,6 +243,23 @@ pub const Face = struct {
         return font_metrics.glyph(self.family, codepoint);
     }
 };
+
+/// Which characters `font-variant-caps` shrinks. See `Face.caps` for the
+/// measurement.
+pub const SmallCaps = enum {
+    none,
+    /// `small-caps`: the characters uppercasing changes.
+    lowercase,
+    /// `all-small-caps`: every character.
+    all,
+};
+
+/// The size the small-caps run shapes at: seven tenths of the font size,
+/// snapped to half a CSS pixel. Measured, `Face.caps`.
+pub fn smallCapsSize(size: f64) f64 {
+    if (!(size > 0) or !std.math.isFinite(size)) return size;
+    return effectiveSize(@round(size * 0.7 * 2) / 2);
+}
 
 /// Whether two faces shape as one run, so a kern pair may cross between them.
 ///
@@ -875,8 +913,8 @@ test "text_measure: the kerning bit turns off both tables" {
     // `element/text_kerning_off.html` asserts this through the CSS layer; this
     // asserts the kernel on its own, because the bit has to reach two tables and
     // the CSS test cannot say which of them answered.
-    const on: Face = .of(font_metrics.serif, 400, false, .{}, .layout, true, .none);
-    const off: Face = .of(font_metrics.serif, 400, false, .{}, .layout, false, .none);
+    const on: Face = .of(font_metrics.serif, 400, false, .{}, .layout, true, .none, .none);
+    const off: Face = .of(font_metrics.serif, 400, false, .{}, .layout, false, .none, .none);
 
     // The ordinary pairs. 'AV' at 16px serif is 21.046875 kerned and 23.109375
     // unkerned -- both Chrome's, both this engine's advance table.
@@ -898,8 +936,8 @@ test "text_measure: the kerning bit turns off both tables" {
     // The canvas surface has no space table either way, so the bit is the only
     // difference there -- and its unkerned width is the same 115.5390625,
     // because with no pairs at all the two surfaces cannot disagree.
-    const canvas_on: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, true, .none);
-    const canvas_off: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, false, .none);
+    const canvas_on: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, true, .none, .none);
+    const canvas_off: Face = .of(font_metrics.serif, 400, false, .{}, .canvas, false, .none, .none);
     try std.testing.expectEqual(@as(f64, 105.9765625), measure(canvas_on, "AVATAR To Wo", 16).width);
     try std.testing.expectEqual(@as(f64, 115.5390625), measure(canvas_off, "AVATAR To Wo", 16).width);
 }
