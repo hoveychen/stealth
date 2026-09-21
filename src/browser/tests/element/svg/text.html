@@ -358,3 +358,74 @@
   testing.expectEqual('normal', getComputedStyle(html).whiteSpace);
 }
 </script>
+
+<!-- An SVG <text> measures its COLLAPSED string, and every index-taking method
+     addresses that string. Read off a headed Chrome 153 over twenty strings by
+     two xml:space values by five white-space declarations
+     (scratch/s69/expr-svg-ws2.js, expr-svg-ws3.js). -->
+<script id=whitespaceCollapses>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const host = document.createElementNS(ns, 'svg');
+  document.body.appendChild(host);
+  const mk = (content, css, xmlSpace) => {
+    const el = document.createElementNS(ns, 'text');
+    el.style.fontFamily = 'sans-serif';
+    el.style.fontSize = '16px';
+    if (css) el.style.whiteSpace = css;
+    if (xmlSpace) el.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', xmlSpace);
+    el.textContent = content;
+    host.appendChild(el);
+    return el;
+  };
+  // The three reference widths every row below is one of.
+  const HELLO = 36.4609375;          // 'Hello'
+  const HELLO_WORLD = 82.40625;      // 'Hello World'
+  const HELLO_2SP_WORLD = 86.8515625; // 'Hello  World'
+  testing.expectEqual(HELLO, mk('Hello').getComputedTextLength());
+  testing.expectEqual(HELLO_WORLD, mk('Hello World').getComputedTextLength());
+
+  // Leading and trailing whitespace is stripped, inner runs collapse to one
+  // space, and a tab / newline / carriage return is a space rather than a
+  // break.
+  for (const raw of [' Hello', 'Hello ', '  Hello  ', '\n  Hello\n  ', '\tHello\t']) {
+    const el = mk(raw);
+    testing.expectEqual(HELLO, el.getComputedTextLength());
+    testing.expectEqual(5, el.getNumberOfChars());
+  }
+  for (const raw of ['Hello\nWorld', 'Hello\rWorld', 'Hello\tWorld', 'Hello   World', 'Hello \n World']) {
+    const el = mk(raw);
+    testing.expectEqual(HELLO_WORLD, el.getComputedTextLength());
+    testing.expectEqual(11, el.getNumberOfChars());
+  }
+  // Whitespace with nothing beside it is nothing at all.
+  testing.expectEqual(0, mk('   ').getComputedTextLength());
+  testing.expectEqual(0, mk('   ').getNumberOfChars());
+  testing.expectEqual(0, mk('\n\n').getNumberOfChars());
+
+  // U+00A0 is not whitespace and survives.
+  testing.expectEqual(40.90625, mk(' Hello').getComputedTextLength());
+  testing.expectEqual(6, mk(' Hello').getNumberOfChars());
+
+  // `white-space` turns the collapsing off exactly where it turns it off for a
+  // <span>, and `xml:space="preserve"` does the same. A tab and a newline stay
+  // one space each even then: that is the SVG half of the rule.
+  for (const css of ['pre', 'pre-wrap', 'break-spaces']) {
+    testing.expectEqual(HELLO_2SP_WORLD, mk('Hello\t\tWorld', css).getComputedTextLength());
+    testing.expectEqual(12, mk('Hello\t\tWorld', css).getNumberOfChars());
+  }
+  testing.expectEqual(HELLO_2SP_WORLD, mk('Hello\t\tWorld', null, 'preserve').getComputedTextLength());
+  testing.expectEqual(HELLO_WORLD, mk('Hello\tWorld', null, 'preserve').getComputedTextLength());
+  testing.expectEqual(HELLO_WORLD, mk('Hello\nWorld', 'pre').getComputedTextLength());
+  // `default` is the attribute's other value and means the collapsing stays on.
+  testing.expectEqual(HELLO, mk(' Hello ', null, 'default').getComputedTextLength());
+
+  // The per-character methods address the collapsed string too, so the first
+  // character of a markup-indented <text> is its first LETTER.
+  const indented = mk('\n  AV\n');
+  testing.expectEqual(2, indented.getNumberOfChars());
+  testing.expectEqual(0, indented.getExtentOfChar(0).x);
+  testing.expectEqual(20.1640625, indented.getComputedTextLength());
+  testing.expectError('IndexSizeError', () => indented.getExtentOfChar(2));
+}
+</script>
