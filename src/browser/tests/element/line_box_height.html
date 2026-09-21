@@ -230,6 +230,51 @@ worth: twenty of them are 360 at dpr 1 and 370 at dpr 2.
   eq('line-height 2em', box('font-size:16px;font-family:serif;line-height:2em;width:400px', 'Hxg'), 32);
   eq('line-height 0.5', box('font-size:16px;font-family:serif;line-height:0.5;width:400px', 'Hxg'), 8);
 
+  // Inherited, where the child's font-size is not the parent's. A relative unit
+  // computed to a LENGTH on the element that declared it, and that length is
+  // what inherits; only a bare number re-multiplies at the child. This engine
+  // re-multiplied all three, so `150%` and `1.5em` on a 16px parent both made a
+  // 108px line on the 72px child instead of a 24px one -- while the computed
+  // value on the same child already said `24px`.
+  //
+  // Measured on Chrome 153 against a headed arm, inline and through a
+  // stylesheet, seven forms (scratch/s72/expr-lh2.js).
+  const inherited = (parentCss, childCss) => {
+    const p = document.createElement('div');
+    p.style.cssText = parentCss;
+    const c = document.createElement('div');
+    c.style.cssText = childCss;
+    c.textContent = 'Hxg';
+    p.appendChild(c);
+    host.appendChild(p);
+    const out = [c.getBoundingClientRect().height, getComputedStyle(c).lineHeight];
+    p.remove();
+    return out.join('/');
+  };
+
+  const child = 'font-size:72px;font-family:serif';
+  eq('inherited 1.5', inherited('font-size:16px;line-height:1.5', child), '108/108px');
+  eq('inherited 150%', inherited('font-size:16px;line-height:150%', child), '24/24px');
+  eq('inherited 1.5em', inherited('font-size:16px;line-height:1.5em', child), '24/24px');
+  eq('inherited 24px', inherited('font-size:16px;line-height:24px', child), '24/24px');
+  // Two levels up, through a middle element that declares a font-size of its
+  // own: the length comes from where line-height was declared, and neither
+  // descendant's font-size gets to re-resolve it.
+  {
+    const g = document.createElement('div');
+    g.style.cssText = 'font-size:16px;line-height:150%';
+    const m = document.createElement('div');
+    m.style.cssText = 'font-size:40px';
+    const leaf = document.createElement('div');
+    leaf.style.cssText = child;
+    leaf.textContent = 'Hxg';
+    m.appendChild(leaf);
+    g.appendChild(m);
+    host.appendChild(g);
+    eq('inherited 150% depth 2', leaf.getBoundingClientRect().height + '/' + getComputedStyle(leaf).lineHeight, '24/24px');
+    g.remove();
+  }
+
   host.remove();
   testing.expectEqual('', wrong.join(' | '));
 }

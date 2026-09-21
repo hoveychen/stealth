@@ -3923,7 +3923,22 @@ pub fn cascadedComputedLengthAs(element: *Element, name: []const u8, resolve_as:
 }
 
 fn cascadedLengthToken(style_manager: *StyleManager, element: *Element, name: []const u8, resolve_as: []const u8) ?f64 {
-    const declaration = cascadedRawDeclaration(style_manager, element, name) orelse return null;
+    const found = cascadedRawDeclarationOn(style_manager, element, name) orelse return null;
+    const declaration = found.declaration;
+    // A relative unit was already resolved once, when the declaration computed
+    // on the element that carried it, and an inherited property hands the
+    // resulting LENGTH down -- a descendant does not re-resolve it against its
+    // own font. `line-height:150%` on a 16px parent is 24px on its 72px child,
+    // not 108px; so is `line-height:1.5em`. This engine re-multiplied both at
+    // the descendant, which the computed value beside it already disagreed with
+    // (it printed `24px` while the box came out 108 tall).
+    //
+    // A bare number is the one exception and the reason this is not simply
+    // "resolve at the owner": for `line-height` its computed value IS the
+    // number, so every descendant multiplies it by its own font size --
+    // `line-height:1.5` on that same pair is 108. Measured on Chrome 153 over
+    // number / percentage / em / px, declared inline and through a stylesheet
+    // (scratch/s72/expr-lh2.js).
     const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
     // A `calc()` is a length too, and this is the only path the layout reaches
     // one by. `units.parse` refuses the whole expression, so a declared
@@ -3932,12 +3947,13 @@ fn cascadedLengthToken(style_manager: *StyleManager, element: *Element, name: []
     // layout laid the element out at its parent's full width, and a page built
     // on calc() widths measured as if it had declared nothing.
     const parsed = units.parse(trimmed) catch
-        return cascadedCalcLength(style_manager, element, resolve_as, trimmed);
+        return cascadedCalcLength(style_manager, found.owner, resolve_as, trimmed);
     // The author's number when there is one, and the print only when there is
     // not: this is the path a used `width` reaches the layout by, and six
     // significant figures of it lands a grid step off.
     const number = declaration.specified orelse parsed.value;
-    return switch (lengthFactor(style_manager, element, resolve_as, parsed.unit)) {
+    const resolve_on = if (parsed.unit == .none) element else found.owner;
+    return switch (lengthFactor(style_manager, resolve_on, resolve_as, parsed.unit)) {
         .verbatim => number,
         .pixels => |factor| number * factor,
         .unresolvable => null,
@@ -3979,14 +3995,25 @@ fn cascadedValueRaw(style_manager: *StyleManager, element: *Element, name: []con
 
 /// cascadedValueRaw with the author's number still on it.
 fn cascadedRawDeclaration(style_manager: *StyleManager, element: *Element, name: []const u8) ?StyleManager.Declaration {
+    const found = cascadedRawDeclarationOn(style_manager, element, name) orelse return null;
+    return found.declaration;
+}
+
+/// The same walk, keeping the element the declaration was found ON -- which is
+/// what a relative unit in an INHERITED property has to be resolved against,
+/// since it computed to a length there before anything inherited it.
+fn cascadedRawDeclarationOn(style_manager: *StyleManager, element: *Element, name: []const u8) ?struct {
+    declaration: StyleManager.Declaration,
+    owner: *Element,
+} {
     if (declaredDeclaration(style_manager, element, name, .wrap(name))) |declaration| {
-        return declaration;
+        return .{ .declaration = declaration, .owner = element };
     }
     if (!chrome_inherited.inherits(name)) return null;
     var ancestor = element.parentElement();
     while (ancestor) |current| : (ancestor = current.parentElement()) {
         if (declaredDeclaration(style_manager, current, name, .wrap(name))) |declaration| {
-            return declaration;
+            return .{ .declaration = declaration, .owner = current };
         }
     }
     return null;
