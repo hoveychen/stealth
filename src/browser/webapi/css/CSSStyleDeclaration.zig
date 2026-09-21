@@ -492,6 +492,61 @@ fn valueCarriesUrl(property_name: []const u8) bool {
 const MAX_PROPERTY_DEPTH = 4;
 
 fn propertyValueAt(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame, surface: Surface, depth: u8) []const u8 {
+    const value = self.propertyValueUnaliased(property_name, frame, surface, depth);
+    if (!self._is_computed) return value;
+    return systemFontAlias(frame, property_name, value);
+}
+
+/// `BlinkMacSystemFont` is Blink's own legacy spelling of the system font, and
+/// a COMPUTED `font-family` answers it as the quoted string `"system-ui"` --
+/// not as the bare generic, and not as written. The specified value keeps the
+/// author's spelling: `el.style.fontFamily` and `cssText` both read back
+/// `BlinkMacSystemFont`, which is why this sits on the computed surface rather
+/// than in `canonicaliseValue`, where it rewrote the style attribute too
+/// (measured on headed Chrome 153, scratch/s73/expr-blinkmac.js -- all eight
+/// readings).
+///
+/// Worth its own pass because the name sits in the default font stack of
+/// Bootstrap and of nearly every page built on one: reading
+/// `getComputedStyle(document.body).fontFamily` on such a page told this
+/// engine from Chrome in a single expression. The face selected was already
+/// the same one -- both arms measure the stack at 958.594 -- so this is the
+/// serialisation alone.
+///
+/// Case-sensitive, as Chrome's is: a lowercase `blinkmacsystemfont` comes back
+/// untouched in both.
+fn systemFontAlias(frame: *Frame, property_name: []const u8, value: []const u8) []const u8 {
+    const legacy = "BlinkMacSystemFont";
+    if (!std.ascii.eqlIgnoreCase(property_name, "font-family") and
+        !std.ascii.eqlIgnoreCase(property_name, "font")) return value;
+    if (std.mem.indexOf(u8, value, legacy) == null) return value;
+
+    // The bare identifier only. A quoted `"BlinkMacSystemFont"` names a family
+    // that happens to be spelled that way -- the same distinction the generics
+    // keep -- and a longer word merely containing it is a different name.
+    const boundary = struct {
+        fn ok(text: []const u8, at: usize, len: usize) bool {
+            if (at > 0 and (isIdentChar(text[at - 1]) or text[at - 1] == '"' or text[at - 1] == '\'')) return false;
+            const after = at + len;
+            if (after < text.len and
+                (isIdentChar(text[after]) or text[after] == '"' or text[after] == '\'')) return false;
+            return true;
+        }
+    }.ok;
+
+    var out: std.ArrayList(u8) = .empty;
+    var rest = value;
+    while (std.mem.indexOf(u8, rest, legacy)) |at| {
+        const replace = boundary(rest, at, legacy.len);
+        out.appendSlice(frame.call_arena, rest[0..at]) catch return value;
+        out.appendSlice(frame.call_arena, if (replace) "\"system-ui\"" else legacy) catch return value;
+        rest = rest[at + legacy.len ..];
+    }
+    out.appendSlice(frame.call_arena, rest) catch return value;
+    return out.items;
+}
+
+fn propertyValueUnaliased(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame, surface: Surface, depth: u8) []const u8 {
     // The name is normalised into a local buffer rather than `frame.buf`,
     // because it has to outlive every call below and that one does not. The
     // cascade's first read is the one that rebuilds the stylesheets, and the
@@ -8899,6 +8954,10 @@ test "WebApi: CSSStyleDeclaration computed colours" {
 
 test "WebApi: CSSStyleDeclaration computed system fonts" {
     try testing.htmlRunner("css/computed_system_fonts.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration BlinkMacSystemFont" {
+    try testing.htmlRunner("css/blink_mac_system_font.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration wide keywords on the font walks" {

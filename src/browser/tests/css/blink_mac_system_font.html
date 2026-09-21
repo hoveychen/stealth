@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`BlinkMacSystemFont` is Blink's own legacy spelling of the system font. A
+COMPUTED `font-family` answers it as the quoted string `"system-ui"`; the
+specified value keeps the author's spelling. Measured on headed Chrome 153
+(scratch/s73/expr-blinkmac.js), all eight readings below:
+
+  el.style.fontFamily        BlinkMacSystemFont
+  el.style.cssText           font-family: BlinkMacSystemFont;
+  computed fontFamily        "system-ui"
+  computed, inside a stack   -apple-system, "system-ui", "Segoe UI", Arial
+
+The name sits in the default font stack of Bootstrap and of nearly every page
+built on one, so `getComputedStyle(document.body).fontFamily` told this engine
+from Chrome in a single expression. The FACE was already the same: both arms
+lay the stack out at 958.594, identical to `system-ui`, so only the
+serialisation was ever wrong.
+-->
+
+<script id=blink_mac_system_font_computes_as_quoted_system_ui>
+{
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + JSON.stringify(want) + ', got ' + JSON.stringify(got)); };
+
+  const el = document.createElement('div');
+  el.style.fontFamily = 'BlinkMacSystemFont';
+  document.body.appendChild(el);
+  eq('specified', el.style.fontFamily, 'BlinkMacSystemFont');
+  eq('cssText', el.style.cssText, 'font-family: BlinkMacSystemFont;');
+  eq('computed', getComputedStyle(el).fontFamily, '"system-ui"');
+
+  const stacked = document.createElement('div');
+  stacked.style.cssText = 'font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Arial';
+  document.body.appendChild(stacked);
+  eq('specified in a stack', stacked.style.fontFamily, '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial');
+  eq('computed in a stack', getComputedStyle(stacked).fontFamily, '-apple-system, "system-ui", "Segoe UI", Arial');
+
+  // Through the `font` shorthand, whose family half is the same value.
+  const short = document.createElement('div');
+  short.style.font = '16px BlinkMacSystemFont';
+  document.body.appendChild(short);
+  eq('shorthand specified', short.style.font, '16px BlinkMacSystemFont');
+  eq('shorthand computed family', getComputedStyle(short).fontFamily, '"system-ui"');
+
+  // Case-sensitive, as Chrome's is -- a lowercase spelling is a family name
+  // of its own and comes back untouched in both.
+  const lower = document.createElement('div');
+  lower.style.fontFamily = 'blinkmacsystemfont';
+  document.body.appendChild(lower);
+  eq('lowercase', getComputedStyle(lower).fontFamily, 'blinkmacsystemfont');
+
+  // Written with quotes, the name drops them on the way in -- it is a bare
+  // identifier by the time anything reads it back -- and then aliases like any
+  // other. Both halves measured, and both arms agree.
+  const quoted = document.createElement('div');
+  quoted.style.fontFamily = '"BlinkMacSystemFont"';
+  document.body.appendChild(quoted);
+  eq('quoted specified', quoted.style.fontFamily, 'BlinkMacSystemFont');
+  eq('quoted computed', getComputedStyle(quoted).fontFamily, '"system-ui"');
+
+  // A longer word merely containing the name is a different family.
+  const longer = document.createElement('div');
+  longer.style.fontFamily = 'BlinkMacSystemFontExtra';
+  document.body.appendChild(longer);
+  eq('longer name', getComputedStyle(longer).fontFamily, 'BlinkMacSystemFontExtra');
+
+  // Every occurrence, not just the first.
+  const twice = document.createElement('div');
+  twice.style.fontFamily = 'BlinkMacSystemFont, BlinkMacSystemFont';
+  document.body.appendChild(twice);
+  eq('twice', getComputedStyle(twice).fontFamily, '"system-ui", "system-ui"');
+
+  for (const e of [el, stacked, short, lower, quoted, longer, twice]) e.remove();
+  testing.expectEqual([], wrong);
+}
+</script>
