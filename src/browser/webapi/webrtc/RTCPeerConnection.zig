@@ -41,9 +41,10 @@
 // candidate is the ordinary observation and a *missing* candidate is the odd
 // one. What this engine cannot do is reach a STUN server, so no server-reflexive
 // candidate ever appears — which is the same thing a Chrome behind a firewall
-// that blocks UDP shows. Gathering therefore completes only when the page
-// configured no ICE servers; with servers configured it stays "gathering", as
-// the measured Chrome does when they cannot be reached.
+// that blocks UDP shows. Gathering still ENDS either way: a page that waits for
+// the null candidate, or for iceGatheringState to reach "complete", must be let
+// go, and a Chrome whose STUN servers are unreachable finishes gathering with
+// only the host candidate rather than waiting forever.
 
 const std = @import("std");
 const lp = @import("lightpanda");
@@ -495,14 +496,17 @@ const GatherTask = struct {
         try connection.dispatchIceCandidate(candidate, exec);
 
         // With ICE servers configured there would still be a server-reflexive
-        // candidate to wait for, and it never comes.
+        // candidate to wait for, and it never comes -- no STUN binding request
+        // is ever sent. Gathering still has to END: a page that waits for the
+        // null candidate (or for gatheringState to reach "complete") otherwise
+        // waits forever, which is both a hang and a tell. Chrome answers a
+        // configured-but-unreachable STUN server the same way, by finishing
+        // gathering with only the host candidate in hand.
         //
         // The order on completion is measured: the state reaches "complete"
         // *before* the null-candidate event, not after.
-        if (connection._config.ice_servers.len == 0) {
-            try connection.setGatheringState(.complete, exec);
-            try connection.dispatchIceCandidate(null, exec);
-        }
+        try connection.setGatheringState(.complete, exec);
+        try connection.dispatchIceCandidate(null, exec);
         return null;
     }
 };

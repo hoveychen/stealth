@@ -315,8 +315,8 @@
 {
   const state = await testing.async();
 
-  // No ICE servers, so gathering runs to completion — with servers configured
-  // there would be a server-reflexive candidate still outstanding.
+  // No ICE servers. The configured-servers case is webrtc_ice_gathering_with_servers
+  // below; gathering has to end in both.
   const pc = new RTCPeerConnection();
   pc.createDataChannel('');
   const sequence = [];
@@ -366,6 +366,33 @@
     // puts it. The application section has no a=rtcp: line.
     const lines = pc.localDescription.sdp.split('\r\n');
     testing.expectEqual('c=IN IP4 0.0.0.0', lines[lines.indexOf(inSdp[0]) - 1]);
+  });
+}
+</script>
+
+<script id=webrtc_ice_gathering_with_servers type=module>
+{
+  const state = await testing.async();
+
+  // Configuring ICE servers must not leave gathering running forever. No STUN
+  // binding request is sent, so the server-reflexive candidate never arrives --
+  // but a page waiting for the null candidate, or for iceGatheringState to
+  // reach 'complete', has to be let go all the same. This hung before.
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  });
+  pc.createDataChannel('');
+  const sequence = [];
+  pc.addEventListener('icecandidate', (e) => sequence.push(e.candidate ? 'candidate' : 'null'));
+  pc.addEventListener('icegatheringstatechange', () => sequence.push('gathering:' + pc.iceGatheringState));
+
+  await pc.setLocalDescription(await pc.createOffer());
+  await new Promise((r) => setTimeout(r, 200));
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual(['gathering:gathering', 'candidate', 'gathering:complete', 'null'], sequence);
+    testing.expectEqual('complete', pc.iceGatheringState);
   });
 }
 </script>
