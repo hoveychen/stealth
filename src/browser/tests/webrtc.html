@@ -315,8 +315,8 @@
 {
   const state = await testing.async();
 
-  // No ICE servers, so gathering runs to completion — with servers configured
-  // there would be a server-reflexive candidate still outstanding.
+  // No ICE servers. The configured-servers case is webrtc_ice_gathering_with_servers
+  // below; gathering has to end in both.
   const pc = new RTCPeerConnection();
   pc.createDataChannel('');
   const sequence = [];
@@ -366,6 +366,41 @@
     // puts it. The application section has no a=rtcp: line.
     const lines = pc.localDescription.sdp.split('\r\n');
     testing.expectEqual('c=IN IP4 0.0.0.0', lines[lines.indexOf(inSdp[0]) - 1]);
+  });
+}
+</script>
+
+<script id=webrtc_ice_gathering_with_servers type=module>
+{
+  const state = await testing.async();
+
+  // A STUN server that cannot be reached must not leave gathering running
+  // forever: a page waiting for the null candidate, or for iceGatheringState to
+  // reach 'complete', has to be let go, with the host candidate its only one.
+  // This hung before. Port 1 on the loopback refuses, so the binding request
+  // comes back as a refusal rather than sitting out the retry budget, and no
+  // name has to be resolved to find that out.
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:127.0.0.1:1' }],
+  });
+  pc.createDataChannel('');
+  const sequence = [];
+  pc.addEventListener('icecandidate', (e) => sequence.push(e.candidate ? 'candidate' : 'null'));
+  pc.addEventListener('icegatheringstatechange', () => sequence.push('gathering:' + pc.iceGatheringState));
+
+  // Resolved by the end of gathering rather than by a timer: the point of the
+  // test is that end-of-gathering arrives at all.
+  const gathered = new Promise((resolve) => {
+    pc.addEventListener('icecandidate', (e) => { if (!e.candidate) resolve('null-candidate'); });
+  });
+  await pc.setLocalDescription(await pc.createOffer());
+  const why = await Promise.race([gathered, new Promise((r) => setTimeout(() => r('timeout'), 5000))]);
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual('null-candidate', why);
+    testing.expectEqual(['gathering:gathering', 'candidate', 'gathering:complete', 'null'], sequence);
+    testing.expectEqual('complete', pc.iceGatheringState);
   });
 }
 </script>

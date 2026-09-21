@@ -35,15 +35,26 @@
 //   createDataChannel() then createOffer() -> m=application, BUNDLE 0
 //   the CreepJS shape                      -> m=audio, m=video, m=application
 //
-// ICE gathering. One host candidate is produced, carrying an mDNS `.local`
-// name rather than an address. That is not an evasion, it is what Chrome does:
-// it hides the local IP behind a per-session UUID by default, so a `.local`
+// ICE gathering. A host candidate is produced, carrying an mDNS `.local` name
+// rather than an address. That is not an evasion, it is what Chrome does: it
+// hides the local IP behind a per-session UUID by default, so a `.local`
 // candidate is the ordinary observation and a *missing* candidate is the odd
-// one. What this engine cannot do is reach a STUN server, so no server-reflexive
-// candidate ever appears — which is the same thing a Chrome behind a firewall
-// that blocks UDP shows. Gathering therefore completes only when the page
-// configured no ICE servers; with servers configured it stays "gathering", as
-// the measured Chrome does when they cannot be reached.
+// one.
+//
+// A page that configures `iceServers` gets a second candidate, because Chrome
+// does: it asks the STUN server what address the request arrived from and
+// reports that back as a server-reflexive candidate. Measured against Chrome
+// 153 with one STUN server, end-of-gathering at 136ms:
+//
+//   candidate:N 1 udp 2113937151 <uuid>.local 60300 typ host ...
+//   candidate:M 1 udp 1677729535 24.41.171.198 60300 typ srflx raddr 0.0.0.0 ...
+//
+// The two share a port, which is why the binding request goes out from the
+// socket the host candidate was gathered on; see stun.zig. A STUN server that
+// cannot be reached leaves only the host candidate, which is what a Chrome
+// behind a UDP-blocking firewall reports. Gathering ENDS in every one of these
+// cases: a page that waits for the null candidate, or for iceGatheringState to
+// reach "complete", must be let go.
 
 const std = @import("std");
 const lp = @import("lightpanda");
@@ -59,6 +70,8 @@ const RTCSessionDescription = @import("RTCSessionDescription.zig");
 const RTCStatsReport = @import("RTCStatsReport.zig");
 const chrome_sdp = @import("chrome_sdp.zig");
 const rtp = @import("rtp.zig");
+const stun = @import("stun.zig");
+const net = @import("../../../sys/net.zig");
 const RTCRtpTransceiver = rtp.RTCRtpTransceiver;
 const handler_property = @import("../handler_property.zig");
 
@@ -80,6 +93,16 @@ pub const Proto = EventTarget;
 // The priority every Chrome host candidate over UDP carries; it is derived from
 // fixed type/local preferences, so it is the same number on every machine.
 const HOST_UDP_PRIORITY = 2113937151;
+
+// The server-reflexive counterpart. Same local preference and component, a
+// lower type preference (100 against 126), so it is equally machine-invariant.
+const SRFLX_UDP_PRIORITY = 1677729535;
+
+// How long gathering waits on the STUN exchange before finishing without a
+// reflexive candidate. The worker retries three times at 300ms, so this is the
+// point past which it has already given up.
+const STUN_BUDGET_MS: u32 = 1000;
+const STUN_POLL_MS: u32 = 10;
 
 // Chrome starts gathering from a task after setLocalDescription rather than
 // inside it — `iceGatheringState` still reads "new" on the next line (measured).
@@ -115,6 +138,21 @@ _closed: bool = false,
 
 _local_description: ?*RTCSessionDescription = null,
 _gathering_started: bool = false,
+
+// The candidate lines gathering has produced so far, in the form the SDP
+// carries them: the event's copies name the ufrag, these do not.
+_sdp_candidates: std.ArrayList([]const u8) = .empty,
+
+// Where the section carrying those candidates points. A section with only a
+// host candidate behind mDNS advertises no destination at all -- `m=... 9` and
+// `c=IN IP4 0.0.0.0` -- but once a reflexive address is known Chrome puts it on
+// the c= line and the candidates' port on the m= line (measured).
+_destination: ?Destination = null,
+
+const Destination = struct {
+    address: stun.Reflexive,
+    port: u16,
+};
 
 const SignalingState = enum {
     stable,
@@ -275,7 +313,7 @@ pub fn createOffer(self: *RTCPeerConnection, options: ?OfferOptions, exec: *Exec
         if (truthy(opts.offerToReceiveVideo)) try self.wantToReceive(.video, exec);
     }
 
-    const sdp = try self.buildSdp(exec._factory._arena, null);
+    const sdp = try self.buildSdp(exec._factory._arena);
     return exec.js.local.?.resolvePromise(SessionDescriptionInit{ .sdp = sdp, .type = "offer" });
 }
 
@@ -298,7 +336,7 @@ pub fn setLocalDescription(self: *RTCPeerConnection, description: ?RTCSessionDes
                 if (s.str.str().len > 0) break :blk try allocator.dupe(u8, s.str.str());
             }
         }
-        break :blk try self.buildSdp(allocator, null);
+        break :blk try self.buildSdp(allocator);
     };
 
     self._local_description = try exec._factory.create(RTCSessionDescription{
@@ -319,10 +357,10 @@ pub fn setLocalDescription(self: *RTCPeerConnection, description: ?RTCSessionDes
     return exec.js.local.?.resolvePromise({});
 }
 
-// Assembles the offer. `candidate`, when given, is spliced into the first
-// section right after its c=/a=rtcp: header, which is where Chrome puts the
-// lines it learns while gathering (measured).
-fn buildSdp(self: *const RTCPeerConnection, allocator: Allocator, candidate: ?[]const u8) ![]const u8 {
+// Assembles the offer. The candidate lines gathering has produced so far are
+// spliced into the first section right after its c=/a=rtcp: header, which is
+// where Chrome puts the lines it learns while gathering (measured).
+fn buildSdp(self: *const RTCPeerConnection, allocator: Allocator) ![]const u8 {
     var out = std.Io.Writer.Allocating.init(allocator);
     const w = &out.writer;
 
@@ -344,7 +382,7 @@ fn buildSdp(self: *const RTCPeerConnection, allocator: Allocator, candidate: ?[]
 
     var mid: u8 = 0;
     for (self._transceivers.items) |transceiver| {
-        try self.writeMediaSection(w, transceiver, mid, if (mid == 0) candidate else null);
+        try self.writeMediaSection(w, transceiver, mid, mid == 0);
         mid += 1;
     }
     if (self._want_application) {
@@ -353,7 +391,7 @@ fn buildSdp(self: *const RTCPeerConnection, allocator: Allocator, candidate: ?[]
             chrome_sdp.application_head,
             chrome_sdp.application_tail,
             mid,
-            if (mid == 0) candidate else null,
+            mid == 0,
         );
     }
 
@@ -380,7 +418,7 @@ fn writeMediaSection(
     w: *std.Io.Writer,
     transceiver: *const RTCRtpTransceiver,
     mid: u8,
-    candidate: ?[]const u8,
+    gathered: bool,
 ) !void {
     const sends = transceiver._direction.sends();
     const audio = transceiver._kind == .audio;
@@ -397,10 +435,7 @@ fn writeMediaSection(
     else
         (if (sends) chrome_sdp.video_tx_tail_body else chrome_sdp.video_tail_body);
 
-    try w.writeAll(head);
-    if (candidate) |line| {
-        try w.print("a={s}\r\n", .{line});
-    }
+    try self.writeHead(w, head, gathered);
     try w.print("a=ice-ufrag:{s}\r\na=ice-pwd:{s}\r\na=ice-options:trickle\r\n", .{ &self._ice_ufrag, &self._ice_pwd });
     try w.print("a=fingerprint:sha-256 {s}\r\na=setup:actpass\r\na=mid:{d}\r\n", .{ &self._fingerprint, mid });
     try w.writeAll(tail_head);
@@ -430,82 +465,243 @@ fn writeSection(
     head: []const u8,
     tail: []const u8,
     mid: u8,
-    candidate: ?[]const u8,
+    gathered: bool,
 ) !void {
-    try w.writeAll(head);
-    if (candidate) |line| {
-        try w.print("a={s}\r\n", .{line});
-    }
+    try self.writeHead(w, head, gathered);
     try w.print("a=ice-ufrag:{s}\r\na=ice-pwd:{s}\r\na=ice-options:trickle\r\n", .{ &self._ice_ufrag, &self._ice_pwd });
     try w.print("a=fingerprint:sha-256 {s}\r\na=setup:actpass\r\na=mid:{d}\r\n", .{ &self._fingerprint, mid });
     try w.writeAll(tail);
 }
 
+/// A section's canned m=/c= header, then the candidate lines gathering has
+/// found — but only for the section that carries them, which is the first one.
+///
+/// The header is not always canned. Once a reflexive address is known the
+/// section advertises a destination: the m= line's port becomes the port the
+/// candidates were gathered on and the c= line names the reflexive address
+/// (measured, on all three of Chrome's section kinds). An `a=rtcp:` line, where
+/// there is one, keeps saying `9 IN IP4 0.0.0.0` regardless.
+fn writeHead(self: *const RTCPeerConnection, w: *std.Io.Writer, head: []const u8, gathered: bool) !void {
+    const destination = if (gathered) self._destination else null;
+    if (destination) |dest| {
+        var lines = std.mem.splitSequence(u8, head, "\r\n");
+        while (lines.next()) |line| {
+            if (line.len == 0) {
+                continue;
+            }
+            if (std.mem.startsWith(u8, line, "m=")) {
+                // "m=<media> <port> <proto...>": only the port moves.
+                const media_end = std.mem.indexOfScalar(u8, line, ' ').?;
+                const port_end = std.mem.indexOfScalarPos(u8, line, media_end + 1, ' ').?;
+                try w.print("{s} {d}{s}\r\n", .{ line[0..media_end], dest.port, line[port_end..] });
+            } else if (std.mem.startsWith(u8, line, "c=")) {
+                try w.print("c=IN IP4 {f}\r\n", .{dest.address});
+            } else {
+                try w.print("{s}\r\n", .{line});
+            }
+        }
+    } else {
+        try w.writeAll(head);
+    }
+
+    if (!gathered) {
+        return;
+    }
+    for (self._sdp_candidates.items) |line| {
+        try w.print("a={s}\r\n", .{line});
+    }
+}
+
 // == ICE gathering ==
 
-// Produces the one host candidate, rewrites localDescription to include it, and
-// then either completes gathering or stalls in "gathering" — see the file
-// header for why the two cases differ.
+// Produces the host candidate, asks any configured STUN server what address it
+// sees this process at, and emits the reflexive candidate that comes back
+// before completing gathering.
+//
+// The task runs twice or more: once to gather the host candidate and send the
+// binding request, and then every STUN_POLL_MS until the exchange comes back or
+// the budget runs out. It re-arms itself with a fresh `scheduler.add` rather
+// than by returning a delay, because a returned repeat stops blocking page
+// completion -- and a page that finishes loading mid-gathering is a page whose
+// candidate list a guard can catch one candidate short.
 const GatherTask = struct {
     connection: *RTCPeerConnection,
     exec: *Execution,
+    probe: ?*stun.Probe = null,
+    // Boot-clock milliseconds; only meaningful once `probe` is set.
+    deadline: u64 = 0,
 
     fn cancelled(ctx: *anyopaque) void {
         const self: *GatherTask = @ptrCast(@alignCast(ctx));
+        self.destroy();
+    }
+
+    fn destroy(self: *GatherTask) void {
+        if (self.probe) |probe| {
+            probe.release();
+        }
         self.exec._factory.destroy(self);
     }
 
     fn run(ctx: *anyopaque) !?u32 {
         const self: *GatherTask = @ptrCast(@alignCast(ctx));
-        defer self.exec._factory.destroy(self);
+        const pending = self.step() catch |err| {
+            self.destroy();
+            return err;
+        };
+        if (!pending) {
+            self.destroy();
+        }
+        return null;
+    }
 
+    // Answers whether it re-armed itself and is still wanted.
+    fn step(self: *GatherTask) !bool {
         const connection = self.connection;
+        const exec = self.exec;
         if (connection._closed) {
-            return null;
+            return false;
         }
 
+        if (self.probe == null) {
+            try self.gatherHost();
+            if (self.probe != null) {
+                self.deadline = lp.datetime.milliTimestamp(.boot) + STUN_BUDGET_MS;
+                try self.rearm();
+                return true;
+            }
+        } else if (!self.probe.?.finished()) {
+            if (lp.datetime.milliTimestamp(.boot) < self.deadline) {
+                try self.rearm();
+                return true;
+            }
+        } else if (self.probe.?.result()) |reflexive| {
+            try self.gatherReflexive(reflexive);
+        }
+
+        // A STUN server that never answered leaves gathering with only the host
+        // candidate, which is what a Chrome behind a UDP-blocking firewall ends
+        // up with too. Either way gathering has to END: a page waiting on the
+        // null candidate (or on gatheringState reaching "complete") otherwise
+        // waits forever, which is both a hang and a tell.
+        //
+        // The order on completion is measured: the state reaches "complete"
+        // *before* the null-candidate event, not after.
+        try connection.setGatheringState(.complete, exec);
+        try connection.dispatchIceCandidate(null, exec);
+        return false;
+    }
+
+    fn rearm(self: *GatherTask) !void {
+        return self.exec.js.scheduler.add(self, run, STUN_POLL_MS, .{
+            .name = "RTCPeerConnection.gather",
+            .finalizer = cancelled,
+        });
+    }
+
+    fn gatherHost(self: *GatherTask) !void {
+        const connection = self.connection;
         const exec = self.exec;
-        const allocator = exec._factory._arena;
 
         try connection.setGatheringState(.gathering, exec);
+
+        // The binding request has to go out from the port the host candidate
+        // advertises -- Chrome's two candidates carry the same one -- so the
+        // socket is opened here and handed to the probe, and only a connection
+        // with nowhere to send a request falls back to an invented port.
+        var port = randomPort();
+        if (connection._config.ice_servers.len != 0) {
+            if (openGatheringSocket()) |bound| {
+                if (stun.Probe.start(stunUrls(connection), bound.socket)) |probe| {
+                    self.probe = probe;
+                    port = bound.port;
+                } else {
+                    net.close(bound.socket);
+                }
+            } else |_| {}
+        }
 
         var mdns: [36]u8 = undefined;
         @import("../../../id.zig").uuidv4(&mdns);
 
-        // The event's line carries the ufrag; the copy spliced into the SDP does
-        // not (measured — the two differ by exactly that token).
-        const sdp_line = try std.fmt.allocPrint(
-            allocator,
-            "candidate:{d} 1 udp {d} {s}.local {d} typ host generation 0 network-cost 999",
-            .{ randomFoundation(), HOST_UDP_PRIORITY, &mdns, randomPort() },
-        );
-        const event_line = try std.fmt.allocPrint(
-            allocator,
-            "{s} ufrag {s} network-cost 999",
-            .{ sdp_line[0 .. sdp_line.len - " network-cost 999".len], &connection._ice_ufrag },
-        );
+        try connection.addCandidate(exec, "{s}.local {d} typ host generation 0", .{
+            randomFoundation(), HOST_UDP_PRIORITY, &mdns, port,
+        });
+    }
 
-        // Chrome's localDescription grows the candidate lines as they arrive.
-        const sdp = try connection.buildSdp(allocator, sdp_line);
-        if (connection._local_description) |description| {
-            description._sdp = try lp.String.init(allocator, sdp, .{});
-        }
+    fn gatherReflexive(self: *GatherTask, reflexive: stun.Reflexive) !void {
+        const connection = self.connection;
 
-        const candidate = try RTCIceCandidate.init(exec, event_line, "0", 0, &connection._ice_ufrag);
-        try connection.dispatchIceCandidate(candidate, exec);
+        // Set first: the localDescription the candidate's arrival rewrites is
+        // already pointing at the reflexive address by the time a page reads it.
+        connection._destination = .{ .address = reflexive, .port = reflexive.port };
 
-        // With ICE servers configured there would still be a server-reflexive
-        // candidate to wait for, and it never comes.
-        //
-        // The order on completion is measured: the state reaches "complete"
-        // *before* the null-candidate event, not after.
-        if (connection._config.ice_servers.len == 0) {
-            try connection.setGatheringState(.complete, exec);
-            try connection.dispatchIceCandidate(null, exec);
-        }
-        return null;
+        // `raddr`/`rport` would name the local address the request went out
+        // from; Chrome, which is hiding that address behind the mDNS name in
+        // the host candidate, reports the pair as 0.0.0.0/0 (measured).
+        try connection.addCandidate(self.exec, "{f} {d} typ srflx raddr 0.0.0.0 rport 0 generation 0", .{
+            randomFoundation(), SRFLX_UDP_PRIORITY, reflexive, reflexive.port,
+        });
     }
 };
+
+// Opens the UDP socket gathering runs from, and reads back the port the system
+// bound it to.
+fn openGatheringSocket() !struct { socket: net.socket_t, port: u16 } {
+    const socket = try net.socket(std.posix.AF.INET, std.posix.SOCK.DGRAM, std.posix.IPPROTO.UDP);
+    errdefer net.close(socket);
+
+    const any: net.IpAddress = .{ .ip4 = .{ .bytes = .{ 0, 0, 0, 0 }, .port = 0 } };
+    const sa = net.sockaddrFromAddress(&any);
+    try net.bind(socket, sa.ptr(), sa.len);
+
+    var storage: std.posix.sockaddr.storage = undefined;
+    var len: std.posix.socklen_t = @sizeOf(@TypeOf(storage));
+    try net.getsockname(socket, @ptrCast(&storage), &len);
+    const bound = net.addressFromSockaddr(@ptrCast(@alignCast(&storage)));
+    return .{ .socket = socket, .port = bound.ip4.port };
+}
+
+fn stunUrls(connection: *const RTCPeerConnection) []const []const u8 {
+    // One server is what a page configures and what the measurement covers; a
+    // second would only produce the same reflexive address through a different
+    // route, and Chrome reports one srflx candidate per section either way.
+    for (connection._config.ice_servers) |server| {
+        if (server.urls.len != 0) {
+            return server.urls;
+        }
+    }
+    return &.{};
+}
+
+// Appends one candidate to the SDP, rewrites localDescription -- Chrome's grows
+// its candidate lines as they arrive -- and fires the event. The event's line
+// names the ufrag and the SDP's copy does not, and the trailing `network-cost`
+// comes after the ufrag on the event line (measured; the two differ by exactly
+// that token's placement).
+fn addCandidate(
+    self: *RTCPeerConnection,
+    exec: *Execution,
+    comptime body: []const u8,
+    args: anytype,
+) !void {
+    const allocator = exec._factory._arena;
+
+    const sdp_line = try std.fmt.allocPrint(allocator, "candidate:{d} 1 udp {d} " ++ body ++ " network-cost 999", args);
+    const event_line = try std.fmt.allocPrint(allocator, "{s} ufrag {s} network-cost 999", .{
+        sdp_line[0 .. sdp_line.len - " network-cost 999".len],
+        &self._ice_ufrag,
+    });
+    try self._sdp_candidates.append(allocator, sdp_line);
+
+    const sdp = try self.buildSdp(allocator);
+    if (self._local_description) |description| {
+        description._sdp = try lp.String.init(allocator, sdp, .{});
+    }
+
+    const candidate = try RTCIceCandidate.init(exec, event_line, "0", 0, &self._ice_ufrag);
+    return self.dispatchIceCandidate(candidate, exec);
+}
 
 fn dispatchIceCandidate(self: *RTCPeerConnection, candidate: ?*RTCIceCandidate, exec: *Execution) !void {
     const target = self.asEventTarget();
