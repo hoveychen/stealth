@@ -2580,6 +2580,28 @@ fn carryFontProp(props: *RuleProperties, name: []const u8, value: []const u8, im
     }
 }
 
+/// The CSS-wide keywords, which every property accepts and no per-property
+/// parser below would otherwise recognise. Each walk here reads an author's
+/// declaration as a value of its own kind -- a family name, a weight, a slant
+/// -- so a keyword that reaches one unhandled is either mistaken for a value
+/// (the family "inherit") or refused, which makes the walk carry on to a
+/// source CSS had already ruled out.
+///
+/// `revert-layer` is listed because the parsers must not read it as a value
+/// either; it and `revert` behave the same in the one origin this engine
+/// cascades.
+const WideKeyword = enum { inherit, initial, unset, revert, revert_layer };
+
+fn wideKeyword(raw: []const u8) ?WideKeyword {
+    const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(value, "inherit")) return .inherit;
+    if (std.ascii.eqlIgnoreCase(value, "initial")) return .initial;
+    if (std.ascii.eqlIgnoreCase(value, "unset")) return .unset;
+    if (std.ascii.eqlIgnoreCase(value, "revert")) return .revert;
+    if (std.ascii.eqlIgnoreCase(value, "revert-layer")) return .revert_layer;
+    return null;
+}
+
 /// Cascaded `font-family` list, verbatim, or null when nothing declares one
 /// anywhere up the chain. Same source order as computedFontSize; the caller
 /// decides which of the listed names it can actually resolve.
@@ -2596,16 +2618,35 @@ fn computedFontFamilyAt(self: *StyleManager, element: ?*Element, depth: u8) ?[]c
     const inline_property = getInlineStyleProperty(current, comptime .wrap("font-family"), self.frame);
     const rule = self.cascadedDeclaration(current, .font_family);
 
-    if (rule) |declaration| {
-        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
-            return declaration.value;
+    // The author's winning declaration, before it is read as a list of family
+    // names: a CSS-wide keyword is not one. `font-family: inherit` used to
+    // reach the face lookup as the family NAMED "inherit", matched nothing and
+    // fell back to the default face -- a child restating its parent's Georgia
+    // measured 184.6 where Chrome says 203.1, while `getComputedStyle` beside
+    // it printed `Georgia` off the cascade, which resolves the keyword
+    // (scratch/s73/expr-kw2.js).
+    const author: ?[]const u8 = blk: {
+        if (rule) |declaration| {
+            if (declaration.important and !(inline_property != null and inline_property.?._important)) {
+                break :blk declaration.value;
+            }
         }
-    }
-    if (inline_property) |property| {
-        return property._value.str();
-    }
-    if (rule) |declaration| {
-        return declaration.value;
+        if (inline_property) |property| break :blk property._value.str();
+        if (rule) |declaration| break :blk declaration.value;
+        break :blk null;
+    };
+    if (author) |raw| {
+        if (wideKeyword(raw)) |keyword| switch (keyword) {
+            // `font-family` inherits, so `unset` is `inherit`.
+            .inherit, .unset => return self.computedFontFamilyAt(current.parentElement(), depth + 1),
+            // Nothing below rolls back to, so both revert to the UA sheet and
+            // then to what an ancestor declares -- which is what falling out of
+            // this branch does.
+            .revert, .revert_layer => {},
+            // The initial family is the engine's default face, which is what
+            // answering null asks the caller for.
+            .initial => return null,
+        } else return raw;
     }
     if (current.getAttributeSafe(comptime .wrap("font-family"))) |raw| {
         return raw;
@@ -2709,6 +2750,18 @@ fn computedFontWeightAt(self: *StyleManager, element: ?*Element, depth: u8) u16 
 /// recursion rather than on the way in.
 fn parseFontWeight(raw: []const u8, inherited: u16) ?u16 {
     const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    // A CSS-wide keyword, which is not a weight. `initial` used to be refused
+    // here, and refusing sends the walk on to the UA sheet and then to the
+    // inherited weight -- so a span that reset itself to `initial` under a
+    // `font-weight: 700` parent laid out BOLD, 235.2 against Chrome's 203.1,
+    // with `getComputedStyle` printing `400` beside it (scratch/s73/expr-kw2.js).
+    if (wideKeyword(value)) |keyword| return switch (keyword) {
+        .initial => 400,
+        .inherit, .unset => inherited,
+        // Nothing to roll back to but the UA sheet, which the caller reaches by
+        // treating this source as having declared nothing.
+        .revert, .revert_layer => null,
+    };
     if (std.ascii.eqlIgnoreCase(value, "normal")) return 400;
     if (std.ascii.eqlIgnoreCase(value, "bold")) return 700;
     if (std.ascii.eqlIgnoreCase(value, "bolder")) return if (inherited < 400) 400 else if (inherited < 600) 700 else 900;
@@ -2732,6 +2785,14 @@ fn computedFontItalicAt(self: *StyleManager, element: ?*Element, depth: u8) bool
     const current = element orelse return false;
     if (self.declaredValue(current, "font-style")) |raw| {
         const value = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        // Same shape as `parseFontWeight`: `font-style: initial` under an
+        // italic parent used to fall through to the inherited slant and lay
+        // out italic (207.3 against Chrome's 203.1).
+        if (wideKeyword(value)) |keyword| switch (keyword) {
+            .initial => return false,
+            .inherit, .unset => return self.computedFontItalicAt(current.parentElement(), depth + 1),
+            .revert, .revert_layer => {},
+        };
         if (std.ascii.eqlIgnoreCase(value, "normal")) return false;
         if (std.ascii.eqlIgnoreCase(value, "italic")) return true;
         if (std.ascii.startsWithIgnoreCase(value, "oblique")) return true;
