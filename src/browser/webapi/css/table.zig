@@ -79,6 +79,48 @@ fn upperBound(column: Column) f64 {
     return @max(column.max, column.min);
 }
 
+/// Charge a cell that covers several columns to them.
+///
+/// Only what they cannot already hold is charged, and it is shared in
+/// proportion to what they DO hold: a 248.2969-wide cell over columns of 8.0625
+/// and 8.9609 makes them 117.5938 and 130.7031 in Chrome, whose 109.53 and
+/// 121.74 of growth are in exactly the ratio 8.0625 : 8.9609. Columns that hold
+/// nothing at all split it evenly, there being no proportion to go by.
+///
+/// The LAST covered column takes the remainder rather than its own rounding,
+/// the way the last column of the table does -- and it is what makes those two
+/// numbers exact rather than 1/128 short: the shares come out 15052.32 and
+/// 16729.67 layout steps, and flooring both leaves the span a step narrower
+/// than the cell that asked for it.
+pub fn spreadOverSpan(covered: []Column, want: Column, snap: *const fn (f64) f64) void {
+    spreadOne(covered, want.min, .min, snap);
+    spreadOne(covered, @max(want.max, want.fixed orelse 0), .max, snap);
+}
+
+fn spreadOne(
+    covered: []Column,
+    wanted: f64,
+    comptime field: enum { min, max },
+    snap: *const fn (f64) f64,
+) void {
+    var held: f64 = 0;
+    for (covered) |column| held += @field(column, @tagName(field));
+    const excess = wanted - held;
+    if (!(excess > 0)) return;
+
+    const count: f64 = @floatFromInt(covered.len);
+    var remaining = wanted;
+    for (covered, 0..) |*column, i| {
+        const share = if (held > 0) @field(column.*, @tagName(field)) / held else 1 / count;
+        const size = if (i + 1 == covered.len)
+            @max(0, remaining)
+        else
+            snap(@field(column.*, @tagName(field)) + excess * share);
+        remaining -= size;
+        @field(column.*, @tagName(field)) = size;
+    }
+}
+
 /// A length on Chrome's internal layout unit, which is 1/64px -- finer than the
 /// 1/128 device grid a reading comes back on at dpr 2, and so invisible except
 /// where an intermediate result is proportioned over it.
@@ -150,7 +192,7 @@ pub fn sizeColumns(
         const low = lowerBound(column);
         const high = upperBound(column);
 
-        var size: f64 = if (target <= total_low)
+        var size: f64 = if (target < total_low)
             low
         else if (target >= total_high) grow: {
             const surplus = target - total_high;
@@ -165,7 +207,7 @@ pub fn sizeColumns(
         size = snap(@max(0, size));
         // The last column is the remainder rather than its own rounding, so a
         // table that fits ends exactly where it said it would.
-        if (i + 1 == columns.len and target > total_low) size = @max(0, remaining);
+        if (i + 1 == columns.len and target >= total_low) size = @max(0, remaining);
         remaining -= size;
 
         placed.* = .{ .start = edge, .size = size };

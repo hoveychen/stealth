@@ -14,11 +14,11 @@ scratch/s79/expr-table.js (the thirteen reference shapes) and
 scratch/s80/expr-tabledist.js (each cell's own min-content and max-content
 beside the column width it got, so the sharing rule could be fitted).
 
-What is modelled here is COLUMN WIDTHS and the x they put a cell at: the three
-sharing regimes, a declared cell width, `table-layout: fixed`, `border-spacing`
-and cell padding. Row heights are still each cell's own -- a row as tall as its
-tallest cell with the shorter ones stretched to match is not here yet -- and
-neither are `colspan`/`rowspan` or `border-collapse`.
+What is modelled here is the whole of the box grid: column widths and the x
+they put a cell at, row heights and the y, the stretch that leaves no cell
+shorter than its row, and `colspan` / `rowspan`. All 28 readings of
+scratch/s79/expr-table.js and all 33 of scratch/s81/expr-tablerows.js match
+Chrome 153. `border-collapse: collapse` and `<caption>` are not here.
 -->
 
 <script id=columns_are_as_wide_as_their_widest_cell>
@@ -172,6 +172,93 @@ neither are `colspan`/`rowspan` or `border-collapse`.
   // back to shrinking to fit.
   testing.expectEqual('0,120|120,124.1484375', cells(
     'table-layout:fixed', ['a', W], ['width:120px']));
+
+  host.remove();
+}
+</script>
+
+<script id=rows_are_as_tall_as_their_tallest_cell>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const RESET = 'box-sizing:content-box;border:0;padding:0;margin:0;' +
+    'width:auto;min-width:0;max-width:none;height:auto;font:16px Georgia;' +
+    'line-height:normal;white-space:normal;text-align:left;vertical-align:top;';
+  const T = 'border-collapse:separate;border-spacing:0;' + RESET;
+
+  const boxes = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const base = d.getBoundingClientRect();
+    const out = [];
+    for (const el of d.querySelectorAll('.p')) {
+      const b = el.getBoundingClientRect();
+      out.push([b.left - base.left, b.top - base.top, b.width, b.height]);
+    }
+    d.remove();
+    return out.map((p) => p.join(',')).join('|');
+  };
+
+  const W = 'Hamburgefonstiv';
+  const td = (extra, text) => `<td class=p style="${RESET}${extra || ''}">${text}</td>`;
+
+  // A cell with padding makes the row taller, and the cell beside it grows to
+  // match. Measured on its own the second cell is 18 tall, which is what this
+  // engine used to report for it.
+  testing.expectEqual('0,0,28.0625,38|28.0625,0,124.1484375,38', boxes(
+    `<table style="${T}"><tr>${td('padding:10px', 'a')}${td('', W)}</tr></table>`));
+
+  // A height declared on one cell does the same.
+  testing.expectEqual('0,0,8.0625,60|8.0625,0,124.1484375,60', boxes(
+    `<table style="${T}"><tr>${td('height:60px', 'a')}${td('', W)}</tr></table>`));
+
+  // A height declared on the ROW is a floor under what its cells need.
+  testing.expectEqual('0,0,8.9609375,50|0,50,8.9609375,18', boxes(
+    `<table style="${T}">` +
+    `<tr style="${RESET}height:50px">${td('', 'a')}</tr>` +
+    `<tr style="${RESET}">${td('', 'b')}</tr></table>`));
+
+  // The table's own box is as tall as its rows together.
+  testing.expectEqual('0,0,28.0625,56', boxes(
+    `<table class=p style="${T}">` +
+    `<tr><td style="${RESET}padding:10px">a</td></tr>` +
+    `<tr><td style="${RESET}">b</td></tr></table>`));
+
+  // `border-spacing` down the block axis is between the rows AND outside them:
+  // the second row starts at 3 + 18 + 3.
+  testing.expectEqual('7,3,8.9609375,18|7,24,8.9609375,18', boxes(
+    `<table style="${RESET}border-collapse:separate;border-spacing:7px 3px">` +
+    `<tr>${td('', 'a')}</tr><tr>${td('', 'b')}</tr></table>`));
+
+  // `colspan`: the wide cell covers two columns, and what it needs beyond what
+  // they already hold is shared between them in proportion to what they hold.
+  // The 109.53 and 121.74 of growth are in the ratio 8.0625 : 8.9609.
+  testing.expectEqual(
+    '0,0,248.296875,18|248.296875,0,8.078125,18|' +
+    '0,18,117.59375,18|117.59375,18,130.703125,18|248.296875,18,8.078125,18',
+    boxes(`<table style="${T}">
+      <tr><td class=p colspan=2 style="${RESET}">${W}${W}</td>${td('', 'x')}</tr>
+      <tr>${td('', 'a')}${td('', 'b')}${td('', 'c')}</tr></table>`));
+
+  // `rowspan`: the tall cell holds its column for two rows, so the second
+  // row's first cell lands in the column beside it rather than under it.
+  testing.expectEqual(
+    '0,0,124.1484375,36|124.1484375,0,8.9609375,18|124.1484375,18,8.9609375,18',
+    boxes(`<table style="${T}">
+      <tr><td class=p rowspan=2 style="${RESET}">${W}</td>${td('', 'b')}</tr>
+      <tr>${td('', 'c')}</tr></table>`));
+
+  // And it is as tall as the rows it covers together, whichever of them the
+  // height came from.
+  testing.expectEqual(
+    '0,0,8.0625,56|8.0625,0,28.9609375,38|8.0625,38,28.9609375,18',
+    boxes(`<table style="${T}">
+      <tr><td class=p rowspan=2 style="${RESET}">a</td>${td('padding:10px', 'b')}</tr>
+      <tr>${td('', 'c')}</tr></table>`));
 
   host.remove();
 }

@@ -4586,6 +4586,7 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
             frame._grid_cells_done.clearRetainingCapacity();
             frame._table_layouts.clearRetainingCapacity();
             frame._table_cells.clearRetainingCapacity();
+            frame._table_rows.clearRetainingCapacity();
             frame._flex_lines_dom_version = dom_version;
         }
     }
@@ -4764,6 +4765,16 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
     // `grid-auto-rows: 40px` cell holding one line of text is 40 tall and not
     // 18. Before the flex branch cannot matter: an element is an item of one
     // container or the other, never both.
+    // A table cell fills its ROW, which is as tall as the tallest cell on it:
+    // a `padding:10px` cell beside a bare one makes both 38 tall in Chrome,
+    // where each measured on its own is 38 and 18.
+    if (height == null) {
+        if (CSSStyleDeclaration.tableCellHeight(self, frame, depth)) |row_height| {
+            height = @max(0, row_height - dims.padding_y - dims.border_y);
+            dims.explicit_height = true;
+        }
+    }
+
     if (height == null) {
         if (CSSStyleDeclaration.gridItemHeight(self, frame, depth)) |row_cross| {
             var cross_containing: ?f64 = containing_width;
@@ -6989,9 +7000,9 @@ fn gridContent(
 /// the frame so each cell can read its own share back. What is left here is
 /// putting the rows down the page and the cells across them.
 ///
-/// Row HEIGHTS are still each cell's own: a row as tall as its tallest cell,
-/// with the shorter ones stretched to match, is what scratch/s79 `padded` asks
-/// for and it is not here yet.
+/// The rows were solved the same way and for the same reason: a cell reads how
+/// tall its row is in order to stretch into it, so the answer has to be
+/// reachable from the cell and not only from this walk.
 fn tableContent(
     self: *Element,
     frame: *Frame,
@@ -7004,12 +7015,17 @@ fn tableContent(
     const layout = CSSStyleDeclaration.tableLayout(self, frame, depth) orelse return null;
     if (layout.columns.len == 0) return null;
 
-    var y: f64 = layout.spacing_y;
+    const placed_rows = CSSStyleDeclaration.tableRows(self, frame, depth);
+    if (placed_rows.len == 0) return null;
+
+    var row_index: usize = 0;
     var rows: CSSStyleDeclaration.TableRowIterator = .{ .container = self, .frame = frame };
-    while (rows.next()) |row| {
+    while (rows.next()) |row| : (row_index += 1) {
+        if (row_index >= placed_rows.len) break;
+        const band = placed_rows[row_index];
+        const y = band.start;
         if (!row.checkVisibilityCached(visibility_cache, frame)) continue;
 
-        var row_height: f64 = 0;
         var child = row.firstElementChild();
         while (child) |cell| : (child = cell.nextElementSibling()) {
             if (!CSSStyleDeclaration.isTableCell(cell, frame)) continue;
@@ -7020,7 +7036,6 @@ fn tableContent(
 
             const box = cell.dimensionsIn(frame, true, depth + 1, true, layout.content_width);
             const outer_height = box.height + box.padding_y + box.border_y;
-            row_height = @max(row_height, outer_height);
 
             if (pass) |p| {
                 p.record(frame, cell, .{
@@ -7048,12 +7063,12 @@ fn tableContent(
                 .x = p.x + layout.spacing_x,
                 .y = p.y + y,
                 .width = @max(0, layout.content_width - layout.spacing_x * 2),
-                .height = row_height,
+                .height = band.size,
             });
         }
-        y += row_height + layout.spacing_y;
     }
-    return .{ .total = y };
+    const last = placed_rows[placed_rows.len - 1];
+    return .{ .total = last.start + last.size + layout.spacing_y };
 }
 
 /// A flex column's own content walk, or null when this element is not one.

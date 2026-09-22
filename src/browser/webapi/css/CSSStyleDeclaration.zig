@@ -5319,10 +5319,12 @@ pub fn gridCellOf(element: *Element, frame: *Frame, depth: u8) ?GridCell {
 // shapes each rule came from.
 // ---------------------------------------------------------------------------
 
-/// Where one cell landed.
+/// Which cells of the grid one `<td>` covers.
 pub const TableCell = struct {
     column: usize,
+    column_span: usize = 1,
     row: usize,
+    row_span: usize = 1,
 };
 
 /// A solved table: where its columns are, and the content width they span.
@@ -5421,10 +5423,23 @@ pub fn tableLayout(container: *Element, frame: *Frame, depth: u8) ?TableLayout {
 fn solveTable(container: *Element, frame: *Frame, depth: u8) ?TableLayout {
     const spacing = tableSpacing(container, frame);
 
-    var columns: std.ArrayListUnmanaged(css_table.Column) = .empty;
     // The table's own width, if it declared one, is what a percentage cell
     // width is a share of -- so it has to be known before the cells are asked.
     const declared_width = declaredTableWidth(container, frame, depth);
+
+    // Every cell, placed and measured. Kept in a list because a cell covering
+    // more than one column can only be charged once the columns it covers have
+    // been sized by the cells that cover one.
+    const Measured = struct {
+        cell: TableCell,
+        want: css_table.Column,
+    };
+    var measured: std.ArrayListUnmanaged(Measured) = .empty;
+    // How far down the page each column is already taken, so a `rowspan` above
+    // pushes the next row's cells past it. The value is the row a column is
+    // free again from.
+    var taken_until: std.ArrayListUnmanaged(usize) = .empty;
+    var column_count: usize = 0;
 
     var row_index: usize = 0;
     var rows = TableRowIterator{ .container = container, .frame = frame };
@@ -5433,24 +5448,63 @@ fn solveTable(container: *Element, frame: *Frame, depth: u8) ?TableLayout {
         var child = row.firstElementChild();
         while (child) |cell| : (child = cell.nextElementSibling()) {
             if (!isTableCell(cell, frame)) continue;
-            const measured = measureCell(cell, frame, depth, declared_width);
-            while (columns.items.len <= column_index) {
-                columns.append(frame.arena, .{}) catch return null;
-            }
-            const column = &columns.items[column_index];
-            column.min = @max(column.min, measured.min);
-            column.max = @max(column.max, measured.max);
-            if (measured.fixed) |px| column.fixed = @max(column.fixed orelse 0, px);
-            frame._table_cells.put(frame.arena, cell, .{
+            while (column_index < taken_until.items.len and
+                taken_until.items[column_index] > row_index) : (column_index += 1)
+            {}
+
+            const column_span = spanAttribute(cell, comptime .wrap("colspan"), frame);
+            const row_span = spanAttribute(cell, comptime .wrap("rowspan"), frame);
+            const placed: TableCell = .{
                 .column = column_index,
+                .column_span = column_span,
                 .row = row_index,
-            }) catch {};
-            column_index += 1;
+                .row_span = row_span,
+            };
+            measured.append(frame.arena, .{
+                .cell = placed,
+                .want = measureCell(cell, frame, depth, declared_width),
+            }) catch return null;
+            frame._table_cells.put(frame.arena, cell, placed) catch {};
+
+            var covered = column_index;
+            while (covered < column_index + column_span) : (covered += 1) {
+                while (taken_until.items.len <= covered) {
+                    taken_until.append(frame.arena, 0) catch return null;
+                }
+                taken_until.items[covered] = row_index + row_span;
+            }
+            column_index += column_span;
+            column_count = @max(column_count, column_index);
         }
     }
-    if (columns.items.len == 0) return null;
+    if (column_count == 0) return null;
 
-    const intrinsic = css_table.intrinsicWidths(columns.items, spacing.x);
+    var columns: std.ArrayListUnmanaged(css_table.Column) = .empty;
+    columns.appendNTimes(frame.arena, .{}, column_count) catch return null;
+    // The cells that cover one column decide it outright.
+    for (measured.items) |entry| {
+        if (entry.cell.column_span != 1) continue;
+        const column = &columns.items[entry.cell.column];
+        column.min = @max(column.min, entry.want.min);
+        column.max = @max(column.max, entry.want.max);
+        if (entry.want.fixed) |px| column.fixed = @max(column.fixed orelse 0, px);
+    }
+    // A cell that covers several is charged only with what they cannot already
+    // hold, shared out in proportion to what they hold. Measured on Chrome 153
+    // (scratch/s81/expr-tablerows.js, `colspan`): a 248.2969-wide cell over
+    // columns of 8.0625 and 8.9609 makes them 117.5938 and 130.7031, whose
+    // 109.53 and 121.74 of growth are in exactly the ratio 8.0625 : 8.9609.
+    for (measured.items) |entry| {
+        if (entry.cell.column_span == 1) continue;
+        const last = @min(entry.cell.column + entry.cell.column_span, column_count);
+        const covered = columns.items[entry.cell.column..last];
+        if (covered.len == 0) continue;
+        css_table.spreadOverSpan(covered, entry.want, Element.layoutUnit);
+    }
+
+    const columns_slice = columns.items;
+
+    const intrinsic = css_table.intrinsicWidths(columns_slice, spacing.x);
     const content_width = blk: {
         if (declared_width) |declared| break :blk @max(declared, intrinsic.min);
         // Shrink to fit: as wide as it wants, unless that does not fit -- and
@@ -5461,9 +5515,9 @@ fn solveTable(container: *Element, frame: *Frame, depth: u8) ?TableLayout {
     };
 
     const placed = if (isTableLayoutFixed(container, frame) and declared_width != null)
-        css_table.sizeFixedColumns(frame.arena, columns.items, content_width, spacing.x, Element.layoutUnit) catch return null
+        css_table.sizeFixedColumns(frame.arena, columns_slice, content_width, spacing.x, Element.layoutUnit) catch return null
     else
-        css_table.sizeColumns(frame.arena, columns.items, content_width, spacing.x, Element.layoutUnit) catch return null;
+        css_table.sizeColumns(frame.arena, columns_slice, content_width, spacing.x, Element.layoutUnit) catch return null;
 
     return .{
         .columns = placed,
@@ -5565,6 +5619,125 @@ pub const TableRowIterator = struct {
     }
 };
 
+/// A `colspan` / `rowspan`, which is an HTML attribute and not a style. Absent,
+/// unreadable and zero all mean one cell, and the count is capped so a typo
+/// cannot ask for a row a million columns wide.
+fn spanAttribute(cell: *Element, name: String, frame: *Frame) usize {
+    _ = frame;
+    const raw = cell.getAttributeSafe(name) orelse return 1;
+    const trimmed = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    const parsed = std.fmt.parseUnsigned(usize, trimmed, 10) catch return 1;
+    return std.math.clamp(parsed, 1, MAX_TABLE_SPAN);
+}
+
+const MAX_TABLE_SPAN = 1000;
+
+/// A table's rows, sized and placed, or an empty list for anything that is not
+/// a table this engine laid out.
+///
+/// A row with no height of its own is as tall as its tallest cell, so filling
+/// this measures every cell in the table -- and guards against re-entry for the
+/// reason `gridRows` does: a cell asks how tall its row is in order to stretch
+/// into it, and that is this answer. A cell reached from inside the solve gets
+/// its own content height, which is the number the row is being sized from.
+pub fn tableRows(container: *Element, frame: *Frame, depth: u8) []const css_table.Placed {
+    if (frame._table_rows.get(container)) |cached| return cached;
+    if (frame._table_rows_solving.contains(container)) return &.{};
+    // The COLUMNS are still being solved, which is a cell being measured for
+    // its intrinsic width -- and that measurement asks how tall its row is.
+    // Answering would be circular, and remembering the empty answer would
+    // freeze it: the rows are solved for real once the columns are known.
+    if (frame._table_solving.contains(container)) return &.{};
+    if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return &.{};
+    frame._table_rows_solving.put(frame.arena, container, {}) catch return &.{};
+    defer _ = frame._table_rows_solving.remove(container);
+
+    const solved = solveTableRows(container, frame, depth);
+    // An empty answer is a solve that could not run, not a table with no rows,
+    // so it is never the one remembered.
+    if (solved.len > 0) frame._table_rows.put(frame.arena, container, solved) catch {};
+    return solved;
+}
+
+fn solveTableRows(container: *Element, frame: *Frame, depth: u8) []const css_table.Placed {
+    const layout = tableLayout(container, frame, depth) orelse return &.{};
+
+    var heights: std.ArrayListUnmanaged(f64) = .empty;
+    // The cells that cover several rows, held back for a second pass: what
+    // they need is only knowable once the rows they cover have a height from
+    // the cells that cover one.
+    const Spanning = struct { row: usize, span: usize, height: f64 };
+    var spanning: std.ArrayListUnmanaged(Spanning) = .empty;
+
+    var row_index: usize = 0;
+    var rows = TableRowIterator{ .container = container, .frame = frame };
+    while (rows.next()) |row| : (row_index += 1) {
+        heights.append(frame.call_arena, 0) catch return &.{};
+        // A row may declare a height of its own, which is a floor under what
+        // its cells need: `<tr style="height:50px">` over one line of text is
+        // 50 tall in Chrome and its cells with it.
+        if (cascadedComputedLength(row, "height", frame)) |declared| {
+            heights.items[row_index] = @max(0, Element.layoutUnit(declared));
+        }
+
+        var child = row.firstElementChild();
+        while (child) |cell| : (child = cell.nextElementSibling()) {
+            if (!isTableCell(cell, frame)) continue;
+            const placed = frame._table_cells.get(cell) orelse continue;
+            const box = cell.dimensionsIn(frame, true, depth + 1, true, layout.content_width);
+            const outer = box.height + box.padding_y + box.border_y;
+            if (placed.row_span == 1) {
+                heights.items[row_index] = @max(heights.items[row_index], outer);
+            } else {
+                spanning.append(frame.call_arena, .{
+                    .row = placed.row,
+                    .span = placed.row_span,
+                    .height = outer,
+                }) catch {};
+            }
+        }
+    }
+    if (heights.items.len == 0) return &.{};
+
+    // A cell taller than the rows it covers puts the difference on the LAST of
+    // them: the rows above it are sized by whatever else is on them.
+    for (spanning.items) |tall| {
+        const last = @min(tall.row + tall.span, heights.items.len);
+        if (last <= tall.row) continue;
+        var held: f64 = 0;
+        for (heights.items[tall.row..last], tall.row..last) |height, i| {
+            held += height + if (i > tall.row) layout.spacing_y else 0;
+        }
+        const short = tall.height - held;
+        if (short > 0) heights.items[last - 1] += short;
+    }
+
+    const placed = frame.arena.alloc(css_table.Placed, heights.items.len) catch return &.{};
+    var y: f64 = layout.spacing_y;
+    for (heights.items, placed) |height, *out| {
+        const size = Element.layoutUnit(@max(0, height));
+        out.* = .{ .start = y, .size = size };
+        y += size + layout.spacing_y;
+    }
+    return placed;
+}
+
+/// A cell's content height: its row's, less its own padding and border. Null
+/// for an element that is not a cell of a solved table, and for one reached
+/// from inside its own table's row solve.
+pub fn tableCellHeight(element: *Element, frame: *Frame, depth: u8) ?f64 {
+    if (!isTableCell(element, frame)) return null;
+    const container = tableOf(element, frame) orelse return null;
+    const rows = tableRows(container, frame, depth);
+    if (rows.len == 0) return null;
+    const cell = frame._table_cells.get(element) orelse return null;
+    if (cell.row >= rows.len) return null;
+    // A cell covering several rows is as tall as all of them together, plus
+    // the `border-spacing` between them.
+    const last = @min(cell.row + cell.row_span, rows.len) - 1;
+    return @max(0, rows[last].start + rows[last].size - rows[cell.row].start);
+}
+
 /// The content width a table box has: its columns', not its containing block's.
 /// Null for anything that is not a table.
 pub fn tableContentWidth(element: *Element, frame: *Frame, depth: u8) ?f64 {
@@ -5583,7 +5756,13 @@ pub fn tableCellWidth(element: *Element, frame: *Frame, depth: u8, edges: BoxEdg
     const layout = tableLayout(container, frame, depth) orelse return null;
     const cell = frame._table_cells.get(element) orelse return null;
     if (cell.column >= layout.columns.len) return null;
-    return @max(0, layout.columns[cell.column].size - edges.padding_x - edges.border_x);
+    // A cell covering several columns covers the `border-spacing` between them
+    // too, which is why this comes off the column EDGES and not off a sum of
+    // sizes.
+    const last = @min(cell.column + cell.column_span, layout.columns.len) - 1;
+    const covered = layout.columns[last].start + layout.columns[last].size -
+        layout.columns[cell.column].start;
+    return @max(0, covered - edges.padding_x - edges.border_x);
 }
 
 /// The table a cell belongs to: up through its row, and through a row group if
