@@ -50,6 +50,7 @@ const CustomElementRegistry = @import("CustomElementRegistry.zig");
 // HeadlessChrome/151, see css/chrome_properties.zig and the
 // tests/css/declaration_surface.html pin), so exposing one is itself a signal.
 const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
+const css_grid = @import("css/grid.zig");
 
 const slotting = @import("element/slotting.zig");
 const DOMStringMap = @import("element/DOMStringMap.zig");
@@ -4571,6 +4572,10 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         const dom_version = frame._page.dom_version;
         if (dom_version != frame._flex_lines_dom_version) {
             frame._flex_lines.clearRetainingCapacity();
+            frame._grid_tracks.clearRetainingCapacity();
+            frame._grid_rows.clearRetainingCapacity();
+            frame._grid_cells.clearRetainingCapacity();
+            frame._grid_cells_done.clearRetainingCapacity();
             frame._flex_lines_dom_version = dom_version;
         }
     }
@@ -4668,6 +4673,16 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
                 width = w;
                 dims.explicit_width = true;
             }
+            // A grid item's width is its COLUMN's, for the same reason and with
+            // the same precedence: the track was sized before anything looked
+            // at the item. Three children of a
+            // `grid-template-columns:100px 1fr 2fr` container measured 800 wide
+            // each -- the containing block's width, three times over -- where
+            // Chrome gives them 100, 226.6641 and 453.3359.
+            if (CSSStyleDeclaration.gridItemWidth(self, frame, depth, edges)) |w| {
+                width = w;
+                dims.explicit_width = true;
+            }
         }
 
         // Bounded here as well as at the end, so the text below wraps at the
@@ -4722,6 +4737,21 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
     //
     // After the cascade, because a declared height wins: `stretch` only fills
     // an axis the item left auto.
+    // A grid item with no height of its own is stretched to fill its ROW, the
+    // same `align-items: stretch` default a flex item takes -- so a
+    // `grid-auto-rows: 40px` cell holding one line of text is 40 tall and not
+    // 18. Before the flex branch cannot matter: an element is an item of one
+    // container or the other, never both.
+    if (height == null) {
+        if (CSSStyleDeclaration.gridItemHeight(self, frame, depth)) |row_cross| {
+            var cross_containing: ?f64 = containing_width;
+            const margins = self.verticalMargins(frame, &cross_containing, depth);
+            height = @max(0, row_cross - margins.top - margins.bottom -
+                dims.padding_y - dims.border_y);
+            dims.explicit_height = true;
+        }
+    }
+
     if (height == null) {
         if (CSSStyleDeclaration.flexItemHeight(self, frame, depth)) |line_cross| {
             // The MARGIN box fills the line, so the item's own parts come out
@@ -5669,6 +5699,13 @@ fn contentHeightIn(self: *Element, frame: *Frame, visibility_cache: *VisibilityC
     //
     if (self.flexRowContent(frame, visibility_cache, content_width, depth, pass)) |flexed| {
         return flexed;
+    }
+    // A GRID puts its items in cells, which is neither of those walks: the
+    // column an item lands in decides both how wide it is and where it starts,
+    // and the walk below would have stacked all of them at x=0 across the
+    // container's whole width.
+    if (self.gridContent(frame, visibility_cache, content_width, depth, pass)) |gridded| {
+        return gridded;
     }
     // A COLUMN stacks, which is what the walk below does -- but it stacks as a
     // flex container and not as a block: the gap between two items is its own,
@@ -6781,6 +6818,141 @@ fn flexRowContent(
     return .{ .total = tallest };
 }
 
+/// A grid's own content walk, or null when this element is not one -- or is one
+/// that declares no template, whose single implicit column stacks its items and
+/// so is already what the block walk does.
+///
+/// The cells are what makes this a walk of its own. An auto-placed grid fills
+/// its rows in order, so the nth item goes in column n mod `columns.len` and row
+/// n div `columns.len`; the column decides the item's x and its width, and the
+/// row its y. Nothing had ever done any of that: three children of a
+/// `grid-template-columns: 100px 1fr 2fr` container sat at 0,0 / 0,18 / 0,36 and
+/// were 800 wide each, where Chrome puts them side by side at 0 / 110 / 346.6641
+/// and 100 / 226.6641 / 453.3359 wide (scratch/s74/expr-geom.js, `grid.threeCols`).
+///
+/// A row is as tall as the tallest item in it, which is why the items are
+/// measured before any of them is placed: the first row's height is not known
+/// until the last item on it has been.
+fn gridContent(
+    self: *Element,
+    frame: *Frame,
+    visibility_cache: *VisibilityCache,
+    content_width: ?f64,
+    depth: u8,
+    pass: ?PositionPass,
+) ?ContentHeight {
+    if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return null;
+    if (!CSSStyleDeclaration.isGridContainer(self, frame)) return null;
+    const width = content_width orelse return null;
+
+    const columns = CSSStyleDeclaration.gridColumns(self, frame, width, depth);
+    if (columns.len == 0) return null;
+
+    // One measured item: its box, and the margins around it. Collected first
+    // because a row's height is the tallest item on it and the items are only
+    // known to be on it once every one of them has been reached.
+    const Item = struct {
+        el: *Element,
+        box: Dimensions,
+        outer_width: f64,
+        outer_height: f64,
+        margin_left: f64,
+        margin_top: f64,
+    };
+    var items: std.ArrayListUnmanaged(Item) = .empty;
+
+    var child = self.firstElementChild();
+    while (child) |el| : (child = el.nextElementSibling()) {
+        if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
+        if (!CSSStyleDeclaration.isGridItem(el, frame)) {
+            // Out of flow, so not in a cell -- but it still has a static
+            // position, and Chrome puts one at its container's content origin.
+            if (pass) |p| {
+                if (CSSStyleDeclaration.flowKind(el, frame) == .positioned) {
+                    const out = el.dimensionsIn(frame, true, depth + 1, true, width);
+                    p.recordStatic(frame, el, .{
+                        .x = p.x,
+                        .y = p.y,
+                        .width = out.width + out.padding_x + out.border_x,
+                        .height = out.height + out.padding_y + out.border_y,
+                    });
+                }
+            }
+            continue;
+        }
+        const box = el.dimensionsIn(frame, true, depth + 1, true, width);
+        const margin_left = el.placedMarginPx(frame, .left, "margin-left");
+        const margin_top = el.placedMarginPx(frame, .top, "margin-top");
+        items.append(frame.call_arena, .{
+            .el = el,
+            .box = box,
+            .outer_width = box.width + box.padding_x + box.border_x,
+            .outer_height = box.height + box.padding_y + box.border_y,
+            .margin_left = margin_left,
+            .margin_top = margin_top,
+        }) catch return null;
+    }
+    if (items.items.len == 0) return .{ .total = 0 };
+
+    // The rows, solved where a stretching item can find the same answer:
+    // `gbcr` takes an item's height from its own measurement and not from this
+    // walk, so the row a cell belongs to has to be knowable from the item.
+    const placed_rows = CSSStyleDeclaration.gridRows(self, frame, depth);
+    if (placed_rows.len == 0) return null;
+
+    var line_width: ?f64 = content_width;
+    for (items.items) |item| {
+        const cell = CSSStyleDeclaration.gridCellOf(item.el, frame, depth) orelse continue;
+        if (cell.column >= columns.len or cell.row >= placed_rows.len) continue;
+        const last_column = @min(cell.column + cell.column_span, columns.len) - 1;
+        const last_row = @min(cell.row + cell.row_span, placed_rows.len) - 1;
+        const column: css_grid.Placed = .{
+            .start = columns[cell.column].start,
+            .size = columns[last_column].start + columns[last_column].size - columns[cell.column].start,
+        };
+        const row: css_grid.Placed = .{
+            .start = placed_rows[cell.row].start,
+            .size = placed_rows[last_row].start + placed_rows[last_row].size - placed_rows[cell.row].start,
+        };
+
+        // An item the page placed rather than stretched sits somewhere inside
+        // its cell: `justify-items: end` on a 200px column puts an 8.0625-wide
+        // word at x=191.9375, and `align-items: center` in a 120px-tall row
+        // puts an 18px line at y=51 (scratch/s74/expr-geom.js, `grid.place`).
+        const inline_offset = switch (CSSStyleDeclaration.gridInlineAlign(item.el, self, frame)) {
+            .stretch, .start => 0,
+            .center => @max(0, (column.size - item.outer_width) / 2),
+            .end => @max(0, column.size - item.outer_width),
+        };
+        const block_offset = switch (CSSStyleDeclaration.flexCrossAlign(item.el, self, frame)) {
+            .stretch, .start => 0,
+            .center => @max(0, (row.size - item.outer_height) / 2),
+            .end => @max(0, row.size - item.outer_height),
+        };
+        const x = column.start + inline_offset + item.margin_left;
+        const y = row.start + block_offset + item.margin_top;
+        if (pass) |p| {
+            p.record(frame, item.el, .{
+                .x = p.x + x,
+                .y = p.y + y,
+                .width = item.outer_width,
+                .height = item.outer_height,
+            });
+            const child_pass: PositionPass = .{
+                .table = p.table,
+                .static_table = p.static_table,
+                .nodes = p.nodes,
+                .x = p.x + x + CSSStyleDeclaration.blockEdgePx(item.el, "left", frame, &line_width, depth),
+                .y = p.y + y + CSSStyleDeclaration.blockEdgePx(item.el, "top", frame, &line_width, depth),
+            };
+            _ = item.el.contentHeight(frame, visibility_cache, .in_flow, item.box.width, depth + 1, child_pass);
+        }
+    }
+
+    const last = placed_rows[placed_rows.len - 1];
+    return .{ .total = last.start + last.size };
+}
+
 /// A flex column's own content walk, or null when this element is not one.
 ///
 /// It stacks, so the plain block walk had the common case right by accident --
@@ -7400,7 +7572,7 @@ fn insetSideOf(comptime name: []const u8) InsetSide {
 /// space, or the declared length. Asked for the `auto` share only where the
 /// cascade actually says `auto`, which is what keeps `usedAutoMarginPx`'s own
 /// measurement off the path of every positioned box that declares a length.
-fn placedMarginPx(self: *Element, frame: *Frame, side: InsetSide, comptime name: []const u8) f64 {
+pub fn placedMarginPx(self: *Element, frame: *Frame, side: InsetSide, comptime name: []const u8) f64 {
     if (self.marginIsAuto(name, frame)) {
         return self.usedAutoMarginPx(frame, side) orelse 0;
     }

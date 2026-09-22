@@ -40,6 +40,8 @@ const referrer = @import("referrer.zig");
 const Blob = @import("webapi/Blob.zig");
 const FileList = @import("webapi/FileList.zig");
 const MediaQueryList = @import("webapi/css/MediaQueryList.zig");
+const css_grid = @import("webapi/css/grid.zig");
+const css_style_declaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const Node = @import("webapi/Node.zig");
 const Event = @import("webapi/Event.zig");
 const EventTarget = @import("webapi/EventTarget.zig");
@@ -218,6 +220,29 @@ _flex_lines: Element.FlexLineLookup = .empty,
 /// The `Page.dom_version` `_flex_lines` was filled under; every entry is stale
 /// at once when that moves, the same rule StyleManager's cascade caches use.
 _flex_lines_dom_version: usize = 0,
+
+/// Grid column tracks solved for the document as it stands, keyed by the
+/// container. Cleared with `_flex_lines` and under the same rule: every item on
+/// one grid asks for the same track list, and parsing it once per item is the
+/// only cost the cache exists to avoid.
+_grid_tracks: std.AutoHashMapUnmanaged(*Element, []const css_grid.Placed) = .empty,
+
+/// The same for the rows, which cost more: a row with no size of its own is as
+/// tall as its tallest item, so filling this measures every item on the grid.
+_grid_rows: std.AutoHashMapUnmanaged(*Element, []const css_grid.Placed) = .empty,
+
+/// Where each grid item was placed, keyed by the item. Filled one container at
+/// a time by CSSStyleDeclaration.gridCells.
+_grid_cells: std.AutoHashMapUnmanaged(*Element, css_style_declaration.GridCell) = .empty,
+
+/// The containers whose items have been placed, so the walk runs once per
+/// container and not once per item asking where it went.
+_grid_cells_done: std.AutoHashMapUnmanaged(*Element, void) = .empty,
+
+/// The containers whose rows are being solved right now. Measuring an item asks
+/// how tall the row it stretches into is, which is the answer being computed --
+/// so an item reached through here is measured at its own content height.
+_grid_rows_solving: std.AutoHashMapUnmanaged(*Element, void) = .empty,
 _element_namespace_uris: Element.NamespaceUriLookup = .empty,
 _element_prefixes: Element.PrefixLookup = .empty,
 _svg_animated_enumerations: AnimatedEnumeration.Lookup = .empty,
