@@ -551,6 +551,20 @@ offset_parent_edges: std.AutoHashMapUnmanaged(*Element, Element.DOMRect.Data) = 
 /// reason: the matrix turns about the element's own box, so nothing can change
 /// it without moving that counter.
 element_transforms: std.AutoHashMapUnmanaged(*Element, Element.Affine) = .empty,
+/// The content height of every box the pass laid out BESIDE A FLOAT, which is
+/// the one height a box cannot work out on its own.
+///
+/// Everything else about a box's height is a function of the box and what it
+/// holds, so `clientHeight` measures it from scratch and gets the same answer
+/// the pass did. A float breaks that: how many lines a paragraph takes depends
+/// on a box that is not its own, not its parent's and not in its subtree, and
+/// re-measuring the paragraph alone silently reads the unobstructed count. The
+/// three lines of `float.basic` in scratch/s74/expr-geom.js came back as two.
+///
+/// So the pass, which does see the floats, leaves its answer here, and the
+/// isolated measure takes the larger of the two. Empty on every page without a
+/// float, which is what keeps the lookup off the hot path -- see `floatHeightOf`.
+float_heights: std.AutoHashMapUnmanaged(*Element, f64) = .empty,
 position_table_version: usize = 0,
 /// True while the pass is running. `layoutPassPositions` measures boxes, and
 /// measuring an out-of-flow box asks its containing block where it is -- which
@@ -1979,6 +1993,27 @@ pub fn staticPositionOf(self: *Frame, element: *Element) ?Element.PlacedBox {
     return if (self.fillPositionTables()) self.static_position_table.get(element) else null;
 }
 
+/// What the last pass measured this box's content height as, when a float was
+/// in the way. Null on a page with no floats at all, which is the check that
+/// comes first: `clientHeight` is read in the thousands per page and must not
+/// pay a hash lookup, let alone a pass, for a table that is always empty.
+///
+/// Deliberately does NOT fill the tables. A height read is not a position read,
+/// and making one trigger a document-wide pass would be a cost nothing here
+/// asked for; the correction applies from the first pass onwards, which every
+/// reader of a rect has already run.
+pub fn floatHeightOf(self: *Frame, element: *Element) ?f64 {
+    if (self.float_heights.count() == 0) return null;
+    if (!self.position_table_filled) return null;
+    if (self.position_table_version != self._page.liveVersion()) return null;
+    return self.float_heights.get(element);
+}
+
+/// Where the pass records the above.
+pub fn recordFloatHeight(self: *Frame, element: *Element, height: f64) void {
+    self.float_heights.put(self.arena, element, height) catch {};
+}
+
 /// The padding edge `offsetLeft`/`offsetTop` are measured from, memoised.
 ///
 /// Every read of either used to be one document coordinate; measuring the offset
@@ -2048,6 +2083,7 @@ fn fillPositionTables(self: *Frame) bool {
         self.static_position_table = .empty;
         self.offset_parent_edges = .empty;
         self.element_transforms = .empty;
+        self.float_heights = .empty;
         _ = Element.layoutPassPositions(root, self, &self.position_table, &self.static_position_table);
         self.position_table_version = version;
         self.position_table_filled = true;
