@@ -4715,6 +4715,11 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
             } else if (CSSStyleDeclaration.tableContentWidth(self, frame, depth)) |w| {
                 width = w;
                 dims.explicit_width = true;
+            } else if (CSSStyleDeclaration.tableCaptionWidth(self, frame, depth, edges)) |w| {
+                // A caption is as wide as the table's whole box, which is
+                // neither the containing block's width nor its own text's.
+                width = w;
+                dims.explicit_width = true;
             }
         }
 
@@ -7028,12 +7033,38 @@ fn tableContent(
     const placed_rows = CSSStyleDeclaration.tableRows(self, frame, depth);
     if (placed_rows.len == 0) return null;
 
+    // A `<caption>` is not in the grid: it is stacked above it or below it, as
+    // wide as the table's whole box, and the table's own border and padding
+    // stay around the GRID rather than around the pair. So the captions are
+    // measured first -- what is above the grid is what the rows are pushed
+    // down by.
+    const Caption = struct { element: *Element, on_top: bool, height: f64 };
+    var captions: std.ArrayListUnmanaged(Caption) = .empty;
+    var above: f64 = 0;
+    var below: f64 = 0;
+    {
+        var child = self.firstElementChild();
+        while (child) |caption| : (child = caption.nextElementSibling()) {
+            if (!CSSStyleDeclaration.isTableCaption(caption, frame)) continue;
+            if (!caption.checkVisibilityCached(visibility_cache, frame)) continue;
+            const box = caption.dimensionsIn(frame, true, depth + 1, true, layout.content_width);
+            const height = box.height + box.padding_y + box.border_y;
+            const on_top = CSSStyleDeclaration.tableCaptionOnTop(caption, frame);
+            captions.append(frame.call_arena, .{
+                .element = caption,
+                .on_top = on_top,
+                .height = height,
+            }) catch {};
+            if (on_top) above += height else below += height;
+        }
+    }
+
     var row_index: usize = 0;
     var rows: CSSStyleDeclaration.TableRowIterator = .{ .container = self, .frame = frame };
     while (rows.next()) |row| : (row_index += 1) {
         if (row_index >= placed_rows.len) break;
         const band = placed_rows[row_index];
-        const y = band.start;
+        const y = band.start + above;
         if (!row.checkVisibilityCached(visibility_cache, frame)) continue;
 
         var child = row.firstElementChild();
@@ -7078,7 +7109,48 @@ fn tableContent(
         }
     }
     const last = placed_rows[placed_rows.len - 1];
-    return .{ .total = last.start + last.size + layout.spacing_y };
+    const rows_total = last.start + last.size + layout.spacing_y;
+
+    if (pass) |p| {
+        if (captions.items.len > 0) {
+            var line_width: ?f64 = layout.content_width;
+            // Back out to the table's own border box, which is where a caption
+            // starts: the grid's border and padding are inside the pair, not
+            // around it.
+            const inset_left = CSSStyleDeclaration.blockEdgePx(self, "left", frame, &line_width, depth);
+            const inset_top = CSSStyleDeclaration.blockEdgePx(self, "top", frame, &line_width, depth);
+            const inset_bottom = CSSStyleDeclaration.blockEdgePx(self, "bottom", frame, &line_width, depth);
+            const width = CSSStyleDeclaration.tableOuterWidth(self, frame, depth) orelse
+                layout.content_width;
+            const x = p.x - inset_left;
+            var top_edge = p.y - inset_top;
+            // The grid box sits between the two stacks, and it is the rows
+            // plus the table's own edges.
+            var bottom_edge = top_edge + above + inset_top + rows_total + inset_bottom;
+
+            for (captions.items) |caption| {
+                const y = if (caption.on_top) top_edge else bottom_edge;
+                if (caption.on_top) top_edge += caption.height else bottom_edge += caption.height;
+                p.record(frame, caption.element, .{
+                    .x = x,
+                    .y = y,
+                    .width = width,
+                    .height = caption.height,
+                });
+                var own_width: ?f64 = width;
+                const child_pass: PositionPass = .{
+                    .table = p.table,
+                    .static_table = p.static_table,
+                    .nodes = p.nodes,
+                    .x = x + CSSStyleDeclaration.blockEdgePx(caption.element, "left", frame, &own_width, depth),
+                    .y = y + CSSStyleDeclaration.blockEdgePx(caption.element, "top", frame, &own_width, depth),
+                };
+                const box = caption.element.dimensionsIn(frame, true, depth + 1, true, layout.content_width);
+                _ = caption.element.contentHeight(frame, visibility_cache, .in_flow, box.width, depth + 1, child_pass);
+            }
+        }
+    }
+    return .{ .total = above + rows_total + below };
 }
 
 /// A flex column's own content walk, or null when this element is not one.

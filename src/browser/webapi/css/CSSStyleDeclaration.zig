@@ -5377,6 +5377,23 @@ pub fn isTableCell(element: *Element, frame: *Frame) bool {
     return std.mem.eql(u8, resolvedDisplay(element, frame), "table-cell");
 }
 
+/// Whether this element is a table's `<caption>`, which is neither a row nor a
+/// cell: it is stacked above or below the grid, as wide as the table's whole
+/// box.
+pub fn isTableCaption(element: *Element, frame: *Frame) bool {
+    if (flowKind(element, frame) != .in_flow) return false;
+    return std.mem.eql(u8, resolvedDisplay(element, frame), "table-caption");
+}
+
+/// Whether a caption goes above the grid. `caption-side` has no other value in
+/// Chrome -- `left` and `right` never shipped -- so anything but `bottom` is
+/// the top.
+pub fn tableCaptionOnTop(caption: *Element, frame: *Frame) bool {
+    const style_manager = &caption.ownerFrame(frame)._style_manager;
+    const value = cascadedKeyword(style_manager, caption, "caption-side") orelse return true;
+    return !std.ascii.eqlIgnoreCase(value, "bottom");
+}
+
 fn isTableRow(element: *Element, frame: *Frame) bool {
     return std.mem.eql(u8, resolvedDisplay(element, frame), "table-row");
 }
@@ -5563,7 +5580,7 @@ fn solveTable(container: *Element, frame: *Frame, depth: u8) ?TableLayout {
     const columns_slice = columns.items;
 
     const intrinsic = css_table.intrinsicWidths(columns_slice, spacing.x);
-    const content_width = blk: {
+    const shrunk_width = blk: {
         if (declared_width) |declared| break :blk @max(declared, intrinsic.min);
         // Shrink to fit: as wide as it wants, unless that does not fit -- and
         // never narrower than what its content cannot give up.
@@ -5571,6 +5588,12 @@ fn solveTable(container: *Element, frame: *Frame, depth: u8) ?TableLayout {
         const available = containingWidth(container, frame, &containing, depth) orelse intrinsic.max;
         break :blk @max(intrinsic.min, @min(intrinsic.max, available));
     };
+
+    // A caption is as wide as the table's whole box, so a caption that cannot
+    // be made narrower makes the table wider: three unbreakable words over two
+    // one-letter columns give Chrome a 372.4453 table where the grid alone
+    // wanted 17.0234 (scratch/s82 `captionWide`).
+    const content_width = @max(shrunk_width, captionFloor(container, frame, depth));
 
     const placed = if (isTableLayoutFixed(container, frame) and declared_width != null)
         css_table.sizeFixedColumns(frame.arena, columns_slice, content_width, spacing.x, Element.layoutUnit) catch return null
@@ -5725,6 +5748,55 @@ pub fn collapsedBorders(element: *Element, frame: *Frame, depth: u8) ?CollapsedB
     if (!layout.collapsed) return null;
     const cell = frame._table_cells.get(element) orelse return null;
     return cell.borders;
+}
+
+/// The narrowest content width a table's captions leave it: a caption fills the
+/// table's box, so one that cannot be made narrower holds the whole table open.
+/// Zero for a table with no caption.
+///
+/// The table's own border is read as declared rather than as collapsed, because
+/// the collapse is not solved yet when this is asked -- which can only make the
+/// floor too low by half a border, and a table whose caption decides its width
+/// is one whose grid had room to spare anyway.
+fn captionFloor(container: *Element, frame: *Frame, depth: u8) f64 {
+    var widest: f64 = 0;
+    var child = container.firstElementChild();
+    while (child) |caption| : (child = caption.nextElementSibling()) {
+        if (!isTableCaption(caption, frame)) continue;
+        var containing: ?f64 = null;
+        const edges = boxEdgesSharing(caption, frame, &containing, depth);
+        const min = caption.minContentWidthExact(frame) orelse continue;
+        widest = @max(widest, min + edges.padding_x + edges.border_x);
+    }
+    if (widest == 0) return 0;
+
+    var containing: ?f64 = null;
+    const table_edges = boxEdgesSharing(container, frame, &containing, depth);
+    return @max(0, widest - table_edges.padding_x - table_edges.border_x);
+}
+
+/// The width of the table box a caption fills, less its own padding and border.
+/// Null for anything that is not the caption of a table this engine laid out.
+pub fn tableCaptionWidth(caption: *Element, frame: *Frame, depth: u8, edges: BoxEdges) ?f64 {
+    if (!isTableCaption(caption, frame)) return null;
+    const container = caption.parentElement() orelse return null;
+    if (!isTableContainer(container, frame)) return null;
+    const outer = tableOuterWidth(container, frame, depth) orelse return null;
+    return @max(0, outer - edges.padding_x - edges.border_x);
+}
+
+/// A table's whole box width -- its columns plus its own padding and border,
+/// the latter collapsed when the table collapses. Null for anything that is
+/// not a table this engine laid out.
+pub fn tableOuterWidth(container: *Element, frame: *Frame, depth: u8) ?f64 {
+    const layout = tableLayout(container, frame, depth) orelse return null;
+    var containing: ?f64 = null;
+    const edges = boxEdgesSharing(container, frame, &containing, depth);
+    const border_x = if (collapsedBorders(container, frame, depth)) |merged|
+        merged.left + merged.right
+    else
+        edges.border_x;
+    return layout.content_width + edges.padding_x + border_x;
 }
 
 fn isTableLayoutFixed(container: *Element, frame: *Frame) bool {

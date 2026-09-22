@@ -19,7 +19,8 @@ they put a cell at, row heights and the y, the stretch that leaves no cell
 shorter than its row, and `colspan` / `rowspan`. All 28 readings of
 scratch/s79/expr-table.js and all 33 of scratch/s81/expr-tablerows.js match
 Chrome 153. `border-collapse: collapse` is here too, in the fourth block, measured with
-scratch/s82/expr-tablecap.js; `<caption>` is not.
+scratch/s82/expr-tablecap.js, and so is `<caption>`, in the fifth: all 16
+shapes of that probe match Chrome box for box.
 -->
 
 <script id=columns_are_as_wide_as_their_widest_cell>
@@ -335,6 +336,84 @@ scratch/s82/expr-tablecap.js; `<caption>` is not.
     '0,0,406,30|3,3,34.40625,24|37.40625,3,365.59375,24',
     boxes(`<table class=p style="${C}width:400px;border:6px solid"><tr>` +
       td('border:2px solid', 'a') + td('border:2px solid', W) + '</tr></table>'));
+
+  host.remove();
+}
+</script>
+
+<script id=a_caption_is_stacked_outside_the_grid>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  // `caption-side` is pinned along with the rest: a page that sets it would
+  // otherwise be the thing being measured.
+  const RESET = 'box-sizing:content-box;border:0;padding:0;margin:0;' +
+    'width:auto;min-width:0;max-width:none;height:auto;font:16px Georgia;' +
+    'line-height:normal;white-space:normal;text-align:left;vertical-align:top;' +
+    'caption-side:top;';
+  const S = 'border-collapse:separate;border-spacing:0;' + RESET;
+
+  const boxes = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const base = d.getBoundingClientRect();
+    const out = [];
+    for (const el of d.querySelectorAll('.p')) {
+      const b = el.getBoundingClientRect();
+      out.push([b.left - base.left, b.top - base.top, b.width, b.height]);
+    }
+    d.remove();
+    return out.map((p) => p.join(',')).join('|');
+  };
+
+  const W = 'Hamburgefonstiv';
+  // Box order below is document order: the table, then its caption, then the
+  // cells.
+  const table = (extra, caption, cells) =>
+    `<table class=p style="${S}${extra || ''}">` +
+    `<caption class=p style="${RESET}${caption || ''}">cap</caption><tr>` +
+    cells + '</tr></table>';
+  const td = (text) => `<td class=p style="${RESET}">${text}</td>`;
+
+  // The caption is above the grid and as wide as the table's whole box, and
+  // the rows are pushed down by it. This engine used to leave the caption out
+  // of the walk entirely, which put it at the placeholder coordinates.
+  testing.expectEqual(
+    '0,0,132.2109375,36|0,0,132.2109375,18|0,18,8.0625,18|8.0625,18,124.1484375,18',
+    boxes(table('', '', td('a') + td(W))));
+
+  // `caption-side: bottom` puts it under the grid, and the cells back at the
+  // top of the table's box.
+  testing.expectEqual(
+    '0,0,132.2109375,36|0,18,132.2109375,18|0,0,8.0625,18|8.0625,0,124.1484375,18',
+    boxes(table('', 'caption-side:bottom', td('a') + td(W))));
+
+  // A caption fills the table, so one that cannot be made narrower holds the
+  // whole table open: the grid alone wanted 17.0234 here.
+  testing.expectEqual(
+    '0,0,372.4453125,36|0,0,372.4453125,18|0,18,176.390625,18|176.390625,18,196.0546875,18',
+    boxes(`<table class=p style="${S}">` +
+      `<caption class=p style="${RESET}">${W}${W}${W}</caption><tr>` +
+      td('a') + td('b') + '</tr></table>'));
+
+  // A declared table width the caption does fit in: the caption takes the
+  // table's width rather than its own text's.
+  testing.expectEqual(
+    '0,0,400,36|0,0,400,18|0,18,24.390625,18|24.390625,18,375.609375,18',
+    boxes(table('width:400px', '', td('a') + td(W))));
+
+  // The table's own border stays around the GRID and not around the pair, so
+  // the caption starts at the table's edge and the cells are inset from it.
+  testing.expectEqual(
+    '0,0,142.2109375,44|0,0,142.2109375,18|2,20,11.0625,22|13.0625,20,127.1484375,22',
+    boxes(`<table class=p style="${RESET}border-collapse:collapse;border:4px solid">` +
+      `<caption class=p style="${RESET}">cap</caption><tr>` +
+      `<td class=p style="${RESET}border:2px solid">a</td>` +
+      `<td class=p style="${RESET}border:2px solid">${W}</td></tr></table>`));
 
   host.remove();
 }
