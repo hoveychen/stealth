@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Table layout was missing entirely. Every `<td>` was a block of its own: two
+cells holding `a` and `Hamburgefonstiv` sat at 0,0 and 0,18 -- stacked down the
+page, each as wide as its own text -- where Chrome puts them side by side at 0
+and 8.0625, and the `<table>` around them measured 0 wide against Chrome's
+132.2109.
+
+Measured on headed Chrome 153 against www.scrapingcourse.com with
+scratch/s79/expr-table.js (the thirteen reference shapes) and
+scratch/s80/expr-tabledist.js (each cell's own min-content and max-content
+beside the column width it got, so the sharing rule could be fitted).
+
+What is modelled here is COLUMN WIDTHS and the x they put a cell at: the three
+sharing regimes, a declared cell width, `table-layout: fixed`, `border-spacing`
+and cell padding. Row heights are still each cell's own -- a row as tall as its
+tallest cell with the shorter ones stretched to match is not here yet -- and
+neither are `colspan`/`rowspan` or `border-collapse`.
+-->
+
+<script id=columns_are_as_wide_as_their_widest_cell>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  // Every box pins its own `box-sizing`, border, padding and margin: the page
+  // this runs in styles tables itself, and would otherwise be the thing being
+  // measured.
+  const RESET = 'box-sizing:content-box;border:0;padding:0;margin:0;' +
+    'width:auto;min-width:0;max-width:none;height:auto;font:16px Georgia;' +
+    'line-height:normal;white-space:normal;text-align:left;vertical-align:top;';
+  const T = 'border-collapse:separate;border-spacing:0;' + RESET;
+
+  const boxes = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const base = d.getBoundingClientRect();
+    const out = [];
+    for (const el of d.querySelectorAll('.p')) {
+      const b = el.getBoundingClientRect();
+      out.push([b.left - base.left, b.width]);
+    }
+    d.remove();
+    return out.map((p) => p.join(',')).join('|');
+  };
+
+  const W = 'Hamburgefonstiv';        // one unbreakable word
+  const P = 'alpha beta gamma delta'; // wraps, so its min-content is one word
+
+  const cells = (style, texts, cellStyles) => boxes(
+    `<table style="${T}${style}"><tr>` +
+    texts.map((t, i) => `<td class=p style="${RESET}${(cellStyles || [])[i] || ''}">${t}</td>`).join('') +
+    '</tr></table>');
+
+  // A table with room to spare shrinks to fit: each column is its cells'
+  // widest content, and the cells sit end to end.
+  testing.expectEqual('0,8.0625|8.0625,124.1484375', cells('', ['a', W]));
+
+  // Two rows: a column is as wide as the widest cell IN IT, whichever row that
+  // cell is on. This is the reading no per-element walk can arrive at.
+  testing.expectEqual(
+    '0,248.296875|248.296875,124.1484375|0,248.296875|248.296875,124.1484375',
+    boxes(`<table style="${T}">
+      <tr><td class=p style="${RESET}">a</td><td class=p style="${RESET}">${W}</td></tr>
+      <tr><td class=p style="${RESET}">${W}${W}</td><td class=p style="${RESET}">b</td></tr>
+    </table>`));
+
+  // A `tbody` around the rows changes nothing, so the walk has to see through
+  // it rather than take it for a row.
+  testing.expectEqual('0,8.0625|8.0625,124.1484375', boxes(
+    `<table style="${T}"><tbody><tr>` +
+    `<td class=p style="${RESET}">a</td><td class=p style="${RESET}">${W}</td>` +
+    '</tr></tbody></table>'));
+
+  // Cell padding is part of the column: 8.0625 of letter inside 10px either
+  // side makes a 28.0625 column.
+  testing.expectEqual('0,28.0625|28.0625,124.1484375', boxes(
+    `<table style="${T}"><tr>` +
+    '<td class=p style="box-sizing:content-box;border:0;margin:0;padding:10px">a</td>' +
+    `<td class=p style="${RESET}">${W}</td></tr></table>`));
+
+  // `border-spacing` sits BETWEEN the columns and outside the end ones: the
+  // first cell starts at 7, and the second at 7 + 8.0625 + 7.
+  testing.expectEqual('7,8.0625|22.0625,124.1484375', boxes(
+    `<table style="${RESET}border-collapse:separate;border-spacing:7px 3px"><tr>` +
+    `<td class=p style="${RESET}">a</td><td class=p style="${RESET}">${W}</td>` +
+    '</tr></table>'));
+
+  host.remove();
+}
+</script>
+
+<script id=the_table_width_decides_how_the_columns_share_it>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const RESET = 'box-sizing:content-box;border:0;padding:0;margin:0;' +
+    'width:auto;min-width:0;max-width:none;height:auto;font:16px Georgia;' +
+    'line-height:normal;white-space:normal;text-align:left;vertical-align:top;';
+  const T = 'border-collapse:separate;border-spacing:0;' + RESET;
+
+  const boxes = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const base = d.getBoundingClientRect();
+    const out = [];
+    for (const el of d.querySelectorAll('.p')) {
+      const b = el.getBoundingClientRect();
+      out.push([b.left - base.left, b.width]);
+    }
+    d.remove();
+    return out.map((p) => p.join(',')).join('|');
+  };
+
+  const W = 'Hamburgefonstiv';
+  const P = 'alpha beta gamma delta';
+
+  const cells = (style, texts, cellStyles) => boxes(
+    `<table style="${T}${style}"><tr>` +
+    texts.map((t, i) => `<td class=p style="${RESET}${(cellStyles || [])[i] || ''}">${t}</td>`).join('') +
+    '</tr></table>');
+
+  // The table's own box is the sum of its columns, which is what it shrinks to
+  // fit -- not its containing block's 800.
+  testing.expectEqual('0,132.2109375', boxes(
+    `<table class=p style="${T}"><tr>` +
+    `<td style="${RESET}">a</td><td style="${RESET}">${W}</td></tr></table>`));
+
+  // ROOM TO SPARE. A declared width wider than the content shares the surplus
+  // out in proportion to the max-contents: 8.0625 + 467.789 x 8.0625/132.2109.
+  testing.expectEqual('0,36.5859375|36.5859375,563.4140625', cells('width:600px', ['a', W]));
+
+  // IN BETWEEN. Content wider than the table gets each column its min-content
+  // plus a share of what is left, in proportion to how much MORE it wanted --
+  // proportion to the max-contents alone would put the split at 534.3 / 265.7.
+  testing.expectEqual('0,530|530,270', cells('', [
+    `${P} ${P} ${P} ${P}`, `${P} ${P}`]));
+
+  // TOO LITTLE ROOM. Every column keeps its min-content -- its longest word --
+  // and the table overflows the width it was given.
+  testing.expectEqual('0,52.4609375|52.4609375,52.4609375', cells(
+    'width:60px', [`${P} ${P}`, P]));
+
+  // A width declared on a CELL is its column's, and neither grows nor shrinks
+  // with the rest: sharing 600 in proportion would have made it 267.7.
+  testing.expectEqual('0,100|100,500', cells('width:600px', ['a', W], ['width:100px']));
+
+  // A percentage cell width is a share of the table's.
+  testing.expectEqual('0,100|100,300', cells('width:400px', ['a', W], ['width:25%']));
+
+  // `table-layout: fixed`: the undeclared columns split what is left of the
+  // table's width evenly, whatever they hold.
+  testing.expectEqual('0,100|100,300', cells(
+    'table-layout:fixed;width:400px', ['a', W], ['width:100px']));
+
+  // Three of them, where the last column takes the rounding remainder rather
+  // than its own: 133.3438 and not the 133.3281 the other two get.
+  testing.expectEqual('0,133.328125|133.328125,133.328125|266.65625,133.34375', cells(
+    'table-layout:fixed;width:400px', ['a', W, 'c']));
+
+  // A fixed table with no width of its own has nothing to divide, and falls
+  // back to shrinking to fit.
+  testing.expectEqual('0,120|120,124.1484375', cells(
+    'table-layout:fixed', ['a', W], ['width:120px']));
+
+  host.remove();
+}
+</script>
